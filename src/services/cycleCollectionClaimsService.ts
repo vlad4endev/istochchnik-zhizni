@@ -58,7 +58,7 @@ export async function ensureCycleCollectionClaimsWeekScopeSchema(): Promise<void
          WHERE schemaname = 'public'
            AND tablename = 'cycle_collection_claims'
            AND indexname = 'cycle_collection_claims_week_member_uidx'
-           AND indexdef NOT LIKE '%WHERE (week_start_date IS NOT NULL)%'
+           AND indexdef NOT LIKE '%WHERE%'
        ) THEN
          DROP INDEX public.cycle_collection_claims_week_member_uidx;
        END IF;

@@ -1,5 +1,3 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-
 import { query } from '../config/db';
 import { getCalendarWeekStartDate, getMemberAssignmentsForWeek, type WeekPlanKind } from './calendarService';
 import {
@@ -62,7 +60,6 @@ type ParticipantHistoryStats = {
 
 const DEFAULT_ASSIGNMENTS_TABLE = 'mentor_assignments';
 const MAX_CONSECUTIVE_WITH_SAME_CURATOR = 3;
-let cachedSupabaseClient: SupabaseClient | null | undefined;
 
 function shuffledCopy<T>(source: readonly T[]): T[] {
   const arr = [...source];
@@ -79,33 +76,6 @@ function resolveAssignmentsTable(): string {
     throw new Error('Invalid MENTOR_ASSIGNMENTS_TABLE name');
   }
   return raw;
-}
-
-function getSupabaseClient(): SupabaseClient {
-  if (cachedSupabaseClient !== undefined) {
-    return cachedSupabaseClient as SupabaseClient;
-  }
-
-  const url = String(process.env.SUPABASE_URL ?? '').trim();
-  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
-  if (!url || !serviceRoleKey) {
-    throw new Error('Supabase is not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
-  }
-
-  cachedSupabaseClient = createClient(url, serviceRoleKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
-  return cachedSupabaseClient;
-}
-
-function hasSupabaseWriteConfig(): boolean {
-  return Boolean(
-    String(process.env.SUPABASE_URL ?? '').trim() &&
-      String(process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim(),
-  );
 }
 
 function toIsoWeekKey(year: number, weekNumber: number): number {
@@ -258,7 +228,7 @@ export class DistributionService {
 
   async executeAndSaveForWeek(week: WeekRef): Promise<ParticipantAssignment[]> {
     const assignments = await this.distributeForWeek({ week });
-    await this.saveAssignmentsViaSupabase(assignments);
+    await this.saveAssignments(assignments);
     return assignments;
   }
 
@@ -276,12 +246,12 @@ export class DistributionService {
     assignments: ParticipantAssignment[];
     cycleIndex: number;
   }> {
+    await ensureCycleCollectionClaimsWeekScopeSchema();
     const weekStartDate = getCalendarWeekStartDate(kind);
     const week = getIsoWeekRefByDateString(weekStartDate);
     const participants = await this.getQueueParticipantsForWeek(kind);
     const assignments = await this.distributeForWeek({ week, participants });
-    await this.saveAssignmentsViaSupabase(assignments);
-    await ensureCycleCollectionClaimsWeekScopeSchema();
+    await this.saveAssignments(assignments);
     const cycleIndex = await this.syncAssignmentsToCycleCollectionClaims(assignments, kind);
     return { week, assignments, cycleIndex };
   }
@@ -462,7 +432,8 @@ export class DistributionService {
     return [...byCoordinator.values()];
   }
 
-  async saveAssignmentsViaSupabase(assignments: ParticipantAssignment[]): Promise<void> {
+  /** Пишет в основную Postgres-БД (DATABASE_URL), не через Supabase Storage API. */
+  async saveAssignments(assignments: ParticipantAssignment[]): Promise<void> {
     await this.ensureAssignmentsTableExists();
     if (assignments.length === 0) {
       return;
@@ -475,18 +446,6 @@ export class DistributionService {
       week_number: item.weekNumber,
       year: item.year,
     }));
-
-    if (hasSupabaseWriteConfig()) {
-      const supabase = getSupabaseClient();
-      // Multi-row insert is executed as a single SQL statement by PostgREST, which is atomic.
-      const { error } = await supabase
-        .from(tableName)
-        .upsert(payload, { onConflict: 'participant_id,week_number,year' });
-      if (error) {
-        throw new Error(`Failed to save assignments to Supabase: ${error.message}`);
-      }
-      return;
-    }
 
     await query('BEGIN');
     try {

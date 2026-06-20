@@ -722,9 +722,15 @@ export async function postCuratorDistribution(req: Request, res: Response): Prom
       });
       return;
     }
-    if (msg.includes('Supabase is not configured')) {
-      res.status(503).json({
-        error: 'На сервере не настроены SUPABASE_URL и SUPABASE_SERVICE_ROLE_KEY — без них запись назначений в хранилище невозможна.',
+    if (msg.includes('Distribution failed: no curator slots left')) {
+      res.status(400).json({
+        error: 'Не удалось сбалансировать нагрузку между кураторами. Проверьте число кураторов и участников в очереди.',
+      });
+      return;
+    }
+    if (msg.includes('Failed to save assignments')) {
+      res.status(500).json({
+        error: 'Не удалось сохранить назначения в базу (mentor_assignments). Проверьте миграции и логи API.',
       });
       return;
     }
@@ -744,7 +750,12 @@ export async function postCuratorDistribution(req: Request, res: Response): Prom
       return;
     }
     console.error('Calendar curator distribution POST error:', err);
-    res.status(500).json({ error: 'Не удалось выполнить распределение кураторов' });
+    const detail = msg.trim().slice(0, 240);
+    res.status(500).json({
+      error: detail
+        ? `Не удалось выполнить распределение кураторов: ${detail}`
+        : 'Не удалось выполнить распределение кураторов',
+    });
   }
 }
 
