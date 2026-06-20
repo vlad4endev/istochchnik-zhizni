@@ -732,6 +732,17 @@ export async function postCuratorDistribution(req: Request, res: Response): Prom
       res.status(400).json({ error: 'Нет активного молитвенного цикла для выбранной недели.' });
       return;
     }
+    if (
+      msg.includes('there is no unique or exclusion constraint matching the ON CONFLICT specification') ||
+      msg.includes('cycle_collection_claims_pkey') ||
+      msg.includes('duplicate key value violates unique constraint')
+    ) {
+      res.status(500).json({
+        error:
+          'Схема таблицы назначений сбора устарела. Перезапустите API или примените миграции Supabase (cycle_collection_claims_surrogate_pk), затем повторите.',
+      });
+      return;
+    }
     console.error('Calendar curator distribution POST error:', err);
     res.status(500).json({ error: 'Не удалось выполнить распределение кураторов' });
   }

@@ -47,6 +47,25 @@ export async function ensureCycleCollectionClaimsWeekScopeSchema(): Promise<void
   await migrateCycleCollectionClaimsSurrogatePkIfNeeded();
   await query(`ALTER TABLE cycle_collection_claims ADD COLUMN IF NOT EXISTS week_start_date DATE`);
 
+  // Старая миграция 20260418 создавала нечастичный uidx; upsert с WHERE week_start_date IS NOT NULL
+  // требует частичный индекс — IF NOT EXISTS не заменяет уже существующий индекс с тем же именем.
+  await query(
+    `DO $cycle_claims_week_idx$
+     BEGIN
+       IF EXISTS (
+         SELECT 1
+         FROM pg_indexes
+         WHERE schemaname = 'public'
+           AND tablename = 'cycle_collection_claims'
+           AND indexname = 'cycle_collection_claims_week_member_uidx'
+           AND indexdef NOT LIKE '%WHERE (week_start_date IS NOT NULL)%'
+       ) THEN
+         DROP INDEX public.cycle_collection_claims_week_member_uidx;
+       END IF;
+     END
+     $cycle_claims_week_idx$`,
+  );
+
   await query(
     `CREATE UNIQUE INDEX IF NOT EXISTS cycle_collection_claims_week_member_uidx
      ON public.cycle_collection_claims (week_start_date, member_id)
