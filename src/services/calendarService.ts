@@ -5,6 +5,7 @@ import { getPrayerCycleTodayYmd, resolvePrayerPlanWeekTimeZone } from '../utils/
 import {
   computeCycleIndex,
   dayIndexInCycle,
+  buildCyclePrayerHistorySelectSql,
   buildCyclePrayerMpcPickSql,
   getCycleStartDate,
   getMergedPrayerCycleRosterMemberIdsForCycleIndex,
@@ -384,7 +385,11 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
   const cycleIndexForDate =
     totalMembers > 0 ? computeCycleIndex(cyclePosition, totalMembers) : 0;
 
-  const mpcPick = buildCyclePrayerMpcPickSql('$2');
+  const todayYmd = getPrayerCycleTodayYmd();
+  const isPastCalendarDay = targetDate < todayYmd;
+  const mpcPick = isPastCalendarDay
+    ? buildCyclePrayerHistorySelectSql('$2')
+    : buildCyclePrayerMpcPickSql('$2');
 
   const overridePromise = query(
     `SELECT m.id, m.name, m.first_name, m.last_name,

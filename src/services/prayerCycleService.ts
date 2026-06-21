@@ -151,6 +151,54 @@ export function buildCyclePrayerMpcPickSql(cycleIndexRef: string): {
   };
 }
 
+/**
+ * Прошлые даты календаря: нужда из журнала `member_prayer_request_history` для cycle_index дня,
+ * с запасным чтением из mpc (если цикл ещё не заархивирован).
+ */
+export function buildCyclePrayerHistorySelectSql(cycleIndexRef: string): {
+  prayerRequest: string;
+  updatedAt: string;
+} {
+  const historyRequest = `(
+    SELECT NULLIF(TRIM(h.prayer_request), '')
+    FROM member_prayer_request_history h
+    WHERE h.member_id = m.id
+      AND h.cycle_index IS NOT DISTINCT FROM ${cycleIndexRef}::bigint
+      AND NULLIF(TRIM(h.prayer_request), '') IS NOT NULL
+    ORDER BY h.created_at DESC
+    LIMIT 1
+  )`;
+  const mpcExactRequest = `(
+    SELECT NULLIF(TRIM(mpc_sel.prayer_request), '')
+    FROM member_prayer_by_cycle mpc_sel
+    WHERE mpc_sel.member_id = m.id
+      AND mpc_sel.cycle_index = ${cycleIndexRef}::bigint
+      AND NULLIF(TRIM(mpc_sel.prayer_request), '') IS NOT NULL
+    LIMIT 1
+  )`;
+  const historyUpdatedAt = `(
+    SELECT h.created_at::text
+    FROM member_prayer_request_history h
+    WHERE h.member_id = m.id
+      AND h.cycle_index IS NOT DISTINCT FROM ${cycleIndexRef}::bigint
+      AND NULLIF(TRIM(h.prayer_request), '') IS NOT NULL
+    ORDER BY h.created_at DESC
+    LIMIT 1
+  )`;
+  const mpcExactUpdatedAt = `(
+    SELECT mpc_sel.updated_at::text
+    FROM member_prayer_by_cycle mpc_sel
+    WHERE mpc_sel.member_id = m.id
+      AND mpc_sel.cycle_index = ${cycleIndexRef}::bigint
+      AND NULLIF(TRIM(mpc_sel.prayer_request), '') IS NOT NULL
+    LIMIT 1
+  )`;
+  return {
+    prayerRequest: `COALESCE(${historyRequest}, ${mpcExactRequest})`,
+    updatedAt: `COALESCE(${historyUpdatedAt}, ${mpcExactUpdatedAt})`,
+  };
+}
+
 /** @deprecated Use buildCyclePrayerMpcPickSql('$N') for the correct bind index. */
 export const CYCLE_PRAYER_REQUEST_SELECT_SQL = buildCyclePrayerMpcPickSql('$1').prayerRequest;
 

@@ -191,13 +191,17 @@ function MemberCard({
   currentUserId,
   onPrayerSaved,
   cardIndex = 0,
+  allowEdit = true,
 }: {
   member: Member;
   currentUserId: number | null;
   onPrayerSaved: () => void;
   cardIndex?: number;
+  /** false для прошлых дат — только просмотр из истории */
+  allowEdit?: boolean;
 }) {
   const isMe = currentUserId != null && member.id === currentUserId;
+  const canEdit = allowEdit && isMe;
   const [editText, setEditText] = useState(member.prayer_request ?? '');
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
@@ -228,7 +232,7 @@ function MemberCard({
       accentVar="var(--member)"
       cardIndex={cardIndex}
     >
-      {isMe ? (
+      {canEdit ? (
         <div className="space-y-3">
           <label className="block">
             <span className="text-xs font-extrabold uppercase tracking-[0.1em] text-[var(--text-secondary)]">
@@ -861,6 +865,13 @@ export function DailyPrayerPage() {
   const today = new Date();
   const chipLabel = format(selected, 'd MMMM yyyy', { locale: ru });
   const isToday = isSameDay(selected, today);
+  const isPastDay = isBefore(startOfDay(selected), startOfDay(today));
+  const isFutureDay = isAfter(startOfDay(selected), startOfDay(today));
+  const memberSectionTitle = isPastDay
+    ? 'Молитвенная нужда за этот день'
+    : isFutureDay
+      ? 'Молитвенная нужда (по очереди цикла)'
+      : 'Сегодня молимся за члена церкви';
   const hasThemesOrMinistries =
     data != null && (data.global_themes.length > 0 || data.ministries.length > 0);
 
@@ -1067,7 +1078,7 @@ export function DailyPrayerPage() {
               <section aria-labelledby={sectionMemberId}>
                 <SectionHeader
                   Icon={LuChurch}
-                  title="Сегодня молимся за члена церкви"
+                  title={memberSectionTitle}
                   id={sectionMemberId}
                 />
                 {data.members.map((m, i) => (
@@ -1076,6 +1087,7 @@ export function DailyPrayerPage() {
                     cardIndex={i}
                     member={m}
                     currentUserId={me?.id ?? null}
+                    allowEdit={!isPastDay}
                     onPrayerSaved={() => {
                       void qc.invalidateQueries({ queryKey: ['calendar', 'day', dateKey] });
                       void qc.invalidateQueries({ queryKey: ['calendar', 'week-members'] });
