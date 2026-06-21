@@ -15,7 +15,7 @@ import {
   upsertMemberPrayerForCycle,
   upsertPrayerCycleRosterCustomOrder,
   archiveMemberLegacyPrayerRequestColumn,
-  CYCLE_PRAYER_REQUEST_SELECT_SQL,
+  buildCyclePrayerMpcPickSql,
   snapshotPastCyclePrayersToHistory,
   PRAYER_CYCLE_MEMBERS_WHERE_M,
   PRAYER_CYCLE_ROSTER_ORDER_SQL,
@@ -277,6 +277,7 @@ async function appendPrayerRequestHistory(
 
 export async function listUsers(): Promise<AppUser[]> {
   const ci = await getCurrentCycleIndexForUpsert();
+  const mpcPick = buildCyclePrayerMpcPickSql('$1');
   const result = await query(
     `SELECT
       m.id,
@@ -291,7 +292,7 @@ export async function listUsers(): Promise<AppUser[]> {
       m.telegram_delivery_blocked_at,
       m.ministry_role,
       m.ministry_direction,
-      ${CYCLE_PRAYER_REQUEST_SELECT_SQL} AS prayer_request,
+      ${mpcPick.prayerRequest} AS prayer_request,
       m.birth_date,
       m.email,
       m.account_provider,
@@ -306,7 +307,6 @@ export async function listUsers(): Promise<AppUser[]> {
       m.created_at,
       m.updated_at
     FROM members m
-    LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $1
     ORDER BY m.id DESC`,
     [ci]
   );
@@ -315,6 +315,7 @@ export async function listUsers(): Promise<AppUser[]> {
 
 export async function getUserById(id: number): Promise<AppUser | null> {
   const ci = await getCurrentCycleIndexForUpsert();
+  const mpcPick = buildCyclePrayerMpcPickSql('$2');
   const result = await query(
     `SELECT
       m.id,
@@ -329,7 +330,7 @@ export async function getUserById(id: number): Promise<AppUser | null> {
       m.telegram_delivery_blocked_at,
       m.ministry_role,
       m.ministry_direction,
-      ${CYCLE_PRAYER_REQUEST_SELECT_SQL} AS prayer_request,
+      ${mpcPick.prayerRequest} AS prayer_request,
       m.birth_date,
       m.email,
       m.account_provider,
@@ -344,7 +345,6 @@ export async function getUserById(id: number): Promise<AppUser | null> {
       m.created_at,
       m.updated_at
     FROM members m
-    LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
     WHERE m.id = $1`,
     [id, ci]
   );

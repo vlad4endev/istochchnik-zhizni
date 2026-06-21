@@ -115,11 +115,44 @@ export async function getCurrentCycleIndexForUpsert(): Promise<number> {
 }
 
 /**
- * Нужда только из `member_prayer_by_cycle` для привязанного `cycle_index`.
+ * Подзапрос: нужда из `member_prayer_by_cycle` для `cycleIndexRef` (например `$2`).
+ * Сначала точное совпадение cycle_index; иначе +1…+2 (сироты после смены формулы цикла).
  * Без COALESCE с `members.prayer_request` — иначе после смены цикла в поле «текущего» цикла
  * остаётся текст прошлого.
  */
-export const CYCLE_PRAYER_REQUEST_SELECT_SQL = `NULLIF(TRIM(mpc.prayer_request), '')`;
+export function buildCyclePrayerMpcPickSql(cycleIndexRef: string): {
+  prayerRequest: string;
+  updatedAt: string;
+} {
+  const where = `
+    mpc_sel.member_id = m.id
+    AND mpc_sel.cycle_index BETWEEN ${cycleIndexRef}::bigint AND ${cycleIndexRef}::bigint + 2
+    AND NULLIF(TRIM(mpc_sel.prayer_request), '') IS NOT NULL`;
+  const order = `
+    ORDER BY
+      CASE WHEN mpc_sel.cycle_index = ${cycleIndexRef}::bigint THEN 0 ELSE 1 END,
+      CASE WHEN mpc_sel.cycle_index > ${cycleIndexRef}::bigint THEN 0 ELSE 1 END,
+      ABS(mpc_sel.cycle_index - ${cycleIndexRef}::bigint),
+      mpc_sel.updated_at DESC
+    LIMIT 1`;
+  return {
+    prayerRequest: `(
+      SELECT NULLIF(TRIM(mpc_sel.prayer_request), '')
+      FROM member_prayer_by_cycle mpc_sel
+      WHERE ${where}
+      ${order}
+    )`,
+    updatedAt: `(
+      SELECT mpc_sel.updated_at::text
+      FROM member_prayer_by_cycle mpc_sel
+      WHERE ${where}
+      ${order}
+    )`,
+  };
+}
+
+/** @deprecated Use buildCyclePrayerMpcPickSql('$N') for the correct bind index. */
+export const CYCLE_PRAYER_REQUEST_SELECT_SQL = buildCyclePrayerMpcPickSql('$1').prayerRequest;
 
 export async function upsertMemberPrayerForCycle(
   memberId: number,
@@ -206,6 +239,39 @@ const MPC_DELETE_ONLY_IF_ARCHIVED_SQL = `
   )`;
 
 /**
+ * После смены формулы cycle_index (выравнивание по понедельнику) нужды могли остаться
+ * на cycle_index на 1–2 больше текущего — переносим в актуальный индекс, если там пусто.
+ */
+async function repairMisalignedPrayerCycleRows(ciNow: number): Promise<number> {
+  const result = await query(
+    `INSERT INTO member_prayer_by_cycle (member_id, cycle_index, prayer_request, updated_at)
+     SELECT DISTINCT ON (src.member_id)
+            src.member_id,
+            $1,
+            src.prayer_request,
+            src.updated_at
+       FROM member_prayer_by_cycle src
+      WHERE src.cycle_index BETWEEN $1 + 1 AND $1 + 3
+        AND NULLIF(trim(src.prayer_request), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+            FROM member_prayer_by_cycle exact
+           WHERE exact.member_id = src.member_id
+             AND exact.cycle_index = $1
+             AND NULLIF(trim(exact.prayer_request), '') IS NOT NULL
+        )
+      ORDER BY src.member_id, src.cycle_index ASC, src.updated_at DESC
+     ON CONFLICT (member_id, cycle_index)
+     DO UPDATE SET
+       prayer_request = EXCLUDED.prayer_request,
+       updated_at = EXCLUDED.updated_at
+     WHERE NULLIF(trim(member_prayer_by_cycle.prayer_request), '') IS NULL`,
+    [ciNow],
+  );
+  return result.rowCount ?? 0;
+}
+
+/**
  * Перенос нужд завершённых циклов в журнал; из member_prayer_by_cycle удаляем только уже
  * заархивированные строки (текст остаётся в member_prayer_request_history).
  */
@@ -213,7 +279,8 @@ export async function snapshotPastCyclePrayersToHistory(): Promise<number> {
   const todayYmd = getPrayerCycleTodayYmd();
   const snap = await getPrayerCycleSnapshotForDate(todayYmd);
   const ciNow = snap?.cycle_index ?? 0;
-  const rangeStart = snap?.start_date ?? todayYmd;
+
+  await repairMisalignedPrayerCycleRows(ciNow);
 
   const result = await query(
     `INSERT INTO member_prayer_request_history (member_id, prayer_request, cycle_index, created_at)
@@ -233,26 +300,6 @@ export async function snapshotPastCyclePrayersToHistory(): Promise<number> {
     [ciNow],
   );
   let inserted = result.rowCount ?? 0;
-
-  const staleCurrent = await query(
-    `INSERT INTO member_prayer_request_history (member_id, prayer_request, cycle_index, created_at)
-     SELECT mpc.member_id,
-            trim(mpc.prayer_request),
-            mpc.cycle_index,
-            mpc.updated_at
-       FROM member_prayer_by_cycle mpc
-      WHERE mpc.cycle_index = $1
-        AND mpc.updated_at::date < $2::date
-        AND NULLIF(trim(mpc.prayer_request), '') IS NOT NULL
-        AND NOT EXISTS (
-          SELECT 1
-            FROM member_prayer_request_history h
-           WHERE h.member_id = mpc.member_id
-             AND h.cycle_index IS NOT DISTINCT FROM mpc.cycle_index
-        )`,
-    [ciNow, rangeStart],
-  );
-  inserted += staleCurrent.rowCount ?? 0;
   inserted += await archiveLegacyMemberPrayerRequestsToHistory(ciNow);
 
   const deletedPast = await query(
@@ -261,14 +308,7 @@ export async function snapshotPastCyclePrayersToHistory(): Promise<number> {
       ${MPC_DELETE_ONLY_IF_ARCHIVED_SQL}`,
     [ciNow],
   );
-  const staleDeleted = await query(
-    `DELETE FROM member_prayer_by_cycle mpc
-      WHERE mpc.cycle_index = $1
-        AND mpc.updated_at::date < $2::date
-        ${MPC_DELETE_ONLY_IF_ARCHIVED_SQL}`,
-    [ciNow, rangeStart],
-  );
-  if (inserted > 0 || (deletedPast.rowCount ?? 0) > 0 || (staleDeleted.rowCount ?? 0) > 0) {
+  if (inserted > 0 || (deletedPast.rowCount ?? 0) > 0) {
     notifyRealtime(['members', 'calendar']);
   }
   return inserted;

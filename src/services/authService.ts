@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import { query } from '../config/db';
 import { getPrayerCycleTodayYmd } from '../utils/prayerPlanTimeZone';
 import type { PrayerCyclePublic } from './prayerCycleService';
-import { getPrayerCycleSnapshotForDate, toPublicCycleInfo } from './prayerCycleService';
+import { getPrayerCycleSnapshotForDate, toPublicCycleInfo, buildCyclePrayerMpcPickSql } from './prayerCycleService';
 import type { AppRole } from '../types/appRole';
 import { normalizeAppRole, normalizeAppRoles } from '../types/appRole';
 import { findMemberIdConflictingName, updateUser } from './userService';
@@ -1832,6 +1832,7 @@ export async function rotateAccessByRefreshToken(
 export async function getAuthUserById(userId: number): Promise<AuthUser | null> {
   const snap = await getPrayerCycleSnapshotForDate(getPrayerCycleTodayYmd());
   const ci = snap?.cycle_index ?? 0;
+  const mpcPick = buildCyclePrayerMpcPickSql('$2');
 
   const result = await query(
     `SELECT
@@ -1847,7 +1848,7 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
       m.ministry_direction,
       m.birth_date,
       m.email,
-      NULLIF(TRIM(mpc.prayer_request), '') AS prayer_request,
+      ${mpcPick.prayerRequest} AS prayer_request,
       m.app_role,
       m.app_roles,
       m.is_active,
@@ -1859,7 +1860,6 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
       COALESCE(NULLIF(TRIM(up.username), ''), 'member-' || m.id::text) AS profile_username
     FROM members m
     LEFT JOIN user_profiles up ON up.member_id = m.id
-    LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
     WHERE m.id = $1
       AND (
         m.is_active = TRUE

@@ -5,7 +5,7 @@ import { getPrayerCycleTodayYmd, resolvePrayerPlanWeekTimeZone } from '../utils/
 import {
   computeCycleIndex,
   dayIndexInCycle,
-  CYCLE_PRAYER_REQUEST_SELECT_SQL,
+  buildCyclePrayerMpcPickSql,
   getCycleStartDate,
   getMergedPrayerCycleRosterMemberIdsForCycleIndex,
   getPrayerCycleSnapshotForDate,
@@ -177,8 +177,7 @@ function parsePreviousNeedId(raw: unknown): number {
 
 /**
  * Ручные заметки координаторов + записи из журнала истории (как в профиле участника).
- * @param cycleIndexByMemberId — цикл назначения участника на эту неделю/день; журнал и «сироты» mpc
- *   с `cycle_index >=` этого значения не показываем (иначе текст текущего цикла дублируется в справке).
+ * @param cycleIndexByMemberId — цикл назначения участника на эту неделю/день.
  */
 async function attachManualPreviousPrayerNeedsToMembers(
   members: Member[],
@@ -187,6 +186,11 @@ async function attachManualPreviousPrayerNeedsToMembers(
   const ids = members.map((m) => m.id).filter((id) => Number.isFinite(id));
   if (ids.length === 0) return;
 
+  const currentNeedByMemberId = new Map(
+    members.map((m) => [m.id, (m.prayer_request ?? '').trim()]),
+  );
+
+  /** Скрываем дубликат только если та же нужда уже в поле «текущая» для этого цикла. */
   function journalRowAllowed(memberId: number, cycleIndex: number | null): boolean {
     const assignmentCycle = cycleIndexByMemberId.get(memberId);
     if (assignmentCycle === undefined) {
@@ -195,7 +199,11 @@ async function attachManualPreviousPrayerNeedsToMembers(
     if (cycleIndex == null || !Number.isFinite(cycleIndex)) {
       return true;
     }
-    return cycleIndex < assignmentCycle;
+    if (cycleIndex !== assignmentCycle) {
+      return true;
+    }
+    const hasCurrent = (currentNeedByMemberId.get(memberId) ?? '').length > 0;
+    return !hasCurrent;
   }
 
   const byManual = new Map<number, PreviousNeedItem[]>();
@@ -376,15 +384,15 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
   const cycleIndexForDate =
     totalMembers > 0 ? computeCycleIndex(cyclePosition, totalMembers) : 0;
 
+  const mpcPick = buildCyclePrayerMpcPickSql('$2');
+
   const overridePromise = query(
     `SELECT m.id, m.name, m.first_name, m.last_name,
             m.in_prayer_cycle AS in_prayer_cycle,
-            ${CYCLE_PRAYER_REQUEST_SELECT_SQL} AS prayer_request,
-            mpc.updated_at::text AS prayer_need_updated_at
+            ${mpcPick.prayerRequest} AS prayer_request,
+            ${mpcPick.updatedAt} AS prayer_need_updated_at
      FROM member_cycle_overrides o
      JOIN members m ON m.id = o.member_id
-     LEFT JOIN member_prayer_by_cycle mpc
-       ON mpc.member_id = m.id AND mpc.cycle_index = $2
      WHERE m.is_active = TRUE
        AND m.in_prayer_cycle = TRUE
        AND o.target_date = $1::date
@@ -410,11 +418,9 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
     const result = await query(
       `SELECT m.id, m.name, m.first_name, m.last_name,
               m.in_prayer_cycle AS in_prayer_cycle,
-              ${CYCLE_PRAYER_REQUEST_SELECT_SQL} AS prayer_request,
-              mpc.updated_at::text AS prayer_need_updated_at
+              ${mpcPick.prayerRequest} AS prayer_request,
+              ${mpcPick.updatedAt} AS prayer_need_updated_at
        FROM members m
-       LEFT JOIN member_prayer_by_cycle mpc
-         ON mpc.member_id = m.id AND mpc.cycle_index = $2
        WHERE m.id = $1
          AND ${PRAYER_CYCLE_MEMBERS_WHERE_M}`,
       [pickedId, cycleIndexForDate]
@@ -511,6 +517,7 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
   );
 
   const overrideByDate = new Map<string, Member>();
+  const mpcPick = buildCyclePrayerMpcPickSql('$2');
   for (const row of overrides.rows) {
     const targetDate = (row as { target_date?: string }).target_date;
     const memberId = Number((row as { id: number }).id);
@@ -522,10 +529,9 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
     const r = await query(
       `SELECT m.id, m.name, m.first_name, m.last_name,
               m.in_prayer_cycle AS in_prayer_cycle,
-              ${CYCLE_PRAYER_REQUEST_SELECT_SQL} AS prayer_request,
-              mpc.updated_at::text AS prayer_need_updated_at
+              ${mpcPick.prayerRequest} AS prayer_request,
+              ${mpcPick.updatedAt} AS prayer_need_updated_at
        FROM members m
-       LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
        WHERE m.id = $1`,
       [memberId, cIdx]
     );
@@ -559,10 +565,9 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
 
     const pr = await query(
       `SELECT m.in_prayer_cycle AS in_prayer_cycle,
-              ${CYCLE_PRAYER_REQUEST_SELECT_SQL} AS prayer_request,
-              mpc.updated_at::text AS prayer_need_updated_at
+              ${mpcPick.prayerRequest} AS prayer_request,
+              ${mpcPick.updatedAt} AS prayer_need_updated_at
        FROM members m
-       LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
        WHERE m.id = $1`,
       [base.id, cIdx]
     );
