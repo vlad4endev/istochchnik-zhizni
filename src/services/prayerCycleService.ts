@@ -247,17 +247,17 @@ async function repairMisalignedPrayerCycleRows(ciNow: number): Promise<number> {
     `INSERT INTO member_prayer_by_cycle (member_id, cycle_index, prayer_request, updated_at)
      SELECT DISTINCT ON (src.member_id)
             src.member_id,
-            $1,
+            $1::bigint,
             src.prayer_request,
             src.updated_at
        FROM member_prayer_by_cycle src
-      WHERE src.cycle_index BETWEEN $1 + 1 AND $1 + 3
+      WHERE src.cycle_index BETWEEN $1::bigint + 1 AND $1::bigint + 3
         AND NULLIF(trim(src.prayer_request), '') IS NOT NULL
         AND NOT EXISTS (
           SELECT 1
             FROM member_prayer_by_cycle exact
            WHERE exact.member_id = src.member_id
-             AND exact.cycle_index = $1
+             AND exact.cycle_index = $1::bigint
              AND NULLIF(trim(exact.prayer_request), '') IS NOT NULL
         )
       ORDER BY src.member_id, src.cycle_index ASC, src.updated_at DESC
