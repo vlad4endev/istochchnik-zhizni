@@ -28,6 +28,11 @@ describe('normalizeChatDisplayText', () => {
     expect(normalizeChatDisplayText(raw)).toBe('Привет @[Иван](12) в 10:00');
   });
 
+  it('collapses digit spaces before punctuation (Chrome numbered lists)', () => {
+    expect(normalizeChatDisplayText('1 . Проповедник')).toBe('1. Проповедник');
+    expect(normalizeChatDisplayText('Текст: 5 : 1 9 - 2 2')).toBe('Текст: 5:19-22');
+  });
+
   it('keeps URLs intact without spaces inside uuid', () => {
     const url = 'https://app.church-tambov.ru/service-plan/share/54f17666-b943-41e6-8de9-3c57f5d58e28';
     expect(normalizeChatDisplayText(url)).toBe(url);

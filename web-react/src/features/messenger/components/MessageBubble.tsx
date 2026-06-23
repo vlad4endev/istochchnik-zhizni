@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useMemo, useEffect, useCallback, type ReactNode } from 'react';
-import { messengerTextForCopy, normalizeChatDisplayText } from '../normalizeChatDisplayText';
+import { handleMessengerTextCopy, messengerTextForCopy, normalizeChatDisplayText } from '../normalizeChatDisplayText';
 import { renderMessengerPlainText } from '../messengerPlainText';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChatStore } from '../chatStore';
@@ -2247,14 +2247,19 @@ function MessageBubbleInner({
           </>
         ) : useInlineTextMeta ? (
           <div className="flex min-w-0 flex-row flex-wrap items-end gap-x-2 gap-y-0.5">
-            <div className="msg-content messenger-bidi-text min-w-0 flex-1">
+            <div
+              className="msg-content messenger-bidi-text min-w-0 flex-1"
+              onCopy={handleMessengerTextCopy}
+            >
               {renderContent()}
             </div>
             <div className="ml-auto">{bubbleMeta}</div>
           </div>
         ) : (
           <>
-            <div className="msg-content messenger-bidi-text">{renderContent()}</div>
+            <div className="msg-content messenger-bidi-text" onCopy={handleMessengerTextCopy}>
+              {renderContent()}
+            </div>
             {message.is_pinned ? (
               <div
                 className={['mt-1 text-xs font-bold uppercase tracking-wide', isMine ? 'text-white/60' : 'text-amber-600'].join(' ')}

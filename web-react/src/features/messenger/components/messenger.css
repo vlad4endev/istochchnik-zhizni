@@ -1921,7 +1921,7 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* BiDi + шрифт: цифры в кириллице не разъезжаются (PWA iOS/Android, десктоп). */
+/* BiDi: в Chromium (Chrome, Яндекс) `plaintext` разрывает цифры — только `isolate`. */
 .tg-messenger .messenger-bidi-text,
 .tg-messenger .msg-content,
 .tg-messenger .mention-rich-text,
@@ -1934,14 +1934,18 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
 .tg-messenger .tg-input-banner-text,
 .tg-messenger .sender-name {
   direction: ltr;
-  unicode-bidi: plaintext;
+  unicode-bidi: isolate;
   font-family: var(--tg-font-family);
   letter-spacing: normal;
   font-variant-numeric: normal;
-  /* Android Chrome BiDi: prevent digit-breaking in Cyrillic+numeric strings */
   word-break: normal;
   -webkit-hyphens: none;
   hyphens: none;
+}
+
+.tg-messenger .msg-content a {
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 .messenger-digit-run {
@@ -1950,6 +1954,13 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
   display: inline;
+}
+
+/* Chromium (Chrome, Яндекс, Edge): усиленная изоляция цифр и ссылок */
+html[data-chromium-messenger='1'] .tg-messenger .messenger-digit-run,
+html[data-chromium-messenger='1'] .tg-messenger .msg-content a {
+  unicode-bidi: isolate !important;
+  direction: ltr !important;
 }
 
 /* Android Chrome / WebView / Capacitor: Roboto + без переносов внутри цифр */

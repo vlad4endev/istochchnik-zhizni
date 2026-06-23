@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import { normalizeChatDisplayText } from './normalizeChatDisplayText';
 
-const PLAIN_CHUNK_RE = /(https?:\/\/[^\s<>"{}|\\^`[\]]+|\d+)/g;
+const PLAIN_CHUNK_RE = /(https?:\/\/[^\s<>"{}|\\^`[\]]+|\d[\d.:,\/-]*)/g;
 
 function renderMessengerUrl(key: string, url: string, linkClassName?: string): ReactNode {
   return (
@@ -37,7 +37,7 @@ export function renderMessengerPlainText(
       if (/^https?:\/\//i.test(chunk)) {
         return renderMessengerUrl(`${keyPrefix}-u-${i}`, chunk, linkClassName);
       }
-      if (/^\d+$/.test(chunk)) {
+      if (/^\d[\d.:,\/-]*$/.test(chunk)) {
         return (
           <bdi key={`${keyPrefix}-d-${i}`} className="messenger-digit-run">
             {chunk}

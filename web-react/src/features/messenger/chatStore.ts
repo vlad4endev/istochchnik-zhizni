@@ -12,6 +12,7 @@ import { onAppBackgroundResume } from '../../lib/appBackgroundResume';
 import { emitAppToast } from '../../lib/uiFeedback';
 import { playAudio } from '../../utils/audio';
 import { extractMentionMemberIdsFromText, normalizeMentionsToCanonical } from './mentionUtils';
+import { normalizeChatDisplayText } from './normalizeChatDisplayText';
 import { inferMessengerPayloadType } from './payloadMedia';
 import {
   applyNewMessage,
@@ -1182,7 +1183,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sendMessage: async (conversationId, content, replyToId, payloadType = 'text', payload = {}) => {
     const convId = await get().promoteDraftToRealConversation(conversationId);
     if (convId == null) return false;
-    const textForSend = normalizeMentionsToCanonical(String(content ?? '').trim());
+    const textForSend = normalizeMentionsToCanonical(
+      normalizeChatDisplayText(String(content ?? '').trim()),
+    );
     playAudio('send');
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const clientMsgId = newClientMsgId();
@@ -1412,7 +1415,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const originalMsg = (state.messagesByConv[convId] || [])
       .find((m) => String(m.id) === mid) ?? null;
 
-    const canonical = normalizeMentionsToCanonical(String(content ?? '').trim());
+    const canonical = normalizeMentionsToCanonical(
+      normalizeChatDisplayText(String(content ?? '').trim()),
+    );
 
     // Optimistic edit (режим редактирования в инпуте сохраняем до успешного ответа API)
     set((s) => {

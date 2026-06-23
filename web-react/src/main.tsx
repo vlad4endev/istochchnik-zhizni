@@ -191,13 +191,17 @@ window.addEventListener('load', () => applyNativeShellViewportLock());
 initPwaStandaloneHtmlHint();
 
 /**
- * Android BiDi: устанавливаем атрибут, по которому messenger.css включает
- * Roboto + отключает hyphens для корректного рендера цифр в кириллице.
+ * Android BiDi: Roboto + без hyphens для цифр в кириллице.
+ * Chromium (Chrome, Яндекс): plaintext в CSS ломает цифры — включаем data-chromium-messenger.
  */
-(function initAndroidMessengerBidiAttr() {
+(function initMessengerBrowserBidiAttrs() {
   if (typeof navigator === 'undefined') return;
-  if (/Android/i.test(navigator.userAgent)) {
+  const ua = navigator.userAgent;
+  if (/Android/i.test(ua)) {
     document.documentElement.setAttribute('data-android-messenger', '1');
+  }
+  if (/(?:Chrome|Chromium|Edg|YaBrowser)\//i.test(ua)) {
+    document.documentElement.setAttribute('data-chromium-messenger', '1');
   }
 })();
 initAppearance();

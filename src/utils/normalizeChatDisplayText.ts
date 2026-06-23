@@ -32,6 +32,8 @@ export function normalizeChatDisplayText(text: string): string {
   }
 
   s = s.replace(/(\d{1,2})\s*:\s*(\d{1,2})/g, '$1:$2');
+  s = s.replace(/(\d)\s+([.:])/g, '$1$2');
+  s = s.replace(/(\d)\s*-\s*(\d)/g, '$1-$2');
 
   return s;
 }

@@ -41,7 +41,20 @@ export function normalizeChatDisplayText(text: string): string {
   // Время: «18 : 00» → «18:00»
   s = s.replace(/(\d{1,2})\s*:\s*(\d{1,2})/g, '$1:$2');
 
+  // Нумерация в Chrome/Yandex: «1 .» → «1.»; стихи «19 - 22» → «19-22»
+  s = s.replace(/(\d)\s+([.:])/g, '$1$2');
+  s = s.replace(/(\d)\s*-\s*(\d)/g, '$1-$2');
+
   return s;
+}
+
+/** При копировании выделения из пузыря (Chrome/Yandex BiDi) — чистый plain-text. */
+export function handleMessengerTextCopy(event: { clipboardData: DataTransfer; preventDefault: () => void }): void {
+  if (typeof window === 'undefined') return;
+  const selected = window.getSelection()?.toString() ?? '';
+  if (!selected.trim()) return;
+  event.clipboardData.setData('text/plain', messengerTextForCopy(selected));
+  event.preventDefault();
 }
 
 /** Текст для буфера обмена — без BiDi-артефактов и «разъехавшихся» цифр. */
@@ -53,6 +66,12 @@ export function messengerTextForCopy(text: string): string {
 export function isAndroidMessengerClient(): boolean {
   if (typeof navigator === 'undefined') return false;
   return /Android/i.test(navigator.userAgent);
+}
+
+/** Chromium (Chrome, Яндекс.Браузер, Edge) — BiDi plaintext ломает цифры в кириллице. */
+export function isChromiumMessengerClient(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /(?:Chrome|Chromium|Edg|YaBrowser)\//i.test(navigator.userAgent);
 }
 
 function slotToken(index: number): string {
