@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import type { MessageWithSender } from '../../api/messenger';
+import { messengerTextForCopy } from '../../lib/messengerUtils';
 import { androidRipple, messengerTextProps } from '../../theme/messenger';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '🙏', '🔥', '😮'] as const;
@@ -43,7 +44,7 @@ export function MessageContextMenu({
 
   const handleCopy = async () => {
     try {
-      await Clipboard.setStringAsync(String(message.content ?? ''));
+      await Clipboard.setStringAsync(messengerTextForCopy(String(message.content ?? '')));
       Alert.alert('Скопировано', 'Текст скопирован в буфер обмена');
     } catch {
       Alert.alert('Ошибка', 'Не удалось скопировать');

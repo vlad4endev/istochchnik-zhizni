@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useMemo, useEffect, useCallback, type ReactNode } from 'react';
-import { displayMessengerText } from '../normalizeChatDisplayText';
+import { messengerTextForCopy, normalizeChatDisplayText } from '../normalizeChatDisplayText';
 import { renderMessengerPlainText } from '../messengerPlainText';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChatStore } from '../chatStore';
@@ -42,8 +42,11 @@ function MentionRichText({
   namesById?: Record<number, string>;
   isMine: boolean;
 }) {
-  const displayText = useMemo(() => displayMessengerText(text), [text]);
-  const parts = displayText.split(/(@\[[^\]]+\]\(\d+\)|@\[\d+\])/g);
+  const normalizedText = useMemo(() => normalizeChatDisplayText(text), [text]);
+  const linkClassName = isMine
+    ? 'break-all font-semibold text-sky-100 underline decoration-white/40 underline-offset-2'
+    : undefined;
+  const parts = normalizedText.split(/(@\[[^\]]+\]\(\d+\)|@\[\d+\])/g);
   return (
     <span className="mention-rich-text messenger-bidi-text">
       {parts.map((part, i) => {
@@ -65,7 +68,9 @@ function MentionRichText({
         }
         const m = part.match(/^@\[(\d+)\]$/);
         if (!m) {
-          return <span key={i}>{renderMessengerPlainText(part, `p${i}`)}</span>;
+          return (
+            <span key={i}>{renderMessengerPlainText(part, `p${i}`, linkClassName)}</span>
+          );
         }
         const id = Number(m[1]);
         const name = namesById?.[id] ?? `участник ${id}`;
@@ -2301,7 +2306,7 @@ function MessageBubbleInner({
                 type="button"
                 onClick={() => {
                   void navigator.clipboard
-                    .writeText(String(message.content ?? ''))
+                    .writeText(messengerTextForCopy(String(message.content ?? '')))
                     .then(() => emitAppToast('Текст скопирован', 'success'))
                     .catch(() => emitAppToast('Не удалось скопировать', 'error'));
                   setShowActions(false);

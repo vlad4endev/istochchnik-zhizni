@@ -21,6 +21,7 @@ import {
   encryptMessageText,
   isMessageEncryptionEnabled,
 } from '../lib/messageCrypto';
+import { normalizeChatDisplayText } from '../utils/normalizeChatDisplayText';
 
 const MARK_READ_DEDUP_WINDOW_MS = 5_000;
 const recentMarkReadCalls = new Map<string, number>();
@@ -1540,7 +1541,9 @@ export async function prepareMessageForSend(
   const pt = normalizePayloadType(payloadType);
   const plRaw = normalizePayload(payload);
   const contentTrimmed = content.trim();
-  const contentStored = normalizeFriendlyMentionsToCanonical(contentTrimmed);
+  const contentNormalized =
+    pt === 'text' || pt === 'poll' ? normalizeChatDisplayText(contentTrimmed) : contentTrimmed;
+  const contentStored = normalizeFriendlyMentionsToCanonical(contentNormalized);
   let pl: MessagePayload;
   if (pt === 'poll') {
     pl = normalizePollPayloadForSend(contentStored, plRaw);
@@ -2035,7 +2038,9 @@ export async function editMessage(
 
   const convId = String(row.conversation_id);
   const pt = String(row.payload_type);
-  const normalized = normalizeFriendlyMentionsToCanonical(newContent.trim());
+  const normalized = normalizeFriendlyMentionsToCanonical(
+    normalizeChatDisplayText(newContent.trim()),
+  );
 
   const mentionRaw = extractMentionMemberIdsFromContent(normalized);
   const memberSet = new Set(await getConversationMemberIds(convId));

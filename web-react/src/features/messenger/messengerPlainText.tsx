@@ -2,14 +2,41 @@ import type { ReactNode } from 'react';
 
 import { normalizeChatDisplayText } from './normalizeChatDisplayText';
 
-/** Разбивает plain-текст: цифры в <bdi> (Chromium/Android WebView BiDi). */
-export function renderMessengerPlainText(text: string, keyPrefix = 'm'): ReactNode[] {
+const PLAIN_CHUNK_RE = /(https?:\/\/[^\s<>"{}|\\^`[\]]+|\d+)/g;
+
+function renderMessengerUrl(key: string, url: string, linkClassName?: string): ReactNode {
+  return (
+    <a
+      key={key}
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={
+        linkClassName ??
+        'break-all font-semibold text-primary underline decoration-primary/40 underline-offset-2'
+      }
+      onClick={(e) => e.stopPropagation()}
+    >
+      {url}
+    </a>
+  );
+}
+
+/** Разбивает plain-текст: URL — ссылкой, цифры — в <bdi> (Chromium/Android WebView BiDi). */
+export function renderMessengerPlainText(
+  text: string,
+  keyPrefix = 'm',
+  linkClassName?: string,
+): ReactNode[] {
   const normalized = normalizeChatDisplayText(text);
-  const chunks = normalized.split(/(\d+)/g);
+  const chunks = normalized.split(PLAIN_CHUNK_RE);
 
   return chunks
     .map((chunk, i) => {
       if (!chunk) return null;
+      if (/^https?:\/\//i.test(chunk)) {
+        return renderMessengerUrl(`${keyPrefix}-u-${i}`, chunk, linkClassName);
+      }
       if (/^\d+$/.test(chunk)) {
         return (
           <bdi key={`${keyPrefix}-d-${i}`} className="messenger-digit-run">
@@ -26,10 +53,16 @@ export function MessengerPlainText({
   text,
   className,
   keyPrefix = 'm',
+  linkClassName,
 }: {
   text: string;
   className?: string;
   keyPrefix?: string;
+  linkClassName?: string;
 }) {
-  return <span className={className}>{renderMessengerPlainText(text, keyPrefix)}</span>;
+  return (
+    <span className={className}>
+      {renderMessengerPlainText(text, keyPrefix, linkClassName)}
+    </span>
+  );
 }
