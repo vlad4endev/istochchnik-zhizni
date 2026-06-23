@@ -1,4 +1,5 @@
 import { query } from '../config/db';
+import { syncSongBlockAssigneesFromPlanMusicMinistry } from './servicePlannerService';
 import { sendPush } from './pushService';
 
 export interface PlannerSetlistSyncResult {
@@ -52,7 +53,7 @@ async function fetchPlanSongBlocks(planId: number): Promise<PlanSongBlock[]> {
      FROM public.service_blocks b
      INNER JOIN public.block_types bt ON bt.id = b.block_type_id
      WHERE b.service_plan_id = $1
-       AND lower(coalesce(bt.code, '')) = 'song'
+       AND (lower(coalesce(bt.code, '')) = 'song' OR bt.kind = 'song')
        AND b.song_id IS NOT NULL
      ORDER BY b.order_index ASC, b.id ASC`,
     [planId],
@@ -226,12 +227,21 @@ export async function syncSetlistFromPublishedPlan(
     | undefined;
   if (!plan || plan.status !== 'published') return [];
 
+  await syncSongBlockAssigneesFromPlanMusicMinistry(planId);
+
   const planMusicMinistryId =
     plan.music_ministry_member_id == null ? null : Number(plan.music_ministry_member_id);
 
   const songBlocks = await fetchPlanSongBlocks(planId);
   const groups = groupSongsByResponsibleMusician(songBlocks, planMusicMinistryId);
-  if (groups.size === 0) return [];
+  if (groups.size === 0) {
+    console.warn('[planner-setlist] skip: no responsible musician or songs', {
+      planId,
+      songBlockCount: songBlocks.length,
+      musicMinistryMemberId: planMusicMinistryId,
+    });
+    return [];
+  }
 
   const serviceDate = String(plan.service_date ?? '').trim();
   const dateLabel = serviceDate ? formatRuDateLong(serviceDate) : 'ближайшее служение';

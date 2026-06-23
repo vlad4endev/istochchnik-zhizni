@@ -847,6 +847,77 @@ export function ServicePlannerPage() {
     [users],
   );
 
+  async function persistPlanBlocksFromDraft(plan: ServicePlanDetails): Promise<void> {
+    const ordered = [...plan.blocks].sort((a, b) => a.order_index - b.order_index);
+    for (const b of ordered) {
+      const meta = blockTypes.find((t) => t.id === b.block_type_id);
+      const isSongMeta = meta?.code === 'song' || meta?.kind === 'song';
+      const isSermonMeta =
+        meta?.code === 'sermon' || (meta?.name ?? '').toLowerCase().includes('проповед');
+      let assigned_member_id = b.assigned_member_id;
+      if (isSermonMeta) assigned_member_id = plan.preacher_member_id ?? null;
+      else if (isSongMeta)
+        assigned_member_id = plan.music_ministry_member_id ?? b.assigned_member_id ?? null;
+      await patchServiceBlock(b.id, {
+        title: b.title,
+        block_type_id: b.block_type_id,
+        duration_minutes: b.duration_minutes,
+        assigned_member_id,
+        song_id: b.song_id,
+        content_json: b.content_json,
+      });
+    }
+  }
+
+  async function handleTogglePublishStatus(): Promise<void> {
+    if (!draft) return;
+    const nextStatus = draft.status === 'draft' ? 'published' : 'draft';
+    const nextDraft: ServicePlanDetails = { ...draft, status: nextStatus };
+
+    suppressNextAutosaveRef.current = true;
+    if (autosaveTimerRef.current != null) {
+      window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+
+    setAutosaveStatus('saving');
+    try {
+      // При публикации сначала сохраняем блоки (песни, ответственных), затем статус —
+      // иначе сервер синхронизирует сетлист по устаревшим данным из БД.
+      if (nextStatus === 'published') {
+        await persistPlanBlocksFromDraft(nextDraft);
+      }
+
+      if (canManagePlanSettings) {
+        await patchServicePlan(nextDraft.id, {
+          service_date: nextDraft.service_date,
+          start_time: nextDraft.start_time,
+          leader_member_id: nextDraft.leader_member_id,
+          preacher_member_id: nextDraft.preacher_member_id,
+          music_ministry_member_id: nextDraft.music_ministry_member_id,
+          current_block_id: nextDraft.current_block_id,
+          status: nextStatus,
+        });
+      } else {
+        await patchServicePlan(nextDraft.id, { status: nextStatus });
+      }
+
+      if (nextStatus === 'draft') {
+        await persistPlanBlocksFromDraft(nextDraft);
+      }
+
+      setDraft(nextDraft);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] }),
+        qc.invalidateQueries({ queryKey: ['service-planner', 'plan', activePlanId] }),
+      ]);
+      setAutosaveSavedAt(Date.now());
+      setAutosaveStatus('saved');
+    } catch {
+      setAutosaveStatus('error');
+    }
+  }
+
   const activeTemplate = useMemo(() => {
     const targetId = activeTemplateId ?? draft?.template_id ?? null;
     if (!targetId) return null;
@@ -2801,10 +2872,9 @@ export function ServicePlannerPage() {
           <button
             type="button"
             onClick={() => {
-              const status = draft.status === 'draft' ? 'published' : 'draft';
-              setDraft({ ...draft, status });
-              void updatePlanMut.mutateAsync({ id: draft.id, body: { status } });
+              void handleTogglePublishStatus();
             }}
+            disabled={autosaveStatus === 'saving'}
             className={[
               'col-span-2 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold md:col-span-1',
               draft.status === 'draft'

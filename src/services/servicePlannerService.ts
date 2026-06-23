@@ -618,6 +618,19 @@ function mapBlockRow(row: DbRecord): PlannerBlock {
   };
 }
 
+/** Перед синхронизацией сетлиста — выставить ответственного на блоках «Песня» из music_ministry_member_id плана. */
+export async function syncSongBlockAssigneesFromPlanMusicMinistry(planId: number): Promise<void> {
+  await ensurePlannerSchema();
+  const res = await query(
+    `select music_ministry_member_id from public.service_plans where id = $1 limit 1`,
+    [planId],
+  );
+  const raw = (res.rows[0] as { music_ministry_member_id?: unknown } | undefined)?.music_ministry_member_id;
+  const musicId = raw == null ? null : Number(raw);
+  if (musicId == null || !Number.isInteger(musicId) || musicId <= 0) return;
+  await syncSongBlocksMusicMinistryMember(planId, musicId);
+}
+
 /** После смены ответственного за музыку в настройках плана — выставить всем блокам с типом kind=song. */
 async function syncSongBlocksMusicMinistryMember(planId: number, memberId: number | null): Promise<void> {
   await ensurePlannerSchema();
