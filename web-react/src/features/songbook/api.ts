@@ -1,4 +1,5 @@
 import { apiClient } from '../../lib/apiClient';
+import type { RecognizedSong } from './studio/sheetMusicTypes';
 
 export interface SongListItem {
   id: string;
@@ -186,6 +187,24 @@ export async function aiRecognizeSongPhoto(file: File): Promise<SongPhotoAiResul
   const fd = new FormData();
   fd.set('photo', file);
   const { data } = await apiClient.post<SongPhotoAiResult>(`${SONGS}/ai/recognize-photo`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 180_000,
+  });
+  return data;
+}
+
+
+export type {
+  RecognizedSong,
+  RecognizedSection,
+  RecognizedSectionType,
+} from './studio/sheetMusicTypes';
+
+/** Распознать партитуру с фото: тональность, размер, BPM, секции с аккордами. */
+export async function aiRecognizeSheetMusic(file: File): Promise<RecognizedSong> {
+  const fd = new FormData();
+  fd.set('photo', file);
+  const { data } = await apiClient.post<RecognizedSong>(`${SONGS}/ai/recognize-sheet`, fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 180_000,
   });

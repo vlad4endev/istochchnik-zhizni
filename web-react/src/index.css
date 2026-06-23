@@ -1087,6 +1087,75 @@ nav.app-bottom-nav {
   animation: bpm-pulse var(--bpm-duration, 0.5s) ease-in-out infinite;
 }
 
+/* Режим выступления на сцене: тёмный фон, крупный текст, минимум отвлечений */
+.perform-stage {
+  --perform-bg: #0c0c0e;
+  --perform-surface: #16161a;
+  --perform-border: rgba(255, 255, 255, 0.1);
+  --perform-text: #f4f4f5;
+  --perform-muted: #a1a1aa;
+  --perform-accent: #34d399;
+  --perform-chord: #6ee7b7;
+  background: var(--perform-bg);
+  color: var(--perform-text);
+}
+
+.perform-stage .perform-stage-surface {
+  background: var(--perform-surface);
+  border-color: var(--perform-border);
+  color: var(--perform-text);
+}
+
+.perform-stage .perform-stage-muted {
+  color: var(--perform-muted);
+}
+
+.perform-stage .perform-song-strip-btn--active {
+  background: var(--perform-accent);
+  color: #052e16;
+  border-color: transparent;
+}
+
+.perform-stage .songbook-reader {
+  color: var(--perform-text);
+}
+
+.perform-edge-nav {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18%;
+  max-width: 5rem;
+  z-index: 2;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.perform-edge-nav:active:not(:disabled) {
+  background: rgba(128, 128, 128, 0.08);
+}
+
+.perform-edge-nav--left {
+  left: 0;
+}
+
+.perform-edge-nav--right {
+  right: 0;
+}
+
+.perform-edge-nav:disabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .perform-edge-nav:active:not(:disabled) {
+    background: transparent;
+  }
+}
+
 /* === BirthdayBlock: пульсирующее кольцо вокруг аватара именинника «Сегодня» === */
 @keyframes bdayRing {
   0%, 100% { opacity: 1; }

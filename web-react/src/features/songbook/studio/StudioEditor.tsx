@@ -5,6 +5,7 @@ import { Link, useBeforeUnload, useLocation, useNavigate, useParams } from 'reac
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import {
   LuArrowLeft,
+  LuCamera,
   LuCircleHelp,
   LuClock3,
   LuHistory,
@@ -41,6 +42,12 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { useSongbookChrome } from '../SongbookChromeContext';
 
 import { BlockWrapper } from './BlockWrapper';
+import { SheetRecognizer } from './SheetRecognizer';
+import {
+  buildRecognitionNotes,
+  recognizedSectionsToBlocks,
+  type RecognizedSong,
+} from './sheetMusicTypes';
 import {
   assertRoundtrip,
   blocksToChordPro,
@@ -299,6 +306,7 @@ export function StudioEditor() {
 
   const [importOpen, setImportOpen] = useState(false);
   const [importInitialTab, setImportInitialTab] = useState<SmartImportSourceTab>('text');
+  const [sheetRecognizerOpen, setSheetRecognizerOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [rawPaste, setRawPaste] = useState('');
   const [showPreview, setShowPreview] = useState(true);
@@ -840,6 +848,31 @@ export function StudioEditor() {
     setKeyHint(`Авто: ${guess.label} (${guess.confidence})`);
   };
 
+  const applySheetRecognition = (data: RecognizedSong) => {
+    if (data.key?.trim()) {
+      setKey(parseKeyForApi(data.key));
+      setKeyHint('С партитуры');
+    }
+    if (data.timeSignature?.trim()) setCatalogTimeSignature(data.timeSignature.trim());
+    if (data.bpm != null && data.bpm > 0) setCatalogTempo(String(data.bpm));
+
+    const sectionBlocks = recognizedSectionsToBlocks(data.sections);
+    if (sectionBlocks.length > 0) {
+      setBlocks(sectionBlocks);
+      setRawPaste(blocksToChordPro(sectionBlocks));
+    }
+
+    const notes = buildRecognitionNotes(data);
+    if (notes) setRawPaste((prev) => (prev.trim() ? `${prev.trim()}\n\n${notes}` : notes));
+
+    setSheetRecognizerOpen(false);
+    const titleBit = data.title?.trim() ? ` «${data.title.trim()}»` : '';
+    emitAppToast({
+      kind: 'success',
+      message: `Партитура распознана${titleBit}. Проверьте поля и сохраните.`,
+    });
+  };
+
   const runAiSongCleanup = () => {
     const source = blocksToChordPro(blocks);
     if (!source.trim()) {
@@ -1193,6 +1226,43 @@ export function StudioEditor() {
         variant={importVariant}
       />
 
+      {sheetRecognizerOpen ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[var(--z-modal-bg)] backdrop-blur-[2px]"
+            style={{ background: 'rgba(0, 0, 0, 0.45)' }}
+            aria-label="Закрыть распознавание нот"
+            onClick={() => setSheetRecognizerOpen(false)}
+          />
+          <div
+            className={`fixed left-1/2 top-1/2 z-[var(--z-modal)] w-[min(calc(100vw-1.5rem),440px)] max-h-[85dvh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl p-5 md:inset-auto md:left-auto md:right-6 md:top-20 md:h-auto md:max-h-[min(90dvh,calc(100dvh-5rem))] md:w-[min(440px,calc(100vw-3rem))] md:translate-x-0 md:translate-y-0 ${shell.drawer}`}
+            role="dialog"
+            aria-labelledby="sheet-recognizer-title"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 id="sheet-recognizer-title" className="text-base font-semibold">
+                  Распознать ноты
+                </h2>
+                <p className={`mt-1 text-xs ${shell.muted}`}>
+                  Сфотографируй партитуру — поля заполнятся автоматически
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSheetRecognizerOpen(false)}
+                className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center ${shell.iconBtn}`}
+                aria-label="Закрыть"
+              >
+                <LuX className="h-5 w-5" />
+              </button>
+            </div>
+            <SheetRecognizer onApply={applySheetRecognition} variant="studio" />
+          </div>
+        </>
+      ) : null}
+
       {toolsOpen ? (
         <>
           <button
@@ -1529,6 +1599,15 @@ export function StudioEditor() {
           <LuArrowLeft className="h-5 w-5" />
         </Link>
         <p className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--studio-editor-text)] lg:hidden">{s.title}</p>
+        <button
+          type="button"
+          onClick={() => setSheetRecognizerOpen(true)}
+          className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold ${shell.violetBtn}`}
+          aria-label="Распознать ноты с фото"
+        >
+          <LuCamera className="h-4 w-4 shrink-0" />
+          <span className="hidden sm:inline">Распознать ноты</span>
+        </button>
         <button
           type="button"
           onClick={() => {

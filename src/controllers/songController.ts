@@ -28,6 +28,7 @@ import pdfParse from 'pdf-parse';
 import { safeFetchUrlForSongImport } from '../utils/safeUrlTextFetch';
 import { AiAgentError, chatCompletion } from '../ai';
 import { recognizeSongFromPhoto } from '../services/songPhotoAiService';
+import { recognizeSheetMusic } from '../services/sheetMusicAiService';
 
 type AuthReq = Request & SessionRoleSource & { authUserId?: number; authUserRole?: AppRole };
 
@@ -728,6 +729,46 @@ export async function aiRecognizePhotoHandler(req: Request, res: Response): Prom
     }
     const msg = e instanceof Error ? e.message : 'Не удалось распознать фото';
     console.error('[songs] ai recognize-photo error', e);
+    res.status(500).json({ error: msg });
+  }
+}
+
+/** ИИ: распознать партитуру с фото → тональность, размер, BPM, секции с аккордами. */
+export async function aiRecognizeSheetHandler(req: Request, res: Response): Promise<void> {
+  const r = req as AuthReq;
+  if (!r.authUserId) {
+    res.status(401).json({ error: 'Требуется вход' });
+    return;
+  }
+  if (!sessionCanModerateCatalog(r)) {
+    res.status(403).json({ error: 'Недостаточно прав для редактирования каталога' });
+    return;
+  }
+
+  const file = (req as Request & { file?: Express.Multer.File }).file;
+  if (!file?.buffer) {
+    res.status(400).json({ error: 'Фото не передано' });
+    return;
+  }
+
+  const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+  const mime = (file.mimetype || 'image/jpeg').toLowerCase();
+  if (!allowed.includes(mime)) {
+    res.status(400).json({ error: 'Поддерживаются JPEG, PNG, WebP' });
+    return;
+  }
+
+  try {
+    const result = await recognizeSheetMusic(file.buffer, file.mimetype || 'image/jpeg');
+    res.json(result);
+  } catch (e) {
+    if (e instanceof AiAgentError) {
+      const mapped = mapAiAgentErrorToHttp(e);
+      res.status(mapped.status).json(mapped.body);
+      return;
+    }
+    const msg = e instanceof Error ? e.message : 'Не удалось распознать партитуру';
+    console.error('[songs] ai recognize-sheet error', e);
     res.status(500).json({ error: msg });
   }
 }

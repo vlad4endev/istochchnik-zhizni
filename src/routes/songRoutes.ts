@@ -3,6 +3,7 @@ import { Router } from 'express';
 import {
   addFavoriteHandler,
   aiRecognizePhotoHandler,
+  aiRecognizeSheetHandler,
   aiSplitBlocksHandler,
   createSongHandler,
   deleteSongHandler,
@@ -29,6 +30,7 @@ router.get('/import-url', requireAuthSession, importUrlText);
 router.get('/version-flags', requireAuthSession, versionFlags);
 router.post('/ai/split-blocks', requireAuthSession, aiSplitBlocksHandler);
 router.post('/ai/recognize-photo', requireAuthSession, songPhotoUploadMiddleware, aiRecognizePhotoHandler);
+router.post('/ai/recognize-sheet', requireAuthSession, songPhotoUploadMiddleware, aiRecognizeSheetHandler);
 router.post('/', requireAuthSession, createSongHandler);
 router.post('/:id/open', requireAuthSession, recordSongOpenedHandler);
 router.post('/:id/publish', requireAuthSession, publishSongHandler);

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
-import { LuArrowLeft, LuArrowRight, LuLoader, LuSave, LuSparkles, LuUpload, LuYoutube } from 'react-icons/lu';
+import { LuArrowLeft, LuArrowRight, LuCamera, LuLoader, LuSave, LuSparkles, LuUpload, LuX, LuYoutube } from 'react-icons/lu';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -18,6 +18,13 @@ import { LyricsWithChords } from '../components/LyricsWithChords';
 import { SectionInsertToolbar } from '../components/SectionInsertToolbar';
 import { convertToChordPro } from '../addSong/chordProConversion';
 import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImportModal';
+import { SheetRecognizer } from '../studio/SheetRecognizer';
+import {
+  buildRecognitionNotes,
+  recognizedSectionsToBlocks,
+  type RecognizedSong,
+} from '../studio/sheetMusicTypes';
+import { blocksToChordPro } from '../studio/songBlocks';
 import { extractChordsFromText, guessKeyFromChords } from '../addSong/keyDetection';
 import { quickChordsForKey } from '../addSong/quickChords';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -58,6 +65,7 @@ export function AddSongPage() {
 
   const [step, setStep] = useState(1);
   const [importOpen, setImportOpen] = useState(false);
+  const [sheetRecognizerOpen, setSheetRecognizerOpen] = useState(false);
   const [importInitialTab, setImportInitialTab] = useState<SmartImportSourceTab>('text');
   const importAutoOpened = useRef(false);
   const [rawPaste, setRawPaste] = useState('');
@@ -305,6 +313,26 @@ export function AddSongPage() {
     }
   };
 
+  const applySheetRecognition = (data: RecognizedSong) => {
+    if (data.title?.trim() && !title.trim()) setTitle(data.title.trim());
+    if (data.key?.trim()) setDefaultKey(data.key.trim());
+    if (data.timeSignature?.trim()) setTimeSig(data.timeSignature.trim());
+    if (data.bpm != null && data.bpm > 0) setTempo(String(data.bpm));
+
+    const sectionBlocks = recognizedSectionsToBlocks(data.sections);
+    if (sectionBlocks.length > 0) {
+      const chordPro = blocksToChordPro(sectionBlocks);
+      setContent(chordPro);
+      setRawPaste(chordPro);
+      setStep(2);
+    }
+
+    const notes = buildRecognitionNotes(data);
+    if (notes) setRawPaste((prev) => (prev.trim() ? `${prev.trim()}\n\n${notes}` : notes));
+
+    setSheetRecognizerOpen(false);
+  };
+
   const goPrev = () => {
     if (step > 1) setStep((s) => s - 1);
   };
@@ -363,6 +391,43 @@ export function AddSongPage() {
         initialTab={importInitialTab}
         variant={isStudio ? 'studio' : 'default'}
       />
+
+      {sheetRecognizerOpen ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[var(--z-modal-bg)] backdrop-blur-[2px]"
+            style={{ background: 'rgba(0, 0, 0, 0.45)' }}
+            aria-label="Закрыть распознавание нот"
+            onClick={() => setSheetRecognizerOpen(false)}
+          />
+          <div
+            className={`fixed left-1/2 top-1/2 z-[var(--z-modal)] w-[min(calc(100vw-1.5rem),440px)] max-h-[85dvh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl border p-5 shadow-2xl ${theme.card}`}
+            role="dialog"
+            aria-labelledby="add-sheet-recognizer-title"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 id="add-sheet-recognizer-title" className={`text-base font-semibold ${theme.title}`}>
+                  Распознать ноты
+                </h2>
+                <p className={`mt-1 text-xs ${theme.muted}`}>
+                  Сфотографируй партитуру — поля заполнятся автоматически
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSheetRecognizerOpen(false)}
+                className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl ${theme.btnOutline}`}
+                aria-label="Закрыть"
+              >
+                <LuX className="h-5 w-5" />
+              </button>
+            </div>
+            <SheetRecognizer onApply={applySheetRecognition} variant={isStudio ? 'studio' : 'default'} />
+          </div>
+        </>
+      ) : null}
 
       {!embeddedInStudio ? (
         <div className="flex flex-wrap items-center gap-3">
@@ -455,6 +520,14 @@ export function AddSongPage() {
               >
                 <LuUpload className="h-5 w-5" />
                 Импорт из PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => setSheetRecognizerOpen(true)}
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-4 text-sm font-semibold sm:w-auto ${theme.btnOutline}`}
+              >
+                <LuCamera className="h-5 w-5" />
+                Распознать ноты
               </button>
             </div>
             <p className={`mt-4 text-sm ${theme.muted}`}>

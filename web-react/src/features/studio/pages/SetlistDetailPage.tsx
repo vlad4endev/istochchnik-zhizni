@@ -5,18 +5,7 @@ import { useMemo, useState, useCallback } from 'react';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { studioSetlistPerformPath, studioSetlistsIndexPath, useStudioModuleSurface } from '../studioPaths';
-import {
-  LuArrowDown,
-  LuArrowUp,
-  LuCopy,
-  LuFileDown,
-  LuChevronLeft,
-  LuLink,
-  LuMic,
-  LuSearch,
-  LuShare2,
-  LuSparkles,
-} from 'react-icons/lu';
+import { LuArrowDown, LuArrowUp, LuCopy, LuFileDown, LuChevronLeft, LuLink, LuMic, LuMusic2, LuPlay, LuSearch, LuShare2, LuSparkles } from 'react-icons/lu';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
 import { exportSetlistPdf } from '../../songbook/pdfExport';
@@ -32,6 +21,7 @@ import {
   reorderSetlistItems,
 } from '../api';
 import { SetlistMusicianNotesEditor } from '../components/SetlistMusicianNotesEditor';
+import { SetlistSongSheetPreview } from '../components/SetlistSongSheetPreview';
 
 export function SetlistDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -247,10 +237,10 @@ export function SetlistDetailPage() {
         <div className="flex flex-wrap gap-2">
           <Link
             to={studioSetlistPerformPath(surface, setlistId)}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-lg studio-btn-success shadow-sm"
+            className="inline-flex min-h-[48px] items-center gap-2 rounded-xl studio-btn-success px-5 text-base font-bold shadow-md"
           >
-            <LuMic className="h-4 w-4 shrink-0" aria-hidden />
-            Режим выступления
+            <LuMic className="h-5 w-5 shrink-0" aria-hidden />
+            На сцену
           </Link>
           <button
             type="button"
@@ -434,8 +424,16 @@ export function SetlistDetailPage() {
                       {it.effective_content_preview}
                     </p>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center">
-                    <div className="flex gap-0.5">
+                    <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center">
+                      <Link
+                        to={`${studioSetlistPerformPath(surface, setlistId)}?song=${idx + 1}`}
+                        className="inline-flex min-h-[36px] items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                        title="Открыть в режиме выступления"
+                      >
+                        <LuPlay className="h-3.5 w-3.5" aria-hidden />
+                        На сцену
+                      </Link>
+                      <div className="flex gap-0.5">
                       <button
                         type="button"
                         disabled={idx <= 0 || reorderMut.isPending}
@@ -466,6 +464,22 @@ export function SetlistDetailPage() {
                     </button>
                   </div>
                 </div>
+                <details className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium text-[var(--text)] marker:hidden [&::-webkit-details-marker]:hidden">
+                    <LuMusic2 className="h-4 w-4 shrink-0 text-sky-600" aria-hidden />
+                    Показать ноты
+                  </summary>
+                  <div className="border-t border-[var(--border)] px-3 pb-3 pt-2">
+                    <SetlistSongSheetPreview
+                      content={it.effective_content || it.song.content}
+                      musicianNotes={it.musician_notes}
+                      songKey={it.effective_key ?? it.song.default_key}
+                      tempo={it.song.tempo}
+                      timeSignature={it.song.time_signature}
+                      compact
+                    />
+                  </div>
+                </details>
                 <details className="mt-3 rounded-lg border border-violet-100 bg-violet-50/30">
                   <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-violet-900 marker:hidden [&::-webkit-details-marker]:hidden">
                     Заметки для музыкантов (режим выступления)

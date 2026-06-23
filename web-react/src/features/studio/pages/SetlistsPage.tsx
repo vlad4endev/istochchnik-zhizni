@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LuChartColumnIncreasing } from 'react-icons/lu';
+import { LuChartColumnIncreasing, LuMic } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
@@ -125,9 +125,10 @@ export function SetlistsPage() {
             <div className="flex shrink-0 items-center gap-2 text-sm">
               <Link
                 to={studioSetlistPerformPath(surface, Number(s.id))}
-                className={`inline-flex min-h-[40px] items-center rounded-lg px-3 text-xs font-semibold ${inStudioShell ? 'studio-btn-primary' : 'font-medium text-emerald-700 hover:text-emerald-800'}`}
+                className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl px-4 text-sm font-bold shadow-sm ${inStudioShell ? 'studio-btn-primary' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
               >
-                Выступление
+                <LuMic className="h-4 w-4 shrink-0" aria-hidden />
+                На сцену
               </Link>
               <button
                 type="button"

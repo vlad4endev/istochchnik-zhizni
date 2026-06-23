@@ -130,7 +130,7 @@ function isAnalyticsTrackingPost(method: string, path: string): boolean {
 function isSongAiAssistPost(method: string, path: string): boolean {
   if (method !== 'POST') return false;
   const p = path.split('?')[0];
-  return p === '/api/songs/ai/split-blocks' || p === '/api/songs/ai/recognize-photo';
+  return p === '/api/songs/ai/split-blocks' || p === '/api/songs/ai/recognize-photo' || p === '/api/songs/ai/recognize-sheet';
 }
 
 /** POST/PATCH каталога (создание и правка — музыканты студии, редакторы и админ). */
