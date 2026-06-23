@@ -30,6 +30,8 @@ import { emitAppToast } from '@/lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { BlockStageSetupFields, BlockStageSetupPreview } from '../components/BlockStageSetupFields';
 import { DurationMinutesInput } from '../components/DurationMinutesInput';
+import { ServicePlannerMemberPicker } from '../components/ServicePlannerMemberPicker';
+import { ServicePlannerSongPicker } from '../components/ServicePlannerSongPicker';
 import { ShareBroadcastTeamPanel } from '../components/ShareBroadcastTeamPanel';
 import {
   STAGE_SETUP_PLACE_EQUIPMENT_KEY,
@@ -845,7 +847,7 @@ export function EditableServicePlanPage() {
                       />
                     </div>
                     <div className="min-w-0">
-                      <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-responsible-${editingBlock.id}`}>
+                      <p className="mb-1 block text-xs font-medium text-stone-600">
                         {isEditingSermonBlock
                           ? 'Проповедник'
                           : isEditingSongBlock
@@ -853,22 +855,38 @@ export function EditableServicePlanPage() {
                             : isEditingPrayerBlock
                               ? 'Молитва'
                               : 'Ответственный'}
-                      </label>
+                      </p>
                       <div className="flex min-w-0 items-center gap-2 sm:block">
-                        <select
+                        <ServicePlannerMemberPicker
                           id={`block-responsible-${editingBlock.id}`}
+                          className="min-w-0 flex-1 sm:w-full"
+                          members={responsibleCandidates}
                           value={
                             isEditingSermonBlock
-                              ? (planPreacherId ?? '')
+                              ? planPreacherId
                               : isEditingSongBlock
-                                ? (planMusicMinistryId ?? '')
-                                : (editingBlock.assigned_member_id ?? '')
+                                ? planMusicMinistryId
+                                : editingBlock.assigned_member_id
                           }
-                          onChange={(e) => {
+                          disabled={isEditingSermonBlock || isEditingSongBlock}
+                          disabledHint={
+                            isEditingSermonBlock
+                              ? planPreacherId
+                                ? (planPreacherName ?? 'Проповедник')
+                                : 'В настройках программы не выбран проповедник'
+                              : isEditingSongBlock
+                                ? planMusicMinistryId
+                                  ? (planMusicMinistryName ?? 'Ответственный за музыку')
+                                  : 'В настройках программы не выбран ответственный за музыку'
+                                : null
+                          }
+                          clearLabel={
+                            isEditingPrayerBlock ? 'Служитель молитвы не назначен' : 'Ответственный не назначен'
+                          }
+                          orphanLabel={editingBlock.assigned_member_name}
+                          onChange={(memberId, member) => {
                             if (isEditingSermonBlock || isEditingSongBlock) return;
                             dirtyShareBlockIdsRef.current.add(editingBlock.id);
-                            const memberId = e.target.value ? Number(e.target.value) : null;
-                            const member = memberId ? members.find((u) => u.id === memberId) : null;
                             setDraftBlocks((prev) =>
                               prev.map((x) =>
                                 x.id === editingBlock.id
@@ -878,14 +896,7 @@ export function EditableServicePlanPage() {
                                         ? member
                                           ? `СТИХ - ${userLabel(member)}`
                                           : 'СТИХ - Чтец'
-                                        : isEditingSermonBlock
-                                          ? (() => {
-                                              const topicRaw = x.content_json?.sermon_topic;
-                                              const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
-                                              const preacherName = member ? userLabel(member) : 'Проповедник';
-                                              return topic ? `${preacherName} - ${topic}` : preacherName;
-                                            })()
-                                          : x.title,
+                                        : x.title,
                                       assigned_member_id: memberId,
                                       assigned_member_name: member ? userLabel(member) : null,
                                     }
@@ -893,32 +904,7 @@ export function EditableServicePlanPage() {
                               ),
                             );
                           }}
-                          className="min-h-11 w-full min-w-0 max-w-full flex-1 rounded-lg border border-stone-300 bg-white px-2 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:w-full sm:py-1.5 sm:text-sm"
-                          disabled={isEditingSermonBlock || isEditingSongBlock}
-                        >
-                          {isEditingSermonBlock ? (
-                            <option value={planPreacherId ?? ''}>
-                              {planPreacherId ? (planPreacherName ?? 'Проповедник') : 'В настройках программы не выбран проповедник'}
-                            </option>
-                          ) : isEditingSongBlock ? (
-                            <option value={planMusicMinistryId ?? ''}>
-                              {planMusicMinistryId
-                                ? (planMusicMinistryName ?? 'Ответственный за музыку')
-                                : 'В настройках программы не выбран ответственный за музыку'}
-                            </option>
-                          ) : (
-                            <>
-                              <option value="">
-                                {isEditingPrayerBlock ? 'Служитель молитвы не назначен' : 'Ответственный не назначен'}
-                              </option>
-                              {responsibleCandidates.map((u) => (
-                                <option key={u.id} value={u.id}>
-                                  {userLabel(u)}
-                                </option>
-                              ))}
-                            </>
-                          )}
-                        </select>
+                        />
                         {!isEditingSongBlock ? (
                           <p
                             className="max-w-[40%] shrink-0 text-[11px] leading-tight text-stone-500 sm:hidden"
@@ -931,27 +917,24 @@ export function EditableServicePlanPage() {
                     </div>
                     {isEditingSongBlock ? (
                       <div className="min-w-0">
-                        <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-song-${editingBlock.id}`}>
-                          Песня
-                        </label>
-                        <select
+                        <p className="mb-1 block text-xs font-medium text-stone-600">Песня</p>
+                        <ServicePlannerSongPicker
                           id={`block-song-${editingBlock.id}`}
+                          songs={songs}
                           value={
                             editingBlock.song_id != null && Number.isFinite(Number(editingBlock.song_id))
-                              ? String(editingBlock.song_id)
-                              : ''
+                              ? Number(editingBlock.song_id)
+                              : null
                           }
-                          onChange={(e) => {
+                          orphanTitle={editingBlock.song_title}
+                          orphanKey={editingBlock.song_key}
+                          clearLabel="Песня не назначена"
+                          autoFocus
+                          onChange={(songId, picked) => {
                             dirtyShareBlockIdsRef.current.add(editingBlock.id);
-                            const raw = e.target.value;
-                            const songId = raw ? Number(raw) : null;
                             setDraftBlocks((prev) =>
                               prev.map((x) => {
                                 if (x.id !== editingBlock.id) return x;
-                                const picked =
-                                  songId != null && Number.isInteger(songId) && songId > 0
-                                    ? songs.find((s) => s.id === songId)
-                                    : null;
                                 const keepOrphanMeta = songId != null && songId === x.song_id && !picked;
                                 return {
                                   ...x,
@@ -963,25 +946,7 @@ export function EditableServicePlanPage() {
                               }),
                             );
                           }}
-                          className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:py-1.5 sm:text-sm"
-                        >
-                          <option value="">Песня не назначена</option>
-                          {editingBlock.song_id != null &&
-                          !songs.some((s) => s.id === editingBlock.song_id) ? (
-                            <option value={String(editingBlock.song_id)}>
-                              {editingBlock.song_title
-                                ? `${editingBlock.song_title}${
-                                    editingBlock.song_key ? ` [${editingBlock.song_key}]` : ''
-                                  }`
-                                : `Песня #${editingBlock.song_id} (нет в списке)`}
-                            </option>
-                          ) : null}
-                          {songs.map((s) => (
-                            <option key={s.id} value={String(s.id)}>
-                              {s.default_key ? `${s.title} [${s.default_key}]` : s.title}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </div>
                     ) : (
                       <div className="hidden rounded-lg border border-dashed border-stone-300 bg-stone-50 px-2.5 py-2 text-xs leading-snug text-stone-500 sm:col-span-2 sm:block sm:py-1.5">
