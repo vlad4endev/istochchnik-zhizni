@@ -20,6 +20,7 @@ import {
   postServicePlanSongPick,
   postServicePlanSongPickApply,
   putVersion,
+  putSheetVersion,
   recentSongsList,
   servicePlanSongUsage,
   setlistItemsAdd,
@@ -49,6 +50,7 @@ router.get('/catalog-song/:songId', catalogSongGet);
 router.get('/versions', getMyVersions);
 router.get('/versions/song/:songId', getVersionForSong);
 router.put('/versions/:songId', putVersion);
+router.put('/versions/:songId/sheet', putSheetVersion);
 router.post('/fork/:songId', forkVersion);
 
 router.get('/drafts', draftsList);

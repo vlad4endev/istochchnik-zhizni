@@ -29,6 +29,7 @@ import { safeFetchUrlForSongImport } from '../utils/safeUrlTextFetch';
 import { AiAgentError, chatCompletion } from '../ai';
 import { recognizeSongFromPhoto } from '../services/songPhotoAiService';
 import { recognizeSheetMusic } from '../services/sheetMusicAiService';
+import { saveStudioSheetImage } from '../services/studioSheetImageStorage';
 
 type AuthReq = Request & SessionRoleSource & { authUserId?: number; authUserRole?: AppRole };
 
@@ -759,8 +760,9 @@ export async function aiRecognizeSheetHandler(req: Request, res: Response): Prom
   }
 
   try {
+    const sourceImageUrl = saveStudioSheetImage(file.buffer, mime, r.authUserId!);
     const result = await recognizeSheetMusic(file.buffer, file.mimetype || 'image/jpeg');
-    res.json(result);
+    res.json({ ...result, sourceImageUrl });
   } catch (e) {
     if (e instanceof AiAgentError) {
       const mapped = mapAiAgentErrorToHttp(e);

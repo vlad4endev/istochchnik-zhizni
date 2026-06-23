@@ -212,7 +212,7 @@ function RecognitionResult({
           onClick={onApply}
           className="studio-btn-primary w-full rounded-xl py-2.5 text-sm font-medium"
         >
-          Применить к песне
+          Применить как версию с нотами
         </button>
       </div>
     </div>

@@ -13,11 +13,25 @@ export interface StudioVersionListItem {
   song_id: string;
   custom_content: string | null;
   custom_key: string | null;
+  sheet_content: string | null;
+  sheet_key: string | null;
+  sheet_meta: StudioSheetMeta | null;
   updated_at: string;
   song_title: string;
   song_slug: string;
   song_is_published: boolean;
 }
+
+export type StudioSheetMeta = {
+  bpm?: number | null;
+  timeSignature?: string | null;
+  composer?: string | null;
+  arranger?: string | null;
+  title?: string | null;
+  generalNotes?: string | null;
+  abcNotation?: string | null;
+  sourceImageUrl?: string | null;
+};
 
 export interface StudioDraft {
   id: string;
@@ -49,6 +63,9 @@ export interface SetlistItemRow {
   effective_key: string | null;
   effective_content: string;
   effective_content_preview: string;
+  sheet_content?: string | null;
+  sheet_key?: string | null;
+  sheet_meta?: StudioSheetMeta | null;
   /** Есть только у авторизованных запросов; в публичном API поля нет. */
   musician_notes?: MusicianNotesV1;
 }
@@ -110,6 +127,19 @@ export async function saveVersion(
   body: { custom_content?: string | null; custom_key?: string | null },
 ) {
   const { data } = await apiClient.put(`${STUDIO}/versions/${songId}`, body);
+  return data;
+}
+
+/** Сохранить отдельную «версию с нотами» (не трогает custom_content). */
+export async function saveSheetVersion(
+  songId: number,
+  body: {
+    sheet_content: string;
+    sheet_key?: string | null;
+    sheet_meta?: StudioSheetMeta | null;
+  },
+): Promise<StudioVersionListItem> {
+  const { data } = await apiClient.put<StudioVersionListItem>(`${STUDIO}/versions/${songId}/sheet`, body);
   return data;
 }
 

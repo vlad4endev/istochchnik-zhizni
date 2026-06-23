@@ -1,0 +1,30 @@
+/* Партитура в стиле печатного нотного листа */
+.sheet-music-score {
+  --sheet-serif: 'Georgia', 'Times New Roman', 'Iowan Old Style', serif;
+}
+
+.sheet-music-score__header h3 {
+  font-family: var(--sheet-serif);
+}
+
+.sheet-music-score__abc .abcjs-container {
+  background: transparent;
+}
+
+.sheet-music-score__abc svg {
+  display: block;
+}
+
+.sheet-music-score--compact .sheet-music-score__header {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.sheet-music-score--compact .sheet-music-score__header h3 {
+  font-size: 1.125rem;
+}
+
+/* Тёмная сцена — белый лист остаётся читаемым */
+.perform-stage .sheet-music-score {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}

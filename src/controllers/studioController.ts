@@ -36,6 +36,7 @@ import {
   updateSetlist,
   updateSetlistItemMusicianNotes,
   upsertStudioVersion,
+  upsertStudioSheetVersion,
 } from '../services/studioService';
 import { AiAgentError, improveChordPlacementWithAi } from '../services/studioAiChordService';
 import { cleanupSongWithAi } from '../services/studioAiCleanupService';
@@ -123,6 +124,52 @@ export async function putVersion(req: Request, res: Response): Promise<void> {
       songId,
       body.custom_content ?? null,
       body.custom_key ?? null
+    );
+    res.json(version);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Ошибка' });
+  }
+}
+
+export async function putSheetVersion(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureStudio(r, res))) return;
+    const songId = Number(req.params.songId);
+    if (!Number.isInteger(songId) || songId <= 0) {
+      res.status(400).json({ error: 'Invalid songId' });
+      return;
+    }
+    const body = req.body as {
+      sheet_content?: unknown;
+      sheet_key?: unknown;
+      sheet_meta?: unknown;
+    };
+    const sheetContent = typeof body.sheet_content === 'string' ? body.sheet_content : '';
+    if (!sheetContent.trim()) {
+      res.status(400).json({ error: 'sheet_content required' });
+      return;
+    }
+    const sheetKey =
+      typeof body.sheet_key === 'string' && body.sheet_key.trim() ? body.sheet_key.trim() : null;
+    let sheetMeta: import('../services/studioService').StudioSheetMeta | null = null;
+    if (body.sheet_meta != null && typeof body.sheet_meta === 'object') {
+      const m = body.sheet_meta as Record<string, unknown>;
+      sheetMeta = {
+        bpm: typeof m.bpm === 'number' ? m.bpm : null,
+        timeSignature: typeof m.timeSignature === 'string' ? m.timeSignature : null,
+        composer: typeof m.composer === 'string' ? m.composer : null,
+        title: typeof m.title === 'string' ? m.title : null,
+        generalNotes: typeof m.generalNotes === 'string' ? m.generalNotes : null,
+      };
+    }
+    const version = await upsertStudioSheetVersion(
+      r.authUserId!,
+      songId,
+      sheetContent,
+      sheetKey,
+      sheetMeta,
     );
     res.json(version);
   } catch (e) {

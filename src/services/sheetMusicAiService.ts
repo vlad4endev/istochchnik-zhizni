@@ -23,12 +23,17 @@ export type RecognizedSection = {
 export type RecognizedSong = {
   title?: string | null;
   composer?: string | null;
+  arranger?: string | null;
   key?: string | null;
   timeSignature?: string | null;
   bpm?: number | null;
   tempo?: string | null;
   sections: RecognizedSection[];
   generalNotes: string;
+  /** ABC-нотация (abcjs): grand staff, lyrics. */
+  abcNotation?: string | null;
+  /** URL сохранённого снимка (добавляется сервером). */
+  sourceImageUrl?: string | null;
 };
 
 function isLikelyVisionModel(model: string): boolean {
@@ -131,6 +136,7 @@ function normalizeRecognizedSong(raw: unknown): RecognizedSong {
   return {
     title: typeof obj.title === 'string' && obj.title.trim() ? obj.title.trim() : null,
     composer: typeof obj.composer === 'string' && obj.composer.trim() ? obj.composer.trim() : null,
+    arranger: typeof obj.arranger === 'string' && obj.arranger.trim() ? obj.arranger.trim() : null,
     key: typeof obj.key === 'string' && obj.key.trim() ? obj.key.trim() : null,
     timeSignature:
       typeof obj.timeSignature === 'string' && obj.timeSignature.trim()
@@ -143,6 +149,8 @@ function normalizeRecognizedSong(raw: unknown): RecognizedSong {
       typeof obj.generalNotes === 'string' && obj.generalNotes.trim()
         ? obj.generalNotes.trim()
         : '',
+    abcNotation:
+      typeof obj.abcNotation === 'string' && obj.abcNotation.trim() ? obj.abcNotation.trim() : null,
   };
 }
 
@@ -150,14 +158,15 @@ const SYSTEM_PROMPT = [
   'Ты — профессиональный музыкальный транскрипер.',
   'Тебе дают фотографию нотного листа или партитуры (возможно, снятой вживую, немного под углом или с бликами).',
   '',
-  'Твоя задача — извлечь максимум структурированной информации.',
+  'Твоя задача — извлечь максимум структурированной информации и по возможности воспроизвести ноты в формате ABC.',
   '',
   'Верни ТОЛЬКО валидный JSON без лишнего текста, строго по этой схеме:',
   '{',
   '  "title": "название произведения или null",',
   '  "composer": "автор или null",',
-  '  "key": "тональность (например Am, G, F#m) или null",',
-  '  "timeSignature": "размер (например 4/4, 3/4, 6/8) или null",',
+  '  "arranger": "аранжировщик или null",',
+  '  "key": "тональность для ABC K: (например D, Am, F#m) или null",',
+  '  "timeSignature": "размер (например 4/4, 3/4, 6/8, C) или null",',
   '  "bpm": число или null,',
   '  "tempo": "темповое обозначение (Andante, Allegro и т.д.) или null",',
   '  "sections": [',
@@ -169,11 +178,20 @@ const SYSTEM_PROMPT = [
   '      "lyricHint": "первые слова текста строки если видны, иначе null"',
   '    }',
   '  ],',
-  '  "generalNotes": "любые важные замечания: динамика, артикуляция, ключевые знаки, повторы, da capo и т.д."',
+  '  "generalNotes": "любые важные замечания: динамика, артикуляция, повторы, da capo и т.д.",',
+  '  "abcNotation": "строка ABC для abcjs или null"',
   '}',
   '',
+  'Поле abcNotation — ОБЯЗАТЕЛЬНО заполни, если на фото видны ноты. Формат:',
+  '- Заголовки: X:1, T:, C:, M:, L:1/8, Q:1/4=75 (если есть BPM), K:',
+  '- Grand staff (фортепиано + вокал): %%score { 1 | 2 }, V:1 clef=treble, V:2 clef=bass',
+  '- Ноты в голосах [V:1] и [V:2] с правильными длительностями, знаками альтерации, связками',
+  '- Текст под нотами: строки w: с дефисами между слогами (The sun comes up → w:The sun comes up)',
+  '- Транскрибируй видимую часть партитуры максимально точно (хотя бы первые 8–16 тактов)',
+  '- Используй только ASCII в abcNotation, без markdown',
+  '',
   'Если информация нечёткая — делай лучшее предположение и укажи в generalNotes.',
-  'Если текст на фото не по-русски — всё равно верни JSON на русском (label, generalNotes).',
+  'Если текст на фото не по-русски — label и generalNotes на русском; lyrics в abcNotation — как на фото.',
 ].join('\n');
 
 async function callVisionModel(
@@ -203,7 +221,7 @@ async function callVisionModel(
       base_url: vision.base_url,
       api_key: vision.api_key,
       temperature: 0.1,
-      max_tokens: 2000,
+      max_tokens: 8000,
       skipSystemPrompt: true,
       response_format: { type: 'json_object' },
     },

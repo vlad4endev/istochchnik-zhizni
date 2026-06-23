@@ -472,10 +472,14 @@ export function SetlistDetailPage() {
                   <div className="border-t border-[var(--border)] px-3 pb-3 pt-2">
                     <SetlistSongSheetPreview
                       content={it.effective_content || it.song.content}
+                      sheetContent={it.sheet_content}
                       musicianNotes={it.musician_notes}
+                      songTitle={it.song.title}
                       songKey={it.effective_key ?? it.song.default_key}
+                      sheetKey={it.sheet_key}
                       tempo={it.song.tempo}
                       timeSignature={it.song.time_signature}
+                      sheetMeta={it.sheet_meta}
                       compact
                     />
                   </div>

@@ -1,4 +1,4 @@
-import { createSongBlock, type SongBlock, type SongBlockType } from './songBlocks';
+import { blocksToChordPro, createSongBlock, type SongBlock, type SongBlockType } from './songBlocks';
 
 export type RecognizedSectionType = 'intro' | 'verse' | 'chorus' | 'bridge' | 'outro' | 'section';
 
@@ -13,12 +13,15 @@ export type RecognizedSection = {
 export type RecognizedSong = {
   title?: string | null;
   composer?: string | null;
+  arranger?: string | null;
   key?: string | null;
   timeSignature?: string | null;
   bpm?: number | null;
   tempo?: string | null;
   sections: RecognizedSection[];
   generalNotes: string;
+  abcNotation?: string | null;
+  sourceImageUrl?: string | null;
 };
 
 const SECTION_TYPE_MAP: Record<RecognizedSectionType, SongBlockType> = {
@@ -73,4 +76,38 @@ export function buildRecognitionNotes(data: RecognizedSong, existing = ''): stri
     .join(' | ');
   if (structure) parts.push(`Структура: ${structure}`);
   return parts.filter(Boolean).join('\n').trim();
+}
+
+export type SheetVersionMeta = {
+  bpm?: number | null;
+  timeSignature?: string | null;
+  composer?: string | null;
+  arranger?: string | null;
+  title?: string | null;
+  generalNotes?: string | null;
+  abcNotation?: string | null;
+  sourceImageUrl?: string | null;
+};
+
+export function buildSheetMetaFromRecognition(data: RecognizedSong): SheetVersionMeta {
+  const notes = buildRecognitionNotes(data);
+  return {
+    bpm: data.bpm ?? null,
+    timeSignature: data.timeSignature ?? null,
+    composer: data.composer ?? null,
+    arranger: data.arranger ?? null,
+    title: data.title ?? null,
+    generalNotes: notes || data.generalNotes || null,
+    abcNotation: data.abcNotation ?? null,
+    sourceImageUrl: data.sourceImageUrl ?? null,
+  };
+}
+
+export function recognizedSongToSheetChordPro(data: RecognizedSong): string {
+  const sectionBlocks = recognizedSectionsToBlocks(data.sections);
+  if (sectionBlocks.length > 0) {
+    return blocksToChordPro(sectionBlocks);
+  }
+  const notes = buildRecognitionNotes(data);
+  return notes ? `{sec:Партитура}\n${notes}` : '';
 }

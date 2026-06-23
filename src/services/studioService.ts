@@ -32,13 +32,61 @@ function mapSong(row: Record<string, unknown>): SongRow {
   };
 }
 
+export interface StudioSheetMeta {
+  bpm?: number | null;
+  timeSignature?: string | null;
+  composer?: string | null;
+  arranger?: string | null;
+  title?: string | null;
+  generalNotes?: string | null;
+  abcNotation?: string | null;
+  sourceImageUrl?: string | null;
+}
+
+function parseStudioSheetMeta(raw: unknown): StudioSheetMeta | null {
+  if (raw == null || typeof raw !== 'object') return null;
+  const m = raw as Record<string, unknown>;
+  return {
+    bpm: typeof m.bpm === 'number' ? m.bpm : null,
+    timeSignature: typeof m.timeSignature === 'string' ? m.timeSignature : null,
+    composer: typeof m.composer === 'string' ? m.composer : null,
+    arranger: typeof m.arranger === 'string' ? m.arranger : null,
+    title: typeof m.title === 'string' ? m.title : null,
+    generalNotes: typeof m.generalNotes === 'string' ? m.generalNotes : null,
+    abcNotation: typeof m.abcNotation === 'string' ? m.abcNotation : null,
+    sourceImageUrl: typeof m.sourceImageUrl === 'string' ? m.sourceImageUrl : null,
+  };
+}
+
 export interface StudioVersionRow {
   id: string;
   member_id: number;
   song_id: string;
   custom_content: string | null;
   custom_key: string | null;
+  sheet_content: string | null;
+  sheet_key: string | null;
+  sheet_meta: StudioSheetMeta | null;
   updated_at: string;
+}
+
+function mapStudioVersionRow(row: Record<string, unknown>): StudioVersionRow {
+  let sheet_meta: StudioSheetMeta | null = null;
+  const rawMeta = row.sheet_meta;
+  if (rawMeta != null) {
+    sheet_meta = parseStudioSheetMeta(rawMeta);
+  }
+  return {
+    id: String(row.id),
+    member_id: Number(row.member_id),
+    song_id: String(row.song_id),
+    custom_content: row.custom_content != null ? String(row.custom_content) : null,
+    custom_key: row.custom_key != null ? String(row.custom_key) : null,
+    sheet_content: row.sheet_content != null ? String(row.sheet_content) : null,
+    sheet_key: row.sheet_key != null ? String(row.sheet_key) : null,
+    sheet_meta,
+    updated_at: String(row.updated_at),
+  };
 }
 
 export async function upsertStudioVersion(
@@ -59,14 +107,30 @@ export async function upsertStudioVersion(
     [memberId, songId, customContent, customKey]
   );
   const row = result.rows[0] as Record<string, unknown>;
-  return {
-    id: String(row.id),
-    member_id: Number(row.member_id),
-    song_id: String(row.song_id),
-    custom_content: row.custom_content != null ? String(row.custom_content) : null,
-    custom_key: row.custom_key != null ? String(row.custom_key) : null,
-    updated_at: String(row.updated_at),
-  };
+  return mapStudioVersionRow(row);
+}
+
+export async function upsertStudioSheetVersion(
+  memberId: number,
+  songId: number,
+  sheetContent: string,
+  sheetKey: string | null,
+  sheetMeta: StudioSheetMeta | null,
+): Promise<StudioVersionRow> {
+  const result = await query(
+    `INSERT INTO studio_versions (member_id, song_id, sheet_content, sheet_key, sheet_meta, updated_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
+     ON CONFLICT (member_id, song_id)
+     DO UPDATE SET
+       sheet_content = EXCLUDED.sheet_content,
+       sheet_key = EXCLUDED.sheet_key,
+       sheet_meta = EXCLUDED.sheet_meta,
+       updated_at = NOW()
+     RETURNING *`,
+    [memberId, songId, sheetContent, sheetKey, sheetMeta ? JSON.stringify(sheetMeta) : null],
+  );
+  const row = result.rows[0] as Record<string, unknown>;
+  return mapStudioVersionRow(row);
 }
 
 export async function listMyStudioVersions(memberId: number): Promise<
@@ -81,14 +145,10 @@ export async function listMyStudioVersions(memberId: number): Promise<
     [memberId]
   );
   return result.rows.map((row) => {
+    const mapped = mapStudioVersionRow(row as Record<string, unknown>);
     const r = row as Record<string, unknown>;
     return {
-      id: String(r.id),
-      member_id: Number(r.member_id),
-      song_id: String(r.song_id),
-      custom_content: r.custom_content != null ? String(r.custom_content) : null,
-      custom_key: r.custom_key != null ? String(r.custom_key) : null,
-      updated_at: String(r.updated_at),
+      ...mapped,
       song_title: String(r.song_title),
       song_slug: String(r.song_slug),
       song_is_published: Boolean(r.song_is_published),
@@ -106,14 +166,7 @@ export async function getStudioVersionForSong(
   );
   const row = result.rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
-  return {
-    id: String(row.id),
-    member_id: Number(row.member_id),
-    song_id: String(row.song_id),
-    custom_content: row.custom_content != null ? String(row.custom_content) : null,
-    custom_key: row.custom_key != null ? String(row.custom_key) : null,
-    updated_at: String(row.updated_at),
-  };
+  return mapStudioVersionRow(row);
 }
 
 export interface StudioDraftRow {
@@ -382,6 +435,10 @@ export interface SetlistItemRow {
   /** Полный текст для режима выступления */
   effective_content: string;
   effective_content_preview: string;
+  /** Версия с нотами (распознанная партитура), отдельно от текста песни */
+  sheet_content: string | null;
+  sheet_key: string | null;
+  sheet_meta: StudioSheetMeta | null;
   /** Только для владельца / режима выступления (не отдаётся по публичной ссылке). */
   musician_notes: MusicianNotesV1;
 }
@@ -435,10 +492,13 @@ async function fetchSetlistItemRows(setlistId: number): Promise<SetlistItemRow[]
     `SELECT si.id, si.setlist_id, si.position, si.song_id, si.studio_version_id, si.musician_notes,
             s.id AS s_id, s.song_number, s.title, s.slug, s.content, s.default_key, s.tempo, s.time_signature,
             s.tags, s.is_published, s.created_by_member_id, s.created_at, s.updated_at,
-            sv.custom_key, sv.custom_content
+            sv.custom_key, sv.custom_content,
+            sv_sheet.sheet_content, sv_sheet.sheet_key, sv_sheet.sheet_meta
      FROM setlist_items si
      JOIN songs s ON s.id = si.song_id
      LEFT JOIN studio_versions sv ON sv.id = si.studio_version_id
+     LEFT JOIN setlists sl ON sl.id = si.setlist_id
+     LEFT JOIN studio_versions sv_sheet ON sv_sheet.song_id = si.song_id AND sv_sheet.member_id = sl.member_id
      WHERE si.setlist_id = $1
      ORDER BY si.position ASC`,
     [setlistId]
@@ -468,6 +528,11 @@ async function fetchSetlistItemRows(setlistId: number): Promise<SetlistItemRow[]
       customContent !== null && customContent !== undefined ? customContent : (song.content ?? '');
     const preview = effectiveContent.slice(0, 200);
     const rawNotes = r.musician_notes;
+    let sheet_meta: StudioSheetMeta | null = null;
+    const rawSheetMeta = r.sheet_meta;
+    if (rawSheetMeta != null) {
+      sheet_meta = parseStudioSheetMeta(rawSheetMeta);
+    }
     return {
       id: String(r.id),
       setlist_id: String(r.setlist_id),
@@ -478,6 +543,9 @@ async function fetchSetlistItemRows(setlistId: number): Promise<SetlistItemRow[]
       effective_key: effectiveKey,
       effective_content: effectiveContent,
       effective_content_preview: preview,
+      sheet_content: r.sheet_content != null ? String(r.sheet_content) : null,
+      sheet_key: r.sheet_key != null ? String(r.sheet_key) : null,
+      sheet_meta,
       musician_notes: sanitizeMusicianNotes(rawNotes),
     };
   });

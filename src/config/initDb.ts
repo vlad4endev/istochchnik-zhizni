@@ -1803,11 +1803,17 @@ CREATE TABLE IF NOT EXISTS studio_versions (
   song_id BIGINT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
   custom_content TEXT,
   custom_key VARCHAR(32),
+  sheet_content TEXT,
+  sheet_key VARCHAR(32),
+  sheet_meta JSONB,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (member_id, song_id)
 );
 CREATE INDEX IF NOT EXISTS idx_studio_versions_member ON studio_versions (member_id);
 CREATE INDEX IF NOT EXISTS idx_studio_versions_song ON studio_versions (song_id);
+ALTER TABLE studio_versions ADD COLUMN IF NOT EXISTS sheet_content TEXT;
+ALTER TABLE studio_versions ADD COLUMN IF NOT EXISTS sheet_key VARCHAR(32);
+ALTER TABLE studio_versions ADD COLUMN IF NOT EXISTS sheet_meta JSONB;
 
 CREATE TABLE IF NOT EXISTS studio_drafts (
   id BIGSERIAL PRIMARY KEY,
