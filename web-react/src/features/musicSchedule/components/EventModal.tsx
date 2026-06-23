@@ -150,7 +150,7 @@ export function EventModal({
             <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-stone-200 sm:hidden" />
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="truncate text-base font-extrabold text-stone-900">Назначения медиа-команды</h2>
+                <h2 className="truncate text-base font-extrabold text-stone-900">Музыкальная команда</h2>
                 <p className="truncate text-xs font-semibold text-stone-500">{headerLabel}</p>
               </div>
               <button

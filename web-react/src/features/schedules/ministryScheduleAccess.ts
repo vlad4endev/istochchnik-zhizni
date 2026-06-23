@@ -36,6 +36,14 @@ export function isPastorAppRole(
   return (roles ?? []).some((r) => normalizeAppRoleToken(r) === 'pastor');
 }
 
+export function isMusicianAppRole(
+  role: AuthRole | undefined,
+  roles?: Array<AuthRole | string | null | undefined>,
+): boolean {
+  if (normalizeAppRoleToken(role) === 'musician') return true;
+  return (roles ?? []).some((r) => normalizeAppRoleToken(r) === 'musician');
+}
+
 export function parseMinistryDirections(ministryDirection: unknown): string[] {
   return Array.from(
     new Set(
@@ -132,11 +140,11 @@ export function canManageMediaSchedule(
 }
 
 export function canManageMusicSchedule(
-  _role: AuthRole | undefined,
+  role: AuthRole | undefined,
   ministryRole: unknown,
-  _roles?: Array<AuthRole | string | null | undefined>,
+  roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
-  return isMusicLeader(ministryRole);
+  return isAdminAppRole(role, roles) || isMusicianAppRole(role, roles) || isMusicLeader(ministryRole);
 }
 
 export function canManageSundaySchedule(

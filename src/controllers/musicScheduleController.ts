@@ -23,7 +23,7 @@ import {
   updateRole,
   type AssignmentStatus,
 } from '../services/musicScheduleService';
-import type { SessionRoleSource } from '../types/appRole';
+import { rolesOfSession, type SessionRoleSource } from '../types/appRole';
 import { canManageMusicSchedule as canManageMusicScheduleByProfile } from '../utils/ministryScheduleAccess';
 
 type AuthReq = Request & SessionRoleSource & { authUserId?: number };
@@ -31,9 +31,12 @@ type AuthReq = Request & SessionRoleSource & { authUserId?: number };
 async function canManageMusicSchedule(req: Request): Promise<boolean> {
   const r = req as AuthReq;
   if (!r.authUserId) return false;
+  const sessionRoles = rolesOfSession(r);
   const result = await query(`SELECT ministry_role FROM members WHERE id = $1 LIMIT 1`, [r.authUserId]);
   const row = result.rows[0] as { ministry_role?: string | null } | undefined;
   return canManageMusicScheduleByProfile({
+    app_role: r.authUserRole,
+    app_roles: sessionRoles,
     ministry_role: row?.ministry_role,
   });
 }
@@ -69,7 +72,7 @@ async function ensureManager(req: Request, res: Response): Promise<number | null
   const userId = await ensureAuth(req, res);
   if (userId == null) return null;
   if (!(await canManageMusicSchedule(req))) {
-    res.status(403).json({ error: 'Редактирование доступно только музыкальному лидеру' });
+    res.status(403).json({ error: 'Недостаточно прав для управления музыкальным расписанием' });
     return null;
   }
   return userId;

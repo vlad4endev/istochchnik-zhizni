@@ -140,8 +140,18 @@ export function canManageMediaSchedule(input: {
   return memberHasMinistryRole(input.ministry_role, 'Медиа менеджер');
 }
 
+function hasAppRole(input: { app_role?: unknown; app_roles?: unknown }, ...roles: string[]): boolean {
+  const primary = String(input.app_role ?? '').trim().toLowerCase();
+  if (roles.includes(primary)) return true;
+  const extra = Array.isArray(input.app_roles) ? input.app_roles : [];
+  return extra.some((r) => roles.includes(String(r ?? '').trim().toLowerCase()));
+}
+
 export function canManageMusicSchedule(input: {
+  app_role?: unknown;
+  app_roles?: unknown;
   ministry_role?: unknown;
 }): boolean {
+  if (hasAppRole(input, 'admin', 'musician')) return true;
   return memberHasMinistryRole(input.ministry_role, 'Музыкальный лидер');
 }

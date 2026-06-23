@@ -1,4 +1,5 @@
 import type { AuthRole } from '../auth/authStore';
+import { isAdminAppRole, isMusicianAppRole } from '../schedules/ministryScheduleAccess';
 import { hasMusicMinistryDirection, isMusicLeader } from './ministryRoleMatch';
 
 export function canViewMusicSchedule(
@@ -10,20 +11,20 @@ export function canViewMusicSchedule(
 }
 
 export function canManageMusicSchedule(
-  _role: AuthRole | undefined,
+  role: AuthRole | undefined,
   ministryRole: unknown,
-  _roles?: Array<AuthRole | string | null | undefined>,
+  roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
-  return isMusicLeader(ministryRole);
+  return isAdminAppRole(role, roles) || isMusicianAppRole(role, roles) || isMusicLeader(ministryRole);
 }
 
-/** Настройка ролей музыкального расписания — только музыкальный лидер. */
+/** Настройка ролей музыкального расписания — администратор или музыкальный лидер. */
 export function canManageMusicRoles(
   role: AuthRole | undefined,
   ministryRole: unknown,
   roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
-  return canManageMusicSchedule(role, ministryRole, roles);
+  return isAdminAppRole(role, roles) || isMusicLeader(ministryRole);
 }
 
 export function assignmentStatusBorderColor(status: string): string {
