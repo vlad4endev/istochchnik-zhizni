@@ -36,7 +36,45 @@ export function isMediaManager(ministryRole: unknown): boolean {
 }
 
 export function isMusicLeader(ministryRole: unknown): boolean {
-  return memberHasMinistryRole(ministryRole, 'Музыкальный лидер');
+  return MUSIC_LEADER_ROLE_ALIASES.some((alias) => memberHasMinistryRole(ministryRole, alias));
+}
+
+const MUSIC_LEADER_ROLE_ALIASES = [
+  'Музыкальный лидер',
+  'Лидер Прославления',
+  'Лидер поклонения',
+] as const;
+
+function isWorshipLeaderScheduleRole(role: {
+  name: string;
+  ministry_role_filter?: string | null;
+}): boolean {
+  const tokens = [role.name, role.ministry_role_filter]
+    .map((v) => normalizeMinistryToken(v))
+    .filter((v) => v.length > 0);
+  return tokens.some(
+    (t) => t.includes('лидер') && (t.includes('прослав') || t.includes('поклон') || t.includes('музык')),
+  );
+}
+
+export function musicRoleMemberMatchToken(role: {
+  name: string;
+  ministry_role_filter?: string | null;
+}): string {
+  const custom = role.ministry_role_filter?.trim();
+  return custom || role.name.trim();
+}
+
+/** Токены для фильтра участников при назначении на слот (с синонимами лидера прославления). */
+export function musicRoleMemberMatchTokens(role: {
+  name: string;
+  ministry_role_filter?: string | null;
+}): string[] {
+  const primary = musicRoleMemberMatchToken(role);
+  if (!isWorshipLeaderScheduleRole(role)) {
+    return [primary];
+  }
+  return Array.from(new Set([primary, ...MUSIC_LEADER_ROLE_ALIASES]));
 }
 
 /** Направление служения «Медиа служение» (или другое с «медиа» в названии). */
@@ -61,14 +99,6 @@ export function hasMusicMinistryDirection(ministryDirection: unknown): boolean {
 }
 
 export function mediaRoleMemberMatchToken(role: {
-  name: string;
-  ministry_role_filter?: string | null;
-}): string {
-  const custom = role.ministry_role_filter?.trim();
-  return custom || role.name.trim();
-}
-
-export function musicRoleMemberMatchToken(role: {
   name: string;
   ministry_role_filter?: string | null;
 }): string {

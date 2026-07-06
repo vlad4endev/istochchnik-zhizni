@@ -72,6 +72,20 @@ function isMusicScheduleAssignmentStatusPatch(method: string, path: string): boo
   return method === 'PATCH' && MEMBER_ALLOWED_MUSIC_SCHEDULE_STATUS_PATCH.test(path);
 }
 
+/** Назначения и роли музыкального расписания — проверка canManageMusicSchedule в контроллере. */
+function isMusicScheduleMutation(method: string, path: string): boolean {
+  if (SAFE_METHODS.has(method)) return false;
+  const p = path.split('?')[0];
+  if (!p.startsWith('/api/music-schedule')) return false;
+  if (method === 'POST' && /^\/api\/music-schedule\/events\/\d+\/assign\/?$/.test(p)) return true;
+  if (method === 'DELETE' && /^\/api\/music-schedule\/assignments\/\d+\/?$/.test(p)) return true;
+  if (method === 'POST' && (p === '/api/music-schedule/roles' || p === '/api/music-schedule/roles/')) return true;
+  if (method === 'POST' && /^\/api\/music-schedule\/roles\/reorder\/?$/.test(p)) return true;
+  if (method === 'PUT' && /^\/api\/music-schedule\/roles\/\d+\/?$/.test(p)) return true;
+  if (method === 'DELETE' && /^\/api\/music-schedule\/roles\/\d+\/?$/.test(p)) return true;
+  return false;
+}
+
 function isSundaySchedulePlanPatch(method: string, path: string): boolean {
   return method === 'PATCH' && SUNDAY_SCHEDULE_PLAN_PATCH.test(path);
 }
@@ -274,6 +288,11 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
   }
 
   if (isMusicScheduleAssignmentStatusPatch(req.method, fullPath)) {
+    next();
+    return;
+  }
+
+  if (isMusicScheduleMutation(req.method, fullPath) && authId) {
     next();
     return;
   }

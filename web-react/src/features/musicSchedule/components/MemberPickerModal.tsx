@@ -4,7 +4,7 @@ import { LuLoaderCircle, LuSearch, LuUsers, LuX } from 'react-icons/lu';
 import { AppAvatar } from '../../../components/AppAvatar';
 import {
   memberHasMinistryRole,
-  musicRoleMemberMatchToken,
+  musicRoleMemberMatchTokens,
   parseMinistryRoles,
 } from '../ministryRoleMatch';
 import type { MusicRole, MusicScheduleMember } from '../types';
@@ -53,13 +53,16 @@ export function MemberPickerModal({
   }, [open, preselectedRoleId]);
 
   const selectedRole = typeof roleId === 'number' ? roles.find((r) => r.id === roleId) : null;
-  const roleMatchToken = selectedRole ? musicRoleMemberMatchToken(selectedRole) : '';
+  const roleMatchTokens = selectedRole ? musicRoleMemberMatchTokens(selectedRole) : [];
+  const roleMatchToken = roleMatchTokens[0] ?? '';
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     let list = members;
-    if (roleMatchToken && !showAllMembers) {
-      list = list.filter((m) => memberHasMinistryRole(m.ministry_role, roleMatchToken));
+    if (roleMatchTokens.length > 0 && !showAllMembers) {
+      list = list.filter((m) =>
+        roleMatchTokens.some((token) => memberHasMinistryRole(m.ministry_role, token)),
+      );
     }
     if (!q) return list;
     return list.filter((m) => {
@@ -68,7 +71,7 @@ export function MemberPickerModal({
       const rolesText = parseMinistryRoles(m.ministry_role).join(' ').toLowerCase();
       return name.includes(q) || dir.includes(q) || rolesText.includes(q);
     });
-  }, [members, search, roleMatchToken, showAllMembers]);
+  }, [members, search, roleMatchTokens, showAllMembers]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, MusicScheduleMember[]>();

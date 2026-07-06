@@ -1,5 +1,5 @@
 import { query } from '../config/db';
-import { memberHasMinistryRole, musicRoleMemberMatchToken } from '../utils/ministryRoleMatch';
+import { memberHasMinistryRole, musicRoleMemberMatchTokens } from '../utils/ministryRoleMatch';
 import { sendPush } from './pushService';
 
 export type AssignmentStatus = 'assigned' | 'confirmed' | 'declined' | 'pending';
@@ -904,11 +904,13 @@ export async function getMusicMembers(roleId?: number): Promise<MusicScheduleMem
     ]);
     const roleRow = roleResult.rows[0] as { name?: string; ministry_role_filter?: string | null } | undefined;
     if (roleRow) {
-      const matchToken = musicRoleMemberMatchToken({
+      const matchTokens = musicRoleMemberMatchTokens({
         name: String(roleRow.name ?? ''),
         ministry_role_filter: roleRow.ministry_role_filter ?? null,
       });
-      const matched = members.filter((m) => memberHasMinistryRole(m.ministry_role, matchToken));
+      const matched = members.filter((m) =>
+        matchTokens.some((token) => memberHasMinistryRole(m.ministry_role, token)),
+      );
       if (matched.length > 0) {
         members = matched;
       }
