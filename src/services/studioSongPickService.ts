@@ -240,7 +240,6 @@ async function loadRecentUsageHints(limit = 12): Promise<string[]> {
      INNER JOIN public.songs s ON s.id = b.song_id
      WHERE lower(coalesce(bt.code, '')) = 'song'
        AND b.song_id IS NOT NULL
-       AND coalesce(sp.is_archived, false) = false
        AND sp.service_date >= (CURRENT_DATE - interval '6 months')
      GROUP BY s.id, s.title
      ORDER BY cnt DESC, max(sp.service_date) DESC

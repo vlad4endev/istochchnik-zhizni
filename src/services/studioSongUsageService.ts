@@ -8,9 +8,12 @@ const SONG_BLOCK_FROM = `
 `;
 
 function songBlockWhere(periodFilter: string): string {
+  // Аналитика песен — это исторический отчёт по всем программам служений.
+  // Архивированные планы (обычно это уже прошедшие служения) намеренно НЕ
+  // исключаются: иначе после автоархивации прошедших служений история песен
+  // пропадала и в отчёте оставались лишь будущие планы (ближайшая неделя).
   return `WHERE lower(coalesce(bt.code, '')) = 'song'
     AND b.song_id IS NOT NULL
-    AND coalesce(sp.is_archived, false) = false
     ${periodFilter}`;
 }
 
