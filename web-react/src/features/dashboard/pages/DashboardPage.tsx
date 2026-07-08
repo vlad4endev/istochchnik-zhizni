@@ -65,6 +65,7 @@ import { useProfileDraftStore } from '../../profile/profileDraftStore';
 import { useCoordinatorNoteEditorRequestStore } from '../coordinatorNoteEditorRequestStore';
 import { LimitedRegistrationDashboard } from '../components/LimitedRegistrationDashboard';
 import { BirthdayBlock } from '../components/BirthdayBlock';
+import { MyServiceWeekWidget } from '../components/MyServiceWeekWidget';
 import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
 import { keys } from '@/lib/queryKeys';
 import { fetchServicePlan, fetchServicePlans, type ServicePlanDetails, type ServicePlanListItem } from '../../servicePlanner/api';
@@ -760,6 +761,8 @@ function DashboardMain() {
 
   const profileUsername = useAuthStore((s) => s.username ?? '');
   const profileMemberId = useAuthStore((s) => s.memberId);
+  const resolvedMemberId =
+    profileMemberId ?? (typeof meQ.data?.id === 'number' ? meQ.data.id : null);
   const publicProfileSlug =
     profileUsername.trim() || (profileMemberId != null ? `member-${profileMemberId}` : '');
 
@@ -934,6 +937,8 @@ function DashboardMain() {
   );
   const canRateSermon = nearestPlan?.phase === 'feedback';
   const showNearestPreacherWidget = nearestSermonData != null && nearestPlan != null;
+  const anchorSundayServiceDate =
+    nearestSermonData?.serviceDate ?? nearestPlan?.plan.service_date ?? null;
   const birthdaysThisWeek: BirthdayWeekItem[] = useMemo(() => {
     const items = birthdaysQ.data?.items ?? [];
     const todayStart = startOfDay(now);
@@ -1141,7 +1146,7 @@ function DashboardMain() {
         />
         <div className="dashboard-desktop hidden lg:flex lg:flex-col lg:gap-5 lg:py-4 xl:gap-6">
           <div className="grid grid-cols-12 items-stretch gap-4 xl:gap-5">
-            <div className="col-span-7 flex min-h-0 min-w-0 flex-col">
+            <div className="col-span-7 flex min-h-0 min-w-0 flex-col gap-4">
               {showNearestPreacherWidget ? (
                 <UpcomingPreacherCard
                   preacherName={preacherName}
@@ -1197,6 +1202,10 @@ function DashboardMain() {
                   </button>
                 </div>
               )}
+              <MyServiceWeekWidget
+                memberId={resolvedMemberId}
+                anchorServiceDate={anchorSundayServiceDate}
+              />
             </div>
 
             <div className="col-span-5 flex min-w-0 flex-col gap-4">
@@ -1502,7 +1511,7 @@ function DashboardMain() {
           ) : null}
 
           {showNearestPreacherWidget ? (
-            <div className="min-[769px]:col-span-2">
+            <div className="flex min-w-0 flex-col gap-3 min-[769px]:col-span-2">
               <UpcomingPreacherCard
                 preacherName={preacherName}
                 preacherAvatarUrl={preacherAvatarUrl}
@@ -1512,8 +1521,17 @@ function DashboardMain() {
                 canRate={canRateSermon}
                 onOpenComments={() => navigate(`/service-plan/sermon-comments/${nearestSermonData!.shareToken}`)}
               />
+              <MyServiceWeekWidget
+                memberId={resolvedMemberId}
+                anchorServiceDate={anchorSundayServiceDate}
+              />
             </div>
-          ) : null}
+          ) : (
+            <MyServiceWeekWidget
+              memberId={resolvedMemberId}
+              anchorServiceDate={anchorSundayServiceDate}
+            />
+          )}
 
           <div className="flex min-w-0 w-full flex-col gap-3">
             <button
