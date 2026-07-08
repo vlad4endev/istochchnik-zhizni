@@ -3,11 +3,17 @@ import { isAdminAppRole, isMusicianAppRole } from '../schedules/ministrySchedule
 import { hasMusicMinistryDirection, isMusicLeader } from './ministryRoleMatch';
 
 export function canViewMusicSchedule(
-  _role: AuthRole | undefined,
+  role: AuthRole | undefined,
   ministryDirection: unknown,
-  _roles?: Array<AuthRole | string | null | undefined>,
+  roles?: Array<AuthRole | string | null | undefined>,
+  ministryRole?: unknown,
 ): boolean {
-  return hasMusicMinistryDirection(ministryDirection);
+  return (
+    isAdminAppRole(role, roles) ||
+    isMusicianAppRole(role, roles) ||
+    isMusicLeader(ministryRole) ||
+    hasMusicMinistryDirection(ministryDirection)
+  );
 }
 
 export function canManageMusicSchedule(

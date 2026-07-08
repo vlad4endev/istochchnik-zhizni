@@ -1,7 +1,11 @@
 import type { Request, Response } from 'express';
 import { query } from '../config/db';
 import { requireAuthSession } from '../middleware/authSession';
-import { hasMusicMinistryDirection } from '../utils/ministryRoleMatch';
+import { rolesOfSession, type SessionRoleSource } from '../types/appRole';
+import {
+  canManageMusicSchedule as canManageMusicScheduleByProfile,
+  canViewMusicSchedule as canViewMusicScheduleByProfile,
+} from '../utils/ministryScheduleAccess';
 import {
   assignMember,
   createRole,
@@ -23,8 +27,6 @@ import {
   updateRole,
   type AssignmentStatus,
 } from '../services/musicScheduleService';
-import { rolesOfSession, type SessionRoleSource } from '../types/appRole';
-import { canManageMusicSchedule as canManageMusicScheduleByProfile } from '../utils/ministryScheduleAccess';
 
 type AuthReq = Request & SessionRoleSource & { authUserId?: number };
 
@@ -44,9 +46,20 @@ async function canManageMusicSchedule(req: Request): Promise<boolean> {
 async function canViewMusicSchedule(req: Request): Promise<boolean> {
   const r = req as AuthReq;
   if (!r.authUserId) return false;
-  const result = await query(`SELECT ministry_direction FROM members WHERE id = $1 LIMIT 1`, [r.authUserId]);
-  const row = result.rows[0] as { ministry_direction?: string | null } | undefined;
-  return hasMusicMinistryDirection(row?.ministry_direction);
+  const sessionRoles = rolesOfSession(r);
+  const result = await query(
+    `SELECT ministry_direction, ministry_role FROM members WHERE id = $1 LIMIT 1`,
+    [r.authUserId],
+  );
+  const row = result.rows[0] as
+    | { ministry_direction?: string | null; ministry_role?: string | null }
+    | undefined;
+  return canViewMusicScheduleByProfile({
+    app_role: r.authUserRole,
+    app_roles: sessionRoles,
+    ministry_direction: row?.ministry_direction,
+    ministry_role: row?.ministry_role,
+  });
 }
 
 async function ensureAuth(req: Request, res: Response): Promise<number | null> {

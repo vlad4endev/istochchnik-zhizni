@@ -4,6 +4,11 @@ import {
   isMusicLeader,
   musicRoleMemberMatchTokens,
 } from '../src/features/musicSchedule/ministryRoleMatch';
+import {
+  canManageMusicSchedule,
+  canViewMusicSchedule,
+} from '../src/features/schedules/ministryScheduleAccess';
+import type { AuthRole } from '../src/features/auth/authStore';
 
 describe('isMusicLeader', () => {
   it('recognizes Лидер Прославления', () => {
@@ -21,6 +26,23 @@ describe('isMusicLeader', () => {
   it('rejects unrelated ministry roles', () => {
     expect(isMusicLeader('Гитара')).toBe(false);
     expect(isMusicLeader('Медиа менеджер')).toBe(false);
+  });
+});
+
+describe('canViewMusicSchedule', () => {
+  it('allows musician app role without ministry direction', () => {
+    expect(canViewMusicSchedule('member' as AuthRole, '', ['musician'])).toBe(true);
+  });
+
+  it('allows worship leader ministry role', () => {
+    expect(canViewMusicSchedule('member' as AuthRole, '', ['member'], 'Лидер Прославления')).toBe(true);
+  });
+});
+
+describe('canManageMusicSchedule', () => {
+  it('allows musician and worship leader', () => {
+    expect(canManageMusicSchedule('musician' as AuthRole, '', ['musician'])).toBe(true);
+    expect(canManageMusicSchedule('member' as AuthRole, 'Лидер Прославления', ['member'])).toBe(true);
   });
 });
 

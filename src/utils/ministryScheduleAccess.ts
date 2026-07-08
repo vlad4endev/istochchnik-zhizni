@@ -1,4 +1,4 @@
-import { normalizeMinistryToken, parseMinistryRoles, memberHasMinistryRole, hasMediaMinistryDirection, hasMusicMinistryDirection } from './ministryRoleMatch';
+import { normalizeMinistryToken, parseMinistryRoles, memberHasMinistryRole, hasMediaMinistryDirection, hasMusicMinistryDirection, isMusicLeader } from './ministryRoleMatch';
 
 export type ScheduleMinistryKey = 'media' | 'music' | 'sunday';
 
@@ -44,7 +44,12 @@ export function hasSundayMinistryRole(ministryRole: unknown): boolean {
 
 export function canViewMusicSchedule(input: {
   ministry_direction?: unknown;
+  ministry_role?: unknown;
+  app_role?: unknown;
+  app_roles?: unknown;
 }): boolean {
+  if (hasAppRole(input, 'admin', 'musician')) return true;
+  if (isMusicLeader(input.ministry_role)) return true;
   return hasMusicMinistryDirection(input.ministry_direction);
 }
 
@@ -63,7 +68,14 @@ export function listAccessibleScheduleMinistries(input: {
   ) {
     out.push('media');
   }
-  if (canViewMusicSchedule({ ministry_direction: input.ministry_direction })) {
+  if (
+    canViewMusicSchedule({
+      ministry_direction: input.ministry_direction,
+      ministry_role: input.ministry_role,
+      app_role: input.app_role,
+      app_roles: input.app_roles,
+    })
+  ) {
     out.push('music');
   }
   if (
@@ -105,7 +117,12 @@ export function canViewAnySchedule(input: {
   if (
     hasMediaMinistryDirection(input.ministry_direction) ||
     memberHasMinistryRole(input.ministry_role, 'Медиа менеджер') ||
-    hasMusicMinistryDirection(input.ministry_direction) ||
+    canViewMusicSchedule({
+      ministry_direction: input.ministry_direction,
+      ministry_role: input.ministry_role,
+      app_role: input.app_role,
+      app_roles: input.app_roles,
+    }) ||
     canManageSundaySchedule({ app_role: input.app_role, app_roles: input.app_roles }) ||
     hasSundayMinistryDirection(input.ministry_direction) ||
     hasSundayMinistryRole(input.ministry_role)
@@ -153,5 +170,5 @@ export function canManageMusicSchedule(input: {
   ministry_role?: unknown;
 }): boolean {
   if (hasAppRole(input, 'admin', 'musician')) return true;
-  return memberHasMinistryRole(input.ministry_role, 'Музыкальный лидер');
+  return isMusicLeader(input.ministry_role);
 }

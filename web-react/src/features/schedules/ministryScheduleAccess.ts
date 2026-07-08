@@ -83,11 +83,17 @@ export function canViewMediaSchedule(
 }
 
 export function canViewMusicSchedule(
-  _role: AuthRole | undefined,
+  role: AuthRole | undefined,
   ministryDirection: unknown,
-  _roles?: Array<AuthRole | string | null | undefined>,
+  roles?: Array<AuthRole | string | null | undefined>,
+  ministryRole?: unknown,
 ): boolean {
-  return hasMusicMinistryDirection(ministryDirection);
+  return (
+    isAdminAppRole(role, roles) ||
+    isMusicianAppRole(role, roles) ||
+    isMusicLeader(ministryRole) ||
+    hasMusicMinistryDirection(ministryDirection)
+  );
 }
 
 export function canViewSundaySchedule(
@@ -113,7 +119,7 @@ export function canViewAnySchedule(
 ): boolean {
   return (
     canViewMediaSchedule(role, ministryDirection, roles) ||
-    canViewMusicSchedule(role, ministryDirection, roles) ||
+    canViewMusicSchedule(role, ministryDirection, roles, ministryRole) ||
     canViewSundaySchedule(role, ministryDirection, ministryRole, roles)
   );
 }
@@ -126,7 +132,7 @@ export function listAccessibleScheduleMinistries(
 ): ScheduleMinistryKey[] {
   const out: ScheduleMinistryKey[] = [];
   if (canViewMediaSchedule(role, ministryDirection, roles)) out.push('media');
-  if (canViewMusicSchedule(role, ministryDirection, roles)) out.push('music');
+  if (canViewMusicSchedule(role, ministryDirection, roles, ministryRole)) out.push('music');
   if (canViewSundaySchedule(role, ministryDirection, ministryRole, roles)) out.push('sunday');
   return out;
 }

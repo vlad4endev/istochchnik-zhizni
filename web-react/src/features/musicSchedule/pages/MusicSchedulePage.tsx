@@ -364,7 +364,7 @@ export function MusicSchedulePage() {
                 <button
                   type="button"
                   onClick={openPlannerPicker}
-                  className="tap-highlight-transparent hidden min-h-[48px] items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-white shadow-sm hover:brightness-110 active:brightness-95 sm:inline-flex sm:w-auto"
+                  className="tap-highlight-transparent col-span-2 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-white shadow-sm hover:brightness-110 active:brightness-95 sm:col-span-1 sm:w-auto"
                 >
                   <LuPlus className="h-4 w-4 shrink-0" aria-hidden />
                   Назначение
@@ -373,7 +373,7 @@ export function MusicSchedulePage() {
                   <button
                     type="button"
                     onClick={() => setRolesModalOpen(true)}
-                    className="tap-highlight-transparent inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-700 shadow-sm hover:bg-stone-50 active:bg-stone-100 sm:w-auto"
+                    className="tap-highlight-transparent col-span-2 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-700 shadow-sm hover:bg-stone-50 active:bg-stone-100 sm:col-span-1 sm:w-auto"
                   >
                     <LuSettings className="h-4 w-4 shrink-0" aria-hidden />
                     Роли
@@ -1122,7 +1122,7 @@ export function MusicSchedulePage() {
           <button
             type="button"
             onClick={openPlannerPicker}
-            className="tap-highlight-transparent fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.75rem)] right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-primary text-white shadow-[0_4px_20px_rgba(125,54,64,0.45)] ring-4 ring-white active:scale-95 lg:hidden"
+            className="tap-highlight-transparent fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.75rem)] right-4 z-[45] grid h-14 w-14 place-items-center rounded-full bg-primary text-white shadow-[0_4px_20px_rgba(125,54,64,0.45)] ring-4 ring-white active:scale-95 lg:hidden"
             aria-label="Добавить назначение"
           >
             <LuPlus className="h-6 w-6" />

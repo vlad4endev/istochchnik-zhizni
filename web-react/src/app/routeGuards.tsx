@@ -172,7 +172,7 @@ export function RequireMusicMinistryAccess({ children }: { children: ReactNode }
   const token = useAuthStore((s) => s.token);
   const meQ = useMe(Boolean(token));
   if (meQ.isLoading) return <RouteFallback />;
-  if (!canViewMusicSchedule(role, meQ.data?.ministry_direction, roles)) {
+  if (!canViewMusicSchedule(role, meQ.data?.ministry_direction, roles, meQ.data?.ministry_role)) {
     return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;
