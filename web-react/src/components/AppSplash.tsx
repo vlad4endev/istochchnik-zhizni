@@ -1,7 +1,5 @@
 import type { ReactNode } from 'react';
 
-import '/app-splash.css';
-
 const APP_NAME = 'Моя церковь';
 const APP_TAGLINE = 'Цифровая платформа';
 
