@@ -2095,6 +2095,16 @@ CREATE TABLE IF NOT EXISTS media_assignments (
 CREATE INDEX IF NOT EXISTS idx_media_assignments_event_ref_id ON media_assignments (event_ref_id);
 CREATE INDEX IF NOT EXISTS idx_media_assignments_member_id ON media_assignments (member_id);
 CREATE INDEX IF NOT EXISTS idx_media_assignments_role_id ON media_assignments (role_id);
+
+-- Offline sync MVP columns
+ALTER TABLE songs ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE songs ADD COLUMN IF NOT EXISTS client_id UUID;
+ALTER TABLE songs ADD COLUMN IF NOT EXISTS created_by_device TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS songs_client_id_uidx ON songs (client_id) WHERE client_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS songs_updated_at_idx ON songs (updated_at);
+ALTER TABLE members ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS client_id UUID;
+CREATE INDEX IF NOT EXISTS members_updated_at_idx ON members (updated_at);
 `;
 
 export async function initDb(): Promise<void> {

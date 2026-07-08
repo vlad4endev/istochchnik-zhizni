@@ -37,6 +37,7 @@ import musicScheduleRoutes from './routes/musicScheduleRoutes';
 import sundayScheduleRoutes from './routes/sundayScheduleRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
 import impersonationRoutes from './routes/impersonationRoutes';
+import syncRoutes from './routes/syncRoutes';
 import { analyticsMiddleware } from './middleware/analyticsMiddleware';
 import { diagnosticsRouter } from './diagnostics/routes/diagnostics.router';
 import {
@@ -368,6 +369,7 @@ app.use('/api/media-schedule', mediaScheduleRoutes);
 app.use('/api/music-schedule', musicScheduleRoutes);
 app.use('/api/sunday-schedule', sundayScheduleRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/sync', syncRoutes);
 app.use('/api', servicePlannerRoutes);
 app.use('/api', routes);
 app.use('/api/push', pushRoutes);
