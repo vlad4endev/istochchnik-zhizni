@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { normalizeBirthDateYmd } from '../lib/birthDate';
 import { getPrayerCycleTodayYmd } from '../utils/prayerPlanTimeZone';
 import {
   AppRole,
@@ -327,10 +328,10 @@ export async function createUserHandler(req: Request, res: Response): Promise<vo
 
   const birthYmd =
     typeof birth_date === 'string' && birth_date.trim().length > 0
-      ? coerceToYmd(birth_date as string)
+      ? normalizeBirthDateYmd(coerceToYmd(birth_date as string) ?? birth_date)
       : null;
   if (!birthYmd) {
-    res.status(400).json({ error: 'Field "birth_date" is required and must be YYYY-MM-DD' });
+    res.status(400).json({ error: 'Field "birth_date" is required (day and month)' });
     return;
   }
 
@@ -444,12 +445,12 @@ export async function bulkCreateUsersHandler(req: Request, res: Response): Promi
     }
     const birthYmd =
       typeof birth_date === 'string' && birth_date.trim().length > 0
-        ? coerceToYmd(birth_date as string)
+        ? normalizeBirthDateYmd(coerceToYmd(birth_date as string) ?? birth_date)
         : null;
     if (!birthYmd) {
       validationErrors.push({
         index: i,
-        message: 'Поле "birth_date": нужна дата в формате ГГГГ-ММ-ДД',
+        message: 'Поле "birth_date": укажите день и месяц рождения',
       });
       continue;
     }
@@ -563,9 +564,9 @@ export async function updateUserHandler(req: Request, res: Response): Promise<vo
       if (bd.length === 0) {
         req.body.birth_date = '';
       } else {
-        const ymd = coerceToYmd(bdRaw);
+        const ymd = normalizeBirthDateYmd(coerceToYmd(bdRaw) ?? bdRaw);
         if (!ymd) {
-          res.status(400).json({ error: 'Field "birth_date" must be YYYY-MM-DD or empty' });
+          res.status(400).json({ error: 'Field "birth_date" must contain a valid day and month or be empty' });
           return;
         }
         req.body.birth_date = ymd;

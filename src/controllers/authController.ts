@@ -43,6 +43,7 @@ import {
   userMediaBucket,
 } from '../lib/supabaseStorage';
 import { writeAppLog } from '../services/appLogService';
+import { birthDayMonthToYmd, isValidBirthDayMonth } from '../lib/birthDate';
 
 type AuthRequest = Request & {
   authUserId?: number;
@@ -69,6 +70,17 @@ async function appendRefreshCookieForUser(res: Response, userId: unknown): Promi
 const MIN_PASSWORD_LENGTH = 8;
 const PHONE_DIGITS_MIN = 7;
 const PHONE_DIGITS_MAX = 20;
+
+function readPositiveIntField(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+    const n = Number(value.trim());
+    return Number.isInteger(n) && n > 0 ? n : null;
+  }
+  return null;
+}
 
 function readStringField(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -185,6 +197,8 @@ export async function registerHandler(req: Request, res: Response): Promise<void
   const firstName = readStringField(req.body.first_name);
   const lastName = readStringField(req.body.last_name);
   const phoneNumber = readStringField(req.body.phone_number);
+  const birthDay = readPositiveIntField(req.body.birth_day);
+  const birthMonth = readPositiveIntField(req.body.birth_month);
 
   const credentialsError = ensureCredentialsShape(phoneNumber, password);
   if (credentialsError) {
@@ -197,12 +211,23 @@ export async function registerHandler(req: Request, res: Response): Promise<void
     return;
   }
 
+  if (birthDay == null || birthMonth == null || !isValidBirthDayMonth(birthDay, birthMonth)) {
+    res.status(400).json({ error: 'Fields "birth_day" and "birth_month" are required and must be valid' });
+    return;
+  }
+  const birthDate = birthDayMonthToYmd(birthDay, birthMonth);
+  if (!birthDate) {
+    res.status(400).json({ error: 'Fields "birth_day" and "birth_month" are required and must be valid' });
+    return;
+  }
+
   try {
     const registration = await registerUser({
       password,
       first_name: firstName,
       last_name: lastName,
       phone_number: phoneNumber,
+      birth_date: birthDate,
     });
 
     if (registration.status === 'pending') {

@@ -11,7 +11,9 @@ import { defaultPostLoginPath, pendingRegistrationLandingPath } from '../../../l
 import { humanizeServerError, mapAxiosAuthError } from '../authErrors';
 import { normalizeRegistrationStatus, useAuthStore } from '../authStore';
 import { formatRuPhoneInput, phoneInputAllowedKeys } from '../utils/formatRuPhone';
-import { SkeletonBox } from '@/components/ui/SkeletonBox';
+import { AppSplash } from '@/components/AppSplash';
+import { BirthDayMonthFields } from '@/components/BirthDayMonthFields';
+import { birthDayMonthToApiYmd, parseBirthDayMonthFromApi } from '@/lib/birthDate';
 
 type LocationState = { mode?: 'signIn' | 'signUp'; from?: string };
 
@@ -91,6 +93,7 @@ export function LoginPage() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [birthDate, setBirthDate] = useState('');
   const [statusText, setStatusText] = useState<string | null>(null);
   const [statusIsError, setStatusIsError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -117,15 +120,7 @@ export function LoginPage() {
   }, [sessionReady, token, navigate, postLoginPath]);
 
   if (!sessionReady) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-[var(--surface)] text-stone-500">
-        <div className="w-full max-w-sm space-y-3 px-5">
-          <SkeletonBox width="42%" height="16px" />
-          <SkeletonBox width="100%" height="48px" radius="12px" />
-          <SkeletonBox width="100%" height="48px" radius="12px" />
-        </div>
-      </div>
-    );
+    return <AppSplash variant="auth" />;
   }
 
   function clearStatus() {
@@ -243,9 +238,23 @@ export function LoginPage() {
     const p = phone.trim();
     const pw = password;
     const cpw = confirmPassword;
+    const birthParsed = parseBirthDayMonthFromApi(birthDate);
 
     if (!fn || !ln || !p || !pw) {
       setStatusText('Заполните все поля регистрации');
+      setStatusIsError(true);
+      return;
+    }
+    if (!birthParsed.day || !birthParsed.month) {
+      setStatusText('Укажите день и месяц рождения');
+      setStatusIsError(true);
+      return;
+    }
+    const birthDay = Number(birthParsed.day);
+    const birthMonth = Number(birthParsed.month);
+    const birthYmd = birthDayMonthToApiYmd(birthDay, birthMonth);
+    if (!birthYmd) {
+      setStatusText('Укажите корректный день и месяц рождения');
       setStatusIsError(true);
       return;
     }
@@ -271,6 +280,8 @@ export function LoginPage() {
           last_name: ln,
           phone_number: p,
           password: pw,
+          birth_day: birthDay,
+          birth_month: birthMonth,
         },
         { validateStatus: (s) => s != null && s < 600 },
       );
@@ -636,6 +647,12 @@ export function LoginPage() {
                       autoComplete="family-name"
                     />
                   </label>
+                  <BirthDayMonthFields
+                    value={birthDate}
+                    onChange={setBirthDate}
+                    selectClassName={inputClass}
+                    required
+                  />
                 </>
               )}
 

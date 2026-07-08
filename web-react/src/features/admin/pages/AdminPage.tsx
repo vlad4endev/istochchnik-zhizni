@@ -101,6 +101,7 @@ import { NextWeekPrayerPlanSection } from '../../calendar/components/NextWeekPra
 import { CHURCH_EVENT_CATEGORY_OPTIONS_FALLBACK } from '../churchEventCategoryOptions';
 import { UserListSkeleton } from '../../../components/skeletons/UserListSkeleton';
 import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
+import { BirthDayMonthFields } from '@/components/BirthDayMonthFields';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { nextOccurrenceLocalYmd } from '../../../lib/weekdayAnchor';
 import {
@@ -1410,14 +1411,16 @@ function MembersSection({
                       />
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 align-middle">
-                      <input
-                        className={`${fieldClass()} py-1.5 text-xs`}
-                        type="date"
+                      <BirthDayMonthFields
                         value={row.birth_date}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setBulkRows((rs) => rs.map((r) => (r.key === row.key ? { ...r, birth_date: v } : r)));
+                        onChange={(apiYmd) => {
+                          setBulkRows((rs) =>
+                            rs.map((r) => (r.key === row.key ? { ...r, birth_date: apiYmd } : r)),
+                          );
                         }}
+                        label=""
+                        labelClassName="sr-only"
+                        selectClassName={`${fieldClass()} py-1.5 text-xs`}
                       />
                     </td>
                     <td className="px-2 py-1.5 align-middle">
@@ -1575,12 +1578,11 @@ function MembersSection({
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">Дата рождения</label>
-                  <input
-                    className={fieldClass()}
-                    type="date"
+                  <BirthDayMonthFields
                     value={form.birth_date}
-                    onChange={(e) => setForm((s) => ({ ...s, birth_date: e.target.value }))}
+                    onChange={(apiYmd) => setForm((s) => ({ ...s, birth_date: apiYmd }))}
+                    labelClassName="mb-1 block text-xs font-semibold text-stone-600"
+                    selectClassName={fieldClass()}
                     required
                   />
                 </div>
@@ -1982,12 +1984,11 @@ function MembersSection({
                     ) : null}
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Дата рождения</label>
-                    <input
-                      type="date"
-                      className={fieldClass()}
+                    <BirthDayMonthFields
                       value={editForm.birth_date}
-                      onChange={(e) => setEditForm((s) => ({ ...s, birth_date: e.target.value }))}
+                      onChange={(apiYmd) => setEditForm((s) => ({ ...s, birth_date: apiYmd }))}
+                      labelClassName="mb-1 block text-xs font-semibold text-stone-600"
+                      selectClassName={fieldClass()}
                     />
                   </div>
                 </div>

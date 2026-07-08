@@ -270,6 +270,10 @@ ALTER TABLE access_requests ADD CONSTRAINT access_requests_request_type_check CH
 -- global_settings: строка (id=1) создаётся в ensurePrayerCycleAnchor() после initDb — не затирать якорь при обновлениях.
 
 ALTER TABLE members ADD COLUMN IF NOT EXISTS birth_date DATE;
+UPDATE members
+SET birth_date = make_date(2000, EXTRACT(MONTH FROM birth_date)::int, EXTRACT(DAY FROM birth_date)::int)
+WHERE birth_date IS NOT NULL
+  AND EXTRACT(YEAR FROM birth_date) <> 2000;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS first_name VARCHAR(120);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS last_name VARCHAR(120);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS login VARCHAR(64);

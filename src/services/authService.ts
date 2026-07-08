@@ -103,6 +103,7 @@ export interface RegisterInput {
   first_name: string;
   last_name: string;
   phone_number: string;
+  birth_date: string;
 }
 
 export interface PasswordResetRequestInput {
@@ -813,10 +814,14 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
   const fullName = `${firstName} ${lastName}`.trim();
   const phoneNumber = normalizePhoneInput(input.phone_number);
   const phoneDigits = normalizePhoneDigits(phoneNumber);
+  const birthDate = input.birth_date.trim();
 
   ensureValidName(firstName, lastName);
   ensureValidPhone(phoneNumber);
   ensureValidPassword(input.password);
+  if (!birthDate) {
+    throw new Error('Invalid birth date');
+  }
 
   const matchedByPhone = await findMemberByPhoneDigits(phoneDigits);
   if (matchedByPhone?.password_hash) {
@@ -853,10 +858,11 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
         name = $3,
         phone_number = $4,
         password_hash = $5,
+        birth_date = $6,
         app_role = COALESCE(NULLIF(app_role, ''), 'member'),
         is_active = TRUE,
         updated_at = NOW()
-       WHERE id = $6
+       WHERE id = $7
        RETURNING
         id,
         user_id,
@@ -873,7 +879,7 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
         in_prayer_cycle,
         created_at,
         updated_at`,
-      [firstName, lastName, fullName, phoneNumber, passwordHash, matchedMember.id]
+      [firstName, lastName, fullName, phoneNumber, passwordHash, birthDate, matchedMember.id]
     );
 
     const member = updatedResult.rows[0] as MemberRow;
@@ -909,10 +915,11 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
           name = $3,
           phone_number = $4,
           password_hash = $5,
+          birth_date = $6,
           app_role = COALESCE(NULLIF(app_role, ''), 'member'),
           is_active = TRUE,
           updated_at = NOW()
-         WHERE id = $6
+         WHERE id = $7
          RETURNING
           id,
           user_id,
@@ -929,7 +936,7 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
         in_prayer_cycle,
         created_at,
         updated_at`,
-        [firstName, lastName, fullName, phoneNumber, passwordHash, dupRow.id]
+        [firstName, lastName, fullName, phoneNumber, passwordHash, birthDate, dupRow.id]
       );
       const member = mergedResult.rows[0] as MemberRow;
       const { token, expiresAt } = await createSessionForUser(member.id);
@@ -998,12 +1005,12 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
 
   const provisional = await query(
     `INSERT INTO members (
-       first_name, last_name, name, phone_number, password_hash, app_role,
+       first_name, last_name, name, phone_number, password_hash, birth_date, app_role,
        is_active, registration_status, in_prayer_cycle, updated_at
      )
-     VALUES ($1, $2, $3, $4, $5, 'member', TRUE, 'pending_review', FALSE, NOW())
+     VALUES ($1, $2, $3, $4, $5, $6, 'member', TRUE, 'pending_review', FALSE, NOW())
      RETURNING id`,
-    [firstName, lastName, fullName, phoneNumber, passwordHash]
+    [firstName, lastName, fullName, phoneNumber, passwordHash, birthDate]
   );
   const provisionalId = Number((provisional.rows[0] as { id?: unknown } | undefined)?.id);
   if (!Number.isFinite(provisionalId)) {

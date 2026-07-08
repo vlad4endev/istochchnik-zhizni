@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { formatBirthDateDisplay } from '../../../lib/birthDate';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   LuBell,
@@ -181,7 +181,11 @@ export function ManageChatHomePage() {
           <InfoRow label="Роль в проекте" value={privateProfile?.app_role ?? '—'} />
           <InfoRow label="Роль (служение)" value={privateProfile?.ministry_role ?? '—'} />
           <InfoRow label="Направление" value={privateProfile?.ministry_direction ?? '—'} />
-          <InfoRow Icon={LuCake} label="Дата рождения" value={privateProfile?.birth_date ?? '—'} />
+          <InfoRow
+            Icon={LuCake}
+            label="День и месяц рождения"
+            value={formatBirthDateDisplay(privateProfile?.birth_date) || '—'}
+          />
         </ManageSettingsGroup>
       </ManageScreenShell>
     );

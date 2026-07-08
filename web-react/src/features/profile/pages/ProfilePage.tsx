@@ -17,6 +17,8 @@ import {
 import { normalizeRegistrationStatus, useAuthStore } from '../../auth/authStore';
 import { formatRuPhoneInput } from '../../auth/utils/formatRuPhone';
 import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
+import { formatBirthDateDisplay } from '../../../lib/birthDate';
+import { BirthDayMonthFields } from '@/components/BirthDayMonthFields';
 import { resolveMessengerWebOrigin } from '../../../lib/config';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import {
@@ -699,8 +701,8 @@ export function ProfilePage() {
                 <InfoRow label="Роль" value={(user?.ministry_role ?? '').trim() || '—'} />
               </div>
               <InfoRow
-                label="Дата рождения"
-                value={dateInputValueFromApi(user?.birth_date) || '—'}
+                label="День и месяц рождения"
+                value={formatBirthDateDisplay(user?.birth_date) || '—'}
               />
               <InfoRow label="Молитвенная нужда" value={user?.prayer_request?.trim() || '—'} pre />
             </div>
@@ -766,8 +768,12 @@ export function ProfilePage() {
                 <input className={INPUT} value={draft.email} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} />
               </div>
               <div>
-                <label className={LABEL}>Дата рождения</label>
-                <input className={INPUT} type="date" value={draft.birth_date} onChange={(e) => setDraft((d) => ({ ...d, birth_date: e.target.value }))} />
+                <BirthDayMonthFields
+                  value={draft.birth_date}
+                  onChange={(apiYmd) => setDraft((d) => ({ ...d, birth_date: apiYmd }))}
+                  labelClassName={LABEL}
+                  selectClassName={INPUT}
+                />
               </div>
               <div>
                 <label className={LABEL}>Молитвенная нужда</label>
