@@ -375,7 +375,7 @@ function UpcomingPreacherCard({
   const scriptureUrl = buildBibleVerseUrl(scripture);
   const preacherNameDisplay = preacherNameTwoLines(preacherName);
   return (
-    <section className="dashboard-sermon-card flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-[#E8E0DC] bg-white max-lg:shadow-none sm:max-w-[420px] lg:max-w-none lg:shadow-[var(--shadow-card)]">
+    <section className="dashboard-sermon-card flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-[#E8E0DC] bg-white max-lg:shadow-none sm:max-w-[420px] lg:max-w-none lg:shadow-[var(--shadow-card)]">
       <div className="dashboard-sermon-card__hero flex min-w-0 items-end gap-3 bg-[#6B2D3E] px-4 pt-4 sm:gap-4 sm:px-5 sm:pt-5 lg:bg-gradient-to-br lg:from-[#6B2D3E] lg:to-[#7F364D]">
         <div className="min-w-0 flex-1 pb-3 sm:pb-4">
           <p className="text-[10px] uppercase tracking-[0.1em] text-[#EAC7D2]">Проповедь</p>
@@ -393,7 +393,7 @@ function UpcomingPreacherCard({
           )}
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 min-w-0 flex-col gap-2.5 bg-white px-4 py-3 sm:gap-3 sm:px-5 sm:py-4">
+      <div className="flex min-w-0 flex-col gap-2.5 bg-white px-4 py-3 sm:gap-3 sm:px-5 sm:py-4">
         <div className="flex min-w-0 items-center gap-2">
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#6B2D3E]" aria-hidden />
           <span className="min-w-0 break-words text-xs font-semibold text-stone-500">{dateLabel}</span>
@@ -1145,8 +1145,8 @@ function DashboardMain() {
           onNavigate={(to) => navigate(to)}
         />
         <div className="dashboard-desktop hidden lg:flex lg:flex-col lg:gap-5 lg:py-4 xl:gap-6">
-          <div className="grid grid-cols-12 items-stretch gap-4 xl:gap-5">
-            <div className="col-span-7 flex min-h-0 min-w-0 flex-col gap-4">
+          <div className="grid grid-cols-12 items-start gap-4 xl:gap-5">
+            <div className="col-span-7 flex min-w-0 flex-col gap-3">
               {showNearestPreacherWidget ? (
                 <UpcomingPreacherCard
                   preacherName={preacherName}
