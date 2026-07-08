@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
+
+import { AppToastHost } from './components/AppToastHost';
 import { isAxiosError } from 'axios';
 import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -323,6 +325,7 @@ if (!rootEl) {
                   <SessionKeepAlive />
                   <NativePushBridge />
                   <RootRouter />
+                  <AppToastHost />
                   <MediaViewer />
                 </AccessibilityProvider>
               </BrowserRouter>

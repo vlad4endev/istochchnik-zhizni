@@ -1,6 +1,8 @@
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
+import { isAxiosError } from 'axios';
 import { LuLoaderCircle, LuSparkles, LuWand, LuX } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
@@ -22,6 +24,20 @@ function formatPlanDate(iso: string): string {
   const d = new Date(`${iso}T12:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
   return dateFmt.format(d);
+}
+
+function readPickError(err: unknown): string {
+  if (isAxiosError(err)) {
+    const apiMsg = err.response?.data;
+    if (typeof apiMsg === 'object' && apiMsg !== null && 'error' in apiMsg) {
+      const text = String((apiMsg as { error?: unknown }).error ?? '').trim();
+      if (text) return text;
+    }
+    if (!err.response) {
+      return 'Нет связи с сервером или запрос занял слишком много времени. Попробуйте ещё раз.';
+    }
+  }
+  return 'Не удалось подобрать песни. Проверьте ИИ-настройки и программу служения.';
 }
 
 function songLabel(song: { song_number: number | null; song_title: string }): string {
@@ -59,14 +75,14 @@ function PickResults({
     onError: () => emitAppToast('Не удалось применить подбор к программе'),
   });
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[var(--z-modal)] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[var(--z-modal-bg)] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="song-pick-title"
     >
-      <div className="flex max-h-[min(92dvh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-bg)] shadow-2xl sm:rounded-2xl">
+      <div className="flex max-h-[min(92dvh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-bg)] shadow-2xl sm:rounded-2xl z-[var(--z-modal)]">
         <div className="flex items-start justify-between gap-3 border-b border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-4 py-4 sm:px-6">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--studio-editor-accent)]">
@@ -170,32 +186,37 @@ function PickResults({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 export function ServicePlanSongPickButton({ onApplied }: { onApplied?: () => void }) {
   const [result, setResult] = useState<ServicePlanSongPickResult | null>(null);
+  const [inlineError, setInlineError] = useState<string | null>(null);
   const editorBackTo = useStudioEditorBackTo();
 
   const pickMut = useMutation({
     mutationFn: () => pickServicePlanSongs(),
-    onSuccess: (data) => setResult(data),
+    onMutate: () => setInlineError(null),
+    onSuccess: (data) => {
+      setInlineError(null);
+      setResult(data);
+    },
     onError: (err: unknown) => {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? String((err as { response?: { data?: { error?: string } } }).response?.data?.error ?? '')
-          : '';
-      emitAppToast(msg || 'Не удалось подобрать песни. Проверьте ИИ-настройки и программу служения.');
+      const msg = readPickError(err);
+      setInlineError(msg);
+      emitAppToast(msg);
     },
   });
 
   return (
-    <>
+    <div className="space-y-2">
       <button
         type="button"
         onClick={() => pickMut.mutate()}
         disabled={pickMut.isPending}
+        aria-busy={pickMut.isPending}
         className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--studio-editor-accent)] to-[#9a4550] px-4 text-sm font-semibold text-white shadow-md transition hover:opacity-95 disabled:opacity-60"
       >
         {pickMut.isPending ? (
@@ -206,6 +227,12 @@ export function ServicePlanSongPickButton({ onApplied }: { onApplied?: () => voi
         {pickMut.isPending ? 'ИИ подбирает песни…' : 'Подбор песен'}
       </button>
 
+      {inlineError ? (
+        <p className="max-w-xl rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-relaxed text-rose-900 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-100">
+          {inlineError}
+        </p>
+      ) : null}
+
       {result ? (
         <PickResults
           result={result}
@@ -214,6 +241,6 @@ export function ServicePlanSongPickButton({ onApplied }: { onApplied?: () => voi
           editorBackTo={editorBackTo}
         />
       ) : null}
-    </>
+    </div>
   );
 }

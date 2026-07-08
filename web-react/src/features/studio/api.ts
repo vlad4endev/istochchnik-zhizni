@@ -315,9 +315,11 @@ export type ServicePlanSongPickResult = {
 };
 
 export async function pickServicePlanSongs(planId?: number): Promise<ServicePlanSongPickResult> {
-  const { data } = await apiClient.post<ServicePlanSongPickResult>(`${STUDIO}/service-plan-song-pick`, {
-    plan_id: planId ?? undefined,
-  });
+  const { data } = await apiClient.post<ServicePlanSongPickResult>(
+    `${STUDIO}/service-plan-song-pick`,
+    { plan_id: planId ?? undefined },
+    { timeout: 120_000 },
+  );
   return data;
 }
 
