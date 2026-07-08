@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthSessionReady } from '../../../hooks/useAuthSessionReady';
 import { defaultPostLoginPath } from '../../../lib/appVariant';
 import { useAuthStore } from '../authStore';
-import { SkeletonBox } from '@/components/ui/SkeletonBox';
+import { AppSplash } from '@/components/AppSplash';
 
 const DEFAULT_APP_NAME = 'МОЯ ЦЕРКОВЬ';
 const DEFAULT_DESCRIPTION = 'Цифровая платформа';
@@ -34,14 +34,7 @@ export function AuthLandingPage() {
   }, [sessionReady, token, navigate, postLoginPath]);
 
   if (!sessionReady) {
-    return (
-      <div className="flex h-full min-h-0 w-full max-w-[100vw] flex-1 items-center justify-center overflow-y-auto bg-primary text-white [min-height:var(--viewport-height,100dvh)] [max-height:var(--viewport-height,100dvh)]">
-        <div className="w-full max-w-xs space-y-3 px-5">
-          <SkeletonBox width="70%" height="16px" />
-          <SkeletonBox width="100%" height="12px" />
-        </div>
-      </div>
-    );
+    return <AppSplash variant="auth" />;
   }
 
   return (

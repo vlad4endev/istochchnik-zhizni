@@ -2,15 +2,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 
+import { AppSplash } from './components/AppSplash';
 import { AppToastHost } from './components/AppToastHost';
 import { isAxiosError } from 'axios';
-import React, { StrictMode } from 'react';
+import React, { StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 
+import { scheduleHideNativeSplashAfterPaint } from './lib/hideNativeSplash';
 import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
 import { client } from './lib/appwrite';
-import { initPwaStandaloneHtmlHint } from './features/pwa/utils/pwaEnvironment';
+import {
+  initPwaStandaloneHtmlHint,
+  isAndroidInstalledPwa,
+  restorePwaAppThemeColor,
+} from './features/pwa/utils/pwaEnvironment';
 import { AppRouter } from './app/Router';
 import { AppRouterMain } from './app/RouterMain';
 import { AppRouterStudio } from './app/RouterStudio';
@@ -21,6 +27,8 @@ import { TopLoader } from './components/ui/TopLoader';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
 import { SessionKeepAlive } from './hooks/SessionKeepAlive';
+import { useAuthHydrated } from './hooks/useAuthHydrated';
+import { useAuthSessionReady } from './hooks/useAuthSessionReady';
 import { useFCM } from './hooks/useFCM';
 import { useBackgroundDataSync } from './hooks/useBackgroundDataSync';
 import { ImpersonationBanner } from './features/admin/components/ImpersonationBanner';
@@ -233,6 +241,20 @@ try {
   /* ignore */
 }
 
+function AppBootstrapGate({ children }: { children: React.ReactNode }) {
+  const hydrated = useAuthHydrated();
+  const sessionReady = useAuthSessionReady();
+  const androidPwa = isAndroidInstalledPwa();
+  const showSplash = !hydrated || (androidPwa && !sessionReady);
+
+  useEffect(() => {
+    if (!showSplash) restorePwaAppThemeColor();
+  }, [showSplash]);
+
+  if (showSplash) return <AppSplash />;
+  return children;
+}
+
 function RootRouter() {
   const v = getAppVariant();
   if (v === 'main') return <AppRouterMain />;
@@ -324,7 +346,9 @@ if (!rootEl) {
                   <ImpersonationBanner />
                   <SessionKeepAlive />
                   <NativePushBridge />
-                  <RootRouter />
+                  <AppBootstrapGate>
+                    <RootRouter />
+                  </AppBootstrapGate>
                   <AppToastHost />
                   <MediaViewer />
                 </AccessibilityProvider>
@@ -336,6 +360,7 @@ if (!rootEl) {
     </StrictMode>,
   );
   scheduleProgressierAfterFirstPaint();
+  scheduleHideNativeSplashAfterPaint();
 }
 
 if ('storage' in navigator && 'persist' in navigator.storage) {

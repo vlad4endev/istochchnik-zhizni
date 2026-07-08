@@ -1,11 +1,30 @@
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** В прод-сборке (PWA/APK) инлайним CSS сплэша — Android PWA не ждёт отдельный запрос до первого кадра. */
+function inlineAppSplashCss(): Plugin {
+  return {
+    name: 'inline-app-splash-css',
+    transformIndexHtml: {
+      order: 'pre',
+      handler(html, ctx) {
+        if (ctx.server) return html;
+        const css = readFileSync(path.resolve(__dirname, 'public/app-splash.css'), 'utf8');
+        return html.replace(
+          '<link rel="stylesheet" href="/app-splash.css" />',
+          `<style id="app-splash-critical">${css}</style>`,
+        );
+      },
+    },
+  };
+}
 
 /**
  * Локальный бэкенд: `PORT` в корневом `.env` (в `src/main.ts` дефолт 40978).
@@ -84,10 +103,17 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
+      inlineAppSplashCss(),
       VitePWA({
         registerType: 'prompt',
         injectRegister: false,
-        includeAssets: ['assets/favicon.ico', 'assets/apple-touch-icon-180x180.png', 'offline.html'],
+        includeAssets: [
+          'assets/favicon.ico',
+          'assets/apple-touch-icon-180x180.png',
+          'assets/logo.svg',
+          'app-splash.css',
+          'offline.html',
+        ],
         manifest: {
           id: pwaManifestId,
           name: 'Моя церковь - цифровая платформа',

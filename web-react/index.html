@@ -12,6 +12,24 @@
         } catch {
           document.documentElement.setAttribute('data-mantine-color-scheme', 'light');
         }
+        try {
+          var standalone =
+            window.matchMedia('(display-mode: standalone)').matches ||
+            window.matchMedia('(display-mode: fullscreen)').matches ||
+            window.matchMedia('(display-mode: minimal-ui)').matches;
+          if (standalone) {
+            document.documentElement.dataset.pwaStandalone = '1';
+            var android = /Android/i.test(navigator.userAgent);
+            if (android) {
+              document.documentElement.dataset.androidPwa = '1';
+              document.querySelectorAll('meta[name="theme-color"]').forEach(function (meta) {
+                meta.setAttribute('content', '#f4f1ed');
+              });
+            }
+          }
+        } catch {
+          /* ignore */
+        }
       })();
     </script>
     <meta charset="UTF-8" />
@@ -56,11 +74,40 @@
     <link rel="apple-touch-startup-image" href="/pwa/apple-splash-1242-2208.png" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
     <link rel="apple-touch-startup-image" href="/pwa/apple-splash-750-1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
     <link rel="apple-touch-startup-image" href="/pwa/apple-splash-640-1136.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <!-- Сплэш до React: тот же вид, что AppSplash.tsx -->
+    <link rel="preload" href="/assets/logo.svg" as="image" type="image/svg+xml" />
+    <link rel="stylesheet" href="/app-splash.css" />
     <!-- Progressier (push): подключается из main.tsx после первого кадра — не блокировать парсинг/сеть PWA. -->
   </head>
   <body style="margin:0;background:#f4f1ed">
-    <!-- До загрузки CSS/React: не оставлять чисто белый фон (типичная жалоба в iOS PWA). -->
-    <div id="root" style="min-height:100dvh;min-height:-webkit-fill-available"></div>
+    <!-- До загрузки React: анимированный сплэш вместо пустого фона. -->
+    <div id="root" style="min-height:100dvh;min-height:-webkit-fill-available">
+      <div class="app-splash" role="status" aria-live="polite" aria-label="Загрузка приложения">
+        <div class="app-splash__bg" aria-hidden="true">
+          <div class="app-splash__orb app-splash__orb--1"></div>
+          <div class="app-splash__orb app-splash__orb--2"></div>
+          <div class="app-splash__orb app-splash__orb--3"></div>
+          <div class="app-splash__grain"></div>
+        </div>
+        <div class="app-splash__center">
+          <div class="app-splash__logo-shell">
+            <span class="app-splash__ring"></span>
+            <span class="app-splash__ring app-splash__ring--2"></span>
+            <div class="app-splash__logo-card">
+              <img src="/assets/logo.svg" alt="" class="app-splash__logo" decoding="async" />
+            </div>
+          </div>
+          <h1 class="app-splash__title">Моя церковь</h1>
+          <p class="app-splash__tagline">Цифровая платформа</p>
+        </div>
+        <div class="app-splash__loader" aria-hidden="true"><div class="app-splash__loader-bar"></div></div>
+        <div class="app-splash__dots" aria-hidden="true">
+          <span class="app-splash__dot"></span>
+          <span class="app-splash__dot"></span>
+          <span class="app-splash__dot"></span>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

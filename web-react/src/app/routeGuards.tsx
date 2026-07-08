@@ -7,6 +7,7 @@ import { canAccessStudio, canModerateSongCatalogSession } from '../features/auth
 import { canViewMediaSchedule } from '../features/mediaSchedule/mediaAccess';
 import { canViewMusicSchedule } from '../features/musicSchedule/musicAccess';
 import { canViewAnySchedule, canViewSundaySchedule } from '../features/schedules/ministryScheduleAccess';
+import { AppSplash } from '@/components/AppSplash';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import {
   canRoleAccessSection,
@@ -62,17 +63,7 @@ export function RouteFallback(): ReactNode {
 }
 
 export function HydrateSplash(): ReactNode {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center text-stone-500"
-      style={{ background: '#f4f1ed' }}
-    >
-      <div className="w-full max-w-sm space-y-2.5 px-4">
-        <SkeletonBox width="36%" height="14px" />
-        <SkeletonBox width="100%" height="44px" radius="12px" />
-      </div>
-    </div>
-  );
+  return <AppSplash />;
 }
 
 export function RequireAuth() {
