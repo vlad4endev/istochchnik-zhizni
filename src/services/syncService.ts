@@ -90,7 +90,7 @@ export async function pullSyncChanges(opts: SyncPullOptions): Promise<{
       where = `updated_at > $${params.length}::timestamptz`;
     }
     params.push(limit, offset);
-    const res = await query<Record<string, unknown>>(
+    const res = await query(
       `SELECT * FROM songs WHERE ${where} ORDER BY updated_at ASC, id ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     );
@@ -106,7 +106,7 @@ export async function pullSyncChanges(opts: SyncPullOptions): Promise<{
     where = `updated_at > $${params.length}::timestamptz`;
   }
   params.push(limit, offset);
-  const res = await query<Record<string, unknown>>(
+  const res = await query(
     `SELECT m.id, m.first_name, m.last_name, m.app_role, m.updated_at, m.deleted_at,
             up.username
      FROM members m
@@ -138,7 +138,7 @@ async function pushSongItem(item: SyncPushItem, memberId: number): Promise<SyncP
     if (!item.clientId) {
       return {id: item.id, ok: false, error: 'clientId required for create'};
     }
-    const existing = await query<{id: string}>(
+    const existing = await query(
       `SELECT id::text FROM songs WHERE client_id = $1::uuid LIMIT 1`,
       [item.clientId],
     );
@@ -148,7 +148,7 @@ async function pushSongItem(item: SyncPushItem, memberId: number): Promise<SyncP
 
     const title = String(payload.title ?? '').trim() || 'Без названия';
     const slug = String(payload.slug ?? '').trim() || `song-${item.clientId.slice(0, 8)}`;
-    const insert = await query<{id: string}>(
+    const insert = await query(
       `INSERT INTO songs (
          title, slug, content, default_key, tags, is_published,
          client_id, created_by_member_id, created_by_device, updated_at
@@ -181,7 +181,7 @@ async function pushSongItem(item: SyncPushItem, memberId: number): Promise<SyncP
     return {id: item.id, ok: true, serverId: recordId};
   }
 
-  const current = await query<{updated_at: Date}>(
+  const current = await query(
     `SELECT updated_at FROM songs WHERE id = $1::bigint LIMIT 1`,
     [recordId],
   );
@@ -240,10 +240,10 @@ export async function pushSyncBatch(
 export async function bootstrapSyncSnapshot(
   memberId: number,
 ): Promise<{songs: Record<string, unknown>[]; member: Record<string, unknown> | null}> {
-  const songsRes = await query<Record<string, unknown>>(
+  const songsRes = await query(
     `SELECT * FROM songs WHERE is_published = TRUE AND deleted_at IS NULL ORDER BY title ASC LIMIT 500`,
   );
-  const memberRes = await query<Record<string, unknown>>(
+  const memberRes = await query(
     `SELECT m.id, m.first_name, m.last_name, m.app_role, m.updated_at, m.deleted_at,
             up.username
      FROM members m
