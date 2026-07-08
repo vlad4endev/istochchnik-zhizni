@@ -5,7 +5,7 @@ import { addWeeks, format, isSunday, nextSunday, startOfDay } from 'date-fns';
 import { fetchMyMusicSchedule } from '../../musicSchedule/api';
 import { fetchMyMediaSchedule } from '../../mediaSchedule/api';
 import { fetchMySundaySchedule } from '../../schedules/api/sundayScheduleApi';
-import { mySundayRole } from '../../schedules/utils/sundayScheduleDisplay';
+import { mySundayRole, serviceTitle } from '../../schedules/utils/sundayScheduleDisplay';
 import type { MusicEvent } from '../../musicSchedule/types';
 import type { MediaEvent } from '../../mediaSchedule/types';
 
@@ -18,6 +18,7 @@ export type ServiceWeekAssignment = {
   eventDate: string;
   startTime: string | null;
   roleName: string;
+  eventTitle: string;
   status: 'assigned' | 'confirmed' | 'declined' | 'pending' | 'info';
   description: string;
   scheduleLink: string;
@@ -50,6 +51,11 @@ function sundayDescription(roleName: string): string {
   return `Твоё служение в воскресенье — ${roleName}`;
 }
 
+function eventLabel(title: string, templateName?: string | null): string {
+  const name = templateName?.trim() || title.trim();
+  return name || 'Воскресное богослужение';
+}
+
 function collectMusicRows(events: MusicEvent[], serviceDate: string): ServiceWeekAssignment[] {
   const out: ServiceWeekAssignment[] = [];
   for (const event of events) {
@@ -62,6 +68,7 @@ function collectMusicRows(events: MusicEvent[], serviceDate: string): ServiceWee
         eventDate: event.event_date,
         startTime: event.start_time ?? null,
         roleName: assignment.role.name,
+        eventTitle: eventLabel(event.title, event.template_name),
         status: assignment.status,
         description: musicDescription(assignment.role.name),
         scheduleLink: '/schedules/music/my',
@@ -84,6 +91,7 @@ function collectMediaRows(events: MediaEvent[], serviceDate: string): ServiceWee
         eventDate: event.event_date,
         startTime: event.start_time ?? null,
         roleName: assignment.role.name,
+        eventTitle: eventLabel(event.title, event.template_name),
         status: assignment.status,
         description: mediaDescription(assignment.role.name),
         scheduleLink: '/schedules/media/my',
@@ -112,6 +120,7 @@ function collectSundayRows(
       eventDate: plan.service_date,
       startTime: plan.start_time ?? null,
       roleName: role,
+      eventTitle: serviceTitle(plan),
       status: 'info',
       description: sundayDescription(role),
       scheduleLink: '/schedules/sunday/my',

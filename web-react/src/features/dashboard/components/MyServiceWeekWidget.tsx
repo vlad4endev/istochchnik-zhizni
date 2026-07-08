@@ -3,11 +3,11 @@ import { format, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
 import {
-  LuCalendarDays,
   LuCheck,
+  LuClock3,
+  LuExternalLink,
   LuLoaderCircle,
   LuMusic2,
-  LuRadio,
   LuSparkles,
   LuVideo,
   LuX,
@@ -22,37 +22,35 @@ import {
   apiErrorMessage as mediaApiError,
   updateMediaAssignmentStatus,
 } from '../../mediaSchedule/api';
-import { assignmentStatusLabel } from '../../musicSchedule/musicAccess';
 import {
   useMyServiceWeekAssignments,
   type ServiceWeekAssignment,
   type ServiceWeekMinistry,
 } from '../hooks/useMyServiceWeekAssignments';
 
+const MAROON = '#732B38';
+
 const MINISTRY_META: Record<
   ServiceWeekMinistry,
-  { label: string; Icon: IconType; accent: string; soft: string; ring: string }
+  { label: string; Icon: IconType; chipBg: string; chipColor: string }
 > = {
   music: {
     label: 'Прославление',
     Icon: LuMusic2,
-    accent: '#7C3AED',
-    soft: '#F3E8FF',
-    ring: '#DDD6FE',
+    chipBg: '#F3E8FF',
+    chipColor: '#7C3AED',
   },
   media: {
     label: 'Трансляция',
     Icon: LuVideo,
-    accent: '#0E7490',
-    soft: '#E0F7FA',
-    ring: '#A5F3FC',
+    chipBg: '#E0F2FE',
+    chipColor: '#0369A1',
   },
   sunday: {
     label: 'Собрание',
     Icon: LuSparkles,
-    accent: '#6B2D3E',
-    soft: '#F8F2F4',
-    ring: '#E8D5DC',
+    chipBg: '#F8F2F4',
+    chipColor: MAROON,
   },
 };
 
@@ -60,7 +58,62 @@ function isPending(status: ServiceWeekAssignment['status']): boolean {
   return status === 'assigned' || status === 'pending';
 }
 
-function AssignmentRow({
+function formatServiceTime(startTime: string | null): string | null {
+  const raw = startTime?.trim();
+  if (!raw) return null;
+  const match = raw.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return raw;
+  return `${match[1]!.padStart(2, '0')}:${match[2]}`;
+}
+
+function DateSidebar({ eventDate }: { eventDate: string }) {
+  const dt = parseISO(eventDate);
+  const weekday = Number.isNaN(dt.getTime()) ? 'ВС' : format(dt, 'EEEEEE', { locale: ru }).toUpperCase();
+  const day = Number.isNaN(dt.getTime()) ? '—' : format(dt, 'd');
+  const month = Number.isNaN(dt.getTime()) ? '' : format(dt, 'LLLL', { locale: ru });
+
+  return (
+    <div
+      className="flex w-[74px] shrink-0 flex-col items-center justify-center gap-0.5 border-r border-dashed border-white/35 px-2 py-4 sm:w-[82px] sm:py-5"
+      style={{ backgroundColor: MAROON }}
+    >
+      <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-white/85">{weekday}</span>
+      <span className="text-[34px] font-bold leading-none text-white sm:text-[38px]">{day}</span>
+      <span className="text-[11px] font-semibold capitalize text-white/90">{month}</span>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: ServiceWeekAssignment['status'] }) {
+  if (status === 'confirmed') {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#E8F5EC] px-2.5 py-1 text-[11px] font-bold text-[#2F6B3C]">
+        <span className="grid h-4 w-4 place-items-center rounded-[4px] bg-[#C8E6D0] text-[#2F6B3C]">
+          <LuCheck className="h-3 w-3" strokeWidth={3} aria-hidden />
+        </span>
+        Подтверждено
+      </span>
+    );
+  }
+  if (status === 'declined') {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 ring-1 ring-rose-200/80">
+        <LuX className="h-3 w-3" aria-hidden />
+        Отказ
+      </span>
+    );
+  }
+  if (isPending(status)) {
+    return (
+      <span className="inline-flex shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800 ring-1 ring-amber-200/80">
+        Нужен ответ
+      </span>
+    );
+  }
+  return null;
+}
+
+function ServiceCard({
   item,
   onConfirm,
   onDecline,
@@ -76,83 +129,74 @@ function AssignmentRow({
   const meta = MINISTRY_META[item.ministry];
   const Icon = meta.Icon;
   const pending = isPending(item.status);
-  const accent = item.roleColor ?? meta.accent;
+  const timeLabel = formatServiceTime(item.startTime);
 
   return (
-    <div
-      className="overflow-hidden rounded-xl border border-stone-200/80 bg-white shadow-sm"
-      style={{ boxShadow: '0 1px 0 0 rgba(255,255,255,0.6) inset' }}
-    >
-      <div className="h-1 w-full" style={{ backgroundColor: accent }} />
-      <div className="px-3.5 py-3.5 sm:px-4 sm:py-4">
-        <div className="flex items-start gap-3">
-          <span
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl ring-1 ring-inset"
-            style={{ backgroundColor: meta.soft, color: meta.accent, boxShadow: `inset 0 0 0 1px ${meta.ring}` }}
-          >
-            <Icon className="h-[18px] w-[18px]" strokeWidth={2.25} aria-hidden />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
+    <article className="flex min-w-0 overflow-hidden rounded-[18px] border border-black/[0.07] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      <DateSidebar eventDate={item.eventDate} />
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex flex-1 flex-col px-4 py-3.5 sm:px-5 sm:py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
               <span
-                className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide"
-                style={{ backgroundColor: meta.soft, color: meta.accent }}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-full"
+                style={{ backgroundColor: meta.chipBg, color: meta.chipColor }}
               >
-                {meta.label}
+                <Icon className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
               </span>
-              {item.status === 'confirmed' ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-extrabold text-emerald-800 ring-1 ring-emerald-200/80">
-                  <LuCheck className="h-3 w-3" aria-hidden />
-                  Подтверждено
-                </span>
-              ) : item.status === 'declined' ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-extrabold text-rose-800 ring-1 ring-rose-200/80">
-                  <LuX className="h-3 w-3" aria-hidden />
-                  Отказ
-                </span>
-              ) : pending ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-200/80">
-                  <LuRadio className="h-3 w-3 animate-pulse" aria-hidden />
-                  {assignmentStatusLabel(item.status)}
-                </span>
-              ) : null}
+              <span className="text-sm font-medium text-stone-500">{meta.label}</span>
             </div>
-            <p className="mt-2 text-[15px] font-bold leading-snug text-stone-900 sm:text-base">
-              {item.description}
-            </p>
-            {item.startTime ? (
-              <p className="mt-1 text-xs font-semibold text-stone-500">Начало в {item.startTime}</p>
-            ) : null}
+            <StatusBadge status={item.status} />
           </div>
+
+          <div className="mt-3 min-w-0">
+            <h3 className="text-[17px] font-bold leading-snug text-stone-900 sm:text-lg">
+              Служение: {item.roleName}
+            </h3>
+            <p className="mt-1 text-sm font-medium text-stone-500">{item.eventTitle}</p>
+          </div>
+
+          {pending && item.assignmentId != null ? (
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onConfirm(item)}
+                className="tap-highlight-transparent inline-flex min-h-[40px] flex-1 items-center justify-center rounded-xl text-sm font-bold text-white disabled:opacity-50"
+                style={{ backgroundColor: MAROON }}
+              >
+                Подтвердить
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onDecline(item)}
+                className="tap-highlight-transparent inline-flex min-h-[40px] flex-1 items-center justify-center rounded-xl border border-stone-200 bg-stone-50 text-sm font-bold text-stone-700 disabled:opacity-50"
+              >
+                Отказать
+              </button>
+            </div>
+          ) : null}
+          {errorText ? <p className="mt-2 text-xs font-semibold text-rose-600">{errorText}</p> : null}
         </div>
 
-        {pending && item.assignmentId != null ? (
-          <div className="mt-3.5 flex flex-col gap-2 sm:flex-row">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => onConfirm(item)}
-              className="tap-highlight-transparent inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[var(--btn-success-bg,#16a34a)] px-4 text-sm font-extrabold text-white shadow-sm transition hover:brightness-95 disabled:opacity-50"
-            >
-              <LuCheck className="h-4 w-4" aria-hidden />
-              Подтвердить
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => onDecline(item)}
-              className="tap-highlight-transparent inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 text-sm font-extrabold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
-            >
-              <LuX className="h-4 w-4" aria-hidden />
-              Отказать
-            </button>
+        <div className="flex items-center justify-between gap-3 border-t border-stone-100 px-4 py-2.5 sm:px-5">
+          <div className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium text-stone-500">
+            <LuClock3 className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="tabular-nums">{timeLabel ?? '—'}</span>
           </div>
-        ) : null}
-        {errorText ? (
-          <p className="mt-2 text-xs font-semibold text-rose-600">{errorText}</p>
-        ) : null}
+          <Link
+            to={item.scheduleLink}
+            className="inline-flex shrink-0 items-center gap-1 text-sm font-bold hover:underline"
+            style={{ color: MAROON }}
+          >
+            Подробнее
+            <LuExternalLink className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -164,8 +208,11 @@ export function MyServiceWeekWidget({
   anchorServiceDate?: string | null;
 }) {
   const qc = useQueryClient();
-  const { assignments, pendingCount, isLoading, hasAssignments, serviceDate } =
-    useMyServiceWeekAssignments(memberId, anchorServiceDate, memberId != null);
+  const { assignments, isLoading, hasAssignments } = useMyServiceWeekAssignments(
+    memberId,
+    anchorServiceDate,
+    memberId != null,
+  );
 
   const statusMut = useMutation({
     mutationFn: async ({
@@ -194,47 +241,27 @@ export function MyServiceWeekWidget({
     return null;
   }
 
-  const dateDt = parseISO(serviceDate);
-  const dateLabel = Number.isNaN(dateDt.getTime())
-    ? serviceDate
-    : format(dateDt, 'EEEE, d MMMM', { locale: ru });
-
   const errorText = statusMut.isError
     ? musicApiError(statusMut.error) || mediaApiError(statusMut.error)
     : null;
 
   return (
-    <section
-      aria-label="Моё служение на этой неделе"
-      className="min-w-0 overflow-hidden rounded-2xl border border-[#E8E0DC] bg-gradient-to-br from-[#FFFCFA] via-white to-[#F8F5F3] shadow-[var(--shadow-card)]"
-    >
-      <div className="border-b border-[#EDE5E1] bg-gradient-to-r from-[#6B2D3E]/[0.06] to-transparent px-4 py-3.5 sm:px-5 sm:py-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#6B2D3E]">
-              Твоё служение на этой неделе
-            </p>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 text-sm font-bold text-stone-800">
-                <LuCalendarDays className="h-4 w-4 shrink-0 text-[#6B2D3E]" aria-hidden />
-                <span className="capitalize">{dateLabel}</span>
-              </span>
-              {pendingCount > 0 ? (
-                <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-extrabold text-amber-900">
-                  {pendingCount} ждут ответа
-                </span>
-              ) : null}
-            </div>
-          </div>
-          {statusMut.isPending ? (
-            <LuLoaderCircle className="h-5 w-5 shrink-0 animate-spin text-stone-400" aria-hidden />
-          ) : null}
-        </div>
+    <section aria-label="Твоё служение на этой неделе" className="min-w-0">
+      <div className="mb-2.5 flex items-center justify-between gap-2 px-0.5">
+        <h2
+          className="text-[11px] font-bold uppercase tracking-[0.1em]"
+          style={{ color: MAROON }}
+        >
+          Твоё служение на этой неделе
+        </h2>
+        {statusMut.isPending ? (
+          <LuLoaderCircle className="h-4 w-4 shrink-0 animate-spin text-stone-400" aria-hidden />
+        ) : null}
       </div>
 
-      <div className="space-y-2.5 px-3 py-3 sm:space-y-3 sm:px-4 sm:py-4">
+      <div className="space-y-3">
         {assignments.map((item) => (
-          <AssignmentRow
+          <ServiceCard
             key={item.key}
             item={item}
             busy={statusMut.isPending}
@@ -243,19 +270,6 @@ export function MyServiceWeekWidget({
             onDecline={(row) => statusMut.mutate({ item: row, status: 'declined' })}
           />
         ))}
-      </div>
-
-      <div className="border-t border-[#EDE5E1] px-4 py-2.5 sm:px-5">
-        <Link
-          to={
-            assignments.length === 1
-              ? assignments[0]!.scheduleLink
-              : '/schedules'
-          }
-          className="inline-flex min-h-[36px] items-center text-xs font-extrabold text-[#6B2D3E] hover:underline"
-        >
-          {assignments.length === 1 ? 'Открыть расписание' : 'Все мои расписания'}
-        </Link>
       </div>
     </section>
   );

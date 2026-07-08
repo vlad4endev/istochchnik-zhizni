@@ -1527,10 +1527,12 @@ function DashboardMain() {
               />
             </div>
           ) : (
-            <MyServiceWeekWidget
-              memberId={resolvedMemberId}
-              anchorServiceDate={anchorSundayServiceDate}
-            />
+            <div className="min-[769px]:col-span-2">
+              <MyServiceWeekWidget
+                memberId={resolvedMemberId}
+                anchorServiceDate={anchorSundayServiceDate}
+              />
+            </div>
           )}
 
           <div className="flex min-w-0 w-full flex-col gap-3">
