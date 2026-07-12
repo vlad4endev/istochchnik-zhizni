@@ -9,6 +9,7 @@ import {
   parseMinistryRoles,
 } from '../ministryRoleMatch';
 import type { MediaRole, MediaScheduleMember } from '../types';
+import { apiErrorMessage } from '../api';
 import { memberAvatarColor } from '../types';
 
 type Props = {
@@ -102,7 +103,7 @@ export function MemberPickerModal({
       setSearch('');
       setSelectedMemberId(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось назначить');
+      setError(apiErrorMessage(e, 'Не удалось назначить'));
     } finally {
       setSubmitting(false);
     }
