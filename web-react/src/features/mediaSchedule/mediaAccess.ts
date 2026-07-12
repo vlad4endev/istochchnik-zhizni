@@ -7,8 +7,13 @@ export function canViewMediaSchedule(
   role: AuthRole | undefined,
   ministryDirection: unknown,
   roles?: Array<AuthRole | string | null | undefined>,
+  ministryRole?: unknown,
 ): boolean {
-  return canModerateSongCatalogSession(role, roles) || hasMediaMinistryDirection(ministryDirection);
+  return (
+    canModerateSongCatalogSession(role, roles) ||
+    isMediaManager(ministryRole) ||
+    hasMediaMinistryDirection(ministryDirection)
+  );
 }
 
 export function canManageMediaSchedule(

@@ -2,7 +2,9 @@ export function normalizeMinistryToken(value: unknown): string {
   return String(value ?? '')
     .trim()
     .toLowerCase()
-    .replace(/ё/g, 'е');
+    .replace(/ё/g, 'е')
+    .replace(/[-–—]/g, ' ')
+    .replace(/\s+/g, ' ');
 }
 
 export function parseMinistryRoles(value: unknown): string[] {
@@ -28,10 +30,7 @@ export function memberHasMinistryRole(ministryRole: unknown, matchRole: unknown)
 }
 
 export function isMediaManager(ministryRole: unknown): boolean {
-  return parseMinistryRoles(ministryRole).some((part) => {
-    const p = normalizeMinistryToken(part);
-    return p.includes('медиа менеджер');
-  });
+  return memberHasMinistryRole(ministryRole, 'Медиа менеджер');
 }
 
 export function hasMediaMinistryDirection(ministryDirection: unknown): boolean {

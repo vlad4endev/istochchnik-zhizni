@@ -151,7 +151,7 @@ export function RequireMediaMinistryAccess({ children }: { children: ReactNode }
   const token = useAuthStore((s) => s.token);
   const meQ = useMe(Boolean(token));
   if (meQ.isLoading) return <RouteFallback />;
-  if (!canViewMediaSchedule(role, meQ.data?.ministry_direction, roles)) {
+  if (!canViewMediaSchedule(role, meQ.data?.ministry_direction, roles, meQ.data?.ministry_role)) {
     return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;

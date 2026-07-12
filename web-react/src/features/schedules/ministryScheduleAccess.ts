@@ -78,8 +78,13 @@ export function canViewMediaSchedule(
   role: AuthRole | undefined,
   ministryDirection: unknown,
   roles?: Array<AuthRole | string | null | undefined>,
+  ministryRole?: unknown,
 ): boolean {
-  return canModerateSongCatalogSession(role, roles) || hasMediaMinistryDirection(ministryDirection);
+  return (
+    canModerateSongCatalogSession(role, roles) ||
+    isMediaManager(ministryRole) ||
+    hasMediaMinistryDirection(ministryDirection)
+  );
 }
 
 export function canViewMusicSchedule(
@@ -118,7 +123,7 @@ export function canViewAnySchedule(
   roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
   return (
-    canViewMediaSchedule(role, ministryDirection, roles) ||
+    canViewMediaSchedule(role, ministryDirection, roles, ministryRole) ||
     canViewMusicSchedule(role, ministryDirection, roles, ministryRole) ||
     canViewSundaySchedule(role, ministryDirection, ministryRole, roles)
   );
@@ -131,7 +136,7 @@ export function listAccessibleScheduleMinistries(
   roles?: Array<AuthRole | string | null | undefined>,
 ): ScheduleMinistryKey[] {
   const out: ScheduleMinistryKey[] = [];
-  if (canViewMediaSchedule(role, ministryDirection, roles)) out.push('media');
+  if (canViewMediaSchedule(role, ministryDirection, roles, ministryRole)) out.push('media');
   if (canViewMusicSchedule(role, ministryDirection, roles, ministryRole)) out.push('music');
   if (canViewSundaySchedule(role, ministryDirection, ministryRole, roles)) out.push('sunday');
   return out;

@@ -86,6 +86,15 @@ function isMusicScheduleMutation(method: string, path: string): boolean {
   return false;
 }
 
+/** Назначения медиа-расписания — проверка canManageMediaSchedule в контроллере (роли — только admin). */
+function isMediaScheduleMutation(method: string, path: string): boolean {
+  if (SAFE_METHODS.has(method)) return false;
+  const p = path.split('?')[0];
+  if (method === 'POST' && /^\/api\/media-schedule\/events\/\d+\/assign\/?$/.test(p)) return true;
+  if (method === 'DELETE' && /^\/api\/media-schedule\/assignments\/\d+\/?$/.test(p)) return true;
+  return false;
+}
+
 function isSundaySchedulePlanPatch(method: string, path: string): boolean {
   return method === 'PATCH' && SUNDAY_SCHEDULE_PLAN_PATCH.test(path);
 }
@@ -293,6 +302,11 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
   }
 
   if (isMusicScheduleMutation(req.method, fullPath) && authId) {
+    next();
+    return;
+  }
+
+  if (isMediaScheduleMutation(req.method, fullPath) && authId) {
     next();
     return;
   }

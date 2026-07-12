@@ -134,8 +134,11 @@ export function MediaSchedulePage() {
   const rolesAuth = useAuthStore((s) => s.roles);
   const memberId = useAuthStore((s) => s.memberId);
   const meQ = useMe();
-  const canManage = canManageMediaSchedule(role, meQ.data?.ministry_role, rolesAuth);
+  const canManage =
+    meQ.data != null ? canManageMediaSchedule(role, meQ.data.ministry_role, rolesAuth) : false;
   const canEditRoles = canManageMediaRoles(role, rolesAuth);
+  const profileLoading = meQ.isPending;
+  const profileError = meQ.isError;
 
   const [viewMode, setViewMode] = useState<MediaScheduleViewMode>('assemblies');
   const [cursor, setCursor] = useState(() => new Date());
@@ -359,14 +362,19 @@ export function MediaSchedulePage() {
               <LuClock className="h-4 w-4 shrink-0" aria-hidden />
               Моё расписание
             </Link>
-            {canManage ? (
+            {(canManage || profileLoading) && !profileError ? (
               <>
                 <button
                   type="button"
                   onClick={openPlannerPicker}
-                  className="tap-highlight-transparent hidden min-h-[48px] items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-white shadow-sm hover:brightness-110 active:brightness-95 sm:inline-flex sm:w-auto"
+                  disabled={profileLoading}
+                  className="tap-highlight-transparent col-span-2 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-white shadow-sm hover:brightness-110 active:brightness-95 disabled:cursor-wait disabled:opacity-60 sm:col-span-1 sm:w-auto"
                 >
-                  <LuPlus className="h-4 w-4 shrink-0" aria-hidden />
+                  {profileLoading ? (
+                    <LuLoaderCircle className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                  ) : (
+                    <LuPlus className="h-4 w-4 shrink-0" aria-hidden />
+                  )}
                   Назначение
                 </button>
                 {canEditRoles ? (
@@ -936,7 +944,7 @@ export function MediaSchedulePage() {
         )}
 
         {mobileDayPanel ? (
-          <div className="fixed inset-0 z-[70] lg:hidden" role="presentation">
+          <div className="fixed inset-0 z-[110] lg:hidden" role="presentation">
             <button
               type="button"
               className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
@@ -1042,7 +1050,7 @@ export function MediaSchedulePage() {
 
         {contextMenu && canManage ? (
           <>
-            <div className="fixed inset-0 z-[72] lg:hidden" onClick={() => setContextMenu(null)} role="presentation">
+            <div className="fixed inset-0 z-[110] lg:hidden" onClick={() => setContextMenu(null)} role="presentation">
               <button
                 type="button"
                 className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
@@ -1118,15 +1126,33 @@ export function MediaSchedulePage() {
           </>
         ) : null}
 
-        {canManage && isMobile ? (
+        {(canManage || profileLoading) && !profileError && isMobile ? (
           <button
             type="button"
             onClick={openPlannerPicker}
-            className="tap-highlight-transparent fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.75rem)] right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-primary text-white shadow-[0_4px_20px_rgba(125,54,64,0.45)] ring-4 ring-white active:scale-95 lg:hidden"
+            disabled={profileLoading}
+            className="tap-highlight-transparent fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.75rem)] right-4 z-[45] grid h-14 w-14 place-items-center rounded-full bg-primary text-white shadow-[0_4px_20px_rgba(125,54,64,0.45)] ring-4 ring-white active:scale-95 disabled:cursor-wait disabled:opacity-60 lg:hidden"
             aria-label="Добавить назначение"
           >
-            <LuPlus className="h-6 w-6" />
+            {profileLoading ? (
+              <LuLoaderCircle className="h-6 w-6 animate-spin" aria-hidden />
+            ) : (
+              <LuPlus className="h-6 w-6" />
+            )}
           </button>
+        ) : null}
+
+        {profileError ? (
+          <div className="fixed inset-x-3 bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] z-[50] flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900 shadow-lg sm:inset-x-auto sm:right-4 sm:max-w-md">
+            <span>Не удалось загрузить профиль, назначение недоступно</span>
+            <button
+              type="button"
+              onClick={() => void meQ.refetch()}
+              className="tap-highlight-transparent shrink-0 rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-extrabold text-white hover:bg-rose-700"
+            >
+              Повторить
+            </button>
+          </div>
         ) : null}
 
         <PlannerEventPickerModal

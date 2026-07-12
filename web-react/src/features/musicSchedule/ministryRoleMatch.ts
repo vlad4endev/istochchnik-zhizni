@@ -2,7 +2,9 @@ export function normalizeMinistryToken(value: unknown): string {
   return String(value ?? '')
     .trim()
     .toLowerCase()
-    .replace(/ё/g, 'е');
+    .replace(/ё/g, 'е')
+    .replace(/[-–—]/g, ' ')
+    .replace(/\s+/g, ' ');
 }
 
 export function parseMinistryRoles(value: unknown): string[] {

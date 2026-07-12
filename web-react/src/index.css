@@ -854,8 +854,7 @@ nav.app-bottom-nav {
 /* Не min-height: 100% — иначе перебивает Tailwind min-h-0 у flex-ребёнка и раздувает колонку + лишний скролл/низ. */
 .page-enter {
   min-height: 0;
-  animation: pageEnter 0.18s ease forwards;
-  will-change: opacity;
+  animation: pageEnter 0.18s ease;
   /* Sticky headers внутри страниц (PWA) ломаются при layout/paint containment. */
   contain: none;
 }
