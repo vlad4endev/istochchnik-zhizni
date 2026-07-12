@@ -80,7 +80,8 @@ function formatHttpError(status: number, hint: string, rawText: string, baseUrl:
     const provider = baseUrl.includes('openrouter.ai') ? 'OpenRouter' : 'провайдером ИИ';
     return (
       `Запрос к ${provider} заблокирован защитой Cloudflare (это не ошибка API-ключа). ` +
-      'В админке → Интеграции → ИИ выберите OpenAI или DeepSeek напрямую, либо повторите позже.'
+      'Рекомендуется: Админка → Интеграции → ИИ → провайдер «DeepSeek» или «OpenAI», вставить ключ, сохранить и включить ИИ. ' +
+      'OpenRouter часто блокирует IP сервера (VPS/хостинг).'
     );
   }
   return hint || `HTTP ${status}`;
@@ -95,18 +96,41 @@ function shouldPreferCurlTransport(baseUrl: string): boolean {
   return baseUrl.includes('openrouter.ai');
 }
 
-async function postViaCurl(url: string, headers: Record<string, string>, body: string): Promise<LlmHttpResult> {
+type CurlProfile = {
+  userAgent: string;
+  extraArgs: string[];
+};
+
+const CURL_PROFILES: CurlProfile[] = [
+  { userAgent: 'curl/8.5.0', extraArgs: ['--http1.1', '--compressed'] },
+  {
+    userAgent:
+      'Mozilla/5.0 (compatible; IstochnikZhizni/1.0; +https://istochik-zhizni.local)',
+    extraArgs: ['--http1.1', '--compressed', '--tlsv1.2'],
+  },
+];
+
+async function postViaCurlProfile(
+  url: string,
+  headers: Record<string, string>,
+  body: string,
+  profile: CurlProfile,
+): Promise<LlmHttpResult> {
   return new Promise((resolve, reject) => {
     const args = [
       '--silent',
       '--show-error',
-      '--http1.1',
       '--max-time',
       '300',
+      '-A',
+      profile.userAgent,
+      ...profile.extraArgs,
       '-w',
       '\n%{http_code}',
       '-X',
       'POST',
+      '-H',
+      'Accept: application/json',
       ...Object.entries(headers).flatMap(([k, v]) => ['-H', `${k}: ${v}`]),
       '--data-binary',
       '@-',
@@ -144,6 +168,18 @@ async function postViaCurl(url: string, headers: Record<string, string>, body: s
   });
 }
 
+async function postViaCurl(url: string, headers: Record<string, string>, body: string): Promise<LlmHttpResult> {
+  let last: LlmHttpResult | null = null;
+  for (const profile of CURL_PROFILES) {
+    const result = await postViaCurlProfile(url, headers, body, profile);
+    last = result;
+    if (result.ok || !isCloudflareSecurityPolicyBlock(result.status, result.rawText)) {
+      return result;
+    }
+  }
+  return last ?? { status: 0, ok: false, rawText: '' };
+}
+
 async function postLlmRequest(
   url: string,
   headers: Record<string, string>,
@@ -158,9 +194,12 @@ async function postLlmRequest(
     try {
       return await postViaCurl(url, headers, body);
     } catch (e) {
-      if (aiDebug) {
-        console.warn('[ai] curl transport failed, falling back to fetch', e);
-      }
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[ai] curl transport unavailable for OpenRouter:', msg);
+      throw new AiAgentError(
+        'На сервере недоступен curl для запросов к OpenRouter. Установите curl или выберите провайдер DeepSeek/OpenAI в админке.',
+        'ai_http_error',
+      );
     }
   }
 
@@ -299,6 +338,12 @@ export async function chatCompletion(
 
   if (!http.ok) {
     const hint = parseProviderError(json, rawText);
+    if (isCloudflareSecurityPolicyBlock(http.status, rawText)) {
+      console.error('[ai] cloudflare security policy block', {
+        base_url: baseUrl,
+        status: http.status,
+      });
+    }
     throw new AiAgentError(
       formatHttpError(http.status, hint, rawText, baseUrl),
       'ai_http_error',

@@ -281,6 +281,16 @@ export function AiSettingsSection() {
           </button>
         </div>
 
+        {form.connection_preset === 'openrouter' ? (
+          <div className="mt-5 rounded-xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-xs text-amber-950">
+            <p className="font-semibold">OpenRouter и Cloudflare</p>
+            <p className="mt-1 leading-relaxed">
+              Если тест связи падает с «Access denied by security policy», IP вашего сервера заблокирован.
+              Переключитесь на <strong>DeepSeek</strong> или <strong>OpenAI</strong> — ключ и модель подставятся автоматически.
+            </p>
+          </div>
+        ) : null}
+
         {form.connection_preset !== 'custom' && activeCatalogEntry ? (
           <div className="mt-5 rounded-xl border border-stone-200/90 bg-[var(--surface)] px-4 py-3 text-xs text-[var(--text-secondary)]">
             <span className="font-semibold text-[var(--text)]">Ключ: </span>

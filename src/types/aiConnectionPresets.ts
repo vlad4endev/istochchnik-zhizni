@@ -47,7 +47,7 @@ export const AI_PRESET_CATALOG: readonly AiPresetCatalogEntry[] = [
   {
     id: 'openrouter',
     label: 'OpenRouter',
-    description: 'Доступ к многим моделям через один ключ и один URL',
+    description: 'Много моделей через один ключ. На VPS OpenRouter иногда блокирует IP (Cloudflare) — тогда используйте DeepSeek.',
     base_url: 'https://openrouter.ai/api/v1',
     default_model: 'openai/gpt-4o-mini',
     key_hint: 'openrouter.ai → Keys',
