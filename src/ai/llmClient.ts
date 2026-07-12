@@ -1,3 +1,5 @@
+import { spawn } from 'child_process';
+
 import { resolveEffectiveSystemPrompt, resolveLlmRuntimeConfig } from '../services/aiSettingsService';
 import type { ChatMessage } from './types';
 
@@ -48,8 +50,139 @@ type OpenAiCompatResponse = {
       content?: string | null | Array<{ type?: string; text?: string }>;
     };
   }[];
-  error?: { message?: string };
+  error?: { message?: string } | string;
+  success?: boolean;
 };
+
+type LlmHttpResult = {
+  status: number;
+  ok: boolean;
+  rawText: string;
+};
+
+function parseProviderError(json: OpenAiCompatResponse, rawText: string): string {
+  const err = json.error;
+  if (typeof err === 'object' && err && typeof err.message === 'string' && err.message.trim()) {
+    return err.message.trim();
+  }
+  if (typeof err === 'string' && err.trim()) {
+    return err.trim();
+  }
+  return rawText.slice(0, 400);
+}
+
+function isCloudflareSecurityPolicyBlock(status: number, rawText: string): boolean {
+  return status === 403 && /Access denied by security policy/i.test(rawText);
+}
+
+function formatHttpError(status: number, hint: string, rawText: string, baseUrl: string): string {
+  if (isCloudflareSecurityPolicyBlock(status, rawText)) {
+    const provider = baseUrl.includes('openrouter.ai') ? 'OpenRouter' : 'провайдером ИИ';
+    return (
+      `Запрос к ${provider} заблокирован защитой Cloudflare (это не ошибка API-ключа). ` +
+      'В админке → Интеграции → ИИ выберите OpenAI или DeepSeek напрямую, либо повторите позже.'
+    );
+  }
+  return hint || `HTTP ${status}`;
+}
+
+function shouldPreferCurlTransport(baseUrl: string): boolean {
+  const mode = (typeof process.env.AI_HTTP_TRANSPORT === 'string' ? process.env.AI_HTTP_TRANSPORT : '')
+    .trim()
+    .toLowerCase();
+  if (mode === 'curl') return true;
+  if (mode === 'fetch') return false;
+  return baseUrl.includes('openrouter.ai');
+}
+
+async function postViaCurl(url: string, headers: Record<string, string>, body: string): Promise<LlmHttpResult> {
+  return new Promise((resolve, reject) => {
+    const args = [
+      '--silent',
+      '--show-error',
+      '--http1.1',
+      '--max-time',
+      '300',
+      '-w',
+      '\n%{http_code}',
+      '-X',
+      'POST',
+      ...Object.entries(headers).flatMap(([k, v]) => ['-H', `${k}: ${v}`]),
+      '--data-binary',
+      '@-',
+      url,
+    ];
+    const child = spawn('curl', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk: Buffer | string) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      stderr += String(chunk);
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `curl exited with code ${code ?? 'unknown'}`));
+        return;
+      }
+      const lastNewline = stdout.lastIndexOf('\n');
+      if (lastNewline < 0) {
+        reject(new Error('curl response missing status line'));
+        return;
+      }
+      const rawText = stdout.slice(0, lastNewline);
+      const status = Number.parseInt(stdout.slice(lastNewline + 1).trim(), 10);
+      resolve({
+        status: Number.isFinite(status) ? status : 0,
+        ok: Number.isFinite(status) && status >= 200 && status < 300,
+        rawText,
+      });
+    });
+    child.stdin.end(body);
+  });
+}
+
+async function postLlmRequest(
+  url: string,
+  headers: Record<string, string>,
+  body: string,
+  baseUrl: string,
+  aiDebug: boolean,
+): Promise<LlmHttpResult> {
+  if (shouldPreferCurlTransport(baseUrl)) {
+    if (aiDebug) {
+      console.info('[ai] transport', { mode: 'curl', url });
+    }
+    try {
+      return await postViaCurl(url, headers, body);
+    } catch (e) {
+      if (aiDebug) {
+        console.warn('[ai] curl transport failed, falling back to fetch', e);
+      }
+    }
+  }
+
+  const res = await fetch(url, { method: 'POST', headers, body });
+  const rawText = await res.text();
+  const result: LlmHttpResult = { status: res.status, ok: res.ok, rawText };
+
+  if (!res.ok && isCloudflareSecurityPolicyBlock(res.status, rawText)) {
+    if (aiDebug) {
+      console.info('[ai] cloudflare block detected, retrying via curl', { url });
+    }
+    try {
+      return await postViaCurl(url, headers, body);
+    } catch (e) {
+      if (aiDebug) {
+        console.warn('[ai] curl retry failed', e);
+      }
+    }
+  }
+
+  return result;
+}
 
 function extractMessageContent(
   content: string | null | Array<{ type?: string; text?: string }> | undefined,
@@ -136,23 +269,20 @@ export async function chatCompletion(
       max_tokens,
     });
   }
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: buildLlmHeaders(baseUrl, apiKey),
-    body: JSON.stringify({
-      model,
-      messages: msgs,
-      temperature,
-      max_tokens,
-      ...(options.response_format ? { response_format: options.response_format } : {}),
-    }),
+  const headers = buildLlmHeaders(baseUrl, apiKey);
+  const body = JSON.stringify({
+    model,
+    messages: msgs,
+    temperature,
+    max_tokens,
+    ...(options.response_format ? { response_format: options.response_format } : {}),
   });
-
-  const rawText = await res.text();
+  const http = await postLlmRequest(url, headers, body, baseUrl, aiDebug);
+  const rawText = http.rawText;
   if (aiDebug) {
     console.info('[ai] response', {
-      status: res.status,
-      ok: res.ok,
+      status: http.status,
+      ok: http.ok,
       body_chars: rawText.length,
     });
   }
@@ -163,16 +293,16 @@ export async function chatCompletion(
     throw new AiAgentError(
       'Ответ провайдера не JSON',
       'ai_bad_response',
-      { status: res.status, bodySnippet: rawText.slice(0, 500) },
+      { status: http.status, bodySnippet: rawText.slice(0, 500) },
     );
   }
 
-  if (!res.ok) {
-    const hint = typeof json.error?.message === 'string' ? json.error.message : rawText.slice(0, 400);
+  if (!http.ok) {
+    const hint = parseProviderError(json, rawText);
     throw new AiAgentError(
-      hint || `HTTP ${res.status}`,
+      formatHttpError(http.status, hint, rawText, baseUrl),
       'ai_http_error',
-      { status: res.status, bodySnippet: rawText.slice(0, 500) },
+      { status: http.status, bodySnippet: rawText.slice(0, 500) },
     );
   }
 
