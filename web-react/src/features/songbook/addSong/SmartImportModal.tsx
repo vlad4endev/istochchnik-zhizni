@@ -822,7 +822,7 @@ export function SmartImportModal({
       onClick={onClose}
     >
       <div
-        className={`max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border p-4 shadow-2xl sm:max-w-2xl sm:rounded-2xl sm:p-6 ${panel}`}
+        className={`max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-2xl sm:rounded-2xl sm:p-6 ${panel}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">

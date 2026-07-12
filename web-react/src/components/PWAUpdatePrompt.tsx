@@ -64,7 +64,7 @@ export function PWAUpdatePrompt() {
       withBorder
       style={{
         position: 'fixed',
-        bottom: 16,
+        bottom: 'calc(var(--app-bottom-nav-total-height) + 8px)',
         left: 16,
         right: 16,
         zIndex: 10_000,

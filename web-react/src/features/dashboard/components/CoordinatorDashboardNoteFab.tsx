@@ -198,14 +198,14 @@ export function CoordinatorDashboardNoteFab() {
 
       {modalKind ? (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4"
+          className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto bg-black/45 p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby={modalTitleId}
           onClick={() => !busy && setModalKind(null)}
         >
           <div
-            className="w-full max-w-lg rounded-3xl border border-stone-200/80 bg-white p-4 shadow-[0_24px_70px_rgba(0,0,0,0.2)] sm:p-5"
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl border border-stone-200/80 bg-white p-4 shadow-[0_24px_70px_rgba(0,0,0,0.2)] sm:p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">

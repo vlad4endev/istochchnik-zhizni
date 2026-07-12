@@ -168,7 +168,7 @@ function PickResults({
           </ol>
         </div>
 
-        <div className="flex flex-col gap-2 border-t border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] p-4 sm:flex-row sm:justify-end">
+        <div className="flex flex-col gap-2 border-t border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-row sm:justify-end">
           <Link
             to="/service-planner"
             className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-[var(--studio-editor-border)] px-4 text-sm font-semibold text-[var(--studio-editor-text)] hover:bg-[var(--studio-nav-active-bg)]"

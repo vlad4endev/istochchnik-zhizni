@@ -309,7 +309,7 @@ export function NotificationsSettingsSection() {
         ))}
       </div>
 
-      <div className="sticky bottom-3 z-20">
+      <div className="sticky z-[110] bottom-[calc(var(--app-bottom-nav-total-height)+0.75rem)] lg:bottom-3">
         <div className="flex items-center justify-end rounded-[10px] border border-[#F0E9EA] bg-white/95 px-4 py-3 backdrop-blur">
           <button
             type="button"

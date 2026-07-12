@@ -148,7 +148,7 @@ export function AppToastHost() {
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-6" role="presentation">
+    <div className="fixed inset-0 z-[9990] flex items-center justify-center p-6" role="presentation">
       <button
         type="button"
         aria-label="Закрыть уведомление"
@@ -162,7 +162,7 @@ export function AppToastHost() {
         aria-labelledby={`app-toast-${active.id}-title`}
         aria-describedby={`app-toast-${active.id}-msg`}
         className={[
-          'relative z-[71] w-full max-w-[min(100%,20rem)] rounded-2xl px-5 py-5 shadow-2xl ring-1 ring-inset backdrop-blur-xl',
+          'relative z-[9991] w-full max-w-[min(100%,20rem)] rounded-2xl px-5 py-5 shadow-2xl ring-1 ring-inset backdrop-blur-xl',
           'bg-zinc-900/88 text-zinc-100 ring-white/12',
           kindRing,
         ].join(' ')}

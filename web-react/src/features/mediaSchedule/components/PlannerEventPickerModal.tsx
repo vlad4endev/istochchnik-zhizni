@@ -47,12 +47,12 @@ export function PlannerEventPickerModal({ open, onClose, from, to, onSelect }: P
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[78] flex items-end justify-center p-0 sm:items-center sm:p-4" role="presentation">
+    <div className="fixed inset-0 z-[110] flex items-end justify-center p-0 sm:items-center sm:p-4" role="presentation">
       <button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/45" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
-        className="relative z-[79] flex max-h-[min(92dvh,560px)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-stone-200/80 bg-white shadow-2xl sm:max-h-[min(90dvh,560px)] sm:rounded-2xl"
+        className="relative z-[111] flex max-h-[min(92dvh,560px)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-stone-200/80 bg-white shadow-2xl sm:max-h-[min(90dvh,560px)] sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 border-b border-stone-100 px-4 py-3">

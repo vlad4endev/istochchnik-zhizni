@@ -1,7 +1,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 110;
   display: grid;
   place-items: end center;
   padding: 0;
@@ -36,6 +36,7 @@
   background: var(--profile-surface-elevated, #fafaf9);
   border: 1px solid var(--profile-border, rgba(120, 113, 108, 0.18));
   box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.2);
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
 @media (min-width: 640px) {

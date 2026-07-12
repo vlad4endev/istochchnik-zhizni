@@ -362,8 +362,8 @@ export function AddSongPage() {
       className={[
         'mx-auto max-w-6xl space-y-5',
         embeddedInStudio
-          ? 'px-0 pb-[var(--studio-mobile-dock-height)] md:pb-6'
-          : 'space-y-6 px-3 pb-[var(--studio-mobile-dock-height)] md:px-4 md:pb-6',
+          ? 'px-0 pb-[var(--studio-mobile-dock-height)] lg:pb-6'
+          : 'space-y-6 px-3 pb-[var(--studio-mobile-dock-height)] md:px-4 lg:pb-6',
         theme.page,
       ].join(' ')}
     >
