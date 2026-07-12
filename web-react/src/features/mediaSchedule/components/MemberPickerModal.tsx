@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { LuLoaderCircle, LuSearch, LuUsers, LuX } from 'react-icons/lu';
 
 import { AppAvatar } from '../../../components/AppAvatar';
+import { useMobileBottomNavLock } from '../../../app/useMobileBottomNavLock';
 import {
   memberHasMinistryRole,
   mediaRoleMemberMatchToken,
@@ -53,6 +54,8 @@ export function MemberPickerModal({
       setError(null);
     }
   }, [open, preselectedRoleId]);
+
+  useMobileBottomNavLock(open);
 
   const selectedRole = typeof roleId === 'number' ? roles.find((r) => r.id === roleId) : null;
   const roleMatchToken = selectedRole ? mediaRoleMemberMatchToken(selectedRole) : '';
@@ -110,7 +113,7 @@ export function MemberPickerModal({
   }
 
   const modal = (
-    <div className="fixed inset-0 z-[120] flex items-end justify-center p-0 sm:items-center sm:p-4" role="presentation">
+    <div className="fixed inset-0 z-[var(--z-modal-bg)] flex items-end justify-center p-0 sm:items-center sm:p-4" role="presentation">
       <button
         type="button"
         aria-label="Закрыть"
@@ -121,7 +124,7 @@ export function MemberPickerModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="member-picker-title"
-        className="relative z-[121] flex max-h-[min(92dvh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-stone-200/80 bg-white shadow-2xl sm:max-h-[min(90dvh,640px)] sm:rounded-2xl"
+        className="relative z-[var(--z-modal)] flex max-h-[min(92dvh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-stone-200/80 bg-white shadow-2xl sm:max-h-[min(90dvh,640px)] sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 border-b border-stone-100 px-4 py-3">
