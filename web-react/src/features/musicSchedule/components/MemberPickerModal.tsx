@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { LuLoaderCircle, LuSearch, LuUsers, LuX } from 'react-icons/lu';
 
 import { AppAvatar } from '../../../components/AppAvatar';
@@ -110,7 +111,7 @@ export function MemberPickerModal({
     }
   }
 
-  return (
+  const modal = (
     <div className="fixed inset-0 z-[120] flex items-end justify-center p-0 sm:items-center sm:p-4" role="presentation">
       <button
         type="button"
@@ -286,4 +287,6 @@ export function MemberPickerModal({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modal, document.body) : null;
 }
