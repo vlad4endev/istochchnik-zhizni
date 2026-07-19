@@ -774,6 +774,70 @@ export async function getChurchFeed(params: {
   return { posts, next_cursor };
 }
 
+/**
+ * Число новых постов в ленте после watermark пользователя.
+ * При первом опросе создаём watermark = NOW(), чтобы не засыпать бейджем старыми постами.
+ * Свои посты не учитываем.
+ */
+export async function getFeedUnreadCount(viewerMemberId: number): Promise<number> {
+  const viewerId = Number(viewerMemberId);
+  if (!Number.isInteger(viewerId) || viewerId <= 0) return 0;
+
+  await query(
+    `INSERT INTO member_feed_watermarks (member_id, last_seen_at, updated_at)
+     VALUES ($1, NOW(), NOW())
+     ON CONFLICT (member_id) DO NOTHING`,
+    [viewerId],
+  );
+
+  const result = await query(
+    `SELECT COUNT(*)::int AS n
+     FROM profile_posts p
+     INNER JOIN user_profiles up ON up.member_id = p.member_id
+     WHERE (up.is_private = FALSE OR p.member_id = $1)
+       AND p.member_id <> $1
+       AND p.created_at > (
+         SELECT w.last_seen_at FROM member_feed_watermarks w WHERE w.member_id = $1
+       )`,
+    [viewerId],
+  );
+  return Math.max(0, Number(result.rows[0]?.n ?? 0));
+}
+
+/** Продвигает watermark «лента просмотрена» до seenAt (или NOW()). */
+export async function markFeedSeen(
+  viewerMemberId: number,
+  seenAt?: string | Date | null,
+): Promise<{ last_seen_at: string }> {
+  const viewerId = Number(viewerMemberId);
+  if (!Number.isInteger(viewerId) || viewerId <= 0) {
+    throw new Error('Invalid member id');
+  }
+
+  let seen: Date | null = null;
+  if (seenAt instanceof Date && !Number.isNaN(seenAt.getTime())) {
+    seen = seenAt;
+  } else if (typeof seenAt === 'string' && seenAt.trim()) {
+    const parsed = new Date(seenAt);
+    if (!Number.isNaN(parsed.getTime())) seen = parsed;
+  }
+
+  const result = await query(
+    `INSERT INTO member_feed_watermarks (member_id, last_seen_at, updated_at)
+     VALUES ($1, COALESCE($2::timestamptz, NOW()), NOW())
+     ON CONFLICT (member_id) DO UPDATE
+       SET last_seen_at = GREATEST(
+             member_feed_watermarks.last_seen_at,
+             COALESCE($2::timestamptz, NOW())
+           ),
+           updated_at = NOW()
+     RETURNING last_seen_at::text AS last_seen_at`,
+    [viewerId, seen ? seen.toISOString() : null],
+  );
+  const lastSeen = String(result.rows[0]?.last_seen_at ?? new Date().toISOString());
+  return { last_seen_at: lastSeen };
+}
+
 export type ProfilePostComment = {
   id: string;
   post_id: string;

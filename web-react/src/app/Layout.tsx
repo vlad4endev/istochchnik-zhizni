@@ -10,8 +10,8 @@ import {
   LuChurch,
   LuDisc3,
   LuEllipsis,
-  LuImages,
   LuLayoutDashboard,
+  LuNewspaper,
   LuMessageCircle,
   LuMic,
   LuMusic2,
@@ -51,6 +51,7 @@ import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/Co
 import { apiClient } from '../lib/apiClient';
 import { fetchActiveBroadcast } from '@/api/broadcast';
 import { getActiveEvents, getCalendarDay, formatCalendarDayKey } from '@/features/calendar/api';
+import { fetchFeedUnreadCount } from '@/features/feed/feedApi';
 import { fetchSongs } from '@/features/songbook/api';
 import { keys } from '@/lib/queryKeys';
 import { useMe } from '@/hooks/useMe';
@@ -75,7 +76,8 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
   { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard, sectionId: 'dashboard' },
-  { to: '/feed', label: 'Лента', Icon: LuImages, sectionId: 'feed' },
+  /** Как News Feed в Facebook: газета. */
+  { to: '/feed', label: 'Лента', Icon: LuNewspaper, sectionId: 'feed' },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
   { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
   { to: '/service-planner', label: 'Служение', Icon: LuCalendarDays, sectionId: 'service_planner' },
@@ -142,6 +144,25 @@ function formatNavBadgeCount(n: number): string {
   return n > 99 ? '99+' : String(n);
 }
 
+/** Бейдж пункта меню: чаты / новые посты ленты. */
+function navItemBadgeCount(to: string, activityBadgeTotal: number, feedUnreadCount: number): number {
+  if (to === '/messenger') return activityBadgeTotal;
+  if (to === '/feed') return feedUnreadCount;
+  return 0;
+}
+
+function navItemBadgeAriaLabel(to: string, count: number): string | undefined {
+  if (count <= 0) return undefined;
+  const shown = count > 99 ? 'более 99' : String(count);
+  if (to === '/messenger') {
+    return `Чаты: непрочитанные сообщения и неоткрытые уведомления, всего: ${shown}`;
+  }
+  if (to === '/feed') {
+    return `Лента: новых публикаций: ${shown}`;
+  }
+  return undefined;
+}
+
 function navClassName(isActive: boolean, compact = false): string {
   const base = compact
     ? 'app-bottom-nav__tab group relative flex h-full w-full min-w-0 flex-col items-center justify-center overflow-visible transition-[transform,color] duration-200 ease-out tap-highlight-transparent touch-manipulation outline-none motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent active:scale-[0.97]'
@@ -190,10 +211,12 @@ function splitMobileNavTabs(visible: NavItem[]): { primary: NavItem[]; overflow:
 function MobileNavOverflow({
   items,
   activityBadgeTotal,
+  feedUnreadCount,
   pathname,
 }: {
   items: NavItem[];
   activityBadgeTotal: number;
+  feedUnreadCount: number;
   pathname: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -302,9 +325,11 @@ function MobileNavOverflow({
                           <>
                             <span className="relative inline-flex shrink-0">
                               <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
-                              {item.to === '/messenger' && activityBadgeTotal > 0 ? (
+                              {navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount) > 0 ? (
                                 <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white dark:ring-stone-900">
-                                  {formatNavBadgeCount(activityBadgeTotal)}
+                                  {formatNavBadgeCount(
+                                    navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount),
+                                  )}
                                 </span>
                               ) : null}
                             </span>
@@ -369,6 +394,15 @@ export function Layout() {
   });
   const pendingDeliveries = pendingDeliveriesQ.data ?? 0;
   const activityBadgeTotal = Math.min(99, unreadMessages + pendingDeliveries);
+  const feedUnreadQ = useQuery({
+    queryKey: keys.feedUnread,
+    queryFn: fetchFeedUnreadCount,
+    enabled: Boolean(token),
+    staleTime: 15_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+  const feedUnreadCount = feedUnreadQ.data ?? 0;
   const role = useAuthStore((s) => s.role);
   const roles = useAuthStore((s) => s.roles ?? [s.role]);
   const sectionVisibilityQ = useQuery({
@@ -777,30 +811,40 @@ export function Layout() {
                       : navClassName(isActive)
                   }
                   title={navCollapsed ? item.label : undefined}
-                  aria-label={navCollapsed ? item.label : undefined}
+                  aria-label={
+                    navCollapsed
+                      ? navItemBadgeAriaLabel(
+                          item.to,
+                          navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount),
+                        ) ?? item.label
+                      : undefined
+                  }
                 >
-                  {({ isActive }) => (
+                  {({ isActive }) => {
+                    const badge = navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount);
+                    return (
                     <>
                       <div className="relative">
                         <Icon className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
-                        {item.to === '/messenger' && activityBadgeTotal > 0 && navCollapsed ? (
+                        {badge > 0 && navCollapsed ? (
                           <span className="absolute -right-1 -top-1 z-[5] inline-flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-rose-500 px-0.5 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                            {formatNavBadgeCount(activityBadgeTotal)}
+                            {formatNavBadgeCount(badge)}
                           </span>
                         ) : null}
                       </div>
                       {!navCollapsed ? (
                         <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
                           <span className="truncate">{item.label}</span>
-                          {item.to === '/messenger' && activityBadgeTotal > 0 ? (
+                          {badge > 0 ? (
                             <span className={['inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-extrabold', isActive ? 'bg-white/90 text-primary' : 'bg-primary text-white'].join(' ')}>
-                              {formatNavBadgeCount(activityBadgeTotal)}
+                              {formatNavBadgeCount(badge)}
                             </span>
                           ) : null}
                         </span>
                       ) : null}
                     </>
-                  )}
+                    );
+                  }}
                 </PrefetchNavLink>
               );
             })}
@@ -940,25 +984,27 @@ export function Layout() {
                   queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
                   staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
                   className={({ isActive }) => navClassName(isActive, true)}
-                  aria-label={
-                    item.to === '/messenger' && activityBadgeTotal > 0
-                      ? `Чаты: непрочитанные сообщения и неоткрытые уведомления, всего: ${activityBadgeTotal > 99 ? 'более 99' : activityBadgeTotal}`
-                      : undefined
-                  }
+                  aria-label={navItemBadgeAriaLabel(
+                    item.to,
+                    navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount),
+                  )}
                 >
-                  {({ isActive }) => (
+                  {({ isActive }) => {
+                    const badge = navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount);
+                    return (
                     <>
                       <span className={mobileBottomTabIconClass(isActive)}>
                         <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
-                        {item.to === '/messenger' && activityBadgeTotal > 0 ? (
+                        {badge > 0 ? (
                           <span className="app-bottom-nav__badge absolute -right-1 -top-0.5 z-[5] inline-flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white dark:ring-[color-mix(in_srgb,var(--surface-elevated)_92%,transparent)]">
-                            {formatNavBadgeCount(activityBadgeTotal)}
+                            {formatNavBadgeCount(badge)}
                           </span>
                         ) : null}
                       </span>
                       <span className={mobileBottomTabLabelClass()}>{item.label}</span>
                     </>
-                  )}
+                    );
+                  }}
                 </PrefetchNavLink>
               </div>
             );
@@ -967,6 +1013,7 @@ export function Layout() {
             <MobileNavOverflow
               items={mobileNavSplit.overflow}
               activityBadgeTotal={activityBadgeTotal}
+              feedUnreadCount={feedUnreadCount}
               pathname={location.pathname}
             />
           ) : null}

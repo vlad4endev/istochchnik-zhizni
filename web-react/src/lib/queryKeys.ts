@@ -7,6 +7,7 @@ export const keys = {
   prayer: ['prayer', 'cycle'] as const,
   prayerMembers: ['prayer', 'members'] as const,
   events: ['events', 'list'] as const,
+  feedUnread: ['feed', 'unread-count'] as const,
   eventOccurrenceOverrides: ['events', 'occurrence-overrides'] as const,
   schedule: ['schedule'] as const,
   adminUsers: ['admin', 'users'] as const,
