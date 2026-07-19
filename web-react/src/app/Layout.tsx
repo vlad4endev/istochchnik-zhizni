@@ -10,7 +10,7 @@ import {
   LuChurch,
   LuDisc3,
   LuEllipsis,
-  LuImages,
+  LuHouse,
   LuLayoutDashboard,
   LuMessageCircle,
   LuMic,
@@ -76,7 +76,8 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
   { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard, sectionId: 'dashboard' },
-  { to: '/feed', label: 'Лента', Icon: LuImages, sectionId: 'feed' },
+  /** Как Home в Instagram: контурный дом для ленты постов. */
+  { to: '/feed', label: 'Лента', Icon: LuHouse, sectionId: 'feed' },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
   { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
   { to: '/service-planner', label: 'Служение', Icon: LuCalendarDays, sectionId: 'service_planner' },
