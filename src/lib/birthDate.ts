@@ -34,3 +34,32 @@ export function normalizeBirthDateYmd(value: string | null | undefined): string 
   if (!parsed) return null;
   return birthDayMonthToYmd(parsed.day, parsed.month);
 }
+
+/**
+ * Приводит значение из pg/JSON (DATE как Date, ISO-строка, YYYY-MM-DD) к YYYY-MM-DD
+ * с годом-заглушкой. Не использует локальный timezone shift через toISOString().
+ */
+export function coerceBirthDateToYmd(value: unknown): string | null {
+  if (value == null || value === '') return null;
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    // pg DATE часто приходит как UTC midnight — берём UTC-компоненты.
+    return birthDayMonthToYmd(value.getUTCDate(), value.getUTCMonth() + 1);
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    // Уже YYYY-MM-DD или ISO — нормализуем через день/месяц из префикса.
+    const fromPrefix = normalizeBirthDateYmd(trimmed);
+    if (fromPrefix) return fromPrefix;
+    const asDate = new Date(trimmed);
+    if (!Number.isNaN(asDate.getTime())) {
+      return birthDayMonthToYmd(asDate.getUTCDate(), asDate.getUTCMonth() + 1);
+    }
+    return null;
+  }
+
+  return null;
+}
