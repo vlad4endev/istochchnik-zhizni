@@ -23,7 +23,7 @@
             if (android) {
               document.documentElement.dataset.androidPwa = '1';
               document.querySelectorAll('meta[name="theme-color"]').forEach(function (meta) {
-                meta.setAttribute('content', '#f4f1ed');
+                meta.setAttribute('content', '#f0ebe3');
               });
             }
           }
@@ -82,7 +82,7 @@
     <link rel="stylesheet" href="/app-splash.css" />
     <!-- Progressier (push): подключается из main.tsx после первого кадра — не блокировать парсинг/сеть PWA. -->
   </head>
-  <body style="margin:0;background:#f4f1ed">
+  <body style="margin:0;background:#f0ebe3">
     <!-- До загрузки React: анимированный сплэш вместо пустого фона. -->
     <div id="root" style="min-height:100dvh;min-height:-webkit-fill-available">
       <div class="app-splash" role="status" aria-live="polite" aria-label="Загрузка приложения">
@@ -90,24 +90,20 @@
           <div class="app-splash__orb app-splash__orb--1"></div>
           <div class="app-splash__orb app-splash__orb--2"></div>
           <div class="app-splash__orb app-splash__orb--3"></div>
-          <div class="app-splash__grain"></div>
         </div>
         <div class="app-splash__center">
           <div class="app-splash__logo-shell">
+            <span class="app-splash__halo"></span>
             <span class="app-splash__ring"></span>
             <span class="app-splash__ring app-splash__ring--2"></span>
-            <div class="app-splash__logo-card">
-              <img src="/assets/logo.svg" alt="" class="app-splash__logo" decoding="async" />
-            </div>
+            <img src="/assets/logo.svg" alt="" class="app-splash__logo" decoding="async" />
           </div>
           <h1 class="app-splash__title">Моя церковь</h1>
           <p class="app-splash__tagline">Цифровая платформа</p>
         </div>
-        <div class="app-splash__loader" aria-hidden="true"><div class="app-splash__loader-bar"></div></div>
-        <div class="app-splash__dots" aria-hidden="true">
-          <span class="app-splash__dot"></span>
-          <span class="app-splash__dot"></span>
-          <span class="app-splash__dot"></span>
+        <div class="app-splash__footer" aria-hidden="true">
+          <div class="app-splash__loader"><div class="app-splash__loader-bar"></div></div>
+          <p class="app-splash__status">Загрузка</p>
         </div>
       </div>
     </div>

@@ -24,30 +24,25 @@ export function AppSplash({
         <div className="app-splash__orb app-splash__orb--1" />
         <div className="app-splash__orb app-splash__orb--2" />
         <div className="app-splash__orb app-splash__orb--3" />
-        <div className="app-splash__grain" />
       </div>
 
       <div className="app-splash__center">
         <div className="app-splash__logo-shell">
+          <span className="app-splash__halo" />
           <span className="app-splash__ring" />
           <span className="app-splash__ring app-splash__ring--2" />
-          <div className="app-splash__logo-card">
-            <img src="/assets/logo.svg" alt="" className="app-splash__logo" decoding="async" />
-          </div>
+          <img src="/assets/logo.svg" alt="" className="app-splash__logo" decoding="async" />
         </div>
 
         <h1 className="app-splash__title">{title}</h1>
         {tagline.trim().length > 0 ? <p className="app-splash__tagline">{tagline}</p> : null}
       </div>
 
-      <div className="app-splash__loader" aria-hidden>
-        <div className="app-splash__loader-bar" />
-      </div>
-
-      <div className="app-splash__dots" aria-hidden>
-        <span className="app-splash__dot" />
-        <span className="app-splash__dot" />
-        <span className="app-splash__dot" />
+      <div className="app-splash__footer" aria-hidden>
+        <div className="app-splash__loader">
+          <div className="app-splash__loader-bar" />
+        </div>
+        <p className="app-splash__status">Загрузка</p>
       </div>
     </div>
   );
