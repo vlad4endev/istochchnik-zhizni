@@ -20,7 +20,7 @@ import {
 } from '../payloadMedia';
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
-import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuRefreshCw, LuReply, LuX } from 'react-icons/lu';
+import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuReply, LuX } from 'react-icons/lu';
 import { isAssistantBotMessage } from '../messengerChannelKinds';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
