@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { LuArrowUpRight, LuCheck, LuHeadphones, LuHeart, LuPlay, LuRefreshCw, LuSearch, LuSettings, LuShare2, LuX } from 'react-icons/lu';
@@ -7,6 +7,14 @@ import { fetchPodcastFeed, fetchPodcastSettings, patchPodcastSettings, type Podc
 import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { useAuthStore } from '../../auth/authStore';
+import {
+  episodeDisplayDescription,
+  isBoilerplateDescription,
+  parseEpisodeTitle,
+} from '../utils/sermonEpisodeDisplay';
+import { progressRatio, useSermonPlayback } from '../sermonPlayback/SermonPlaybackContext';
+
+type ListFilter = 'all' | 'favorites' | 'in_progress';
 
 function formatDuration(sec: number | null): string | null {
   if (sec == null || !Number.isFinite(sec) || sec <= 0) return null;
@@ -37,13 +45,18 @@ function episodeSubtitle(ep: PodcastEpisode): string {
 export function PodcastsPage() {
   const qc = useQueryClient();
   const [query, setQuery] = useState('');
+  const [listFilter, setListFilter] = useState<ListFilter>('all');
   const role = useAuthStore((s) => s.role);
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [rssDraft, setRssDraft] = useState('');
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const saveTickRef = useRef(0);
+  const {
+    session,
+    audioState,
+    isPlaying,
+    playEpisode,
+    toggleFavorite,
+  } = useSermonPlayback();
 
   const q = useQuery({
     queryKey: ['resources', 'podcasts'],
@@ -72,87 +85,38 @@ export function PodcastsPage() {
 
   const feed = q.data?.feed ?? null;
   const episodes = useMemo(() => (Array.isArray(q.data?.episodes) ? q.data!.episodes : []), [q.data]);
-  const activeEpisode = useMemo(
-    () => (activeId ? episodes.find((e) => e.id === activeId) ?? null : null),
-    [activeId, episodes],
-  );
-  const token = useAuthStore((s) => s.token);
-  const storageKey = useMemo(() => {
-    const suffix = (token ?? 'anon').slice(-12);
-    return `sermons_audio_v1:${suffix}`;
-  }, [token]);
-
-  type AudioState = {
-    favorites: Record<string, true>;
-    progress: Record<string, { position: number; duration: number | null; updatedAt: number }>;
-    listened: Record<string, true>;
-  };
-
-  const [audioState, setAudioState] = useState<AudioState>(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) return { favorites: {}, progress: {}, listened: {} };
-      const parsed = JSON.parse(raw) as Partial<AudioState>;
-      return {
-        favorites: (parsed.favorites ?? {}) as Record<string, true>,
-        progress: (parsed.progress ?? {}) as Record<string, { position: number; duration: number | null; updatedAt: number }>,
-        listened: (parsed.listened ?? {}) as Record<string, true>,
-      };
-    } catch {
-      return { favorites: {}, progress: {}, listened: {} };
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(audioState));
-    } catch {
-      /* ignore */
-    }
-  }, [audioState, storageKey]);
-
-  function toggleFavorite(id: string) {
-    setAudioState((s) => {
-      const next = { ...s, favorites: { ...s.favorites } };
-      if (next.favorites[id]) {
-        delete next.favorites[id];
-      } else {
-        next.favorites[id] = true;
-      }
-      return next;
-    });
-  }
-
-  function markListened(id: string) {
-    setAudioState((s) => ({ ...s, listened: { ...s.listened, [id]: true } }));
-  }
+  const activeId = session?.episode.id ?? null;
+  const playerOpen = Boolean(session);
 
   const filtered = useMemo(() => {
     const t = query.trim().toLowerCase();
-    if (!t) return episodes;
     return episodes.filter((e) => {
-      const hay = `${e.title}\n${e.description ?? ''}`.toLowerCase();
+      const ratio = progressRatio(audioState.progress[e.id]);
+      const listened = Boolean(audioState.listened[e.id]) || ratio >= 0.98;
+      const isFav = Boolean(audioState.favorites[e.id]);
+      const inProgress = ratio > 0 && !listened;
+
+      if (listFilter === 'favorites' && !isFav) return false;
+      if (listFilter === 'in_progress' && !inProgress) return false;
+
+      if (!t) return true;
+      const { topic, author } = parseEpisodeTitle(e.title);
+      const hay = `${e.title}\n${topic}\n${author ?? ''}\n${e.description ?? ''}`.toLowerCase();
       return hay.includes(t);
     });
-  }, [episodes, query]);
+  }, [episodes, query, listFilter, audioState.favorites, audioState.progress, audioState.listened]);
 
-  useEffect(() => {
-    if (!activeEpisode) return;
-    try {
-      const ms = (navigator as Navigator & { mediaSession?: MediaSession }).mediaSession;
-      if (!ms) return;
-      ms.metadata = new MediaMetadata({
-        title: activeEpisode.title,
-        artist: feed?.title ?? 'Подкаст',
-        album: feed?.title ?? undefined,
-        artwork: activeEpisode.imageUrl
-          ? [{ src: activeEpisode.imageUrl, sizes: '512x512', type: 'image/png' }]
-          : undefined,
-      });
-    } catch {
-      /* ignore */
+  const filterCounts = useMemo(() => {
+    let favorites = 0;
+    let inProgress = 0;
+    for (const e of episodes) {
+      if (audioState.favorites[e.id]) favorites += 1;
+      const ratio = progressRatio(audioState.progress[e.id]);
+      const listened = Boolean(audioState.listened[e.id]) || ratio >= 0.98;
+      if (ratio > 0 && !listened) inProgress += 1;
     }
-  }, [activeEpisode, feed?.title]);
+    return { all: episodes.length, favorites, inProgress };
+  }, [episodes, audioState.favorites, audioState.progress, audioState.listened]);
 
   async function tryShare(title: string, url: string) {
     try {
@@ -171,32 +135,31 @@ export function PodcastsPage() {
     }
   }
 
-  async function playEpisode(ep: PodcastEpisode) {
-    setActiveId(ep.id);
-    // Wait a tick so <audio src> updates before play()
-    await Promise.resolve();
-    const el = audioRef.current;
-    if (!el) return;
-    try {
-      await el.play();
-    } catch {
-      // Autoplay blocked until user gesture in some browsers — but this is invoked by a click.
-    }
-  }
+  const filterChips: { id: ListFilter; label: string; count: number }[] = [
+    { id: 'all', label: 'Все', count: filterCounts.all },
+    { id: 'favorites', label: 'Избранное', count: filterCounts.favorites },
+    { id: 'in_progress', label: 'Слушаю', count: filterCounts.inProgress },
+  ];
 
   return (
-    <div className="min-h-full bg-[var(--surface)] max-lg:pb-0 lg:pb-8">
+    <div
+      className={[
+        'min-h-full bg-[var(--surface)] lg:pb-8',
+        /* main already pads for bottom nav — only reserve space for the sticky player */
+        playerOpen ? 'pb-24 max-lg:pb-[5.75rem] lg:pb-28' : 'max-lg:pb-0',
+      ].join(' ')}
+    >
       <div className={sectionHeroStickyClass}>
         <PageHeader title="Проповеди" />
       </div>
 
-      <div className="px-3 py-6 sm:px-4 sm:py-8 md:px-6 lg:px-8 xl:px-10">
+      <div className="py-5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] sm:py-8 sm:pl-[max(1rem,env(safe-area-inset-left,0px))] sm:pr-[max(1rem,env(safe-area-inset-right,0px))] md:pl-6 md:pr-6 lg:pl-8 lg:pr-8 xl:pl-10 xl:pr-10">
         <div className="mx-auto flex w-full max-w-lg flex-col gap-4 sm:gap-6 md:max-w-xl lg:max-w-4xl xl:max-w-6xl">
-          <section className="rounded-[1.35rem] border border-stone-200/70 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow-card)] sm:rounded-3xl sm:p-6 sm:shadow-[var(--shadow)] lg:p-8 shell:p-8">
-            <div className="mb-5 flex flex-col gap-4 sm:mb-6">
+          <section className="overflow-hidden rounded-[1.35rem] border border-stone-200/70 bg-[var(--surface-elevated)] p-3.5 shadow-[var(--shadow-card)] sm:rounded-3xl sm:p-6 sm:shadow-[var(--shadow)] lg:p-8 shell:p-8">
+            <div className="mb-4 flex flex-col gap-3.5 sm:mb-6 sm:gap-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70 sm:h-16 sm:w-16">
                     {feed?.imageUrl ? (
                       <img src={feed.imageUrl} alt="" className="h-full w-full object-cover" />
                     ) : (
@@ -207,7 +170,7 @@ export function PodcastsPage() {
                   </div>
                   <div className="min-w-0">
                     <h2 className="text-base font-extrabold text-stone-900 sm:text-lg md:text-xl">Аудио проповеди</h2>
-                    {feed?.description ? (
+                    {feed?.description && !isBoilerplateDescription(feed.description) ? (
                       <p className="mt-1 line-clamp-2 text-sm font-medium leading-snug text-stone-600">
                         {feed.description}
                       </p>
@@ -223,13 +186,13 @@ export function PodcastsPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 self-start">
+                <div className="flex w-full flex-wrap items-center gap-2 self-start sm:w-auto">
                   {feed?.link ? (
                     <a
                       href={feed.link}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex h-10 items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-50 active:scale-[0.98]"
+                      className="inline-flex h-10 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-50 active:scale-[0.98] sm:flex-none sm:px-4"
                     >
                       <LuArrowUpRight className="h-4 w-4" strokeWidth={2} />
                       Сайт
@@ -238,7 +201,7 @@ export function PodcastsPage() {
                   {isAdmin ? (
                     <button
                       type="button"
-                      className="inline-flex h-10 items-center gap-2 rounded-xl bg-stone-100 px-4 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-200 hover:text-stone-900 active:scale-[0.98]"
+                      className="inline-flex h-10 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-stone-100 px-3 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-200 hover:text-stone-900 active:scale-[0.98] sm:flex-none sm:px-4"
                       onClick={() => {
                         setSettingsOpen(true);
                         setRssDraft('');
@@ -250,7 +213,7 @@ export function PodcastsPage() {
                   ) : null}
                   <button
                     type="button"
-                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-50 active:scale-[0.98] disabled:opacity-50"
+                    className="inline-flex h-10 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-50 active:scale-[0.98] disabled:opacity-50 sm:flex-none sm:px-4"
                     onClick={() => q.refetch()}
                     disabled={q.isFetching}
                   >
@@ -344,10 +307,41 @@ export function PodcastsPage() {
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Поиск по названию или описанию…"
+                  placeholder="Поиск по названию, автору или описанию…"
                   className="h-11 w-full rounded-2xl border border-stone-200 bg-white pl-10 pr-4 text-sm font-semibold text-stone-900 shadow-sm outline-none transition focus:border-primary"
                 />
               </label>
+
+              <div className="-mx-0.5 flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Фильтр проповедей">
+                {filterChips.map((chip) => {
+                  const selected = listFilter === chip.id;
+                  return (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      onClick={() => setListFilter(chip.id)}
+                      className={[
+                        'inline-flex h-10 min-h-[40px] shrink-0 touch-manipulation items-center gap-1.5 rounded-xl px-3.5 text-xs font-extrabold transition',
+                        selected
+                          ? 'bg-stone-900 text-white shadow-sm'
+                          : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
+                      ].join(' ')}
+                    >
+                      {chip.label}
+                      <span
+                        className={[
+                          'tabular-nums',
+                          selected ? 'text-white/70' : 'text-stone-400',
+                        ].join(' ')}
+                      >
+                        {chip.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {q.isLoading ? (
@@ -377,27 +371,39 @@ export function PodcastsPage() {
               </div>
             ) : filtered.length === 0 ? (
               <div className="rounded-2xl border border-stone-200 bg-white/60 p-5 text-center">
-                <p className="text-sm font-semibold text-stone-700">Ничего не найдено</p>
-                <p className="mt-1 text-xs text-stone-500">Попробуйте изменить запрос поиска.</p>
+                <p className="text-sm font-semibold text-stone-700">
+                  {listFilter === 'favorites'
+                    ? 'В избранном пока пусто'
+                    : listFilter === 'in_progress'
+                      ? 'Нет проповедей в процессе прослушивания'
+                      : 'Ничего не найдено'}
+                </p>
+                <p className="mt-1 text-xs text-stone-500">
+                  {query.trim()
+                    ? 'Попробуйте изменить запрос поиска.'
+                    : listFilter === 'all'
+                      ? 'Попробуйте изменить запрос поиска.'
+                      : 'Переключитесь на «Все», чтобы увидеть полный список.'}
+                </p>
               </div>
             ) : (
               <div className="grid gap-3 sm:gap-4">
                 {filtered.map((ep) => {
                   const sub = episodeSubtitle(ep);
-                    const isActive = activeEpisode?.id === ep.id;
+                  const { topic, author } = parseEpisodeTitle(ep.title);
+                  const description = episodeDisplayDescription(ep.description, feed?.description);
+                  const isActive = activeId === ep.id;
                   const isFav = Boolean(audioState.favorites[ep.id]);
-                  const p = audioState.progress[ep.id];
-                  const dur = p?.duration ?? null;
-                  const pos = p?.position ?? 0;
-                  const ratio = dur && dur > 0 ? Math.max(0, Math.min(1, pos / dur)) : 0;
+                  const ratio = progressRatio(audioState.progress[ep.id]);
                   const listened = Boolean(audioState.listened[ep.id]) || ratio >= 0.98;
+                  const statusLabel = listened ? 'ПРОСЛУШАНО' : ratio > 0 ? `${Math.round(ratio * 100)}%` : 'НОВОЕ';
                   return (
                     <article
                       key={ep.id}
-                      className="rounded-3xl border border-stone-200/70 bg-white/70 p-4 shadow-sm transition hover:bg-white sm:p-5"
+                      className="overflow-hidden rounded-2xl border border-stone-200/70 bg-white/70 p-3.5 shadow-sm transition hover:bg-white sm:rounded-3xl sm:p-5"
                     >
-                      <div className="flex items-start gap-3 sm:gap-4">
-                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
+                      <div className="flex min-w-0 items-start gap-2.5 sm:gap-4">
+                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-stone-100 ring-1 ring-stone-200/70 sm:h-16 sm:w-16 sm:rounded-2xl">
                           {ep.imageUrl ? (
                             <img src={ep.imageUrl} alt="" className="h-full w-full object-cover" />
                           ) : (
@@ -407,64 +413,77 @@ export function PodcastsPage() {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="text-[15px] font-extrabold leading-snug text-stone-900 sm:text-base">
-                            {ep.title}
-                          </h3>
-                          {sub ? (
-                            <p className="mt-1 text-xs font-semibold text-stone-500">{sub}</p>
-                          ) : (
-                            <p className="mt-1 text-xs font-semibold text-stone-500"> </p>
-                          )}
-                          <div className="mt-2 flex items-center gap-2">
-                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-100 ring-1 ring-stone-200/60">
-                              <div className="h-full bg-primary" style={{ width: `${Math.round(ratio * 100)}%` }} />
-                            </div>
+                          <div className="flex min-w-0 items-start gap-2">
+                            <h3 className="min-w-0 flex-1 line-clamp-2 text-[15px] font-extrabold leading-snug text-stone-900 sm:text-base">
+                              {topic}
+                            </h3>
                             <span
                               className={[
-                                'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-extrabold',
-                                listened ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70' : 'bg-stone-50 text-stone-600 ring-1 ring-stone-200/70',
+                                'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold leading-none',
+                                listened
+                                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70'
+                                  : ratio > 0
+                                    ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
+                                    : 'bg-stone-100 text-stone-600 ring-1 ring-stone-200/70',
                               ].join(' ')}
                             >
-                              {listened ? 'ПРОСЛУШАНО' : ratio > 0 ? `${Math.round(ratio * 100)}%` : 'НОВОЕ'}
+                              {statusLabel}
                             </span>
                           </div>
-                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {author ? (
+                            <p className="mt-0.5 truncate text-xs font-semibold text-stone-500">{author}</p>
+                          ) : null}
+                          {sub ? (
+                            <p className="mt-1 text-xs font-semibold text-stone-500">{sub}</p>
+                          ) : null}
+                          {ratio > 0 && !listened ? (
+                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-stone-100 ring-1 ring-stone-200/60">
+                              <div className="h-full bg-primary" style={{ width: `${Math.round(ratio * 100)}%` }} />
+                            </div>
+                          ) : null}
+                          <div className="mt-3 flex w-full min-w-0 items-center gap-1.5 sm:gap-2">
                             <button
                               type="button"
-                              onClick={() => void playEpisode(ep)}
+                              onClick={() => playEpisode(ep, feed?.title)}
                               className={[
-                                'inline-flex h-10 items-center gap-2 rounded-2xl px-4 text-sm font-extrabold shadow-sm transition',
+                                'inline-flex h-11 min-h-[44px] min-w-0 flex-1 touch-manipulation items-center justify-center gap-2 rounded-2xl px-3 text-sm font-extrabold shadow-sm transition sm:flex-none sm:px-4',
                                 isActive
                                   ? 'bg-primary text-white shadow-primary/25'
                                   : 'bg-stone-900 text-white hover:bg-stone-800',
                               ].join(' ')}
                             >
-                              <LuPlay className="h-4 w-4" strokeWidth={2.25} aria-hidden />
-                              {isActive ? 'В плеере' : 'Слушать'}
+                              <LuPlay className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+                              <span className="truncate">
+                                {isActive ? (isPlaying ? 'Играет' : 'В плеере') : 'Слушать'}
+                              </span>
                             </button>
                             <button
                               type="button"
                               onClick={() => toggleFavorite(ep.id)}
                               className={[
-                                'inline-flex h-10 items-center gap-2 rounded-2xl px-4 text-sm font-extrabold shadow-sm transition',
+                                'inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 touch-manipulation items-center justify-center rounded-2xl shadow-sm transition sm:w-auto sm:min-w-0 sm:gap-2 sm:px-3',
                                 isFav
                                   ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 hover:bg-rose-100'
                                   : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
                               ].join(' ')}
                               aria-pressed={isFav}
                               aria-label={isFav ? 'Убрать из избранного' : 'Добавить в избранное'}
+                              title={isFav ? 'В избранном' : 'В избранное'}
                             >
-                              <LuHeart className="h-4 w-4" strokeWidth={2} aria-hidden />
-                              {isFav ? 'В избранном' : 'В избранное'}
+                              <LuHeart className={['h-4 w-4', isFav ? 'fill-current' : ''].join(' ')} strokeWidth={2} aria-hidden />
+                              <span className="hidden text-sm font-extrabold sm:inline">
+                                {isFav ? 'В избранном' : 'В избранное'}
+                              </span>
                             </button>
                             {ep.pageUrl ? (
                               <button
                                 type="button"
                                 onClick={() => void tryShare(ep.title, ep.pageUrl!)}
-                                className="inline-flex h-9 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50"
+                                className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 touch-manipulation items-center justify-center rounded-2xl border border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                                aria-label="Поделиться"
+                                title="Поделиться"
                               >
                                 <LuShare2 className="h-4 w-4" strokeWidth={2} aria-hidden />
-                                Поделиться
                               </button>
                             ) : null}
                             {ep.pageUrl ? (
@@ -472,16 +491,17 @@ export function PodcastsPage() {
                                 href={ep.pageUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex h-9 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50"
+                                className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 touch-manipulation items-center justify-center rounded-2xl border border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                                aria-label="Открыть на сайте"
+                                title="Открыть"
                               >
                                 <LuArrowUpRight className="h-4 w-4" strokeWidth={2} aria-hidden />
-                                Открыть
                               </a>
                             ) : null}
                           </div>
-                          {ep.description ? (
+                          {description ? (
                             <p className="mt-3 line-clamp-2 text-sm font-medium leading-snug text-stone-600">
-                              {ep.description}
+                              {description}
                             </p>
                           ) : null}
                         </div>
@@ -494,109 +514,6 @@ export function PodcastsPage() {
           </section>
         </div>
       </div>
-
-      {/* Sticky player: keeps playing while browsing (mobile-first). */}
-      {activeEpisode ? (
-        <div className="fixed inset-x-3 bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] z-[60] lg:inset-x-6 lg:bottom-6">
-          <div className="rounded-3xl border border-stone-200/80 bg-white/90 p-4 shadow-[0_16px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl">
-            <div className="flex items-start gap-3">
-              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
-                {activeEpisode.imageUrl ? (
-                  <img src={activeEpisode.imageUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="grid h-full w-full place-items-center text-stone-400">
-                    <LuHeadphones className="h-5 w-5" strokeWidth={1.8} aria-hidden />
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-extrabold text-stone-900">{activeEpisode.title}</p>
-                <p className="mt-0.5 truncate text-[11px] font-semibold text-stone-500">
-                  {episodeSubtitle(activeEpisode) || (feed?.title ?? 'Подкаст')}
-                </p>
-              </div>
-              <button
-                type="button"
-                className={[
-                  'inline-flex h-9 items-center justify-center rounded-2xl px-3 text-xs font-extrabold transition',
-                  audioState.favorites[activeEpisode.id]
-                    ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 hover:bg-rose-100'
-                    : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
-                ].join(' ')}
-                onClick={() => toggleFavorite(activeEpisode.id)}
-                aria-label="Избранное"
-              >
-                <LuHeart className="h-4 w-4" strokeWidth={2} aria-hidden />
-              </button>
-              <button
-                type="button"
-                className="inline-flex h-9 items-center justify-center rounded-2xl border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50"
-                onClick={() => setActiveId(null)}
-                aria-label="Закрыть плеер"
-              >
-                <LuX className="h-4 w-4" strokeWidth={2} aria-hidden />
-              </button>
-            </div>
-
-            <div className="mt-3">
-              <audio
-                ref={(el) => {
-                  audioRef.current = el;
-                }}
-                controls
-                preload="none"
-                className="w-full"
-                src={activeEpisode.audioUrl}
-                onLoadedMetadata={() => {
-                  const el = audioRef.current;
-                  if (!el) return;
-                  const saved = audioState.progress[activeEpisode.id];
-                  const savedPos = saved?.position ?? 0;
-                  // Seek to saved position if reasonable.
-                  if (Number.isFinite(savedPos) && savedPos > 2 && savedPos < el.duration - 2) {
-                    try {
-                      el.currentTime = savedPos;
-                    } catch {
-                      /* ignore */
-                    }
-                  }
-                }}
-                onTimeUpdate={() => {
-                  const el = audioRef.current;
-                  if (!el) return;
-                  const now = Date.now();
-                  // Throttle saves (about every 2 seconds)
-                  if (now - saveTickRef.current < 2000) return;
-                  saveTickRef.current = now;
-                  const position = Number.isFinite(el.currentTime) ? el.currentTime : 0;
-                  const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : null;
-                  setAudioState((s) => ({
-                    ...s,
-                    progress: {
-                      ...s.progress,
-                      [activeEpisode.id]: { position, duration, updatedAt: now },
-                    },
-                  }));
-                  if (duration && duration > 0 && position / duration >= 0.98) {
-                    markListened(activeEpisode.id);
-                  }
-                }}
-                onEnded={() => {
-                  markListened(activeEpisode.id);
-                  setAudioState((s) => ({
-                    ...s,
-                    progress: {
-                      ...s.progress,
-                      [activeEpisode.id]: { position: 0, duration: s.progress[activeEpisode.id]?.duration ?? null, updatedAt: Date.now() },
-                    },
-                  }));
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
-

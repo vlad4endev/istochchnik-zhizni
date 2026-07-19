@@ -14,9 +14,9 @@
   --tg-sidebar-width: min(400px, 100%);
   /* ПК: макс. ширина колонки переписки (центрирование на ультрашироких) */
   --tg-desktop-thread-max: 880px;
-  --tg-primary: #7d3640;
-  --tg-primary-hover: #5c2830;
-  --tg-primary-light: rgba(125, 54, 64, 0.12);
+  --tg-primary: var(--primary, #7d3640);
+  --tg-primary-hover: var(--primary-dark, #5c2830);
+  --tg-primary-light: color-mix(in srgb, var(--tg-primary) 12%, transparent);
   /* Chrome мессенджера (вкладки, reply-bar) — не трогает аватары и пузыри */
   --messenger-brand: #8b1a1a;
   --messenger-brand-light: rgba(139, 26, 26, 0.1);
@@ -24,20 +24,33 @@
   --tg-surface: #ffffff;
   --tg-surface-elevated: #faf8f6;
   --tg-border: rgba(28, 25, 23, 0.07);
+  --tg-border-strong: #e8e0dc;
   --tg-text: #1c1917;
   --tg-text-secondary: #44403c;
   --tg-text-muted: #a8a29e;
   --tg-shadow: 0 4px 24px rgba(28, 25, 23, 0.06);
   --tg-glass: rgba(255, 255, 255, 0.72);
+  --tg-composer-bg: #ffffff;
+  --tg-composer-field: #f1f1f1;
+  --tg-composer-field-focus: #ebebeb;
+  --tg-composer-shadow: 0 -4px 32px color-mix(in srgb, var(--tg-primary) 8%, transparent);
+  --tg-online: #22c55e;
+  --tg-error: #f03738;
+  --tg-row-hover: rgba(0, 0, 0, 0.03);
+  --tg-row-divider: rgba(28, 25, 23, 0.08);
 
   --tg-bubble-out: linear-gradient(145deg, #8b3d48 0%, #6d2f38 100%);
   --tg-bubble-out-solid: #7d3640;
   --tg-bubble-out-text: #ffffff;
   --tg-bubble-in: #ffffff;
   --tg-bubble-in-text: #1c1917;
-  --tg-bubble-radius: 18px;
+  --tg-bubble-radius: 22px;
+  --tg-bubble-tail-radius: 6px;
   --tg-bubble-meta: rgba(255, 255, 255, 0.72);
   --tg-bubble-meta-in: #a8a29e;
+  --tg-bubble-in-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --tg-bubble-out-shadow: 0 2px 12px rgba(125, 54, 64, 0.18);
+  --tg-date-chip-bg: rgba(255, 255, 255, 0.85);
 
   /* Height of the global bottom tab bar (Layout.tsx).
      Needed because messenger uses absolute layers on mobile. */
@@ -45,6 +58,49 @@
     --app-bottom-nav-total-height,
     calc(60px + 0.25rem + env(safe-area-inset-bottom, 0px))
   );
+}
+
+/**
+ * Dark theme tokens for messenger chrome.
+ * Mirrors app dark modes (html.dark / Mantine / data-color-theme).
+ * Does not change layout or interaction behaviour.
+ */
+html.dark,
+html[data-mantine-color-scheme='dark'],
+html[data-color-theme='dark'] {
+  --tg-primary: var(--primary, #c0415a);
+  --tg-primary-hover: var(--primary-dark, #a8304a);
+  --tg-primary-light: color-mix(in srgb, var(--tg-primary) 18%, transparent);
+  --messenger-brand: #d97787;
+  --messenger-brand-light: rgba(217, 119, 135, 0.14);
+  --tg-bg: #141416;
+  --tg-surface: #1a1a1e;
+  --tg-surface-elevated: #18181c;
+  --tg-border: rgba(255, 255, 255, 0.08);
+  --tg-border-strong: rgba(255, 255, 255, 0.12);
+  --tg-text: #f0eff4;
+  --tg-text-secondary: #9896a4;
+  --tg-text-muted: #6b6975;
+  --tg-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --tg-glass: rgba(24, 24, 28, 0.82);
+  --tg-composer-bg: #1a1a1e;
+  --tg-composer-field: rgba(255, 255, 255, 0.06);
+  --tg-composer-field-focus: rgba(255, 255, 255, 0.09);
+  --tg-composer-shadow: 0 -4px 28px rgba(0, 0, 0, 0.35);
+  --tg-online: #34d399;
+  --tg-error: #f87171;
+  --tg-row-hover: rgba(255, 255, 255, 0.04);
+  --tg-row-divider: rgba(255, 255, 255, 0.08);
+  --tg-bubble-out: linear-gradient(145deg, #a84856 0%, #7d3640 100%);
+  --tg-bubble-out-solid: #9a4050;
+  --tg-bubble-out-text: #ffffff;
+  --tg-bubble-in: #2a2a30;
+  --tg-bubble-in-text: #f0eff4;
+  --tg-bubble-meta: rgba(255, 255, 255, 0.7);
+  --tg-bubble-meta-in: #8b8896;
+  --tg-bubble-in-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --tg-bubble-out-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
+  --tg-date-chip-bg: rgba(32, 32, 36, 0.9);
 }
 
 /**
@@ -338,7 +394,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
     flex-direction: column;
     height: 100%;
     overflow: hidden;
-    border-right: 1px solid #e8e0dc;
+    border-right: 1px solid var(--tg-border-strong);
   }
 
   .chat-list-panel .chats-scroll-area {
@@ -359,8 +415,8 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
     min-height: 64px;
     display: flex;
     align-items: center;
-    border-bottom: 1px solid #e8e0dc;
-    background: #fff;
+    border-bottom: 1px solid var(--tg-border-strong);
+    background: var(--tg-surface);
     border-radius: 12px 12px 0 0;
   }
 
@@ -376,21 +432,22 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   .message-input-bar {
     flex-shrink: 0;
     padding: 12px 16px;
-    border-top: 1px solid #e8e0dc;
-    background: #fff;
+    border-top: 1px solid var(--tg-border-strong);
+    background: var(--tg-composer-bg);
     display: flex;
     align-items: center;
     gap: 8px;
-    box-shadow: 0 -1px 0 #e8e0dc;
+    box-shadow: 0 -1px 0 var(--tg-border-strong);
   }
 
   .message-input-bar .tg-input-textarea {
     flex: 1;
-    border: 1.5px solid #e0d8d4 !important;
+    border: 1.5px solid var(--tg-border-strong) !important;
     border-radius: 22px;
     padding: 10px 16px;
     font-size: 14px;
-    background: #f7f3f1;
+    background: var(--tg-composer-field);
+    color: var(--tg-text);
     outline: none;
     resize: none;
     max-height: 120px;
@@ -398,8 +455,8 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   }
 
   .message-input-bar .tg-input-textarea:focus {
-    border-color: #8a6a6a !important;
-    background: #fff;
+    border-color: color-mix(in srgb, var(--tg-primary) 45%, var(--tg-border-strong)) !important;
+    background: var(--tg-composer-field-focus);
   }
 
   .chat-empty-state {
@@ -409,7 +466,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
     align-items: center;
     justify-content: center;
     height: 100%;
-    background: #f5f0ee;
+    background: var(--tg-bg);
   }
 }
 
@@ -490,22 +547,26 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
 
 .chatlist-online {
   position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 13px;
-  height: 13px;
+  bottom: 1px;
+  right: 1px;
+  z-index: 10;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  border: 2px solid #ffffff;
-  background: #a8a29e;
-  transition: border-color 0.15s ease;
+  border: 2.5px solid var(--tg-surface-elevated, var(--surface-elevated, #fff));
+  background: var(--tg-online);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tg-online) 25%, transparent);
+  pointer-events: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .chatlist-online--on {
-  background: #22c55e;
+  background: var(--tg-online);
 }
 
-.chatlist-item--active .chatlist-online {
-  border-color: var(--tg-primary);
+.chatlist-item--active .chatlist-online,
+.tg-chat-row[aria-current='true'] .chatlist-online {
+  border-color: var(--tg-surface-elevated, var(--surface-elevated, #fff));
 }
 
 .chatlist-content {
@@ -1230,7 +1291,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
 }
 
 .tg-bubble {
-  border-radius: 16px;
+  border-radius: var(--tg-bubble-radius);
   font-family: var(--tg-font-family);
   font-size: 1rem;
   font-weight: 400;
@@ -1259,23 +1320,23 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
 .tg-bubble--out {
   background: var(--tg-bubble-out);
   color: var(--tg-bubble-out-text);
-  border-bottom-right-radius: 4px;
-  box-shadow: 0 2px 12px rgba(125, 54, 64, 0.18);
+  border-bottom-right-radius: var(--tg-bubble-tail-radius);
+  box-shadow: var(--tg-bubble-out-shadow);
 }
 
 .tg-bubble--in {
   background: var(--tg-bubble-in);
   color: var(--tg-bubble-in-text);
-  border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  border-bottom-left-radius: var(--tg-bubble-tail-radius);
+  box-shadow: var(--tg-bubble-in-shadow);
 }
 
 .tg-bubble--grouped-prev.tg-bubble--out {
-  border-bottom-right-radius: 16px;
+  border-bottom-right-radius: var(--tg-bubble-radius);
 }
 
 .tg-bubble--grouped-prev.tg-bubble--in {
-  border-bottom-left-radius: 16px;
+  border-bottom-left-radius: var(--tg-bubble-radius);
 }
 
 .tg-bubble-sender {
@@ -1299,7 +1360,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
 }
 
 .tg-bubble--in .tg-bubble-meta {
-  color: #9ca3af;
+  color: var(--tg-bubble-meta-in);
 }
 
 /* Tail Positioning Fix */
@@ -1336,7 +1397,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--tg-text-secondary);
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--tg-date-chip-bg);
   border: 1px solid var(--tg-border);
   box-shadow: var(--tg-shadow);
   backdrop-filter: blur(8px);
@@ -1346,8 +1407,9 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
 .tg-input-area-wrap {
   padding: 8px 12px;
   padding-bottom: max(0px, var(--app-bottom-nav-safe-pad, 0px));
-  background: #fff;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--tg-composer-bg);
+  border-top: 1px solid var(--tg-border);
+  box-shadow: var(--tg-composer-shadow);
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -1372,7 +1434,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   display: flex;
   flex-direction: row;
   align-items: flex-end;
-  background: #f1f1f1;
+  background: var(--tg-composer-field);
   border-radius: 24px;
   padding: 6px 6px 6px 12px;
   gap: 4px;
@@ -1381,8 +1443,8 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
 }
 
 .tg-input-container:focus-within {
-  background: #ebebeb;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  background: var(--tg-composer-field-focus);
+  box-shadow: inset 0 0 0 1px var(--tg-border);
 }
 
 .tg-input-textarea {
@@ -1399,11 +1461,11 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   padding: 6px 2px 6px 0;
   resize: none;
   overflow-y: auto;
-  color: #1c1917;
+  color: var(--tg-text);
   font-family: inherit;
   align-self: flex-end;
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.22) transparent;
+  scrollbar-color: color-mix(in srgb, var(--tg-text) 22%, transparent) transparent;
   touch-action: manipulation;
 }
 
@@ -1412,18 +1474,51 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
 }
 
 .tg-input-textarea::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.22);
+  background: color-mix(in srgb, var(--tg-text) 22%, transparent);
   border-radius: 999px;
 }
 
 .tg-input-textarea::placeholder {
-  color: #aaa;
+  color: var(--tg-text-muted);
 }
 
 .chat-header {
-  background: var(--color-background-primary, #fff);
+  background: var(--color-background-primary, var(--tg-surface));
   border-bottom: 0.5px solid var(--color-border-tertiary, var(--tg-border));
   border-radius: var(--border-radius-lg, 14px) var(--border-radius-lg, 14px) 0 0;
+}
+
+/* Fail/retry status — как цветная точка в UI-ките (логика retry без изменений) */
+.tg-msg-status-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.tg-msg-status-dot:active {
+  transform: scale(0.92);
+}
+
+.tg-msg-status-dot--error {
+  background: var(--tg-error);
+  color: #fff;
+}
+
+.tg-msg-status-dot--error:hover {
+  opacity: 0.92;
+}
+
+.tg-msg-status-dot--error:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tg-error) 55%, white);
+  outline-offset: 2px;
 }
 
 .chat-header .last-seen,
@@ -3226,20 +3321,24 @@ html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-container.t
 .tg-chat-window__composer .tg-input-container.tg-composer-pill-layout {
   border: none !important;
   box-shadow: none !important;
-  background: rgba(0, 0, 0, 0.04) !important;
+  background: var(--tg-composer-field) !important;
 }
 
-html[data-mantine-color-scheme='dark'] .tg-chat-window__composer .tg-input-container.tg-composer-pill-layout {
-  background: rgba(255, 255, 255, 0.06) !important;
+html.dark .tg-chat-window__composer .tg-input-container.tg-composer-pill-layout,
+html[data-mantine-color-scheme='dark'] .tg-chat-window__composer .tg-input-container.tg-composer-pill-layout,
+html[data-color-theme='dark'] .tg-chat-window__composer .tg-input-container.tg-composer-pill-layout {
+  background: var(--tg-composer-field) !important;
 }
 
 .tg-chat-window__composer .tg-input-container.tg-composer-pill-layout:focus-within {
   box-shadow: none !important;
-  background: rgba(0, 0, 0, 0.07) !important;
+  background: var(--tg-composer-field-focus) !important;
 }
 
-html[data-mantine-color-scheme='dark'] .tg-chat-window__composer .tg-input-container.tg-composer-pill-layout:focus-within {
-  background: rgba(255, 255, 255, 0.09) !important;
+html.dark .tg-chat-window__composer .tg-input-container.tg-composer-pill-layout:focus-within,
+html[data-mantine-color-scheme='dark'] .tg-chat-window__composer .tg-input-container.tg-composer-pill-layout:focus-within,
+html[data-color-theme='dark'] .tg-chat-window__composer .tg-input-container.tg-composer-pill-layout:focus-within {
+  background: var(--tg-composer-field-focus) !important;
 }
 
 /* Капсула: textarea на всю высоту, эмодзи внизу — не «сжимать» овал по центру. */
