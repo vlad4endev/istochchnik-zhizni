@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import {
   BIRTH_MONTH_OPTIONS,
   birthDayMonthToApiYmd,
@@ -26,21 +27,63 @@ export function BirthDayMonthFields({
   selectClassName,
   required = false,
 }: BirthDayMonthFieldsProps) {
-  const { day, month } = parseBirthDayMonthFromApi(value);
-  const maxDay = month ? daysInBirthMonth(Number(month)) : 31;
-  const dayOptions = Array.from({ length: maxDay }, (_, i) => String(i + 1));
+  const parsed = parseBirthDayMonthFromApi(value);
+  const [day, setDay] = useState(parsed.day);
+  const [month, setMonth] = useState(parsed.month);
+  /** Tracks values we emitted so empty onChange during partial edit does not wipe local picks. */
+  const lastEmittedRef = useRef(value);
+
+  useEffect(() => {
+    if (value === lastEmittedRef.current) return;
+    lastEmittedRef.current = value;
+    const next = parseBirthDayMonthFromApi(value);
+    setDay(next.day);
+    setMonth(next.month);
+  }, [value]);
 
   function update(nextDay: string, nextMonth: string) {
-    if (!nextDay || !nextMonth) {
+    let dayValue = nextDay;
+    const monthNum = nextMonth ? Number(nextMonth) : NaN;
+    const dayNum = nextDay ? Number(nextDay) : NaN;
+
+    if (
+      nextMonth &&
+      Number.isInteger(monthNum) &&
+      Number.isInteger(dayNum) &&
+      dayNum > 0
+    ) {
+      const capped = daysInBirthMonth(monthNum);
+      if (dayNum > capped) {
+        dayValue = String(capped);
+      }
+    }
+
+    setDay(dayValue);
+    setMonth(nextMonth);
+
+    if (!dayValue || !nextMonth) {
+      lastEmittedRef.current = '';
       onChange('');
       return;
     }
-    const monthNum = Number(nextMonth);
-    let dayNum = Number(nextDay);
-    const maxDay = daysInBirthMonth(monthNum);
-    if (dayNum > maxDay) dayNum = maxDay;
-    const ymd = birthDayMonthToApiYmd(dayNum, monthNum);
-    onChange(ymd ?? '');
+
+    const ymd = birthDayMonthToApiYmd(Number(dayValue), Number(nextMonth)) ?? '';
+    lastEmittedRef.current = ymd;
+    onChange(ymd);
+  }
+
+  function onDayChange(raw: string) {
+    const digits = raw.replace(/\D/g, '').slice(0, 2);
+    if (!digits) {
+      update('', month);
+      return;
+    }
+    const n = Number(digits);
+    if (!Number.isInteger(n) || n < 1) {
+      update('', month);
+      return;
+    }
+    update(String(n), month);
   }
 
   return (
@@ -51,35 +94,47 @@ export function BirthDayMonthFields({
           {required ? <span className="text-red-600"> *</span> : null}
         </span>
       ) : null}
-      <div className="grid grid-cols-2 gap-2">
-        <select
-          id={dayId}
-          className={selectClassName}
-          value={day}
-          required={required}
-          onChange={(e) => update(e.target.value, month)}
-        >
-          <option value="">День</option>
-          {dayOptions.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
-          ))}
-        </select>
-        <select
-          id={monthId}
-          className={selectClassName}
-          value={month}
-          required={required}
-          onChange={(e) => update(day, e.target.value)}
-        >
-          <option value="">Месяц</option>
-          {BIRTH_MONTH_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+      <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2 sm:grid-cols-[6.5rem_minmax(0,1fr)]">
+        <label className="block min-w-0">
+          <span className="sr-only">День рождения</span>
+          <input
+            id={dayId}
+            className={selectClassName}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="bday-day"
+            placeholder="День"
+            value={day}
+            required={required}
+            aria-label="День рождения"
+            maxLength={2}
+            onChange={(e) => onDayChange(e.target.value)}
+          />
+        </label>
+        <label className="block min-w-0">
+          <span className="sr-only">Месяц рождения</span>
+          <select
+            id={monthId}
+            className={`${selectClassName ?? ''} appearance-none bg-[length:1rem] bg-[right_0.9rem_center] bg-no-repeat pr-10`}
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2378716c'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")",
+            }}
+            value={month}
+            required={required}
+            autoComplete="bday-month"
+            aria-label="Месяц рождения"
+            onChange={(e) => update(day, e.target.value)}
+          >
+            <option value="">Месяц</option>
+            {BIRTH_MONTH_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
     </div>
   );

@@ -1,7 +1,16 @@
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LuArrowRight, LuEye, LuEyeOff, LuPenLine, LuTriangleAlert } from 'react-icons/lu';
+import {
+  LuArrowLeft,
+  LuArrowRight,
+  LuCheck,
+  LuEye,
+  LuEyeOff,
+  LuInfo,
+  LuTriangleAlert,
+  LuUserPlus,
+} from 'react-icons/lu';
 
 import { useAuthSessionReady } from '../../../hooks/useAuthSessionReady';
 import { useScrollInputIntoView } from '../../../hooks/useScrollInputIntoView';
@@ -14,6 +23,24 @@ import { formatRuPhoneInput, phoneInputAllowedKeys } from '../utils/formatRuPhon
 import { AppSplash } from '@/components/AppSplash';
 import { BirthDayMonthFields } from '@/components/BirthDayMonthFields';
 import { birthDayMonthToApiYmd, parseBirthDayMonthFromApi } from '@/lib/birthDate';
+
+const REGISTER_STEPS = [
+  { id: 'profile', title: 'О вас', hint: 'Имя, фамилия и день рождения' },
+  { id: 'phone', title: 'Телефон', hint: 'Номер для входа в приложение' },
+  { id: 'password', title: 'Пароль', hint: 'Придумайте надёжный пароль' },
+] as const;
+
+function passwordStrength(pw: string): { score: number; label: string; tone: string } {
+  if (!pw) return { score: 0, label: '', tone: 'bg-stone-200' };
+  let score = 0;
+  if (pw.length >= 8) score += 1;
+  if (pw.length >= 12) score += 1;
+  if (/[A-Za-zА-Яа-я]/.test(pw) && /\d/.test(pw)) score += 1;
+  if (/[^A-Za-zА-Яа-я0-9]/.test(pw)) score += 1;
+  if (score <= 1) return { score, label: 'Слабый', tone: 'bg-amber-400' };
+  if (score === 2) return { score, label: 'Нормальный', tone: 'bg-sky-500' };
+  return { score, label: 'Надёжный', tone: 'bg-emerald-500' };
+}
 
 type LocationState = { mode?: 'signIn' | 'signUp'; from?: string };
 
@@ -88,6 +115,7 @@ export function LoginPage() {
   const setSession = useAuthStore((s) => s.setSession);
 
   const [isRegisterMode, setIsRegisterMode] = useState(state.mode === 'signUp');
+  const [registerStep, setRegisterStep] = useState(0);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
@@ -528,51 +556,127 @@ export function LoginPage() {
     }
   }
 
-  const title = isRegisterMode ? 'Создание аккаунта' : 'Вход в систему';
+  const registerPwStrength = passwordStrength(password);
+  const activeRegisterStep = REGISTER_STEPS[Math.min(registerStep, REGISTER_STEPS.length - 1)]!;
+
+  const title = isRegisterMode ? 'Регистрация' : 'Вход в систему';
   const subtitle = isRegisterMode
-    ? 'Заполните данные для регистрации'
-    : 'Укажите телефон. Если администратор сбросил пароль, достаточно номера — откроется форма нового пароля. Иначе введите и пароль.';
+    ? activeRegisterStep.hint
+    : 'Укажите телефон и пароль. Если администратор сбросил пароль — достаточно номера.';
+
+  function switchMode(register: boolean) {
+    setIsRegisterMode(register);
+    setRegisterStep(0);
+    setShowResetForm(false);
+    setAdminForcedResetMode(false);
+    setResetCodeVerified(false);
+    setResetToken('');
+    clearStatus();
+  }
+
+  function validateRegisterStep(step: number): boolean {
+    if (step === 0) {
+      if (!firstName.trim() || !lastName.trim()) {
+        setStatusText('Укажите имя и фамилию');
+        setStatusIsError(true);
+        return false;
+      }
+      const birthParsed = parseBirthDayMonthFromApi(birthDate);
+      if (!birthParsed.day || !birthParsed.month || !birthDayMonthToApiYmd(Number(birthParsed.day), Number(birthParsed.month))) {
+        setStatusText('Укажите день и месяц рождения');
+        setStatusIsError(true);
+        return false;
+      }
+      return true;
+    }
+    if (step === 1) {
+      if (!phone.trim()) {
+        setStatusText('Введите номер телефона');
+        setStatusIsError(true);
+        return false;
+      }
+      return true;
+    }
+    if (step === 2) {
+      if (password.length < 8) {
+        setStatusText('Пароль должен быть не менее 8 символов');
+        setStatusIsError(true);
+        return false;
+      }
+      if (password !== confirmPassword) {
+        setStatusText('Пароли не совпадают');
+        setStatusIsError(true);
+        return false;
+      }
+      return true;
+    }
+    return true;
+  }
+
+  function goRegisterNext() {
+    if (submitting) return;
+    clearStatus();
+    if (!validateRegisterStep(registerStep)) return;
+    if (registerStep < REGISTER_STEPS.length - 1) {
+      setRegisterStep((s) => s + 1);
+      return;
+    }
+    void submitRegister();
+  }
+
+  function goRegisterBack() {
+    clearStatus();
+    if (registerStep > 0) setRegisterStep((s) => s - 1);
+  }
+
   const handlePrimarySubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (submitting) return;
-    void (isRegisterMode ? submitRegister() : submitLogin());
+    if (isRegisterMode) {
+      goRegisterNext();
+      return;
+    }
+    void submitLogin();
   };
 
   const inputClass =
-    'min-h-[48px] w-full rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3.5 py-3 text-base text-stone-900 outline-none ring-primary/30 placeholder:text-stone-400 focus:border-primary focus:ring-2 sm:min-h-0 sm:py-2.5 sm:text-[15px]';
+    'min-h-[52px] w-full rounded-2xl border border-stone-200/90 bg-stone-50/80 px-4 py-3 text-base text-stone-900 outline-none transition-[border-color,box-shadow,background-color] placeholder:text-stone-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 sm:min-h-[48px] sm:text-[15px]';
+  const labelClass = 'mb-1.5 block text-[13px] font-semibold tracking-wide text-stone-600';
+  const eyeBtnClass =
+    'absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary';
 
   return (
-    <div className="min-h-dvh w-full max-w-[100vw] overflow-y-auto bg-[var(--surface)] [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
-      <div className="flex min-h-dvh flex-col py-5 [padding-left:max(1rem,env(safe-area-inset-left,0px))] [padding-right:max(1rem,env(safe-area-inset-right,0px))] sm:py-6">
+    <div className="relative min-h-dvh w-full max-w-[100vw] overflow-y-auto bg-[var(--surface)] [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-[42vh] bg-gradient-to-b from-primary/[0.12] via-primary/[0.04] to-transparent"
+        aria-hidden
+      />
+      <div className="relative flex min-h-dvh flex-col py-5 [padding-left:max(1rem,env(safe-area-inset-left,0px))] [padding-right:max(1rem,env(safe-area-inset-right,0px))] sm:py-6">
         <Link
           to="/login"
-          className="mb-3 inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-stone-500 transition active:text-primary hover:text-primary"
+          className="mb-3 inline-flex min-h-[44px] items-center gap-1.5 self-start rounded-full px-1 text-sm font-semibold text-stone-500 transition hover:text-primary active:text-primary"
         >
-          <span aria-hidden>←</span> Назад
+          <LuArrowLeft className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+          Назад
         </Link>
 
         <div className="flex flex-1 flex-col justify-start pb-4 sm:justify-center">
-          <div className="mx-auto w-full max-w-[min(100%,480px)] rounded-[1.25rem] bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow-card)] ring-1 ring-stone-900/[0.06] sm:rounded-2xl sm:p-6 md:shadow-[var(--shadow)]">
-            <div className="flex justify-center">
-              <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[1rem] bg-stone-50 p-3 shadow-inner ring-1 ring-stone-900/5">
+          <div className="mx-auto w-full max-w-[min(100%,480px)] overflow-hidden rounded-[1.5rem] bg-[var(--surface-elevated)]/95 p-5 shadow-[0_18px_50px_rgba(28,25,23,0.08)] ring-1 ring-stone-900/[0.06] backdrop-blur-sm sm:rounded-[1.75rem] sm:p-7">
+            <div className="flex items-center gap-3.5">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 p-2.5 ring-1 ring-primary/15">
                 <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-[1.4rem] font-extrabold leading-tight tracking-tight text-stone-900 sm:text-2xl">
+                  {title}
+                </h1>
+                <p className="mt-0.5 text-sm leading-snug text-stone-500 sm:text-[15px]">{subtitle}</p>
               </div>
             </div>
 
-            <h1 className="mt-3.5 text-[1.35rem] font-extrabold leading-snug text-stone-900 sm:text-2xl">
-              {title}
-            </h1>
-            <p className="mt-1.5 text-sm leading-relaxed text-stone-600 sm:text-[15px]">{subtitle}</p>
-            {isRegisterMode && (
-              <p className="mt-2 rounded-lg bg-stone-50 px-3 py-2 text-xs leading-snug text-stone-600">
-                Учётная запись привязывается к участнику в базе церкви: ФИО и телефон должны совпадать с
-                карточкой. Иначе заявка уйдёт администратору — до одобрения войти нельзя.
-              </p>
-            )}
-
             {apiMismatch && (
               <div
-                className="mt-4 flex gap-2.5 rounded-xl bg-red-50 p-3 text-sm leading-snug text-red-900"
+                className="mt-4 flex gap-2.5 rounded-2xl bg-red-50 p-3 text-sm leading-snug text-red-900"
                 role="alert"
               >
                 <LuTriangleAlert className="h-5 w-5 shrink-0 text-amber-600" strokeWidth={2} aria-hidden />
@@ -583,183 +687,288 @@ export function LoginPage() {
               </div>
             )}
 
-            <div className="mt-4 rounded-full bg-stone-100/95 p-1 ring-1 ring-stone-200/60">
-              <div className="flex gap-0.5">
+            <div className="mt-5 rounded-2xl bg-stone-100/90 p-1 ring-1 ring-stone-200/70">
+              <div className="grid grid-cols-2 gap-0.5">
                 <button
                   type="button"
-                  className={`touch-manipulation flex-1 rounded-full py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
+                  className={`touch-manipulation rounded-[0.9rem] py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
                     !isRegisterMode
-                      ? 'bg-primary text-white shadow-sm shadow-primary/20'
-                      : 'bg-transparent text-stone-600'
+                      ? 'bg-white text-stone-900 shadow-sm ring-1 ring-stone-200/80'
+                      : 'bg-transparent text-stone-500'
                   }`}
-                  onClick={() => {
-                    setIsRegisterMode(false);
-                    setShowResetForm(false);
-                    setAdminForcedResetMode(false);
-                    setResetCodeVerified(false);
-                    setResetToken('');
-                    clearStatus();
-                  }}
+                  onClick={() => switchMode(false)}
                 >
                   Вход
                 </button>
                 <button
                   type="button"
-                  className={`touch-manipulation flex-1 rounded-full py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
+                  className={`touch-manipulation rounded-[0.9rem] py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
                     isRegisterMode
-                      ? 'bg-primary text-white shadow-sm shadow-primary/20'
-                      : 'bg-transparent text-stone-600'
+                      ? 'bg-primary text-white shadow-sm shadow-primary/25'
+                      : 'bg-transparent text-stone-500'
                   }`}
-                  onClick={() => {
-                    setIsRegisterMode(true);
-                    setShowResetForm(false);
-                    setAdminForcedResetMode(false);
-                    setResetCodeVerified(false);
-                    setResetToken('');
-                    clearStatus();
-                  }}
+                  onClick={() => switchMode(true)}
                 >
                   Регистрация
                 </button>
               </div>
             </div>
 
-            <form className="mt-4 flex flex-col gap-3" onSubmit={handlePrimarySubmit}>
-              {isRegisterMode && (
-                <>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-stone-600">Имя</span>
-                    <input
-                      className={inputClass}
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      placeholder="Например, Влад"
-                      autoComplete="given-name"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</span>
-                    <input
-                      className={inputClass}
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      placeholder="Например, Чендев"
-                      autoComplete="family-name"
-                    />
-                  </label>
+            {isRegisterMode && (
+              <div className="mt-5" aria-label="Шаги регистрации">
+                <div className="flex items-center gap-2">
+                  {REGISTER_STEPS.map((step, index) => {
+                    const done = index < registerStep;
+                    const current = index === registerStep;
+                    return (
+                      <div key={step.id} className="flex min-w-0 flex-1 items-center gap-2">
+                        <div
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
+                            done
+                              ? 'bg-primary text-white'
+                              : current
+                                ? 'bg-primary/15 text-primary ring-2 ring-primary/30'
+                                : 'bg-stone-100 text-stone-400'
+                          }`}
+                        >
+                          {done ? <LuCheck className="h-4 w-4" strokeWidth={2.5} aria-hidden /> : index + 1}
+                        </div>
+                        {index < REGISTER_STEPS.length - 1 ? (
+                          <div
+                            className={`h-0.5 flex-1 rounded-full ${done ? 'bg-primary/70' : 'bg-stone-200'}`}
+                            aria-hidden
+                          />
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="mt-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-primary/80">
+                  Шаг {registerStep + 1} из {REGISTER_STEPS.length} · {activeRegisterStep.title}
+                </p>
+              </div>
+            )}
+
+            <form className="mt-4 flex flex-col gap-3.5" onSubmit={handlePrimarySubmit}>
+              {isRegisterMode && registerStep === 0 && (
+                <div className="auth-step-enter flex flex-col gap-3.5">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className={labelClass}>Имя</span>
+                      <input
+                        className={inputClass}
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="Влад"
+                        autoComplete="given-name"
+                        autoFocus
+                      />
+                    </label>
+                    <label className="block">
+                      <span className={labelClass}>Фамилия</span>
+                      <input
+                        className={inputClass}
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="Чендев"
+                        autoComplete="family-name"
+                      />
+                    </label>
+                  </div>
                   <BirthDayMonthFields
                     value={birthDate}
                     onChange={setBirthDate}
                     selectClassName={inputClass}
+                    labelClassName={labelClass}
                     required
                   />
+                  <div className="flex gap-2.5 rounded-2xl bg-primary/[0.06] px-3.5 py-3 text-xs leading-relaxed text-stone-600">
+                    <LuInfo className="mt-0.5 h-4 w-4 shrink-0 text-primary" strokeWidth={2} aria-hidden />
+                    <p>
+                      Укажите ФИО как в карточке участника церкви. Если данные не совпадут, заявка уйдёт
+                      администратору на проверку.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {isRegisterMode && registerStep === 1 && (
+                <div className="auth-step-enter flex flex-col gap-3.5">
+                  <label className="block">
+                    <span className={labelClass}>Номер телефона</span>
+                    <input
+                      className={inputClass}
+                      value={phone}
+                      onChange={(e) => setPhone(formatRuPhoneInput(e.target.value))}
+                      onKeyDown={(e) => {
+                        if (!phoneInputAllowedKeys(e)) e.preventDefault();
+                      }}
+                      placeholder="+7 900 000-00-00"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      autoFocus
+                    />
+                  </label>
+                  <p className="text-xs leading-relaxed text-stone-500">
+                    На этот номер вы будете входить в приложение. Формат: +7…
+                  </p>
+                </div>
+              )}
+
+              {isRegisterMode && registerStep === 2 && (
+                <div className="auth-step-enter flex flex-col gap-3.5">
+                  <label className="block">
+                    <span className={labelClass}>Пароль</span>
+                    <div className="relative">
+                      <input
+                        className={`${inputClass} pr-11`}
+                        type={showPassword ? 'password' : 'text'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="new-password"
+                        placeholder="Минимум 8 символов"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        className={eyeBtnClass}
+                        onClick={() => setShowPassword((v) => !v)}
+                        aria-label={showPassword ? 'Показать пароль' : 'Скрыть пароль'}
+                      >
+                        {showPassword ? (
+                          <LuEye className="h-5 w-5" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <LuEyeOff className="h-5 w-5" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </div>
+                    {password ? (
+                      <div className="mt-2">
+                        <div className="flex gap-1">
+                          {[0, 1, 2, 3].map((i) => (
+                            <div
+                              key={i}
+                              className={`h-1.5 flex-1 rounded-full transition-colors ${
+                                i < registerPwStrength.score ? registerPwStrength.tone : 'bg-stone-200'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <p className="mt-1.5 text-xs font-medium text-stone-500">
+                          Надёжность: {registerPwStrength.label}
+                        </p>
+                      </div>
+                    ) : null}
+                  </label>
+                  <label className="block">
+                    <span className={labelClass}>Повторите пароль</span>
+                    <div className="relative">
+                      <input
+                        className={`${inputClass} pr-11`}
+                        type={showConfirm ? 'password' : 'text'}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        autoComplete="new-password"
+                        placeholder="Ещё раз"
+                      />
+                      <button
+                        type="button"
+                        className={eyeBtnClass}
+                        onClick={() => setShowConfirm((v) => !v)}
+                        aria-label={showConfirm ? 'Показать пароль' : 'Скрыть пароль'}
+                      >
+                        {showConfirm ? (
+                          <LuEye className="h-5 w-5" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <LuEyeOff className="h-5 w-5" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </div>
+                    {confirmPassword && password === confirmPassword ? (
+                      <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-emerald-700">
+                        <LuCheck className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                        Пароли совпадают
+                      </p>
+                    ) : null}
+                  </label>
+                </div>
+              )}
+
+              {!isRegisterMode && (
+                <>
+                  <label className="block">
+                    <span className={labelClass}>Номер телефона</span>
+                    <input
+                      className={inputClass}
+                      value={phone}
+                      onChange={(e) => setPhone(formatRuPhoneInput(e.target.value))}
+                      onKeyDown={(e) => {
+                        if (!phoneInputAllowedKeys(e)) e.preventDefault();
+                      }}
+                      placeholder="+7 900 000-00-00"
+                      inputMode="tel"
+                      autoComplete="tel"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className={labelClass}>
+                      Пароль
+                      <span className="ml-1 font-normal text-stone-400">
+                        (необязательно при сбросе админом)
+                      </span>
+                    </span>
+                    <div className="relative">
+                      <input
+                        className={`${inputClass} pr-11`}
+                        type={showPassword ? 'password' : 'text'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="current-password"
+                      />
+                      <button
+                        type="button"
+                        className={eyeBtnClass}
+                        onClick={() => setShowPassword((v) => !v)}
+                        aria-label={showPassword ? 'Показать пароль' : 'Скрыть пароль'}
+                      >
+                        {showPassword ? (
+                          <LuEye className="h-5 w-5" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <LuEyeOff className="h-5 w-5" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </div>
+                  </label>
+
+                  <div className="flex justify-start">
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-primary hover:underline"
+                      onClick={() => {
+                        setShowResetForm((v) => !v);
+                        setAdminForcedResetMode(false);
+                        setResetCodeVerified(false);
+                        setResetToken('');
+                        setResetCode('');
+                        clearStatus();
+                      }}
+                    >
+                      {showResetForm ? 'Скрыть восстановление' : 'Забыли пароль?'}
+                    </button>
+                  </div>
                 </>
               )}
 
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-stone-600">Номер телефона</span>
-                <input
-                  className={inputClass}
-                  value={phone}
-                  onChange={(e) => setPhone(formatRuPhoneInput(e.target.value))}
-                  onKeyDown={(e) => {
-                    if (!phoneInputAllowedKeys(e)) e.preventDefault();
-                  }}
-                  placeholder="+7..."
-                  inputMode="tel"
-                  autoComplete="tel"
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-stone-600">
-                  Пароль
-                  {!isRegisterMode && (
-                    <span className="ml-1 font-normal text-stone-500">
-                      (необязательно, если пароль сбросил администратор)
-                    </span>
-                  )}
-                </span>
-                <div className="relative">
-                  <input
-                    className={`${inputClass} pr-11`}
-                    type={showPassword ? 'password' : 'text'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete={isRegisterMode ? 'new-password' : 'current-password'}
-                  />
-                  <button
-                    type="button"
-                    className="absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary"
-                    onClick={() => setShowPassword((v) => !v)}
-                    aria-label={showPassword ? 'Показать пароль' : 'Скрыть пароль'}
-                  >
-                    {showPassword ? (
-                      <LuEye className="h-5 w-5" strokeWidth={2} aria-hidden />
-                    ) : (
-                      <LuEyeOff className="h-5 w-5" strokeWidth={2} aria-hidden />
-                    )}
-                  </button>
-                </div>
-              </label>
-
-              {!isRegisterMode && (
-                <div className="mt-1 flex justify-start">
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-primary hover:underline"
-                    onClick={() => {
-                      setShowResetForm((v) => !v);
-                    setAdminForcedResetMode(false);
-                      setResetCodeVerified(false);
-                      setResetToken('');
-                      setResetCode('');
-                      clearStatus();
-                    }}
-                  >
-                    {showResetForm ? 'Скрыть восстановление' : 'Забыли пароль?'}
-                  </button>
-                </div>
-              )}
-
-              {isRegisterMode && (
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-stone-600">
-                    Повторите пароль
-                  </span>
-                  <div className="relative">
-                    <input
-                      className={`${inputClass} pr-11`}
-                      type={showConfirm ? 'password' : 'text'}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      autoComplete="new-password"
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary"
-                      onClick={() => setShowConfirm((v) => !v)}
-                      aria-label={showConfirm ? 'Показать пароль' : 'Скрыть пароль'}
-                    >
-                      {showConfirm ? (
-                        <LuEye className="h-5 w-5" strokeWidth={2} aria-hidden />
-                      ) : (
-                        <LuEyeOff className="h-5 w-5" strokeWidth={2} aria-hidden />
-                      )}
-                    </button>
-                  </div>
-                </label>
-              )}
-
               {!isRegisterMode && showResetForm && (
-                <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
+                <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-3.5">
                   <p className="text-xs font-semibold text-stone-700">
                     {adminForcedResetMode
                       ? 'Администратор запросил смену пароля. Укажите новый пароль и подтвердите его.'
                       : 'Восстановление через Telegram: введите телефон, получите код в боте на привязанный аккаунт, затем задайте новый пароль.'}
                   </p>
                   <label className="mt-3 block">
-                    <span className="mb-1 block text-xs font-semibold text-stone-600">Телефон</span>
+                    <span className={labelClass}>Телефон</span>
                     <input
                       className={inputClass}
                       value={resetPhone}
@@ -785,7 +994,7 @@ export function LoginPage() {
                         </button>
                       </div>
                       <label className="mt-3 block">
-                        <span className="mb-1 block text-xs font-semibold text-stone-600">Код из Telegram</span>
+                        <span className={labelClass}>Код из Telegram</span>
                         <input
                           className={inputClass}
                           value={resetCode}
@@ -808,70 +1017,68 @@ export function LoginPage() {
                     </>
                   )}
                   {resetCodeVerified && (
-                  <>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-semibold text-stone-600">Новый пароль</span>
-                      <div className="relative">
-                        <input
-                          className={`${inputClass} pr-11`}
-                          type={showResetPassword ? 'password' : 'text'}
-                          value={resetPassword}
-                          onChange={(e) => setResetPassword(e.target.value)}
-                          autoComplete="new-password"
-                        />
+                    <>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <label className="block">
+                          <span className={labelClass}>Новый пароль</span>
+                          <div className="relative">
+                            <input
+                              className={`${inputClass} pr-11`}
+                              type={showResetPassword ? 'password' : 'text'}
+                              value={resetPassword}
+                              onChange={(e) => setResetPassword(e.target.value)}
+                              autoComplete="new-password"
+                            />
+                            <button
+                              type="button"
+                              className={eyeBtnClass}
+                              onClick={() => setShowResetPassword((v) => !v)}
+                              aria-label={showResetPassword ? 'Показать пароль' : 'Скрыть пароль'}
+                            >
+                              {showResetPassword ? (
+                                <LuEye className="h-5 w-5" strokeWidth={2} aria-hidden />
+                              ) : (
+                                <LuEyeOff className="h-5 w-5" strokeWidth={2} aria-hidden />
+                              )}
+                            </button>
+                          </div>
+                        </label>
+                        <label className="block">
+                          <span className={labelClass}>Повторите пароль</span>
+                          <div className="relative">
+                            <input
+                              className={`${inputClass} pr-11`}
+                              type={showResetConfirm ? 'password' : 'text'}
+                              value={resetConfirmPassword}
+                              onChange={(e) => setResetConfirmPassword(e.target.value)}
+                              autoComplete="new-password"
+                            />
+                            <button
+                              type="button"
+                              className={eyeBtnClass}
+                              onClick={() => setShowResetConfirm((v) => !v)}
+                              aria-label={showResetConfirm ? 'Показать пароль' : 'Скрыть пароль'}
+                            >
+                              {showResetConfirm ? (
+                                <LuEye className="h-5 w-5" strokeWidth={2} aria-hidden />
+                              ) : (
+                                <LuEyeOff className="h-5 w-5" strokeWidth={2} aria-hidden />
+                              )}
+                            </button>
+                          </div>
+                        </label>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
                         <button
                           type="button"
-                          className="absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary"
-                          onClick={() => setShowResetPassword((v) => !v)}
-                          aria-label={showResetPassword ? 'Показать пароль' : 'Скрыть пароль'}
+                          disabled={submitting}
+                          onClick={() => void submitForgotPassword()}
+                          className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-50"
                         >
-                          {showResetPassword ? (
-                            <LuEye className="h-5 w-5" strokeWidth={2} aria-hidden />
-                          ) : (
-                            <LuEyeOff className="h-5 w-5" strokeWidth={2} aria-hidden />
-                          )}
+                          Сохранить новый пароль
                         </button>
                       </div>
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-semibold text-stone-600">
-                        Повторите пароль
-                      </span>
-                      <div className="relative">
-                        <input
-                          className={`${inputClass} pr-11`}
-                          type={showResetConfirm ? 'password' : 'text'}
-                          value={resetConfirmPassword}
-                          onChange={(e) => setResetConfirmPassword(e.target.value)}
-                          autoComplete="new-password"
-                        />
-                        <button
-                          type="button"
-                          className="absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary"
-                          onClick={() => setShowResetConfirm((v) => !v)}
-                          aria-label={showResetConfirm ? 'Показать пароль' : 'Скрыть пароль'}
-                        >
-                          {showResetConfirm ? (
-                            <LuEye className="h-5 w-5" strokeWidth={2} aria-hidden />
-                          ) : (
-                            <LuEyeOff className="h-5 w-5" strokeWidth={2} aria-hidden />
-                          )}
-                        </button>
-                      </div>
-                    </label>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={submitting}
-                      onClick={() => void submitForgotPassword()}
-                      className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-50"
-                    >
-                      Сохранить новый пароль
-                    </button>
-                  </div>
-                  </>
+                    </>
                   )}
                 </div>
               )}
@@ -879,7 +1086,7 @@ export function LoginPage() {
 
             {statusText && (
               <div
-                className={`mt-3 rounded-lg px-3 py-2.5 text-sm font-semibold ${
+                className={`mt-3.5 rounded-2xl px-3.5 py-2.5 text-sm font-semibold ${
                   statusIsError
                     ? 'bg-red-500/10 text-red-700'
                     : 'bg-emerald-500/10 text-emerald-800'
@@ -890,28 +1097,64 @@ export function LoginPage() {
               </div>
             )}
 
-            <button
-              type="button"
-              disabled={submitting}
-              className="touch-manipulation mt-5 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-bold text-white shadow-md shadow-primary/25 transition-[opacity,transform] hover:opacity-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
-              onClick={() => void (isRegisterMode ? submitRegister() : submitLogin())}
-            >
-              {submitting ? (
-                <span>{isRegisterMode ? 'Создаем...' : 'Входим...'}</span>
-              ) : (
-                <>
-                  {isRegisterMode ? (
-                    <LuPenLine className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+            <div className="mt-5 flex gap-2.5">
+              {isRegisterMode && registerStep > 0 ? (
+                <button
+                  type="button"
+                  disabled={submitting}
+                  className="touch-manipulation flex min-h-[52px] w-[7.5rem] shrink-0 items-center justify-center gap-1.5 rounded-2xl border border-stone-200 bg-white text-sm font-bold text-stone-700 transition active:scale-[0.99] disabled:opacity-60"
+                  onClick={goRegisterBack}
+                >
+                  <LuArrowLeft className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                  Назад
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled={submitting}
+                className="touch-manipulation flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-white shadow-lg shadow-primary/25 transition-[opacity,transform] hover:opacity-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+                onClick={() => {
+                  if (isRegisterMode) goRegisterNext();
+                  else void submitLogin();
+                }}
+              >
+                {submitting ? (
+                  <span>{isRegisterMode ? 'Создаём…' : 'Входим…'}</span>
+                ) : isRegisterMode ? (
+                  registerStep < REGISTER_STEPS.length - 1 ? (
+                    <>
+                      <span>Далее</span>
+                      <LuArrowRight className="h-5 w-5 shrink-0" strokeWidth={2.25} aria-hidden />
+                    </>
                   ) : (
+                    <>
+                      <LuUserPlus className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+                      <span>Создать аккаунт</span>
+                    </>
+                  )
+                ) : (
+                  <>
                     <LuArrowRight className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
-                  )}
-                  <span>{isRegisterMode ? 'Зарегистрироваться' : 'Войти'}</span>
-                </>
-              )}
-            </button>
+                    <span>Войти</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
+      <style>{`
+        @keyframes authStepEnter {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .auth-step-enter {
+          animation: authStepEnter 220ms ease-out;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .auth-step-enter { animation: none; }
+        }
+      `}</style>
     </div>
   );
 }
