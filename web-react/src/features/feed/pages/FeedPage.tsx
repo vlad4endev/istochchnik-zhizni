@@ -9,6 +9,7 @@ import {
   likeProfilePost,
   repostProfilePost,
   unlikeProfilePost,
+  type ProfileFeedPostAuthor,
 } from '../../profile/publicProfileApi';
 import profileShell from '../../profile/profileShell.module.css';
 import { CommentSheet } from '../components/CommentSheet';
@@ -168,6 +169,17 @@ export function FeedPage() {
   const myUsername = me?.username?.trim() || (me ? `member-${me.id}` : '');
   const isAdmin = (me?.app_role ?? '').toLowerCase() === 'admin';
   const profileLinkState = { backTo: '/feed', backLabel: 'Лента' };
+  const myAuthor = useMemo((): ProfileFeedPostAuthor | null => {
+    if (!me) return null;
+    return {
+      member_id: me.id,
+      username: me.username?.trim() || `member-${me.id}`,
+      first_name: me.first_name,
+      last_name: me.last_name,
+      display_name: me.name || null,
+      avatar_url: me.avatar_url ?? null,
+    };
+  }, [me]);
 
   const markStoryViewedLocal = (storyId: string) => {
     qc.setQueryData<StoryAuthorGroup[]>(STORIES_KEY, (prev) => {
@@ -335,6 +347,7 @@ export function FeedPage() {
         open={commentPostId != null}
         postId={commentPostId}
         myMemberId={me?.id ?? null}
+        myAuthor={myAuthor}
         isAdmin={isAdmin}
         profileLinkState={profileLinkState}
         onClose={() => setCommentPostId(null)}

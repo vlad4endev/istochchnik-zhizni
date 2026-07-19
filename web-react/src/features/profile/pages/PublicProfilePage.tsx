@@ -18,6 +18,7 @@ import {
   likeProfilePost,
   repostProfilePost,
   type ProfileFeedPost,
+  type ProfileFeedPostAuthor,
   type ProfileFeedResponse,
   unlikeProfilePost,
 } from '../publicProfileApi';
@@ -142,6 +143,28 @@ export function PublicProfilePage() {
       avatar_url: data.profile.avatar_url,
     };
   }, [data]);
+
+  const myAuthor = useMemo((): ProfileFeedPostAuthor | null => {
+    if (!me) return null;
+    if (isOwner && data) {
+      return {
+        member_id: data.profile.member_id,
+        username: data.profile.username,
+        first_name: data.profile.first_name,
+        last_name: data.profile.last_name,
+        display_name: data.profile.display_name,
+        avatar_url: data.profile.avatar_url,
+      };
+    }
+    return {
+      member_id: me.id,
+      username: me.username?.trim() || `member-${me.id}`,
+      first_name: me.first_name,
+      last_name: me.last_name,
+      display_name: me.name || null,
+      avatar_url: me.avatar_url ?? null,
+    };
+  }, [me, isOwner, data]);
 
   const patchPost = useCallback((postId: string, patch: Partial<ProfileFeedPost>) => {
     setData((prev) => {
@@ -491,6 +514,7 @@ export function PublicProfilePage() {
         open={commentPostId != null}
         postId={commentPostId}
         myMemberId={me?.id ?? null}
+        myAuthor={myAuthor}
         isAdmin={isAdmin}
         profileLinkState={profileLinkState}
         onClose={() => setCommentPostId(null)}
