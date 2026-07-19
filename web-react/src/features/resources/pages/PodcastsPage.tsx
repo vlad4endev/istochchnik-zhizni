@@ -7,6 +7,13 @@ import { fetchPodcastFeed, fetchPodcastSettings, patchPodcastSettings, type Podc
 import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { useAuthStore } from '../../auth/authStore';
+import {
+  episodeDisplayDescription,
+  isBoilerplateDescription,
+  parseEpisodeTitle,
+} from '../utils/sermonEpisodeDisplay';
+
+type ListFilter = 'all' | 'favorites' | 'in_progress';
 
 function formatDuration(sec: number | null): string | null {
   if (sec == null || !Number.isFinite(sec) || sec <= 0) return null;
@@ -34,9 +41,18 @@ function episodeSubtitle(ep: PodcastEpisode): string {
   return parts.join(' • ');
 }
 
+function progressRatio(
+  progress: { position: number; duration: number | null } | undefined,
+): number {
+  const dur = progress?.duration ?? null;
+  const pos = progress?.position ?? 0;
+  return dur && dur > 0 ? Math.max(0, Math.min(1, pos / dur)) : 0;
+}
+
 export function PodcastsPage() {
   const qc = useQueryClient();
   const [query, setQuery] = useState('');
+  const [listFilter, setListFilter] = useState<ListFilter>('all');
   const role = useAuthStore((s) => s.role);
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -75,6 +91,10 @@ export function PodcastsPage() {
   const activeEpisode = useMemo(
     () => (activeId ? episodes.find((e) => e.id === activeId) ?? null : null),
     [activeId, episodes],
+  );
+  const activeParsed = useMemo(
+    () => (activeEpisode ? parseEpisodeTitle(activeEpisode.title) : null),
+    [activeEpisode],
   );
   const token = useAuthStore((s) => s.token);
   const storageKey = useMemo(() => {
@@ -129,21 +149,43 @@ export function PodcastsPage() {
 
   const filtered = useMemo(() => {
     const t = query.trim().toLowerCase();
-    if (!t) return episodes;
     return episodes.filter((e) => {
-      const hay = `${e.title}\n${e.description ?? ''}`.toLowerCase();
+      const ratio = progressRatio(audioState.progress[e.id]);
+      const listened = Boolean(audioState.listened[e.id]) || ratio >= 0.98;
+      const isFav = Boolean(audioState.favorites[e.id]);
+      const inProgress = ratio > 0 && !listened;
+
+      if (listFilter === 'favorites' && !isFav) return false;
+      if (listFilter === 'in_progress' && !inProgress) return false;
+
+      if (!t) return true;
+      const { topic, author } = parseEpisodeTitle(e.title);
+      const hay = `${e.title}\n${topic}\n${author ?? ''}\n${e.description ?? ''}`.toLowerCase();
       return hay.includes(t);
     });
-  }, [episodes, query]);
+  }, [episodes, query, listFilter, audioState.favorites, audioState.progress, audioState.listened]);
+
+  const filterCounts = useMemo(() => {
+    let favorites = 0;
+    let inProgress = 0;
+    for (const e of episodes) {
+      if (audioState.favorites[e.id]) favorites += 1;
+      const ratio = progressRatio(audioState.progress[e.id]);
+      const listened = Boolean(audioState.listened[e.id]) || ratio >= 0.98;
+      if (ratio > 0 && !listened) inProgress += 1;
+    }
+    return { all: episodes.length, favorites, inProgress };
+  }, [episodes, audioState.favorites, audioState.progress, audioState.listened]);
 
   useEffect(() => {
     if (!activeEpisode) return;
     try {
       const ms = (navigator as Navigator & { mediaSession?: MediaSession }).mediaSession;
       if (!ms) return;
+      const { topic, author } = parseEpisodeTitle(activeEpisode.title);
       ms.metadata = new MediaMetadata({
-        title: activeEpisode.title,
-        artist: feed?.title ?? 'Подкаст',
+        title: topic,
+        artist: author ?? feed?.title ?? 'Подкаст',
         album: feed?.title ?? undefined,
         artwork: activeEpisode.imageUrl
           ? [{ src: activeEpisode.imageUrl, sizes: '512x512', type: 'image/png' }]
@@ -184,8 +226,19 @@ export function PodcastsPage() {
     }
   }
 
+  const filterChips: { id: ListFilter; label: string; count: number }[] = [
+    { id: 'all', label: 'Все', count: filterCounts.all },
+    { id: 'favorites', label: 'Избранное', count: filterCounts.favorites },
+    { id: 'in_progress', label: 'Слушаю', count: filterCounts.inProgress },
+  ];
+
   return (
-    <div className="min-h-full bg-[var(--surface)] max-lg:pb-0 lg:pb-8">
+    <div
+      className={[
+        'min-h-full bg-[var(--surface)] lg:pb-8',
+        activeEpisode ? 'pb-[calc(var(--app-bottom-nav-total-height)+9.5rem)] lg:pb-40' : 'max-lg:pb-0',
+      ].join(' ')}
+    >
       <div className={sectionHeroStickyClass}>
         <PageHeader title="Проповеди" />
       </div>
@@ -207,7 +260,7 @@ export function PodcastsPage() {
                   </div>
                   <div className="min-w-0">
                     <h2 className="text-base font-extrabold text-stone-900 sm:text-lg md:text-xl">Аудио проповеди</h2>
-                    {feed?.description ? (
+                    {feed?.description && !isBoilerplateDescription(feed.description) ? (
                       <p className="mt-1 line-clamp-2 text-sm font-medium leading-snug text-stone-600">
                         {feed.description}
                       </p>
@@ -344,10 +397,41 @@ export function PodcastsPage() {
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Поиск по названию или описанию…"
+                  placeholder="Поиск по названию, автору или описанию…"
                   className="h-11 w-full rounded-2xl border border-stone-200 bg-white pl-10 pr-4 text-sm font-semibold text-stone-900 shadow-sm outline-none transition focus:border-primary"
                 />
               </label>
+
+              <div className="flex flex-wrap gap-2" role="tablist" aria-label="Фильтр проповедей">
+                {filterChips.map((chip) => {
+                  const selected = listFilter === chip.id;
+                  return (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      onClick={() => setListFilter(chip.id)}
+                      className={[
+                        'inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-extrabold transition',
+                        selected
+                          ? 'bg-stone-900 text-white shadow-sm'
+                          : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
+                      ].join(' ')}
+                    >
+                      {chip.label}
+                      <span
+                        className={[
+                          'tabular-nums',
+                          selected ? 'text-white/70' : 'text-stone-400',
+                        ].join(' ')}
+                      >
+                        {chip.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {q.isLoading ? (
@@ -377,27 +461,39 @@ export function PodcastsPage() {
               </div>
             ) : filtered.length === 0 ? (
               <div className="rounded-2xl border border-stone-200 bg-white/60 p-5 text-center">
-                <p className="text-sm font-semibold text-stone-700">Ничего не найдено</p>
-                <p className="mt-1 text-xs text-stone-500">Попробуйте изменить запрос поиска.</p>
+                <p className="text-sm font-semibold text-stone-700">
+                  {listFilter === 'favorites'
+                    ? 'В избранном пока пусто'
+                    : listFilter === 'in_progress'
+                      ? 'Нет проповедей в процессе прослушивания'
+                      : 'Ничего не найдено'}
+                </p>
+                <p className="mt-1 text-xs text-stone-500">
+                  {query.trim()
+                    ? 'Попробуйте изменить запрос поиска.'
+                    : listFilter === 'all'
+                      ? 'Попробуйте изменить запрос поиска.'
+                      : 'Переключитесь на «Все», чтобы увидеть полный список.'}
+                </p>
               </div>
             ) : (
               <div className="grid gap-3 sm:gap-4">
                 {filtered.map((ep) => {
                   const sub = episodeSubtitle(ep);
-                    const isActive = activeEpisode?.id === ep.id;
+                  const { topic, author } = parseEpisodeTitle(ep.title);
+                  const description = episodeDisplayDescription(ep.description, feed?.description);
+                  const isActive = activeEpisode?.id === ep.id;
                   const isFav = Boolean(audioState.favorites[ep.id]);
-                  const p = audioState.progress[ep.id];
-                  const dur = p?.duration ?? null;
-                  const pos = p?.position ?? 0;
-                  const ratio = dur && dur > 0 ? Math.max(0, Math.min(1, pos / dur)) : 0;
+                  const ratio = progressRatio(audioState.progress[ep.id]);
                   const listened = Boolean(audioState.listened[ep.id]) || ratio >= 0.98;
+                  const statusLabel = listened ? 'ПРОСЛУШАНО' : ratio > 0 ? `${Math.round(ratio * 100)}%` : 'НОВОЕ';
                   return (
                     <article
                       key={ep.id}
-                      className="rounded-3xl border border-stone-200/70 bg-white/70 p-4 shadow-sm transition hover:bg-white sm:p-5"
+                      className="overflow-hidden rounded-3xl border border-stone-200/70 bg-white/70 p-4 shadow-sm transition hover:bg-white sm:p-5"
                     >
-                      <div className="flex items-start gap-3 sm:gap-4">
-                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
+                      <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70 sm:h-16 sm:w-16">
                           {ep.imageUrl ? (
                             <img src={ep.imageUrl} alt="" className="h-full w-full object-cover" />
                           ) : (
@@ -407,64 +503,75 @@ export function PodcastsPage() {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="text-[15px] font-extrabold leading-snug text-stone-900 sm:text-base">
-                            {ep.title}
-                          </h3>
-                          {sub ? (
-                            <p className="mt-1 text-xs font-semibold text-stone-500">{sub}</p>
-                          ) : (
-                            <p className="mt-1 text-xs font-semibold text-stone-500"> </p>
-                          )}
-                          <div className="mt-2 flex items-center gap-2">
-                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-100 ring-1 ring-stone-200/60">
-                              <div className="h-full bg-primary" style={{ width: `${Math.round(ratio * 100)}%` }} />
-                            </div>
+                          <div className="flex min-w-0 items-start gap-2">
+                            <h3 className="min-w-0 flex-1 line-clamp-2 text-[15px] font-extrabold leading-snug text-stone-900 sm:text-base">
+                              {topic}
+                            </h3>
                             <span
                               className={[
-                                'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-extrabold',
-                                listened ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70' : 'bg-stone-50 text-stone-600 ring-1 ring-stone-200/70',
+                                'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold leading-none',
+                                listened
+                                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70'
+                                  : ratio > 0
+                                    ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
+                                    : 'bg-stone-100 text-stone-600 ring-1 ring-stone-200/70',
                               ].join(' ')}
                             >
-                              {listened ? 'ПРОСЛУШАНО' : ratio > 0 ? `${Math.round(ratio * 100)}%` : 'НОВОЕ'}
+                              {statusLabel}
                             </span>
                           </div>
-                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {author ? (
+                            <p className="mt-0.5 truncate text-xs font-semibold text-stone-500">{author}</p>
+                          ) : null}
+                          {sub ? (
+                            <p className="mt-1 text-xs font-semibold text-stone-500">{sub}</p>
+                          ) : null}
+                          {ratio > 0 && !listened ? (
+                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-stone-100 ring-1 ring-stone-200/60">
+                              <div className="h-full bg-primary" style={{ width: `${Math.round(ratio * 100)}%` }} />
+                            </div>
+                          ) : null}
+                          <div className="mt-3 flex w-full min-w-0 items-center gap-2">
                             <button
                               type="button"
                               onClick={() => void playEpisode(ep)}
                               className={[
-                                'inline-flex h-10 items-center gap-2 rounded-2xl px-4 text-sm font-extrabold shadow-sm transition',
+                                'inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl px-3 text-sm font-extrabold shadow-sm transition sm:flex-none sm:px-4',
                                 isActive
                                   ? 'bg-primary text-white shadow-primary/25'
                                   : 'bg-stone-900 text-white hover:bg-stone-800',
                               ].join(' ')}
                             >
-                              <LuPlay className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                              <LuPlay className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
                               {isActive ? 'В плеере' : 'Слушать'}
                             </button>
                             <button
                               type="button"
                               onClick={() => toggleFavorite(ep.id)}
                               className={[
-                                'inline-flex h-10 items-center gap-2 rounded-2xl px-4 text-sm font-extrabold shadow-sm transition',
+                                'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl shadow-sm transition sm:w-auto sm:gap-2 sm:px-3',
                                 isFav
                                   ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 hover:bg-rose-100'
                                   : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
                               ].join(' ')}
                               aria-pressed={isFav}
                               aria-label={isFav ? 'Убрать из избранного' : 'Добавить в избранное'}
+                              title={isFav ? 'В избранном' : 'В избранное'}
                             >
-                              <LuHeart className="h-4 w-4" strokeWidth={2} aria-hidden />
-                              {isFav ? 'В избранном' : 'В избранное'}
+                              <LuHeart className={['h-4 w-4', isFav ? 'fill-current' : ''].join(' ')} strokeWidth={2} aria-hidden />
+                              <span className="hidden text-sm font-extrabold sm:inline">
+                                {isFav ? 'В избранном' : 'В избранное'}
+                              </span>
                             </button>
                             {ep.pageUrl ? (
                               <button
                                 type="button"
                                 onClick={() => void tryShare(ep.title, ep.pageUrl!)}
-                                className="inline-flex h-9 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50"
+                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                                aria-label="Поделиться"
+                                title="Поделиться"
                               >
                                 <LuShare2 className="h-4 w-4" strokeWidth={2} aria-hidden />
-                                Поделиться
                               </button>
                             ) : null}
                             {ep.pageUrl ? (
@@ -472,16 +579,17 @@ export function PodcastsPage() {
                                 href={ep.pageUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex h-9 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50"
+                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                                aria-label="Открыть на сайте"
+                                title="Открыть"
                               >
                                 <LuArrowUpRight className="h-4 w-4" strokeWidth={2} aria-hidden />
-                                Открыть
                               </a>
                             ) : null}
                           </div>
-                          {ep.description ? (
+                          {description ? (
                             <p className="mt-3 line-clamp-2 text-sm font-medium leading-snug text-stone-600">
-                              {ep.description}
+                              {description}
                             </p>
                           ) : null}
                         </div>
@@ -510,9 +618,13 @@ export function PodcastsPage() {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-extrabold text-stone-900">{activeEpisode.title}</p>
+                <p className="truncate text-[13px] font-extrabold text-stone-900">
+                  {activeParsed?.topic ?? activeEpisode.title}
+                </p>
                 <p className="mt-0.5 truncate text-[11px] font-semibold text-stone-500">
-                  {episodeSubtitle(activeEpisode) || (feed?.title ?? 'Подкаст')}
+                  {activeParsed?.author
+                    ? `${activeParsed.author}${episodeSubtitle(activeEpisode) ? ` • ${episodeSubtitle(activeEpisode)}` : ''}`
+                    : episodeSubtitle(activeEpisode) || (feed?.title ?? 'Подкаст')}
                 </p>
               </div>
               <button
@@ -526,7 +638,11 @@ export function PodcastsPage() {
                 onClick={() => toggleFavorite(activeEpisode.id)}
                 aria-label="Избранное"
               >
-                <LuHeart className="h-4 w-4" strokeWidth={2} aria-hidden />
+                <LuHeart
+                  className={['h-4 w-4', audioState.favorites[activeEpisode.id] ? 'fill-current' : ''].join(' ')}
+                  strokeWidth={2}
+                  aria-hidden
+                />
               </button>
               <button
                 type="button"
@@ -599,4 +715,3 @@ export function PodcastsPage() {
     </div>
   );
 }
-
