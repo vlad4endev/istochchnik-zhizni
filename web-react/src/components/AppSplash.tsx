@@ -24,7 +24,6 @@ export function AppSplash({
         <div className="app-splash__orb app-splash__orb--1" />
         <div className="app-splash__orb app-splash__orb--2" />
         <div className="app-splash__orb app-splash__orb--3" />
-        <div className="app-splash__grain" />
       </div>
 
       <div className="app-splash__center">
@@ -32,9 +31,7 @@ export function AppSplash({
           <span className="app-splash__halo" />
           <span className="app-splash__ring" />
           <span className="app-splash__ring app-splash__ring--2" />
-          <div className="app-splash__logo-card">
-            <img src="/assets/logo.svg" alt="" className="app-splash__logo" decoding="async" />
-          </div>
+          <img src="/assets/logo.svg" alt="" className="app-splash__logo" decoding="async" />
         </div>
 
         <h1 className="app-splash__title">{title}</h1>
