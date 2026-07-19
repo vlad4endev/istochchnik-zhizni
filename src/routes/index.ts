@@ -3,6 +3,7 @@ import {
   createBroadcast,
   getActiveBroadcast,
   getBroadcastEmbed,
+  getBroadcastHistory,
   listBroadcasts,
   patchBroadcast,
   updateBroadcastEmbed,
@@ -43,6 +44,7 @@ import { profilePostUploadIfMultipart } from '../middleware/profileMediaUpload';
 const router = Router();
 
 router.get('/broadcasts/active', getActiveBroadcast);
+router.get('/broadcasts/history', requireAuthSession, getBroadcastHistory);
 router.get('/broadcasts', requireBroadcastManager, listBroadcasts);
 router.post('/broadcasts', requireBroadcastManager, createBroadcast);
 router.patch('/broadcasts/:id', requireBroadcastManager, patchBroadcast);

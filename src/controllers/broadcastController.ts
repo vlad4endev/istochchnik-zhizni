@@ -43,6 +43,25 @@ function normalizePlatform(v: unknown, fallback: BroadcastPlatform): BroadcastPl
   return fallback;
 }
 
+/** Длительность слота эфира — совпадает с фронтом (BROADCAST_SLOT_MS = 2 ч). */
+const BROADCAST_SLOT_INTERVAL = `INTERVAL '2 hours'`;
+
+/**
+ * Помечает эфиры со статусом live/scheduled как finished, если слот уже закончился.
+ * Нужно, чтобы история записей заполнялась без ручного PATCH.
+ */
+async function expireElapsedBroadcasts(): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `UPDATE broadcasts
+        SET status = 'finished',
+            updated_at = NOW()
+      WHERE status IN ('live', 'scheduled')
+        AND starts_at IS NOT NULL
+        AND starts_at + ${BROADCAST_SLOT_INTERVAL} < NOW()`,
+  );
+}
+
 async function ensureBroadcastSchema(): Promise<void> {
   if (!pool) return;
   await pool.query(`
@@ -86,6 +105,7 @@ export async function getActiveBroadcast(_req: Request, res: Response): Promise<
   }
   try {
     await ensureBroadcastSchema();
+    await expireElapsedBroadcasts();
     const { rows } = await pool.query(
       `SELECT id, title, description, ${BROADCAST_STARTS_AT_SELECT}, platform, stream_url, notify_members, is_public, status, notification_sent
          FROM broadcasts
@@ -97,6 +117,34 @@ export async function getActiveBroadcast(_req: Request, res: Response): Promise<
     res.json({ broadcast: rows[0] ?? null });
   } catch (error) {
     console.error('getActiveBroadcast error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/** История завершённых трансляций с записью — доступна участникам церкви. */
+export async function getBroadcastHistory(req: Request, res: Response): Promise<void> {
+  if (!pool) {
+    res.status(503).json({ error: 'Database pool is not initialized' });
+    return;
+  }
+  try {
+    await ensureBroadcastSchema();
+    await expireElapsedBroadcasts();
+    const rawLimit = Number(req.query.limit ?? 30);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 50) : 30;
+    const { rows } = await pool.query(
+      `SELECT id, title, description, ${BROADCAST_STARTS_AT_SELECT}, platform, stream_url, notify_members, is_public, status, notification_sent
+         FROM broadcasts
+        WHERE status = 'finished'
+          AND stream_url IS NOT NULL
+          AND TRIM(stream_url) <> ''
+        ORDER BY starts_at DESC NULLS LAST, id DESC
+        LIMIT $1`,
+      [limit],
+    );
+    res.json({ items: rows });
+  } catch (error) {
+    console.error('getBroadcastHistory error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

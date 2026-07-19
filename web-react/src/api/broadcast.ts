@@ -50,6 +50,14 @@ export async function fetchFinishedBroadcasts(limit = 10): Promise<BroadcastList
   return data;
 }
 
+/** История записей для всех авторизованных участников. */
+export async function fetchBroadcastHistory(limit = 30): Promise<BroadcastListResponse> {
+  const { data } = await apiClient.get<BroadcastListResponse>('/api/broadcasts/history', {
+    params: { limit },
+  });
+  return data;
+}
+
 export async function fetchBroadcastEmbed(): Promise<LegacyBroadcastEmbedData> {
   const { data } = await apiClient.get<LegacyBroadcastEmbedData>('/api/broadcast');
   return data;
