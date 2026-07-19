@@ -96,7 +96,7 @@ export function MessengerPage() {
    */
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const stackLayout = window.matchMedia('(max-width: 768px)').matches;
+    const stackLayout = window.matchMedia('(max-width: 1023px)').matches;
     if (!stackLayout) return;
     if (mobileView === 'chat') {
       dispatchLayoutMainChrome(false);
@@ -147,9 +147,9 @@ export function MessengerPage() {
   const handleBack = useCallback(() => {
     blurActiveElement();
     runTransitionWindow();
-    // Совпадает с messenger.css (split ≥769px) и messengerReadSurface (≤768px «только чат»).
+    // Совпадает с messenger.css (split ≥1024px) и messengerReadSurface (≤1023px «только чат»).
     const stackLayout =
-      typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
     // В одноколоночном режиме «назад» снимает выбор: иначе ChatWindow остаётся смонтированным
     // и продолжает markAsRead / WS auto-read, пока виден только список.
     if (activeId && (stackLayout || isDraftPrivateConversationId(activeId))) {

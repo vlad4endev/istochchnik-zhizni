@@ -627,92 +627,89 @@ export function EventsCalendarPage() {
 
         {mode === 'month' ? (
           <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)]">
-            <p className="border-b border-stone-100 bg-stone-50/50 px-3 py-2 text-center text-[11px] font-semibold text-stone-400 sm:hidden">
-              Свайпните таблицу, чтобы увидеть все дни
-            </p>
-            <div className="max-sm:overflow-x-auto max-sm:overscroll-x-contain max-sm:pb-1 sm:overflow-visible">
-              <div>
-                <div className="grid min-w-[560px] grid-cols-7 border-b border-stone-100 bg-stone-50/90 sm:min-w-0">
-                  {weekdayLabelsMonFirst.map((wd) => (
+            <div>
+              <div className="grid grid-cols-7 border-b border-stone-100 bg-stone-50/90">
+                {weekdayLabelsMonFirst.map((wd) => (
+                  <div
+                    key={wd}
+                    className="px-0.5 py-1.5 text-center text-[9px] font-extrabold uppercase tracking-wide text-stone-500 sm:px-1 sm:py-2 sm:text-xs"
+                  >
+                    {wd}
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-px bg-stone-100">
+                {monthGridDays.map((day) => {
+                  const inMonth = isSameMonth(day, cursorDate);
+                  const today = isToday(day);
+                  const occ = listOccurrencesOnLocalDay(day, items, occOverrides);
+                  const visible = occ.slice(0, 2);
+                  const more = occ.length - visible.length;
+                  return (
                     <div
-                      key={wd}
-                      className="px-0.5 py-2 text-center text-[10px] font-extrabold uppercase tracking-wide text-stone-500 sm:px-1 sm:text-xs"
-                    >
-                      {wd}
-                    </div>
-                  ))}
-                </div>
-                <div className="grid min-w-[560px] grid-cols-7 gap-px bg-stone-100 sm:min-w-0">
-                  {monthGridDays.map((day) => {
-                    const inMonth = isSameMonth(day, cursorDate);
-                    const today = isToday(day);
-                    const occ = listOccurrencesOnLocalDay(day, items, occOverrides);
-                    const visible = occ.slice(0, 3);
-                    const more = occ.length - visible.length;
-                    return (
-                      <div
-                        key={day.toISOString()}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => {
+                      key={day.toISOString()}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        setCursorDate(day);
+                        setMode('day');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
                           setCursorDate(day);
                           setMode('day');
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            setCursorDate(day);
-                            setMode('day');
-                          }
-                        }}
+                        }
+                      }}
+                      className={[
+                        'tap-highlight-transparent flex min-h-[72px] cursor-pointer flex-col items-stretch gap-0.5 bg-white p-1 text-left transition-colors active:bg-stone-50 sm:min-h-[120px] sm:gap-1 sm:hover:bg-emerald-50/40 sm:p-2',
+                        !inMonth ? 'opacity-40' : '',
+                        today ? 'ring-1 ring-inset ring-[#1A9A55]/40' : '',
+                      ].join(' ')}
+                    >
+                      <span
                         className={[
-                          'tap-highlight-transparent flex min-h-[104px] cursor-pointer flex-col items-stretch gap-1 bg-white p-1.5 text-left transition-colors active:bg-stone-50 sm:min-h-[120px] sm:hover:bg-emerald-50/40 sm:p-2',
-                          !inMonth ? 'opacity-40' : '',
-                          today ? 'ring-1 ring-inset ring-[#1A9A55]/40' : '',
+                          'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-extrabold sm:h-8 sm:w-8 sm:text-sm',
+                          today ? 'bg-[#1A9A55] text-white' : 'text-stone-800',
                         ].join(' ')}
                       >
-                        <span
-                          className={[
-                            'flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-extrabold sm:h-8 sm:w-8 sm:text-sm',
-                            today ? 'bg-[#1A9A55] text-white' : 'text-stone-800',
-                          ].join(' ')}
-                        >
-                          {format(day, 'd')}
-                        </span>
-                        <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden sm:gap-1">
-                          {eventsQ.isPending ? (
-                            <span className="text-[10px] font-semibold text-stone-400">…</span>
-                          ) : (
-                            visible.map((o) => {
-                              const tone = EVENT_TONE_STYLES[eventToneIndex(o.item.id)];
-                              return (
-                                <button
-                                  key={`${o.item.id}-${o.startsAt.getTime()}`}
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openOccurrence(o);
-                                  }}
-                                  className={[
-                                    'tap-highlight-transparent w-full min-h-[32px] truncate rounded-md px-1.5 py-1 text-left text-[10px] font-bold leading-tight ring-1 sm:min-h-0 sm:py-0.5 sm:text-[11px]',
-                                    'touch-manipulation',
-                                    tone.monthChip,
-                                  ].join(' ')}
-                                >
-                                  <span className={tone.monthTime}>{format(o.startsAt, 'HH:mm')}</span>{' '}
-                                  <span className={tone.monthTitle}>{(o.item.title ?? '').trim() || 'Событие'}</span>
-                                </button>
-                              );
-                            })
-                          )}
-                          {!eventsQ.isPending && more > 0 ? (
-                            <span className="text-[10px] font-bold text-stone-500">+ещё {more}</span>
-                          ) : null}
-                        </div>
+                        {format(day, 'd')}
+                      </span>
+                      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden sm:gap-1">
+                        {eventsQ.isPending ? (
+                          <span className="text-[10px] font-semibold text-stone-400">…</span>
+                        ) : (
+                          visible.map((o) => {
+                            const tone = EVENT_TONE_STYLES[eventToneIndex(o.item.id)];
+                            return (
+                              <button
+                                key={`${o.item.id}-${o.startsAt.getTime()}`}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openOccurrence(o);
+                                }}
+                                className={[
+                                  'tap-highlight-transparent w-full min-h-0 truncate rounded-md px-1 py-0.5 text-left text-[9px] font-bold leading-tight ring-1 sm:text-[11px]',
+                                  'touch-manipulation',
+                                  tone.monthChip,
+                                ].join(' ')}
+                              >
+                                <span className={tone.monthTime}>{format(o.startsAt, 'HH:mm')}</span>{' '}
+                                <span className={`hidden sm:inline ${tone.monthTitle}`}>
+                                  {(o.item.title ?? '').trim() || 'Событие'}
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
+                        {!eventsQ.isPending && more > 0 ? (
+                          <span className="text-[9px] font-bold text-stone-500 sm:text-[10px]">+{more}</span>
+                        ) : null}
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </section>
@@ -785,7 +782,10 @@ export function EventsCalendarPage() {
               })}
             </section>
 
-            <section className="hidden overflow-x-auto rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)] [-webkit-overflow-scrolling:touch] lg:block">
+            <section
+              data-scroll-hint
+              className="hidden overflow-x-auto rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)] [-webkit-overflow-scrolling:touch] lg:block"
+            >
               <div className="grid min-w-[720px] grid-cols-7 divide-x divide-stone-100">
                 {weekDays.map((day) => {
                   const occ = listOccurrencesOnLocalDay(day, items, occOverrides);

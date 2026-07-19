@@ -137,7 +137,7 @@ const DIALOG_STYLES = `
     font-weight: 600;
     color: #b91c1c;
   }
-  @media (min-width: 769px) {
+  @media (min-width: 1024px) {
     .tg-dialog-overlay {
       align-items: center;
     }

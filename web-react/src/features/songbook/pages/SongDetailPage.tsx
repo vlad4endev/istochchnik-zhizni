@@ -3,6 +3,7 @@ import { type CSSProperties, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { LuArrowLeft, LuMinus, LuPlus, LuSettings2, LuX } from 'react-icons/lu';
 
+import { useMobileBottomNavLock } from '@/app/useMobileBottomNavLock';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
@@ -66,6 +67,7 @@ export function SongDetailPage() {
   const [showChords, setShowChords] = useState(true);
   const [fontSize, setFontSize] = useState(18);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  useMobileBottomNavLock(settingsOpen);
 
   const q = useQuery({
     queryKey: keys.song(songId),
@@ -312,7 +314,7 @@ export function SongDetailPage() {
         </>
       ) : null}
 
-      <main className="min-h-0 flex-1 overflow-y-auto px-3 py-3 [webkit-overflow-scrolling:touch] md:px-4">
+      <main className="min-h-0 flex-1 overflow-y-auto overflow-x-auto px-3 py-3 [webkit-overflow-scrolling:touch] md:px-4">
         <LyricsWithChords
           text={effectiveContent}
           transposeSemitones={currentShift}
@@ -320,12 +322,12 @@ export function SongDetailPage() {
           fontSizePx={stageMode ? 22 : fontSize}
           chordTone={stageMode ? 'dark' : 'light'}
           className={[
-            'songbook-reader rounded-2xl border border-[var(--sd-border)] bg-[var(--sd-surface-elevated)] p-5',
+            'songbook-reader max-w-full rounded-2xl border border-[var(--sd-border)] bg-[var(--sd-surface-elevated)] p-5',
             'font-sans leading-relaxed text-[var(--sd-text)]',
             stageMode ? 'songbook-reader--stage' : '',
           ].join(' ')}
         />
-        <div className="h-[calc(var(--app-bottom-nav-total-height)+12px)]" />
+        {!stageMode ? <div className="h-[calc(var(--app-bottom-nav-total-height)+12px)]" aria-hidden /> : null}
       </main>
     </div>
   );

@@ -80,7 +80,8 @@ export function useImpersonationBodyOffset(active: boolean): void {
   useEffect(() => {
     if (!active) return;
     const prev = document.body.style.paddingTop;
-    document.body.style.paddingTop = '40px';
+    /* Banner content ~40px + notch safe-area */
+    document.body.style.paddingTop = 'calc(40px + env(safe-area-inset-top, 0px))';
     return () => {
       document.body.style.paddingTop = prev;
     };

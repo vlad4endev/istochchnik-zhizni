@@ -2,6 +2,7 @@ import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-p
 import { useEffect, useState } from 'react';
 import { LuGripVertical, LuLoaderCircle, LuPencil, LuTrash2, LuX } from 'react-icons/lu';
 
+import { useMobileBottomNavLock } from '../../../app/useMobileBottomNavLock';
 import type { MusicRole } from '../types';
 
 const COLOR_PRESETS = [
@@ -47,6 +48,7 @@ export function RolesSettingsModal({
   const [editRoleFilter, setEditRoleFilter] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useMobileBottomNavLock(open);
 
   useEffect(() => {
     if (open) {

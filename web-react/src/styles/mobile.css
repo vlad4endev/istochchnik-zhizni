@@ -119,15 +119,13 @@
     display: none !important;
   }
 
+  /* Только legacy dashboard/widgets — не трогаем Tailwind grid-cols-* в формах и галереях. */
   .dashboard-grid,
-  [class*='widgets-grid'],
-  .grid-cols-3,
-  .grid-cols-2 {
+  [class*='widgets-grid'] {
     grid-template-columns: 1fr !important;
     gap: 12px !important;
   }
 
-  /* Нижний лист «Все разделы»: возвращаем многоколоночную сетку поверх общего grid-cols-* fallback. */
   .app-mobile-sections-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 10px !important;
@@ -416,32 +414,37 @@
     display: inline !important;
   }
 
-  input,
-  textarea,
-  select {
-    width: 100% !important;
-    min-height: 44px !important;
-    font-size: 16px !important;
-    padding: 10px 12px !important;
-    box-sizing: border-box !important;
+  /* iOS zoom: текстовые поля ≥16px. Не форсим width/min-height на все controls. */
+  .page-content form input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='range']):not([type='file']):not([type='color']):not([type='button']):not([type='submit']):not([type='reset']),
+  .page-content form textarea,
+  .page-content form select {
+    width: 100%;
+    min-height: 44px;
+    font-size: 16px;
+    padding: 10px 12px;
+    box-sizing: border-box;
   }
-  textarea {
-    min-height: 100px !important;
+  .page-content form textarea {
+    min-height: 100px;
   }
   input[type='text'],
   input[type='email'],
   input[type='tel'],
   input[type='password'],
+  input[type='search'],
+  input[type='url'],
   input[type='date'],
   input[type='time'],
   input[type='number'],
+  textarea,
   select {
-    font-size: 16px !important;
+    font-size: 16px;
   }
-  button,
-  .btn {
-    min-height: 44px !important;
-    min-width: 44px !important;
+  .btn,
+  .tap-target,
+  .studio-touch-target {
+    min-height: 44px;
+    min-width: 44px;
   }
   .card,
   [class*='section-card'],

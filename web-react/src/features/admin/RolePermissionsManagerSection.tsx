@@ -315,53 +315,88 @@ function MatrixCategoryTable({
   onToggle: (role: AppRole, id: AppPermissionId, next: boolean) => Promise<void>;
 }) {
   return (
-    <div className="min-w-[720px] rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
+    <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
       <div className="border-b border-stone-200/80 px-4 py-3">
         <h4 className="text-sm font-bold text-[var(--text)]">{cat.label}</h4>
         <p className="text-xs text-[var(--text-muted)]">{cat.description}</p>
       </div>
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-stone-200/80 bg-stone-50/50 dark:bg-[var(--surface)]">
-            <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--text-muted)]">Функция</th>
-            {APP_ROLE_IDS.map((roleId) => (
-              <th
-                key={roleId}
-                className="px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]"
-                title={appRoleLabel(roleId)}
-              >
-                {appRoleLabel(roleId).slice(0, 4)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {defs.map((def) => (
-            <tr key={def.id} className="border-b border-stone-100 last:border-0">
-              <td className="px-3 py-2">
-                <div className="font-medium text-[var(--text)]">{def.label}</div>
-                <div className="text-[10px] text-[var(--text-muted)]">{def.description}</div>
-              </td>
+
+      {/* Mobile: stacked permission cards */}
+      <div className="space-y-3 p-3 lg:hidden">
+        {defs.map((def) => (
+          <div key={def.id} className="rounded-xl border border-stone-200/70 bg-[var(--surface)] p-3">
+            <div className="font-medium text-[var(--text)]">{def.label}</div>
+            <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{def.description}</div>
+            <ul className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
               {APP_ROLE_IDS.map((roleId) => {
                 const checked = Boolean(data.roles[roleId]?.[def.id]);
                 const locked = isPermissionLocked(roleId, def.id);
                 return (
-                  <td key={roleId} className="px-2 py-2 text-center">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-stone-300 text-primary focus:ring-primary disabled:opacity-40"
-                      checked={checked}
-                      disabled={isBusy || locked}
-                      title={locked ? 'Обязательное право администратора' : def.label}
-                      onChange={() => void onToggle(roleId, def.id, !checked)}
-                    />
-                  </td>
+                  <li key={roleId}>
+                    <label className="flex min-h-10 items-center gap-2 rounded-lg px-1.5 py-1 text-sm text-[var(--text-secondary)]">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 rounded border-stone-300 text-primary focus:ring-primary disabled:opacity-40"
+                        checked={checked}
+                        disabled={isBusy || locked}
+                        title={locked ? 'Обязательное право администратора' : def.label}
+                        onChange={() => void onToggle(roleId, def.id, !checked)}
+                      />
+                      <span className="min-w-0 truncate">{appRoleLabel(roleId)}</span>
+                    </label>
+                  </li>
                 );
               })}
+            </ul>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop matrix */}
+      <div data-scroll-hint className="hidden overflow-x-auto lg:block">
+        <table className="w-full min-w-[720px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-stone-200/80 bg-stone-50/50 dark:bg-[var(--surface)]">
+              <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--text-muted)]">Функция</th>
+              {APP_ROLE_IDS.map((roleId) => (
+                <th
+                  key={roleId}
+                  className="px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]"
+                  title={appRoleLabel(roleId)}
+                >
+                  {appRoleLabel(roleId).slice(0, 4)}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {defs.map((def) => (
+              <tr key={def.id} className="border-b border-stone-100 last:border-0">
+                <td className="px-3 py-2">
+                  <div className="font-medium text-[var(--text)]">{def.label}</div>
+                  <div className="text-[10px] text-[var(--text-muted)]">{def.description}</div>
+                </td>
+                {APP_ROLE_IDS.map((roleId) => {
+                  const checked = Boolean(data.roles[roleId]?.[def.id]);
+                  const locked = isPermissionLocked(roleId, def.id);
+                  return (
+                    <td key={roleId} className="px-2 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-stone-300 text-primary focus:ring-primary disabled:opacity-40"
+                        checked={checked}
+                        disabled={isBusy || locked}
+                        title={locked ? 'Обязательное право администратора' : def.label}
+                        onChange={() => void onToggle(roleId, def.id, !checked)}
+                      />
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

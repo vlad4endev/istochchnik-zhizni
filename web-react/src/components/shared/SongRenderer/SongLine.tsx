@@ -1,5 +1,6 @@
 import type { ChordAnchor, ParsedChordLine } from './chordParser';
 import { splitGraphemeClusters } from './chordParser';
+import { ChordsRow } from './ChordsRow';
 
 type SongLineProps = {
   line: ParsedChordLine;
@@ -58,12 +59,21 @@ function buildFromAnchors(chords: ChordAnchor[]): string {
   return cells.join('').trimEnd();
 }
 
+/** Approximate left offset for proportional fonts from grapheme index. */
+export function chordLeftPercent(position: number, graphemeCount: number): string {
+  if (graphemeCount <= 0) return '0%';
+  const clamped = Math.max(0, Math.min(position, graphemeCount));
+  return `${(clamped / graphemeCount) * 100}%`;
+}
+
 export function SongLine({ line, chordsVisible, chordTone, layoutMode, className = '' }: SongLineProps) {
   const text = typeof line.text === 'string' ? line.text : '';
   const graphemes = splitGraphemeClusters(text);
   const normalizedChords = resolveOverlaps(line.chords ?? []);
   const chordToneClass = chordTone === 'dark' ? 'text-amber-300' : 'text-[#2563EB]';
-  const rootClassName = ['line-pair w-full min-w-0', className].filter(Boolean).join(' ');
+  const rootClassName = ['line-pair w-full min-w-0 max-w-full overflow-x-auto', className]
+    .filter(Boolean)
+    .join(' ');
 
   const hasText = graphemes.length > 0;
   const hasChords = normalizedChords.length > 0;
@@ -94,31 +104,35 @@ export function SongLine({ line, chordsVisible, chordTone, layoutMode, className
     );
   }
 
-  const chordLine = buildChordLine(text, normalizedChords);
+  if (layoutMode === 'measured') {
+    const measuredChords = normalizedChords.map((chord, index) => ({
+      key: `${chord.position}-${index}`,
+      label: chord.chord,
+      left: chordLeftPercent(chord.position, graphemes.length),
+    }));
 
-  if (layoutMode === 'mono') {
     return (
       <div className={rootClassName} data-layout-mode={layoutMode}>
-        {chordLine.trim() !== '' && (
-          <pre
-            className={['chord-line m-0 overflow-visible p-0 whitespace-pre', chordToneClass].join(' ')}
-          >
-            {chordLine}
-          </pre>
-        )}
-        <pre className="lyric-line lyric-line--mono m-0 overflow-visible p-0 whitespace-pre-wrap">{text}</pre>
+        <div className="relative inline-block min-w-full whitespace-nowrap">
+          <ChordsRow chords={measuredChords} visible={chordsVisible} tone={chordTone} />
+          <p className="lyric-line m-0 overflow-visible p-0 whitespace-pre">{text}</p>
+        </div>
       </div>
     );
   }
 
+  const chordLine = buildChordLine(text, normalizedChords);
+
   return (
     <div className={rootClassName} data-layout-mode={layoutMode}>
-      {chordLine.trim() !== '' && (
-        <pre className={['chord-line m-0 overflow-visible p-0 whitespace-pre', chordToneClass].join(' ')}>
-          {chordLine}
-        </pre>
-      )}
-      <p className="lyric-line m-0 overflow-visible p-0 whitespace-pre-wrap">{text}</p>
+      <div className="inline-block min-w-full font-mono">
+        {chordLine.trim() !== '' && (
+          <pre className={['chord-line m-0 overflow-visible p-0 whitespace-pre', chordToneClass].join(' ')}>
+            {chordLine}
+          </pre>
+        )}
+        <pre className="lyric-line lyric-line--mono m-0 overflow-visible p-0 whitespace-pre">{text}</pre>
+      </div>
     </div>
   );
 }

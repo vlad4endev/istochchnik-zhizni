@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useMobileBottomNavLock } from '../app/useMobileBottomNavLock';
 import { emitAppToast } from '../lib/uiFeedback';
 import {
   isCapacitorNative,
@@ -42,6 +43,7 @@ export function PermissionsRequestModal() {
   const [notif, setNotif] = useState<PermissionStateLike>('unknown');
   const [busy, setBusy] = useState(false);
   const dismissedRef = useRef(false);
+  useMobileBottomNavLock(open);
 
   useEffect(() => {
     if (!token) return;

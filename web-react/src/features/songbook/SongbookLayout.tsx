@@ -1,9 +1,11 @@
 import { Outlet } from 'react-router-dom';
 
+import { useMobileBottomNavLock } from '../../app/useMobileBottomNavLock';
 import { SongbookChromeProvider, useSongbookChrome } from './SongbookChromeContext';
 
 function SongbookShell() {
   const { stageMode } = useSongbookChrome();
+  useMobileBottomNavLock(stageMode);
 
   return (
     <div
@@ -13,7 +15,7 @@ function SongbookShell() {
         stageMode ? 'songbook-stage bg-[#030303] text-zinc-100' : 'bg-[var(--surface)] text-[var(--text)]',
       ].join(' ')}
     >
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-2 pt-1">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto pb-2 pt-1">
         <Outlet />
       </div>
     </div>

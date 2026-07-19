@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import Picker from '@emoji-mart/react';
 import emojiData from '@emoji-mart/data';
 import { LuPlus, LuSmile, LuTrash2 } from 'react-icons/lu';
+import { useMobileBottomNavLock } from '../../../app/useMobileBottomNavLock';
 import { useChatStore } from '../chatStore';
 
 type PopoverPos = { bottomPx: number; leftPx?: number; rightPx?: number } | null;
@@ -76,6 +77,7 @@ export function PollCreateModal({ open, onClose, conversationId }: PollCreateMod
   /** `question` или индекс варианта — открыт picker эмодзи для этого поля */
   const [emojiField, setEmojiField] = useState<'question' | number | null>(null);
   const [emojiPos, setEmojiPos] = useState<PopoverPos>(null);
+  useMobileBottomNavLock(open);
 
   const questionRef = useRef<HTMLTextAreaElement>(null);
   const optionElRef = useRef<Map<number, HTMLInputElement>>(new Map());

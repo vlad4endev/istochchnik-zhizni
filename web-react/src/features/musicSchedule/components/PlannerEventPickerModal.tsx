@@ -4,6 +4,7 @@ import { format, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { LuLoaderCircle, LuSearch, LuX } from 'react-icons/lu';
 
+import { useMobileBottomNavLock } from '../../../app/useMobileBottomNavLock';
 import { fetchServicePlans, type ServicePlanListItem } from '../../servicePlanner/api';
 import { formatPlannerEventLabel } from '../types';
 
@@ -17,6 +18,7 @@ type Props = {
 
 export function PlannerEventPickerModal({ open, onClose, from, to, onSelect }: Props) {
   const [search, setSearch] = useState('');
+  useMobileBottomNavLock(open);
 
   const plansQ = useQuery({
     queryKey: ['service-plans', 'music-picker', from.toISOString(), to.toISOString()],

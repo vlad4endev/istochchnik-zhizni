@@ -16,6 +16,7 @@ import {
 } from 'react-icons/lu';
 import axios from 'axios';
 
+import { useMobileBottomNavLock } from '../../../app/useMobileBottomNavLock';
 import { apiClient } from '../../../lib/apiClient';
 import { extractTextFromPdfBufferWithMeta } from './extractTextFromPdf';
 import { analyzeImportedSongText, type ImportedTextAnalysis } from './analyzeImportedSongText';
@@ -55,6 +56,7 @@ export function SmartImportModal({
 }: Props) {
   const isStudio = variant === 'studio';
   const baseId = useId();
+  useMobileBottomNavLock(open);
   const [tab, setTab] = useState<SmartImportSourceTab>('text');
   const [raw, setRaw] = useState(initialRaw);
   const [dropActive, setDropActive] = useState(false);
