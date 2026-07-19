@@ -317,13 +317,15 @@
   .song-view-content {
     padding: 0 4px !important;
   }
+  /* Keep chord/lyric sizes aligned so mono chord rows don't drift on Android. */
   .chord-line {
-    font-size: 13px !important;
+    font-size: 15px !important;
     letter-spacing: 0 !important;
+    line-height: 1.45 !important;
   }
   .lyric-line {
-    font-size: 17px !important;
-    line-height: 1.6 !important;
+    font-size: 15px !important;
+    line-height: 1.65 !important;
   }
   .song-header-toolbar {
     flex-wrap: wrap !important;
