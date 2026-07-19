@@ -50,8 +50,8 @@ textarea {
    */
   --app-bottom-nav-safe-pad: env(safe-area-inset-bottom, 0px);
   --app-safe-top: env(safe-area-inset-top, 0px);
-  --app-bottom-nav-bar-height: 60px;
-  --app-bottom-nav-row-pad-y: 0.25rem; /* pt-1.5 на обёртке ряда табов */
+  --app-bottom-nav-bar-height: 58px;
+  --app-bottom-nav-row-pad-y: 0.25rem; /* pt-1 на обёртке ряда табов */
   /* Только «тело» таб-бара — отступ main под фикс. панель без второго env(safe-area). */
   --app-bottom-nav-main-gutter: calc(
     var(--app-bottom-nav-bar-height) + var(--app-bottom-nav-row-pad-y)
