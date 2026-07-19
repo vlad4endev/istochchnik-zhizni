@@ -7,10 +7,12 @@ import {
   deleteCommentAsOwnerOrAdmin,
   deletePostAsOwner,
   getChurchFeed,
+  getFeedUnreadCount,
   getProfileWithFeed,
   getProfileWithFeedByUsername,
   likePost,
   listComments,
+  markFeedSeen,
   patchMyProfileSettings,
   unlikePost,
   updatePostCaptionAsOwner,
@@ -318,6 +320,39 @@ export async function getFeed(req: Request, res: Response): Promise<void> {
     res.json(data);
   } catch (e) {
     console.error('[profile] getFeed error:', e);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function getFeedUnread(req: Request, res: Response): Promise<void> {
+  const authUserId = (req as AuthReq).authUserId;
+  if (!authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  try {
+    const count = await getFeedUnreadCount(authUserId);
+    res.json({ count });
+  } catch (e) {
+    console.error('[profile] getFeedUnread error:', e);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function postFeedMarkSeen(req: Request, res: Response): Promise<void> {
+  const authUserId = (req as AuthReq).authUserId;
+  if (!authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const body = req.body as { seen_at?: unknown } | undefined;
+  const seenAt =
+    typeof body?.seen_at === 'string' && body.seen_at.trim().length > 0 ? body.seen_at.trim() : null;
+  try {
+    const data = await markFeedSeen(authUserId, seenAt);
+    res.json({ ok: true, ...data });
+  } catch (e) {
+    console.error('[profile] postFeedMarkSeen error:', e);
     res.status(500).json({ error: 'Database error' });
   }
 }

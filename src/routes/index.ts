@@ -17,6 +17,7 @@ import {
   deleteLike,
   deletePost,
   getFeed,
+  getFeedUnread,
   getPostComments,
   getProfile,
   getProfileByUsername,
@@ -24,6 +25,7 @@ import {
   patchProfileSettings,
   postComment,
   postCreatePost,
+  postFeedMarkSeen,
   postLike,
   postRepost,
 } from '../controllers/profileController';
@@ -62,6 +64,8 @@ router.get('/profile/:id', getProfile);
 router.patch('/profile/settings', requireAuthSession, patchProfileSettings);
 
 router.get('/feed', requireAuthSession, getFeed);
+router.get('/feed/unread-count', requireAuthSession, getFeedUnread);
+router.post('/feed/mark-seen', requireAuthSession, postFeedMarkSeen);
 
 router.get('/stories', requireAuthSession, getStories);
 router.post('/stories', requireAuthSession, profilePostUploadIfMultipart, postCreateStory);
