@@ -243,15 +243,9 @@ const PrivateChatOnlineIndicator = memo(function PrivateChatOnlineIndicator({
   memberId: number;
 }) {
   const isOnline = useChatStore((s) => s.onlineMembers.has(memberId));
-  return (
-    <span
-      className={[
-        'pointer-events-none absolute bottom-0 right-0 z-10 h-3 w-3 rounded-full border-[2px] border-[var(--surface-elevated)]',
-        isOnline ? 'bg-emerald-500' : 'bg-gray-300',
-      ].join(' ')}
-      aria-hidden
-    />
-  );
+  /* Как в UI-ките: точка только когда человек в сети (серый offline не рисуем). */
+  if (!isOnline) return null;
+  return <span className="chatlist-online chatlist-online--on" aria-hidden />;
 });
 
 function ChatListItem({
@@ -481,7 +475,7 @@ function ChatListItem({
         <div
           className={[
             'flex min-w-0 flex-1 flex-col justify-center py-2 pr-3',
-            !isLast ? 'border-b border-stone-200/60' : '',
+            !isLast ? 'border-b border-[color:var(--tg-row-divider,var(--tg-border))]' : '',
           ].join(' ')}
         >
           <div className="flex min-w-0 items-baseline justify-between gap-2">
