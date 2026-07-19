@@ -888,9 +888,10 @@ nav.app-bottom-nav .app-bottom-nav__row {
   align-items: stretch;
   width: 100%;
   min-width: 0;
+  /* content-box: pt ряда суммируется с min-height → совпадает с --app-bottom-nav-main-gutter */
+  box-sizing: content-box;
   min-height: var(--app-bottom-nav-bar-height);
   padding: var(--app-bottom-nav-row-pad-y) 0.125rem 0;
-  box-sizing: border-box;
 }
 
 nav.app-bottom-nav .app-bottom-nav__cell {
