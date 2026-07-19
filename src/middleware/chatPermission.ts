@@ -166,11 +166,11 @@ export function checkChatPermission(action: Action) {
           action === 'set_permissions' ||
           action === 'manage_chat')
       ) {
-        return deny(res, 403, 'Чат Ассистенота личный: управление участниками недоступно.');
+        return deny(res, 403, 'Чат «ИИ помощник» личный: управление участниками недоступно.');
       }
 
       if (action === 'send_media' && svc.isMessengerAssistantChannelMetadata(meta.metadata)) {
-        return deny(res, 403, 'В чате Ассистенота доступна только текстовая переписка.');
+        return deny(res, 403, 'В чате «ИИ помощник» доступна только текстовая переписка.');
       }
 
       step = 'getParticipantChatAuthRow';

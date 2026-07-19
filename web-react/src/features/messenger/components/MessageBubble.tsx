@@ -867,7 +867,7 @@ interface MessageBubbleProps {
   onPinToggle?: (messageId: string, nextPinned: boolean) => void | Promise<void>;
   /** Канал «Заявки»: оформление как системный бот, без ответа свайпом. */
   accessRequestsSystemChannel?: boolean;
-  /** Личный чат «Ассистенот»: шапка бота для ответов ИИ. */
+  /** Личный чат «ИИ помощник»: шапка бота для ответов ИИ. */
   assistantChannel?: boolean;
 }
 
@@ -965,7 +965,7 @@ function MessageBubbleInner({
     message.sender_name ??
       [message.sender_first_name, message.sender_last_name].filter(Boolean).join(' ') ??
       '',
-  ).trim() || (systemBotAssistantMessage ? 'Ассистенот' : 'Неизвестно');
+  ).trim() || (systemBotAssistantMessage ? 'ИИ помощник' : 'Неизвестно');
   const viewerDate = useMemo(() => formatViewerDate(message.created_at), [message.created_at]);
   const viewerSender = useMemo(
     () => ({
@@ -2181,7 +2181,7 @@ function MessageBubbleInner({
             animate(x, 0, { type: 'spring', stiffness: 420, damping: 32 });
           }}
         >
-        {/* Канал «Заявки» / «Ассистенот»: шапка как системный бот */}
+        {/* Канал «Заявки» / «ИИ помощник»: шапка как системный бот */}
         {systemBotAccessMessage && !isGroupedPrev ? (
           <div className="sender-name mb-3 flex w-full items-center gap-2.5 px-0.5">
             <span
@@ -2204,8 +2204,8 @@ function MessageBubbleInner({
               <LuBot className="h-5 w-5" strokeWidth={2} />
             </span>
             <div className="min-w-0 text-left">
-              <div className="text-sm font-bold leading-tight text-[var(--text)]">Ассистенот</div>
-              <div className="text-[11px] font-medium leading-tight text-[var(--text-secondary)]">ИИ-помощник</div>
+              <div className="text-sm font-bold leading-tight text-[var(--text)]">ИИ помощник</div>
+              <div className="text-[11px] font-medium leading-tight text-[var(--text-secondary)]">Ответы по программе церкви</div>
             </div>
           </div>
         ) : !isMine && !isGroupedPrev && message.sender_name ? (

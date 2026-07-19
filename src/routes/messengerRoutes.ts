@@ -485,7 +485,7 @@ router.post('/studio/song-chat', async (req: Request, res: Response) => {
   }
 });
 
-/** POST /api/messenger/assistant — личный чат с ИИ «Ассистенот». */
+/** POST /api/messenger/assistant — личный чат с «ИИ помощник». */
 router.post('/assistant', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   try {
@@ -648,7 +648,7 @@ router.get('/conversations', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const startedAt = Date.now();
   try {
-    // Гарантируем личный чат «Ассистенот» в списке (идемпотентно).
+    // Гарантируем личный чат «ИИ помощник» в списке (идемпотентно).
     try {
       const ensured = await ensureAssistantConversation(userId);
       ensureMemberInRoom(userId, ensured.conversationId);
@@ -1266,7 +1266,7 @@ router.post(
         return;
       }
 
-      // ИИ «Ассистенот»: ответ после успешной записи пользовательского текста.
+      // ИИ помощник: ответ после успешной записи пользовательского текста.
       if (pt === 'text') {
         void (async () => {
           try {

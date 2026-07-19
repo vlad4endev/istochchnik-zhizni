@@ -1,5 +1,5 @@
 /**
- * ИИ-ассистент «Ассистенот» в мессенджере.
+ * ИИ-ассистент «ИИ помощник» в мессенджере.
  *
  * - Личный канал на каждого участника (metadata.kind = 'assistant').
  * - Только чтение общих данных церкви: события, программы служения (проповеди),
@@ -35,13 +35,19 @@ import { listPublishedSongs } from './songService';
 import { listSundayScheduleSlots } from './sundayScheduleSlots';
 
 const ASSISTANT_WELCOME =
-  'Здравствуйте! Я Ассистенот — ИИ-помощник церкви «Источник жизни».\n\n' +
-  'Могу ответить на вопросы по событиям, программам служения (проповеди и темы), ' +
-  'песеннику, молитвенному календарю и расписаниям (воскресное, музыка, медиа).\n\n' +
-  'Я только читаю общие данные программы и не вижу личные переписки других участников. ' +
-  'Спросите, например: «Кто проповедует в следующее воскресенье?» или «Какие песни про любовь?»';
+  'Здравствуйте! Я — ИИ помощник церкви «Источник жизни».\n\n' +
+  'Могу подсказать по событиям, программам служения (проповеди и темы), ' +
+  'песеннику, молитвенному календарю и расписаниям.\n\n' +
+  'Примеры вопросов:\n' +
+  '• Кто проповедует в следующее воскресенье и какая тема?\n' +
+  '• Какие события запланированы на ближайшие две недели?\n' +
+  '• Кто на музыке / медиа в ближайшее служение?\n' +
+  '• Что в молитвенном календаре на сегодня?\n' +
+  '• Найди песни про любовь или хвалу\n' +
+  '• Кто ведущий на ближайшее воскресенье?\n\n' +
+  'Я только читаю общие данные программы и не вижу личные переписки других участников. Просто напишите свой вопрос.';
 
-const DEFAULT_ASSISTANT_SYSTEM_PROMPT = `Ты — Ассистенот, дружелюбный ИИ-ассистент церковной платформы «Источник жизни».
+const DEFAULT_ASSISTANT_SYSTEM_PROMPT = `Ты — «ИИ помощник», дружелюбный ассистент церковной платформы «Источник жизни».
 
 Твоя роль:
 - Помогать участникам церкви ответами на вопросы по программе: событиям, служениям, проповедям (проповедник и тема), песням, молитвенному календарю и расписаниям.
@@ -512,7 +518,7 @@ async function postAssistantBotMessage(
 }
 
 /**
- * Создаёт или возвращает личный чат «Ассистенот» для участника.
+ * Создаёт или возвращает личный чат «ИИ помощник» для участника.
  */
 export async function ensureAssistantConversation(
   memberId: number,
@@ -536,7 +542,13 @@ export async function ensureAssistantConversation(
   );
 
   if (found.rows[0]?.id != null) {
-    return { conversationId: String(found.rows[0].id), created: false };
+    const conversationId = String(found.rows[0].id);
+    // Обновляем название, если чат создан со старым именем.
+    await dbQuery(
+      `UPDATE conversations SET title = $2 WHERE id = $1::bigint AND title IS DISTINCT FROM $2`,
+      [conversationId, MESSENGER_ASSISTANT_CHANNEL_TITLE],
+    );
+    return { conversationId, created: false };
   }
 
   const ins = await dbQuery(
@@ -588,7 +600,7 @@ function isAssistantOwnedBy(metadata: unknown, memberId: number): boolean {
 }
 
 /**
- * Обработать сообщение пользователя в чате Ассистенота и ответить.
+ * Обработать сообщение пользователя в чате «ИИ помощник» и ответить.
  * Вызывать fire-and-forget после успешной записи пользовательского сообщения.
  */
 export async function replyAsAssistantBot(input: {
@@ -661,7 +673,6 @@ export async function replyAsAssistantBot(input: {
     const cfg = await resolveLlmRuntimeConfig();
     const fromSettings = resolveEffectiveSystemPrompt(cfg, 'messenger');
     if (typeof fromSettings === 'string' && fromSettings.trim()) {
-      // Не дублируем базовый промпт Ассистенота, если админ задал свой для messenger.
       adminSectionPrompt = fromSettings.trim();
     }
   } catch {

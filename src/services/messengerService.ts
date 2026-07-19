@@ -241,7 +241,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
           WHEN lm.sender_id IS NULL AND (
             COALESCE(lm.payload->>'assistant', '') = 'true'
             OR COALESCE(lm.payload->>'kind', '') = 'assistant'
-          ) THEN 'Ассистенот'
+          ) THEN 'ИИ помощник'
           ELSE NULL
         END
       ) AS lm_sender_name,
@@ -773,7 +773,7 @@ export async function getConversationListItem(
           WHEN lm.sender_id IS NULL AND (
             COALESCE(lm.payload->>'assistant', '') = 'true'
             OR COALESCE(lm.payload->>'kind', '') = 'assistant'
-          ) THEN 'Ассистенот'
+          ) THEN 'ИИ помощник'
           ELSE NULL
         END
       ) AS lm_sender_name,
@@ -2644,9 +2644,9 @@ export async function listRegisteredMembers(
 const ACCESS_REQUESTS_CHANNEL_KIND = 'access_requests';
 const ACCESS_REQUESTS_CHANNEL_TITLE = 'Заявки';
 
-/** Личный ИИ-чат «Ассистенот» (по одному на участника). */
+/** Личный ИИ-чат «ИИ помощник» (по одному на участника). */
 export const MESSENGER_ASSISTANT_CHANNEL_KIND = 'assistant';
-export const MESSENGER_ASSISTANT_CHANNEL_TITLE = 'Ассистенот';
+export const MESSENGER_ASSISTANT_CHANNEL_TITLE = 'ИИ помощник';
 
 /** Канал уведомлений админам о заявках на доступ (только системные сообщения). */
 export function isMessengerAccessRequestsChannelMetadata(metadata: unknown): boolean {
@@ -2658,7 +2658,7 @@ export function isMessengerAccessRequestsChannelMetadata(metadata: unknown): boo
   );
 }
 
-/** Личный канал ИИ-ассистента «Ассистенот». */
+/** Личный канал ИИ-ассистента «ИИ помощник». */
 export function isMessengerAssistantChannelMetadata(metadata: unknown): boolean {
   return (
     metadata != null &&
