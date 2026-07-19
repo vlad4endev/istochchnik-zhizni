@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import axios from 'axios';
+import { useAuthStore } from '../auth/authStore';
 import * as api from './api/messengerApi';
 import {
   normalizeConversationListItem,
@@ -305,9 +306,26 @@ function getSnapshotKey(userId: number | null): string {
   return userId ? `messenger_snapshot_v2_${userId}` : 'messenger_snapshot_v2_guest';
 }
 
+/** Id для кэша: WS `ready` может прийти позже auth — не пишем/читаем guest-снимок чужого аккаунта. */
+function resolveSnapshotMemberId(state: ChatState): number | null {
+  if (state.currentMemberId != null && state.currentMemberId > 0) {
+    return state.currentMemberId;
+  }
+  try {
+    const fromAuth = useAuthStore.getState().memberId;
+    if (typeof fromAuth === 'number' && fromAuth > 0) return fromAuth;
+  } catch {
+    /* store недоступен */
+  }
+  return null;
+}
+
 function saveSnapshot(state: ChatState): void {
   try {
     if (typeof localStorage === 'undefined') return;
+    const snapshotUserId = resolveSnapshotMemberId(state);
+    // Без memberId не сохраняем в guest — иначе чаты пользователя A всплывут у B до WS ready.
+    if (snapshotUserId == null) return;
 
     // Filter out temporary/pending messages from snapshot
     const cleanMessagesByConv: Record<string, MessageWithSender[]> = {};
@@ -328,7 +346,7 @@ function saveSnapshot(state: ChatState): void {
       outbox: [],
       savedAt: new Date().toISOString(),
     };
-    localStorage.setItem(getSnapshotKey(state.currentMemberId), JSON.stringify(snap));
+    localStorage.setItem(getSnapshotKey(snapshotUserId), JSON.stringify(snap));
   } catch {
     /* ignore localStorage quota/errors */
   }
@@ -338,7 +356,9 @@ function saveOutboxSnapshot(get: () => ChatState, outbox: OutboxItem[]): void {
   try {
     if (typeof localStorage === 'undefined') return;
     const s = get();
-    const snapRaw = localStorage.getItem(getSnapshotKey(s.currentMemberId));
+    const snapshotUserId = resolveSnapshotMemberId(s);
+    if (snapshotUserId == null) return;
+    const snapRaw = localStorage.getItem(getSnapshotKey(snapshotUserId));
     const snap: MessengerSnapshot = snapRaw ? JSON.parse(snapRaw) : {
       conversations: s.conversations || [],
       messagesByConv: s.messagesByConv || {},
@@ -349,7 +369,7 @@ function saveOutboxSnapshot(get: () => ChatState, outbox: OutboxItem[]): void {
     };
     snap.outbox = outbox;
     snap.savedAt = new Date().toISOString();
-    localStorage.setItem(getSnapshotKey(s.currentMemberId), JSON.stringify(snap));
+    localStorage.setItem(getSnapshotKey(snapshotUserId), JSON.stringify(snap));
   } catch {
     /* ignore */
   }
@@ -584,7 +604,13 @@ function hydrateFromCacheIntoStore(
   get: () => ChatState,
 ) {
   const s = get();
-  const snap = readSnapshot(s.currentMemberId);
+  const snapshotUserId = resolveSnapshotMemberId(s);
+  // Не поднимаем guest-кэш для авторизованного пользователя без id — там могут быть чужие чаты.
+  if (snapshotUserId == null) return;
+  if (s.currentMemberId == null) {
+    set({ currentMemberId: snapshotUserId });
+  }
+  const snap = readSnapshot(snapshotUserId);
   if (!snap) return;
   inMemoryOutbox = Array.isArray(snap.outbox) ? snap.outbox : [];
   const rawConversations = snap.conversations || [];
@@ -981,6 +1007,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] loadConversations error:', e);
+      const status = axios.isAxiosError(e) ? e.response?.status : undefined;
+      // 401: сессию сбрасывает apiClient — не подмешиваем кэш (в т.ч. guest) поверх разлогина.
+      if (status === 401) {
+        return;
+      }
       const wasLoaded = get().conversationsLoaded;
       // Offline/backend down: use cached snapshot.
       hydrateFromCacheIntoStore(set, get);
@@ -1115,6 +1146,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] loadMessages error:', e);
+      // Чат из deep-link / устаревшего кэша, к которому больше нет доступа.
+      if (axios.isAxiosError(e) && e.response?.status === 403) {
+        set((s) => ({
+          conversations: (s.conversations || []).filter((c) => c.id !== conversationId),
+          activeConversationId:
+            s.activeConversationId === conversationId ? null : s.activeConversationId,
+        }));
+        emitAppToast({
+          message: 'Нет доступа к этому чату.',
+          kind: 'error',
+          adminOnly: true,
+        });
+      }
     } finally {
       set((s) => ({
         messagesLoading: { ...s.messagesLoading, [conversationId]: false },

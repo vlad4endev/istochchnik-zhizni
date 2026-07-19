@@ -3,7 +3,7 @@ import axios, { type AxiosError, type AxiosHeaders, type InternalAxiosRequestCon
 import { useAuthStore } from '../features/auth/authStore';
 
 import { performAuthRefresh } from './authRefresh';
-import { isCookieOnlySessionToken } from './authSessionConstants';
+import { COOKIE_ONLY_SESSION_TOKEN, isCookieOnlySessionToken } from './authSessionConstants';
 import { resolveAxiosBaseURL } from './config';
 import { emitAppToast } from './uiFeedback';
 
@@ -40,7 +40,20 @@ function getTokenForRequest(): string | null {
 
 type RetryableAxiosConfig = InternalAxiosRequestConfig & {
   _retryAfterRefresh?: boolean;
+  _retryCookieOnly?: boolean;
+  /** Зонд cookie-only: не чистить сессию в этом проходе — решает внешний 401-handler. */
+  _suppressAuthClear?: boolean;
 };
+
+function readAuthorizationHeader(config: InternalAxiosRequestConfig): string | undefined {
+  const h = config.headers;
+  if (!h) return undefined;
+  const raw =
+    typeof (h as AxiosHeaders).get === 'function'
+      ? (h as AxiosHeaders).get('Authorization') ?? (h as AxiosHeaders).get('authorization')
+      : (h as Record<string, unknown>).Authorization ?? (h as Record<string, unknown>).authorization;
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
+}
 
 /** После refresh Access из стора новый; убираем старый Bearer из повторяемого config. */
 function stripStaleAuthorization(config: InternalAxiosRequestConfig): void {
@@ -60,6 +73,26 @@ function stripStaleAuthorization(config: InternalAxiosRequestConfig): void {
   }
 }
 
+/** Устаревший Bearer в LS при живой HttpOnly cookie — повторяем запрос только с credentials. */
+function switchSessionToCookieOnly(): void {
+  try {
+    const auth = useAuthStore.getState();
+    if (!auth.token || isCookieOnlySessionToken(auth.token)) return;
+    auth.setSession({
+      token: COOKIE_ONLY_SESSION_TOKEN,
+      firstName: auth.firstName,
+      lastName: auth.lastName,
+      role: auth.role,
+      roles: auth.roles,
+      registrationStatus: auth.registrationStatus,
+      username: auth.username,
+      memberId: auth.memberId,
+    });
+  } catch {
+    /* store недоступен */
+  }
+}
+
 export const apiClient = axios.create({
   timeout: 25_000,
   headers: { Accept: 'application/json' },
@@ -72,10 +105,13 @@ function applyBaseURL(config: InternalAxiosRequestConfig): InternalAxiosRequestC
 }
 
 apiClient.interceptors.request.use((config) => {
-  const next = applyBaseURL(config);
+  const next = applyBaseURL(config) as RetryableAxiosConfig;
   next.withCredentials = true;
   const token = getTokenForRequest();
-  if (token && !isCookieOnlySessionToken(token)) {
+  // Cookie-only retry после 401: не возвращать устаревший Bearer из стора.
+  if (next._retryCookieOnly) {
+    stripStaleAuthorization(next);
+  } else if (token && !isCookieOnlySessionToken(token)) {
     next.headers.Authorization = `Bearer ${token}`;
   } else if (next.headers && 'Authorization' in next.headers) {
     // Prevent stale bearer token after logout/session clear.
@@ -125,6 +161,26 @@ apiClient.interceptors.response.use(
             stripStaleAuthorization(retryCfg);
             return apiClient.request(retryCfg);
           }
+
+          // Refresh не помог: если слали Bearer, пробуем HttpOnly cookie (как realtime WS).
+          const hadBearer =
+            Boolean(readAuthorizationHeader(retryCfg)) ||
+            Boolean(getTokenForRequest() && !isCookieOnlySessionToken(getTokenForRequest()));
+          if (hadBearer && !retryCfg._retryCookieOnly) {
+            retryCfg._retryCookieOnly = true;
+            retryCfg._suppressAuthClear = true;
+            stripStaleAuthorization(retryCfg);
+            try {
+              const cookieResponse = await apiClient.request(retryCfg);
+              switchSessionToCookieOnly();
+              return cookieResponse;
+            } catch {
+              /* cookie тоже не приняли — ниже по статусу refresh */
+            } finally {
+              retryCfg._suppressAuthClear = false;
+            }
+          }
+
           if (refreshResult.status === 'unchanged') {
             // 429 / сеть / 5xx на refresh: сессию не рвём — пользователь остаётся «внутри», следующий refresh или ручной повтор сработают.
             return Promise.reject(error);
@@ -132,6 +188,10 @@ apiClient.interceptors.response.use(
         } catch {
           return Promise.reject(error);
         }
+      }
+
+      if ((cfg as RetryableAxiosConfig | undefined)?._suppressAuthClear) {
+        return Promise.reject(error);
       }
 
       try {

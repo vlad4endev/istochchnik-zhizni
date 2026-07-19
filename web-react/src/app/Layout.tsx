@@ -339,9 +339,11 @@ export function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
+  const setCurrentMemberId = useChatStore((s) => s.setCurrentMemberId);
   const loadConversations = useChatStore((s) => s.loadConversations);
   const refreshUnread = useChatStore((s) => s.refreshUnread);
   const unreadMessages = useChatStore((s) => s.totalUnread);
+  const authMemberId = useAuthStore((s) => s.memberId);
   const pendingDeliveriesQ = useQuery({
     queryKey: UNREAD_DELIVERIES_QK,
     queryFn: async () => {
@@ -527,6 +529,14 @@ export function Layout() {
       window.removeEventListener('app:open-conversation', onOpenConversation);
     };
   }, [navigate, setActiveConversation]);
+
+  /** До WS `ready`: привязать кэш мессенджера к memberId из auth (не guest-снимок). */
+  useEffect(() => {
+    if (!token) return;
+    if (typeof authMemberId === 'number' && authMemberId > 0) {
+      setCurrentMemberId(authMemberId);
+    }
+  }, [token, authMemberId, setCurrentMemberId]);
 
   /** Список чатов и totalUnread для бейджа в таббаре — не только после захода в «Чаты». */
   useEffect(() => {
