@@ -619,6 +619,9 @@ export function LoginPage() {
     if (!validateRegisterStep(registerStep)) return;
     if (registerStep < REGISTER_STEPS.length - 1) {
       setRegisterStep((s) => s + 1);
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
       return;
     }
     void submitRegister();
@@ -626,7 +629,12 @@ export function LoginPage() {
 
   function goRegisterBack() {
     clearStatus();
-    if (registerStep > 0) setRegisterStep((s) => s - 1);
+    if (registerStep > 0) {
+      setRegisterStep((s) => s - 1);
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
   }
 
   const handlePrimarySubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -639,38 +647,51 @@ export function LoginPage() {
     void submitLogin();
   };
 
+  // text-[16px] prevents iOS Safari zoom-on-focus; keep tall touch targets on phones.
   const inputClass =
-    'min-h-[52px] w-full rounded-2xl border border-stone-200/90 bg-stone-50/80 px-4 py-3 text-base text-stone-900 outline-none transition-[border-color,box-shadow,background-color] placeholder:text-stone-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 sm:min-h-[48px] sm:text-[15px]';
+    'min-h-[52px] w-full rounded-2xl border border-stone-200/90 bg-stone-50/80 px-4 py-3.5 text-[16px] leading-normal text-stone-900 outline-none transition-[border-color,box-shadow,background-color] placeholder:text-stone-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 sm:min-h-[48px] sm:py-3 sm:text-[15px]';
   const labelClass = 'mb-1.5 block text-[13px] font-semibold tracking-wide text-stone-600';
   const eyeBtnClass =
-    'absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary';
+    'absolute right-1 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-xl text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary sm:h-11 sm:w-11';
+
+  const primaryActionLabel = submitting
+    ? isRegisterMode
+      ? 'Создаём…'
+      : 'Входим…'
+    : isRegisterMode
+      ? registerStep < REGISTER_STEPS.length - 1
+        ? 'Далее'
+        : 'Создать аккаунт'
+      : 'Войти';
 
   return (
-    <div className="relative min-h-dvh w-full max-w-[100vw] overflow-y-auto bg-[var(--surface)] [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
+    <div className="relative min-h-dvh w-full max-w-[100vw] overflow-x-hidden overflow-y-auto bg-[var(--surface)]">
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[42vh] bg-gradient-to-b from-primary/[0.12] via-primary/[0.04] to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[36vh] bg-gradient-to-b from-primary/[0.14] via-primary/[0.05] to-transparent sm:h-[42vh]"
         aria-hidden
       />
-      <div className="relative flex min-h-dvh flex-col py-5 [padding-left:max(1rem,env(safe-area-inset-left,0px))] [padding-right:max(1rem,env(safe-area-inset-right,0px))] sm:py-6">
+      <div className="relative flex min-h-dvh flex-col pt-[max(0.75rem,env(safe-area-inset-top,0px))] [padding-left:max(0.75rem,env(safe-area-inset-left,0px))] [padding-right:max(0.75rem,env(safe-area-inset-right,0px))] sm:py-6 sm:[padding-left:max(1rem,env(safe-area-inset-left,0px))] sm:[padding-right:max(1rem,env(safe-area-inset-right,0px))]">
         <Link
           to="/login"
-          className="mb-3 inline-flex min-h-[44px] items-center gap-1.5 self-start rounded-full px-1 text-sm font-semibold text-stone-500 transition hover:text-primary active:text-primary"
+          className="mb-2 inline-flex min-h-[44px] items-center gap-1.5 self-start rounded-full px-1 text-sm font-semibold text-stone-500 transition hover:text-primary active:text-primary sm:mb-3"
         >
           <LuArrowLeft className="h-4 w-4" strokeWidth={2.25} aria-hidden />
           Назад
         </Link>
 
-        <div className="flex flex-1 flex-col justify-start pb-4 sm:justify-center">
-          <div className="mx-auto w-full max-w-[min(100%,480px)] overflow-hidden rounded-[1.5rem] bg-[var(--surface-elevated)]/95 p-5 shadow-[0_18px_50px_rgba(28,25,23,0.08)] ring-1 ring-stone-900/[0.06] backdrop-blur-sm sm:rounded-[1.75rem] sm:p-7">
-            <div className="flex items-center gap-3.5">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 p-2.5 ring-1 ring-primary/15">
+        <div className="flex flex-1 flex-col justify-start pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] sm:justify-center sm:pb-4">
+          <div className="mx-auto w-full max-w-[min(100%,480px)] overflow-hidden rounded-[1.25rem] bg-[var(--surface-elevated)]/95 p-4 shadow-[0_14px_40px_rgba(28,25,23,0.08)] ring-1 ring-stone-900/[0.06] backdrop-blur-sm sm:rounded-[1.75rem] sm:p-7">
+            <div className="flex items-center gap-3 sm:gap-3.5">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 p-2 ring-1 ring-primary/15 sm:h-14 sm:w-14 sm:p-2.5">
                 <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain" />
               </div>
-              <div className="min-w-0">
-                <h1 className="text-[1.4rem] font-extrabold leading-tight tracking-tight text-stone-900 sm:text-2xl">
+              <div className="min-w-0 flex-1">
+                <h1 className="truncate text-[1.25rem] font-extrabold leading-tight tracking-tight text-stone-900 sm:text-2xl">
                   {title}
                 </h1>
-                <p className="mt-0.5 text-sm leading-snug text-stone-500 sm:text-[15px]">{subtitle}</p>
+                <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-stone-500 sm:text-[15px]">
+                  {subtitle}
+                </p>
               </div>
             </div>
 
@@ -687,11 +708,11 @@ export function LoginPage() {
               </div>
             )}
 
-            <div className="mt-5 rounded-2xl bg-stone-100/90 p-1 ring-1 ring-stone-200/70">
+            <div className="mt-4 rounded-2xl bg-stone-100/90 p-1 ring-1 ring-stone-200/70 sm:mt-5">
               <div className="grid grid-cols-2 gap-0.5">
                 <button
                   type="button"
-                  className={`touch-manipulation rounded-[0.9rem] py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
+                  className={`touch-manipulation min-h-[48px] rounded-[0.9rem] px-2 text-sm font-bold transition-all active:scale-[0.98] sm:min-h-0 sm:py-2.5 ${
                     !isRegisterMode
                       ? 'bg-white text-stone-900 shadow-sm ring-1 ring-stone-200/80'
                       : 'bg-transparent text-stone-500'
@@ -702,7 +723,7 @@ export function LoginPage() {
                 </button>
                 <button
                   type="button"
-                  className={`touch-manipulation rounded-[0.9rem] py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
+                  className={`touch-manipulation min-h-[48px] rounded-[0.9rem] px-2 text-sm font-bold transition-all active:scale-[0.98] sm:min-h-0 sm:py-2.5 ${
                     isRegisterMode
                       ? 'bg-primary text-white shadow-sm shadow-primary/25'
                       : 'bg-transparent text-stone-500'
@@ -715,44 +736,43 @@ export function LoginPage() {
             </div>
 
             {isRegisterMode && (
-              <div className="mt-5" aria-label="Шаги регистрации">
-                <div className="flex items-center gap-2">
+              <div className="mt-4 sm:mt-5" aria-label="Шаги регистрации">
+                <ol className="grid grid-cols-3 gap-1.5">
                   {REGISTER_STEPS.map((step, index) => {
                     const done = index < registerStep;
                     const current = index === registerStep;
                     return (
-                      <div key={step.id} className="flex min-w-0 flex-1 items-center gap-2">
-                        <div
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
-                            done
-                              ? 'bg-primary text-white'
-                              : current
-                                ? 'bg-primary/15 text-primary ring-2 ring-primary/30'
-                                : 'bg-stone-100 text-stone-400'
-                          }`}
-                        >
-                          {done ? <LuCheck className="h-4 w-4" strokeWidth={2.5} aria-hidden /> : index + 1}
-                        </div>
-                        {index < REGISTER_STEPS.length - 1 ? (
-                          <div
-                            className={`h-0.5 flex-1 rounded-full ${done ? 'bg-primary/70' : 'bg-stone-200'}`}
-                            aria-hidden
-                          />
-                        ) : null}
-                      </div>
+                      <li
+                        key={step.id}
+                        className={`flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-center transition-colors sm:min-h-[56px] ${
+                          done
+                            ? 'bg-primary/10 text-primary'
+                            : current
+                              ? 'bg-primary text-white shadow-sm shadow-primary/20'
+                              : 'bg-stone-100 text-stone-400'
+                        }`}
+                      >
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/25 text-[11px] font-bold leading-none">
+                          {done ? <LuCheck className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden /> : index + 1}
+                        </span>
+                        <span className="text-[11px] font-bold leading-tight sm:text-xs">{step.title}</span>
+                      </li>
                     );
                   })}
-                </div>
-                <p className="mt-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-primary/80">
-                  Шаг {registerStep + 1} из {REGISTER_STEPS.length} · {activeRegisterStep.title}
+                </ol>
+                <p className="mt-2 text-center text-[12px] font-medium text-stone-500 sm:mt-2.5 sm:text-left sm:text-xs sm:font-semibold sm:uppercase sm:tracking-[0.08em] sm:text-primary/80">
+                  <span className="sm:hidden">{activeRegisterStep.hint}</span>
+                  <span className="hidden sm:inline">
+                    Шаг {registerStep + 1} из {REGISTER_STEPS.length} · {activeRegisterStep.title}
+                  </span>
                 </p>
               </div>
             )}
 
-            <form className="mt-4 flex flex-col gap-3.5" onSubmit={handlePrimarySubmit}>
+            <form className="mt-4 flex flex-col gap-3 sm:gap-3.5" onSubmit={handlePrimarySubmit}>
               {isRegisterMode && registerStep === 0 && (
-                <div className="auth-step-enter flex flex-col gap-3.5">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="auth-step-enter flex flex-col gap-3 sm:gap-3.5">
+                  <div className="grid grid-cols-1 gap-3">
                     <label className="block">
                       <span className={labelClass}>Имя</span>
                       <input
@@ -761,6 +781,8 @@ export function LoginPage() {
                         onChange={(e) => setFirstName(e.target.value)}
                         placeholder="Влад"
                         autoComplete="given-name"
+                        enterKeyHint="next"
+                        autoCapitalize="words"
                         autoFocus
                       />
                     </label>
@@ -772,6 +794,8 @@ export function LoginPage() {
                         onChange={(e) => setLastName(e.target.value)}
                         placeholder="Чендев"
                         autoComplete="family-name"
+                        enterKeyHint="next"
+                        autoCapitalize="words"
                       />
                     </label>
                   </div>
@@ -782,11 +806,10 @@ export function LoginPage() {
                     labelClassName={labelClass}
                     required
                   />
-                  <div className="flex gap-2.5 rounded-2xl bg-primary/[0.06] px-3.5 py-3 text-xs leading-relaxed text-stone-600">
+                  <div className="flex gap-2 rounded-2xl bg-primary/[0.06] px-3 py-2.5 text-[12px] leading-relaxed text-stone-600 sm:gap-2.5 sm:px-3.5 sm:py-3 sm:text-xs">
                     <LuInfo className="mt-0.5 h-4 w-4 shrink-0 text-primary" strokeWidth={2} aria-hidden />
                     <p>
-                      Укажите ФИО как в карточке участника церкви. Если данные не совпадут, заявка уйдёт
-                      администратору на проверку.
+                      ФИО как в карточке участника. Если не совпадёт — заявка уйдёт администратору.
                     </p>
                   </div>
                 </div>
@@ -806,27 +829,29 @@ export function LoginPage() {
                       placeholder="+7 900 000-00-00"
                       inputMode="tel"
                       autoComplete="tel"
+                      enterKeyHint="done"
                       autoFocus
                     />
                   </label>
-                  <p className="text-xs leading-relaxed text-stone-500">
-                    На этот номер вы будете входить в приложение. Формат: +7…
+                  <p className="text-[12px] leading-relaxed text-stone-500 sm:text-xs">
+                    На этот номер вы будете входить в приложение.
                   </p>
                 </div>
               )}
 
               {isRegisterMode && registerStep === 2 && (
-                <div className="auth-step-enter flex flex-col gap-3.5">
+                <div className="auth-step-enter flex flex-col gap-3 sm:gap-3.5">
                   <label className="block">
                     <span className={labelClass}>Пароль</span>
                     <div className="relative">
                       <input
-                        className={`${inputClass} pr-11`}
+                        className={`${inputClass} pr-14`}
                         type={showPassword ? 'password' : 'text'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         autoComplete="new-password"
                         placeholder="Минимум 8 символов"
+                        enterKeyHint="next"
                         autoFocus
                       />
                       <button
@@ -864,12 +889,13 @@ export function LoginPage() {
                     <span className={labelClass}>Повторите пароль</span>
                     <div className="relative">
                       <input
-                        className={`${inputClass} pr-11`}
+                        className={`${inputClass} pr-14`}
                         type={showConfirm ? 'password' : 'text'}
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         autoComplete="new-password"
                         placeholder="Ещё раз"
+                        enterKeyHint="done"
                       />
                       <button
                         type="button"
@@ -908,23 +934,25 @@ export function LoginPage() {
                       placeholder="+7 900 000-00-00"
                       inputMode="tel"
                       autoComplete="tel"
+                      enterKeyHint="next"
                     />
                   </label>
 
                   <label className="block">
                     <span className={labelClass}>
                       Пароль
-                      <span className="ml-1 font-normal text-stone-400">
+                      <span className="ml-1 hidden font-normal text-stone-400 sm:inline">
                         (необязательно при сбросе админом)
                       </span>
                     </span>
                     <div className="relative">
                       <input
-                        className={`${inputClass} pr-11`}
+                        className={`${inputClass} pr-14`}
                         type={showPassword ? 'password' : 'text'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         autoComplete="current-password"
+                        enterKeyHint="done"
                       />
                       <button
                         type="button"
@@ -939,12 +967,15 @@ export function LoginPage() {
                         )}
                       </button>
                     </div>
+                    <p className="mt-1.5 text-[11px] text-stone-400 sm:hidden">
+                      Можно без пароля, если его сбросил администратор
+                    </p>
                   </label>
 
-                  <div className="flex justify-start">
+                  <div className="flex min-h-[44px] items-center justify-start">
                     <button
                       type="button"
-                      className="text-xs font-semibold text-primary hover:underline"
+                      className="py-2 text-sm font-semibold text-primary hover:underline"
                       onClick={() => {
                         setShowResetForm((v) => !v);
                         setAdminForcedResetMode(false);
@@ -1097,7 +1128,8 @@ export function LoginPage() {
               </div>
             )}
 
-            <div className="mt-5 flex gap-2.5">
+            {/* Desktop / large screens: inline actions */}
+            <div className="mt-5 hidden gap-2.5 sm:flex">
               {isRegisterMode && registerStep > 0 ? (
                 <button
                   type="button"
@@ -1119,7 +1151,7 @@ export function LoginPage() {
                 }}
               >
                 {submitting ? (
-                  <span>{isRegisterMode ? 'Создаём…' : 'Входим…'}</span>
+                  <span>{primaryActionLabel}</span>
                 ) : isRegisterMode ? (
                   registerStep < REGISTER_STEPS.length - 1 ? (
                     <>
@@ -1143,6 +1175,54 @@ export function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* Mobile sticky action bar — always reachable above the keyboard/home indicator */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200/80 bg-[var(--surface-elevated)]/95 px-3 pt-2.5 shadow-[0_-8px_28px_rgba(28,25,23,0.08)] backdrop-blur-md sm:hidden [padding-bottom:max(0.65rem,env(safe-area-inset-bottom,0px))] [padding-left:max(0.75rem,env(safe-area-inset-left,0px))] [padding-right:max(0.75rem,env(safe-area-inset-right,0px))]">
+        <div className="mx-auto flex max-w-[480px] gap-2">
+          {isRegisterMode && registerStep > 0 ? (
+            <button
+              type="button"
+              disabled={submitting}
+              className="touch-manipulation flex min-h-[52px] w-[3.25rem] shrink-0 items-center justify-center rounded-2xl border border-stone-200 bg-white text-stone-700 transition active:scale-[0.98] disabled:opacity-60"
+              onClick={goRegisterBack}
+              aria-label="Назад"
+            >
+              <LuArrowLeft className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={submitting}
+            className="touch-manipulation flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-[16px] font-bold text-white shadow-lg shadow-primary/25 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={() => {
+              if (isRegisterMode) goRegisterNext();
+              else void submitLogin();
+            }}
+          >
+            {submitting ? (
+              <span>{primaryActionLabel}</span>
+            ) : isRegisterMode ? (
+              registerStep < REGISTER_STEPS.length - 1 ? (
+                <>
+                  <span>Далее</span>
+                  <LuArrowRight className="h-5 w-5 shrink-0" strokeWidth={2.25} aria-hidden />
+                </>
+              ) : (
+                <>
+                  <LuUserPlus className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+                  <span>Создать аккаунт</span>
+                </>
+              )
+            ) : (
+              <>
+                <LuArrowRight className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+                <span>Войти</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
       <style>{`
         @keyframes authStepEnter {
           from { opacity: 0; transform: translateY(6px); }

@@ -86,6 +86,8 @@ export function BirthDayMonthFields({
     update(String(n), month);
   }
 
+  const fieldClass = selectClassName ?? '';
+
   return (
     <div>
       {label ? (
@@ -94,12 +96,15 @@ export function BirthDayMonthFields({
           {required ? <span className="text-red-600"> *</span> : null}
         </span>
       ) : null}
-      <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2 sm:grid-cols-[6.5rem_minmax(0,1fr)]">
+      {/* Stack on very narrow phones, side-by-side from ~360px */}
+      <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-[minmax(5.5rem,7rem)_minmax(0,1fr)]">
         <label className="block min-w-0">
-          <span className="sr-only">День рождения</span>
+          <span className="mb-1 block text-[11px] font-medium text-stone-400 min-[360px]:sr-only">
+            День
+          </span>
           <input
             id={dayId}
-            className={selectClassName}
+            className={`${fieldClass} text-center tabular-nums min-[360px]:text-left`}
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
@@ -109,14 +114,17 @@ export function BirthDayMonthFields({
             required={required}
             aria-label="День рождения"
             maxLength={2}
+            enterKeyHint="next"
             onChange={(e) => onDayChange(e.target.value)}
           />
         </label>
         <label className="block min-w-0">
-          <span className="sr-only">Месяц рождения</span>
+          <span className="mb-1 block text-[11px] font-medium text-stone-400 min-[360px]:sr-only">
+            Месяц
+          </span>
           <select
             id={monthId}
-            className={`${selectClassName ?? ''} appearance-none bg-[length:1rem] bg-[right_0.9rem_center] bg-no-repeat pr-10`}
+            className={`${fieldClass} appearance-none bg-[length:1rem] bg-[right_0.85rem_center] bg-no-repeat pr-10`}
             style={{
               backgroundImage:
                 "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2378716c'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")",
