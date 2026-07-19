@@ -6,8 +6,9 @@ import { AppAvatar } from '../../../components/AppAvatar';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
 import { MessengerPlainText, renderMessengerPlainText } from '../messengerPlainText';
-import { LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2, LuSearch } from 'react-icons/lu';
+import { LuBot, LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2, LuSearch } from 'react-icons/lu';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
+import { isAssistantMessengerChannel } from '../messengerChannelKinds';
 
 interface ChatListProps {
   onSelect: (id: string) => void;
@@ -367,6 +368,7 @@ function ChatListItem({
   };
 
   const displayName = getConversationName(conv);
+  const isAssistantChat = isAssistantMessengerChannel(conv.metadata);
   const avatarLetter = getAvatarInitial(displayName);
   const avatarColor = getAvatarColor(conv.id);
   const avatarUrl =
@@ -446,24 +448,33 @@ function ChatListItem({
         <div className="flex shrink-0 items-center py-2 pl-3 pr-2">
           <div className="relative h-12 w-12 shrink-0">
             <div className="grid h-12 w-12 place-items-center overflow-hidden rounded-full">
-              <AppAvatar
-                src={avatarUrl}
-                initialsFallbackText={displayName}
-                initialsColorSeed={conv.id}
-                fallback={
-                  <span
-                    className="grid h-full w-full place-items-center text-base font-bold text-white"
-                    style={{ background: avatarColor }}
-                  >
-                    {avatarLetter}
-                  </span>
-                }
-                priority={avatarPriority}
-                width={48}
-                height={48}
-                className="grid h-full w-full place-items-center"
-                imgClassName="h-full w-full object-cover"
-              />
+              {isAssistantChat ? (
+                <span
+                  className="grid h-full w-full place-items-center rounded-full bg-primary/12 text-primary ring-1 ring-primary/15"
+                  aria-hidden
+                >
+                  <LuBot className="h-6 w-6" strokeWidth={2} />
+                </span>
+              ) : (
+                <AppAvatar
+                  src={avatarUrl}
+                  initialsFallbackText={displayName}
+                  initialsColorSeed={conv.id}
+                  fallback={
+                    <span
+                      className="grid h-full w-full place-items-center text-base font-bold text-white"
+                      style={{ background: avatarColor }}
+                    >
+                      {avatarLetter}
+                    </span>
+                  }
+                  priority={avatarPriority}
+                  width={48}
+                  height={48}
+                  className="grid h-full w-full place-items-center"
+                  imgClassName="h-full w-full object-cover"
+                />
+              )}
             </div>
             {conv.type === 'private' && conv.other_member ? (
               <PrivateChatOnlineIndicator memberId={conv.other_member.id} />

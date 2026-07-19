@@ -158,6 +158,21 @@ export function checkChatPermission(action: Action) {
         return deny(res, 403, 'Канал только для уведомлений. Отправка сообщений недоступна.');
       }
 
+      if (
+        svc.isMessengerAssistantChannelMetadata(meta.metadata) &&
+        (action === 'add_users' ||
+          action === 'remove_member' ||
+          action === 'set_admin' ||
+          action === 'set_permissions' ||
+          action === 'manage_chat')
+      ) {
+        return deny(res, 403, 'Чат «ИИ помощник» личный: управление участниками недоступно.');
+      }
+
+      if (action === 'send_media' && svc.isMessengerAssistantChannelMetadata(meta.metadata)) {
+        return deny(res, 403, 'В чате «ИИ помощник» доступна только текстовая переписка.');
+      }
+
       step = 'getParticipantChatAuthRow';
       // Load member override fields (permissions/mute) — устойчиво к старым схемам БД
       const { permissions: memberPermissions, muted_until: mutedUntil } =

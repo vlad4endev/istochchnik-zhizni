@@ -236,7 +236,14 @@ export async function listConversations(memberId: number): Promise<ConversationL
       lm.payload_type  AS lm_payload_type,
       COALESCE(
         NULLIF(TRIM(COALESCE(lm_sender.first_name, '') || ' ' || COALESCE(lm_sender.last_name, '')), ''),
-        CASE WHEN lm.payload_type::text = 'access_request' THEN 'Заявки' ELSE NULL END
+        CASE
+          WHEN lm.payload_type::text = 'access_request' THEN 'Заявки'
+          WHEN lm.sender_id IS NULL AND (
+            COALESCE(lm.payload->>'assistant', '') = 'true'
+            OR COALESCE(lm.payload->>'kind', '') = 'assistant'
+          ) THEN 'ИИ помощник'
+          ELSE NULL
+        END
       ) AS lm_sender_name,
       CASE
         WHEN lm.id IS NULL THEN NULL
@@ -271,7 +278,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
     JOIN conversations c ON c.id = cp.conversation_id
     -- last message via lateral
     LEFT JOIN LATERAL (
-      SELECT m.id, m.content, m.sender_id, m.created_at, m.is_deleted, m.payload_type
+      SELECT m.id, m.content, m.sender_id, m.created_at, m.is_deleted, m.payload_type, m.payload
       FROM messages m
       WHERE m.conversation_id = c.id
       ORDER BY m.id DESC
@@ -301,7 +308,11 @@ export async function listConversations(memberId: number): Promise<ConversationL
     WHERE cp.member_id = $1
       AND cp.left_at IS NULL
     ORDER BY
-      CASE WHEN COALESCE(cp.ui_pinned, FALSE) THEN 0 ELSE 1 END,
+      CASE
+        WHEN COALESCE(c.metadata->>'kind', '') = 'assistant' THEN 0
+        WHEN COALESCE(cp.ui_pinned, FALSE) THEN 1
+        ELSE 2
+      END,
       cp.ui_pinned_at DESC NULLS LAST,
       c.updated_at DESC
     `,
@@ -757,7 +768,14 @@ export async function getConversationListItem(
       lm.payload_type  AS lm_payload_type,
       COALESCE(
         NULLIF(TRIM(COALESCE(lm_sender.first_name, '') || ' ' || COALESCE(lm_sender.last_name, '')), ''),
-        CASE WHEN lm.payload_type::text = 'access_request' THEN 'Заявки' ELSE NULL END
+        CASE
+          WHEN lm.payload_type::text = 'access_request' THEN 'Заявки'
+          WHEN lm.sender_id IS NULL AND (
+            COALESCE(lm.payload->>'assistant', '') = 'true'
+            OR COALESCE(lm.payload->>'kind', '') = 'assistant'
+          ) THEN 'ИИ помощник'
+          ELSE NULL
+        END
       ) AS lm_sender_name,
       CASE
         WHEN lm.id IS NULL THEN NULL
@@ -795,7 +813,7 @@ export async function getConversationListItem(
     FROM conversation_participants cp
     JOIN conversations c ON c.id = cp.conversation_id
     LEFT JOIN LATERAL (
-      SELECT m.id, m.content, m.sender_id, m.created_at, m.is_deleted, m.payload_type
+      SELECT m.id, m.content, m.sender_id, m.created_at, m.is_deleted, m.payload_type, m.payload
       FROM messages m
       WHERE m.conversation_id = c.id
       ORDER BY m.id DESC
@@ -2626,6 +2644,10 @@ export async function listRegisteredMembers(
 const ACCESS_REQUESTS_CHANNEL_KIND = 'access_requests';
 const ACCESS_REQUESTS_CHANNEL_TITLE = 'Заявки';
 
+/** Личный ИИ-чат «ИИ помощник» (по одному на участника). */
+export const MESSENGER_ASSISTANT_CHANNEL_KIND = 'assistant';
+export const MESSENGER_ASSISTANT_CHANNEL_TITLE = 'ИИ помощник';
+
 /** Канал уведомлений админам о заявках на доступ (только системные сообщения). */
 export function isMessengerAccessRequestsChannelMetadata(metadata: unknown): boolean {
   return (
@@ -2634,6 +2656,22 @@ export function isMessengerAccessRequestsChannelMetadata(metadata: unknown): boo
     !Array.isArray(metadata) &&
     String((metadata as Record<string, unknown>).kind ?? '') === ACCESS_REQUESTS_CHANNEL_KIND
   );
+}
+
+/** Личный канал ИИ-ассистента «ИИ помощник». */
+export function isMessengerAssistantChannelMetadata(metadata: unknown): boolean {
+  return (
+    metadata != null &&
+    typeof metadata === 'object' &&
+    !Array.isArray(metadata) &&
+    String((metadata as Record<string, unknown>).kind ?? '') === MESSENGER_ASSISTANT_CHANNEL_KIND
+  );
+}
+
+export function isMessengerAssistantBotPayload(payload: unknown): boolean {
+  if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  const p = payload as Record<string, unknown>;
+  return p.assistant === true || String(p.kind ?? '') === MESSENGER_ASSISTANT_CHANNEL_KIND;
 }
 /** Для SELECT как у истории чата; для access_request блоки опроса пустые. */
 const FANOUT_VIEWER_MEMBER_ID = 0;
@@ -2908,7 +2946,13 @@ function mapMessageWithSender(r: Record<string, unknown>): MessageWithSender {
     is_pinned: asBoolean(r.is_pinned),
     created_at: asString(r.created_at),
     updated_at: asString(r.updated_at),
-    sender_name: asNullableString(r.sender_name)?.trim() || (pt === 'access_request' ? 'Заявки' : null),
+    sender_name:
+      asNullableString(r.sender_name)?.trim() ||
+      (pt === 'access_request'
+        ? 'Заявки'
+        : isMessengerAssistantBotPayload(payloadNorm)
+          ? MESSENGER_ASSISTANT_CHANNEL_TITLE
+          : null),
     sender_first_name: asNullableString(r.sender_first_name),
     sender_last_name: asNullableString(r.sender_last_name),
     reply_preview: r.rp_id
