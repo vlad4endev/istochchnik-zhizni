@@ -33,8 +33,23 @@ import {
   uploadBufferToPublicBucket,
   uploadStreamToPublicBucket,
 } from '../lib/supabaseStorage';
+import type { AppRole } from '../types/appRole';
+import { canAccessMessengerAssistant } from '../types/appRole';
 
-type AuthReq = Request & { authUserId?: number };
+type AuthReq = Request & {
+  authUserId?: number;
+  authUserRole?: AppRole;
+  authUserRoles?: AppRole[];
+};
+
+function sessionRoles(req: Request): AppRole[] {
+  const r = req as AuthReq;
+  if (Array.isArray(r.authUserRoles) && r.authUserRoles.length > 0) {
+    return r.authUserRoles;
+  }
+  if (r.authUserRole) return [r.authUserRole];
+  return [];
+}
 
 const MESSENGER_ATTACHMENT_PROXY_MAX_BYTES = 25 * 1024 * 1024;
 
@@ -488,6 +503,12 @@ router.post('/studio/song-chat', async (req: Request, res: Response) => {
 /** POST /api/messenger/assistant — личный чат с «ИИ помощник». */
 router.post('/assistant', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
+  if (!canAccessMessengerAssistant(sessionRoles(req))) {
+    res.status(403).json({
+      error: 'ИИ помощник доступен только членам церкви. Для прихожан чат недоступен.',
+    });
+    return;
+  }
   try {
     const { conversationId, created } = await ensureAssistantConversation(userId);
     ensureMemberInRoom(userId, conversationId);
@@ -647,15 +668,21 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
 router.get('/conversations', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const startedAt = Date.now();
+  const assistantAllowed = canAccessMessengerAssistant(sessionRoles(req));
   try {
-    // Гарантируем личный чат «ИИ помощник» в списке (идемпотентно).
-    try {
-      const ensured = await ensureAssistantConversation(userId);
-      ensureMemberInRoom(userId, ensured.conversationId);
-    } catch (ensureErr) {
-      console.warn('[messenger] ensure assistant on list failed:', ensureErr);
+    // Гарантируем личный чат «ИИ помощник» только для членов церкви (не прихожан).
+    if (assistantAllowed) {
+      try {
+        const ensured = await ensureAssistantConversation(userId);
+        ensureMemberInRoom(userId, ensured.conversationId);
+      } catch (ensureErr) {
+        console.warn('[messenger] ensure assistant on list failed:', ensureErr);
+      }
     }
-    const list = await svc.listConversations(userId);
+    let list = await svc.listConversations(userId);
+    if (!assistantAllowed) {
+      list = list.filter((c) => !svc.isMessengerAssistantChannelMetadata(c.metadata));
+    }
     res.setHeader('Server-Timing', `listConversations;dur=${Date.now() - startedAt}`);
     res.json(list);
   } catch (e) {
@@ -1267,7 +1294,7 @@ router.post(
       }
 
       // ИИ помощник: ответ после успешной записи пользовательского текста.
-      if (pt === 'text') {
+      if (pt === 'text' && canAccessMessengerAssistant(sessionRoles(req))) {
         void (async () => {
           try {
             const cmeta = await svc.getConversationMeta(convKey);
