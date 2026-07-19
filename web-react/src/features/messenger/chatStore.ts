@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import axios from 'axios';
-import { useAuthStore } from '../auth/authStore';
+import { canAccessMessengerAssistantSession, useAuthStore } from '../auth/authStore';
 import * as api from './api/messengerApi';
 import {
   normalizeConversationListItem,
@@ -15,6 +15,7 @@ import { playAudio } from '../../utils/audio';
 import { extractMentionMemberIdsFromText, normalizeMentionsToCanonical } from './mentionUtils';
 import { normalizeChatDisplayText } from './normalizeChatDisplayText';
 import { inferMessengerPayloadType } from './payloadMedia';
+import { isAssistantMessengerChannel } from './messengerChannelKinds';
 import {
   applyNewMessage,
   processMessengerWsBatch,
@@ -23,6 +24,14 @@ import {
   type WsBatchRuntime,
   type WsInboundMessage,
 } from './chatStoreWsBatch';
+
+/** Скрыть «ИИ помощник» для прихожан (клиентская защита поверх фильтра API). */
+function filterConversationsForAssistantAccess(
+  conversations: ConversationListItem[],
+): ConversationListItem[] {
+  if (canAccessMessengerAssistantSession()) return conversations;
+  return conversations.filter((c) => !isAssistantMessengerChannel(c.metadata));
+}
 
 /** Личный чат до первого сообщения: нет строки в БД, пока пользователь не отправит сообщение. */
 export const DRAFT_PRIVATE_PREFIX = 'draft:';
@@ -614,15 +623,26 @@ function hydrateFromCacheIntoStore(
   if (!snap) return;
   inMemoryOutbox = Array.isArray(snap.outbox) ? snap.outbox : [];
   const rawConversations = snap.conversations || [];
-  const conversations = rawConversations.map((c) =>
-    normalizeConversationListItem(c as ConversationListRow),
+  const conversations = filterConversationsForAssistantAccess(
+    rawConversations.map((c) => normalizeConversationListItem(c as ConversationListRow)),
   );
+  const activeId = get().activeConversationId;
+  const activeBlocked =
+    activeId != null &&
+    !canAccessMessengerAssistantSession() &&
+    conversations.every((c) => String(c.id) !== String(activeId)) &&
+    rawConversations.some(
+      (c) =>
+        String((c as ConversationListRow).id) === String(activeId) &&
+        isAssistantMessengerChannel((c as ConversationListRow).metadata),
+    );
   set({
     conversations,
     conversationsLoaded: conversations.length > 0,
     messagesByConv: snap.messagesByConv || {},
     hasMore: snap.hasMore || {},
     totalUnread: Number(snap.totalUnread || 0),
+    ...(activeBlocked ? { activeConversationId: null } : {}),
   });
   restoreOutboxMessagesIntoStore(set, get);
   ensureOutboxPump(get);
@@ -988,7 +1008,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
     set({ conversationsLoading: true });
     try {
-      const conversations = await api.fetchConversations();
+      const conversations = filterConversationsForAssistantAccess(await api.fetchConversations());
       const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0);
       const prevSeen = get().memberLastSeenAt;
       const memberLastSeenAt = { ...prevSeen };
@@ -997,12 +1017,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const ls = om?.last_seen_at;
         if (om && ls) memberLastSeenAt[om.id] = ls;
       }
+      const activeId = get().activeConversationId;
+      const activeStillVisible =
+        activeId == null || conversations.some((c) => String(c.id) === String(activeId));
       set({
         conversations,
         conversationsLoaded: true,
         totalUnread,
         conversationsLastLoadedAt: Date.now(),
         memberLastSeenAt,
+        ...(activeStillVisible ? {} : { activeConversationId: null }),
       });
       saveSnapshot(get());
     } catch (e) {
@@ -1030,6 +1054,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ─── Active conversation ──────────────────────────────────
 
   setActiveConversation: (id) => {
+    if (id && !isDraftPrivateConversationId(id) && !canAccessMessengerAssistantSession()) {
+      const existing = get().conversations.find((c) => String(c.id) === String(id));
+      if (existing && isAssistantMessengerChannel(existing.metadata)) {
+        return;
+      }
+    }
     set((s) => {
       let nextPeer: SearchMember | null = null;
       if (id && isDraftPrivateConversationId(id)) {

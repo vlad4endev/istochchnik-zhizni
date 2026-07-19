@@ -33,6 +33,18 @@ import { sendPushNotification } from './pushService';
 import { listPlans } from './servicePlannerService';
 import { listPublishedSongs } from './songService';
 import { listSundayScheduleSlots } from './sundayScheduleSlots';
+import { canAccessMessengerAssistant, normalizeAppRoles, type AppRole } from '../types/appRole';
+
+async function memberCanAccessAssistant(memberId: number): Promise<boolean> {
+  const res = await dbQuery(
+    `SELECT app_role, app_roles FROM members WHERE id = $1 LIMIT 1`,
+    [memberId],
+  );
+  const row = res.rows[0] as { app_role?: unknown; app_roles?: unknown } | undefined;
+  if (!row) return false;
+  const roles = normalizeAppRoles(row.app_roles, row.app_role) as AppRole[];
+  return canAccessMessengerAssistant(roles);
+}
 
 const ASSISTANT_WELCOME =
   'Здравствуйте! Я — ИИ помощник.\n\n' +
@@ -520,6 +532,9 @@ export async function ensureAssistantConversation(
   if (!Number.isFinite(memberId) || memberId < 1) {
     throw new Error('Invalid memberId');
   }
+  if (!(await memberCanAccessAssistant(memberId))) {
+    throw new Error('ИИ помощник доступен только членам церкви. Для прихожан чат недоступен.');
+  }
 
   const found = await dbQuery(
     `SELECT c.id
@@ -659,6 +674,10 @@ export async function replyAsAssistantBot(input: {
   const { conversationId, memberId, userMessageId, userText } = input;
   const text = String(userText ?? '').trim();
   if (!text) return;
+
+  if (!(await memberCanAccessAssistant(memberId))) {
+    return;
+  }
 
   const meta = await getConversationMeta(conversationId);
   if (!meta || !isAssistantOwnedBy(meta.metadata, memberId)) {

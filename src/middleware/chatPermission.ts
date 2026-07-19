@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as svc from '../services/messengerService';
+import { canAccessMessengerAssistant } from '../types/appRole';
 import type { ParticipantRole, PermissionsJson, PermissionKey } from '../types/messenger';
 
 type AuthReq = Request & { authUserId?: number };
@@ -171,6 +172,24 @@ export function checkChatPermission(action: Action) {
 
       if (action === 'send_media' && svc.isMessengerAssistantChannelMetadata(meta.metadata)) {
         return deny(res, 403, 'В чате «ИИ помощник» доступна только текстовая переписка.');
+      }
+
+      if (
+        svc.isMessengerAssistantChannelMetadata(meta.metadata) &&
+        (action === 'view' || action === 'send_message' || action === 'send_media')
+      ) {
+        const roles = Array.isArray(req.authUserRoles)
+          ? req.authUserRoles
+          : req.authUserRole
+            ? [req.authUserRole]
+            : [];
+        if (!canAccessMessengerAssistant(roles)) {
+          return deny(
+            res,
+            403,
+            'ИИ помощник доступен только членам церкви. Для прихожан чат недоступен.',
+          );
+        }
       }
 
       step = 'getParticipantChatAuthRow';

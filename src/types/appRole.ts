@@ -77,6 +77,24 @@ export function canModerateCatalog(role: AppRole): boolean {
   return role === 'musician' || role === 'editor' || role === 'admin';
 }
 
+/**
+ * Чат «ИИ помощник»: доступен членам церкви и выше (member, minister, pastor, musician, editor, admin).
+ * Роль «прихожанин» (guest) — без доступа, если нет другой роли.
+ */
+export function canAccessMessengerAssistant(roles: readonly AppRole[] | AppRole | null | undefined): boolean {
+  const list = Array.isArray(roles)
+    ? roles
+    : roles
+      ? [roles]
+      : [];
+  if (list.length === 0) return false;
+  return list.some((role) => role !== 'parishioner');
+}
+
+export function sessionCanAccessMessengerAssistant(source: SessionRoleSource): boolean {
+  return canAccessMessengerAssistant(rolesOfSession(source));
+}
+
 /** Удаление песни из общего каталога — музыканты студии, редакторы и админ. */
 export function canDeleteCatalogSong(role: AppRole): boolean {
   return role === 'musician' || role === 'editor' || role === 'admin';
