@@ -24,6 +24,7 @@ import {
 } from '../api';
 import { BlockStageSetupPreview } from '../components/BlockStageSetupFields';
 import { ShareBroadcastTeamPanel } from '../components/ShareBroadcastTeamPanel';
+import { SharePlanBackBar } from '../components/SharePlanBackBar';
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import { stageSetupProgramLines } from '../stageSetupFlags';
 import { safeServicePlanTimelineStart } from '../planPayloadNormalize';
@@ -300,13 +301,21 @@ export function PublicServicePlanPage() {
   }, [q.data]);
 
   if (!token) {
-    return <p className="p-6 text-red-600">Некорректная ссылка</p>;
+    return (
+      <div className="p-6">
+        <SharePlanBackBar />
+        <p className="mt-3 text-red-600">Некорректная ссылка</p>
+      </div>
+    );
   }
   if (q.isLoading) {
     return (
       <div className="min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--viewport-height,100dvh)]">
         <div className="mx-auto max-w-3xl px-3 py-5 sm:px-4 sm:py-8">
-          <SongListSkeleton />
+          <SharePlanBackBar />
+          <div className="mt-3">
+            <SongListSkeleton />
+          </div>
         </div>
       </div>
     );
@@ -314,7 +323,8 @@ export function PublicServicePlanPage() {
   if (q.isError || !q.data) {
     return (
       <div className="min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--viewport-height,100dvh)]">
-        <div className="mx-auto max-w-2xl p-6">
+        <div className="mx-auto max-w-2xl space-y-3 p-6">
+          <SharePlanBackBar />
           <p className="text-red-600">Программа не найдена или ссылка недействительна.</p>
         </div>
       </div>
@@ -335,11 +345,14 @@ export function PublicServicePlanPage() {
   return (
     <div className="min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--viewport-height,100dvh)]">
       <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 sm:space-y-6 sm:px-4 sm:py-8">
-        <p className="text-sm">
-          <Link to="/login" className="text-sky-600 hover:underline">
-            Войти
-          </Link>
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <SharePlanBackBar />
+          <p className="text-sm">
+            <Link to="/login" className="text-sky-600 hover:underline">
+              Войти
+            </Link>
+          </p>
+        </div>
 
         <header className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
           <h1 className="text-xl font-extrabold text-stone-900 sm:text-2xl">
