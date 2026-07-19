@@ -28,12 +28,22 @@ function readBearerToken(req: Request): string | null {
   return value.trim() || null;
 }
 
-function readSessionToken(req: Request): string | null {
+/**
+ * Кандидаты сессии: сначала Bearer из localStorage, затем HttpOnly cookie.
+ * Как в realtime WS — устаревший Bearer не должен перекрывать ещё живую cookie
+ * (частый случай после ротации refresh в другой вкладке / сбое обновления LS).
+ */
+function collectSessionTokenCandidates(req: Request): string[] {
+  const candidates: string[] = [];
   const bearer = readBearerToken(req);
   if (bearer) {
-    return bearer;
+    candidates.push(bearer);
   }
-  return readAuthTokenFromCookies(req);
+  const cookie = readAuthTokenFromCookies(req);
+  if (cookie && !candidates.includes(cookie)) {
+    candidates.push(cookie);
+  }
+  return candidates;
 }
 
 export async function resolveAuthSession(
@@ -42,15 +52,24 @@ export async function resolveAuthSession(
   next: NextFunction
 ): Promise<void> {
   const authReq = req as AuthRequest;
-  const token = readSessionToken(req);
-  if (!token || !process.env.DATABASE_URL) {
+  if (!process.env.DATABASE_URL) {
+    next();
+    return;
+  }
+
+  const candidates = collectSessionTokenCandidates(req);
+  if (candidates.length === 0) {
     next();
     return;
   }
 
   try {
-    const resolution = await resolveSessionByToken(token);
-    if (resolution.principal) {
+    for (const token of candidates) {
+      const resolution = await resolveSessionByToken(token);
+      if (!resolution.principal) {
+        continue;
+      }
+
       authReq.authUserId = resolution.principal.userId;
       authReq.authUserRole = resolution.principal.role;
       authReq.authUserRoles = resolution.principal.roles;
@@ -69,6 +88,7 @@ export async function resolveAuthSession(
         authReq.realAdminId = impersonation.realAdminId;
         authReq.isImpersonating = true;
       }
+      break;
     }
   } catch (error) {
     console.error('Failed to resolve auth session', error);
