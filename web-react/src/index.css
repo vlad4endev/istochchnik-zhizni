@@ -1780,6 +1780,12 @@ html.dark .songbook-reader .chorus-block {
   border: 0 !important;
 }
 
+/* Лента: лист комментариев поверх нижней навигации */
+body.feed-comments-open nav[aria-label='Основная навигация'] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .skeleton-box {
   background: linear-gradient(90deg, #f0e9ea 0%, #faf5f6 50%, #f0e9ea 100%);
   background-size: 200% 100%;

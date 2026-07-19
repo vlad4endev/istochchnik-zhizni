@@ -10,14 +10,14 @@ function storyLabel(group: StoryAuthorGroup): string {
   if (group.is_me) return 'Ваша история';
   const uname = (group.author.username ?? '').trim();
   if (uname && !/^member-\d+$/i.test(uname)) {
-    return uname.length > 12 ? `${uname.slice(0, 11)}…` : uname;
+    return uname.length > 11 ? `${uname.slice(0, 10)}…` : uname;
   }
   const full =
     memberNameFirstLast(group.author) ||
     group.author.display_name?.trim() ||
     'Участник';
   const first = full.split(/\s+/)[0] ?? full;
-  return first.length > 12 ? `${first.slice(0, 11)}…` : first;
+  return first.length > 11 ? `${first.slice(0, 10)}…` : first;
 }
 
 export type StoryRingBarProps = {
@@ -57,13 +57,17 @@ export function StoryRingBar({ groups, onOpenGroup, onCompose }: StoryRingBarPro
           >
             <span className={ringClass}>
               <span className={styles.avatarWrap}>
-                {av ? <img src={av} alt="" /> : <LuUser className="h-6 w-6 opacity-40" aria-hidden />}
-                {group.is_me ? (
-                  <span className={styles.addBadge} aria-hidden>
-                    <LuPlus className="h-3 w-3" strokeWidth={3} />
-                  </span>
-                ) : null}
+                {av ? (
+                  <img className={styles.avatarMedia} src={av} alt="" />
+                ) : (
+                  <LuUser className="h-6 w-6 opacity-40" aria-hidden />
+                )}
               </span>
+              {group.is_me ? (
+                <span className={styles.addBadge} aria-hidden>
+                  <LuPlus className="h-3 w-3" strokeWidth={3} />
+                </span>
+              ) : null}
             </span>
             <span className={`${styles.label} ${group.is_me ? styles.labelMe : ''}`}>
               {storyLabel(group)}
