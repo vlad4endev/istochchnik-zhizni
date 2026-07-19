@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { LuCamera, LuPlus, LuUser } from 'react-icons/lu';
+import { LuChevronDown, LuPlus } from 'react-icons/lu';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'framer-motion';
 
@@ -68,6 +67,8 @@ export function FeedPage() {
   const [busy, setBusy] = useState<Record<string, string | undefined>>({});
   const [headerScrolled, setHeaderScrolled] = useState(false);
   const [sortMode, setSortMode] = useState<FeedSortMode>('smart');
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
 
   const storiesQ = useQuery({
     queryKey: STORIES_KEY,
@@ -118,6 +119,16 @@ export function FeedPage() {
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  useEffect(() => {
+    if (!sortMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const el = sortMenuRef.current;
+      if (el && !el.contains(e.target as Node)) setSortMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [sortMenuOpen]);
 
   const loadMore = useCallback(async () => {
     if (!cursor || loadingMore) return;
@@ -210,7 +221,6 @@ export function FeedPage() {
     }
   };
 
-  const myUsername = me?.username?.trim() || (me ? `member-${me.id}` : '');
   const isAdmin = (me?.app_role ?? '').toLowerCase() === 'admin';
   const profileLinkState = { backTo: '/feed', backLabel: 'Лента' };
   const myAuthor = useMemo((): ProfileFeedPostAuthor | null => {
@@ -272,55 +282,71 @@ export function FeedPage() {
 
   return (
     <div className={`${profileShell.profileRoot} ${styles.page}`} data-profile-root>
-      <div className={`${styles.topBar} ${headerScrolled ? styles.topBarScrolled : ''}`}>
-        <div className={styles.topBarMain}>
-          <h1 className={styles.title}>Лента</h1>
-          <div className={styles.sortToggle} role="group" aria-label="Порядок ленты">
-            <button
-              type="button"
-              className={`${styles.sortBtn} ${sortMode === 'smart' ? styles.sortBtnActive : ''}`}
-              aria-pressed={sortMode === 'smart'}
-              onClick={() => setSortMode('smart')}
-            >
-              Для вас
-            </button>
-            <button
-              type="button"
-              className={`${styles.sortBtn} ${sortMode === 'recent' ? styles.sortBtnActive : ''}`}
-              aria-pressed={sortMode === 'recent'}
-              onClick={() => setSortMode('recent')}
-            >
-              Новые
-            </button>
-          </div>
-        </div>
-        <div className={styles.topActions}>
+      <header className={`${styles.topBar} ${headerScrolled ? styles.topBarScrolled : ''}`}>
+        <button
+          type="button"
+          className={styles.iconBtn}
+          aria-label="Новая публикация"
+          onClick={() => setComposeOpen(true)}
+        >
+          <LuPlus className="h-[26px] w-[26px]" strokeWidth={1.75} aria-hidden />
+        </button>
+
+        <div className={styles.brandSlot} ref={sortMenuRef}>
           <button
             type="button"
-            className={styles.iconBtn}
-            aria-label="Новая история"
-            onClick={() => setStoryComposeOpen(true)}
+            className={styles.brandBtn}
+            aria-haspopup="menu"
+            aria-expanded={sortMenuOpen}
+            aria-label="Порядок ленты"
+            onClick={() => setSortMenuOpen((v) => !v)}
           >
-            <LuCamera className="h-5 w-5" strokeWidth={2} aria-hidden />
+            <h1 className={styles.brand}>Лента</h1>
+            <LuChevronDown
+              className={`${styles.brandChevron} ${sortMenuOpen ? styles.brandChevronOpen : ''}`}
+              strokeWidth={2.5}
+              aria-hidden
+            />
           </button>
-          {myUsername ? (
-            <Link
-              to={`/profile/${encodeURIComponent(myUsername)}`}
-              state={profileLinkState}
-              className={styles.iconBtn}
-              aria-label="Мой профиль"
-            >
-              <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
-            </Link>
+          {sortMenuOpen ? (
+            <div className={styles.sortMenu} role="menu">
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={sortMode === 'smart'}
+                className={`${styles.sortMenuItem} ${sortMode === 'smart' ? styles.sortMenuItemActive : ''}`}
+                onClick={() => {
+                  setSortMode('smart');
+                  setSortMenuOpen(false);
+                }}
+              >
+                Для вас
+              </button>
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={sortMode === 'recent'}
+                className={`${styles.sortMenuItem} ${sortMode === 'recent' ? styles.sortMenuItemActive : ''}`}
+                onClick={() => {
+                  setSortMode('recent');
+                  setSortMenuOpen(false);
+                }}
+              >
+                Новые
+              </button>
+            </div>
           ) : null}
         </div>
-      </div>
+
+        {/* Баланс симметрии как у Instagram (иконка справа — визуальный якорь). */}
+        <span className={styles.iconBtnSpacer} aria-hidden />
+      </header>
 
       <motion.div
         className={styles.storiesWrap}
-        initial={reduceMotion ? false : { opacity: 0, y: -8 }}
+        initial={reduceMotion ? false : { opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
       >
         {storiesQ.isLoading && storyGroups.length === 0 ? (
           <div className={styles.storiesSkel} aria-hidden>
