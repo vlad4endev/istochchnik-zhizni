@@ -184,6 +184,8 @@ export interface ChatState {
   loadConversations: (opts?: { force?: boolean }) => Promise<void>;
   setActiveConversation: (id: string | null) => void;
   openPrivateDraft: (peer: SearchMember) => void;
+  /** Deep link `draft:{memberId}` без peer в store — подтянуть карточку и открыть черновик ЛС. */
+  ensurePrivateDraftFromConversationId: (conversationId: string) => Promise<boolean>;
   loadMessages: (conversationId: string, older?: boolean, opts?: { force?: boolean }) => Promise<void>;
   /** После reconnect: догрузить сообщения новее max(реальный id) без сброса истории. */
   catchUpMessagesAfter: (conversationId: string, retryCount?: number) => Promise<void>;
@@ -1021,6 +1023,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
       },
       hasMore: { ...s.hasMore, [draftId]: false },
     }));
+  },
+
+  ensurePrivateDraftFromConversationId: async (conversationId) => {
+    const memberId = parseDraftPrivateMemberId(conversationId);
+    if (memberId == null) return false;
+    const existing = get().privateDraftPeer;
+    if (existing && Number(existing.id) === memberId) {
+      get().openPrivateDraft(existing);
+      return true;
+    }
+    const peer = await api.fetchMessengerMember(memberId);
+    if (!peer) {
+      emitAppToast('Не удалось открыть чат с участником', 'error');
+      return false;
+    }
+    get().openPrivateDraft(peer);
+    return true;
   },
 
   // ─── Load messages ────────────────────────────────────────

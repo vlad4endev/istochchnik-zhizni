@@ -590,6 +590,17 @@ export async function searchMembers(q: string): Promise<SearchMember[]> {
   return data;
 }
 
+export async function fetchMessengerMember(memberId: number): Promise<SearchMember | null> {
+  const id = Number(memberId);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  try {
+    const { data } = await apiClient.get<SearchMember>(`${BASE}/members/${id}`);
+    return data ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function searchMessages(conversationId: string, q: string, limit = 50): Promise<MessageWithSender[]> {
   const { data } = await apiClient.get<MessageWithSender[]>(
     `${BASE}/conversations/${conversationId}/search`,

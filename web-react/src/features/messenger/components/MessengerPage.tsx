@@ -43,6 +43,7 @@ function blurActiveElement() {
 export function MessengerPage() {
   const activeId = useChatStore((s) => s.activeConversationId);
   const setActive = useChatStore((s) => s.setActiveConversation);
+  const ensurePrivateDraftFromConversationId = useChatStore((s) => s.ensurePrivateDraftFromConversationId);
   const loadConversations = useChatStore((s) => s.loadConversations);
   const [showNewChat, setShowNewChat] = useState(false);
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
@@ -127,15 +128,18 @@ export function MessengerPage() {
     window.localStorage.setItem('messenger:desktop-density', density);
   }, [density]);
 
-  // Deep-link from push notification: /messenger?conversationId=123
+  // Deep-link from push / dashboard: /messenger?conversationId=123|draft:42
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const convId = params.get('conversationId');
-    if (convId && convId.trim()) {
-      setActive(convId.trim());
-      setMobileView('chat');
+    const convId = params.get('conversationId')?.trim() ?? '';
+    if (!convId) return;
+    setMobileView('chat');
+    if (isDraftPrivateConversationId(convId)) {
+      void ensurePrivateDraftFromConversationId(convId);
+      return;
     }
-  }, [location.search, setActive]);
+    setActive(convId);
+  }, [location.search, setActive, ensurePrivateDraftFromConversationId]);
 
   const handleSelectConversation = useCallback((id: string) => {
     blurActiveElement();

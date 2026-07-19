@@ -8,6 +8,7 @@ import type { AppRole } from '../types/appRole';
 import { normalizeAppRole, normalizeAppRoles } from '../types/appRole';
 import { findMemberIdConflictingName, updateUser } from './userService';
 import { postRegistrationAccessRequestMessengerNotification } from './messengerService';
+import { notifyMembersAboutNewJoiner } from './memberJoinedNotifyService';
 import { writeAppLog } from './appLogService';
 import { resolveSmsRuntimeConfig } from './smsSettingsService';
 import { sendPasswordResetTelegramMessage } from './telegramService';
@@ -2407,6 +2408,19 @@ export async function approveAccessRequest(
   if (!approved) {
     throw new Error('Member not found after approval');
   }
+
+  // Социальный пуш только при одобрении новой регистрации (не password_reset).
+  if (requestRow.request_type === 'registration') {
+    void notifyMembersAboutNewJoiner({
+      id: approved.id,
+      first_name: approved.first_name,
+      last_name: approved.last_name,
+      name: approved.name,
+    }).catch((e) => {
+      console.warn('[auth] notifyMembersAboutNewJoiner failed:', e);
+    });
+  }
+
   return approved;
 }
 

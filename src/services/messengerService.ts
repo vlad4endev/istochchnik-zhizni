@@ -2621,6 +2621,26 @@ export async function listRegisteredMembers(
   return result.rows.map((row) => mapMemberSearchRow(row as Record<string, unknown>));
 }
 
+/** Карточка участника для открытия черновика ЛС (deep link из пуша «новый участник»). */
+export async function getMemberByIdForMessenger(
+  memberId: number,
+  viewerMemberId: number,
+) {
+  if (!Number.isFinite(memberId) || memberId <= 0) return null;
+  if (memberId === viewerMemberId) return null;
+  const result = await dbQuery(
+    `SELECT ${MEMBER_SEARCH_SELECT}
+     FROM members m
+     WHERE m.id = $1
+       AND m.is_active = TRUE
+       AND COALESCE(NULLIF(TRIM(m.registration_status), ''), 'active') = 'active'
+     LIMIT 1`,
+    [memberId],
+  );
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  return row ? mapMemberSearchRow(row) : null;
+}
+
 // ─── Канал «Заявки» (уведомления админам о регистрации) ───────
 
 const ACCESS_REQUESTS_CHANNEL_KIND = 'access_requests';
