@@ -1458,6 +1458,9 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   flex-shrink: 0;
   transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease;
   align-self: flex-end;
+  /* Не гасим кнопку opacity — Safari/PWA + :disabled иначе «съедают» кружок */
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 .tg-send-btn:hover:not(:disabled) {
@@ -1467,6 +1470,14 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
 
 .tg-send-btn:active:not(:disabled) {
   transform: scale(0.96);
+  opacity: 1 !important;
+}
+
+.tg-send-btn:disabled {
+  opacity: 1 !important;
+  cursor: not-allowed;
+  background: color-mix(in srgb, var(--tg-primary, #7d3640) 72%, #c4c4c4);
+  box-shadow: none;
 }
 
 .tg-send-btn:focus-visible {
@@ -3508,8 +3519,9 @@ html.dark .msg-videonote-circle--placeholder {
   background-color: var(--tg-primary, #2AABEE);
   -webkit-tap-highlight-color: transparent;
   touch-action: none;
-  /* PWA iOS/Android: prevent button going transparent on keyboard open */
-  opacity: 1;
+  /* PWA iOS/Android: prevent button going transparent on keyboard open / :disabled */
+  opacity: 1 !important;
+  visibility: visible !important;
   -webkit-appearance: none;
   appearance: none;
   outline: none;
@@ -3520,6 +3532,14 @@ html.dark .msg-videonote-circle--placeholder {
 
 .sendBtn:active:not(:disabled) {
   transform: translateZ(0) scale(0.92);
+  opacity: 1 !important;
+}
+
+.sendBtn:disabled {
+  opacity: 1 !important;
+  cursor: not-allowed;
+  background-color: color-mix(in srgb, var(--tg-primary, #2AABEE) 72%, #c4c4c4);
+  box-shadow: none;
 }
 
 .sendBtn.recording {
@@ -3553,7 +3573,7 @@ html.dark .msg-videonote-circle--placeholder {
 }
 
 .iconWrapper.visible {
-  opacity: 1;
+  opacity: 1 !important;
   transform: scale(1) rotate(0deg);
 }
 
@@ -3563,7 +3583,7 @@ html.dark .msg-videonote-circle--placeholder {
 }
 
 .iconWrapper.sendEnter.visible {
-  opacity: 1;
+  opacity: 1 !important;
   transform: scale(1) rotate(0deg) translateY(0);
 }
 

@@ -92,4 +92,60 @@ describe('messenger chatStore last message preview', () => {
     expect(conversation?.last_message?.content).toBe('Новое сообщение');
     expect(conversation?.updated_at).toBe('2026-05-07T12:00:00.000Z');
   });
+
+  it('keeps a single reply target between swipe and context-menu reply', () => {
+    const msgA = {
+      id: '100',
+      conversation_id: 'conv-1',
+      sender_id: 2,
+      content: 'A',
+      reply_to_message_id: null,
+      is_edited: false,
+      is_deleted: false,
+      created_at: '2026-05-07T11:59:00.000Z',
+      updated_at: '2026-05-07T11:59:00.000Z',
+      sender_name: 'Иван',
+      sender_first_name: 'Иван',
+      sender_last_name: 'Иванов',
+      reply_preview: null,
+      reactions: [],
+    };
+    const msgB = { ...msgA, id: '101', content: 'B', sender_name: 'Пётр' };
+
+    useChatStore.getState().setReplyingTo(msgA);
+    expect(useChatStore.getState().replyingTo?.id).toBe('100');
+    expect(useChatStore.getState().replyToMessage).toBeNull();
+
+    useChatStore.getState().setReplyTo(msgB);
+    expect(useChatStore.getState().replyToMessage?.id).toBe('101');
+    expect(useChatStore.getState().replyingTo).toBeNull();
+
+    useChatStore.getState().setEditing(msgA);
+    expect(useChatStore.getState().editingMessage?.id).toBe('100');
+    expect(useChatStore.getState().replyToMessage).toBeNull();
+    expect(useChatStore.getState().replyingTo).toBeNull();
+  });
+
+  it('clears swipe-reply when switching conversations', () => {
+    const msg = {
+      id: '100',
+      conversation_id: 'conv-1',
+      sender_id: 2,
+      content: 'A',
+      reply_to_message_id: null,
+      is_edited: false,
+      is_deleted: false,
+      created_at: '2026-05-07T11:59:00.000Z',
+      updated_at: '2026-05-07T11:59:00.000Z',
+      sender_name: 'Иван',
+      sender_first_name: 'Иван',
+      sender_last_name: 'Иванов',
+      reply_preview: null,
+      reactions: [],
+    };
+    useChatStore.getState().setReplyingTo(msg);
+    useChatStore.getState().setActiveConversation('conv-2');
+    expect(useChatStore.getState().replyingTo).toBeNull();
+    expect(useChatStore.getState().replyToMessage).toBeNull();
+  });
 });

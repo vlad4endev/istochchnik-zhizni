@@ -608,6 +608,13 @@
     opacity: 1 !important;
     transform: scale(0.98) !important;
   }
+
+  /* Send/mic: не даём UA :disabled и клавиатуре гасить кружок */
+  .tg-messenger .sendBtn,
+  .tg-messenger .tg-send-btn {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
   * {
     -webkit-overflow-scrolling: touch;
   }

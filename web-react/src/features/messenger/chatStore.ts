@@ -998,6 +998,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({
       activeConversationId: id,
       replyToMessage: null,
+      replyingTo: null,
       editingMessage: null,
       privateDraftPeer: id && isDraftPrivateConversationId(id) ? s.privateDraftPeer : null,
     }));
@@ -1012,6 +1013,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       privateDraftPeer: peer,
       activeConversationId: draftId,
       replyToMessage: null,
+      replyingTo: null,
       editingMessage: null,
       messagesByConv: {
         ...s.messagesByConv,
@@ -1234,14 +1236,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sender_name: 'Вы',
       sender_first_name: null,
       sender_last_name: null,
-      reply_preview: get().replyToMessage
-        ? {
-            id: get().replyToMessage!.id,
-            content: get().replyToMessage!.content,
-            sender_name: get().replyToMessage!.sender_name,
-            is_deleted: get().replyToMessage!.is_deleted,
-          }
-        : null,
+      reply_preview: (() => {
+        const replySrc = get().replyingTo ?? get().replyToMessage;
+        return replySrc
+          ? {
+              id: replySrc.id,
+              content: replySrc.content,
+              sender_name: replySrc.sender_name,
+              is_deleted: replySrc.is_deleted,
+            }
+          : null;
+      })(),
       reactions: [],
     };
 
@@ -1284,6 +1289,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           updated_at: real.created_at,
         })),
         replyToMessage: null,
+        replyingTo: null,
       }));
       saveSnapshot(get());
       return true;
@@ -1672,9 +1678,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // ─── Reply / Edit state ───────────────────────────────────
 
-  setReplyTo: (msg) => set({ replyToMessage: msg, editingMessage: null }),
-  setReplyingTo: (msg) => set({ replyingTo: msg, editingMessage: null }),
-  setEditing: (msg) => set({ editingMessage: msg, replyToMessage: null }),
+  setReplyTo: (msg) => set({ replyToMessage: msg, replyingTo: null, editingMessage: null }),
+  setReplyingTo: (msg) => set({ replyingTo: msg, replyToMessage: null, editingMessage: null }),
+  setEditing: (msg) => set({ editingMessage: msg, replyToMessage: null, replyingTo: null }),
 
   // ─── WS event handlers ───────────────────────────────────
 

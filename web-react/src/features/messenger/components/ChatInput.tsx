@@ -1643,18 +1643,17 @@ export function ChatInput({
   const iconMode: IconMode = isRecording
     ? (captureKind === 'video_note' ? 'video' : 'mic')
     : (hasSendAction ? 'send' : 'mic');
-  const prevIconModeRef = useRef<IconMode>(iconMode);
-  const [exitingMode, setExitingMode] = useState<IconMode | null>(null);
-
-  useEffect(() => {
-    if (prevIconModeRef.current !== iconMode) {
-      setExitingMode(prevIconModeRef.current);
-      const t = window.setTimeout(() => setExitingMode(null), 200);
-      prevIconModeRef.current = iconMode;
-      return () => window.clearTimeout(t);
-    }
-    return undefined;
-  }, [iconMode]);
+  const replyBanner = replyingTo ?? replyTo;
+  const composerBannerTitle = editing
+    ? 'Редактирование'
+    : replyBanner
+      ? `Ответ ${replyBanner.sender_name || ''}`.trim()
+      : '';
+  const composerBannerBody = editing
+    ? String(editing.content || '')
+    : replyBanner
+      ? String(replyBanner.content || '').trim() || '—'
+      : '';
 
   if (!canSend) {
     return (
@@ -1666,49 +1665,31 @@ export function ChatInput({
 
   return (
     <div className="w-full min-w-0">
-      {/* Reply/Edit Banners */}
-      {(replyTo || editing) && (
-        <div className="tg-input-banner">
-          <div className="tg-input-banner-bar" aria-hidden />
-          <div className="tg-input-banner-content">
-            <div className="tg-input-banner-title">
-              {replyTo ? `Ответ ${replyTo.sender_name}` : 'Редактирование'}
-            </div>
-            <div className="tg-input-banner-text">
-              {replyTo ? replyTo.content : editing?.content}
-            </div>
-          </div>
-          <button 
-            type="button" 
-            className="tg-input-banner-close"
-            onClick={() => { setReplyTo(null); setEditing(null); }}
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {/* Swipe-to-reply preview */}
-      {replyingTo ? (
+      {/* Reply/Edit Banner — один баннер (swipe и context menu не дублируются) */}
+      {replyBanner || editing ? (
         <div className="tg-input-banner">
           <div className="tg-input-banner-bar" aria-hidden />
           <div className="tg-input-banner-content">
             <MessengerPlainText
               className="tg-input-banner-title messenger-bidi-text"
-              text={replyingTo.sender_name || 'Сообщение'}
-              keyPrefix="reply-title"
+              text={composerBannerTitle}
+              keyPrefix="composer-banner-title"
             />
             <MessengerPlainText
               className="tg-input-banner-text messenger-bidi-text"
-              text={String(replyingTo.content || '').trim() || '—'}
-              keyPrefix="reply-body"
+              text={composerBannerBody}
+              keyPrefix="composer-banner-body"
             />
           </div>
           <button
             type="button"
             className="tg-input-banner-close"
-            onClick={() => setReplyingTo(null)}
-            aria-label="Отменить ответ"
+            onClick={() => {
+              setReplyingTo(null);
+              setReplyTo(null);
+              setEditing(null);
+            }}
+            aria-label={editing ? 'Отменить редактирование' : 'Отменить ответ'}
             title="Отменить"
           >
             ✕
@@ -2266,11 +2247,7 @@ export function ChatInput({
               })()}
             >
               <span
-                className={[
-                  'iconWrapper sendEnter',
-                  iconMode === 'send' ? 'visible' : 'hidden',
-                  exitingMode === 'send' ? 'hidden' : '',
-                ].join(' ')}
+                className={['iconWrapper sendEnter', iconMode === 'send' ? 'visible' : 'hidden'].join(' ')}
                 aria-hidden
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -2284,11 +2261,7 @@ export function ChatInput({
                 </svg>
               </span>
               <span
-                className={[
-                  'iconWrapper',
-                  iconMode === 'mic' ? 'visible' : 'hidden',
-                  exitingMode === 'mic' ? 'hidden' : '',
-                ].join(' ')}
+                className={['iconWrapper', iconMode === 'mic' ? 'visible' : 'hidden'].join(' ')}
                 aria-hidden
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -2302,11 +2275,7 @@ export function ChatInput({
                 </svg>
               </span>
               <span
-                className={[
-                  'iconWrapper',
-                  iconMode === 'video' ? 'visible' : 'hidden',
-                  exitingMode === 'video' ? 'hidden' : '',
-                ].join(' ')}
+                className={['iconWrapper', iconMode === 'video' ? 'visible' : 'hidden'].join(' ')}
                 aria-hidden
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
