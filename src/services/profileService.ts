@@ -1108,7 +1108,33 @@ export type ProfilePostComment = {
   text: string;
   created_at: string;
   author: ProfilePostAuthor | null;
+  like_count: number;
+  liked_by_me: boolean;
 };
+
+let commentLikesSchemaReady: Promise<void> | null = null;
+
+async function ensureCommentLikesSchema(): Promise<void> {
+  if (!commentLikesSchemaReady) {
+    commentLikesSchemaReady = (async () => {
+      await query(`
+CREATE TABLE IF NOT EXISTS profile_post_comment_likes (
+  comment_id BIGINT NOT NULL REFERENCES profile_post_comments(id) ON DELETE CASCADE,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (comment_id, member_id)
+)`);
+      await query(
+        `CREATE INDEX IF NOT EXISTS idx_profile_post_comment_likes_comment
+         ON profile_post_comment_likes (comment_id)`,
+      );
+    })().catch((err) => {
+      commentLikesSchemaReady = null;
+      throw err;
+    });
+  }
+  await commentLikesSchemaReady;
+}
 
 async function getPostCommentGate(postId: string): Promise<{
   postMemberId: number;
@@ -1144,6 +1170,7 @@ export function canAccessPostComments(
 }
 
 export async function listComments(postId: string, viewerMemberId: number): Promise<ProfilePostComment[]> {
+  await ensureCommentLikesSchema();
   const gate = await getPostCommentGate(postId);
   if (!gate) throw new Error('Публикация не найдена');
   if (!canAccessPostComments(gate, viewerMemberId)) {
@@ -1156,12 +1183,22 @@ export async function listComments(postId: string, viewerMemberId: number): Prom
       c.post_id::text AS post_id,
       c.member_id,
       c.text,
-      c.created_at::text AS created_at
+      c.created_at::text AS created_at,
+      COALESCE(lc.cnt, 0)::int AS like_count,
+      EXISTS (
+        SELECT 1 FROM profile_post_comment_likes cl
+        WHERE cl.comment_id = c.id AND cl.member_id = $2
+      ) AS liked_by_me
      FROM profile_post_comments c
+     LEFT JOIN (
+       SELECT comment_id, COUNT(*)::int AS cnt
+       FROM profile_post_comment_likes
+       GROUP BY comment_id
+     ) lc ON lc.comment_id = c.id
      WHERE c.post_id = $1::bigint
      ORDER BY c.created_at ASC, c.id ASC
      LIMIT 200`,
-    [postId],
+    [postId, viewerMemberId],
   );
   const rows = r.rows as Array<{
     id: string;
@@ -1169,6 +1206,8 @@ export async function listComments(postId: string, viewerMemberId: number): Prom
     member_id: number | null;
     text: string;
     created_at: string;
+    like_count: number;
+    liked_by_me: boolean;
   }>;
   const authors = await loadAuthorsForMemberIds(
     rows.map((x) => x.member_id).filter((id): id is number => typeof id === 'number' && id > 0),
@@ -1180,7 +1219,61 @@ export async function listComments(postId: string, viewerMemberId: number): Prom
     text: row.text,
     created_at: row.created_at,
     author: row.member_id != null ? authors.get(row.member_id) ?? null : null,
+    like_count: Number(row.like_count ?? 0),
+    liked_by_me: Boolean(row.liked_by_me),
   }));
+}
+
+export async function likeComment(
+  postId: string,
+  commentId: string,
+  memberId: number,
+): Promise<{ like_count: number }> {
+  await ensureCommentLikesSchema();
+  const gate = await getPostCommentGate(postId);
+  if (!gate) throw new Error('Публикация не найдена');
+  if (!canAccessPostComments(gate, memberId)) {
+    throw new Error('Комментарии недоступны');
+  }
+  const owns = await query(
+    `SELECT 1 FROM profile_post_comments WHERE id = $1::bigint AND post_id = $2::bigint`,
+    [commentId, postId],
+  );
+  if (owns.rows.length === 0) throw new Error('Комментарий не найден');
+  await query(
+    `INSERT INTO profile_post_comment_likes (comment_id, member_id)
+     VALUES ($1::bigint, $2)
+     ON CONFLICT DO NOTHING`,
+    [commentId, memberId],
+  );
+  const cnt = await query(
+    `SELECT COUNT(*)::int AS c FROM profile_post_comment_likes WHERE comment_id = $1::bigint`,
+    [commentId],
+  );
+  return { like_count: Number((cnt.rows[0] as { c?: number })?.c ?? 0) };
+}
+
+export async function unlikeComment(
+  postId: string,
+  commentId: string,
+  memberId: number,
+): Promise<{ like_count: number }> {
+  await ensureCommentLikesSchema();
+  const gate = await getPostCommentGate(postId);
+  if (!gate) throw new Error('Публикация не найдена');
+  if (!canAccessPostComments(gate, memberId)) {
+    throw new Error('Комментарии недоступны');
+  }
+  await query(
+    `DELETE FROM profile_post_comment_likes
+     WHERE comment_id = $1::bigint AND member_id = $2`,
+    [commentId, memberId],
+  );
+  const cnt = await query(
+    `SELECT COUNT(*)::int AS c FROM profile_post_comment_likes WHERE comment_id = $1::bigint`,
+    [commentId],
+  );
+  return { like_count: Number((cnt.rows[0] as { c?: number })?.c ?? 0) };
 }
 
 export async function addComment(

@@ -35,6 +35,8 @@ export type FeedComment = {
   text: string;
   created_at: string;
   author: ProfileFeedPostAuthor | null;
+  like_count?: number;
+  liked_by_me?: boolean;
 };
 
 export type StoryItem = {
@@ -104,6 +106,26 @@ export async function createPostComment(postId: string, text: string): Promise<{
 
 export async function deletePostComment(postId: string, commentId: string): Promise<void> {
   await apiClient.delete(`/api/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`);
+}
+
+export async function likePostComment(
+  postId: string,
+  commentId: string,
+): Promise<{ like_count: number }> {
+  const { data } = await apiClient.post<{ like_count?: number }>(
+    `/api/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/like`,
+  );
+  return { like_count: Number(data?.like_count ?? 0) };
+}
+
+export async function unlikePostComment(
+  postId: string,
+  commentId: string,
+): Promise<{ like_count: number }> {
+  const { data } = await apiClient.delete<{ like_count?: number }>(
+    `/api/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/like`,
+  );
+  return { like_count: Number(data?.like_count ?? 0) };
 }
 
 export async function fetchStories(): Promise<StoryAuthorGroup[]> {
