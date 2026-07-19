@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { LuArrowUpRight, LuCheck, LuHeadphones, LuHeart, LuPlay, LuRefreshCw, LuSearch, LuSettings, LuShare2, LuX } from 'react-icons/lu';
@@ -12,6 +12,7 @@ import {
   isBoilerplateDescription,
   parseEpisodeTitle,
 } from '../utils/sermonEpisodeDisplay';
+import { progressRatio, useSermonPlayback } from '../sermonPlayback/SermonPlaybackContext';
 
 type ListFilter = 'all' | 'favorites' | 'in_progress';
 
@@ -41,14 +42,6 @@ function episodeSubtitle(ep: PodcastEpisode): string {
   return parts.join(' • ');
 }
 
-function progressRatio(
-  progress: { position: number; duration: number | null } | undefined,
-): number {
-  const dur = progress?.duration ?? null;
-  const pos = progress?.position ?? 0;
-  return dur && dur > 0 ? Math.max(0, Math.min(1, pos / dur)) : 0;
-}
-
 export function PodcastsPage() {
   const qc = useQueryClient();
   const [query, setQuery] = useState('');
@@ -57,9 +50,13 @@ export function PodcastsPage() {
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [rssDraft, setRssDraft] = useState('');
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const saveTickRef = useRef(0);
+  const {
+    session,
+    audioState,
+    isPlaying,
+    playEpisode,
+    toggleFavorite,
+  } = useSermonPlayback();
 
   const q = useQuery({
     queryKey: ['resources', 'podcasts'],
@@ -88,64 +85,8 @@ export function PodcastsPage() {
 
   const feed = q.data?.feed ?? null;
   const episodes = useMemo(() => (Array.isArray(q.data?.episodes) ? q.data!.episodes : []), [q.data]);
-  const activeEpisode = useMemo(
-    () => (activeId ? episodes.find((e) => e.id === activeId) ?? null : null),
-    [activeId, episodes],
-  );
-  const activeParsed = useMemo(
-    () => (activeEpisode ? parseEpisodeTitle(activeEpisode.title) : null),
-    [activeEpisode],
-  );
-  const token = useAuthStore((s) => s.token);
-  const storageKey = useMemo(() => {
-    const suffix = (token ?? 'anon').slice(-12);
-    return `sermons_audio_v1:${suffix}`;
-  }, [token]);
-
-  type AudioState = {
-    favorites: Record<string, true>;
-    progress: Record<string, { position: number; duration: number | null; updatedAt: number }>;
-    listened: Record<string, true>;
-  };
-
-  const [audioState, setAudioState] = useState<AudioState>(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) return { favorites: {}, progress: {}, listened: {} };
-      const parsed = JSON.parse(raw) as Partial<AudioState>;
-      return {
-        favorites: (parsed.favorites ?? {}) as Record<string, true>,
-        progress: (parsed.progress ?? {}) as Record<string, { position: number; duration: number | null; updatedAt: number }>,
-        listened: (parsed.listened ?? {}) as Record<string, true>,
-      };
-    } catch {
-      return { favorites: {}, progress: {}, listened: {} };
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(audioState));
-    } catch {
-      /* ignore */
-    }
-  }, [audioState, storageKey]);
-
-  function toggleFavorite(id: string) {
-    setAudioState((s) => {
-      const next = { ...s, favorites: { ...s.favorites } };
-      if (next.favorites[id]) {
-        delete next.favorites[id];
-      } else {
-        next.favorites[id] = true;
-      }
-      return next;
-    });
-  }
-
-  function markListened(id: string) {
-    setAudioState((s) => ({ ...s, listened: { ...s.listened, [id]: true } }));
-  }
+  const activeId = session?.episode.id ?? null;
+  const playerOpen = Boolean(session);
 
   const filtered = useMemo(() => {
     const t = query.trim().toLowerCase();
@@ -177,25 +118,6 @@ export function PodcastsPage() {
     return { all: episodes.length, favorites, inProgress };
   }, [episodes, audioState.favorites, audioState.progress, audioState.listened]);
 
-  useEffect(() => {
-    if (!activeEpisode) return;
-    try {
-      const ms = (navigator as Navigator & { mediaSession?: MediaSession }).mediaSession;
-      if (!ms) return;
-      const { topic, author } = parseEpisodeTitle(activeEpisode.title);
-      ms.metadata = new MediaMetadata({
-        title: topic,
-        artist: author ?? feed?.title ?? 'Подкаст',
-        album: feed?.title ?? undefined,
-        artwork: activeEpisode.imageUrl
-          ? [{ src: activeEpisode.imageUrl, sizes: '512x512', type: 'image/png' }]
-          : undefined,
-      });
-    } catch {
-      /* ignore */
-    }
-  }, [activeEpisode, feed?.title]);
-
   async function tryShare(title: string, url: string) {
     try {
       if (navigator.share) {
@@ -213,19 +135,6 @@ export function PodcastsPage() {
     }
   }
 
-  async function playEpisode(ep: PodcastEpisode) {
-    setActiveId(ep.id);
-    // Wait a tick so <audio src> updates before play()
-    await Promise.resolve();
-    const el = audioRef.current;
-    if (!el) return;
-    try {
-      await el.play();
-    } catch {
-      // Autoplay blocked until user gesture in some browsers — but this is invoked by a click.
-    }
-  }
-
   const filterChips: { id: ListFilter; label: string; count: number }[] = [
     { id: 'all', label: 'Все', count: filterCounts.all },
     { id: 'favorites', label: 'Избранное', count: filterCounts.favorites },
@@ -236,7 +145,7 @@ export function PodcastsPage() {
     <div
       className={[
         'min-h-full bg-[var(--surface)] lg:pb-8',
-        activeEpisode ? 'pb-[calc(var(--app-bottom-nav-total-height)+9.5rem)] lg:pb-40' : 'max-lg:pb-0',
+        playerOpen ? 'pb-[calc(var(--app-bottom-nav-total-height)+8.5rem)] lg:pb-36' : 'max-lg:pb-0',
       ].join(' ')}
     >
       <div className={sectionHeroStickyClass}>
@@ -482,7 +391,7 @@ export function PodcastsPage() {
                   const sub = episodeSubtitle(ep);
                   const { topic, author } = parseEpisodeTitle(ep.title);
                   const description = episodeDisplayDescription(ep.description, feed?.description);
-                  const isActive = activeEpisode?.id === ep.id;
+                  const isActive = activeId === ep.id;
                   const isFav = Boolean(audioState.favorites[ep.id]);
                   const ratio = progressRatio(audioState.progress[ep.id]);
                   const listened = Boolean(audioState.listened[ep.id]) || ratio >= 0.98;
@@ -534,7 +443,7 @@ export function PodcastsPage() {
                           <div className="mt-3 flex w-full min-w-0 items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => void playEpisode(ep)}
+                              onClick={() => playEpisode(ep, feed?.title)}
                               className={[
                                 'inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl px-3 text-sm font-extrabold shadow-sm transition sm:flex-none sm:px-4',
                                 isActive
@@ -543,7 +452,7 @@ export function PodcastsPage() {
                               ].join(' ')}
                             >
                               <LuPlay className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
-                              {isActive ? 'В плеере' : 'Слушать'}
+                              {isActive ? (isPlaying ? 'Играет' : 'В плеере') : 'Слушать'}
                             </button>
                             <button
                               type="button"
@@ -602,116 +511,6 @@ export function PodcastsPage() {
           </section>
         </div>
       </div>
-
-      {/* Sticky player: keeps playing while browsing (mobile-first). */}
-      {activeEpisode ? (
-        <div className="fixed inset-x-3 bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] z-[60] lg:inset-x-6 lg:bottom-6">
-          <div className="rounded-3xl border border-stone-200/80 bg-white/90 p-4 shadow-[0_16px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl">
-            <div className="flex items-start gap-3">
-              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
-                {activeEpisode.imageUrl ? (
-                  <img src={activeEpisode.imageUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="grid h-full w-full place-items-center text-stone-400">
-                    <LuHeadphones className="h-5 w-5" strokeWidth={1.8} aria-hidden />
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-extrabold text-stone-900">
-                  {activeParsed?.topic ?? activeEpisode.title}
-                </p>
-                <p className="mt-0.5 truncate text-[11px] font-semibold text-stone-500">
-                  {activeParsed?.author
-                    ? `${activeParsed.author}${episodeSubtitle(activeEpisode) ? ` • ${episodeSubtitle(activeEpisode)}` : ''}`
-                    : episodeSubtitle(activeEpisode) || (feed?.title ?? 'Подкаст')}
-                </p>
-              </div>
-              <button
-                type="button"
-                className={[
-                  'inline-flex h-9 items-center justify-center rounded-2xl px-3 text-xs font-extrabold transition',
-                  audioState.favorites[activeEpisode.id]
-                    ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 hover:bg-rose-100'
-                    : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
-                ].join(' ')}
-                onClick={() => toggleFavorite(activeEpisode.id)}
-                aria-label="Избранное"
-              >
-                <LuHeart
-                  className={['h-4 w-4', audioState.favorites[activeEpisode.id] ? 'fill-current' : ''].join(' ')}
-                  strokeWidth={2}
-                  aria-hidden
-                />
-              </button>
-              <button
-                type="button"
-                className="inline-flex h-9 items-center justify-center rounded-2xl border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50"
-                onClick={() => setActiveId(null)}
-                aria-label="Закрыть плеер"
-              >
-                <LuX className="h-4 w-4" strokeWidth={2} aria-hidden />
-              </button>
-            </div>
-
-            <div className="mt-3">
-              <audio
-                ref={(el) => {
-                  audioRef.current = el;
-                }}
-                controls
-                preload="none"
-                className="w-full"
-                src={activeEpisode.audioUrl}
-                onLoadedMetadata={() => {
-                  const el = audioRef.current;
-                  if (!el) return;
-                  const saved = audioState.progress[activeEpisode.id];
-                  const savedPos = saved?.position ?? 0;
-                  // Seek to saved position if reasonable.
-                  if (Number.isFinite(savedPos) && savedPos > 2 && savedPos < el.duration - 2) {
-                    try {
-                      el.currentTime = savedPos;
-                    } catch {
-                      /* ignore */
-                    }
-                  }
-                }}
-                onTimeUpdate={() => {
-                  const el = audioRef.current;
-                  if (!el) return;
-                  const now = Date.now();
-                  // Throttle saves (about every 2 seconds)
-                  if (now - saveTickRef.current < 2000) return;
-                  saveTickRef.current = now;
-                  const position = Number.isFinite(el.currentTime) ? el.currentTime : 0;
-                  const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : null;
-                  setAudioState((s) => ({
-                    ...s,
-                    progress: {
-                      ...s.progress,
-                      [activeEpisode.id]: { position, duration, updatedAt: now },
-                    },
-                  }));
-                  if (duration && duration > 0 && position / duration >= 0.98) {
-                    markListened(activeEpisode.id);
-                  }
-                }}
-                onEnded={() => {
-                  markListened(activeEpisode.id);
-                  setAudioState((s) => ({
-                    ...s,
-                    progress: {
-                      ...s.progress,
-                      [activeEpisode.id]: { position: 0, duration: s.progress[activeEpisode.id]?.duration ?? null, updatedAt: Date.now() },
-                    },
-                  }));
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
