@@ -1,4 +1,5 @@
 import { query } from '../config/db';
+import { rankStoryGroups } from './feedRanking';
 import type { MediaType, ProfilePostAuthor } from './profileService';
 
 const STORY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -203,15 +204,6 @@ export async function listActiveStories(viewerMemberId: number): Promise<StoryAu
     groups.push({ author, stories, all_seen, is_me: isMe });
   }
 
-  // Свои кольцо всегда первым; непросмотренные — выше просмотренных; внутри — по свежести последней сторис.
-  groups.sort((a, b) => {
-    if (a.is_me !== b.is_me) return a.is_me ? -1 : 1;
-    if (a.all_seen !== b.all_seen) return a.all_seen ? 1 : -1;
-    const aLast = a.stories[a.stories.length - 1]?.created_at ?? '';
-    const bLast = b.stories[b.stories.length - 1]?.created_at ?? '';
-    return bLast.localeCompare(aLast);
-  });
-
   if (!groups.some((g) => g.is_me)) {
     const me = authors.get(viewerMemberId);
     if (me) {
@@ -219,7 +211,66 @@ export async function listActiveStories(viewerMemberId: number): Promise<StoryAu
     }
   }
 
-  return groups;
+  // Affinity к авторам сторис (лайки/комменты к их постам) — умный порядок колец.
+  const authorIds = groups.map((g) => g.author.member_id).filter((id) => id !== viewerMemberId);
+  const affinity = new Map<number, { likes: number; comments: number }>();
+  if (authorIds.length > 0) {
+    const [likesAff, commentsAff] = await Promise.all([
+      query(
+        `SELECT p.member_id AS author_id, COUNT(*)::int AS cnt
+         FROM profile_post_likes lk
+         INNER JOIN profile_posts p ON p.id = lk.post_id
+         WHERE lk.member_id = $1 AND p.member_id = ANY($2::int[])
+         GROUP BY p.member_id`,
+        [viewerMemberId, authorIds],
+      ),
+      query(
+        `SELECT p.member_id AS author_id, COUNT(*)::int AS cnt
+         FROM profile_post_comments cm
+         INNER JOIN profile_posts p ON p.id = cm.post_id
+         WHERE cm.member_id = $1 AND p.member_id = ANY($2::int[])
+         GROUP BY p.member_id`,
+        [viewerMemberId, authorIds],
+      ),
+    ]);
+    for (const row of likesAff.rows as Array<{ author_id: number; cnt: number }>) {
+      const prev = affinity.get(row.author_id) ?? { likes: 0, comments: 0 };
+      prev.likes = Number(row.cnt ?? 0);
+      affinity.set(row.author_id, prev);
+    }
+    for (const row of commentsAff.rows as Array<{ author_id: number; cnt: number }>) {
+      const prev = affinity.get(row.author_id) ?? { likes: 0, comments: 0 };
+      prev.comments = Number(row.cnt ?? 0);
+      affinity.set(row.author_id, prev);
+    }
+  }
+
+  const ranked = rankStoryGroups(
+    groups.map((g) => {
+      const aff = affinity.get(g.author.member_id) ?? { likes: 0, comments: 0 };
+      const unseen = g.is_me ? 0 : g.stories.filter((s) => !s.viewed_by_me).length;
+      const newest = g.stories[g.stories.length - 1]?.created_at
+        ?? g.stories[0]?.created_at
+        ?? new Date(0).toISOString();
+      return {
+        ...g,
+        member_id: g.author.member_id,
+        unseen_count: unseen,
+        story_count: g.stories.length,
+        newest_created_at: newest,
+        author_likes_from_me: aff.likes,
+        author_comments_from_me: aff.comments,
+        has_avatar: Boolean(g.author.avatar_url),
+      };
+    }),
+  );
+
+  return ranked.map(({ author, stories, all_seen, is_me }) => ({
+    author,
+    stories,
+    all_seen,
+    is_me,
+  }));
 }
 
 export async function createStory(input: {

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LuCamera, LuPlus, LuUser } from 'react-icons/lu';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { motion, useReducedMotion } from 'framer-motion';
 
 import { useMe } from '../../../hooks/useMe';
 import { ProfileComposeModal } from '../../profile/components/ProfileComposeModal';
@@ -9,6 +10,7 @@ import {
   likeProfilePost,
   repostProfilePost,
   unlikeProfilePost,
+  type ProfileFeedPostAuthor,
 } from '../../profile/publicProfileApi';
 import profileShell from '../../profile/profileShell.module.css';
 import { CommentSheet } from '../components/CommentSheet';
@@ -22,6 +24,7 @@ import {
   fetchStories,
   markFeedSeen,
   type FeedPost,
+  type FeedSortMode,
   type StoryAuthorGroup,
 } from '../feedApi';
 
@@ -50,6 +53,8 @@ export function FeedPage() {
   const meQ = useMe();
   const me = meQ.data ?? null;
   const qc = useQueryClient();
+  const reduceMotion = useReducedMotion();
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -61,6 +66,8 @@ export function FeedPage() {
   const [commentPostId, setCommentPostId] = useState<string | null>(null);
   const [viewerGroup, setViewerGroup] = useState<StoryAuthorGroup | null>(null);
   const [busy, setBusy] = useState<Record<string, string | undefined>>({});
+  const [headerScrolled, setHeaderScrolled] = useState(false);
+  const [sortMode, setSortMode] = useState<FeedSortMode>('smart');
 
   const storiesQ = useQuery({
     queryKey: STORIES_KEY,
@@ -80,7 +87,7 @@ export function FeedPage() {
     setLoading(true);
     setError(null);
     try {
-      const page = await fetchChurchFeed({ limit: 20 });
+      const page = await fetchChurchFeed({ limit: 20, sort: sortMode });
       setPosts(page.posts);
       setCursor(page.next_cursor);
       // Просмотрел ленту → сразу убираем бейдж в меню.
@@ -99,17 +106,28 @@ export function FeedPage() {
     } finally {
       setLoading(false);
     }
+<<<<<<< HEAD
+  }, [sortMode]);
+=======
   }, [qc]);
+>>>>>>> origin/main
 
   useEffect(() => {
     void loadFirst();
   }, [loadFirst]);
 
-  const loadMore = async () => {
+  useEffect(() => {
+    const onScroll = () => setHeaderScrolled(window.scrollY > 12);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const loadMore = useCallback(async () => {
     if (!cursor || loadingMore) return;
     setLoadingMore(true);
     try {
-      const page = await fetchChurchFeed({ cursor, limit: 20 });
+      const page = await fetchChurchFeed({ cursor, limit: 20, sort: sortMode });
       setPosts((prev) => {
         const seen = new Set(prev.map((p) => p.id));
         const merged = [...prev];
@@ -124,7 +142,20 @@ export function FeedPage() {
     } finally {
       setLoadingMore(false);
     }
-  };
+  }, [cursor, loadingMore, sortMode]);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !cursor) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void loadMore();
+      },
+      { rootMargin: '280px 0px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [cursor, loadMore]);
 
   const patchPost = (postId: string, patch: Partial<FeedPost>) => {
     setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, ...patch } : p)));
@@ -133,8 +164,15 @@ export function FeedPage() {
   const onToggleLike = async (post: FeedCardPost) => {
     if (!me) return;
     const key = `like-${post.id}`;
+    if (busy[key]) return;
     setBusy((b) => ({ ...b, [key]: '1' }));
     const liked = post.liked_by_me ?? false;
+    const prevCount = post.like_count ?? 0;
+    // Optimistic UI — мгновенный отклик как в нативных лентах.
+    patchPost(post.id, {
+      liked_by_me: !liked,
+      like_count: Math.max(0, prevCount + (liked ? -1 : 1)),
+    });
     try {
       if (liked) {
         const r = await unlikeProfilePost(post.id);
@@ -144,7 +182,7 @@ export function FeedPage() {
         patchPost(post.id, { liked_by_me: true, like_count: r.like_count });
       }
     } catch {
-      /* ignore */
+      patchPost(post.id, { liked_by_me: liked, like_count: prevCount });
     } finally {
       setBusy((b) => {
         const n = { ...b };
@@ -179,6 +217,17 @@ export function FeedPage() {
   const myUsername = me?.username?.trim() || (me ? `member-${me.id}` : '');
   const isAdmin = (me?.app_role ?? '').toLowerCase() === 'admin';
   const profileLinkState = { backTo: '/feed', backLabel: 'Лента' };
+  const myAuthor = useMemo((): ProfileFeedPostAuthor | null => {
+    if (!me) return null;
+    return {
+      member_id: me.id,
+      username: me.username?.trim() || `member-${me.id}`,
+      first_name: me.first_name,
+      last_name: me.last_name,
+      display_name: me.name || null,
+      avatar_url: me.avatar_url ?? null,
+    };
+  }, [me]);
 
   const markStoryViewedLocal = (storyId: string) => {
     qc.setQueryData<StoryAuthorGroup[]>(STORIES_KEY, (prev) => {
@@ -227,8 +276,28 @@ export function FeedPage() {
 
   return (
     <div className={`${profileShell.profileRoot} ${styles.page}`} data-profile-root>
-      <div className={styles.topBar}>
-        <h1 className={styles.title}>Лента</h1>
+      <div className={`${styles.topBar} ${headerScrolled ? styles.topBarScrolled : ''}`}>
+        <div className={styles.topBarMain}>
+          <h1 className={styles.title}>Лента</h1>
+          <div className={styles.sortToggle} role="group" aria-label="Порядок ленты">
+            <button
+              type="button"
+              className={`${styles.sortBtn} ${sortMode === 'smart' ? styles.sortBtnActive : ''}`}
+              aria-pressed={sortMode === 'smart'}
+              onClick={() => setSortMode('smart')}
+            >
+              Для вас
+            </button>
+            <button
+              type="button"
+              className={`${styles.sortBtn} ${sortMode === 'recent' ? styles.sortBtnActive : ''}`}
+              aria-pressed={sortMode === 'recent'}
+              onClick={() => setSortMode('recent')}
+            >
+              Новые
+            </button>
+          </div>
+        </div>
         <div className={styles.topActions}>
           <button
             type="button"
@@ -251,7 +320,12 @@ export function FeedPage() {
         </div>
       </div>
 
-      <div className={styles.storiesWrap}>
+      <motion.div
+        className={styles.storiesWrap}
+        initial={reduceMotion ? false : { opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      >
         {storiesQ.isLoading && storyGroups.length === 0 ? (
           <div className={styles.storiesSkel} aria-hidden>
             {Array.from({ length: 5 }).map((_, i) => (
@@ -268,14 +342,24 @@ export function FeedPage() {
             onCompose={() => setStoryComposeOpen(true)}
           />
         )}
-      </div>
+      </motion.div>
 
       <main className={styles.feed}>
         {loading ? (
           <>
-            <div className={styles.skel} aria-hidden />
-            <div className={styles.skel} aria-hidden />
-            <div className={styles.skel} aria-hidden />
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className={styles.skelCard} aria-hidden>
+                <div className={styles.skelHead}>
+                  <div className={styles.skelAvatar} />
+                  <div className={styles.skelLines}>
+                    <div className={`${styles.skelLine} ${styles.skelLineShort}`} />
+                    <div className={`${styles.skelLine} ${styles.skelLineTiny}`} />
+                  </div>
+                </div>
+                <div className={styles.skelMedia} />
+                <div className={styles.skelActions} />
+              </div>
+            ))}
           </>
         ) : null}
 
@@ -292,10 +376,11 @@ export function FeedPage() {
         ) : null}
 
         {!loading &&
-          posts.map((post) => (
+          posts.map((post, index) => (
             <FeedPostCard
               key={post.id}
               post={post}
+              appearIndex={index}
               canInteract={Boolean(me)}
               likeBusy={!!busy[`like-${post.id}`]}
               repostBusy={!!busy[`repost-${post.id}`]}
@@ -305,6 +390,8 @@ export function FeedPage() {
               onOpenComments={(p) => setCommentPostId(p.id)}
             />
           ))}
+
+        {cursor ? <div ref={sentinelRef} className={styles.sentinel} aria-hidden /> : null}
 
         {cursor ? (
           <button
@@ -318,14 +405,18 @@ export function FeedPage() {
         ) : null}
       </main>
 
-      <button
+      <motion.button
         type="button"
         className={styles.fab}
         aria-label="Новая публикация"
         onClick={() => setComposeOpen(true)}
+        initial={reduceMotion ? false : { scale: 0.7, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 18, delay: 0.15 }}
+        whileTap={reduceMotion ? undefined : { scale: 0.94 }}
       >
         <LuPlus className="h-7 w-7" strokeWidth={2.5} aria-hidden />
-      </button>
+      </motion.button>
 
       <ProfileComposeModal
         open={composeOpen}
@@ -346,6 +437,7 @@ export function FeedPage() {
         open={commentPostId != null}
         postId={commentPostId}
         myMemberId={me?.id ?? null}
+        myAuthor={myAuthor}
         isAdmin={isAdmin}
         profileLinkState={profileLinkState}
         onClose={() => setCommentPostId(null)}

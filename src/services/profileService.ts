@@ -1,4 +1,14 @@
 import { query } from '../config/db';
+import {
+  decodeFeedListCursor,
+  encodeRecentCursor,
+  encodeSmartCursor,
+  feedDayKey,
+  rankFeedPosts,
+  type RankableFeedPost,
+  type SmartFeedCursorV1,
+  viewerDaySeed,
+} from './feedRanking';
 
 export type PrivacyLevel = 'public' | 'followers' | 'private';
 export type ThemeMode = 'system' | 'light' | 'dark';
@@ -622,94 +632,122 @@ export type FeedPost = {
 export type ChurchFeedPage = {
   posts: FeedPost[];
   next_cursor: string | null;
+  /** Режим выдачи: умный ранжировщик или чистая хронология. */
+  sort: 'smart' | 'recent';
 };
 
-function encodeFeedCursor(createdAt: string, id: string): string {
-  return Buffer.from(JSON.stringify({ t: createdAt, id }), 'utf8').toString('base64url');
-}
+type FeedSqlRow = {
+  id: string;
+  member_id: number;
+  caption: string | null;
+  created_at: string;
+  shared_post_id: string | null;
+  like_count: number;
+  comment_count: number;
+  repost_count: number;
+  media_count: number;
+  has_video: boolean;
+  caption_len: number;
+  author_likes_from_me: number;
+  author_comments_from_me: number;
+  likes_6h: number;
+  comments_6h: number;
+  author_post_count_7d: number;
+  is_admin: boolean;
+};
 
-function decodeFeedCursor(raw: string | undefined | null): { t: string; id: string } | null {
-  if (!raw || typeof raw !== 'string' || !raw.trim()) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(raw.trim(), 'base64url').toString('utf8')) as {
-      t?: unknown;
-      id?: unknown;
-    };
-    if (typeof parsed.t !== 'string' || typeof parsed.id !== 'string') return null;
-    if (!parsed.t.trim() || !/^\d+$/.test(parsed.id)) return null;
-    return { t: parsed.t, id: parsed.id };
-  } catch {
-    return null;
-  }
-}
+const FEED_SELECT_CORE = `
+  p.id::text AS id,
+  p.member_id,
+  p.caption,
+  p.created_at::text AS created_at,
+  p.shared_post_id::text AS shared_post_id,
+  COALESCE(l.like_count, 0)::int AS like_count,
+  COALESCE(c.comment_count, 0)::int AS comment_count,
+  COALESCE(rc.cnt, 0)::int AS repost_count,
+  COALESCE(med.media_count, 0)::int AS media_count,
+  COALESCE(med.has_video, FALSE) AS has_video,
+  COALESCE(LENGTH(p.caption), 0)::int AS caption_len,
+  COALESCE(al.cnt, 0)::int AS author_likes_from_me,
+  COALESCE(ac.cnt, 0)::int AS author_comments_from_me,
+  COALESCE(lv.cnt, 0)::int AS likes_6h,
+  COALESCE(cv.cnt, 0)::int AS comments_6h,
+  COALESCE(ap.cnt, 0)::int AS author_post_count_7d,
+  (
+    LOWER(COALESCE(m.app_role, '')) = 'admin'
+    OR EXISTS (
+      SELECT 1
+      FROM unnest(COALESCE(m.app_roles, ARRAY[]::text[])) AS r(role)
+      WHERE LOWER(r.role) = 'admin'
+    )
+  ) AS is_admin
+`;
 
-/** Церковная хронологическая лента: все не-private (+ свои private). */
-export async function getChurchFeed(params: {
-  viewerMemberId: number;
-  cursor?: string | null;
-  limit?: number;
-}): Promise<ChurchFeedPage> {
-  const limit = Math.min(Math.max(Number(params.limit) || 20, 1), 50);
-  const cursor = decodeFeedCursor(params.cursor);
-  const viewerId = params.viewerMemberId;
+const FEED_JOINS = `
+  INNER JOIN user_profiles up ON up.member_id = p.member_id
+  INNER JOIN members m ON m.id = p.member_id
+  LEFT JOIN (
+    SELECT post_id, COUNT(*)::int AS like_count
+    FROM profile_post_likes
+    GROUP BY post_id
+  ) l ON l.post_id = p.id
+  LEFT JOIN (
+    SELECT post_id, COUNT(*)::int AS comment_count
+    FROM profile_post_comments
+    GROUP BY post_id
+  ) c ON c.post_id = p.id
+  LEFT JOIN (
+    SELECT shared_post_id, COUNT(*)::int AS cnt
+    FROM profile_posts
+    WHERE shared_post_id IS NOT NULL
+    GROUP BY shared_post_id
+  ) rc ON rc.shared_post_id = p.id
+  LEFT JOIN (
+    SELECT
+      post_id,
+      COUNT(*)::int AS media_count,
+      BOOL_OR(type = 'video') AS has_video
+    FROM profile_post_media
+    GROUP BY post_id
+  ) med ON med.post_id = p.id
+  LEFT JOIN (
+    SELECT p2.member_id AS author_id, COUNT(*)::int AS cnt
+    FROM profile_post_likes lk
+    INNER JOIN profile_posts p2 ON p2.id = lk.post_id
+    WHERE lk.member_id = $1
+    GROUP BY p2.member_id
+  ) al ON al.author_id = p.member_id
+  LEFT JOIN (
+    SELECT p2.member_id AS author_id, COUNT(*)::int AS cnt
+    FROM profile_post_comments cm
+    INNER JOIN profile_posts p2 ON p2.id = cm.post_id
+    WHERE cm.member_id = $1
+    GROUP BY p2.member_id
+  ) ac ON ac.author_id = p.member_id
+  LEFT JOIN (
+    SELECT post_id, COUNT(*)::int AS cnt
+    FROM profile_post_likes
+    WHERE created_at > NOW() - INTERVAL '6 hours'
+    GROUP BY post_id
+  ) lv ON lv.post_id = p.id
+  LEFT JOIN (
+    SELECT post_id, COUNT(*)::int AS cnt
+    FROM profile_post_comments
+    WHERE created_at > NOW() - INTERVAL '6 hours'
+    GROUP BY post_id
+  ) cv ON cv.post_id = p.id
+  LEFT JOIN (
+    SELECT member_id, COUNT(*)::int AS cnt
+    FROM profile_posts
+    WHERE created_at > NOW() - INTERVAL '7 days'
+    GROUP BY member_id
+  ) ap ON ap.member_id = p.member_id
+`;
 
-  const sqlParams: unknown[] = [viewerId];
-  let cursorClause = '';
-  if (cursor) {
-    sqlParams.push(cursor.t, cursor.id);
-    cursorClause = `AND (p.created_at, p.id) < ($2::timestamptz, $3::bigint)`;
-  }
-  sqlParams.push(limit + 1);
-  const limitParam = `$${sqlParams.length}`;
-
-  const postsRes = await query(
-    `SELECT
-      p.id::text AS id,
-      p.member_id,
-      p.caption,
-      p.created_at::text AS created_at,
-      p.shared_post_id::text AS shared_post_id,
-      COALESCE(l.like_count, 0)::int AS like_count,
-      COALESCE(c.comment_count, 0)::int AS comment_count,
-      COALESCE(rc.cnt, 0)::int AS repost_count
-     FROM profile_posts p
-     INNER JOIN user_profiles up ON up.member_id = p.member_id
-     LEFT JOIN (
-       SELECT post_id, COUNT(*)::int AS like_count
-       FROM profile_post_likes
-       GROUP BY post_id
-     ) l ON l.post_id = p.id
-     LEFT JOIN (
-       SELECT post_id, COUNT(*)::int AS comment_count
-       FROM profile_post_comments
-       GROUP BY post_id
-     ) c ON c.post_id = p.id
-     LEFT JOIN (
-       SELECT shared_post_id, COUNT(*)::int AS cnt
-       FROM profile_posts
-       WHERE shared_post_id IS NOT NULL
-       GROUP BY shared_post_id
-     ) rc ON rc.shared_post_id = p.id
-     WHERE (up.is_private = FALSE OR p.member_id = $1)
-     ${cursorClause}
-     ORDER BY p.created_at DESC, p.id DESC
-     LIMIT ${limitParam}`,
-    sqlParams,
-  );
-
-  const postRows = postsRes.rows as Array<{
-    id: string;
-    member_id: number;
-    caption: string | null;
-    created_at: string;
-    shared_post_id: string | null;
-    like_count: number;
-    comment_count: number;
-    repost_count: number;
-  }>;
-
-  const hasMore = postRows.length > limit;
-  const pageRows = hasMore ? postRows.slice(0, limit) : postRows;
+async function hydrateFeedPosts(
+  pageRows: FeedSqlRow[],
+  viewerId: number,
+): Promise<FeedPost[]> {
   const postIds = pageRows.map((r) => r.id);
   const sharedIds = pageRows.map((r) => r.shared_post_id).filter((x): x is string => !!x);
   const memberIds = pageRows.map((r) => r.member_id);
@@ -717,7 +755,9 @@ export async function getChurchFeed(params: {
   const [mediaByPost, authors, embeddedById] = await Promise.all([
     loadMediaMap(postIds),
     loadAuthorsForMemberIds(memberIds),
-    sharedIds.length > 0 ? buildEmbeddedPosts([...new Set(sharedIds)]) : Promise.resolve(new Map<string, ProfilePostEmbedded>()),
+    sharedIds.length > 0
+      ? buildEmbeddedPosts([...new Set(sharedIds)])
+      : Promise.resolve(new Map<string, ProfilePostEmbedded>()),
   ]);
 
   let likedSet = new Set<string>();
@@ -750,7 +790,8 @@ export async function getChurchFeed(params: {
   for (const row of pageRows) {
     const author = authors.get(row.member_id);
     if (!author) continue;
-    const contentRootId = row.shared_post_id && row.shared_post_id.length > 0 ? row.shared_post_id : row.id;
+    const contentRootId =
+      row.shared_post_id && row.shared_post_id.length > 0 ? row.shared_post_id : row.id;
     posts.push({
       id: row.id,
       member_id: row.member_id,
@@ -766,12 +807,234 @@ export async function getChurchFeed(params: {
       shared_post: row.shared_post_id ? embeddedById.get(row.shared_post_id) ?? null : null,
     });
   }
+  return posts;
+}
 
+async function getChurchFeedRecent(params: {
+  viewerMemberId: number;
+  cursorT?: string;
+  cursorId?: string;
+  limit: number;
+}): Promise<ChurchFeedPage> {
+  const viewerId = params.viewerMemberId;
+  const limit = params.limit;
+  const sqlParams: unknown[] = [viewerId];
+  let cursorClause = '';
+  if (params.cursorT && params.cursorId) {
+    sqlParams.push(params.cursorT, params.cursorId);
+    cursorClause = `AND (p.created_at, p.id) < ($2::timestamptz, $3::bigint)`;
+  }
+  sqlParams.push(limit + 1);
+  const limitParam = `$${sqlParams.length}`;
+
+  const postsRes = await query(
+    `SELECT ${FEED_SELECT_CORE}
+     FROM profile_posts p
+     ${FEED_JOINS}
+     WHERE (up.is_private = FALSE OR p.member_id = $1)
+     ${cursorClause}
+     ORDER BY p.created_at DESC, p.id DESC
+     LIMIT ${limitParam}`,
+    sqlParams,
+  );
+
+  const postRows = postsRes.rows as FeedSqlRow[];
+  const hasMore = postRows.length > limit;
+  const pageRows = hasMore ? postRows.slice(0, limit) : postRows;
+  const posts = await hydrateFeedPosts(pageRows, viewerId);
   const last = pageRows[pageRows.length - 1];
-  const next_cursor =
-    hasMore && last ? encodeFeedCursor(last.created_at, last.id) : null;
+  return {
+    posts,
+    next_cursor: hasMore && last ? encodeRecentCursor(last.created_at, last.id) : null,
+    sort: 'recent',
+  };
+}
 
-  return { posts, next_cursor };
+async function getChurchFeedSmart(params: {
+  viewerMemberId: number;
+  cursor: SmartFeedCursorV1 | null;
+  limit: number;
+}): Promise<ChurchFeedPage> {
+  const viewerId = params.viewerMemberId;
+  const limit = params.limit;
+  const day = params.cursor?.day && params.cursor.day === feedDayKey()
+    ? params.cursor.day
+    : feedDayKey();
+  const seed =
+    params.cursor?.day === day && params.cursor.seed
+      ? params.cursor.seed
+      : viewerDaySeed(viewerId, day);
+
+  // Chrono-хвост: посты старше окна ранжирования.
+  if (params.cursor?.phase === 'chrono' && params.cursor.t && params.cursor.id) {
+    const chrono = await getChurchFeedRecent({
+      viewerMemberId: viewerId,
+      cursorT: params.cursor.t,
+      cursorId: params.cursor.id,
+      limit,
+    });
+    // Сохраняем smart-cursor обёртку, чтобы клиент оставался в smart-режиме.
+    if (!chrono.next_cursor) {
+      return { posts: chrono.posts, next_cursor: null, sort: 'smart' };
+    }
+    const decoded = decodeFeedListCursor(chrono.next_cursor);
+    if (decoded && 't' in decoded && decoded.t && decoded.id) {
+      return {
+        posts: chrono.posts,
+        next_cursor: encodeSmartCursor({
+          v: 1,
+          mode: 'smart',
+          phase: 'chrono',
+          off: 0,
+          day,
+          seed,
+          t: decoded.t,
+          id: decoded.id,
+        }),
+        sort: 'smart',
+      };
+    }
+    return { posts: chrono.posts, next_cursor: null, sort: 'smart' };
+  }
+
+  const offset = params.cursor?.phase === 'ranked' ? Math.max(0, params.cursor.off) : 0;
+
+  // Кандидаты: до 400 постов за 75 дней — достаточно для церковного масштаба.
+  const poolRes = await query(
+    `SELECT ${FEED_SELECT_CORE}
+     FROM profile_posts p
+     ${FEED_JOINS}
+     WHERE (up.is_private = FALSE OR p.member_id = $1)
+       AND p.created_at > NOW() - INTERVAL '75 days'
+     ORDER BY p.created_at DESC, p.id DESC
+     LIMIT 400`,
+    [viewerId],
+  );
+
+  const poolRows = poolRes.rows as FeedSqlRow[];
+  const rankable: Array<FeedSqlRow & RankableFeedPost> = poolRows.map((r) => ({
+    ...r,
+    media_count: Number(r.media_count ?? 0),
+    has_video: Boolean(r.has_video),
+    caption_len: Number(r.caption_len ?? 0),
+    is_repost: Boolean(r.shared_post_id),
+    is_own: r.member_id === viewerId,
+    is_admin: Boolean(r.is_admin),
+    author_likes_from_me: Number(r.author_likes_from_me ?? 0),
+    author_comments_from_me: Number(r.author_comments_from_me ?? 0),
+    likes_6h: Number(r.likes_6h ?? 0),
+    comments_6h: Number(r.comments_6h ?? 0),
+    author_post_count_7d: Number(r.author_post_count_7d ?? 0),
+    like_count: Number(r.like_count ?? 0),
+    comment_count: Number(r.comment_count ?? 0),
+    repost_count: Number(r.repost_count ?? 0),
+  }));
+
+  const ranked = rankFeedPosts(rankable, { seedHex: seed });
+
+  // Если offset уже за пределами пула — сразу уходим в chrono-хвост.
+  if (offset < ranked.length) {
+    const pageSlice = ranked.slice(offset, offset + limit);
+    const posts = await hydrateFeedPosts(pageSlice, viewerId);
+    const nextOff = offset + pageSlice.length;
+    if (nextOff < ranked.length) {
+      return {
+        posts,
+        next_cursor: encodeSmartCursor({
+          v: 1,
+          mode: 'smart',
+          phase: 'ranked',
+          off: nextOff,
+          day,
+          seed,
+        }),
+        sort: 'smart',
+      };
+    }
+
+    const oldest = poolRows[poolRows.length - 1];
+    if (oldest) {
+      return {
+        posts,
+        next_cursor: encodeSmartCursor({
+          v: 1,
+          mode: 'smart',
+          phase: 'chrono',
+          off: 0,
+          day,
+          seed,
+          t: oldest.created_at,
+          id: oldest.id,
+        }),
+        sort: 'smart',
+      };
+    }
+    return { posts, next_cursor: null, sort: 'smart' };
+  }
+
+  const oldest = poolRows[poolRows.length - 1];
+  if (!oldest) {
+    return { posts: [], next_cursor: null, sort: 'smart' };
+  }
+  return getChurchFeedSmart({
+    viewerMemberId: viewerId,
+    cursor: {
+      v: 1,
+      mode: 'smart',
+      phase: 'chrono',
+      off: 0,
+      day,
+      seed,
+      t: oldest.created_at,
+      id: oldest.id,
+    },
+    limit,
+  });
+}
+
+/** Церковная лента: smart (по умолчанию) или recent (хронология). */
+export async function getChurchFeed(params: {
+  viewerMemberId: number;
+  cursor?: string | null;
+  limit?: number;
+  sort?: 'smart' | 'recent' | string | null;
+}): Promise<ChurchFeedPage> {
+  const limit = Math.min(Math.max(Number(params.limit) || 20, 1), 50);
+  const viewerId = params.viewerMemberId;
+  const decoded = decodeFeedListCursor(params.cursor);
+
+  const sortRaw = (params.sort ?? '').toString().trim().toLowerCase();
+  let sort: 'smart' | 'recent' =
+    sortRaw === 'recent' || sortRaw === 'chrono' || sortRaw === 'latest' ? 'recent' : 'smart';
+
+  // Legacy cursor без mode → recent; smart-cursor сохраняет режим.
+  if (decoded && 'mode' in decoded && decoded.mode === 'recent') sort = 'recent';
+  if (decoded && 'mode' in decoded && decoded.mode === 'smart') sort = 'smart';
+  if (decoded && !('mode' in decoded) && 't' in decoded) sort = 'recent';
+
+  if (sort === 'recent') {
+    const t =
+      decoded && 't' in decoded && typeof decoded.t === 'string' ? decoded.t : undefined;
+    const id =
+      decoded && 'id' in decoded && typeof decoded.id === 'string' ? decoded.id : undefined;
+    return getChurchFeedRecent({
+      viewerMemberId: viewerId,
+      cursorT: t,
+      cursorId: id,
+      limit,
+    });
+  }
+
+  const smartCursor =
+    decoded && 'mode' in decoded && decoded.mode === 'smart'
+      ? (decoded as SmartFeedCursorV1)
+      : null;
+
+  return getChurchFeedSmart({
+    viewerMemberId: viewerId,
+    cursor: smartCursor,
+    limit,
+  });
 }
 
 /**
