@@ -33,11 +33,17 @@ export function formatPostDate(iso: string): string {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleString('ru-RU', {
+    const now = Date.now();
+    const diffMin = Math.floor((now - d.getTime()) / 60_000);
+    if (diffMin < 1) return 'сейчас';
+    if (diffMin < 60) return `${diffMin} мин`;
+    const diffH = Math.floor(diffMin / 60);
+    if (diffH < 24) return `${diffH} ч`;
+    const diffD = Math.floor(diffH / 24);
+    if (diffD < 7) return `${diffD} д`;
+    return d.toLocaleDateString('ru-RU', {
       day: 'numeric',
       month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
     });
   } catch {
     return '';
@@ -57,17 +63,27 @@ function authorDisplayName(author: ProfileFeedPostAuthor): string {
 function ProfilePostMediaBlock({ post }: { post: Pick<FeedCardPost, 'media'> }) {
   const items = sortMedia(post);
   if (items.length === 0) return null;
+  const multi = items.length > 1;
   return (
-    <div className={styles.fbMedia}>
+    <div className={`${styles.fbMedia} ${multi ? styles.fbMediaCarousel : ''}`}>
       {items.map((m, idx) => {
         const url = resolvePublicUrl(m.url) ?? '';
         if (!url) return null;
         if (m.type === 'video') {
           return (
-            <video key={`${m.url}-${idx}`} src={url} controls playsInline preload="metadata" />
+            <video
+              key={`${m.url}-${idx}`}
+              className={styles.fbMediaItem}
+              src={url}
+              controls
+              playsInline
+              preload="metadata"
+            />
           );
         }
-        return <img key={`${m.url}-${idx}`} src={url} alt="" loading="lazy" />;
+        return (
+          <img key={`${m.url}-${idx}`} className={styles.fbMediaItem} src={url} alt="" loading="lazy" />
+        );
       })}
     </div>
   );
@@ -179,61 +195,12 @@ export function FeedPostCard({
     lastTapRef.current = now;
   };
 
+  const showOwnerMenu = Boolean(isOwner && (onEdit || onDelete));
+
   return (
     <article className={styles.fbCard}>
       <div className={styles.fbCardHead}>
-        {isOwner && (onEdit || onDelete) ? (
-          <div className={styles.fbCardMenuAnchor} ref={menuOpen ? menuRef : undefined}>
-            <button
-              type="button"
-              className={styles.fbCardMenuBtn}
-              aria-expanded={menuOpen}
-              aria-haspopup="menu"
-              aria-label="Действия с публикацией"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen((v) => !v);
-              }}
-            >
-              <LuEllipsis className="h-5 w-5" strokeWidth={2.25} aria-hidden />
-            </button>
-            {menuOpen ? (
-              <div className={styles.fbCardMenu} role="menu">
-                {onEdit ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={styles.fbCardMenuItem}
-                    onClick={() => {
-                      onEdit(post);
-                      setMenuOpen(false);
-                    }}
-                  >
-                    <LuPencil className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
-                    Редактировать
-                  </button>
-                ) : null}
-                {onDelete ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={styles.fbCardMenuItemDanger}
-                    disabled={deleteBusy}
-                    onClick={() => {
-                      onDelete(post);
-                      setMenuOpen(false);
-                    }}
-                  >
-                    <LuTrash2 className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-                    Удалить
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className={styles.fbCardHeadRow}>
+        <div className={`${styles.fbCardHeadRow} ${showOwnerMenu ? styles.fbCardHeadRowWithMenu : ''}`}>
           {author && uname ? (
             <Link
               to={`/profile/${encodeURIComponent(uname)}`}
@@ -250,35 +217,87 @@ export function FeedPostCard({
           ) : null}
 
           <div className={styles.fbCardAuthorMeta}>
-            {author && uname ? (
-              <Link
-                to={`/profile/${encodeURIComponent(uname)}`}
-                state={profileLinkState}
-                className={styles.fbCardAuthorName}
-              >
-                {name}
-              </Link>
-            ) : author ? (
-              <span className={styles.fbCardAuthorName}>{name}</span>
-            ) : post.shared_post ? (
-              <p className={styles.fbRepostBadge}>
-                <LuRepeat2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Репост
-              </p>
-            ) : (
-              <span className={styles.fbCardHeadSpacer} aria-hidden />
-            )}
+            <div className={styles.fbCardAuthorLine}>
+              {author && uname ? (
+                <Link
+                  to={`/profile/${encodeURIComponent(uname)}`}
+                  state={profileLinkState}
+                  className={styles.fbCardAuthorName}
+                >
+                  {name}
+                </Link>
+              ) : author ? (
+                <span className={styles.fbCardAuthorName}>{name}</span>
+              ) : post.shared_post ? (
+                <p className={styles.fbRepostBadge}>
+                  <LuRepeat2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Репост
+                </p>
+              ) : (
+                <span className={styles.fbCardHeadSpacer} aria-hidden />
+              )}
+              <time className={styles.fbCardTime} dateTime={post.created_at}>
+                {formatPostDate(post.created_at)}
+              </time>
+            </div>
             {post.shared_post && author ? (
-              <p className={styles.fbRepostBadge} style={{ alignSelf: 'flex-start' }}>
+              <p className={styles.fbRepostBadge}>
                 <LuRepeat2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 Репост
               </p>
             ) : null}
           </div>
 
-          <time className={styles.fbCardTime} dateTime={post.created_at}>
-            {formatPostDate(post.created_at)}
-          </time>
+          {showOwnerMenu ? (
+            <div className={styles.fbCardMenuInline} ref={menuOpen ? menuRef : undefined}>
+              <button
+                type="button"
+                className={styles.fbCardMenuBtn}
+                aria-expanded={menuOpen}
+                aria-haspopup="menu"
+                aria-label="Действия с публикацией"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen((v) => !v);
+                }}
+              >
+                <LuEllipsis className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+              </button>
+              {menuOpen ? (
+                <div className={styles.fbCardMenu} role="menu">
+                  {onEdit ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={styles.fbCardMenuItem}
+                      onClick={() => {
+                        onEdit(post);
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <LuPencil className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                      Редактировать
+                    </button>
+                  ) : null}
+                  {onDelete ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={styles.fbCardMenuItemDanger}
+                      disabled={deleteBusy}
+                      onClick={() => {
+                        onDelete(post);
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <LuTrash2 className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                      Удалить
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
 

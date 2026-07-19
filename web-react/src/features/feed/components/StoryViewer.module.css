@@ -1,12 +1,14 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: 130;
   background: #0c0a09;
   color: #fafaf9;
   display: flex;
   flex-direction: column;
   animation: fadeIn 0.16s ease;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 .progressRow {
