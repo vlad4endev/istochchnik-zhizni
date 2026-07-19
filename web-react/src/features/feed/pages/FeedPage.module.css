@@ -6,7 +6,7 @@
   box-sizing: border-box;
   /* Нижний safe-area уже в --app-bottom-nav-total-height у main — не дублируем. */
   padding-bottom: 0;
-  background: var(--profile-surface, #000);
+  background: var(--profile-surface, #f4f1ed);
   color: var(--profile-text-body, #1c1917);
 }
 
@@ -23,21 +23,20 @@
   padding: 0.2rem 0.35rem;
   padding-left: max(0.55rem, env(safe-area-inset-left, 0px));
   padding-right: max(0.55rem, env(safe-area-inset-right, 0px));
-  background: var(--profile-surface, #000);
+  background: var(--profile-surface, #f4f1ed);
   border-bottom: none;
   transition: background 0.2s ease;
 }
 
 .topBarScrolled {
-  background: color-mix(in srgb, var(--profile-surface, #000) 92%, transparent);
+  background: color-mix(in srgb, var(--profile-surface, #f4f1ed) 92%, transparent);
   backdrop-filter: blur(14px);
 }
 
 .brandSlot {
   position: relative;
-  justify-self: start;
+  justify-self: center;
   min-width: 0;
-  margin-left: 0.15rem;
 }
 
 .brandBtn {
@@ -46,9 +45,9 @@
   gap: 0.2rem;
   border: none;
   background: transparent;
-  padding: 0.1rem 0.2rem 0.1rem 0;
+  padding: 0.1rem 0.15rem;
   cursor: pointer;
-  color: var(--profile-text-heading, #fafafa);
+  color: var(--profile-text-heading, #1c1917);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
@@ -56,7 +55,7 @@
 .brand {
   margin: 0;
   font-family: 'Grand Hotel', 'Segoe Script', 'Snell Roundhand', cursive;
-  font-size: clamp(1.65rem, 7.5vw, 2rem);
+  font-size: clamp(1.85rem, 8vw, 2.25rem);
   font-weight: 400;
   line-height: 1.05;
   letter-spacing: 0.01em;
@@ -67,9 +66,9 @@
 .brandChevron {
   width: 1rem;
   height: 1rem;
-  opacity: 0.9;
+  opacity: 0.75;
   transition: transform 0.18s ease;
-  margin-top: 0.2rem;
+  margin-top: 0.25rem;
 }
 
 .brandChevronOpen {
@@ -79,14 +78,15 @@
 .sortMenu {
   position: absolute;
   top: calc(100% + 0.35rem);
-  left: 0;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 50;
   min-width: 9.5rem;
   padding: 0.35rem;
   border-radius: 0.75rem;
-  background: var(--profile-surface-elevated, #1c1c1e);
-  border: 1px solid color-mix(in srgb, var(--profile-border, rgba(255, 255, 255, 0.12)) 90%, transparent);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35);
+  background: var(--profile-surface-elevated, #fafaf9);
+  border: 1px solid color-mix(in srgb, var(--profile-border, rgba(120, 113, 108, 0.2)) 90%, transparent);
+  box-shadow: 0 14px 36px rgba(28, 25, 23, 0.12);
   animation: menuPop 0.16s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -98,14 +98,14 @@
   border-radius: 0.5rem;
   padding: 0.6rem 0.75rem;
   background: transparent;
-  color: var(--profile-text-heading, #fafafa);
+  color: var(--profile-text-heading, #1c1917);
   font-size: 0.875rem;
   font-weight: 650;
   cursor: pointer;
 }
 
 .sortMenuItem:hover {
-  background: color-mix(in srgb, var(--profile-text-heading, #fff) 8%, transparent);
+  background: color-mix(in srgb, var(--profile-text-heading, #1c1917) 6%, transparent);
 }
 
 .sortMenuItemActive {
@@ -132,7 +132,7 @@
   border: none;
   border-radius: 0.5rem;
   background: transparent;
-  color: var(--profile-text-heading, #fafafa);
+  color: var(--profile-text-heading, #1c1917);
   cursor: pointer;
   text-decoration: none;
   transition: opacity 0.15s ease, transform 0.15s ease;
@@ -153,19 +153,19 @@
 }
 
 .storiesWrap {
-  border-bottom: 1px solid color-mix(in srgb, var(--profile-border, rgba(255, 255, 255, 0.1)) 80%, transparent);
-  background: var(--profile-surface, #000);
+  border-bottom: 1px solid color-mix(in srgb, var(--profile-border, rgba(120, 113, 108, 0.18)) 80%, transparent);
+  background: var(--profile-surface, #f4f1ed);
   min-height: 0;
 }
 
 @keyframes menuPop {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.97);
+    transform: translateX(-50%) translateY(-4px) scale(0.97);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateX(-50%) translateY(0) scale(1);
   }
 }
 
@@ -209,8 +209,8 @@
   margin: 0 auto;
   width: 100%;
   max-width: 36rem;
-  /* Нижний запас под FAB; safe-area/nav уже в Layout. */
-  padding: 0.7rem 0.75rem 5.25rem;
+  /* Нижний запас под центральный FAB; safe-area/nav уже в Layout. */
+  padding: 0.85rem 0.85rem 5.75rem;
   padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
   padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
   display: flex;
@@ -326,13 +326,23 @@
   pointer-events: none;
 }
 
-.fab {
+/* Центральный «+» как на макете анонса — над таб-баром, по центру. */
+.fabDock {
   position: fixed;
-  right: max(0.85rem, env(safe-area-inset-right, 0px));
-  bottom: calc(var(--app-bottom-nav-total-height, 4.75rem) + 0.65rem);
+  left: 0;
+  right: 0;
+  bottom: calc(var(--app-bottom-nav-total-height, 4.75rem) - 0.85rem);
   z-index: 45;
-  width: 3.45rem;
-  height: 3.45rem;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.fab {
+  position: relative;
+  pointer-events: auto;
+  width: 3.65rem;
+  height: 3.65rem;
   border: none;
   border-radius: 9999px;
   background:
@@ -346,6 +356,7 @@
   place-items: center;
   box-shadow:
     0 12px 30px color-mix(in srgb, var(--profile-primary, #7d3640) 38%, transparent),
+    0 0 0 3px var(--profile-surface, #f4f1ed),
     0 0 0 1px color-mix(in srgb, #fff 18%, transparent) inset;
   cursor: pointer;
   transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease, opacity 0.15s ease;
@@ -363,6 +374,7 @@
   transform: scale(1.06) translateY(-1px);
   box-shadow:
     0 16px 36px color-mix(in srgb, var(--profile-primary, #7d3640) 42%, transparent),
+    0 0 0 3px var(--profile-surface, #f4f1ed),
     0 0 0 1px color-mix(in srgb, #fff 22%, transparent) inset;
 }
 
@@ -371,20 +383,22 @@
 }
 
 @media (min-width: 900px) {
+  .fabDock {
+    bottom: 1.35rem;
+  }
+
   .fab {
-    right: 1.5rem;
-    bottom: 1.5rem;
-    width: 3.6rem;
-    height: 3.6rem;
+    width: 3.75rem;
+    height: 3.75rem;
   }
 }
 
 .skelCard {
-  border-radius: 1.2rem;
+  border-radius: 1.35rem;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--profile-border, rgba(120, 113, 108, 0.18)) 80%, transparent);
   background: var(--profile-surface-elevated, #fafaf9);
-  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.05);
+  box-shadow: 0 10px 28px rgba(28, 25, 23, 0.07);
 }
 
 .skelHead {
@@ -425,7 +439,9 @@
 }
 
 .skelMedia {
-  height: 14rem;
+  height: 12.5rem;
+  margin: 0 0.85rem 0.75rem;
+  border-radius: 1rem;
   background: linear-gradient(
     90deg,
     var(--profile-media-placeholder, #e7e5e4) 0%,
