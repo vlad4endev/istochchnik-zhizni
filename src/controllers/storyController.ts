@@ -32,8 +32,9 @@ export async function getStories(req: Request, res: Response): Promise<void> {
     const groups = await listActiveStories(authUserId);
     res.json({ groups });
   } catch (e) {
-    console.error('[stories] list error:', e);
-    res.status(500).json({ error: 'Database error' });
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[stories] list error:', msg, e);
+    res.status(500).json({ error: 'Не удалось загрузить истории' });
   }
 }
 

@@ -1,4 +1,5 @@
 -- Instagram-style stories (24h expiry) + views for ring "seen" state.
+-- NOTE: do not use NOW() in index predicates (not IMMUTABLE).
 
 CREATE TABLE IF NOT EXISTS profile_stories (
   id BIGSERIAL PRIMARY KEY,
@@ -10,9 +11,8 @@ CREATE TABLE IF NOT EXISTS profile_stories (
   expires_at TIMESTAMPTZ NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_profile_stories_active
-  ON profile_stories (expires_at DESC, created_at DESC)
-  WHERE expires_at > NOW();
+CREATE INDEX IF NOT EXISTS idx_profile_stories_expires
+  ON profile_stories (expires_at DESC, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_profile_stories_member_created
   ON profile_stories (member_id, created_at DESC);
@@ -26,6 +26,3 @@ CREATE TABLE IF NOT EXISTS profile_story_views (
 
 CREATE INDEX IF NOT EXISTS idx_profile_story_views_viewer
   ON profile_story_views (viewer_member_id);
-
-ALTER TABLE profile_stories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE profile_story_views ENABLE ROW LEVEL SECURITY;

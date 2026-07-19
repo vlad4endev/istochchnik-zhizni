@@ -4,6 +4,56 @@ import type { MediaType, ProfilePostAuthor } from './profileService';
 const STORY_TTL_MS = 24 * 60 * 60 * 1000;
 const CAPTION_MAX = 500;
 
+let storiesSchemaReady: Promise<void> | null = null;
+
+/** Создаёт таблицы сторис на лету, если миграция не применилась (например из‑за индекса с NOW()). */
+export async function ensureStoriesSchema(): Promise<void> {
+  if (!storiesSchemaReady) {
+    storiesSchemaReady = (async () => {
+      await query(`
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'profile_media_type') THEN
+    CREATE TYPE profile_media_type AS ENUM ('image', 'video');
+  END IF;
+END $$`);
+      await query(`
+CREATE TABLE IF NOT EXISTS profile_stories (
+  id BIGSERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  media_url TEXT NOT NULL,
+  media_type profile_media_type NOT NULL,
+  caption TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL
+)`);
+      await query(`DROP INDEX IF EXISTS idx_profile_stories_active`);
+      await query(
+        `CREATE INDEX IF NOT EXISTS idx_profile_stories_expires
+         ON profile_stories (expires_at DESC, created_at DESC)`,
+      );
+      await query(
+        `CREATE INDEX IF NOT EXISTS idx_profile_stories_member_created
+         ON profile_stories (member_id, created_at DESC)`,
+      );
+      await query(`
+CREATE TABLE IF NOT EXISTS profile_story_views (
+  story_id BIGINT NOT NULL REFERENCES profile_stories(id) ON DELETE CASCADE,
+  viewer_member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (story_id, viewer_member_id)
+)`);
+      await query(
+        `CREATE INDEX IF NOT EXISTS idx_profile_story_views_viewer
+         ON profile_story_views (viewer_member_id)`,
+      );
+    })().catch((err) => {
+      storiesSchemaReady = null;
+      throw err;
+    });
+  }
+  await storiesSchemaReady;
+}
+
 export type StoryItem = {
   id: string;
   member_id: number;
@@ -74,6 +124,7 @@ async function loadAuthorsForMemberIds(memberIds: number[]): Promise<Map<number,
 }
 
 export async function listActiveStories(viewerMemberId: number): Promise<StoryAuthorGroup[]> {
+  await ensureStoriesSchema();
   await ensureProfileRow(viewerMemberId);
 
   const storiesRes = await query(
@@ -177,6 +228,7 @@ export async function createStory(input: {
   mediaType: MediaType;
   caption?: string | null;
 }): Promise<{ id: string; expires_at: string }> {
+  await ensureStoriesSchema();
   await ensureProfileRow(input.memberId);
   const url = input.mediaUrl.trim();
   if (!url) throw new Error('Нужен медиафайл');
@@ -199,6 +251,7 @@ export async function createStory(input: {
 }
 
 export async function markStoryViewed(storyId: string, viewerMemberId: number): Promise<boolean> {
+  await ensureStoriesSchema();
   const exists = await query(
     `SELECT 1 FROM profile_stories WHERE id = $1::bigint AND expires_at > NOW()`,
     [storyId],
@@ -214,6 +267,7 @@ export async function markStoryViewed(storyId: string, viewerMemberId: number): 
 }
 
 export async function deleteStoryAsOwner(storyId: string, memberId: number): Promise<boolean> {
+  await ensureStoriesSchema();
   const r = await query(
     `DELETE FROM profile_stories WHERE id = $1::bigint AND member_id = $2`,
     [storyId, memberId],

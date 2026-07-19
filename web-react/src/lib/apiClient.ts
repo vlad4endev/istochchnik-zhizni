@@ -7,6 +7,13 @@ import { COOKIE_ONLY_SESSION_TOKEN, isCookieOnlySessionToken } from './authSessi
 import { resolveAxiosBaseURL } from './config';
 import { emitAppToast } from './uiFeedback';
 
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    /** Не показывать глобальный toast при ошибке ответа. */
+    silentErrorToast?: boolean;
+  }
+}
+
 const AUTH_PATHS_SKIP_401_HANDLING = ['/api/auth/login', '/api/auth/register', '/api/auth/refresh'];
 
 function shouldSkip401Handling(url: string | undefined): boolean {
@@ -43,6 +50,8 @@ type RetryableAxiosConfig = InternalAxiosRequestConfig & {
   _retryCookieOnly?: boolean;
   /** Зонд cookie-only: не чистить сессию в этом проходе — решает внешний 401-handler. */
   _suppressAuthClear?: boolean;
+  /** Не показывать глобальный toast при 4xx/5xx (ошибку обрабатывает экран). */
+  silentErrorToast?: boolean;
 };
 
 function readAuthorizationHeader(config: InternalAxiosRequestConfig): string | undefined {
@@ -201,25 +210,29 @@ apiClient.interceptors.response.use(
       }
       emitAppToast({ message: bodyMsg ?? 'Сессия недействительна или истекла. Войдите снова.', kind: 'error' });
       return Promise.reject(error);
-    } else if (!error.response) {
-      emitAppToast({
-        message: 'Нет связи с сервером. Проверьте интернет и доступность API.',
-        kind: 'error',
-        adminOnly: true,
-      });
-    } else if (status != null && status >= 500) {
-      emitAppToast({
-        message: bodyMsg ?? formatApiFailureHint(status, url, 'Сервер временно недоступен. Попробуйте через несколько минут.'),
-        kind: 'error',
-        adminOnly: true,
-      });
-    } else if (status === 403) {
-      emitAppToast({
-        message:
-          bodyMsg ?? 'Недостаточно прав для действия. Если роль изменилась, обновите страницу.',
-        kind: 'error',
-        adminOnly: true,
-      });
+    } else if (!(cfg as RetryableAxiosConfig | undefined)?.silentErrorToast) {
+      if (!error.response) {
+        emitAppToast({
+          message: 'Нет связи с сервером. Проверьте интернет и доступность API.',
+          kind: 'error',
+          adminOnly: true,
+        });
+      } else if (status != null && status >= 500) {
+        emitAppToast({
+          message:
+            bodyMsg ??
+            formatApiFailureHint(status, url, 'Сервер временно недоступен. Попробуйте через несколько минут.'),
+          kind: 'error',
+          adminOnly: true,
+        });
+      } else if (status === 403) {
+        emitAppToast({
+          message:
+            bodyMsg ?? 'Недостаточно прав для действия. Если роль изменилась, обновите страницу.',
+          kind: 'error',
+          adminOnly: true,
+        });
+      }
     }
 
     return Promise.reject(error);

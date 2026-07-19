@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LuCamera, LuPlus, LuUser } from 'react-icons/lu';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -28,6 +28,22 @@ import styles from './FeedPage.module.css';
 const FEED_KEY = ['church-feed'] as const;
 const STORIES_KEY = ['church-stories'] as const;
 
+function meAsStoryGroup(me: NonNullable<ReturnType<typeof useMe>['data']>): StoryAuthorGroup {
+  return {
+    author: {
+      member_id: me.id,
+      username: me.username?.trim() || `member-${me.id}`,
+      first_name: me.first_name,
+      last_name: me.last_name,
+      display_name: me.name || null,
+      avatar_url: me.avatar_url ?? null,
+    },
+    stories: [],
+    all_seen: true,
+    is_me: true,
+  };
+}
+
 export function FeedPage() {
   const meQ = useMe();
   const me = meQ.data ?? null;
@@ -48,7 +64,15 @@ export function FeedPage() {
     queryKey: STORIES_KEY,
     queryFn: fetchStories,
     staleTime: 30_000,
+    retry: 1,
   });
+
+  const storyGroups = useMemo((): StoryAuthorGroup[] => {
+    const remote = storiesQ.data;
+    if (remote && remote.length > 0) return remote;
+    if (me) return [meAsStoryGroup(me)];
+    return [];
+  }, [storiesQ.data, me]);
 
   const loadFirst = useCallback(async () => {
     setLoading(true);
@@ -217,11 +241,22 @@ export function FeedPage() {
       </div>
 
       <div className={styles.storiesWrap}>
-        <StoryRingBar
-          groups={storiesQ.data ?? []}
-          onOpenGroup={(g) => setViewerGroup(g)}
-          onCompose={() => setStoryComposeOpen(true)}
-        />
+        {storiesQ.isLoading && storyGroups.length === 0 ? (
+          <div className={styles.storiesSkel} aria-hidden>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className={styles.storiesSkelItem}>
+                <div className={styles.storiesSkelRing} />
+                <div className={styles.storiesSkelLabel} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <StoryRingBar
+            groups={storyGroups}
+            onOpenGroup={(g) => setViewerGroup(g)}
+            onCompose={() => setStoryComposeOpen(true)}
+          />
+        )}
       </div>
 
       <main className={styles.feed}>
