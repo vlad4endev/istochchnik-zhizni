@@ -6,14 +6,18 @@ import type { StoryAuthorGroup } from '../feedApi';
 
 import styles from './StoryRingBar.module.css';
 
-function shortName(group: StoryAuthorGroup): string {
-  if (group.is_me) return 'Вы';
+function storyLabel(group: StoryAuthorGroup): string {
+  if (group.is_me) return 'Ваша история';
+  const uname = (group.author.username ?? '').trim();
+  if (uname && !/^member-\d+$/i.test(uname)) {
+    return uname.length > 12 ? `${uname.slice(0, 11)}…` : uname;
+  }
   const full =
     memberNameFirstLast(group.author) ||
     group.author.display_name?.trim() ||
-    group.author.username;
+    'Участник';
   const first = full.split(/\s+/)[0] ?? full;
-  return first.length > 10 ? `${first.slice(0, 9)}…` : first;
+  return first.length > 12 ? `${first.slice(0, 11)}…` : first;
 }
 
 export type StoryRingBarProps = {
@@ -61,7 +65,9 @@ export function StoryRingBar({ groups, onOpenGroup, onCompose }: StoryRingBarPro
                 ) : null}
               </span>
             </span>
-            <span className={styles.label}>{shortName(group)}</span>
+            <span className={`${styles.label} ${group.is_me ? styles.labelMe : ''}`}>
+              {storyLabel(group)}
+            </span>
           </button>
         );
       })}

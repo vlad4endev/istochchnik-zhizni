@@ -1,21 +1,19 @@
 .bar {
   display: flex;
-  gap: 0.65rem;
+  gap: 0.85rem;
   overflow-x: auto;
   overflow-y: visible;
-  padding: 0.7rem 0.65rem 0.55rem;
+  padding: 0.55rem 0.7rem 0.7rem;
   margin: 0 auto;
   max-width: 36rem;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  /* место под бейдж «+», чтобы не обрезался overflow-x */
-  padding-bottom: 0.65rem;
 }
 
 @media (min-width: 640px) {
   .bar {
-    gap: 0.85rem;
-    padding: 0.85rem 1rem 0.7rem;
+    gap: 1rem;
+    padding: 0.65rem 1rem 0.85rem;
   }
 }
 
@@ -25,93 +23,68 @@
 
 .item {
   flex: 0 0 auto;
-  width: 4.25rem;
+  width: 4.5rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.35rem;
   border: none;
   background: transparent;
-  padding: 0.1rem 0 0;
+  padding: 0;
   cursor: pointer;
   color: inherit;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  animation: storyEnter 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-
-.item:nth-child(1) { animation-delay: 0.02s; }
-.item:nth-child(2) { animation-delay: 0.05s; }
-.item:nth-child(3) { animation-delay: 0.08s; }
-.item:nth-child(4) { animation-delay: 0.11s; }
-.item:nth-child(5) { animation-delay: 0.14s; }
-.item:nth-child(6) { animation-delay: 0.17s; }
-.item:nth-child(7) { animation-delay: 0.2s; }
-.item:nth-child(8) { animation-delay: 0.23s; }
 
 @media (min-width: 640px) {
   .item {
-    width: 4.5rem;
+    width: 4.75rem;
   }
 }
 
+.item:active .ring {
+  transform: scale(0.96);
+}
+
+/* Instagram-style story ring */
 .ring {
-  width: 3.85rem;
-  height: 3.85rem;
+  width: 4.1rem;
+  height: 4.1rem;
   border-radius: 9999px;
-  padding: 2px;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--profile-primary, #7d3640) 92%, #c47884),
-    color-mix(in srgb, var(--profile-primary-dark, #5c2830) 80%, #2a1216)
-  );
+  padding: 2.5px;
   display: grid;
   place-items: center;
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
   position: relative;
-  overflow: hidden;
-}
-
-.ring:not(.ringSeen):not(.ringEmpty)::before {
-  content: '';
-  position: absolute;
-  inset: -35%;
-  background: conic-gradient(
-    from 0deg,
-    color-mix(in srgb, var(--profile-primary, #7d3640) 95%, #d4a0a8),
-    color-mix(in srgb, var(--profile-primary-dark, #5c2830) 75%, #2a1216),
-    #b4535f,
-    color-mix(in srgb, var(--profile-primary, #7d3640) 95%, #d4a0a8)
+  transition: transform 0.15s ease;
+  background: linear-gradient(
+    45deg,
+    #f09433 0%,
+    #e6683c 25%,
+    #dc2743 50%,
+    #cc2366 75%,
+    #bc1888 100%
   );
-  animation: ringSpin 4.8s linear infinite;
-  z-index: 0;
-}
-
-.ring:not(.ringSeen):not(.ringEmpty) {
-  background: transparent;
 }
 
 @media (min-width: 640px) {
   .ring {
-    width: 4.15rem;
-    height: 4.15rem;
+    width: 4.35rem;
+    height: 4.35rem;
   }
 }
 
-.item:hover .ring {
-  transform: scale(1.04);
-}
-
-.item:active .ring {
-  transform: scale(0.97);
-}
-
 .ringSeen {
-  background: color-mix(in srgb, var(--profile-border, #a8a29e) 85%, transparent);
+  background: color-mix(in srgb, var(--profile-text-faint, #737373) 55%, transparent);
 }
 
 .ringEmpty {
-  background: color-mix(in srgb, var(--profile-border, #a8a29e) 55%, transparent);
+  background: transparent;
+  padding: 0;
+}
+
+.ringEmpty .avatarWrap {
+  border: 1.5px solid color-mix(in srgb, var(--profile-text-faint, #a8a29e) 55%, transparent);
 }
 
 .avatarWrap {
@@ -119,12 +92,25 @@
   height: 100%;
   border-radius: 9999px;
   overflow: hidden;
-  background: var(--profile-surface, #f4f1ed);
-  border: 2px solid var(--profile-surface, #f4f1ed);
+  background: var(--profile-surface, #000);
+  border: 2.5px solid var(--profile-surface, #000);
   display: grid;
   place-items: center;
   position: relative;
-  z-index: 1;
+  box-sizing: border-box;
+}
+
+.ringEmpty .avatarWrap {
+  width: 4.1rem;
+  height: 4.1rem;
+  border-width: 1.5px;
+}
+
+@media (min-width: 640px) {
+  .ringEmpty .avatarWrap {
+    width: 4.35rem;
+    height: 4.35rem;
+  }
 }
 
 .avatarWrap img {
@@ -135,55 +121,32 @@
 
 .addBadge {
   position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 1.15rem;
-  height: 1.15rem;
+  right: -1px;
+  bottom: -1px;
+  width: 1.35rem;
+  height: 1.35rem;
   border-radius: 9999px;
-  background: var(--profile-primary, #7d3640);
+  background: #0095f6;
   color: #fff;
   display: grid;
   place-items: center;
-  border: 2px solid var(--profile-surface, #f4f1ed);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  border: 2.5px solid var(--profile-surface, #000);
+  box-shadow: none;
 }
 
 .label {
   max-width: 100%;
   font-size: 0.6875rem;
-  font-weight: 700;
+  font-weight: 400;
   line-height: 1.15;
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--profile-text-soft, #57534e);
+  color: var(--profile-text-heading, #fafafa);
 }
 
-@keyframes ringSpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes storyEnter {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.94);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .item,
-  .ring:not(.ringSeen):not(.ringEmpty) {
-    animation: none !important;
-  }
-
-  .ring {
-    transition: none !important;
-  }
+.labelMe {
+  font-weight: 400;
+  color: var(--profile-text-soft, #a8a29e);
 }
