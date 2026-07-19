@@ -290,7 +290,7 @@ html[data-pwa-standalone='1'] .app-splash {
   margin: 0;
   font-family: ui-rounded, 'Segoe UI', 'SF Pro Text', Roboto, 'Helvetica Neue', sans-serif;
   font-size: 0.75rem;
-  font-weight: 560;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--splash-text-muted);
