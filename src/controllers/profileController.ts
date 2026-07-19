@@ -10,10 +10,12 @@ import {
   getFeedUnreadCount,
   getProfileWithFeed,
   getProfileWithFeedByUsername,
+  likeComment,
   likePost,
   listComments,
   markFeedSeen,
   patchMyProfileSettings,
+  unlikeComment,
   unlikePost,
   updatePostCaptionAsOwner,
   type MediaType,
@@ -450,6 +452,62 @@ export async function deleteComment(req: Request, res: Response): Promise<void> 
     res.json({ ok: true });
   } catch (e) {
     console.error('[profile] deleteComment error:', e);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function postCommentLike(req: Request, res: Response): Promise<void> {
+  const authUserId = (req as AuthReq).authUserId;
+  if (!authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const postId = String(req.params.id ?? '').trim();
+  const commentId = String(req.params.commentId ?? '').trim();
+  if (!postId || !commentId) {
+    res.status(400).json({ error: 'Invalid id' });
+    return;
+  }
+  try {
+    const r = await likeComment(postId, commentId, authUserId);
+    res.json({ ok: true, like_count: r.like_count });
+  } catch (e) {
+    console.error('[profile] commentLike error:', e);
+    const msg = e instanceof Error ? e.message : 'Database error';
+    if (msg.includes('не найден')) {
+      res.status(404).json({ error: msg });
+      return;
+    }
+    if (msg.includes('недоступны')) {
+      res.status(403).json({ error: msg });
+      return;
+    }
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function deleteCommentLike(req: Request, res: Response): Promise<void> {
+  const authUserId = (req as AuthReq).authUserId;
+  if (!authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const postId = String(req.params.id ?? '').trim();
+  const commentId = String(req.params.commentId ?? '').trim();
+  if (!postId || !commentId) {
+    res.status(400).json({ error: 'Invalid id' });
+    return;
+  }
+  try {
+    const r = await unlikeComment(postId, commentId, authUserId);
+    res.json({ ok: true, like_count: r.like_count });
+  } catch (e) {
+    console.error('[profile] commentUnlike error:', e);
+    const msg = e instanceof Error ? e.message : 'Database error';
+    if (msg.includes('недоступны')) {
+      res.status(403).json({ error: msg });
+      return;
+    }
     res.status(500).json({ error: 'Database error' });
   }
 }

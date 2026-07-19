@@ -61,7 +61,10 @@ export function PublicProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [editPost, setEditPost] = useState<ProfileFeedPost | null>(null);
-  const [commentPostId, setCommentPostId] = useState<string | null>(null);
+  const [commentTarget, setCommentTarget] = useState<{
+    postId: string;
+    authorName: string | null;
+  } | null>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [postBusy, setPostBusy] = useState<Record<string, string | undefined>>({});
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
@@ -477,7 +480,14 @@ export function PublicProfilePage() {
                 profileLinkState={profileLinkState}
                 onToggleLike={(p) => void onToggleLike(p)}
                 onRepost={(p) => void onRepost(p)}
-                onOpenComments={(p) => setCommentPostId(p.id)}
+                onOpenComments={(p) => {
+                  const uname = data?.profile.username?.trim() ?? '';
+                  const authorName =
+                    (uname && !/^member-\d+$/i.test(uname) ? uname : null) ||
+                    displayName ||
+                    null;
+                  setCommentTarget({ postId: p.id, authorName });
+                }}
                 onEdit={(p) => setEditPost(p as ProfileFeedPost)}
                 onDelete={(p) => void onDeletePost(p)}
               />
@@ -511,13 +521,14 @@ export function PublicProfilePage() {
       />
 
       <CommentSheet
-        open={commentPostId != null}
-        postId={commentPostId}
+        open={commentTarget != null}
+        postId={commentTarget?.postId ?? null}
+        postAuthorName={commentTarget?.authorName}
         myMemberId={me?.id ?? null}
         myAuthor={myAuthor}
         isAdmin={isAdmin}
         profileLinkState={profileLinkState}
-        onClose={() => setCommentPostId(null)}
+        onClose={() => setCommentTarget(null)}
         onCountChange={(postId, delta) => {
           setData((prev) => {
             if (!prev) return prev;

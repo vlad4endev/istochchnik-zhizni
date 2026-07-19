@@ -14,6 +14,7 @@ import { blockImpersonationForChats } from '../middleware/blockImpersonationForC
 import { requireBroadcastManager } from '../middleware/requireBroadcastManager';
 import {
   deleteComment,
+  deleteCommentLike,
   deleteLike,
   deletePost,
   getFeed,
@@ -24,6 +25,7 @@ import {
   patchPost,
   patchProfileSettings,
   postComment,
+  postCommentLike,
   postCreatePost,
   postFeedMarkSeen,
   postLike,
@@ -85,6 +87,8 @@ router.delete('/posts/:id', requireAuthSession, deletePost);
 router.get('/posts/:id/comments', requireAuthSession, getPostComments);
 router.post('/posts/:id/comment', requireAuthSession, postComment);
 router.delete('/posts/:id/comments/:commentId', requireAuthSession, deleteComment);
+router.post('/posts/:id/comments/:commentId/like', requireAuthSession, postCommentLike);
+router.delete('/posts/:id/comments/:commentId/like', requireAuthSession, deleteCommentLike);
 
 type AuthReq = Request & { authUserId?: number };
 

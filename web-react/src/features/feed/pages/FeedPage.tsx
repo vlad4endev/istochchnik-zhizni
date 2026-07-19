@@ -62,7 +62,10 @@ export function FeedPage() {
   const [error, setError] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [storyComposeOpen, setStoryComposeOpen] = useState(false);
-  const [commentPostId, setCommentPostId] = useState<string | null>(null);
+  const [commentTarget, setCommentTarget] = useState<{
+    postId: string;
+    authorName: string | null;
+  } | null>(null);
   const [viewerGroup, setViewerGroup] = useState<StoryAuthorGroup | null>(null);
   const [busy, setBusy] = useState<Record<string, string | undefined>>({});
   const [headerScrolled, setHeaderScrolled] = useState(false);
@@ -409,7 +412,15 @@ export function FeedPage() {
               profileLinkState={profileLinkState}
               onToggleLike={(p) => void onToggleLike(p)}
               onRepost={(p) => void onRepost(p)}
-              onOpenComments={(p) => setCommentPostId(p.id)}
+              onOpenComments={(p) => {
+                const a = p.author;
+                const uname = a?.username?.trim() ?? '';
+                const authorName =
+                  (uname && !/^member-\d+$/i.test(uname) ? uname : null) ||
+                  a?.display_name?.trim() ||
+                  null;
+                setCommentTarget({ postId: p.id, authorName });
+              }}
             />
           ))}
 
@@ -456,13 +467,14 @@ export function FeedPage() {
       />
 
       <CommentSheet
-        open={commentPostId != null}
-        postId={commentPostId}
+        open={commentTarget != null}
+        postId={commentTarget?.postId ?? null}
+        postAuthorName={commentTarget?.authorName}
         myMemberId={me?.id ?? null}
         myAuthor={myAuthor}
         isAdmin={isAdmin}
         profileLinkState={profileLinkState}
-        onClose={() => setCommentPostId(null)}
+        onClose={() => setCommentTarget(null)}
         onCountChange={(postId, delta) => {
           setPosts((prev) =>
             prev.map((p) =>

@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LuMessageCircle, LuSendHorizontal, LuTrash2, LuUser, LuX } from 'react-icons/lu';
+import { LuHeart, LuTrash2, LuUser, LuX } from 'react-icons/lu';
 
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
-import { pluralizeRu } from '../../../lib/pluralizeRu';
 import { memberNameFirstLast } from '../../profile/memberDisplayName';
 import type { ProfileFeedPostAuthor } from '../../profile/publicProfileApi';
 import {
   createPostComment,
   deletePostComment,
   fetchPostComments,
+  likePostComment,
+  unlikePostComment,
   type FeedComment,
 } from '../feedApi';
 import { formatPostDate } from './FeedPostCard';
@@ -17,22 +18,23 @@ import { formatPostDate } from './FeedPostCard';
 import styles from './CommentSheet.module.css';
 
 const COMMENT_MAX = 2000;
+const QUICK_EMOJIS = ['❤️', '🙌', '🔥', '👏', '😢', '😍', '😮', '😂'] as const;
 
-function commentAuthorName(c: FeedComment): string {
-  if (!c.author) return 'Участник';
+function commentHandle(c: FeedComment): string {
+  if (!c.author) return 'участник';
   const uname = (c.author.username ?? '').trim();
-  const isPlaceholder = /^member-\d+$/i.test(uname);
+  if (uname && !/^member-\d+$/i.test(uname)) return uname;
   return (
     memberNameFirstLast(c.author) ||
     c.author.display_name?.trim() ||
-    (!isPlaceholder && uname ? `@${uname}` : 'Участник')
+    `участник_${c.author.member_id}`
   );
 }
 
 function autosizeTextarea(el: HTMLTextAreaElement | null) {
   if (!el) return;
   el.style.height = 'auto';
-  el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  el.style.height = `${Math.min(el.scrollHeight, 104)}px`;
 }
 
 function prefersDesktopComposer(): boolean {
@@ -45,6 +47,8 @@ export type CommentSheetProps = {
   postId: string | null;
   myMemberId: number | null;
   myAuthor?: ProfileFeedPostAuthor | null;
+  /** Имя автора поста для плейсхолдера «Оставьте комментарий для …». */
+  postAuthorName?: string | null;
   isAdmin?: boolean;
   profileLinkState?: { backTo?: string; backLabel?: string };
   onClose: () => void;
@@ -56,6 +60,7 @@ export function CommentSheet({
   postId,
   myMemberId,
   myAuthor,
+  postAuthorName,
   isAdmin,
   profileLinkState,
   onClose,
@@ -70,6 +75,7 @@ export function CommentSheet({
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [likingId, setLikingId] = useState<string | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [keyboardInset, setKeyboardInset] = useState(0);
@@ -120,7 +126,6 @@ export function CommentSheet({
   useLayoutEffect(() => {
     if (!open) return;
     const t = window.setTimeout(() => {
-      // На тач-устройствах не открываем клавиатуру сразу — меньше скачков вёрстки.
       if (prefersDesktopComposer()) {
         inputRef.current?.focus({ preventScroll: true });
       }
@@ -161,8 +166,32 @@ export function CommentSheet({
   if (!open || !postId) return null;
 
   const myAv = resolvePublicUrl(myAuthor?.avatar_url ?? null);
-  const countLabel = pluralizeRu(comments.length, ['комментарий', 'комментария', 'комментариев']);
   const nearLimit = text.length >= COMMENT_MAX - 80;
+  const authorLabel = (postAuthorName ?? '').trim();
+  const placeholder = authorLabel
+    ? `Оставьте комментарий для ${authorLabel}…`
+    : 'Оставьте комментарий…';
+
+  const appendEmoji = (emoji: string) => {
+    setText((prev) => {
+      const next = `${prev}${emoji}`;
+      return next.length > COMMENT_MAX ? prev : next;
+    });
+    requestAnimationFrame(() => {
+      autosizeTextarea(inputRef.current);
+      inputRef.current?.focus({ preventScroll: true });
+    });
+  };
+
+  const onReply = (c: FeedComment) => {
+    const handle = commentHandle(c);
+    const prefix = `@${handle} `;
+    setText((prev) => (prev.startsWith(prefix) ? prev : `${prefix}${prev}`));
+    requestAnimationFrame(() => {
+      autosizeTextarea(inputRef.current);
+      inputRef.current?.focus({ preventScroll: true });
+    });
+  };
 
   const onSend = async () => {
     const trimmed = text.trim();
@@ -180,6 +209,8 @@ export function CommentSheet({
           text: trimmed,
           created_at: created.created_at,
           author: myAuthor ?? null,
+          like_count: 0,
+          liked_by_me: false,
         },
       ]);
       setText('');
@@ -196,6 +227,40 @@ export function CommentSheet({
       setSendError(msg);
     } finally {
       setSending(false);
+    }
+  };
+
+  const onToggleLike = async (c: FeedComment) => {
+    if (likingId === c.id) return;
+    setLikingId(c.id);
+    const liked = Boolean(c.liked_by_me);
+    const prevCount = c.like_count ?? 0;
+    setComments((prev) =>
+      prev.map((x) =>
+        x.id === c.id
+          ? {
+              ...x,
+              liked_by_me: !liked,
+              like_count: Math.max(0, prevCount + (liked ? -1 : 1)),
+            }
+          : x,
+      ),
+    );
+    try {
+      const r = liked
+        ? await unlikePostComment(postId, c.id)
+        : await likePostComment(postId, c.id);
+      setComments((prev) =>
+        prev.map((x) => (x.id === c.id ? { ...x, like_count: r.like_count, liked_by_me: !liked } : x)),
+      );
+    } catch {
+      setComments((prev) =>
+        prev.map((x) =>
+          x.id === c.id ? { ...x, liked_by_me: liked, like_count: prevCount } : x,
+        ),
+      );
+    } finally {
+      setLikingId(null);
     }
   };
 
@@ -234,27 +299,19 @@ export function CommentSheet({
       >
         <div className={styles.handle} aria-hidden />
         <div className={styles.head}>
-          <div className={styles.headText}>
-            <h2 id={titleId} className={styles.title}>
-              Комментарии
-            </h2>
-            {!loading && !error ? (
-              <p className={styles.subtitle}>
-                {comments.length === 0 ? 'Пока пусто' : `${comments.length} ${countLabel}`}
-              </p>
-            ) : (
-              <p className={styles.subtitle}>Обсуждение публикации</p>
-            )}
-          </div>
           <button type="button" className={styles.closeBtn} aria-label="Закрыть" onClick={onClose}>
-            <LuX className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+            <LuX className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
+          <h2 id={titleId} className={styles.title}>
+            Комментарии
+          </h2>
+          <span className={styles.headSpacer} aria-hidden />
         </div>
 
         <div className={styles.list} ref={listRef}>
           {loading ? (
             <>
-              {Array.from({ length: 4 }).map((_, i) => (
+              {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className={styles.skelRow} aria-hidden>
                   <div className={styles.skelAvatar} />
                   <div className={styles.skelBody}>
@@ -277,27 +334,23 @@ export function CommentSheet({
 
           {!loading && !error && comments.length === 0 ? (
             <div className={styles.stateBox}>
-              <div className={styles.stateIcon} aria-hidden>
-                <LuMessageCircle className="h-5 w-5" strokeWidth={2.25} />
-              </div>
-              <p className={styles.stateTitle}>Начните обсуждение</p>
-              <p className={styles.stateHint}>Напишите первый комментарий к этой публикации.</p>
+              <p className={styles.stateTitle}>Пока нет комментариев</p>
+              <p className={styles.stateHint}>Начните обсуждение.</p>
             </div>
           ) : null}
 
           {!loading &&
             !error &&
             comments.map((c) => {
-              const name = commentAuthorName(c);
+              const handle = commentHandle(c);
               const uname = c.author?.username?.trim() ?? '';
               const av = resolvePublicUrl(c.author?.avatar_url ?? null);
               const mine = myMemberId != null && c.member_id === myMemberId;
               const canDelete = mine || Boolean(isAdmin);
+              const liked = Boolean(c.liked_by_me);
+              const likeCount = c.like_count ?? 0;
               return (
-                <div
-                  key={c.id}
-                  className={`${styles.row} ${mine ? styles.rowMine : ''}`}
-                >
+                <div key={c.id} className={styles.row}>
                   {uname ? (
                     <Link
                       to={`/profile/${encodeURIComponent(uname)}`}
@@ -320,7 +373,8 @@ export function CommentSheet({
                       )}
                     </div>
                   )}
-                  <div className={styles.bubble}>
+
+                  <div className={styles.main}>
                     <div className={styles.meta}>
                       {uname ? (
                         <Link
@@ -329,19 +383,42 @@ export function CommentSheet({
                           className={styles.who}
                           onClick={onClose}
                         >
-                          {name}
+                          {handle}
                         </Link>
                       ) : (
-                        <span className={styles.who}>{name}</span>
+                        <span className={styles.who}>{handle}</span>
                       )}
+                      <span className={styles.dot} aria-hidden>
+                        ·
+                      </span>
                       <time className={styles.when} dateTime={c.created_at}>
                         {formatPostDate(c.created_at)}
                       </time>
                     </div>
                     <p className={styles.text}>{c.text}</p>
+                    <button type="button" className={styles.replyBtn} onClick={() => onReply(c)}>
+                      Ответить
+                    </button>
                   </div>
-                  {canDelete ? (
-                    <div className={styles.rowActions}>
+
+                  <div className={styles.likeCol}>
+                    <button
+                      type="button"
+                      className={`${styles.likeBtn} ${liked ? styles.likeBtnActive : ''}`}
+                      aria-label={liked ? 'Убрать лайк' : 'Нравится'}
+                      aria-pressed={liked}
+                      disabled={likingId === c.id}
+                      onClick={() => void onToggleLike(c)}
+                    >
+                      <LuHeart
+                        className="h-[18px] w-[18px]"
+                        strokeWidth={liked ? 0 : 1.75}
+                        fill={liked ? 'currentColor' : 'none'}
+                        aria-hidden
+                      />
+                    </button>
+                    <span className={styles.likeCount}>{likeCount > 0 ? likeCount : ''}</span>
+                    {canDelete ? (
                       <button
                         type="button"
                         className={styles.deleteBtn}
@@ -349,65 +426,79 @@ export function CommentSheet({
                         disabled={deletingId === c.id}
                         onClick={() => void onDelete(c)}
                       >
-                        <LuTrash2 className="h-4 w-4" aria-hidden />
+                        <LuTrash2 className="h-3.5 w-3.5" aria-hidden />
                       </button>
-                    </div>
-                  ) : null}
+                    ) : null}
+                  </div>
                 </div>
               );
             })}
         </div>
 
-        <div className={styles.composer}>
-          <div className={styles.composerAvatar} aria-hidden>
-            {myAv ? <img src={myAv} alt="" /> : <LuUser className="h-4 w-4 opacity-40" />}
-          </div>
-          <div className={styles.composerMain}>
-            <div className={`${styles.inputWrap} ${inputFocused ? styles.inputWrapFocus : ''}`}>
-              <textarea
-                ref={inputRef}
-                className={styles.input}
-                rows={1}
-                maxLength={COMMENT_MAX}
-                placeholder="Написать комментарий…"
-                value={text}
-                disabled={sending}
-                enterKeyHint="send"
-                onFocus={() => {
-                  setInputFocused(true);
-                  window.setTimeout(() => {
-                    inputRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-                  }, 280);
-                }}
-                onBlur={() => setInputFocused(false)}
-                onChange={(e) => {
-                  setText(e.target.value);
-                  autosizeTextarea(e.currentTarget);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter' || e.shiftKey) return;
-                  // На телефоне Enter — новая строка; отправка кнопкой.
-                  if (!prefersDesktopComposer()) return;
-                  e.preventDefault();
-                  void onSend();
-                }}
-              />
+        <div className={styles.composerBlock}>
+          <div className={styles.emojiRow} aria-label="Быстрые реакции">
+            {QUICK_EMOJIS.map((emoji) => (
               <button
+                key={emoji}
                 type="button"
-                className={styles.sendBtn}
-                disabled={sending || !text.trim()}
-                aria-label="Отправить"
-                onClick={() => void onSend()}
+                className={styles.emojiBtn}
+                aria-label={`Добавить ${emoji}`}
+                onClick={() => appendEmoji(emoji)}
               >
-                <LuSendHorizontal className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                {emoji}
               </button>
+            ))}
+          </div>
+
+          <div className={styles.composer}>
+            <div className={styles.composerAvatar} aria-hidden>
+              {myAv ? <img src={myAv} alt="" /> : <LuUser className="h-4 w-4 opacity-40" />}
             </div>
-            {sendError ? <p className={styles.errorText}>{sendError}</p> : null}
-            {nearLimit ? (
-              <p className={`${styles.charHint} ${text.length >= COMMENT_MAX ? styles.charHintWarn : ''}`}>
-                {text.length}/{COMMENT_MAX}
-              </p>
-            ) : null}
+            <div className={styles.composerMain}>
+              <div className={`${styles.inputWrap} ${inputFocused ? styles.inputWrapFocus : ''}`}>
+                <textarea
+                  ref={inputRef}
+                  className={styles.input}
+                  rows={1}
+                  maxLength={COMMENT_MAX}
+                  placeholder={placeholder}
+                  value={text}
+                  disabled={sending}
+                  enterKeyHint="send"
+                  onFocus={() => {
+                    setInputFocused(true);
+                    window.setTimeout(() => {
+                      inputRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                    }, 280);
+                  }}
+                  onBlur={() => setInputFocused(false)}
+                  onChange={(e) => {
+                    setText(e.target.value);
+                    autosizeTextarea(e.currentTarget);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || e.shiftKey) return;
+                    if (!prefersDesktopComposer()) return;
+                    e.preventDefault();
+                    void onSend();
+                  }}
+                />
+                <button
+                  type="button"
+                  className={styles.sendBtn}
+                  disabled={sending || !text.trim()}
+                  onClick={() => void onSend()}
+                >
+                  Опубл.
+                </button>
+              </div>
+              {sendError ? <p className={styles.errorText}>{sendError}</p> : null}
+              {nearLimit ? (
+                <p className={`${styles.charHint} ${text.length >= COMMENT_MAX ? styles.charHintWarn : ''}`}>
+                  {text.length}/{COMMENT_MAX}
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
