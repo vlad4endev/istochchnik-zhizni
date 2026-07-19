@@ -1681,7 +1681,7 @@ function DashboardMain() {
 
             {latestEpisode ? (
               <div className="mt-4 min-w-0">
-                <p className="min-w-0 text-base font-extrabold text-stone-900 max-lg:truncate lg:line-clamp-2">
+                <p className="min-w-0 text-base font-extrabold leading-snug text-stone-900 line-clamp-2">
                   {latestEpisode.title}
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">

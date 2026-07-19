@@ -12,14 +12,44 @@ const fontScaleMap: Record<FontSize, number> = {
   xlarge: 1.25,
 };
 
+const A11Y_STORAGE_KEY = 'istoch-life-a11y-v1';
+
+function readA11yDarkLike(): boolean {
+  try {
+    const raw = localStorage.getItem(A11Y_STORAGE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { colorTheme?: string };
+    return (
+      parsed.colorTheme === 'dark' ||
+      parsed.colorTheme === 'high-contrast' ||
+      parsed.colorTheme === 'blue'
+    );
+  } catch {
+    return false;
+  }
+}
+
 function applyTheme(theme: Theme): void {
   const root = document.documentElement;
+  // AccessibilityProvider owns data-color-theme + dark class after mount.
+  // On boot / rare appearance-only paths, keep html.dark aligned.
   root.classList.remove('dark', 'theme-sepia');
 
-  if (theme === 'dark') root.classList.add('dark');
-  else if (theme === 'sepia') root.classList.add('theme-sepia');
-  else if (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  if (theme === 'dark') {
     root.classList.add('dark');
+    if (!root.getAttribute('data-color-theme')) {
+      root.setAttribute('data-color-theme', 'dark');
+    }
+  } else if (theme === 'sepia') {
+    root.classList.add('theme-sepia');
+    root.removeAttribute('data-color-theme');
+  } else if (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    root.classList.add('dark');
+    if (!root.getAttribute('data-color-theme')) {
+      root.setAttribute('data-color-theme', 'dark');
+    }
+  } else {
+    root.removeAttribute('data-color-theme');
   }
 
   syncThemeColorMeta();
@@ -35,7 +65,7 @@ function syncThemeColorMeta(): void {
   const root = document.documentElement;
   let content = '#7d3640';
   if (root.classList.contains('theme-sepia')) content = '#5c4330';
-  else if (root.classList.contains('dark')) content = '#0a0a0b';
+  else if (root.classList.contains('dark')) content = '#121214';
 
   let meta = document.querySelector('meta[name="theme-color"][data-app-managed="true"]');
   if (!meta) {
@@ -79,6 +109,26 @@ export function initAppearance(): void {
     localStorage.removeItem(MANTINE_COLOR_SCHEME_STORAGE_KEY);
   } catch {
     /* ignore */
+  }
+
+  // A11y color theme wins on boot to avoid light flash when user chose dark in settings.
+  if (readA11yDarkLike()) {
+    try {
+      const stored = localStorage.getItem('app-appearance');
+      const parsed = stored
+        ? (JSON.parse(stored) as { state?: { fontSize?: FontSize } })
+        : null;
+      const fontSize = parsed?.state?.fontSize ?? 'normal';
+      useAppearanceStore.setState({ theme: 'dark', fontSize });
+      applyTheme('dark');
+      applyFontSize(fontSize);
+      return;
+    } catch {
+      useAppearanceStore.setState({ theme: 'dark', fontSize: 'normal' });
+      applyTheme('dark');
+      applyFontSize('normal');
+      return;
+    }
   }
 
   try {
