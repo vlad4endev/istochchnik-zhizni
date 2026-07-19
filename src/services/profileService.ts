@@ -604,11 +604,268 @@ export async function unlikePost(postId: string, memberId: number): Promise<{ li
   return { like_count: Number((cnt.rows[0] as { c?: unknown } | undefined)?.c ?? 0), removed: (del.rowCount ?? 0) > 0 };
 }
 
+export type FeedPost = {
+  id: string;
+  member_id: number;
+  author: ProfilePostAuthor;
+  caption: string | null;
+  created_at: string;
+  media: Array<{ url: string; type: MediaType; order: number }>;
+  like_count: number;
+  comment_count: number;
+  repost_count: number;
+  liked_by_me: boolean;
+  reposted_by_me: boolean;
+  shared_post: ProfilePostEmbedded | null;
+};
+
+export type ChurchFeedPage = {
+  posts: FeedPost[];
+  next_cursor: string | null;
+};
+
+function encodeFeedCursor(createdAt: string, id: string): string {
+  return Buffer.from(JSON.stringify({ t: createdAt, id }), 'utf8').toString('base64url');
+}
+
+function decodeFeedCursor(raw: string | undefined | null): { t: string; id: string } | null {
+  if (!raw || typeof raw !== 'string' || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(raw.trim(), 'base64url').toString('utf8')) as {
+      t?: unknown;
+      id?: unknown;
+    };
+    if (typeof parsed.t !== 'string' || typeof parsed.id !== 'string') return null;
+    if (!parsed.t.trim() || !/^\d+$/.test(parsed.id)) return null;
+    return { t: parsed.t, id: parsed.id };
+  } catch {
+    return null;
+  }
+}
+
+/** Церковная хронологическая лента: все не-private (+ свои private). */
+export async function getChurchFeed(params: {
+  viewerMemberId: number;
+  cursor?: string | null;
+  limit?: number;
+}): Promise<ChurchFeedPage> {
+  const limit = Math.min(Math.max(Number(params.limit) || 20, 1), 50);
+  const cursor = decodeFeedCursor(params.cursor);
+  const viewerId = params.viewerMemberId;
+
+  const sqlParams: unknown[] = [viewerId];
+  let cursorClause = '';
+  if (cursor) {
+    sqlParams.push(cursor.t, cursor.id);
+    cursorClause = `AND (p.created_at, p.id) < ($2::timestamptz, $3::bigint)`;
+  }
+  sqlParams.push(limit + 1);
+  const limitParam = `$${sqlParams.length}`;
+
+  const postsRes = await query(
+    `SELECT
+      p.id::text AS id,
+      p.member_id,
+      p.caption,
+      p.created_at::text AS created_at,
+      p.shared_post_id::text AS shared_post_id,
+      COALESCE(l.like_count, 0)::int AS like_count,
+      COALESCE(c.comment_count, 0)::int AS comment_count,
+      COALESCE(rc.cnt, 0)::int AS repost_count
+     FROM profile_posts p
+     INNER JOIN user_profiles up ON up.member_id = p.member_id
+     LEFT JOIN (
+       SELECT post_id, COUNT(*)::int AS like_count
+       FROM profile_post_likes
+       GROUP BY post_id
+     ) l ON l.post_id = p.id
+     LEFT JOIN (
+       SELECT post_id, COUNT(*)::int AS comment_count
+       FROM profile_post_comments
+       GROUP BY post_id
+     ) c ON c.post_id = p.id
+     LEFT JOIN (
+       SELECT shared_post_id, COUNT(*)::int AS cnt
+       FROM profile_posts
+       WHERE shared_post_id IS NOT NULL
+       GROUP BY shared_post_id
+     ) rc ON rc.shared_post_id = p.id
+     WHERE (up.is_private = FALSE OR p.member_id = $1)
+     ${cursorClause}
+     ORDER BY p.created_at DESC, p.id DESC
+     LIMIT ${limitParam}`,
+    sqlParams,
+  );
+
+  const postRows = postsRes.rows as Array<{
+    id: string;
+    member_id: number;
+    caption: string | null;
+    created_at: string;
+    shared_post_id: string | null;
+    like_count: number;
+    comment_count: number;
+    repost_count: number;
+  }>;
+
+  const hasMore = postRows.length > limit;
+  const pageRows = hasMore ? postRows.slice(0, limit) : postRows;
+  const postIds = pageRows.map((r) => r.id);
+  const sharedIds = pageRows.map((r) => r.shared_post_id).filter((x): x is string => !!x);
+  const memberIds = pageRows.map((r) => r.member_id);
+
+  const [mediaByPost, authors, embeddedById] = await Promise.all([
+    loadMediaMap(postIds),
+    loadAuthorsForMemberIds(memberIds),
+    sharedIds.length > 0 ? buildEmbeddedPosts([...new Set(sharedIds)]) : Promise.resolve(new Map<string, ProfilePostEmbedded>()),
+  ]);
+
+  let likedSet = new Set<string>();
+  let repostedRootSet = new Set<string>();
+  if (viewerId > 0 && postIds.length > 0) {
+    const lk = await query(
+      `SELECT post_id::text AS post_id FROM profile_post_likes
+       WHERE member_id = $1 AND post_id = ANY($2::bigint[])`,
+      [viewerId, postIds.map((id) => BigInt(id))],
+    );
+    likedSet = new Set((lk.rows as Array<{ post_id: string }>).map((x) => x.post_id));
+
+    const rootIds = [
+      ...new Set(
+        pageRows.map((r) => (r.shared_post_id && r.shared_post_id.length > 0 ? r.shared_post_id : r.id)),
+      ),
+    ];
+    if (rootIds.length > 0) {
+      const rp = await query(
+        `SELECT shared_post_id::text AS sid
+         FROM profile_posts
+         WHERE member_id = $1 AND shared_post_id = ANY($2::bigint[])`,
+        [viewerId, rootIds.map((id) => BigInt(id))],
+      );
+      repostedRootSet = new Set((rp.rows as Array<{ sid: string }>).map((x) => x.sid));
+    }
+  }
+
+  const posts: FeedPost[] = [];
+  for (const row of pageRows) {
+    const author = authors.get(row.member_id);
+    if (!author) continue;
+    const contentRootId = row.shared_post_id && row.shared_post_id.length > 0 ? row.shared_post_id : row.id;
+    posts.push({
+      id: row.id,
+      member_id: row.member_id,
+      author,
+      caption: row.caption,
+      created_at: row.created_at,
+      media: mediaByPost.get(row.id) ?? [],
+      like_count: row.like_count,
+      comment_count: row.comment_count,
+      repost_count: row.repost_count,
+      liked_by_me: likedSet.has(row.id),
+      reposted_by_me: repostedRootSet.has(contentRootId),
+      shared_post: row.shared_post_id ? embeddedById.get(row.shared_post_id) ?? null : null,
+    });
+  }
+
+  const last = pageRows[pageRows.length - 1];
+  const next_cursor =
+    hasMore && last ? encodeFeedCursor(last.created_at, last.id) : null;
+
+  return { posts, next_cursor };
+}
+
+export type ProfilePostComment = {
+  id: string;
+  post_id: string;
+  member_id: number | null;
+  text: string;
+  created_at: string;
+  author: ProfilePostAuthor | null;
+};
+
+async function getPostCommentGate(postId: string): Promise<{
+  postMemberId: number;
+  allowComments: PrivacyLevel;
+} | null> {
+  const r = await query(
+    `SELECT
+       p.member_id,
+       COALESCE(up.allow_comments, 'public') AS allow_comments
+     FROM profile_posts p
+     LEFT JOIN user_profiles up ON up.member_id = p.member_id
+     WHERE p.id = $1::bigint`,
+    [postId],
+  );
+  const row = r.rows[0] as { member_id?: number; allow_comments?: string } | undefined;
+  if (!row || row.member_id == null) return null;
+  const allow =
+    row.allow_comments === 'private' || row.allow_comments === 'followers' || row.allow_comments === 'public'
+      ? (row.allow_comments as PrivacyLevel)
+      : 'public';
+  return { postMemberId: row.member_id, allowComments: allow };
+}
+
+/** Может ли viewer комментировать / читать комментарии. `followers` = как public (нет follow-графа). */
+export function canAccessPostComments(
+  gate: { postMemberId: number; allowComments: PrivacyLevel },
+  viewerMemberId: number,
+): boolean {
+  if (gate.allowComments === 'private') {
+    return viewerMemberId === gate.postMemberId;
+  }
+  return true;
+}
+
+export async function listComments(postId: string, viewerMemberId: number): Promise<ProfilePostComment[]> {
+  const gate = await getPostCommentGate(postId);
+  if (!gate) throw new Error('Публикация не найдена');
+  if (!canAccessPostComments(gate, viewerMemberId)) {
+    throw new Error('Комментарии недоступны');
+  }
+
+  const r = await query(
+    `SELECT
+      c.id::text AS id,
+      c.post_id::text AS post_id,
+      c.member_id,
+      c.text,
+      c.created_at::text AS created_at
+     FROM profile_post_comments c
+     WHERE c.post_id = $1::bigint
+     ORDER BY c.created_at ASC, c.id ASC
+     LIMIT 200`,
+    [postId],
+  );
+  const rows = r.rows as Array<{
+    id: string;
+    post_id: string;
+    member_id: number | null;
+    text: string;
+    created_at: string;
+  }>;
+  const authors = await loadAuthorsForMemberIds(
+    rows.map((x) => x.member_id).filter((id): id is number => typeof id === 'number' && id > 0),
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    post_id: row.post_id,
+    member_id: row.member_id,
+    text: row.text,
+    created_at: row.created_at,
+    author: row.member_id != null ? authors.get(row.member_id) ?? null : null,
+  }));
+}
+
 export async function addComment(
   postId: string,
   memberId: number,
   text: string,
 ): Promise<{ id: string; created_at: string }> {
+  const gate = await getPostCommentGate(postId);
+  if (!gate) throw new Error('Публикация не найдена');
+  if (!canAccessPostComments(gate, memberId)) {
+    throw new Error('Комментарии недоступны');
+  }
   const r = await query(
     `INSERT INTO profile_post_comments (post_id, member_id, text)
      VALUES ($1::bigint, $2, $3)
@@ -618,6 +875,28 @@ export async function addComment(
   const row = r.rows[0] as { id?: string; created_at?: string } | undefined;
   if (!row?.id) throw new Error('Failed to add comment');
   return { id: row.id, created_at: String(row.created_at ?? new Date().toISOString()) };
+}
+
+export async function deleteCommentAsOwnerOrAdmin(
+  postId: string,
+  commentId: string,
+  memberId: number,
+  isAdmin: boolean,
+): Promise<boolean> {
+  if (isAdmin) {
+    const r = await query(
+      `DELETE FROM profile_post_comments
+       WHERE id = $1::bigint AND post_id = $2::bigint`,
+      [commentId, postId],
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+  const r = await query(
+    `DELETE FROM profile_post_comments
+     WHERE id = $1::bigint AND post_id = $2::bigint AND member_id = $3`,
+    [commentId, postId, memberId],
+  );
+  return (r.rowCount ?? 0) > 0;
 }
 
 /** Удалить свою публикацию (каскадно снимаются лайки, комментарии, медиа). */

@@ -4,10 +4,13 @@ import {
   addComment,
   createPost,
   createRepost,
+  deleteCommentAsOwnerOrAdmin,
   deletePostAsOwner,
+  getChurchFeed,
   getProfileWithFeed,
   getProfileWithFeedByUsername,
   likePost,
+  listComments,
   patchMyProfileSettings,
   unlikePost,
   updatePostCaptionAsOwner,
@@ -298,6 +301,56 @@ export async function postLike(req: Request, res: Response): Promise<void> {
   }
 }
 
+export async function getFeed(req: Request, res: Response): Promise<void> {
+  const authUserId = (req as AuthReq).authUserId;
+  if (!authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : null;
+  const limitRaw = typeof req.query.limit === 'string' ? Number(req.query.limit) : 20;
+  try {
+    const data = await getChurchFeed({
+      viewerMemberId: authUserId,
+      cursor,
+      limit: Number.isFinite(limitRaw) ? limitRaw : 20,
+    });
+    res.json(data);
+  } catch (e) {
+    console.error('[profile] getFeed error:', e);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function getPostComments(req: Request, res: Response): Promise<void> {
+  const authUserId = (req as AuthReq).authUserId;
+  if (!authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const postId = String(req.params.id ?? '').trim();
+  if (!postId) {
+    res.status(400).json({ error: 'Invalid post id' });
+    return;
+  }
+  try {
+    const comments = await listComments(postId, authUserId);
+    res.json({ comments });
+  } catch (e) {
+    console.error('[profile] getComments error:', e);
+    const msg = e instanceof Error ? e.message : 'Database error';
+    if (msg.includes('не найдена')) {
+      res.status(404).json({ error: msg });
+      return;
+    }
+    if (msg.includes('недоступны')) {
+      res.status(403).json({ error: msg });
+      return;
+    }
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
 export async function postComment(req: Request, res: Response): Promise<void> {
   const authUserId = (req as AuthReq).authUserId;
   if (!authUserId) {
@@ -323,6 +376,43 @@ export async function postComment(req: Request, res: Response): Promise<void> {
     res.status(201).json({ ok: true, id: created.id, created_at: created.created_at });
   } catch (e) {
     console.error('[profile] comment error:', e);
+    const msg = e instanceof Error ? e.message : 'Database error';
+    if (msg.includes('не найдена')) {
+      res.status(404).json({ error: msg });
+      return;
+    }
+    if (msg.includes('недоступны')) {
+      res.status(403).json({ error: msg });
+      return;
+    }
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function deleteComment(req: Request, res: Response): Promise<void> {
+  const authUserId = (req as AuthReq).authUserId;
+  if (!authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const postId = String(req.params.id ?? '').trim();
+  const commentId = String(req.params.commentId ?? '').trim();
+  if (!postId || !commentId) {
+    res.status(400).json({ error: 'Invalid id' });
+    return;
+  }
+  const role = String((req as AuthReq & { authUserRole?: string }).authUserRole ?? '').toLowerCase();
+  const roles = (req as AuthReq & { authUserRoles?: string[] }).authUserRoles ?? [];
+  const isAdmin = role === 'admin' || roles.includes('admin');
+  try {
+    const ok = await deleteCommentAsOwnerOrAdmin(postId, commentId, authUserId, isAdmin);
+    if (!ok) {
+      res.status(404).json({ error: 'Комментарий не найден или нет доступа' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[profile] deleteComment error:', e);
     res.status(500).json({ error: 'Database error' });
   }
 }

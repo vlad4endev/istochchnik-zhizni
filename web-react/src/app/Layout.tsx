@@ -10,6 +10,7 @@ import {
   LuChurch,
   LuDisc3,
   LuEllipsis,
+  LuImages,
   LuLayoutDashboard,
   LuMessageCircle,
   LuMic,
@@ -74,6 +75,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
   { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard, sectionId: 'dashboard' },
+  { to: '/feed', label: 'Лента', Icon: LuImages, sectionId: 'feed' },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
   { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
   { to: '/service-planner', label: 'Служение', Icon: LuCalendarDays, sectionId: 'service_planner' },
@@ -163,8 +165,8 @@ function mobileBottomRouteActive(pathname: string, to: string): boolean {
   return pathname === to || pathname.startsWith(`${to}/`);
 }
 
-/** Нижняя панель (мобильная / PWA): фиксированно Главная → Молитва → Чаты, всё остальное — в «Ещё». */
-const MOBILE_BOTTOM_PINNED: readonly string[] = ['/dashboard', '/prayer', '/messenger'];
+/** Нижняя панель (мобильная / PWA): Главная → Лента → Чаты, всё остальное — в «Ещё». */
+const MOBILE_BOTTOM_PINNED: readonly string[] = ['/dashboard', '/feed', '/messenger'];
 
 function splitMobileNavFourTabs(visible: NavItem[]): { primary: NavItem[]; overflow: NavItem[] } {
   if (visible.length === 0) return { primary: [], overflow: [] };

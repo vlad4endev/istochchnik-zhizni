@@ -1,0 +1,105 @@
+import { apiClient } from '../../lib/apiClient';
+import type {
+  ProfileFeedMediaType,
+  ProfileFeedPostAuthor,
+  ProfileFeedPostEmbedded,
+} from '../profile/publicProfileApi';
+
+export type FeedPost = {
+  id: string;
+  member_id: number;
+  author: ProfileFeedPostAuthor;
+  caption: string | null;
+  created_at: string;
+  media: Array<{ url: string; type: ProfileFeedMediaType; order: number }>;
+  like_count: number;
+  comment_count: number;
+  repost_count: number;
+  liked_by_me: boolean;
+  reposted_by_me: boolean;
+  shared_post: ProfileFeedPostEmbedded | null;
+};
+
+export type ChurchFeedPage = {
+  posts: FeedPost[];
+  next_cursor: string | null;
+};
+
+export type FeedComment = {
+  id: string;
+  post_id: string;
+  member_id: number | null;
+  text: string;
+  created_at: string;
+  author: ProfileFeedPostAuthor | null;
+};
+
+export type StoryItem = {
+  id: string;
+  member_id: number;
+  media_url: string;
+  media_type: ProfileFeedMediaType;
+  caption: string | null;
+  created_at: string;
+  expires_at: string;
+  viewed_by_me: boolean;
+};
+
+export type StoryAuthorGroup = {
+  author: ProfileFeedPostAuthor;
+  stories: StoryItem[];
+  all_seen: boolean;
+  is_me: boolean;
+};
+
+export async function fetchChurchFeed(params?: {
+  cursor?: string | null;
+  limit?: number;
+}): Promise<ChurchFeedPage> {
+  const { data } = await apiClient.get<ChurchFeedPage>('/api/feed', {
+    params: {
+      cursor: params?.cursor || undefined,
+      limit: params?.limit ?? 20,
+    },
+  });
+  return data;
+}
+
+export async function fetchPostComments(postId: string): Promise<FeedComment[]> {
+  const { data } = await apiClient.get<{ comments: FeedComment[] }>(
+    `/api/posts/${encodeURIComponent(postId)}/comments`,
+  );
+  return data.comments ?? [];
+}
+
+export async function createPostComment(postId: string, text: string): Promise<{ id: string; created_at: string }> {
+  const { data } = await apiClient.post<{ id: string; created_at: string }>(
+    `/api/posts/${encodeURIComponent(postId)}/comment`,
+    { text },
+  );
+  return data;
+}
+
+export async function deletePostComment(postId: string, commentId: string): Promise<void> {
+  await apiClient.delete(`/api/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`);
+}
+
+export async function fetchStories(): Promise<StoryAuthorGroup[]> {
+  const { data } = await apiClient.get<{ groups: StoryAuthorGroup[] }>('/api/stories');
+  return data.groups ?? [];
+}
+
+export async function createStory(params: { file: File; caption?: string }): Promise<void> {
+  const form = new FormData();
+  form.append('media', params.file);
+  if (params.caption?.trim()) form.append('caption', params.caption.trim());
+  await apiClient.post('/api/stories', form, { timeout: 120_000 });
+}
+
+export async function markStoryViewed(storyId: string): Promise<void> {
+  await apiClient.post(`/api/stories/${encodeURIComponent(storyId)}/view`);
+}
+
+export async function deleteStory(storyId: string): Promise<void> {
+  await apiClient.delete(`/api/stories/${encodeURIComponent(storyId)}`);
+}

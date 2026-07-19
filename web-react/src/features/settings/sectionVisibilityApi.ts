@@ -2,6 +2,7 @@ import { apiClient } from '../../lib/apiClient';
 
 export const APP_SECTION_IDS = [
   'dashboard',
+  'feed',
   'prayer',
   'songbook',
   'service_planner',
@@ -50,6 +51,7 @@ export function appRoleLabel(role: AppRole): string {
 
 export function appSectionLabel(section: AppSectionId): string {
   if (section === 'dashboard') return 'Главная';
+  if (section === 'feed') return 'Лента';
   if (section === 'prayer') return 'Молитва';
   if (section === 'songbook') return 'Песенник';
   if (section === 'service_planner') return 'Планировщик';
