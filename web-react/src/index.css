@@ -50,8 +50,9 @@ textarea {
    */
   --app-bottom-nav-safe-pad: env(safe-area-inset-bottom, 0px);
   --app-safe-top: env(safe-area-inset-top, 0px);
-  --app-bottom-nav-bar-height: 60px;
-  --app-bottom-nav-row-pad-y: 0.25rem; /* pt-1.5 на обёртке ряда табов */
+  --app-bottom-nav-bar-height: 56px;
+  --app-bottom-nav-row-pad-y: 0.25rem; /* вертикальный pad ряда табов */
+  --app-bottom-nav-cols: 5;
   /* Только «тело» таб-бара — отступ main под фикс. панель без второго env(safe-area). */
   --app-bottom-nav-main-gutter: calc(
     var(--app-bottom-nav-bar-height) + var(--app-bottom-nav-row-pad-y)
@@ -876,21 +877,121 @@ button {
   transition: none;
 }
 
-/* Таб-бар: только скрытие при клавиатуре — без «плывущего» фона от глобального правила nav {} */
+/* Таб-бар: равная сетка, адаптивные подписи/иконки; opacity — отдельно от глобального nav {} */
 nav.app-bottom-nav {
   transition: opacity 0.15s ease-out;
+}
+
+nav.app-bottom-nav .app-bottom-nav__row {
+  display: grid;
+  grid-template-columns: repeat(var(--app-bottom-nav-cols, 5), minmax(0, 1fr));
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  /* content-box: pt ряда суммируется с min-height → совпадает с --app-bottom-nav-main-gutter */
+  box-sizing: content-box;
+  min-height: var(--app-bottom-nav-bar-height);
+  padding: var(--app-bottom-nav-row-pad-y) 0.125rem 0;
+}
+
+nav.app-bottom-nav .app-bottom-nav__cell {
+  display: flex;
+  min-width: 0;
+  min-height: 100%;
+}
+
+nav.app-bottom-nav .app-bottom-nav__tab {
+  gap: 0.125rem;
+  min-height: calc(var(--app-bottom-nav-bar-height) - var(--app-bottom-nav-row-pad-y));
+  padding: 0.125rem 0.0625rem;
+  border-radius: 0.75rem;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+nav.app-bottom-nav .app-bottom-nav__icon {
+  width: 1.875rem;
+  height: 1.875rem;
+  flex-shrink: 0;
+}
+
+nav.app-bottom-nav .app-bottom-nav__label {
+  display: block;
+  max-width: 100%;
+  padding-inline: 0.0625rem;
+  font-size: clamp(0.5625rem, 2.55vw, 0.6875rem); /* 9–11px */
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (min-width: 360px) {
+  nav.app-bottom-nav .app-bottom-nav__row {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+  }
+
+  nav.app-bottom-nav .app-bottom-nav__icon {
+    width: 2rem;
+    height: 2rem;
+  }
+}
+
+@media (min-width: 400px) {
+  nav.app-bottom-nav .app-bottom-nav__label {
+    font-size: clamp(0.625rem, 2.4vw, 0.6875rem); /* 10–11px */
+  }
+}
+
+@media (min-width: 640px) {
+  :root {
+    --app-bottom-nav-bar-height: 60px;
+  }
+
+  nav.app-bottom-nav .app-bottom-nav__row {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  nav.app-bottom-nav .app-bottom-nav__tab {
+    gap: 0.1875rem;
+    padding: 0.25rem 0.125rem;
+  }
+
+  nav.app-bottom-nav .app-bottom-nav__icon {
+    width: 2.125rem;
+    height: 2.125rem;
+  }
+
+  nav.app-bottom-nav .app-bottom-nav__label {
+    font-size: 0.6875rem; /* 11px */
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  :root {
+    --app-bottom-nav-bar-height: 62px;
+  }
+
+  nav.app-bottom-nav .app-bottom-nav__row {
+    max-width: 36rem;
+    margin-inline: auto;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  nav.app-bottom-nav .app-bottom-nav__label {
+    font-size: 0.75rem; /* 12px */
+  }
 }
 
 @media (max-width: 767px) {
   nav.app-bottom-nav {
     touch-action: manipulation;
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-  }
-
-  nav.app-bottom-nav a {
-    -webkit-user-select: none;
-    user-select: none;
-    -webkit-touch-callout: none;
   }
 }
 

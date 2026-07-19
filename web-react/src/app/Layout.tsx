@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { IconType } from 'react-icons';
 import {
   LuCalendarClock,
@@ -94,7 +94,7 @@ function normalizeMinistryDirection(value: unknown): string {
 
 function navIconClass(isActive: boolean, compact: boolean) {
   return [
-    compact ? 'h-5 w-5' : 'h-5 w-5',
+    compact ? 'app-bottom-nav__glyph h-[1.125rem] w-[1.125rem] sm:h-5 sm:w-5' : 'h-5 w-5',
     'shrink-0 transition-colors duration-200',
     isActive && compact ? 'bottom-nav-active-icon' : '',
     isActive && compact ? 'text-primary' : isActive ? 'text-white' : 'text-gray-400 group-hover:text-primary',
@@ -144,17 +144,27 @@ function formatNavBadgeCount(n: number): string {
 
 function navClassName(isActive: boolean, compact = false): string {
   const base = compact
-    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center overflow-visible rounded-[14px] px-0.5 py-1.5 transition-[transform,background-color,color] duration-200 ease-out tap-highlight-transparent touch-manipulation outline-none motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent active:scale-[0.96]'
+    ? 'app-bottom-nav__tab group relative flex h-full w-full min-w-0 flex-col items-center justify-center overflow-visible transition-[transform,color] duration-200 ease-out tap-highlight-transparent touch-manipulation outline-none motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent active:scale-[0.97]'
     : 'group flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors duration-200 tap-highlight-transparent';
-  const size = compact ? 'min-h-[50px]' : '';
   const active = isActive
     ? compact
-      ? 'bg-primary/[0.11] text-primary shadow-[inset_0_0_0_1px_rgba(125,54,64,0.14)] nav-active-glow active:bg-primary/[0.15]'
+      ? 'is-active text-primary nav-active-glow'
       : 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow'
     : compact
-      ? 'text-stone-500 hover:bg-black/[0.04] hover:text-stone-700 active:bg-black/[0.06] dark:text-stone-400 dark:hover:bg-white/[0.06] dark:hover:text-stone-200 dark:active:bg-white/[0.08]'
+      ? 'text-stone-500 hover:text-stone-700 active:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 dark:active:text-stone-100'
       : 'text-stone-600 hover:bg-stone-100 shell:hover:bg-stone-50';
-  return `${base} ${size} ${active}`.replace(/\s+/g, ' ').trim();
+  return `${base} ${active}`.replace(/\s+/g, ' ').trim();
+}
+
+function mobileBottomTabIconClass(isActive: boolean): string {
+  return [
+    'app-bottom-nav__icon relative z-10 grid place-items-center overflow-visible rounded-full transition-colors duration-200',
+    isActive ? 'is-active bg-primary/[0.12]' : 'group-active:bg-black/[0.05] dark:group-active:bg-white/[0.08]',
+  ].join(' ');
+}
+
+function mobileBottomTabLabelClass(): string {
+  return 'app-bottom-nav__label w-full min-w-0 text-center font-semibold tracking-tight text-inherit';
 }
 
 /** Активный маршрут для нижней панели (в т.ч. вложенные пути). */
@@ -165,10 +175,10 @@ function mobileBottomRouteActive(pathname: string, to: string): boolean {
   return pathname === to || pathname.startsWith(`${to}/`);
 }
 
-/** Нижняя панель (мобильная / PWA): Главная → Лента → Чаты, всё остальное — в «Ещё». */
-const MOBILE_BOTTOM_PINNED: readonly string[] = ['/dashboard', '/feed', '/messenger'];
+/** Нижняя панель (мобильная / PWA): Главная → Молитва → Лента → Чаты → «Ещё». */
+const MOBILE_BOTTOM_PINNED: readonly string[] = ['/dashboard', '/prayer', '/feed', '/messenger'];
 
-function splitMobileNavFourTabs(visible: NavItem[]): { primary: NavItem[]; overflow: NavItem[] } {
+function splitMobileNavTabs(visible: NavItem[]): { primary: NavItem[]; overflow: NavItem[] } {
   if (visible.length === 0) return { primary: [], overflow: [] };
   const byTo = (to: string) => visible.find((i) => i.to === to);
   const primary = MOBILE_BOTTOM_PINNED.map((to) => byTo(to)).filter((x): x is NavItem => Boolean(x));
@@ -211,7 +221,7 @@ function MobileNavOverflow({
   const isMoreTabActive = items.some((item) => mobileBottomRouteActive(pathname, item.to));
 
   return (
-    <div className="relative flex min-w-0 flex-1 flex-col items-stretch">
+    <div className="app-bottom-nav__cell relative min-w-0">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -220,10 +230,10 @@ function MobileNavOverflow({
         aria-haspopup="dialog"
         aria-controls={menuId}
       >
-        <LuEllipsis className={navIconClass(isMoreTabActive, true)} strokeWidth={2} aria-hidden />
-        <span className="mt-0.5 w-full min-w-0 px-0.5 text-center text-[11px] font-semibold leading-[1.15] tracking-tight text-inherit line-clamp-1">
-          Ещё
+        <span className={mobileBottomTabIconClass(isMoreTabActive)}>
+          <LuEllipsis className={navIconClass(isMoreTabActive, true)} strokeWidth={2} aria-hidden />
         </span>
+        <span className={mobileBottomTabLabelClass()}>Ещё</span>
       </button>
       {open ? (
         <div className="fixed inset-0 z-[60]" aria-hidden={false}>
@@ -442,7 +452,7 @@ export function Layout() {
   const sidebarItems = items;
   /** На телефоне «Настройки» нет в NAV_ITEMS — добавляем в лист «Ещё», как в подвале сайдбара на lg+. */
   const mobileNavSplit = useMemo(() => {
-    const split = splitMobileNavFourTabs(items);
+    const split = splitMobileNavTabs(items);
     if (registrationStatus !== 'active') return split;
     if (split.overflow.some((i) => i.to === '/settings')) return split;
     return {
@@ -903,45 +913,54 @@ export function Layout() {
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
         className={[
-          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex w-full min-w-0 max-w-full flex-col border-t border-black/[0.07] bg-[color-mix(in_srgb,var(--surface-elevated)_94%,transparent)] pb-[max(0px,env(safe-area-inset-bottom,0px))] shadow-[0_-1px_0_rgba(0,0,0,0.05),0_-10px_40px_rgba(28,25,23,0.08)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] lg:hidden transition-opacity duration-150 ease-out dark:border-white/[0.08] dark:shadow-[0_-1px_0_rgba(255,255,255,0.06),0_-12px_40px_rgba(0,0,0,0.35)] [padding-left:max(0.5rem,env(safe-area-inset-left,0px))] [padding-right:max(0.5rem,env(safe-area-inset-right,0px))]',
+          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex w-full min-w-0 max-w-full flex-col border-t border-black/[0.07] bg-[color-mix(in_srgb,var(--surface-elevated)_94%,transparent)] pb-[max(0px,env(safe-area-inset-bottom,0px))] shadow-[0_-1px_0_rgba(0,0,0,0.05),0_-10px_40px_rgba(28,25,23,0.08)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] lg:hidden transition-opacity duration-150 ease-out dark:border-white/[0.08] dark:shadow-[0_-1px_0_rgba(255,255,255,0.06),0_-12px_40px_rgba(0,0,0,0.35)] [padding-left:max(0px,env(safe-area-inset-left,0px))] [padding-right:max(0px,env(safe-area-inset-right,0px))]',
           mainChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
         ].join(' ')}
         aria-label="Основная навигация"
         aria-hidden={!mainChromeVisible}
+        style={
+          {
+            '--app-bottom-nav-cols': String(
+              Math.max(
+                1,
+                mobileNavSplit.primary.length + (mobileNavSplit.overflow.length > 0 ? 1 : 0),
+              ),
+            ),
+          } as CSSProperties
+        }
       >
-        <div className="flex w-full min-h-[var(--app-bottom-nav-bar-height)] min-w-0 items-stretch justify-between gap-1 px-2 pb-0 pt-1.5 sm:px-3">
+        <div className="app-bottom-nav__row">
           {mobileNavSplit.primary.map((item) => {
             const Icon = item.Icon;
             return (
-              <PrefetchNavLink
-                key={item.to}
-                to={item.to}
-                queryKey={NAV_PREFETCH_BY_PATH[item.to]?.queryKey}
-                queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
-                staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
-                className={({ isActive }) => navClassName(isActive, true)}
-                aria-label={
-                  item.to === '/messenger' && activityBadgeTotal > 0
-                    ? `Чаты: непрочитанные сообщения и неоткрытые уведомления, всего: ${activityBadgeTotal > 99 ? 'более 99' : activityBadgeTotal}`
-                    : undefined
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <span className="relative z-10 inline-flex overflow-visible">
-                      <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
-                      {item.to === '/messenger' && activityBadgeTotal > 0 ? (
-                        <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                          {formatNavBadgeCount(activityBadgeTotal)}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="mt-0.5 w-full min-w-0 px-0.5 text-center text-[11px] font-semibold leading-[1.15] tracking-tight text-inherit line-clamp-1">
-                      {item.label}
-                    </span>
-                  </>
-                )}
-              </PrefetchNavLink>
+              <div key={item.to} className="app-bottom-nav__cell relative min-w-0">
+                <PrefetchNavLink
+                  to={item.to}
+                  queryKey={NAV_PREFETCH_BY_PATH[item.to]?.queryKey}
+                  queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
+                  staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
+                  className={({ isActive }) => navClassName(isActive, true)}
+                  aria-label={
+                    item.to === '/messenger' && activityBadgeTotal > 0
+                      ? `Чаты: непрочитанные сообщения и неоткрытые уведомления, всего: ${activityBadgeTotal > 99 ? 'более 99' : activityBadgeTotal}`
+                      : undefined
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <span className={mobileBottomTabIconClass(isActive)}>
+                        <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                        {item.to === '/messenger' && activityBadgeTotal > 0 ? (
+                          <span className="app-bottom-nav__badge absolute -right-1 -top-0.5 z-[5] inline-flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white dark:ring-[color-mix(in_srgb,var(--surface-elevated)_92%,transparent)]">
+                            {formatNavBadgeCount(activityBadgeTotal)}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className={mobileBottomTabLabelClass()}>{item.label}</span>
+                    </>
+                  )}
+                </PrefetchNavLink>
+              </div>
             );
           })}
           {mobileNavSplit.overflow.length > 0 ? (
