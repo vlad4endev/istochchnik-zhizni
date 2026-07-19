@@ -21,6 +21,7 @@ import {
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuRefreshCw, LuReply } from 'react-icons/lu';
+import { isAssistantBotMessage } from '../messengerChannelKinds';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { ChatVideoAttachmentPreview } from './ChatVideoAttachmentPreview';
@@ -866,6 +867,8 @@ interface MessageBubbleProps {
   onPinToggle?: (messageId: string, nextPinned: boolean) => void | Promise<void>;
   /** Канал «Заявки»: оформление как системный бот, без ответа свайпом. */
   accessRequestsSystemChannel?: boolean;
+  /** Личный чат «Ассистенот»: шапка бота для ответов ИИ. */
+  assistantChannel?: boolean;
 }
 
 function MessageBubbleInner({
@@ -877,6 +880,7 @@ function MessageBubbleInner({
   canPinMessages = false,
   onPinToggle,
   accessRequestsSystemChannel = false,
+  assistantChannel = false,
 }: MessageBubbleProps) {
   const openViewer = useMediaViewer((s) => s.openViewer);
   const currentMemberId = useChatStore((s) => s.currentMemberId);
@@ -952,11 +956,16 @@ function MessageBubbleInner({
     message.sender_id == null &&
     !isDeleted;
   const payload = (message.payload ?? {}) as Record<string, unknown>;
+  const systemBotAssistantMessage =
+    assistantChannel &&
+    !isDeleted &&
+    !isMine &&
+    isAssistantBotMessage(payload, message.sender_id);
   const senderName = String(
     message.sender_name ??
       [message.sender_first_name, message.sender_last_name].filter(Boolean).join(' ') ??
       '',
-  ).trim() || 'Неизвестно';
+  ).trim() || (systemBotAssistantMessage ? 'Ассистенот' : 'Неизвестно');
   const viewerDate = useMemo(() => formatViewerDate(message.created_at), [message.created_at]);
   const viewerSender = useMemo(
     () => ({
@@ -2172,7 +2181,7 @@ function MessageBubbleInner({
             animate(x, 0, { type: 'spring', stiffness: 420, damping: 32 });
           }}
         >
-        {/* Канал «Заявки»: шапка как системный бот */}
+        {/* Канал «Заявки» / «Ассистенот»: шапка как системный бот */}
         {systemBotAccessMessage && !isGroupedPrev ? (
           <div className="sender-name mb-3 flex w-full items-center gap-2.5 px-0.5">
             <span
@@ -2184,6 +2193,19 @@ function MessageBubbleInner({
             <div className="min-w-0 text-left">
               <div className="text-sm font-bold leading-tight text-[var(--text)]">Заявки</div>
               <div className="text-[11px] font-medium leading-tight text-[var(--text-secondary)]">Системные уведомления</div>
+            </div>
+          </div>
+        ) : systemBotAssistantMessage && !isGroupedPrev ? (
+          <div className="sender-name mb-3 flex w-full items-center gap-2.5 px-0.5">
+            <span
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/12 text-primary ring-1 ring-primary/15"
+              aria-hidden
+            >
+              <LuBot className="h-5 w-5" strokeWidth={2} />
+            </span>
+            <div className="min-w-0 text-left">
+              <div className="text-sm font-bold leading-tight text-[var(--text)]">Ассистенот</div>
+              <div className="text-[11px] font-medium leading-tight text-[var(--text-secondary)]">ИИ-помощник</div>
             </div>
           </div>
         ) : !isMine && !isGroupedPrev && message.sender_name ? (
