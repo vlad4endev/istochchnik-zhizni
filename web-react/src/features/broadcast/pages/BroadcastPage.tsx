@@ -3,7 +3,13 @@ import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useBroadcastViewers } from '../../../hooks/useBroadcastViewers';
-import { createBroadcast, fetchActiveBroadcast, fetchFinishedBroadcasts, patchBroadcast, type BroadcastData } from '../../../api/broadcast';
+import {
+  createBroadcast,
+  fetchActiveBroadcast,
+  fetchBroadcastHistory,
+  patchBroadcast,
+  type BroadcastData,
+} from '../../../api/broadcast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { useAuthStore } from '../../auth/authStore';
@@ -24,8 +30,10 @@ import { useMe } from '@/hooks/useMe';
 import { keys } from '@/lib/queryKeys';
 
 import { StreamPlayer } from '../components/StreamPlayer';
-import { PastStreams } from '../components/PastStreams';
+import { BroadcastHistory } from '../components/BroadcastHistory';
 import { StreamSettings } from '../components/StreamSettings';
+
+const HISTORY_LIMIT = 30;
 
 export function BroadcastPage() {
   const qc = useQueryClient();
@@ -41,6 +49,7 @@ export function BroadcastPage() {
   const activeBroadcast = data?.broadcast ?? null;
 
   const [playerUrl, setPlayerUrl] = useState<string | null>(null);
+  const [archiveItem, setArchiveItem] = useState<BroadcastData | null>(null);
   const [broadcastTickMs, setBroadcastTickMs] = useState(() => Date.now());
   const [datePart, setDatePart] = useState('');
   const [timePart, setTimePart] = useState('');
@@ -62,13 +71,16 @@ export function BroadcastPage() {
     platform: 'other',
   });
 
-  const { data: archiveData } = useQuery({
-    queryKey: keys.broadcastArchive(10),
-    queryFn: () => fetchFinishedBroadcasts(10),
-    enabled: isAdmin,
+  const {
+    data: historyData,
+    isLoading: historyLoading,
+  } = useQuery({
+    queryKey: keys.broadcastArchive(HISTORY_LIMIT),
+    queryFn: () => fetchBroadcastHistory(HISTORY_LIMIT),
   });
 
   useEffect(() => {
+    setArchiveItem(null);
     setPlayerUrl(getEmbedUrl(activeBroadcast?.stream_url ?? '') ?? null);
     const { date, time } = splitBroadcastStartsAt(activeBroadcast?.starts_at ?? null);
     setDatePart(date);
@@ -88,7 +100,7 @@ export function BroadcastPage() {
     return () => window.clearInterval(id);
   }, []);
 
-  const viewerCount = useBroadcastViewers({ watching: true });
+  const viewerCount = useBroadcastViewers({ watching: !archiveItem });
   const broadcastUiMode = getBroadcastUiMode(broadcastTickMs, activeBroadcast);
   const broadcastMainTimer = formatBroadcastMainTimer(broadcastTickMs, activeBroadcast);
   const countdownPhrase = formatBroadcastCountdownPhrase(broadcastTickMs, activeBroadcast?.starts_at ?? null);
@@ -112,6 +124,7 @@ export function BroadcastPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.broadcast });
+      qc.invalidateQueries({ queryKey: keys.broadcastArchive(HISTORY_LIMIT) });
       emitAppToast({ kind: 'success', message: 'Настройки трансляции сохранены' });
     },
     onError: () => emitAppToast({ kind: 'error', message: 'Не удалось сохранить настройки трансляции' }),
@@ -157,6 +170,7 @@ export function BroadcastPage() {
       return;
     }
     setStreamUrlError(null);
+    setArchiveItem(null);
     setFormState((prev) => ({
       ...prev,
       stream_url: parsed,
@@ -167,8 +181,26 @@ export function BroadcastPage() {
     emitAppToast({ kind: 'success', message: 'Ссылка распознана и подставлена в трансляцию' });
   };
 
-  // Compute player time-line text
+  const openHistoryItem = (item: BroadcastData) => {
+    const embed = getEmbedUrl(item.stream_url ?? '') ?? item.stream_url;
+    if (!embed) {
+      emitAppToast({ kind: 'error', message: 'Не удалось открыть запись' });
+      return;
+    }
+    setArchiveItem(item);
+    setPlayerUrl(embed);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const watchingArchive = Boolean(archiveItem);
+
   const playerTimeLine = useMemo(() => {
+    if (watchingArchive) {
+      if (!archiveItem?.starts_at) return 'Запись эфира';
+      const d = parseBroadcastStartsAt(archiveItem.starts_at);
+      if (!d) return 'Запись эфира';
+      return `Запись · ${format(d, 'd MMMM yyyy, HH:mm', { locale: ru })}`;
+    }
     if (broadcastUiMode === 'post') return 'Запланированный эфир завершён';
     if (broadcastUiMode === 'onair') return `В эфире: ${broadcastMainTimer}`;
     if (countdownPhrase) return countdownPhrase;
@@ -180,12 +212,24 @@ export function BroadcastPage() {
       return 'Время начала наступило — вставьте ссылку в настройках.';
     }
     return 'До начала: время уточняется';
-  }, [broadcastUiMode, broadcastMainTimer, countdownPhrase, activeBroadcast?.starts_at, broadcastTickMs]);
+  }, [
+    watchingArchive,
+    archiveItem?.starts_at,
+    broadcastUiMode,
+    broadcastMainTimer,
+    countdownPhrase,
+    activeBroadcast?.starts_at,
+    broadcastTickMs,
+  ]);
 
-  const playerTimeLineSub = broadcastEndsLabel ? `Окончание эфира: ${broadcastEndsLabel}` : null;
+  const playerTimeLineSub = watchingArchive
+    ? 'Вы смотрите запись из истории трансляции'
+    : broadcastEndsLabel
+      ? `Окончание эфира: ${broadcastEndsLabel}`
+      : null;
 
-  // The player uses the active broadcast URL (or what admin selected from archive)
   const displayUrl = playerUrl ?? activeBroadcast?.stream_url ?? null;
+  const displayTitle = archiveItem?.title ?? activeBroadcast?.title ?? null;
 
   return (
     <div className="min-h-full bg-[var(--surface)] max-lg:pb-0 lg:pb-8">
@@ -213,63 +257,62 @@ export function BroadcastPage() {
           ) : (
             <StreamPlayer
               url={displayUrl}
-              title={activeBroadcast?.title ?? null}
-              viewersCount={viewerCount}
-              isLive={broadcastUiMode === 'onair'}
+              title={displayTitle}
+              viewersCount={watchingArchive ? null : viewerCount}
+              isLive={!watchingArchive && broadcastUiMode === 'onair'}
               timeLine={playerTimeLine}
               timeLineSub={playerTimeLineSub}
             />
           )}
 
-          {/* Past streams + admin settings — admin only */}
+          <BroadcastHistory
+            items={historyData?.items ?? []}
+            activeId={archiveItem?.id ?? null}
+            isLoading={historyLoading}
+            onOpen={openHistoryItem}
+          />
+
           {isAdmin && (
-            <>
-              <PastStreams
-                items={archiveData?.items ?? []}
-                onOpen={(item) => setPlayerUrl(getEmbedUrl(item.stream_url ?? '') ?? item.stream_url)}
-              />
+            <StreamSettings
+              formTitle={formState.title}
+              formStreamUrl={formState.stream_url}
+              formDescription={formState.description}
+              formNotifyMembers={formState.notify_members}
+              formIsPublic={formState.is_public}
+              formPlatform={formState.platform}
+              datePart={datePart}
+              timePart={timePart}
+              smartInput={smartInput}
+              streamUrlError={streamUrlError}
+              isSaving={saveMutation.isPending}
 
-              <StreamSettings
-                formTitle={formState.title}
-                formStreamUrl={formState.stream_url}
-                formDescription={formState.description}
-                formNotifyMembers={formState.notify_members}
-                formIsPublic={formState.is_public}
-                formPlatform={formState.platform}
-                datePart={datePart}
-                timePart={timePart}
-                smartInput={smartInput}
-                streamUrlError={streamUrlError}
-                isSaving={saveMutation.isPending}
-
-                onTitleChange={(v) => setFormState((p) => ({ ...p, title: v }))}
-                onStreamUrlChange={(v) => {
-                  setFormState((p) => ({ ...p, stream_url: v }));
-                  if (!v.trim()) { setStreamUrlError(null); return; }
-                  const parsed = parseBroadcastInputToEmbed(v);
-                  setStreamUrlError(parsed ? null : 'Ссылка не распознана. Вставьте URL или iframe-код.');
-                }}
-                onStreamUrlBlur={(v) => {
-                  const embed = getEmbedUrl(v);
-                  setFormState((p) => ({
-                    ...p,
-                    stream_url: embed ?? v,
-                    platform: detectPlatform(embed ?? v),
-                  }));
-                  if (!v.trim()) { setStreamUrlError(null); return; }
-                  const parsed = parseBroadcastInputToEmbed(v);
-                  setStreamUrlError(parsed ? null : 'Ссылка не распознана. Вставьте URL или iframe-код.');
-                }}
-                onDescriptionChange={(v) => setFormState((p) => ({ ...p, description: v }))}
-                onNotifyMembersChange={(v) => setFormState((p) => ({ ...p, notify_members: v }))}
-                onIsPublicChange={(v) => setFormState((p) => ({ ...p, is_public: v }))}
-                onDateChange={setDatePart}
-                onTimeChange={setTimePart}
-                onSmartInputChange={setSmartInput}
-                onApplySmartInput={applySmartEmbedInput}
-                onSave={onSave}
-              />
-            </>
+              onTitleChange={(v) => setFormState((p) => ({ ...p, title: v }))}
+              onStreamUrlChange={(v) => {
+                setFormState((p) => ({ ...p, stream_url: v }));
+                if (!v.trim()) { setStreamUrlError(null); return; }
+                const parsed = parseBroadcastInputToEmbed(v);
+                setStreamUrlError(parsed ? null : 'Ссылка не распознана. Вставьте URL или iframe-код.');
+              }}
+              onStreamUrlBlur={(v) => {
+                const embed = getEmbedUrl(v);
+                setFormState((p) => ({
+                  ...p,
+                  stream_url: embed ?? v,
+                  platform: detectPlatform(embed ?? v),
+                }));
+                if (!v.trim()) { setStreamUrlError(null); return; }
+                const parsed = parseBroadcastInputToEmbed(v);
+                setStreamUrlError(parsed ? null : 'Ссылка не распознана. Вставьте URL или iframe-код.');
+              }}
+              onDescriptionChange={(v) => setFormState((p) => ({ ...p, description: v }))}
+              onNotifyMembersChange={(v) => setFormState((p) => ({ ...p, notify_members: v }))}
+              onIsPublicChange={(v) => setFormState((p) => ({ ...p, is_public: v }))}
+              onDateChange={setDatePart}
+              onTimeChange={setTimePart}
+              onSmartInputChange={setSmartInput}
+              onApplySmartInput={applySmartEmbedInput}
+              onSave={onSave}
+            />
           )}
 
         </div>
