@@ -85,7 +85,10 @@ export async function deletePostComment(postId: string, commentId: string): Prom
 }
 
 export async function fetchStories(): Promise<StoryAuthorGroup[]> {
-  const { data } = await apiClient.get<{ groups: StoryAuthorGroup[] }>('/api/stories');
+  const { data } = await apiClient.get<{ groups: StoryAuthorGroup[] }>('/api/stories', {
+    // Кольца рисуем локальным fallback; глобальный toast «Database error» не нужен.
+    silentErrorToast: true,
+  });
   return data.groups ?? [];
 }
 

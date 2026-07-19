@@ -249,33 +249,17 @@ export function FeedPostCard({
             </div>
           ) : null}
 
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+          <div className={styles.fbCardAuthorMeta}>
             {author && uname ? (
               <Link
                 to={`/profile/${encodeURIComponent(uname)}`}
                 state={profileLinkState}
-                style={{
-                  fontSize: '0.875rem',
-                  fontWeight: 800,
-                  color: 'var(--profile-text-heading)',
-                  textDecoration: 'none',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
+                className={styles.fbCardAuthorName}
               >
                 {name}
               </Link>
             ) : author ? (
-              <span
-                style={{
-                  fontSize: '0.875rem',
-                  fontWeight: 800,
-                  color: 'var(--profile-text-heading)',
-                }}
-              >
-                {name}
-              </span>
+              <span className={styles.fbCardAuthorName}>{name}</span>
             ) : post.shared_post ? (
               <p className={styles.fbRepostBadge}>
                 <LuRepeat2 className="h-3.5 w-3.5 shrink-0" aria-hidden />

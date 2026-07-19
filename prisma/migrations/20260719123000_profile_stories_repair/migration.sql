@@ -1,5 +1,10 @@
--- Instagram-style stories (24h expiry) + views for ring "seen" state.
--- NOTE: do not use NOW() in index predicates (not IMMUTABLE).
+-- Repair stories schema if earlier migration failed (NOW() index / missing tables).
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'profile_media_type') THEN
+    CREATE TYPE profile_media_type AS ENUM ('image', 'video');
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS profile_stories (
   id BIGSERIAL PRIMARY KEY,
@@ -10,6 +15,8 @@ CREATE TABLE IF NOT EXISTS profile_stories (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL
 );
+
+DROP INDEX IF EXISTS idx_profile_stories_active;
 
 CREATE INDEX IF NOT EXISTS idx_profile_stories_expires
   ON profile_stories (expires_at DESC, created_at DESC);
