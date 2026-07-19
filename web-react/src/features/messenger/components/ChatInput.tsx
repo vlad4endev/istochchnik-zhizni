@@ -168,6 +168,11 @@ interface ChatInputProps {
   canSend: boolean;
   /** Медиа/файлы (отдельное право в группах/каналах). По умолчанию совпадает с возможностью писать текст. */
   canSendAttachments?: boolean;
+  /**
+   * Только текст: скрыть скрепку, микрофон и предупреждение про отключённые вложения.
+   * Для чата «ИИ помощник».
+   */
+  textOnly?: boolean;
   /** Участники для @-упоминаний (группы/каналы). */
   mentionParticipants?: { id: number; label: string }[];
   /** Имена по id — чтобы при редактировании показывать @Имя, а не @[цифры]. */
@@ -249,6 +254,7 @@ export function ChatInput({
   sendTypingStop,
   canSend,
   canSendAttachments = true,
+  textOnly = false,
   mentionParticipants = [],
   participantLabelById = {},
   placeholder = 'Сообщение',
@@ -1643,9 +1649,13 @@ export function ChatInput({
   type IconMode = 'send' | 'mic' | 'video';
   const isRecording = Boolean(mediaCapture && !mediaCapture.connecting);
   const captureKind = mediaCapture?.kind === 'video_note' ? 'video_note' : 'audio';
-  const iconMode: IconMode = isRecording
-    ? (captureKind === 'video_note' ? 'video' : 'mic')
-    : (hasSendAction ? 'send' : 'mic');
+  /** В textOnly (ИИ помощник) всегда кнопка «отправить», без микрофона. */
+  const iconMode: IconMode = textOnly
+    ? 'send'
+    : isRecording
+      ? (captureKind === 'video_note' ? 'video' : 'mic')
+      : (hasSendAction ? 'send' : 'mic');
+  const attachmentsUiEnabled = canSendAttachments && !textOnly;
   const replyBanner = replyingTo ?? replyTo;
   const composerBannerTitle = editing
     ? 'Редактирование'
@@ -1912,13 +1922,13 @@ export function ChatInput({
       {uploadErr ? (
         <p className="mb-2 text-sm font-semibold text-red-600">{uploadErr}</p>
       ) : null}
-      {!uploadsHealthy ? (
+      {!uploadsHealthy && !textOnly ? (
         <p className="mb-2 text-sm font-semibold text-amber-700">
           Хранилище вложений недоступно. Отправка фото и файлов временно отключена.
           {uploadsHealthChecking ? ' Проверяем восстановление…' : ''}
         </p>
       ) : null}
-      {canSend && !canSendAttachments ? (
+      {canSend && !canSendAttachments && !textOnly ? (
         <p className="mb-2 text-sm font-semibold text-amber-800">
           В этом чате для вас отключены фото, файлы, голосовые и видеосообщения (настройки группы).
         </p>
@@ -2052,29 +2062,31 @@ export function ChatInput({
             onChange={(e) => void handleFileSelected(e.target.files)}
           />
 
-          <div ref={attachMenuRef} className="relative z-[5000] shrink-0">
-            <button
-              ref={attachBtnRef}
-              type="button"
-              disabled={!canSendAttachments}
-              onClick={() => {
-                haptic(8);
-                setAttachMenuOpen((v) => !v);
-              }}
-              aria-label="Вложения"
-              aria-expanded={attachMenuOpen}
-              aria-haspopup="menu"
-              title="Вложения"
-              className={[
-                'flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors',
-                'text-stone-600 hover:bg-black/[0.06] active:scale-[0.98]',
-                'disabled:pointer-events-none disabled:opacity-45',
-                'dark:text-stone-200 dark:hover:bg-white/10',
-              ].join(' ')}
-            >
-              <LuPaperclip size={20} strokeWidth={2} aria-hidden />
-            </button>
-          </div>
+          {attachmentsUiEnabled ? (
+            <div ref={attachMenuRef} className="relative z-[5000] shrink-0">
+              <button
+                ref={attachBtnRef}
+                type="button"
+                disabled={!canSendAttachments}
+                onClick={() => {
+                  haptic(8);
+                  setAttachMenuOpen((v) => !v);
+                }}
+                aria-label="Вложения"
+                aria-expanded={attachMenuOpen}
+                aria-haspopup="menu"
+                title="Вложения"
+                className={[
+                  'flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors',
+                  'text-stone-600 hover:bg-black/[0.06] active:scale-[0.98]',
+                  'disabled:pointer-events-none disabled:opacity-45',
+                  'dark:text-stone-200 dark:hover:bg-white/10',
+                ].join(' ')}
+              >
+                <LuPaperclip size={20} strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+          ) : null}
 
           <div
             className={[
@@ -2198,10 +2210,11 @@ export function ChatInput({
                 'tg-send-btn sendBtn relative !flex !h-11 !w-11 !min-h-[44px] !min-w-[44px] shrink-0 touch-none select-none items-center justify-center !rounded-full',
                 isRecording ? 'recording' : '',
                 isRecording && captureKind === 'video_note' ? 'videoMode' : '',
+                textOnly && !hasSendAction ? 'opacity-45' : '',
               ].join(' ')}
-              onPointerDown={!editing ? onSendOrMicPointerDown : undefined}
-              onPointerUp={!editing ? (ev) => onSendOrMicPointerEnd(ev, true) : undefined}
-              onPointerCancel={!editing ? (ev) => onSendOrMicPointerEnd(ev, false) : undefined}
+              onPointerDown={!editing && !textOnly ? onSendOrMicPointerDown : undefined}
+              onPointerUp={!editing && !textOnly ? (ev) => onSendOrMicPointerEnd(ev, true) : undefined}
+              onPointerCancel={!editing && !textOnly ? (ev) => onSendOrMicPointerEnd(ev, false) : undefined}
               onClick={() => {
                 if (suppressVoiceSendClickRef.current) {
                   suppressVoiceSendClickRef.current = false;
@@ -2213,8 +2226,14 @@ export function ChatInput({
                   focusMessengerField(textareaRef.current);
                 }
               }}
-              disabled={uploading != null || (!hasSendAction && (!canSendAttachments || !uploadsHealthy))}
+              disabled={
+                uploading != null ||
+                (textOnly
+                  ? !hasSendAction
+                  : !hasSendAction && (!canSendAttachments || !uploadsHealthy))
+              }
               aria-label={(() => {
+                if (textOnly) return hasSendAction ? 'Отправить' : 'Введите вопрос';
                 if (!canSendAttachments || !uploadsHealthy) {
                   return hasSendAction ? 'Отправить' : 'Голосовые сообщения недоступны';
                 }
@@ -2232,6 +2251,7 @@ export function ChatInput({
                 return 'Удерживайте: запись. Влево — видеокружок до 1 мин, вправо — голос';
               })()}
               title={(() => {
+                if (textOnly) return hasSendAction ? 'Отправить' : 'Введите вопрос';
                 if (!canSendAttachments || !uploadsHealthy) {
                   return hasSendAction ? 'Отправить' : 'Голосовые сообщения недоступны';
                 }

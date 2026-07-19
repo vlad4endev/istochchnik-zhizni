@@ -24,14 +24,32 @@ import './messenger.css';
 
 const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
 
-const ASSISTANT_EXAMPLE_QUESTIONS = [
-  'Кто проповедует в следующее воскресенье и какая тема?',
-  'Какие события запланированы на ближайшие две недели?',
-  'Кто на музыке / медиа в ближайшее служение?',
-  'Что в молитвенном календаре на сегодня?',
-  'Найди песни про любовь или хвалу',
-  'Кто ведущий на ближайшее воскресенье?',
-] as const;
+const ASSISTANT_EXAMPLE_QUESTIONS: ReadonlyArray<{ label: string; text: string }> = [
+  {
+    label: 'Кто проповедует?',
+    text: 'Кто проповедует в следующее воскресенье и какая тема?',
+  },
+  {
+    label: 'События на 2 недели',
+    text: 'Какие события запланированы на ближайшие две недели?',
+  },
+  {
+    label: 'Музыка и медиа',
+    text: 'Кто на музыке / медиа в ближайшее служение?',
+  },
+  {
+    label: 'Молитва на сегодня',
+    text: 'Что в молитвенном календаре на сегодня?',
+  },
+  {
+    label: 'Песни про хвалу',
+    text: 'Найди песни про любовь или хвалу',
+  },
+  {
+    label: 'Кто ведущий?',
+    text: 'Кто ведущий на ближайшее воскресенье?',
+  },
+];
 
 /** Склонение «N участников» по-русски (как в интерфейсах мессенджеров). */
 function formatParticipantCountRU(n: number): string {
@@ -1275,17 +1293,17 @@ export function ChatWindow({
                 <p className="mb-1.5 px-0.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                   Примеры вопросов
                 </p>
-                <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {ASSISTANT_EXAMPLE_QUESTIONS.map((q) => (
                     <button
-                      key={q}
+                      key={q.text}
                       type="button"
-                      className="shrink-0 rounded-2xl border border-primary/20 bg-primary/[0.06] px-3 py-2 text-left text-[13px] font-medium leading-snug text-[var(--text)] transition-colors hover:bg-primary/10 active:bg-primary/15"
+                      className="max-w-[85%] shrink-0 snap-start rounded-2xl border border-primary/20 bg-primary/[0.06] px-3 py-2 text-left text-[13px] font-medium leading-snug text-[var(--text)] transition-colors hover:bg-primary/10 active:bg-primary/15"
                       onClick={() => {
-                        void useChatStore.getState().sendMessage(conversationId, q);
+                        void useChatStore.getState().sendMessage(conversationId, q.text);
                       }}
                     >
-                      {q}
+                      {q.label}
                     </button>
                   ))}
                 </div>
@@ -1297,6 +1315,7 @@ export function ChatWindow({
               sendTypingStop={sendTypingStop}
               canSend={canPostMessages}
               canSendAttachments={canSendAttachments}
+              textOnly={isAssistantChannel}
               mentionParticipants={
                 conv && conv.type !== 'private' && !isAssistantChannel ? mentionList : []
               }
