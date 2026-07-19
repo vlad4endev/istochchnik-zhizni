@@ -1774,6 +1774,26 @@ WHERE NOT s.is_published
   AND btrim(coalesce(s.content, '')) <> ''
   AND NOT (coalesce(s.tags, '{}'::text[]) @> ARRAY['нет_текста']::text[])
   AND NOT (coalesce(s.tags, '{}'::text[]) @> ARRAY['__archived']::text[]);
+
+-- Must exist before the studio_versions → catalog backfill below (fresh DBs).
+CREATE TABLE IF NOT EXISTS studio_versions (
+  id BIGSERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  song_id BIGINT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  custom_content TEXT,
+  custom_key VARCHAR(32),
+  sheet_content TEXT,
+  sheet_key VARCHAR(32),
+  sheet_meta JSONB,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (member_id, song_id)
+);
+CREATE INDEX IF NOT EXISTS idx_studio_versions_member ON studio_versions (member_id);
+CREATE INDEX IF NOT EXISTS idx_studio_versions_song ON studio_versions (song_id);
+ALTER TABLE studio_versions ADD COLUMN IF NOT EXISTS sheet_content TEXT;
+ALTER TABLE studio_versions ADD COLUMN IF NOT EXISTS sheet_key VARCHAR(32);
+ALTER TABLE studio_versions ADD COLUMN IF NOT EXISTS sheet_meta JSONB;
+
 -- Текст только в studio_versions → каталог (см. migration 20260615120000).
 UPDATE songs s
 SET content = sub.content,
@@ -1800,24 +1820,6 @@ FROM (
 WHERE s.id = sub.song_id
   AND NOT s.is_published
   AND btrim(coalesce(s.content, '')) = '';
-
-CREATE TABLE IF NOT EXISTS studio_versions (
-  id BIGSERIAL PRIMARY KEY,
-  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
-  song_id BIGINT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
-  custom_content TEXT,
-  custom_key VARCHAR(32),
-  sheet_content TEXT,
-  sheet_key VARCHAR(32),
-  sheet_meta JSONB,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (member_id, song_id)
-);
-CREATE INDEX IF NOT EXISTS idx_studio_versions_member ON studio_versions (member_id);
-CREATE INDEX IF NOT EXISTS idx_studio_versions_song ON studio_versions (song_id);
-ALTER TABLE studio_versions ADD COLUMN IF NOT EXISTS sheet_content TEXT;
-ALTER TABLE studio_versions ADD COLUMN IF NOT EXISTS sheet_key VARCHAR(32);
-ALTER TABLE studio_versions ADD COLUMN IF NOT EXISTS sheet_meta JSONB;
 
 CREATE TABLE IF NOT EXISTS studio_drafts (
   id BIGSERIAL PRIMARY KEY,
@@ -1863,11 +1865,19 @@ ALTER TABLE setlists ALTER COLUMN share_token_issued_at SET DEFAULT NOW();
 ALTER TABLE setlists ALTER COLUMN share_token_issued_at SET NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_setlists_member ON setlists (member_id);
 ALTER TABLE setlists ADD COLUMN IF NOT EXISTS source_service_plan_id BIGINT;
+-- Minimal stub so fresh local DBs can boot (full schema comes from planner migrations).
+CREATE TABLE IF NOT EXISTS service_plans (
+  id BIGSERIAL PRIMARY KEY,
+  service_date DATE,
+  title TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'setlists_source_service_plan_id_fkey'
-  ) THEN
+  IF to_regclass('public.service_plans') IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM pg_constraint WHERE conname = 'setlists_source_service_plan_id_fkey'
+     ) THEN
     ALTER TABLE setlists
       ADD CONSTRAINT setlists_source_service_plan_id_fkey
       FOREIGN KEY (source_service_plan_id) REFERENCES service_plans(id) ON DELETE SET NULL;
