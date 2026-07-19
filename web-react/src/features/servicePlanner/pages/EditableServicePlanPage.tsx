@@ -33,6 +33,7 @@ import { DurationMinutesInput } from '../components/DurationMinutesInput';
 import { ServicePlannerMemberPicker } from '../components/ServicePlannerMemberPicker';
 import { ServicePlannerSongPicker } from '../components/ServicePlannerSongPicker';
 import { ShareBroadcastTeamPanel } from '../components/ShareBroadcastTeamPanel';
+import { SharePlanBackBar } from '../components/SharePlanBackBar';
 import {
   STAGE_SETUP_PLACE_EQUIPMENT_KEY,
   STAGE_SETUP_REMOVE_MIC_STANDS_KEY,
@@ -544,13 +545,21 @@ export function EditableServicePlanPage() {
   }
 
   if (!token) {
-    return <p className="p-6 text-red-600">Некорректная ссылка</p>;
+    return (
+      <div className="p-6">
+        <SharePlanBackBar />
+        <p className="mt-3 text-red-600">Некорректная ссылка</p>
+      </div>
+    );
   }
   if (planQ.isLoading || metaQ.isLoading) {
     return (
-      <div className="flex min-h-[calc(var(--viewport-height,100dvh)*0.4)] items-center justify-center gap-2 text-stone-500">
-        <LuLoaderCircle className="h-4 w-4 animate-spin" />
-        Загружаю программу...
+      <div className="mx-auto flex min-h-[calc(var(--viewport-height,100dvh)*0.4)] max-w-3xl flex-col gap-3 px-3 py-5 sm:px-4">
+        <SharePlanBackBar />
+        <div className="flex flex-1 items-center justify-center gap-2 text-stone-500">
+          <LuLoaderCircle className="h-4 w-4 animate-spin" />
+          Загружаю программу...
+        </div>
       </div>
     );
   }
@@ -559,6 +568,9 @@ export function EditableServicePlanPage() {
   if ((planRateLimited || metaRateLimited) && (!planQ.data || !metaQ.data)) {
     return (
       <div className="mx-auto flex min-h-[calc(var(--viewport-height,100dvh)*0.4)] max-w-xl flex-col items-center justify-center gap-3 px-4 text-center">
+        <div className="w-full text-left">
+          <SharePlanBackBar />
+        </div>
         <p className="text-base font-semibold text-stone-800">
           Слишком много запросов, попробуйте через несколько секунд.
         </p>
@@ -579,7 +591,12 @@ export function EditableServicePlanPage() {
     return <Navigate to={`/service-plan/share/${token}`} replace />;
   }
   if (metaQ.isError || !metaQ.data) {
-    return <p className="p-6 text-red-600">Не удалось загрузить данные для редактирования</p>;
+    return (
+      <div className="p-6">
+        <SharePlanBackBar />
+        <p className="mt-3 text-red-600">Не удалось загрузить данные для редактирования</p>
+      </div>
+    );
   }
 
   const { plan } = planQ.data;
@@ -610,6 +627,7 @@ export function EditableServicePlanPage() {
   return (
     <div className="share-plan-scroll-root min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--viewport-height,100dvh)] max-lg:[scroll-padding-bottom:calc(var(--app-bottom-nav-total-height)+5.5rem)]">
       <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 sm:space-y-6 sm:px-4 sm:py-8">
+        <SharePlanBackBar />
         <header className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
           <h1 className="text-xl font-extrabold text-stone-900 sm:text-2xl">План собрания на {dateText}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-600 sm:text-sm">
