@@ -776,7 +776,7 @@ export function MusicSchedulePage() {
                 />
 
                 <div className="hidden overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)] lg:block">
-                  <div className="overflow-x-auto">
+                  <div data-scroll-hint className="overflow-x-auto">
                     <table className="min-w-[720px] w-full border-collapse text-sm">
                     <thead>
                       <tr className="bg-stone-50/90">

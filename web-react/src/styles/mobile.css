@@ -657,3 +657,52 @@
     height: 30px !important;
   }
 }
+
+/* ─── Android WebView / installed PWA (Capacitor + Chrome standalone) ─── */
+html[data-android-messenger='1'],
+html[data-android-pwa='1'],
+html.app-native-shell {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+html[data-android-messenger='1'] body,
+html[data-android-pwa='1'] body,
+html.app-native-shell body {
+  overscroll-behavior-y: none;
+}
+
+/* Android Chrome/WebView: keep text fields ≥16px even outside standalone PWA. */
+html[data-android-messenger='1']
+  :where(
+    input:not([type='checkbox']):not([type='radio']):not([type='button']):not([type='submit']):not([type='reset']):not(
+        [type='range']
+      ):not([type='color']):not([type='file']),
+    textarea,
+    select
+  ) {
+  font-size: max(16px, 1rem);
+}
+
+@media (max-width: 1023px) {
+  html[data-android-messenger='1'] .page-content,
+  html[data-android-pwa='1'] .page-content,
+  html.app-native-shell .page-content {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Dense admin/schedule tables: keep horizontal scroll usable on Android. */
+  html[data-android-messenger='1'] [data-scroll-hint],
+  html[data-android-pwa='1'] [data-scroll-hint] {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y;
+  }
+
+  html[data-android-messenger='1'] .songbook-reader,
+  html[data-android-pwa='1'] .songbook-reader {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
