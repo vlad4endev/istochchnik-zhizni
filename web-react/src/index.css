@@ -333,6 +333,9 @@ html[data-pwa-standalone='1'] {
  * when the keyboard opens or an input is focused.
  * Safari applies a default :active opacity and can drop it to 0 during
  * layout shifts caused by the virtual keyboard.
+ *
+ * Кнопка отправки в мессенджере НЕ sibling textarea (она снаружи pill) —
+ * поэтому дополнительно фиксируем .sendBtn / .tg-send-btn.
  */
 @media (hover: none) and (pointer: coarse) {
   button,
@@ -350,6 +353,16 @@ html[data-pwa-standalone='1'] {
   input:focus + button,
   textarea:focus ~ button,
   textarea:focus + button {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  .tg-messenger .sendBtn,
+  .tg-messenger .tg-send-btn,
+  .tg-messenger .sendBtn:disabled,
+  .tg-messenger .tg-send-btn:disabled,
+  .tg-messenger:focus-within .sendBtn,
+  .tg-messenger:focus-within .tg-send-btn {
     opacity: 1 !important;
     visibility: visible !important;
   }

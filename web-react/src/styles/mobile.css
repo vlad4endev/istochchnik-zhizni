@@ -592,7 +592,8 @@
   }
 
   @media (hover: none) {
-    button:hover,
+    /* Не трогаем вкладки фильтра чатов: sticky :hover после тапа иначе сносит brand-фон active. */
+    button:hover:not(.tg-smart-tab):not(.tab-filter-button),
     .card:hover,
     .list-item:hover,
     a:hover {
@@ -603,10 +604,17 @@
   }
 
   /* Тактильный отклик без opacity — на PWA/iOS Safari кнопки (вкладки, отправка) выглядели «прозрачными». */
-  button:active:not(:disabled),
+  button:active:not(:disabled):not(.tg-smart-tab):not(.tab-filter-button),
   .tappable:active {
     opacity: 1 !important;
     transform: scale(0.98) !important;
+  }
+
+  /* Send/mic: не даём UA :disabled и клавиатуре гасить кружок */
+  .tg-messenger .sendBtn,
+  .tg-messenger .tg-send-btn {
+    opacity: 1 !important;
+    visibility: visible !important;
   }
   * {
     -webkit-overflow-scrolling: touch;

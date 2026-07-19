@@ -961,6 +961,8 @@ export function ChatWindow({
                     ) : (
                       <AppAvatar
                         src={headerAvatarUrl}
+                        initialsFallbackText={displayName}
+                        initialsColorSeed={conv?.id ?? (draftPeer ? `member-${draftPeer.id}` : null)}
                         fallback={<span>{headerInitial}</span>}
                         priority
                         className="grid h-full w-full place-items-center"

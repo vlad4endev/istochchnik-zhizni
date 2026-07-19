@@ -46,6 +46,8 @@ const markReadCommittedByConv = new Map<string, bigint>();
 const pollVoteInFlightByMsg = new Set<string>();
 /** Один in-flight reaction-запрос на пару message+emoji. */
 const reactionInFlightByKey = new Set<string>();
+/** Поколение ensurePrivateDraft — отменяет устаревшие async-открытия draft:*. */
+let privateDraftEnsureGen = 0;
 
 /** Throttle: `ready` replay при каждом subscribeRealtimeMessages не должен ддосить API. */
 let lastMessengerReadySyncAt = 0;
@@ -184,6 +186,8 @@ export interface ChatState {
   loadConversations: (opts?: { force?: boolean }) => Promise<void>;
   setActiveConversation: (id: string | null) => void;
   openPrivateDraft: (peer: SearchMember) => void;
+  /** Deep link `draft:{memberId}` без peer в store — подтянуть карточку и открыть черновик ЛС. */
+  ensurePrivateDraftFromConversationId: (conversationId: string) => Promise<boolean>;
   loadMessages: (conversationId: string, older?: boolean, opts?: { force?: boolean }) => Promise<void>;
   /** После reconnect: догрузить сообщения новее max(реальный id) без сброса истории. */
   catchUpMessagesAfter: (conversationId: string, retryCount?: number) => Promise<void>;
@@ -995,12 +999,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ─── Active conversation ──────────────────────────────────
 
   setActiveConversation: (id) => {
-    set((s) => ({
-      activeConversationId: id,
-      replyToMessage: null,
-      editingMessage: null,
-      privateDraftPeer: id && isDraftPrivateConversationId(id) ? s.privateDraftPeer : null,
-    }));
+    set((s) => {
+      let nextPeer: SearchMember | null = null;
+      if (id && isDraftPrivateConversationId(id)) {
+        const draftMemberId = parseDraftPrivateMemberId(id);
+        if (
+          draftMemberId != null &&
+          s.privateDraftPeer != null &&
+          Number(s.privateDraftPeer.id) === draftMemberId
+        ) {
+          nextPeer = s.privateDraftPeer;
+        }
+      }
+      return {
+        activeConversationId: id,
+        replyToMessage: null,
+        replyingTo: null,
+        editingMessage: null,
+        privateDraftPeer: nextPeer,
+      };
+    });
     if (id && !get().messagesByConv[id] && !isDraftPrivateConversationId(id)) {
       void get().loadMessages(id);
     }
@@ -1012,6 +1030,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       privateDraftPeer: peer,
       activeConversationId: draftId,
       replyToMessage: null,
+      replyingTo: null,
       editingMessage: null,
       messagesByConv: {
         ...s.messagesByConv,
@@ -1019,6 +1038,41 @@ export const useChatStore = create<ChatState>((set, get) => ({
       },
       hasMore: { ...s.hasMore, [draftId]: false },
     }));
+  },
+
+  ensurePrivateDraftFromConversationId: async (conversationId) => {
+    const memberId = parseDraftPrivateMemberId(conversationId);
+    if (memberId == null) return false;
+
+    const existingConv = (get().conversations || EMPTY_ARRAY).find(
+      (c) => c.type === 'private' && c.other_member != null && Number(c.other_member.id) === memberId,
+    );
+    if (existingConv) {
+      get().setActiveConversation(existingConv.id);
+      return true;
+    }
+
+    const existing = get().privateDraftPeer;
+    if (existing && Number(existing.id) === memberId) {
+      get().openPrivateDraft(existing);
+      return true;
+    }
+
+    const ensureGen = ++privateDraftEnsureGen;
+    const activeBefore = get().activeConversationId;
+    const peer = await api.fetchMessengerMember(memberId);
+    if (ensureGen !== privateDraftEnsureGen) return false;
+    const activeNow = get().activeConversationId;
+    // Пользователь ушёл в другой чат, пока грузили карточку — не перетираем.
+    if (activeNow !== activeBefore && activeNow !== conversationId) {
+      return false;
+    }
+    if (!peer) {
+      emitAppToast('Не удалось открыть чат с участником', 'error');
+      return false;
+    }
+    get().openPrivateDraft(peer);
+    return true;
   },
 
   // ─── Load messages ────────────────────────────────────────
@@ -1234,14 +1288,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sender_name: 'Вы',
       sender_first_name: null,
       sender_last_name: null,
-      reply_preview: get().replyToMessage
-        ? {
-            id: get().replyToMessage!.id,
-            content: get().replyToMessage!.content,
-            sender_name: get().replyToMessage!.sender_name,
-            is_deleted: get().replyToMessage!.is_deleted,
-          }
-        : null,
+      reply_preview: (() => {
+        const replySrc = get().replyingTo ?? get().replyToMessage;
+        return replySrc
+          ? {
+              id: replySrc.id,
+              content: replySrc.content,
+              sender_name: replySrc.sender_name,
+              is_deleted: replySrc.is_deleted,
+            }
+          : null;
+      })(),
       reactions: [],
     };
 
@@ -1284,6 +1341,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           updated_at: real.created_at,
         })),
         replyToMessage: null,
+        replyingTo: null,
       }));
       saveSnapshot(get());
       return true;
@@ -1672,9 +1730,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // ─── Reply / Edit state ───────────────────────────────────
 
-  setReplyTo: (msg) => set({ replyToMessage: msg, editingMessage: null }),
-  setReplyingTo: (msg) => set({ replyingTo: msg, editingMessage: null }),
-  setEditing: (msg) => set({ editingMessage: msg, replyToMessage: null }),
+  setReplyTo: (msg) => set({ replyToMessage: msg, replyingTo: null, editingMessage: null }),
+  setReplyingTo: (msg) => set({ replyingTo: msg, replyToMessage: null, editingMessage: null }),
+  setEditing: (msg) => set({ editingMessage: msg, replyToMessage: null, replyingTo: null }),
 
   // ─── WS event handlers ───────────────────────────────────
 

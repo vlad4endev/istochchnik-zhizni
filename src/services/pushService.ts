@@ -250,7 +250,7 @@ export type SendPushOptions = {
   recordDelivery?: boolean;
 };
 
-/** Push-доставки для роли «прихожанин»: только чаты и трансляция (см. kind/type/url в данных). */
+/** Push-доставки для роли «прихожанин»: только чаты, трансляция и «новый участник». */
 function isParishionerAllowedPushData(data?: Record<string, string>): boolean {
   if (!data) return false;
   const conv =
@@ -259,10 +259,13 @@ function isParishionerAllowedPushData(data?: Record<string, string>): boolean {
   if (conv || chatTag) return true;
 
   const kind = typeof data.kind === 'string' ? data.kind.trim().toLowerCase() : '';
-  if (kind === 'broadcast' || kind === 'broadcast_start') return true;
+  if (kind === 'broadcast' || kind === 'broadcast_start' || kind === 'member_joined') return true;
 
   const type = typeof data.type === 'string' ? data.type.trim().toLowerCase() : '';
-  if (type.startsWith('broadcast')) return true;
+  if (type.startsWith('broadcast') || type === 'member_joined') return true;
+
+  const tag = typeof data.tag === 'string' ? data.tag.trim().toLowerCase() : '';
+  if (tag.startsWith('member-joined-')) return true;
 
   const url = typeof data.url === 'string' ? data.url.toLowerCase() : '';
   if (url.includes('/broadcast')) return true;

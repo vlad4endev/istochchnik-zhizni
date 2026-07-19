@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { resolvePublicUrl } from '../lib/resolvePublicUrl';
 import { getAvatarColor, getAvatarInitial } from '../features/messenger/avatarUtils';
 
@@ -24,6 +24,21 @@ type AppAvatarProps = {
   initialsColorSeed?: string | null;
 };
 
+function syncImgLoadState(
+  img: HTMLImageElement | null,
+  onReady: () => void,
+  onFail: () => void,
+): void {
+  if (!img) return;
+  // Кэш: onLoad мог сработать до подписки React — иначе аватар навсегда opacity-0.
+  if (!img.complete) return;
+  if (img.naturalWidth > 0) {
+    onReady();
+  } else {
+    onFail();
+  }
+}
+
 export const AppAvatar = memo(function AppAvatar({
   src,
   fallback,
@@ -42,6 +57,7 @@ export const AppAvatar = memo(function AppAvatar({
   const resolvedSrc = useMemo(() => resolvePublicUrl(src ?? null), [src]);
   const [loadFailed, setLoadFailed] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
 
   const effectiveLoading = loading ?? (priority ? 'eager' : 'lazy');
   const effectiveFetchPriority = fetchPriority ?? (priority ? 'high' : 'auto');
@@ -49,6 +65,14 @@ export const AppAvatar = memo(function AppAvatar({
   useEffect(() => {
     setLoadFailed(false);
     setIsLoaded(false);
+  }, [resolvedSrc]);
+
+  useEffect(() => {
+    syncImgLoadState(
+      imgRef.current,
+      () => setIsLoaded(true),
+      () => setLoadFailed(true),
+    );
   }, [resolvedSrc]);
 
   const showImage = Boolean(resolvedSrc) && !loadFailed;
@@ -75,6 +99,7 @@ export const AppAvatar = memo(function AppAvatar({
             </span>
           ) : null}
           <img
+            ref={imgRef}
             src={resolvedSrc ?? undefined}
             alt={alt}
             className={[

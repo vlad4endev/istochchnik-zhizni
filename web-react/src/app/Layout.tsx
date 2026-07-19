@@ -35,7 +35,7 @@ import { PermissionsRequestModal } from '../components/PermissionsRequestModal';
 import { NotificationPrompt } from '../features/pwa';
 import { PrefetchNavLink } from '../components/PrefetchNavLink';
 import { ScrollRestoration } from '../components/ScrollRestoration';
-import { useChatStore } from '../features/messenger/chatStore';
+import { isDraftPrivateConversationId, useChatStore } from '../features/messenger/chatStore';
 import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
 import { CallWindow } from '../features/calls/CallWindow';
 import { IncomingCallToast } from '../features/calls/IncomingCallToast';
@@ -514,8 +514,13 @@ export function Layout() {
       const ce = e as CustomEvent<{ conversationId?: string }>;
       const conversationId = String(ce.detail?.conversationId ?? '').trim();
       if (!conversationId) return;
+      // draft:* открывает MessengerPage через ensurePrivateDraft (peer ещё может быть неизвестен).
+      if (isDraftPrivateConversationId(conversationId)) {
+        navigate(`/messenger?conversationId=${encodeURIComponent(conversationId)}`);
+        return;
+      }
       setActiveConversation(conversationId);
-      navigate('/messenger');
+      navigate(`/messenger?conversationId=${encodeURIComponent(conversationId)}`);
     };
     window.addEventListener('app:open-conversation', onOpenConversation);
     return () => {
@@ -572,7 +577,10 @@ export function Layout() {
 
       const conversationId = String(payload.conversationId ?? '').trim();
       if (conversationId) {
-        setActiveConversation(conversationId);
+        // Не вызываем setActiveConversation для draft:* — иначе залипает чужой/пустой peer.
+        if (!isDraftPrivateConversationId(conversationId)) {
+          setActiveConversation(conversationId);
+        }
         navigate(`/messenger?conversationId=${encodeURIComponent(conversationId)}`);
         return;
       }
@@ -601,7 +609,9 @@ export function Layout() {
       const payload = ce.detail ?? {};
       const conversationId = String(payload.conversationId ?? '').trim();
       if (conversationId) {
-        setActiveConversation(conversationId);
+        if (!isDraftPrivateConversationId(conversationId)) {
+          setActiveConversation(conversationId);
+        }
         navigate(`/messenger?conversationId=${encodeURIComponent(conversationId)}`);
         return;
       }

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { getAvatarColor, getAvatarInitial } from '../../lib/messengerUtils';
@@ -26,11 +26,23 @@ export function ChatAvatar({
   const styles = useMemo(() => createStyles(size), [size]);
   const letter = getAvatarInitial(name);
   const bg = getAvatarColor(seed ?? name);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [imageUrl]);
+
+  const showImage = Boolean(imageUrl) && !imageFailed;
 
   return (
     <View style={styles.wrap}>
-      {imageUrl ? (
-        <Image source={{ uri: imageUrl }} style={styles.image} contentFit="cover" />
+      {showImage ? (
+        <Image
+          source={{ uri: imageUrl! }}
+          style={styles.image}
+          contentFit="cover"
+          onError={() => setImageFailed(true)}
+        />
       ) : (
         <View style={[styles.fallback, { backgroundColor: bg }]}>
           <Text style={[styles.letter, { color: colors.textOnPrimary }]}>{letter}</Text>

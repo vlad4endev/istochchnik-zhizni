@@ -1853,6 +1853,27 @@ router.get('/members/search', async (req: Request, res: Response) => {
   }
 });
 
+/** GET /api/messenger/members/:memberId — для deep link в черновик ЛС */
+router.get('/members/:memberId', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const memberId = Number(req.params.memberId);
+  if (!Number.isFinite(memberId) || memberId <= 0) {
+    res.status(400).json({ error: 'Invalid member id' });
+    return;
+  }
+  try {
+    const member = await svc.getMemberByIdForMessenger(memberId, userId);
+    if (!member) {
+      res.status(404).json({ error: 'Member not found' });
+      return;
+    }
+    res.json({ ...member, is_online: isMemberOnline(member.id) });
+  } catch (e) {
+    console.error('[messenger] getMemberById error:', e);
+    res.status(500).json({ error: 'Failed to load member' });
+  }
+});
+
 // ─── Search Messages ──────────────────────────────────────────
 
 /** GET /api/messenger/conversations/:id/search?q=... */
