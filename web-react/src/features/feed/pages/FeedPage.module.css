@@ -4,7 +4,8 @@
   max-width: 100%;
   overflow-x: clip;
   box-sizing: border-box;
-  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  /* Нижний safe-area уже в --app-bottom-nav-total-height у main — не дублируем. */
+  padding-bottom: 0;
   background: var(--profile-surface, #000);
   color: var(--profile-text-body, #1c1917);
 }
@@ -17,11 +18,11 @@
   grid-template-columns: 2.75rem 1fr 2.75rem;
   align-items: center;
   gap: 0.25rem;
-  min-height: 2.75rem;
-  padding: 0.15rem 0.35rem;
-  padding-top: calc(0.15rem + env(safe-area-inset-top, 0px));
-  padding-left: max(0.35rem, env(safe-area-inset-left, 0px));
-  padding-right: max(0.35rem, env(safe-area-inset-right, 0px));
+  min-height: 2.85rem;
+  /* body уже даёт safe-area-inset-top — здесь только внутренний отступ. */
+  padding: 0.2rem 0.35rem;
+  padding-left: max(0.55rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.55rem, env(safe-area-inset-right, 0px));
   background: var(--profile-surface, #000);
   border-bottom: none;
   transition: background 0.2s ease;
@@ -55,11 +56,12 @@
 .brand {
   margin: 0;
   font-family: 'Grand Hotel', 'Segoe Script', 'Snell Roundhand', cursive;
-  font-size: 2rem;
+  font-size: clamp(1.65rem, 7.5vw, 2rem);
   font-weight: 400;
-  line-height: 1;
+  line-height: 1.05;
   letter-spacing: 0.01em;
   color: inherit;
+  padding-bottom: 0.05rem;
 }
 
 .brandChevron {
@@ -171,9 +173,12 @@
   display: flex;
   gap: 0.85rem;
   overflow: hidden;
-  padding: 0.55rem 0.7rem 0.7rem;
+  padding: 0.55rem 0.75rem 0.7rem;
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
   margin: 0 auto;
   max-width: 36rem;
+  box-sizing: border-box;
 }
 
 .storiesSkelItem {
@@ -204,10 +209,13 @@
   margin: 0 auto;
   width: 100%;
   max-width: 36rem;
-  padding: 0.75rem 0.55rem 5.5rem;
+  /* Нижний запас под FAB; safe-area/nav уже в Layout. */
+  padding: 0.7rem 0.75rem 5.25rem;
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 0.85rem;
   box-sizing: border-box;
 }
 
@@ -215,6 +223,24 @@
   .feed {
     padding: 1.1rem 1rem 3rem;
     gap: 1.1rem;
+  }
+}
+
+@media (max-width: 359px) {
+  .topBar {
+    grid-template-columns: 2.5rem 1fr 2.5rem;
+    min-height: 2.65rem;
+  }
+
+  .iconBtn,
+  .iconBtnSpacer {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .feed {
+    padding-top: 0.55rem;
+    gap: 0.7rem;
   }
 }
 
@@ -322,9 +348,15 @@
     0 12px 30px color-mix(in srgb, var(--profile-primary, #7d3640) 38%, transparent),
     0 0 0 1px color-mix(in srgb, #fff 18%, transparent) inset;
   cursor: pointer;
-  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease, opacity 0.15s ease;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+}
+
+.fabHidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.9);
 }
 
 .fab:hover {

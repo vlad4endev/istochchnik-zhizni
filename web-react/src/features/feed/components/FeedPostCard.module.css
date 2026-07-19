@@ -9,9 +9,10 @@
     );
   border: 1px solid color-mix(in srgb, var(--profile-border, rgba(120, 113, 108, 0.2)) 88%, transparent);
   box-shadow:
-    0 1px 0 color-mix(in srgb, #fff 55%, transparent) inset,
-    0 8px 28px rgba(28, 25, 23, 0.06);
-  overflow: hidden;
+    0 1px 0 color-mix(in srgb, #fff 35%, transparent) inset,
+    0 8px 28px rgba(28, 25, 23, 0.08);
+  /* visible — чтобы меню владельца не обрезалось; медиа клипается отдельно */
+  overflow: visible;
   transform-origin: center top;
   will-change: transform, opacity;
 }
@@ -249,6 +250,7 @@
 .mediaWrap {
   position: relative;
   isolation: isolate;
+  overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -259,6 +261,7 @@
   display: flex;
   flex-direction: column;
   background: var(--profile-media-placeholder, #e7e5e4);
+  overflow: hidden;
 }
 
 .mediaCarousel {
@@ -386,10 +389,15 @@
 }
 
 .embedWho {
+  min-width: 0;
+  flex: 1;
   font-size: 0.8125rem;
   font-weight: 800;
   color: var(--profile-text-heading, #1c1917);
   text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .embedCaption {

@@ -111,14 +111,20 @@ export function CommentSheet({
 
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
+    const main = document.getElementById('main-content') as HTMLElement | null;
+    const prevBody = document.body.style.overflow;
+    const prevMain = main?.style.overflow ?? '';
     document.body.style.overflow = 'hidden';
+    if (main) main.style.overflow = 'hidden';
+    document.body.classList.add('feed-comments-open');
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevBody;
+      if (main) main.style.overflow = prevMain;
+      document.body.classList.remove('feed-comments-open');
       document.removeEventListener('keydown', onKey);
     };
   }, [open, onClose]);
@@ -293,7 +299,7 @@ export function CommentSheet({
         aria-labelledby={titleId}
         style={
           keyboardInset > 0
-            ? { paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${keyboardInset}px)` }
+            ? { paddingBottom: `${keyboardInset}px` }
             : undefined
         }
       >
@@ -465,12 +471,7 @@ export function CommentSheet({
                   value={text}
                   disabled={sending}
                   enterKeyHint="send"
-                  onFocus={() => {
-                    setInputFocused(true);
-                    window.setTimeout(() => {
-                      inputRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-                    }, 280);
-                  }}
+                  onFocus={() => setInputFocused(true)}
                   onBlur={() => setInputFocused(false)}
                   onChange={(e) => {
                     setText(e.target.value);
