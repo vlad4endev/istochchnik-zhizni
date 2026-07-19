@@ -20,7 +20,7 @@ import {
 } from '../payloadMedia';
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
-import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuRefreshCw, LuReply } from 'react-icons/lu';
+import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuReply, LuX } from 'react-icons/lu';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { ChatVideoAttachmentPreview } from './ChatVideoAttachmentPreview';
@@ -1966,8 +1966,8 @@ function MessageBubbleInner({
     : systemBotAccessMessage
       ? 'rounded-2xl'
       : isMine
-        ? 'rounded-tl-[18px] rounded-tr-[4px] rounded-br-[18px] rounded-bl-[18px]'
-        : 'rounded-tl-[4px] rounded-tr-[18px] rounded-br-[18px] rounded-bl-[18px]';
+        ? 'rounded-tl-[22px] rounded-tr-[6px] rounded-br-[22px] rounded-bl-[22px]'
+        : 'rounded-tl-[6px] rounded-tr-[22px] rounded-br-[22px] rounded-bl-[22px]';
 
   const bubbleClasses = isVideoNoteLayout
     ? ['tg-bubble relative bg-transparent p-0 shadow-none ring-0', bubbleShapeClass].join(' ')
@@ -1975,10 +1975,10 @@ function MessageBubbleInner({
         'tg-bubble relative px-3 py-2 sm:px-3.5 sm:py-2',
         bubbleShapeClass,
         systemBotAccessMessage
-          ? 'bg-[var(--surface-elevated)] text-[var(--text)] shadow-[0_1px_0.5px_rgba(0,0,0,0.06)] ring-1 ring-stone-200/55'
+          ? 'bg-[var(--tg-bubble-in,var(--surface-elevated))] text-[var(--tg-bubble-in-text,var(--text))] shadow-[var(--tg-bubble-in-shadow)] ring-1 ring-[color:var(--tg-border)]'
           : isMine
-            ? 'bg-primary text-white'
-            : 'bg-[var(--surface-elevated)] text-[var(--text)] shadow-[0_1px_0.5px_rgba(0,0,0,0.06)]',
+            ? 'bg-primary text-white shadow-[var(--tg-bubble-out-shadow)]'
+            : 'bg-[var(--tg-bubble-in,var(--surface-elevated))] text-[var(--tg-bubble-in-text,var(--text))] shadow-[var(--tg-bubble-in-shadow)]',
       ]
         .filter(Boolean)
         .join(' ');
@@ -2039,13 +2039,14 @@ function MessageBubbleInner({
           ) : status === 'error' ? (
             <button
               type="button"
-              className="inline-flex shrink-0 rounded p-0.5 text-white/90 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              className="tg-msg-status-dot tg-msg-status-dot--error"
               aria-label="Сообщение не доставлено. Нажмите, чтобы повторить отправку."
+              title="Повторить отправку"
               onClick={() => {
                 void retrySendMessage(String(message.conversation_id), String(message.id));
               }}
             >
-              <LuRefreshCw className="h-3.5 w-3.5" aria-hidden focusable={false} />
+              <LuX className="h-2 w-2" strokeWidth={3} aria-hidden focusable={false} />
             </button>
           ) : isReadByOther ? (
             <IoCheckmarkDone
