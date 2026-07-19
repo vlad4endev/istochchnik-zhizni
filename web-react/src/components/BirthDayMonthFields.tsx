@@ -94,7 +94,7 @@ export function BirthDayMonthFields({
           {required ? <span className="text-red-600"> *</span> : null}
         </span>
       ) : null}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2 sm:grid-cols-[6.5rem_minmax(0,1fr)]">
         <label className="block min-w-0">
           <span className="sr-only">День рождения</span>
           <input
@@ -116,7 +116,11 @@ export function BirthDayMonthFields({
           <span className="sr-only">Месяц рождения</span>
           <select
             id={monthId}
-            className={selectClassName}
+            className={`${selectClassName ?? ''} appearance-none bg-[length:1rem] bg-[right_0.9rem_center] bg-no-repeat pr-10`}
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2378716c'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")",
+            }}
             value={month}
             required={required}
             autoComplete="bday-month"
