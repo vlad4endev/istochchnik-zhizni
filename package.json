@@ -69,7 +69,8 @@
     "start-all": "bash ./start-all",
     "go": "echo \"Команды: go:start | go:update | go:stop | go:restart — Docker-сервисы api + web (БД Supabase отдельно)\"",
     "go:start": "docker compose up -d --no-deps api web && docker compose logs -f --tail=50 api",
-    "go:update": "git pull && docker compose up -d --build --no-deps api web && docker compose logs -f --tail=100 api",
+    "go:update": "bash scripts/server-update.sh",
+    "server:update": "bash scripts/server-update.sh",
     "go:stop": "docker compose stop api web",
     "go:restart": "docker compose restart api web && docker compose logs -f api",
     "docker:web:rebuild": "docker compose build --no-cache web && docker compose up -d web"
