@@ -138,6 +138,7 @@ const PAYLOAD_LABELS: Record<MessagePayloadType, string> = {
   file: '📎 Файл',
   poll: '📊 Опрос',
   access_request: '🔐 Запрос доступа',
+  story_reply: '↩️ Ответ на историю',
 };
 
 export function messagePreviewText(msg: MessageWithSender | ConversationListItem['last_message']): string {

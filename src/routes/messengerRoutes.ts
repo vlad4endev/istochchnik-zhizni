@@ -1325,9 +1325,11 @@ router.post(
               ? '🎤 Голосовое сообщение'
               : ptype === 'video_note'
                 ? '🎥 Видеосообщение'
-                : ptype !== 'text'
-                  ? 'Вложение'
-                  : 'Новое сообщение');
+                : ptype === 'story_reply'
+                  ? '↩️ Ответ на историю'
+                  : ptype !== 'text'
+                    ? 'Вложение'
+                    : 'Новое сообщение');
         const mpl =
           message.payload && typeof message.payload === 'object' && !Array.isArray(message.payload)
             ? (message.payload as Record<string, unknown>)

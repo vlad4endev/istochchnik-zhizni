@@ -184,6 +184,127 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
+.withReply .caption {
+  bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 1.1rem;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.55));
+}
+
+.footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  padding-left: calc(0.75rem + env(safe-area-inset-left, 0px));
+  padding-right: calc(0.75rem + env(safe-area-inset-right, 0px));
+  padding-bottom: calc(0.7rem + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.62) 28%, rgba(0, 0, 0, 0.78));
+  pointer-events: auto;
+}
+
+.replyFlash {
+  margin: 0;
+  align-self: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(8px);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fafaf9;
+}
+
+.reactionRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.2rem;
+  padding: 0 0.1rem;
+}
+
+.reactionBtn {
+  flex: 1;
+  min-width: 0;
+  height: 2.55rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s ease, background-color 0.12s ease;
+}
+
+.reactionBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.reactionBtn:not(:disabled):active {
+  transform: scale(1.18);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.replyForm {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.replyInput {
+  flex: 1;
+  min-width: 0;
+  height: 2.65rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(250, 250, 249, 0.55);
+  background: rgba(0, 0, 0, 0.28);
+  color: #fafaf9;
+  padding: 0 1rem;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.replyInput::placeholder {
+  color: rgba(250, 250, 249, 0.62);
+}
+
+.replyInput:focus {
+  border-color: rgba(250, 250, 249, 0.9);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.replyInput:disabled {
+  opacity: 0.6;
+}
+
+.replySend {
+  display: grid;
+  place-items: center;
+  width: 2.65rem;
+  height: 2.65rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(250, 250, 249, 0.18);
+  color: #fafaf9;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.replySend:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.replySend:not(:disabled):active {
+  background: rgba(250, 250, 249, 0.28);
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -196,5 +317,9 @@
 @media (prefers-reduced-motion: reduce) {
   .overlay {
     animation: none;
+  }
+
+  .reactionBtn {
+    transition: none;
   }
 }

@@ -1,9 +1,41 @@
 import { query } from '../config/db';
 import { rankStoryGroups } from './feedRanking';
+import {
+  findOrCreatePersonalConversation,
+  sendMessage,
+} from './messengerService';
+import type { MessageWithSender } from '../types/messenger';
 import type { MediaType, ProfilePostAuthor } from './profileService';
 
 const STORY_TTL_MS = 24 * 60 * 60 * 1000;
 const CAPTION_MAX = 500;
+const REPLY_TEXT_MAX = 1000;
+const REACTION_MAX = 16;
+
+async function ensureStoryReplyPayloadType(): Promise<void> {
+  await query(`
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON t.typnamespace = n.oid
+    WHERE n.nspname = 'public'
+      AND t.typname = 'message_payload_type'
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_enum e
+    JOIN pg_type t ON e.enumtypid = t.oid
+    JOIN pg_namespace n ON t.typnamespace = n.oid
+    WHERE n.nspname = 'public'
+      AND t.typname = 'message_payload_type'
+      AND e.enumlabel = 'story_reply'
+  ) THEN
+    ALTER TYPE public.message_payload_type ADD VALUE 'story_reply';
+  END IF;
+END $$`);
+}
 
 let storiesSchemaReady: Promise<void> | null = null;
 
@@ -324,4 +356,92 @@ export async function deleteStoryAsOwner(storyId: string, memberId: number): Pro
     [storyId, memberId],
   );
   return (r.rowCount ?? 0) > 0;
+}
+
+export type StoryReplyResult = {
+  conversationId: string;
+  message: MessageWithSender;
+};
+
+/**
+ * Ответ или реакция на историю → сообщение `story_reply` в личный чат с автором
+ * (как ответы на Stories в Instagram).
+ */
+export async function replyToStory(input: {
+  storyId: string;
+  fromMemberId: number;
+  text?: string | null;
+  reaction?: string | null;
+}): Promise<StoryReplyResult> {
+  await ensureStoriesSchema();
+  await ensureStoryReplyPayloadType();
+
+  const text = typeof input.text === 'string' ? input.text.trim() : '';
+  const reaction = typeof input.reaction === 'string' ? input.reaction.trim() : '';
+  if (!text && !reaction) {
+    throw Object.assign(new Error('Нужен текст ответа или реакция'), { code: 'empty_reply' });
+  }
+  if (text.length > REPLY_TEXT_MAX) {
+    throw Object.assign(new Error(`Текст слишком длинный (макс. ${REPLY_TEXT_MAX})`), {
+      code: 'text_too_long',
+    });
+  }
+  if (reaction.length > REACTION_MAX) {
+    throw Object.assign(new Error('Некорректная реакция'), { code: 'bad_reaction' });
+  }
+
+  const storyRes = await query(
+    `SELECT
+      s.id::text AS id,
+      s.member_id,
+      s.media_url,
+      s.media_type::text AS media_type,
+      s.caption
+     FROM profile_stories s
+     WHERE s.id = $1::bigint AND s.expires_at > NOW()
+     LIMIT 1`,
+    [input.storyId],
+  );
+  const story = storyRes.rows[0] as
+    | {
+        id: string;
+        member_id: number;
+        media_url: string;
+        media_type: string;
+        caption: string | null;
+      }
+    | undefined;
+  if (!story) {
+    throw Object.assign(new Error('Сторис не найдена или истекла'), { code: 'not_found' });
+  }
+  if (Number(story.member_id) === Number(input.fromMemberId)) {
+    throw Object.assign(new Error('Нельзя ответить на свою историю'), { code: 'self_reply' });
+  }
+
+  const kind = reaction && !text ? 'reaction' : 'reply';
+  const content = text || reaction;
+  const conversationId = await findOrCreatePersonalConversation(
+    input.fromMemberId,
+    Number(story.member_id),
+  );
+  const message = await sendMessage(
+    conversationId,
+    input.fromMemberId,
+    content,
+    null,
+    null,
+    'story_reply',
+    {
+      kind,
+      story_id: story.id,
+      story_media_url: story.media_url,
+      story_media_type: story.media_type === 'video' ? 'video' : 'image',
+      story_caption: story.caption,
+      story_author_id: Number(story.member_id),
+      reaction: reaction || null,
+      text: text || null,
+    },
+  );
+
+  return { conversationId: String(conversationId), message };
 }

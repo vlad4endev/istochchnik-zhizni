@@ -5,6 +5,7 @@ import {
   deleteStoryAsOwner,
   listActiveStories,
   markStoryViewed,
+  replyToStory,
 } from '../services/storyService';
 import type { MediaType } from '../services/profileService';
 import {
@@ -14,6 +15,14 @@ import {
   uploadBufferToPublicBucket,
   userMediaBucket,
 } from '../lib/supabaseStorage';
+import {
+  ensureMemberInRoom,
+  sendToMember,
+  sendToRoomAll,
+} from '../realtime/wsHub';
+import { sendPushNotification } from '../services/pushService';
+import * as messengerSvc from '../services/messengerService';
+import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
 
 type AuthReq = Request & { authUserId?: number };
 
@@ -162,5 +171,107 @@ export async function deleteStory(req: Request, res: Response): Promise<void> {
   } catch (e) {
     console.error('[stories] delete error:', e);
     res.status(500).json({ error: 'Database error' });
+  }
+}
+
+/** POST /api/stories/:id/reply { text?, reaction? } — ответ уходит в личный чат. */
+export async function postStoryReply(req: Request, res: Response): Promise<void> {
+  const authUserId = (req as AuthReq).authUserId;
+  if (!authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const storyId = String(req.params.id ?? '').trim();
+  if (!storyId) {
+    res.status(400).json({ error: 'Invalid story id' });
+    return;
+  }
+  const text = typeof req.body?.text === 'string' ? req.body.text : null;
+  const reaction = typeof req.body?.reaction === 'string' ? req.body.reaction : null;
+
+  try {
+    const { conversationId, message } = await replyToStory({
+      storyId,
+      fromMemberId: authUserId,
+      text,
+      reaction,
+    });
+    const convKey = String(conversationId);
+    const authorId = Number(
+      (message.payload as { story_author_id?: unknown } | undefined)?.story_author_id,
+    );
+
+    ensureMemberInRoom(authUserId, convKey);
+    if (Number.isFinite(authorId) && authorId > 0) {
+      ensureMemberInRoom(authorId, convKey);
+      try {
+        const convForAuthor = await messengerSvc.getConversationListItem(authorId, convKey);
+        if (convForAuthor) {
+          sendToMember(authorId, { type: 'conv:created', conversation: convForAuthor });
+        }
+      } catch {
+        /* best-effort */
+      }
+    }
+
+    const messageForRealtime = { ...message, is_read: false as const };
+    sendToRoomAll(convKey, {
+      type: 'msg:new',
+      conversationId: convKey,
+      message: messageForRealtime,
+    });
+
+    res.status(201).json({
+      ok: true,
+      conversationId: convKey,
+      message: messageForRealtime,
+    });
+
+    void (async () => {
+      try {
+        if (!Number.isFinite(authorId) || authorId <= 0) return;
+        if (await messengerSvc.isConversationMutedForMember(convKey, authorId)) return;
+        const senderName = message.sender_name ?? 'Новое сообщение';
+        const bodyText =
+          String(message.content ?? '').trim() || '↩️ Ответ на историю';
+        await sendPushNotification(authorId, {
+          title: senderName,
+          body: bodyText,
+          senderName,
+          conversationId: convKey,
+          messageId: String(message.id ?? ''),
+          url: resolveMessengerConversationDeepLink(convKey),
+          tag: `chat-${convKey}`,
+          renotify: true,
+          badge: '/assets/pwa-64x64.png',
+          icon: '/assets/pwa-192x192.png',
+          actions: [
+            { action: 'reply', title: 'Ответить' },
+            { action: 'dismiss', title: 'Закрыть' },
+          ],
+        });
+      } catch (e) {
+        console.warn('[stories] reply push failed (best-effort):', e);
+      }
+    })();
+  } catch (e) {
+    const code =
+      e && typeof e === 'object' && 'code' in e ? String((e as { code?: unknown }).code ?? '') : '';
+    const msg = e instanceof Error ? e.message : 'Failed to reply';
+    if (code === 'not_found') {
+      res.status(404).json({ error: msg });
+      return;
+    }
+    if (
+      code === 'empty_reply' ||
+      code === 'text_too_long' ||
+      code === 'bad_reaction' ||
+      code === 'self_reply'
+    ) {
+      res.status(400).json({ error: msg });
+      return;
+    }
+    console.error('[stories] reply error:', e);
+    res.status(500).json({ error: 'Не удалось отправить ответ' });
   }
 }

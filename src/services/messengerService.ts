@@ -190,6 +190,7 @@ function lastMessageListPreviewContent(rawContent: unknown, payloadType: unknown
   if (pt === 'image') return '📷 Фото';
   if (pt === 'file') return '📎 Файл';
   if (pt === 'poll') return '📊 Опрос';
+  if (pt === 'story_reply') return s || '↩️ Ответ на историю';
   return typeof rawContent === 'string' ? rawContent : '';
 }
 

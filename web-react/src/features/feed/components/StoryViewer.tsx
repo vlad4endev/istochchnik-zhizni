@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { LuTrash2, LuUser, LuX } from 'react-icons/lu';
+import { LuSend, LuTrash2, LuUser, LuX } from 'react-icons/lu';
 
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { memberNameFirstLast } from '../../profile/memberDisplayName';
-import { deleteStory, markStoryViewed, type StoryAuthorGroup } from '../feedApi';
+import { deleteStory, markStoryViewed, replyToStory, type StoryAuthorGroup } from '../feedApi';
 import { formatPostDate } from './FeedPostCard';
 
 import styles from './StoryViewer.module.css';
@@ -13,6 +13,8 @@ const IMAGE_MS = 5200;
 const SWIPE_CLOSE_PX = 80;
 const HOLD_PAUSE_MS = 180;
 const TAP_MOVE_TOLERANCE = 12;
+const REPLY_MAX = 1000;
+const STORY_REACTIONS = ['❤️', '😂', '😮', '😢', '😍', '🔥', '👏', '🙌'] as const;
 
 export type StoryViewerProps = {
   group: StoryAuthorGroup | null;
@@ -27,6 +29,10 @@ export function StoryViewer({ group, onClose, onViewed, onDeleted }: StoryViewer
   const [paused, setPaused] = useState(false);
   const [dragY, setDragY] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [replyBusy, setReplyBusy] = useState(false);
+  const [replyFlash, setReplyFlash] = useState<string | null>(null);
+  const [composerFocused, setComposerFocused] = useState(false);
 
   const timerRef = useRef<number | null>(null);
   const startRef = useRef(0);
@@ -34,15 +40,18 @@ export function StoryViewer({ group, onClose, onViewed, onDeleted }: StoryViewer
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const pausedRef = useRef(false);
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const pointerStartRef = useRef<{ x: number; y: number; id: number } | null>(null);
   const swipeAxisRef = useRef<'undecided' | 'vertical' | 'horizontal'>('undecided');
   const holdTimerRef = useRef<number | null>(null);
   const heldRef = useRef(false);
   const dragYRef = useRef(0);
+  const flashTimerRef = useRef<number | null>(null);
 
   const stories = group?.stories ?? [];
   const story = stories[index] ?? null;
   const isOwner = Boolean(group?.is_me);
+  const canReply = Boolean(group && !group.is_me && story);
 
   useEffect(() => {
     setIndex(0);
@@ -52,7 +61,15 @@ export function StoryViewer({ group, onClose, onViewed, onDeleted }: StoryViewer
     setDragY(0);
     dragYRef.current = 0;
     setDragging(false);
+    setReplyText('');
+    setReplyFlash(null);
+    setComposerFocused(false);
   }, [group?.author.member_id]);
+
+  useEffect(() => {
+    setReplyText('');
+    setReplyFlash(null);
+  }, [story?.id]);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -116,6 +133,21 @@ export function StoryViewer({ group, onClose, onViewed, onDeleted }: StoryViewer
     }
   }, [paused, story?.id, story?.media_type]);
 
+  useEffect(() => {
+    if (composerFocused) {
+      pausePlayback();
+    } else if (!heldRef.current && swipeAxisRef.current !== 'vertical') {
+      resumePlayback();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composerFocused]);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+    };
+  }, []);
+
   const goPrev = () => {
     if (index <= 0) {
       onClose();
@@ -135,13 +167,14 @@ export function StoryViewer({ group, onClose, onViewed, onDeleted }: StoryViewer
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
+      if (composerFocused) return;
       if (e.key === 'ArrowRight') goNext();
       if (e.key === 'ArrowLeft') goPrev();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, stories.length, onClose]);
+  }, [index, stories.length, onClose, composerFocused]);
 
   const clearHoldTimer = () => {
     if (holdTimerRef.current) {
@@ -160,6 +193,7 @@ export function StoryViewer({ group, onClose, onViewed, onDeleted }: StoryViewer
 
   const resumePlayback = () => {
     if (!pausedRef.current) return;
+    if (composerFocused) return;
     if (story?.media_type !== 'video') {
       startRef.current = Date.now();
     }
@@ -168,7 +202,7 @@ export function StoryViewer({ group, onClose, onViewed, onDeleted }: StoryViewer
 
   const isChromeTarget = (target: EventTarget | null) => {
     if (!(target instanceof Element)) return false;
-    return Boolean(target.closest(`.${styles.head}`));
+    return Boolean(target.closest(`.${styles.head}, .${styles.footer}`));
   };
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -262,6 +296,32 @@ export function StoryViewer({ group, onClose, onViewed, onDeleted }: StoryViewer
     else goNext();
   };
 
+  const showFlash = (msg: string) => {
+    setReplyFlash(msg);
+    if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = window.setTimeout(() => setReplyFlash(null), 1800);
+  };
+
+  const sendReply = async (opts: { text?: string; reaction?: string }) => {
+    if (!story || !canReply || replyBusy) return;
+    const text = opts.text?.trim() ?? '';
+    const reaction = opts.reaction?.trim() ?? '';
+    if (!text && !reaction) return;
+    setReplyBusy(true);
+    pausePlayback();
+    try {
+      await replyToStory(story.id, { text: text || undefined, reaction: reaction || undefined });
+      if (text) setReplyText('');
+      showFlash(reaction && !text ? 'Реакция отправлена в чат' : 'Ответ отправлен в чат');
+      inputRef.current?.blur();
+    } catch {
+      showFlash('Не удалось отправить');
+    } finally {
+      setReplyBusy(false);
+      if (!composerFocused) resumePlayback();
+    }
+  };
+
   const onDelete = async () => {
     if (!isOwner || !story) return;
     if (!window.confirm('Удалить эту историю?')) return;
@@ -285,11 +345,12 @@ export function StoryViewer({ group, onClose, onViewed, onDeleted }: StoryViewer
   const mediaUrl = resolvePublicUrl(story.media_url) ?? '';
   const isVideo = story.media_type === 'video';
   const dragOpacity = dragY > 0 ? Math.max(0.35, 1 - dragY / 320) : 1;
+  const caption = story.caption?.trim() ?? '';
 
   const overlay = (
     <div
       ref={overlayRef}
-      className={`${styles.overlay}${dragging ? ` ${styles.overlayDragging}` : ''}`}
+      className={`${styles.overlay}${dragging ? ` ${styles.overlayDragging}` : ''}${canReply ? ` ${styles.withReply}` : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label="Просмотр истории"
@@ -371,7 +432,60 @@ export function StoryViewer({ group, onClose, onViewed, onDeleted }: StoryViewer
         </div>
       </div>
 
-      {story.caption?.trim() ? <p className={styles.caption}>{story.caption.trim()}</p> : null}
+      {caption ? <p className={styles.caption}>{caption}</p> : null}
+
+      {canReply ? (
+        <div
+          className={styles.footer}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {replyFlash ? <p className={styles.replyFlash} role="status">{replyFlash}</p> : null}
+          <div className={styles.reactionRow} aria-label="Быстрые реакции">
+            {STORY_REACTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                className={styles.reactionBtn}
+                aria-label={`Реакция ${emoji}`}
+                disabled={replyBusy}
+                onClick={() => void sendReply({ reaction: emoji })}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+          <form
+            className={styles.replyForm}
+            onSubmit={(e) => {
+              e.preventDefault();
+              void sendReply({ text: replyText });
+            }}
+          >
+            <input
+              ref={inputRef}
+              className={styles.replyInput}
+              type="text"
+              maxLength={REPLY_MAX}
+              placeholder="Отправить сообщение…"
+              value={replyText}
+              disabled={replyBusy}
+              onChange={(e) => setReplyText(e.target.value)}
+              onFocus={() => setComposerFocused(true)}
+              onBlur={() => setComposerFocused(false)}
+              autoComplete="off"
+              enterKeyHint="send"
+            />
+            <button
+              type="submit"
+              className={styles.replySend}
+              aria-label="Отправить"
+              disabled={replyBusy || !replyText.trim()}
+            >
+              <LuSend className="h-5 w-5" aria-hidden />
+            </button>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 

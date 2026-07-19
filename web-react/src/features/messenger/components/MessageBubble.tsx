@@ -1253,6 +1253,76 @@ function MessageBubbleInner({
       );
     }
 
+    if (payloadType === 'story_reply') {
+      const storyUrl = resolvePublicUrl(
+        String(payload.story_media_url ?? payload.media_url ?? '').trim(),
+      );
+      const storyType = String(payload.story_media_type ?? '').trim() === 'video' ? 'video' : 'image';
+      const replyText = String(
+        payload.text ?? message.content ?? '',
+      ).trim();
+      const reaction = String(payload.reaction ?? '').trim();
+      const kind = String(payload.kind ?? '').trim();
+      const showAsReaction = kind === 'reaction' || (Boolean(reaction) && !String(payload.text ?? '').trim());
+      const display = showAsReaction ? reaction || replyText : replyText || reaction;
+
+      return (
+        <div className="w-full max-w-[min(78vw,18rem)]">
+          <div
+            className={[
+              'overflow-hidden rounded-2xl border',
+              isMine ? 'border-white/15 bg-white/10' : 'border-stone-200/80 bg-[var(--surface)]',
+            ].join(' ')}
+          >
+            <div className="flex gap-2.5 p-2">
+              <div
+                className={[
+                  'relative h-[4.5rem] w-[3.2rem] shrink-0 overflow-hidden rounded-xl bg-stone-900/80',
+                  isMine ? 'ring-1 ring-white/20' : 'ring-1 ring-stone-200/70',
+                ].join(' ')}
+              >
+                {storyUrl ? (
+                  storyType === 'video' ? (
+                    <video
+                      src={storyUrl}
+                      className="h-full w-full object-cover"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : (
+                    <img src={storyUrl} alt="" className="h-full w-full object-cover" />
+                  )
+                ) : null}
+                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1 pb-0.5 pt-3 text-[9px] font-bold uppercase tracking-wide text-white/90">
+                  Story
+                </span>
+              </div>
+              <div className="min-w-0 flex-1 self-center py-0.5">
+                <div
+                  className={[
+                    'text-[11px] font-bold tracking-wide',
+                    isMine ? 'text-white/70' : 'text-[var(--text-secondary)]',
+                  ].join(' ')}
+                >
+                  {showAsReaction ? 'Реакция на историю' : 'Ответ на историю'}
+                </div>
+                <div
+                  className={[
+                    'mt-1 break-words leading-snug messenger-bidi-text',
+                    showAsReaction ? 'text-2xl' : 'text-sm',
+                    isMine ? 'text-white/95' : 'text-[var(--text)]',
+                  ].join(' ')}
+                >
+                  {display || '↩️'}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (payloadType === 'image') {
       if (albumImages.length > 0) {
         const caption = String(message.content ?? '').trim();
