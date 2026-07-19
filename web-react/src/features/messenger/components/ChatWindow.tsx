@@ -905,7 +905,7 @@ export function ChatWindow({
   return (
     <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
-      <header className="chat-header sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-gray-200/60 bg-[var(--surface-elevated)]">
+      <header className="chat-header sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-[color:var(--tg-border)] bg-[var(--tg-surface,var(--surface-elevated))]">
         <div className="mx-auto flex min-h-[52px] w-full min-w-0 max-w-full items-center gap-1 px-1 py-1.5 sm:gap-2 sm:px-2 sm:py-2">
           {/* Слева: назад — только мобилка; на ПК список чатов всегда слева. */}
           <div className="flex shrink-0 items-center lg:hidden">
@@ -944,26 +944,33 @@ export function ChatWindow({
               </>
             ) : (
               <>
-                <div
-                  className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-sm font-semibold text-white sm:h-10 sm:w-10"
-                  style={{ backgroundColor: isAssistantChannel ? 'transparent' : headerAvatarColor }}
-                >
-                  {isAssistantChannel ? (
-                    <span
-                      className="grid h-full w-full place-items-center rounded-full bg-primary/12 text-primary ring-1 ring-primary/15"
-                      aria-hidden
-                    >
-                      <LuBot className="h-5 w-5" strokeWidth={2} />
-                    </span>
-                  ) : (
-                    <AppAvatar
-                      src={headerAvatarUrl}
-                      fallback={<span>{headerInitial}</span>}
-                      priority
-                      className="grid h-full w-full place-items-center"
-                      imgClassName="h-full w-full object-cover"
-                    />
-                  )}
+                <div className="relative h-9 w-9 shrink-0 sm:h-10 sm:w-10">
+                  <div
+                    className="grid h-full w-full place-items-center overflow-hidden rounded-full text-sm font-semibold text-white"
+                    style={{
+                      backgroundColor: isAssistantChannel ? 'transparent' : headerAvatarColor,
+                    }}
+                  >
+                    {isAssistantChannel ? (
+                      <span
+                        className="grid h-full w-full place-items-center rounded-full bg-primary/12 text-primary ring-1 ring-primary/15"
+                        aria-hidden
+                      >
+                        <LuBot className="h-5 w-5" strokeWidth={2} />
+                      </span>
+                    ) : (
+                      <AppAvatar
+                        src={headerAvatarUrl}
+                        fallback={<span>{headerInitial}</span>}
+                        priority
+                        className="grid h-full w-full place-items-center"
+                        imgClassName="h-full w-full object-cover"
+                      />
+                    )}
+                  </div>
+                  {!isAssistantChannel && conv?.type === 'private' && isPrivatePeerOnline ? (
+                    <span className="chatlist-online chatlist-online--on" aria-hidden />
+                  ) : null}
                 </div>
                 <div className="min-w-0 flex-1 overflow-hidden">
                   <div className="truncate text-base font-semibold leading-[1.2] text-[var(--text)] sm:text-lg">{displayName}</div>

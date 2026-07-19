@@ -39,6 +39,8 @@ import { useChatStore } from '../features/messenger/chatStore';
 import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
 import { CallWindow } from '../features/calls/CallWindow';
 import { IncomingCallToast } from '../features/calls/IncomingCallToast';
+import { SermonPlaybackProvider } from '../features/resources/sermonPlayback/SermonPlaybackContext';
+import { SermonPlayer } from '../features/resources/sermonPlayback/SermonPlayer';
 import { useBrowserNotificationScheduler } from '../features/notifications/useBrowserNotificationScheduler';
 import { useProfileDraftStore } from '../features/profile/profileDraftStore';
 import { canAccessStudio } from '../features/auth/studioAccess';
@@ -646,6 +648,7 @@ export function Layout() {
 
   return (
     <MessengerWsProvider>
+    <SermonPlaybackProvider>
     <div className="flex min-h-0 w-full max-w-full flex-1 flex-col bg-[var(--surface)] text-[var(--text)]">
       <ScrollRestoration />
       <a
@@ -936,7 +939,9 @@ export function Layout() {
       <PermissionsRequestModal />
       <IncomingCallToast />
       <CallWindow />
+      <SermonPlayer />
     </div>
+    </SermonPlaybackProvider>
     </MessengerWsProvider>
   );
 }
