@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { LuLoaderCircle, LuSearch, LuUsers, LuX } from 'react-icons/lu';
+import { LuCheck, LuLoaderCircle, LuSearch, LuUsers, LuX } from 'react-icons/lu';
 
 import { AppAvatar } from '../../../components/AppAvatar';
 import { useMobileBottomNavLock } from '../../../app/useMobileBottomNavLock';
@@ -225,19 +225,23 @@ export function MemberPickerModal({
                       {groupLabel}
                     </p>
                   ) : null}
-                  <ul className="space-y-1">
+                  <ul className="space-y-1" role="listbox" aria-label="Список служителей">
                     {groupMembers.map((m) => {
                       const active = selectedMemberId === m.id;
                       const bg = memberAvatarColor(m.id);
                       const roleLabel = parseMinistryRoles(m.ministry_role).join(', ');
                       return (
-                        <li key={m.id}>
+                        <li key={m.id} role="presentation">
                           <button
                             type="button"
+                            role="option"
+                            aria-selected={active}
                             onClick={() => setSelectedMemberId(m.id)}
                             className={[
                               'tap-highlight-transparent flex w-full min-h-[48px] items-center gap-3 rounded-xl px-3 py-2.5 text-left transition active:scale-[0.99]',
-                              active ? 'bg-primary/10 ring-1 ring-primary/30' : 'active:bg-stone-50',
+                              active
+                                ? 'bg-[color-mix(in_srgb,var(--primary)_16%,white)] font-semibold text-primary ring-2 ring-primary/45'
+                                : 'text-stone-900 active:bg-stone-50',
                             ].join(' ')}
                           >
                             <AppAvatar
@@ -252,7 +256,9 @@ export function MemberPickerModal({
                               style={{ backgroundColor: m.avatar_url ? undefined : bg }}
                             />
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium">{m.name}</p>
+                              <p className={['truncate text-sm', active ? 'font-bold text-primary' : 'font-medium'].join(' ')}>
+                                {m.name}
+                              </p>
                               {roleLabel ? (
                                 <p className="truncate text-[11px] text-[var(--text-muted)]">{roleLabel}</p>
                               ) : m.ministry_direction ? (
@@ -266,6 +272,19 @@ export function MemberPickerModal({
                                 занят
                               </span>
                             ) : null}
+                            {active ? (
+                              <span
+                                className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-white"
+                                aria-hidden
+                              >
+                                <LuCheck className="h-4 w-4 stroke-[2.5]" />
+                              </span>
+                            ) : (
+                              <span
+                                className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-stone-200 bg-white"
+                                aria-hidden
+                              />
+                            )}
                           </button>
                         </li>
                       );
