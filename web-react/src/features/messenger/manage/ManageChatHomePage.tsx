@@ -28,6 +28,7 @@ import { ManageDialogShell } from './ManageDialogShell';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { getAvatarInitial } from '../avatarUtils';
+import { isAssistantMessengerChannel } from '../messengerChannelKinds';
 
 export function ManageChatHomePage() {
   const { chatId } = useParams<{ chatId: string }>();
@@ -56,6 +57,13 @@ export function ManageChatHomePage() {
     conv?.type === 'private'
       ? (conv.other_member?.first_name ? `${conv.other_member.first_name} ${conv.other_member.last_name ?? ''}`.trim() : conv.other_member?.name) ?? 'Чат'
       : conv?.title ?? meta?.title ?? 'Чат';
+
+  useEffect(() => {
+    if (!chatId) return;
+    if (isAssistantMessengerChannel(conv?.metadata ?? meta?.metadata)) {
+      navigate(`/messenger/chat/${chatId}`, { replace: true });
+    }
+  }, [chatId, conv?.metadata, meta?.metadata, navigate]);
 
   useEffect(() => {
     if (!chatId) return;

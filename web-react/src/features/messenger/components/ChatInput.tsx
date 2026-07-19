@@ -172,6 +172,8 @@ interface ChatInputProps {
   mentionParticipants?: { id: number; label: string }[];
   /** Имена по id — чтобы при редактировании показывать @Имя, а не @[цифры]. */
   participantLabelById?: Record<number, string>;
+  /** Текст плейсхолдера поля ввода. */
+  placeholder?: string;
 }
 
 /** Одна визуальная строка без учёта переноса placeholder (иначе на iPhone поле раздувается на весь scrollHeight). */
@@ -249,6 +251,7 @@ export function ChatInput({
   canSendAttachments = true,
   mentionParticipants = [],
   participantLabelById = {},
+  placeholder = 'Сообщение',
 }: ChatInputProps) {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const editMessage = useChatStore((s) => s.editMessage);
@@ -2110,7 +2113,7 @@ export function ChatInput({
                 '!max-h-[min(40dvh,200px)] py-2.5 pl-3 text-[16px] !leading-[1.45] text-[var(--text)] placeholder:text-stone-400/90',
                 '!pb-2.5 outline-none transition-[height] duration-200 ease-out dark:placeholder:text-stone-500',
               ].join(' ')}
-              placeholder="Сообщение"
+              placeholder={placeholder}
               enterKeyHint="send"
               inputMode="text"
               autoComplete="off"

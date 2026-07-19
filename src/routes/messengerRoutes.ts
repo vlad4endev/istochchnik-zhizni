@@ -13,6 +13,10 @@ import { attachConversationFromMessageIdParam, checkChatPermission } from '../mi
 import { ensureValidRequest, validateSendMessage } from '../middleware/messengerValidation';
 import { messengerUpload } from '../middleware/upload';
 import * as svc from '../services/messengerService';
+import {
+  ensureAssistantConversation,
+  replyAsAssistantBot,
+} from '../services/messengerAssistantService';
 import { sendToRoomAll, sendToRoom, sendToMember, ensureMemberInRoom, isMemberOnline } from '../realtime/wsHub';
 import { sendPushNotification } from '../services/pushService';
 import {
@@ -481,6 +485,28 @@ router.post('/studio/song-chat', async (req: Request, res: Response) => {
   }
 });
 
+/** POST /api/messenger/assistant — личный чат с «ИИ помощник». */
+router.post('/assistant', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  try {
+    const { conversationId, created } = await ensureAssistantConversation(userId);
+    ensureMemberInRoom(userId, conversationId);
+    const conversation = await getConversationListItemForMember(userId, conversationId);
+    if (created && conversation) {
+      sendToMember(userId, { type: 'conv:created', conversation });
+    }
+    res.json({
+      conversationId,
+      created,
+      conversation: conversation ?? null,
+      openUrl: resolveMessengerConversationDeepLink(conversationId),
+    });
+  } catch (e) {
+    console.error('[messenger] ensure assistant error:', e);
+    res.status(500).json({ error: 'Failed to open assistant chat' });
+  }
+});
+
 /** POST /api/messenger/upload (form-data: file) -> { url, name, size } */
 router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Response) => {
   const file = (req as Request & { file?: Express.Multer.File }).file;
@@ -622,6 +648,13 @@ router.get('/conversations', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const startedAt = Date.now();
   try {
+    // Гарантируем личный чат «ИИ помощник» в списке (идемпотентно).
+    try {
+      const ensured = await ensureAssistantConversation(userId);
+      ensureMemberInRoom(userId, ensured.conversationId);
+    } catch (ensureErr) {
+      console.warn('[messenger] ensure assistant on list failed:', ensureErr);
+    }
     const list = await svc.listConversations(userId);
     res.setHeader('Server-Timing', `listConversations;dur=${Date.now() - startedAt}`);
     res.json(list);
@@ -1232,6 +1265,25 @@ router.post(
       if (!isNew) {
         return;
       }
+
+      // ИИ помощник: ответ после успешной записи пользовательского текста.
+      if (pt === 'text') {
+        void (async () => {
+          try {
+            const cmeta = await svc.getConversationMeta(convKey);
+            if (!svc.isMessengerAssistantChannelMetadata(cmeta?.metadata)) return;
+            await replyAsAssistantBot({
+              conversationId: convKey,
+              memberId: userId,
+              userMessageId: String(message.id),
+              userText: String(message.content ?? content ?? ''),
+            });
+          } catch (assistantErr) {
+            console.warn('[messenger] assistant reply failed:', assistantErr);
+          }
+        })();
+      }
+
       void (async () => {
         try {
         const memberIds = await svc.getConversationMemberIds(convKey);

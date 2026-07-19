@@ -8,12 +8,12 @@ import * as api from '../api/messengerApi';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SearchChat } from './SearchChat';
-import { LuChevronLeft, LuPhone, LuSearch, LuVideo } from 'react-icons/lu';
+import { LuBot, LuChevronLeft, LuPhone, LuSearch, LuVideo } from 'react-icons/lu';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { groupMessages } from '../groupMessages';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
-import { isAccessRequestsMessengerChannel } from '../messengerChannelKinds';
+import { isAccessRequestsMessengerChannel, isAssistantMessengerChannel } from '../messengerChannelKinds';
 import { isAppAdministratorRole } from '../manage/messengerManageAccess';
 import { useCallStore } from '../../calls/callStore';
 import { requestCallNotificationsFromUserGesture } from '../../calls/incomingCallBackground';
@@ -23,6 +23,15 @@ import { useAuthStore } from '../../auth/authStore';
 import './messenger.css';
 
 const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
+
+const ASSISTANT_EXAMPLE_QUESTIONS = [
+  'Кто проповедует в следующее воскресенье и какая тема?',
+  'Какие события запланированы на ближайшие две недели?',
+  'Кто на музыке / медиа в ближайшее служение?',
+  'Что в молитвенном календаре на сегодня?',
+  'Найди песни про любовь или хвалу',
+  'Кто ведущий на ближайшее воскресенье?',
+] as const;
 
 /** Склонение «N участников» по-русски (как в интерфейсах мессенджеров). */
 function formatParticipantCountRU(n: number): string {
@@ -142,16 +151,27 @@ export function ChatWindow({
     () => isAccessRequestsMessengerChannel(chatMeta?.metadata ?? conv?.metadata),
     [chatMeta?.metadata, conv?.metadata],
   );
+  const isAssistantChannel = useMemo(
+    () => isAssistantMessengerChannel(chatMeta?.metadata ?? conv?.metadata),
+    [chatMeta?.metadata, conv?.metadata],
+  );
 
   /** Пока звонки разрешены только администратору приложения — кнопка только в личке с admin. */
   const canShowPrivateCallToAdmin = useMemo(() => {
     if (!CALLS_FEATURE_ENABLED) return false;
-    if (isDraft || !conv || conv.type !== 'private' || !conv.other_member || isAccessRequestsChannel) {
+    if (
+      isDraft ||
+      !conv ||
+      conv.type !== 'private' ||
+      !conv.other_member ||
+      isAccessRequestsChannel ||
+      isAssistantChannel
+    ) {
       return false;
     }
     const om = conv.other_member;
     return isAppAdministratorRole(om.app_role ?? null, om.app_roles ?? null);
-  }, [conv, isAccessRequestsChannel, isDraft]);
+  }, [conv, isAccessRequestsChannel, isAssistantChannel, isDraft]);
 
   useEffect(() => {
     setCallHeaderMenuOpen(false);
@@ -323,13 +343,15 @@ export function ChatWindow({
 
   const canPostMessages =
     !isAccessRequestsChannel && (isDraft || chatMeta?.my_effective_permissions?.can_send_messages !== false);
-  /** В группах/каналах медио может быть отключено отдельно от текста. */
+  /** В группах/каналах медиа может быть отключено отдельно от текста. У ИИ помощника — только текст. */
   const canSendAttachments =
     canPostMessages &&
+    !isAssistantChannel &&
     (isDraft ||
       chatMeta == null ||
       chatMeta.my_effective_permissions?.can_send_media !== false);
-  const canPinMessages = chatMeta?.my_effective_permissions?.can_pin_messages === true;
+  const canPinMessages =
+    !isAssistantChannel && chatMeta?.my_effective_permissions?.can_pin_messages === true;
 
   const handlePinToggle = useCallback(
     async (messageId: string, nextPinned: boolean) => {
@@ -760,6 +782,8 @@ export function ChatWindow({
     }
     if (isDraft) return 'черновик · чат появится после 1 сообщения';
     if (!conv) return '';
+    if (isAssistantChannel) return 'Отвечает по событиям, проповедям, песням и расписанию';
+    if (isAccessRequestsChannel) return 'Системные уведомления';
     if (conv.type === 'private' && conv.other_member) {
       if (isPrivatePeerOnline) return 'в сети';
       const pid = conv.other_member.id;
@@ -781,7 +805,18 @@ export function ChatWindow({
       return conv.type === 'channel' ? 'канал' : 'группа';
     }
     return 'чат';
-  }, [chatHeadReady, conv, typingUsers, isPrivatePeerOnline, isDraft, memberLastSeenAt, groupParticipantIds.length, onlineInGroupCount]);
+  }, [
+    chatHeadReady,
+    conv,
+    typingUsers,
+    isPrivatePeerOnline,
+    isDraft,
+    isAssistantChannel,
+    isAccessRequestsChannel,
+    memberLastSeenAt,
+    groupParticipantIds.length,
+    onlineInGroupCount,
+  ]);
 
   const initiateCall = useCallback(
     (callType: 'audio' | 'video') => {
@@ -912,19 +947,30 @@ export function ChatWindow({
                 <div className="relative h-9 w-9 shrink-0 sm:h-10 sm:w-10">
                   <div
                     className="grid h-full w-full place-items-center overflow-hidden rounded-full text-sm font-semibold text-white"
-                    style={{ backgroundColor: headerAvatarColor }}
+                    style={{
+                      backgroundColor: isAssistantChannel ? 'transparent' : headerAvatarColor,
+                    }}
                   >
-                    <AppAvatar
-                      src={headerAvatarUrl}
-                      initialsFallbackText={displayName}
-                      initialsColorSeed={conv?.id ?? (draftPeer ? `member-${draftPeer.id}` : null)}
-                      fallback={<span>{headerInitial}</span>}
-                      priority
-                      className="grid h-full w-full place-items-center"
-                      imgClassName="h-full w-full object-cover"
-                    />
+                    {isAssistantChannel ? (
+                      <span
+                        className="grid h-full w-full place-items-center rounded-full bg-primary/12 text-primary ring-1 ring-primary/15"
+                        aria-hidden
+                      >
+                        <LuBot className="h-5 w-5" strokeWidth={2} />
+                      </span>
+                    ) : (
+                      <AppAvatar
+                        src={headerAvatarUrl}
+                        initialsFallbackText={displayName}
+                        initialsColorSeed={conv?.id ?? (draftPeer ? `member-${draftPeer.id}` : null)}
+                        fallback={<span>{headerInitial}</span>}
+                        priority
+                        className="grid h-full w-full place-items-center"
+                        imgClassName="h-full w-full object-cover"
+                      />
+                    )}
                   </div>
-                  {conv?.type === 'private' && isPrivatePeerOnline ? (
+                  {!isAssistantChannel && conv?.type === 'private' && isPrivatePeerOnline ? (
                     <span className="chatlist-online chatlist-online--on" aria-hidden />
                   ) : null}
                 </div>
@@ -1040,17 +1086,19 @@ export function ChatWindow({
                     ) : null}
                   </div>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
-                  aria-label="Управление чатом"
-                  title="Управление"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors active:bg-[var(--surface)]"
-                >
-                  <span className="text-lg font-black leading-none" aria-hidden>
-                    ⋮
-                  </span>
-                </button>
+                {!isAssistantChannel ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
+                    aria-label="Управление чатом"
+                    title="Управление"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors active:bg-[var(--surface)]"
+                  >
+                    <span className="text-lg font-black leading-none" aria-hidden>
+                      ⋮
+                    </span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => setShowSearch(true)}
@@ -1200,6 +1248,7 @@ export function ChatWindow({
                         canPinMessages={canPinMessages}
                         onPinToggle={handlePinToggle}
                         accessRequestsSystemChannel={isAccessRequestsChannel}
+                        assistantChannel={isAssistantChannel}
                       />
                     </div>
                   </div>
@@ -1220,15 +1269,43 @@ export function ChatWindow({
             </p>
           </div>
         ) : (
-          <ChatInput
-            conversationId={conversationId}
-            sendTypingStart={sendTypingStart}
-            sendTypingStop={sendTypingStop}
-            canSend={canPostMessages}
-            canSendAttachments={canSendAttachments}
-            mentionParticipants={conv && conv.type !== 'private' ? mentionList : []}
-            participantLabelById={participantLabelById}
-          />
+          <>
+            {isAssistantChannel && canPostMessages ? (
+              <div className="mb-2 min-w-0">
+                <p className="mb-1.5 px-0.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+                  Примеры вопросов
+                </p>
+                <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {ASSISTANT_EXAMPLE_QUESTIONS.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      className="shrink-0 rounded-2xl border border-primary/20 bg-primary/[0.06] px-3 py-2 text-left text-[13px] font-medium leading-snug text-[var(--text)] transition-colors hover:bg-primary/10 active:bg-primary/15"
+                      onClick={() => {
+                        void useChatStore.getState().sendMessage(conversationId, q);
+                      }}
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <ChatInput
+              conversationId={conversationId}
+              sendTypingStart={sendTypingStart}
+              sendTypingStop={sendTypingStop}
+              canSend={canPostMessages}
+              canSendAttachments={canSendAttachments}
+              mentionParticipants={
+                conv && conv.type !== 'private' && !isAssistantChannel ? mentionList : []
+              }
+              participantLabelById={participantLabelById}
+              placeholder={
+                isAssistantChannel ? 'Задайте вопрос ИИ помощнику…' : 'Сообщение'
+              }
+            />
+          </>
         )}
       </div>
 
