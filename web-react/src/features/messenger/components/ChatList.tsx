@@ -60,6 +60,15 @@ export const ChatList = memo(function ChatList({ onSelect, activeId }: ChatListP
   const [listSearchQuery, setListSearchQuery] = useState('');
 
   const filtered = useMemo(() => getConversationsForActiveTab() || EMPTY_ARRAY, [getConversationsForActiveTab, conversations, activeTab]);
+  const unreadByTab = useMemo(
+    () => ({
+      all: getUnreadForTab('all'),
+      personal: getUnreadForTab('personal'),
+      services: getUnreadForTab('services'),
+      notifications: getUnreadForTab('notifications'),
+    }),
+    [getUnreadForTab, conversations],
+  );
 
   const visibleChats = useMemo(() => {
     const base = filtered.filter((c) => !isHiddenTestConversation(c));
@@ -110,10 +119,10 @@ export const ChatList = memo(function ChatList({ onSelect, activeId }: ChatListP
         <SmartTabs
           activeTab={activeTab}
           onChange={setActiveTab}
-          unreadAll={getUnreadForTab('all')}
-          unreadPersonal={getUnreadForTab('personal')}
-          unreadServices={getUnreadForTab('services')}
-          unreadNotifications={getUnreadForTab('notifications')}
+          unreadAll={unreadByTab.all}
+          unreadPersonal={unreadByTab.personal}
+          unreadServices={unreadByTab.services}
+          unreadNotifications={unreadByTab.notifications}
         />
       </div>
 
@@ -167,6 +176,13 @@ function ChatListSearch({
   );
 }
 
+const CHAT_FILTER_TABS: { id: ChatTab; label: string }[] = [
+  { id: 'all', label: 'Все' },
+  { id: 'personal', label: 'Личные' },
+  { id: 'services', label: 'Служения' },
+  { id: 'notifications', label: 'Уведомления' },
+];
+
 function SmartTabs({
   activeTab,
   onChange,
@@ -183,47 +199,103 @@ function SmartTabs({
   unreadNotifications: number;
 }) {
   const [pressedId, setPressedId] = useState<ChatTab | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const tabRefs = useRef<Partial<Record<ChatTab, HTMLButtonElement | null>>>({});
 
-  const tabs: { id: ChatTab; label: string; unread: number }[] = [
-    { id: 'all', label: 'Все', unread: unreadAll },
-    { id: 'personal', label: 'Личные', unread: unreadPersonal },
-    { id: 'services', label: 'Служения', unread: unreadServices },
-    { id: 'notifications', label: 'Уведомления', unread: unreadNotifications },
-  ];
+  const unreadByTab: Record<ChatTab, number> = {
+    all: unreadAll,
+    personal: unreadPersonal,
+    services: unreadServices,
+    notifications: unreadNotifications,
+  };
+
+  const clearPressed = useCallback(() => setPressedId(null), []);
+
+  useEffect(() => {
+    const el = tabRefs.current[activeTab];
+    if (!el) return;
+    try {
+      el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    } catch {
+      el.scrollIntoView(false);
+    }
+  }, [activeTab]);
+
+  const selectTab = useCallback(
+    (id: ChatTab) => {
+      clearPressed();
+      if (id !== activeTab) onChange(id);
+    },
+    [activeTab, clearPressed, onChange],
+  );
+
+  const onTabKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLButtonElement>, id: ChatTab) => {
+      const idx = CHAT_FILTER_TABS.findIndex((t) => t.id === id);
+      if (idx < 0) return;
+      let next = -1;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = Math.min(CHAT_FILTER_TABS.length - 1, idx + 1);
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = Math.max(0, idx - 1);
+      if (e.key === 'Home') next = 0;
+      if (e.key === 'End') next = CHAT_FILTER_TABS.length - 1;
+      if (next < 0 || next === idx) return;
+      e.preventDefault();
+      const nextId = CHAT_FILTER_TABS[next].id;
+      selectTab(nextId);
+      tabRefs.current[nextId]?.focus();
+    },
+    [selectTab],
+  );
 
   return (
-    <div className="tg-smart-tabs-scroll" role="tablist" aria-label="Фильтр чатов">
-      {tabs.map((t) => {
+    <div
+      ref={scrollerRef}
+      className="tg-smart-tabs-scroll"
+      role="tablist"
+      aria-label="Фильтр чатов"
+    >
+      {CHAT_FILTER_TABS.map((t) => {
         const isActive = t.id === activeTab;
+        const unread = unreadByTab[t.id] ?? 0;
         return (
           <button
             key={t.id}
+            ref={(node) => {
+              tabRefs.current[t.id] = node;
+            }}
             type="button"
             role="tab"
             aria-selected={isActive}
-            onClick={() => onChange(t.id)}
-            onPointerDown={() => setPressedId(t.id)}
-            onPointerUp={() => setPressedId(null)}
-            onPointerCancel={() => setPressedId(null)}
-            onPointerLeave={() => setPressedId(null)}
+            tabIndex={isActive ? 0 : -1}
+            onClick={() => selectTab(t.id)}
+            onKeyDown={(e) => onTabKeyDown(e, t.id)}
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              setPressedId(t.id);
+            }}
+            onPointerUp={clearPressed}
+            onPointerCancel={clearPressed}
+            onPointerLeave={clearPressed}
+            onBlur={clearPressed}
             className={[
               'tg-smart-tab',
               'tab-filter-button',
-              isActive ? 'tg-smart-tab--active active' : '',
+              isActive ? 'tg-smart-tab--active' : '',
               pressedId === t.id ? 'tg-smart-tab--pressed' : '',
             ]
               .filter(Boolean)
               .join(' ')}
           >
-            <span className="whitespace-nowrap">{t.label}</span>
-            {t.unread > 0 ? (
+            <span className="tg-smart-tab__label">{t.label}</span>
+            {unread > 0 ? (
               <span
                 className={[
                   'tg-smart-tab__badge',
                   isActive ? 'tg-smart-tab__badge--active' : 'tg-smart-tab__badge--inactive',
                 ].join(' ')}
+                aria-label={`Непрочитанных: ${unread > 99 ? 'более 99' : unread}`}
               >
-                {t.unread > 99 ? '99+' : t.unread}
+                {unread > 99 ? '99+' : unread}
               </span>
             ) : null}
           </button>

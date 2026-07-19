@@ -129,11 +129,14 @@ html[data-mantine-color-scheme='dark'] .tg-chatlist-search {
 
 .tg-smart-tabs-scroll {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  padding-bottom: 2px;
+  scroll-padding-inline: 2px;
+  padding: 1px 2px 2px;
+  touch-action: pan-x;
 }
 
 .tg-smart-tabs-scroll::-webkit-scrollbar {
@@ -146,43 +149,58 @@ html[data-mantine-color-scheme='dark'] .tg-chatlist-search {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 32px;
-  padding: 6px 14px;
+  min-height: 36px;
+  padding: 7px 14px;
   border: none;
-  border-radius: 20px;
-  background: rgba(0, 0, 0, 0.07);
-  color: #555;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.07) !important;
+  color: #555 !important;
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 500;
+  line-height: 1.2;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   -webkit-appearance: none;
   appearance: none;
-  opacity: 1;
+  opacity: 1 !important;
+  visibility: visible !important;
   transform: translateZ(0);
-  transition: background-color 0.18s ease;
-  will-change: background-color;
+  transition: background-color 0.16s ease, color 0.16s ease, transform 0.12s ease;
+  box-shadow: none;
 }
 
 html[data-mantine-color-scheme='dark'] .tg-smart-tab {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--tg-text-secondary);
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--tg-text-secondary, #a8a29e) !important;
+}
+
+.tg-smart-tab:not(.tg-smart-tab--active):is(:hover, :focus-visible) {
+  background: rgba(0, 0, 0, 0.11) !important;
+  color: #444 !important;
+}
+
+html[data-mantine-color-scheme='dark'] .tg-smart-tab:not(.tg-smart-tab--active):is(:hover, :focus-visible) {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: var(--tg-text, #f5f5f4) !important;
 }
 
 .tg-smart-tab:not(.tg-smart-tab--active):is(:active, .tg-smart-tab--pressed) {
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.14) !important;
   opacity: 1 !important;
   transform: scale(0.97) translateZ(0) !important;
 }
 
 html[data-mantine-color-scheme='dark'] .tg-smart-tab:not(.tg-smart-tab--active):is(:active, .tg-smart-tab--pressed) {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.16) !important;
 }
 
-.tg-smart-tab--active {
-  background: var(--messenger-brand, #8b1a1a);
-  color: #fff;
+.tg-smart-tab--active,
+.tg-smart-tab--active:hover,
+.tg-smart-tab--active:focus,
+.tg-smart-tab--active:focus-visible {
+  background: var(--messenger-brand, #8b1a1a) !important;
+  color: #fff !important;
   font-weight: 600;
 }
 
@@ -191,6 +209,11 @@ html[data-mantine-color-scheme='dark'] .tg-smart-tab:not(.tg-smart-tab--active):
   color: #fff !important;
   opacity: 1 !important;
   transform: scale(0.97) translateZ(0) !important;
+}
+
+.tg-smart-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--messenger-brand, #8b1a1a) 55%, transparent);
+  outline-offset: 2px;
 }
 
 /* iOS Safari PWA: Safari сбрасывает opacity кнопок при :active */
@@ -205,6 +228,10 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   opacity: 1 !important;
 }
 
+.tg-smart-tab__label {
+  white-space: nowrap;
+}
+
 .tg-smart-tab__badge {
   display: inline-flex;
   min-width: 18px;
@@ -216,6 +243,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .tg-smart-tab__badge--inactive {
@@ -224,7 +252,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
 }
 
 .tg-smart-tab__badge--active {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.28);
   color: #fff;
 }
 
@@ -256,8 +284,24 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
     transform: scale(0.96) !important;
   }
 
-  .tg-messenger .tg-smart-tab:is(:active, .tg-smart-tab--pressed) {
+  .tg-messenger .tg-smart-tab,
+  .tg-messenger .tg-smart-tab:hover,
+  .tg-messenger .tg-smart-tab:active,
+  .tg-messenger .tg-smart-tab:focus,
+  .tg-messenger .tg-smart-tab.tg-smart-tab--pressed {
     opacity: 1 !important;
+  }
+
+  .tg-messenger .tg-smart-tab--active,
+  .tg-messenger .tg-smart-tab--active:hover,
+  .tg-messenger .tg-smart-tab--active:focus,
+  .tg-messenger .tg-smart-tab--active:active {
+    background: var(--messenger-brand, #8b1a1a) !important;
+    color: #fff !important;
+  }
+
+  .tg-messenger .tg-smart-tab--active:is(:active, .tg-smart-tab--pressed) {
+    background: #741616 !important;
   }
 }
 

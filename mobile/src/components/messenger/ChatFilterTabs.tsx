@@ -97,10 +97,11 @@ function createStyles() {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+      minHeight: 36,
       paddingHorizontal: 14,
-      paddingVertical: 6,
-      borderRadius: 20,
-      marginRight: 6,
+      paddingVertical: 7,
+      borderRadius: 999,
+      marginRight: 2,
     },
     tabButtonActive: {
       backgroundColor: MESSENGER_BRAND,
@@ -108,6 +109,7 @@ function createStyles() {
     tabButtonActivePressed: {
       backgroundColor: '#741616',
       opacity: 1,
+      transform: [{ scale: 0.97 }],
     },
     tabButtonInactive: {
       backgroundColor: tabInactiveBg,
@@ -115,9 +117,11 @@ function createStyles() {
     tabButtonInactivePressed: {
       backgroundColor: 'rgba(0,0,0,0.12)',
       opacity: 1,
+      transform: [{ scale: 0.97 }],
     },
     tabButtonText: {
       fontSize: 13,
+      lineHeight: 16,
     },
     tabButtonTextActive: {
       color: '#fff',
@@ -125,7 +129,7 @@ function createStyles() {
     },
     tabButtonTextInactive: {
       color: '#555',
-      fontWeight: '400',
+      fontWeight: '500',
     },
     tabBadge: {
       minWidth: 18,
