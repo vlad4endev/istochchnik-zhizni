@@ -70,6 +70,23 @@ export async function fetchChurchFeed(params?: {
   return data;
 }
 
+export async function fetchFeedUnreadCount(): Promise<number> {
+  const { data } = await apiClient.get<{ count?: number }>('/api/feed/unread-count', {
+    silentErrorToast: true,
+  });
+  const n = Number(data?.count);
+  return Number.isFinite(n) && n > 0 ? Math.min(99, Math.floor(n)) : 0;
+}
+
+/** Сбрасывает бейдж новых постов: watermark = newest seen_at или NOW(). */
+export async function markFeedSeen(seenAt?: string | null): Promise<void> {
+  await apiClient.post(
+    '/api/feed/mark-seen',
+    seenAt ? { seen_at: seenAt } : {},
+    { silentErrorToast: true },
+  );
+}
+
 export async function fetchPostComments(postId: string): Promise<FeedComment[]> {
   const { data } = await apiClient.get<{ comments: FeedComment[] }>(
     `/api/posts/${encodeURIComponent(postId)}/comments`,

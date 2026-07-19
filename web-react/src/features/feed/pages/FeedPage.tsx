@@ -18,9 +18,11 @@ import { FeedPostCard, type FeedCardPost } from '../components/FeedPostCard';
 import { StoryComposeModal } from '../components/StoryComposeModal';
 import { StoryRingBar } from '../components/StoryRingBar';
 import { StoryViewer } from '../components/StoryViewer';
+import { keys } from '../../../lib/queryKeys';
 import {
   fetchChurchFeed,
   fetchStories,
+  markFeedSeen,
   type FeedPost,
   type FeedSortMode,
   type StoryAuthorGroup,
@@ -88,6 +90,15 @@ export function FeedPage() {
       const page = await fetchChurchFeed({ limit: 20, sort: sortMode });
       setPosts(page.posts);
       setCursor(page.next_cursor);
+      // Просмотрел ленту → сразу убираем бейдж в меню.
+      const newest = page.posts[0]?.created_at ?? null;
+      qc.setQueryData(keys.feedUnread, 0);
+      try {
+        await markFeedSeen(newest);
+        void qc.invalidateQueries({ queryKey: keys.feedUnread });
+      } catch {
+        /* бейдж обновится при следующем опросе */
+      }
     } catch {
       setError('Не удалось загрузить ленту');
       setPosts([]);
@@ -95,7 +106,11 @@ export function FeedPage() {
     } finally {
       setLoading(false);
     }
+<<<<<<< HEAD
   }, [sortMode]);
+=======
+  }, [qc]);
+>>>>>>> origin/main
 
   useEffect(() => {
     void loadFirst();
