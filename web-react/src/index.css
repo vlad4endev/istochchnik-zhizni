@@ -1387,7 +1387,7 @@ table {
   max-width: 100%;
 }
 
-/* Tables stay as tables; scroll via explicit overflow-x-auto wrappers. */}
+/* Tables stay as tables; scroll via explicit overflow-x-auto wrappers. */
 
 button {
   font: inherit;
