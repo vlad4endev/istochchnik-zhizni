@@ -106,11 +106,7 @@ export function FeedPage() {
     } finally {
       setLoading(false);
     }
-<<<<<<< HEAD
-  }, [sortMode]);
-=======
-  }, [qc]);
->>>>>>> origin/main
+  }, [qc, sortMode]);
 
   useEffect(() => {
     void loadFirst();
