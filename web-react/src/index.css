@@ -28,6 +28,15 @@ textarea {
   /* Легче на маленьких экранах — меньше «грязи» при скролле */
   --shadow-card: 0 2px 12px rgba(28, 25, 23, 0.05);
   --nav-pill-shadow: 0 -8px 32px rgba(28, 25, 23, 0.09), 0 4px 16px rgba(28, 25, 23, 0.04);
+  --border: rgba(28, 25, 23, 0.1);
+  --border-hover: rgba(28, 25, 23, 0.18);
+  --bg-base: var(--surface);
+  --bg-card: var(--surface-elevated);
+  --bg-elevated: #fafaf9;
+  --bg-interactive: #ffffff;
+  --bg-hover: #f5f5f4;
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(28, 25, 23, 0.08);
 
   /* Доступность: масштаб только из панели приложения; системный шрифт ОС не умножаем (иначе на части телефонов завышался). */
   --a11y-font-scale: 1;
@@ -115,28 +124,37 @@ textarea {
   --z-perform: 600;
 }
 
-html.dark {
+/*
+ * Единая тёмная палитра для html.dark и data-color-theme='dark'.
+ * Контраст secondary/muted рассчитан на телефоны (OLED + яркость экрана).
+ */
+html.dark,
+html[data-color-theme='dark'] {
   color-scheme: dark;
-  --bg-base: #0a0a0b;
-  --bg-card: #111114;
-  --bg-elevated: #18181c;
-  --bg-interactive: #1f1f24;
-  --bg-hover: #26262c;
-  --surface: #0a0a0b;
-  --surface-elevated: #18181c;
-  --text: #f0eff4;
-  --text-secondary: #9896a4;
-  --text-muted: #55535f;
-  --border: rgba(255, 255, 255, 0.06);
-  --border-hover: rgba(255, 255, 255, 0.12);
-  --primary: #c0415a;
-  --primary-dark: #a8304a;
-  --primary-glow: rgba(192, 65, 90, 0.25);
-  --accent-glow: rgba(192, 65, 90, 0.15);
-  --shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-  --shadow-card: 0 2px 16px rgba(0, 0, 0, 0.4);
-  --glass: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  --bg-base: #121214;
+  --bg-card: #1a1a1e;
+  --bg-elevated: #222228;
+  --bg-interactive: #2a2a32;
+  --bg-hover: #32323c;
+  --surface: #121214;
+  --surface-elevated: #1c1c22;
+  --text: #f4f3f7;
+  --text-secondary: #c4c2ce;
+  --text-muted: #9b99a8;
+  --text-on-primary: #1c1917;
+  --border: rgba(255, 255, 255, 0.12);
+  --border-hover: rgba(255, 255, 255, 0.2);
+  --primary: #e07a8a;
+  --primary-dark: #c55f70;
+  --accent: #f87171;
+  --primary-glow: rgba(224, 122, 138, 0.28);
+  --accent-glow: rgba(224, 122, 138, 0.16);
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  --shadow-card: 0 2px 16px rgba(0, 0, 0, 0.38);
+  --nav-pill-shadow: 0 -8px 32px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.28);
+  --glass: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --a11y-focus-ring: #fbbf24;
 }
 
 html.theme-sepia {
@@ -148,20 +166,9 @@ html.theme-sepia {
 
 /* ── Темы оформления (глобально на <html data-color-theme>) ── */
 html[data-color-theme='dark'] {
-  color-scheme: dark;
-  --primary: #d97787;
-  --primary-dark: #b85c6c;
-  --accent: #f87171;
-  --surface: #1c1917;
-  --surface-elevated: #292524;
-  --text: #fafaf9;
-  --text-secondary: #d6d3d1;
-  --text-muted: #a8a29e;
-  --text-on-primary: #1c1917;
-  --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-  --shadow-card: 0 2px 14px rgba(0, 0, 0, 0.28);
-  --nav-pill-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.25);
-  --a11y-focus-ring: #fbbf24;
+  /* Акцент чуть теплее базового html.dark — совпадает с панелью доступности */
+  --primary: #e895a0;
+  --primary-dark: #d07785;
 }
 
 html.dark,
@@ -225,10 +232,17 @@ html[data-color-theme='high-contrast'] {
   --accent: #ffff00;
   --surface: #000000;
   --surface-elevated: #0a0a0a;
+  --bg-base: #000000;
+  --bg-card: #0a0a0a;
+  --bg-elevated: #121212;
+  --bg-interactive: #1a1a1a;
+  --bg-hover: #242424;
   --text: #ffff00;
   --text-secondary: #ffff00;
   --text-muted: #f5e000;
   --text-on-primary: #000000;
+  --border: rgba(255, 255, 0, 0.45);
+  --border-hover: rgba(255, 255, 0, 0.7);
   --member: #00ffff;
   --theme: #00ffff;
   --ministry: #ffff00;
@@ -236,6 +250,8 @@ html[data-color-theme='high-contrast'] {
   --shadow: none;
   --shadow-card: none;
   --nav-pill-shadow: none;
+  --glass: rgba(255, 255, 0, 0.06);
+  --glass-border: rgba(255, 255, 0, 0.35);
   --a11y-focus-ring: #ffffff;
 }
 
@@ -246,13 +262,22 @@ html[data-color-theme='blue'] {
   --accent: #38bdf8;
   --surface: #0b1628;
   --surface-elevated: #0f2137;
+  --bg-base: #0b1628;
+  --bg-card: #0f2137;
+  --bg-elevated: #152a45;
+  --bg-interactive: #1a3354;
+  --bg-hover: #214066;
   --text: #f8fafc;
   --text-secondary: #e2e8f0;
-  --text-muted: #94a3b8;
+  --text-muted: #a8b8cc;
   --text-on-primary: #0b1628;
+  --border: rgba(148, 163, 184, 0.28);
+  --border-hover: rgba(148, 163, 184, 0.42);
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
   --shadow-card: 0 2px 14px rgba(0, 0, 0, 0.35);
   --nav-pill-shadow: 0 -8px 32px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.3);
+  --glass: rgba(148, 163, 184, 0.08);
+  --glass-border: rgba(148, 163, 184, 0.22);
   --a11y-focus-ring: #fde047;
 }
 
@@ -415,6 +440,8 @@ html.app-native-shell body {
 
 html.dark body {
   letter-spacing: 0.01em;
+  color: var(--text);
+  background: var(--surface);
 }
 
 p,
@@ -509,7 +536,8 @@ dd {
   display: flex;
   flex-direction: column;
   touch-action: pan-x pan-y;
-  background: #f4f1ed;
+  background: var(--surface);
+  color: var(--text);
 }
 
 /* PWA / нативная оболочка: как у body — не даём #root расти по 100dvh выше layout viewport (полоска снизу на iOS). */
@@ -541,12 +569,10 @@ html.app-keyboard-open main.app-main-content.page-content {
   padding-bottom: 0;
 }
 
-html.dark .rounded-2xl,
-html.dark .rounded-xl {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border);
-}
-
+/*
+ * Не красим все .rounded-* глобально — ломает пастельные виджеты и градиенты
+ * (светлый background-image поверх тёмного background-color + светлый текст = «половина не видно»).
+ */
 html.dark aside,
 html.dark nav:not(.app-bottom-nav) {
   background-color: var(--bg-elevated);
@@ -768,6 +794,66 @@ html.dark [class*='bg-stone-100/'],
 html.dark [class*='bg-zinc-50/'],
 html.dark [class*='bg-zinc-100/'] {
   background-color: color-mix(in srgb, var(--surface-elevated) 86%, transparent) !important;
+}
+
+/* Светлые pastel/gradient «острова»: на тёмной теме — elevated-карточки без светлой заливки */
+html.dark [class*='from-rose-50'],
+html.dark [class*='from-amber-50'],
+html.dark [class*='from-orange-50'],
+html.dark [class*='from-sky-50'],
+html.dark [class*='from-indigo-50'],
+html.dark [class*='from-violet-50'],
+html.dark [class*='from-emerald-50'],
+html.dark [class*='from-[#FFF'],
+html.dark [class*='from-[#EEF'],
+html.dark [class*='from-[#EDF'],
+html.dark [class*='from-[#FEF'],
+html.dark [class*='bg-rose-50'],
+html.dark [class*='bg-amber-50'],
+html.dark [class*='bg-red-50'],
+html.dark [class*='bg-[#F8F5F3]'],
+html.dark [class*='bg-[#FFF8EC]'] {
+  background-image: none !important;
+  background-color: var(--surface-elevated) !important;
+  border-color: var(--border) !important;
+}
+
+/* Текст на бывших pastel-карточках: тёмные hex → читаемые токены */
+html.dark [class*='text-[#1A2560]'],
+html.dark [class*='text-[#0A2E18]'],
+html.dark [class*='text-[#3D2800]'],
+html.dark [class*='text-[#1a1a1a]'],
+html.dark [class*='text-rose-800'],
+html.dark [class*='text-rose-900'],
+html.dark [class*='text-amber-900'],
+html.dark [class*='text-amber-950'],
+html.dark [class*='text-red-900'] {
+  color: var(--text) !important;
+}
+
+html.dark [class*='text-[#C23D57]'],
+html.dark [class*='text-[#3042A8]'],
+html.dark [class*='text-[#4A5FD5]'],
+html.dark [class*='text-[#9A6200]'],
+html.dark [class*='text-[#B87800]'],
+html.dark [class*='text-[#0F6636]'],
+html.dark [class*='text-[#1A9A55]'],
+html.dark [class*='text-[#0A5A4C]'],
+html.dark [class*='text-[#0E7E6A]'],
+html.dark [class*='text-[#2F6D49]'],
+html.dark [class*='text-[#6B2D3E]'],
+html.dark [class*='text-rose-700'],
+html.dark [class*='text-amber-800'] {
+  color: var(--text-secondary) !important;
+}
+
+/* Мобильная типографика в тёмной теме: длинные слова/заголовки не вылезают за край */
+@media (max-width: 767px) {
+  html.dark #root,
+  html.dark main.app-main-content {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 }
 
 #root,
@@ -1351,25 +1437,25 @@ html.dark .dashboard-adaptive .dashboard-sheet {
 
 html.dark .dashboard-adaptive [class*='text-stone-900'],
 html.dark .dashboard-adaptive [class*='text-stone-800'],
-html.dark .dashboard-adaptive [class*='text-\\[#1a1a1a\\]'],
-html.dark .dashboard-adaptive [class*='text-\\[#3D1520\\]'],
-html.dark .dashboard-adaptive [class*='text-\\[#1A2560\\]'],
-html.dark .dashboard-adaptive [class*='text-\\[#0A2E18\\]'],
-html.dark .dashboard-adaptive [class*='text-\\[#3D2800\\]'] {
+html.dark .dashboard-adaptive [class*='text-[#1a1a1a]'],
+html.dark .dashboard-adaptive [class*='text-[#3D1520]'],
+html.dark .dashboard-adaptive [class*='text-[#1A2560]'],
+html.dark .dashboard-adaptive [class*='text-[#0A2E18]'],
+html.dark .dashboard-adaptive [class*='text-[#3D2800]'] {
   color: var(--text) !important;
 }
 
 html.dark .dashboard-adaptive [class*='text-stone-700'],
 html.dark .dashboard-adaptive [class*='text-stone-600'],
 html.dark .dashboard-adaptive [class*='text-stone-500'],
-html.dark .dashboard-adaptive [class*='text-\\[#C23D57\\]'],
-html.dark .dashboard-adaptive [class*='text-\\[#3042A8\\]'],
-html.dark .dashboard-adaptive [class*='text-\\[#4A5FD5\\]'],
-html.dark .dashboard-adaptive [class*='text-\\[#9A6200\\]'],
-html.dark .dashboard-adaptive [class*='text-\\[#B87800\\]'],
-html.dark .dashboard-adaptive [class*='text-\\[#0F6636\\]'],
-html.dark .dashboard-adaptive [class*='text-\\[#1A9A55\\]'],
-html.dark .dashboard-adaptive [class*='text-\\[#0A5A4C\\]'] {
+html.dark .dashboard-adaptive [class*='text-[#C23D57]'],
+html.dark .dashboard-adaptive [class*='text-[#3042A8]'],
+html.dark .dashboard-adaptive [class*='text-[#4A5FD5]'],
+html.dark .dashboard-adaptive [class*='text-[#9A6200]'],
+html.dark .dashboard-adaptive [class*='text-[#B87800]'],
+html.dark .dashboard-adaptive [class*='text-[#0F6636]'],
+html.dark .dashboard-adaptive [class*='text-[#1A9A55]'],
+html.dark .dashboard-adaptive [class*='text-[#0A5A4C]'] {
   color: var(--text-secondary) !important;
 }
 

@@ -52,7 +52,7 @@ export function UpcomingSundayServicesWidget({
 }: Props) {
   if (loading) {
     return (
-      <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-gradient-to-br from-primary/[0.06] via-white to-stone-50 shadow-[var(--shadow-card)]">
+      <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-gradient-to-br from-primary/[0.06] via-white to-stone-50 shadow-[var(--shadow-card)] dark:border-[var(--border)] dark:bg-[var(--surface-elevated)] dark:bg-none">
         <div className="border-b border-stone-100/80 px-3 py-3 sm:px-4">
           <div className="h-5 w-40 animate-pulse rounded-lg bg-stone-200" />
         </div>
@@ -66,8 +66,8 @@ export function UpcomingSundayServicesWidget({
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-gradient-to-br from-primary/[0.06] via-white to-stone-50 shadow-[var(--shadow-card)]">
-      <div className="flex items-center gap-2.5 border-b border-stone-100/80 px-3 py-3 sm:px-4">
+    <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-gradient-to-br from-primary/[0.06] via-white to-stone-50 shadow-[var(--shadow-card)] dark:border-[var(--border)] dark:bg-[var(--surface-elevated)] dark:bg-none">
+      <div className="flex items-center gap-2.5 border-b border-stone-100/80 px-3 py-3 sm:px-4 dark:border-[var(--border)]">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
           <LuCalendarDays className="h-4 w-4" aria-hidden />
         </span>

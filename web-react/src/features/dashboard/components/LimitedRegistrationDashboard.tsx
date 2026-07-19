@@ -106,15 +106,17 @@ export function LimitedRegistrationDashboard({ registrationStatus, firstName }: 
           className={[
             'rounded-3xl border p-5 shadow-sm sm:p-6',
             isPending
-              ? 'border-amber-200/90 bg-gradient-to-br from-amber-50 via-white to-orange-50/80'
-              : 'border-rose-200/90 bg-gradient-to-br from-rose-50 via-white to-stone-50/90',
+              ? 'border-amber-200/90 bg-gradient-to-br from-amber-50 via-white to-orange-50/80 dark:border-amber-400/30 dark:bg-[var(--surface-elevated)] dark:bg-none'
+              : 'border-rose-200/90 bg-gradient-to-br from-rose-50 via-white to-stone-50/90 dark:border-rose-400/30 dark:bg-[var(--surface-elevated)] dark:bg-none',
           ].join(' ')}
         >
           <div className="flex items-start gap-3">
             <div
               className={[
                 'grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-xl',
-                isPending ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-700',
+                isPending
+                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200'
+                  : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200',
               ].join(' ')}
               aria-hidden
             >

@@ -78,9 +78,9 @@ html[data-color-theme='dark'] {
   --tg-surface-elevated: #18181c;
   --tg-border: rgba(255, 255, 255, 0.08);
   --tg-border-strong: rgba(255, 255, 255, 0.12);
-  --tg-text: #f0eff4;
-  --tg-text-secondary: #9896a4;
-  --tg-text-muted: #6b6975;
+  --tg-text: #f4f3f7;
+  --tg-text-secondary: #c4c2ce;
+  --tg-text-muted: #9b99a8;
   --tg-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   --tg-glass: rgba(24, 24, 28, 0.82);
   --tg-composer-bg: #1a1a1e;

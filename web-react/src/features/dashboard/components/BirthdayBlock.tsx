@@ -5,9 +5,6 @@ import { FaCakeCandles } from 'react-icons/fa6';
 import { LuMessageCircle } from 'react-icons/lu';
 import type { BirthdayWeekItem } from '../../calendar/api';
 
-const BRAND = '#7D3640';
-const BRAND_LIGHT = '#FDE8E8';
-
 type BirthdayStatus = 'today' | 'tomorrow' | 'soon';
 type BirthdayWithStatus = BirthdayWeekItem & { status: BirthdayStatus };
 
@@ -45,7 +42,6 @@ function formatBirthdayDate(weekDateYMD: string): string {
   return format(d, 'EEE, d MMMM', { locale: ru });
 }
 
-
 function getStatus(weekDateYMD: string, today: Date): BirthdayStatus | null {
   const d = parse(weekDateYMD, 'yyyy-MM-dd', new Date());
   if (Number.isNaN(d.getTime())) return null;
@@ -59,8 +55,6 @@ function getStatus(weekDateYMD: string, today: Date): BirthdayStatus | null {
 }
 
 const STATUS_ORDER: Record<BirthdayStatus, number> = { today: 0, tomorrow: 1, soon: 2 };
-
-// ─── Main component ──────────────────────────────────────────────────────────
 
 export function BirthdayBlock({
   birthdays,
@@ -82,21 +76,20 @@ export function BirthdayBlock({
   if (thisWeek.length === 0) return null;
 
   return (
-    <section>
-      {/* Section header */}
-      <div className="mb-2.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.07em] text-[#888]">
+    <section className="min-w-0">
+      <div className="mb-2.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.07em] text-[var(--text-muted)]">
         <FaCakeCandles
           size={13}
-          style={{ color: BRAND, flexShrink: 0 }}
+          className="shrink-0 text-[var(--primary)]"
           aria-hidden
         />
         Дни рождения
       </div>
 
-      {/* Card — translateZ(0) изолирует overflow:hidden+border-radius от scroll-repaint на Android */}
+      {/* translateZ(0) изолирует overflow:hidden+border-radius от scroll-repaint на Android */}
       <div
-        className="overflow-hidden rounded-[20px] bg-white"
-        style={{ border: '1px solid rgba(0,0,0,0.07)', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}
+        className="overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--surface-elevated)]"
+        style={{ transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}
       >
         {thisWeek.map((person, i) => (
           <BirthdayRow
@@ -107,12 +100,9 @@ export function BirthdayBlock({
           />
         ))}
       </div>
-
     </section>
   );
 }
-
-// ─── Row component ───────────────────────────────────────────────────────────
 
 function BirthdayRow({
   person,
@@ -127,128 +117,65 @@ function BirthdayRow({
   const initials = getInitials(person.name);
 
   const pillConfig = {
-    today:    { label: '🎉 Сегодня', bg: BRAND,       color: '#fff'  },
-    tomorrow: { label: 'Завтра',      bg: BRAND_LIGHT, color: BRAND   },
-    soon:     { label: null,          bg: '',          color: ''      },
+    today: {
+      label: '🎉 Сегодня',
+      className: 'bg-[var(--primary)] text-[var(--text-on-primary)]',
+    },
+    tomorrow: {
+      label: 'Завтра',
+      className:
+        'bg-[color-mix(in_srgb,var(--primary)_16%,var(--surface))] text-[var(--primary)]',
+    },
+    soon: { label: null, className: '' },
   } as const;
 
   const pill = pillConfig[person.status];
 
   return (
     <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '13px 14px',
-        borderBottom: isLast ? 'none' : '1px solid rgba(0,0,0,0.06)',
-        WebkitTapHighlightColor: 'transparent',
-      }}
+      className={[
+        'flex items-center gap-3 px-3.5 py-3.5 [-webkit-tap-highlight-color:transparent]',
+        isLast ? '' : 'border-b border-[var(--border)]',
+      ].join(' ')}
     >
-      {/* Avatar */}
-      <div style={{ position: 'relative', flexShrink: 0 }}>
+      <div className="relative shrink-0">
         <div
-          style={{
-            width: 46,
-            height: 46,
-            borderRadius: '50%',
-            background: palette.bg,
-            color: palette.text,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 15,
-            fontWeight: 700,
-            userSelect: 'none',
-          }}
+          className="flex h-[46px] w-[46px] select-none items-center justify-center rounded-full text-[15px] font-bold"
+          style={{ background: palette.bg, color: palette.text }}
           aria-hidden
         >
           {initials}
         </div>
-        {person.status === 'today' && (
-          <div className="bday-ring" aria-hidden />
-        )}
+        {person.status === 'today' ? <div className="bday-ring" aria-hidden /> : null}
       </div>
 
-      {/* Info */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 7,
-            marginBottom: 3,
-            overflow: 'hidden',
-          }}
-        >
-          <span
-            style={{
-              fontSize: 14,
-              fontWeight: 600,
-              color: '#111',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              maxWidth: '100%',
-              unicodeBidi: 'plaintext',
-              direction: 'ltr',
-            }}
-          >
+      <div className="min-w-0 flex-1">
+        <div className="mb-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden">
+          <span className="min-w-0 truncate text-sm font-semibold text-[var(--text)] [unicode-bidi:plaintext] [direction:ltr]">
             {person.name}
           </span>
-          {pill.label != null && (
+          {pill.label != null ? (
             <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                fontSize: 10,
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: 20,
-                flexShrink: 0,
-                whiteSpace: 'nowrap',
-                background: pill.bg,
-                color: pill.color,
-              }}
+              className={[
+                'inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold',
+                pill.className,
+              ].join(' ')}
             >
               {pill.label}
             </span>
-          )}
+          ) : null}
         </div>
-        <div
-          style={{
-            fontSize: 12,
-            color: '#999',
-            unicodeBidi: 'plaintext',
-            direction: 'ltr',
-          }}
-        >
+        <div className="text-xs text-[var(--text-muted)] [unicode-bidi:plaintext] [direction:ltr]">
           {formatBirthdayDate(person.week_date)}
         </div>
       </div>
 
-      {/* Message button */}
       <button
         type="button"
         onClick={onMessage}
         aria-label={`Написать поздравление ${person.name}`}
-        className="tap-highlight-transparent touch-manipulation"
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: '50%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: 'none',
-          cursor: 'pointer',
-          flexShrink: 0,
-          background: palette.bg,
-          color: palette.text,
-          transition: 'transform 0.1s',
-          WebkitTapHighlightColor: 'transparent',
-          opacity: 1,
-        }}
+        className="tap-highlight-transparent touch-manipulation flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-0 transition-transform active:scale-95"
+        style={{ background: palette.bg, color: palette.text }}
       >
         <LuMessageCircle size={17} aria-hidden />
       </button>

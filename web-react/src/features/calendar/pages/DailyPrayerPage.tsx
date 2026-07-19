@@ -147,7 +147,7 @@ function PrayerCard(props: {
   const staggerMs = Math.min(cardIndex * 48, 320);
   return (
     <article
-      className="group relative mb-4 overflow-hidden rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] shadow-[var(--shadow-card)] transition-[box-shadow,transform,border-color] duration-300 ease-out animate-prayer-fade-up hover:-translate-y-0.5 hover:border-stone-300/85 hover:shadow-lg motion-reduce:animate-none motion-reduce:transform-none motion-reduce:transition-none md:border-stone-200/80 md:shadow-[var(--shadow)]"
+      className="group relative mb-4 overflow-hidden rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] shadow-[var(--shadow-card)] transition-[box-shadow,transform,border-color] duration-300 ease-out animate-prayer-fade-up hover:-translate-y-0.5 hover:border-stone-300/85 hover:shadow-lg motion-reduce:animate-none motion-reduce:transform-none motion-reduce:transition-none dark:border-[var(--border)] dark:hover:border-[var(--border-hover)] md:border-stone-200/80 md:shadow-[var(--shadow)]"
       style={{
         ['--card-accent' as string]: accentVar,
         animationDelay: `${staggerMs}ms`,
@@ -656,7 +656,7 @@ function TelegramPrayerDispatchModal(props: {
         </div>
 
         {!loading ? (
-          <div className="shrink-0 border-t border-stone-100 bg-[var(--surface-elevated)] px-4 py-3 sm:bg-white sm:px-5 sm:pb-5 sm:pt-0 sm:shadow-none">
+          <div className="shrink-0 border-t border-stone-100 bg-[var(--surface-elevated)] px-4 py-3 sm:bg-[var(--surface-elevated)] sm:px-5 sm:pb-5 sm:pt-0 sm:shadow-none dark:border-[var(--border)]">
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end sm:gap-2">
               <button
                 type="button"
@@ -880,20 +880,20 @@ export function DailyPrayerPage() {
     urgentPrayerText.length > 0 ? (
       <section
         aria-label="Срочная молитвенная нужда"
-        className="overflow-hidden rounded-2xl border-2 border-rose-300/90 bg-gradient-to-br from-rose-50 via-white to-amber-50/90 p-4 shadow-[0_10px_32px_rgba(190,24,93,0.14)]"
+        className="overflow-hidden rounded-2xl border-2 border-rose-300/90 bg-gradient-to-br from-rose-50 via-white to-amber-50/90 p-4 shadow-[0_10px_32px_rgba(190,24,93,0.14)] dark:border-rose-400/35 dark:bg-[var(--surface-elevated)] dark:bg-none dark:shadow-[0_10px_32px_rgba(0,0,0,0.35)]"
       >
         <div className="flex items-start gap-3">
           <span
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-700"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300"
             aria-hidden
           >
             <LuFlame className="h-5 w-5" strokeWidth={2} />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-xs font-extrabold uppercase tracking-[0.14em] text-rose-800">
+            <h2 className="text-xs font-extrabold uppercase tracking-[0.14em] text-rose-800 dark:text-rose-300">
               Срочная молитвенная нужда
             </h2>
-            <p className="mt-2 whitespace-pre-wrap text-base font-semibold leading-relaxed text-[var(--text)]">
+            <p className="mt-2 whitespace-pre-wrap break-words text-base font-semibold leading-relaxed text-rose-950 dark:text-[var(--text)]">
               {urgentPrayerText}
             </p>
           </div>
@@ -950,7 +950,7 @@ export function DailyPrayerPage() {
         <button
           type="button"
           onClick={() => setCalendarExpanded((e) => !e)}
-          className="group flex min-h-[48px] w-full items-center gap-3 rounded-full border border-stone-200/60 bg-[var(--surface-elevated)] px-4 py-3 text-left shadow-[var(--shadow)] transition-all duration-200 hover:border-stone-300/80 hover:bg-stone-50/90 active:scale-[0.99] sm:min-h-[52px] motion-reduce:active:scale-100 animate-prayer-fade-in motion-reduce:animate-none"
+          className="group flex min-h-[48px] w-full items-center gap-3 rounded-full border border-stone-200/60 bg-[var(--surface-elevated)] px-4 py-3 text-left shadow-[var(--shadow)] transition-all duration-200 hover:border-stone-300/80 hover:bg-stone-50/90 active:scale-[0.99] sm:min-h-[52px] motion-reduce:active:scale-100 animate-prayer-fade-in motion-reduce:animate-none dark:border-[var(--border)] dark:hover:border-[var(--border-hover)] dark:hover:bg-[var(--bg-hover)]"
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-200 group-hover:scale-105 group-hover:bg-primary/[0.14] group-hover:text-primary-dark motion-reduce:group-hover:scale-100">
             <LuCalendarDays className="h-5 w-5" strokeWidth={2} aria-hidden />
@@ -1145,7 +1145,7 @@ export function DailyPrayerPage() {
       {me?.id && canViewPrayerSectionViewersStats ? (
         <div className="px-4 pb-6 pt-2 shell:px-6 shell:pb-8">
           <div
-            className="mx-auto flex max-w-xl items-center justify-center gap-2.5 rounded-2xl border border-stone-200/70 bg-gradient-to-r from-[var(--surface-elevated)] via-white/90 to-[var(--surface-elevated)] px-4 py-2.5 text-center shadow-[0_2px_12px_rgba(0,0,0,0.04)] backdrop-blur-sm supports-[backdrop-filter]:bg-[var(--surface-elevated)]/75"
+            className="mx-auto flex max-w-xl items-center justify-center gap-2.5 rounded-2xl border border-stone-200/70 bg-gradient-to-r from-[var(--surface-elevated)] via-white/90 to-[var(--surface-elevated)] px-4 py-2.5 text-center shadow-[0_2px_12px_rgba(0,0,0,0.04)] backdrop-blur-sm supports-[backdrop-filter]:bg-[var(--surface-elevated)]/75 dark:border-[var(--border)] dark:via-[var(--bg-elevated)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.25)]"
             role="status"
             aria-live="polite"
           >

@@ -1,12 +1,17 @@
 /* Режим «как в Instagram» внутри модалки: две колонки, нейтральные границы. */
 
 .igRoot {
-  --ig-border: #dbdbdb;
-  --ig-bg: #ffffff;
-  --ig-muted: #8e8e8e;
-  --ig-text: #262626;
+  --ig-border: var(--border, #dbdbdb);
+  --ig-bg: var(--surface-elevated, #ffffff);
+  --ig-muted: var(--text-muted, #8e8e8e);
+  --ig-text: var(--text, #262626);
   --ig-link: #0095f6;
   width: 100%;
+  color: var(--ig-text);
+}
+
+:global(html.dark) .igRoot {
+  --ig-link: #4db5f9;
 }
 
 .igGrid {
@@ -45,7 +50,7 @@
   aspect-ratio: 1;
   max-height: min(55dvh, 420px);
   margin: 0 auto;
-  background: #fafafa;
+  background: var(--bg-elevated, #fafafa);
   overflow: hidden;
 }
 

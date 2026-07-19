@@ -640,8 +640,9 @@ export function LoginPage() {
   };
 
   const inputClass =
-    'min-h-[52px] w-full rounded-2xl border border-stone-200/90 bg-stone-50/80 px-4 py-3 text-base text-stone-900 outline-none transition-[border-color,box-shadow,background-color] placeholder:text-stone-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 sm:min-h-[48px] sm:text-[15px]';
-  const labelClass = 'mb-1.5 block text-[13px] font-semibold tracking-wide text-stone-600';
+    'min-h-[52px] w-full rounded-2xl border border-stone-200/90 bg-stone-50/80 px-4 py-3 text-base text-stone-900 outline-none transition-[border-color,box-shadow,background-color] placeholder:text-stone-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 dark:border-[var(--border)] dark:bg-[var(--bg-interactive)] dark:text-[var(--text)] dark:placeholder:text-[var(--text-muted)] dark:focus:bg-[var(--bg-elevated)] sm:min-h-[48px] sm:text-[15px]';
+  const labelClass =
+    'mb-1.5 block text-[13px] font-semibold tracking-wide text-stone-600 dark:text-[var(--text-secondary)]';
   const eyeBtnClass =
     'absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary';
 
@@ -676,7 +677,7 @@ export function LoginPage() {
 
             {apiMismatch && (
               <div
-                className="mt-4 flex gap-2.5 rounded-2xl bg-red-50 p-3 text-sm leading-snug text-red-900"
+                className="mt-4 flex gap-2.5 rounded-2xl bg-red-50 p-3 text-sm leading-snug text-red-900 dark:bg-red-950/45 dark:text-red-100"
                 role="alert"
               >
                 <LuTriangleAlert className="h-5 w-5 shrink-0 text-amber-600" strokeWidth={2} aria-hidden />
