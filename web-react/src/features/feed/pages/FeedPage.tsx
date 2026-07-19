@@ -438,20 +438,22 @@ export function FeedPage() {
         ) : null}
       </main>
 
-      <motion.button
-        type="button"
-        className={`${styles.fab} ${commentTarget != null ? styles.fabHidden : ''}`}
-        aria-label="Новая публикация"
-        aria-hidden={commentTarget != null}
-        tabIndex={commentTarget != null ? -1 : 0}
-        onClick={() => setComposeOpen(true)}
-        initial={reduceMotion ? false : { scale: 0.7, opacity: 0 }}
-        animate={{ scale: commentTarget != null ? 0.9 : 1, opacity: commentTarget != null ? 0 : 1 }}
-        transition={{ type: 'spring', stiffness: 380, damping: 18, delay: 0.15 }}
-        whileTap={reduceMotion ? undefined : { scale: 0.94 }}
-      >
-        <LuPlus className="h-7 w-7" strokeWidth={2.5} aria-hidden />
-      </motion.button>
+      <div className={styles.fabDock}>
+        <motion.button
+          type="button"
+          className={`${styles.fab} ${commentTarget != null ? styles.fabHidden : ''}`}
+          aria-label="Новая публикация"
+          aria-hidden={commentTarget != null}
+          tabIndex={commentTarget != null ? -1 : 0}
+          onClick={() => setComposeOpen(true)}
+          initial={reduceMotion ? false : { scale: 0.7, opacity: 0 }}
+          animate={{ scale: commentTarget != null ? 0.9 : 1, opacity: commentTarget != null ? 0 : 1 }}
+          transition={{ type: 'spring', stiffness: 380, damping: 18, delay: 0.15 }}
+          whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+        >
+          <LuPlus className="h-7 w-7" strokeWidth={2.5} aria-hidden />
+        </motion.button>
+      </div>
 
       <ProfileComposeModal
         open={composeOpen}

@@ -1,16 +1,9 @@
 .card {
   position: relative;
-  border-radius: 1.2rem;
-  background:
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--profile-surface-elevated, #fafaf9) 92%, var(--profile-primary, #7d3640)) 0%,
-      var(--profile-card-bg, var(--profile-surface-elevated, #fafaf9)) 3.5rem
-    );
-  border: 1px solid color-mix(in srgb, var(--profile-border, rgba(120, 113, 108, 0.2)) 88%, transparent);
-  box-shadow:
-    0 1px 0 color-mix(in srgb, #fff 35%, transparent) inset,
-    0 8px 28px rgba(28, 25, 23, 0.08);
+  border-radius: 1.35rem;
+  background: var(--profile-surface-elevated, #fafaf9);
+  border: 1px solid color-mix(in srgb, var(--profile-border, rgba(120, 113, 108, 0.16)) 88%, transparent);
+  box-shadow: 0 10px 28px rgba(28, 25, 23, 0.07);
   /* visible — чтобы меню владельца не обрезалось; медиа клипается отдельно */
   overflow: visible;
   transform-origin: center top;
@@ -19,22 +12,19 @@
 
 @media (min-width: 640px) {
   .card {
-    border-radius: 1.35rem;
+    border-radius: 1.5rem;
   }
 }
 
 .card:hover {
-  box-shadow:
-    0 1px 0 color-mix(in srgb, #fff 55%, transparent) inset,
-    0 14px 36px rgba(28, 25, 23, 0.09);
+  box-shadow: 0 14px 36px rgba(28, 25, 23, 0.09);
 }
 
 .head {
   position: relative;
   padding: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--profile-border, rgba(120, 113, 108, 0.18)) 55%, transparent);
-  background: color-mix(in srgb, var(--profile-surface-elevated, #fafaf9) 55%, transparent);
-  backdrop-filter: blur(10px);
+  border-bottom: none;
+  background: transparent;
 }
 
 .headRow {
@@ -72,8 +62,9 @@
 }
 
 .authorName {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 70%;
   font-size: 0.9rem;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -231,7 +222,7 @@
 
 .caption {
   margin: 0;
-  padding: 0.85rem 0.85rem 0.35rem;
+  padding: 0.15rem 0.95rem 0.75rem;
   font-size: 0.925rem;
   line-height: 1.55;
   letter-spacing: -0.01em;
@@ -242,7 +233,7 @@
 
 @media (min-width: 640px) {
   .caption {
-    padding: 0.95rem 1.05rem 0.4rem;
+    padding: 0.2rem 1.1rem 0.85rem;
     font-size: 0.95rem;
   }
 }
@@ -251,8 +242,17 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
+  margin: 0 0.85rem;
+  border-radius: 1rem;
   user-select: none;
   -webkit-user-select: none;
+}
+
+@media (min-width: 640px) {
+  .mediaWrap {
+    margin: 0 1.05rem;
+    border-radius: 1.1rem;
+  }
 }
 
 .media {
@@ -288,10 +288,10 @@
 }
 
 .media:not(.mediaCarousel) .mediaItem {
-  max-height: min(68dvh, 32rem);
-  aspect-ratio: auto;
-  object-fit: contain;
-  min-height: 12rem;
+  max-height: min(58dvh, 28rem);
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  min-height: 11rem;
 }
 
 @media (min-width: 640px) {
@@ -424,23 +424,24 @@
 .actions {
   display: flex;
   flex-wrap: nowrap;
-  align-items: stretch;
-  gap: 0.2rem;
-  padding: 0.35rem 0.4rem 0.45rem;
-  background: color-mix(in srgb, var(--profile-surface, #f4f1ed) 35%, var(--profile-surface-elevated, #fafaf9));
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.35rem;
+  padding: 0.55rem 0.65rem 0.75rem;
+  background: transparent;
 }
 
 .actionBtn {
   display: inline-flex;
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  min-height: 2.65rem;
-  padding: 0.45rem 0.35rem;
+  gap: 0.35rem;
+  min-height: 2.35rem;
+  padding: 0.4rem 0.65rem;
   border: none;
-  border-radius: 0.85rem;
+  border-radius: 999px;
   background: transparent;
   font-size: 0.8125rem;
   font-weight: 750;

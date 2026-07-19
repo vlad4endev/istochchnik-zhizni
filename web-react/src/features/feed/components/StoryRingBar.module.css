@@ -117,8 +117,8 @@
   height: 100%;
   border-radius: 9999px;
   overflow: hidden;
-  background: var(--profile-surface, #000);
-  border: 2.5px solid var(--profile-surface, #000);
+  background: var(--profile-surface, #f4f1ed);
+  border: 2.5px solid var(--profile-surface, #f4f1ed);
   display: grid;
   place-items: center;
   position: relative;
@@ -144,7 +144,7 @@
   color: #fff;
   display: grid;
   place-items: center;
-  border: 2.5px solid var(--profile-surface, #000);
+  border: 2.5px solid var(--profile-surface, #f4f1ed);
   z-index: 2;
   pointer-events: none;
 }
@@ -152,16 +152,16 @@
 .label {
   max-width: 100%;
   font-size: 0.6875rem;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 1.2;
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--profile-text-heading, #fafafa);
+  color: var(--profile-text-heading, #1c1917);
 }
 
 .labelMe {
-  font-weight: 400;
-  color: var(--profile-text-soft, #a8a29e);
+  font-weight: 500;
+  color: var(--profile-text-soft, #78716c);
 }
