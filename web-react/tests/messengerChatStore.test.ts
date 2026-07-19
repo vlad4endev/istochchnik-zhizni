@@ -148,4 +148,48 @@ describe('messenger chatStore last message preview', () => {
     expect(useChatStore.getState().replyingTo).toBeNull();
     expect(useChatStore.getState().replyToMessage).toBeNull();
   });
+
+  it('drops mismatched privateDraftPeer when activating another draft id', () => {
+    useChatStore.getState().openPrivateDraft({
+      id: 5,
+      name: 'Анна',
+      first_name: 'Анна',
+      last_name: 'Иванова',
+      avatar_url: null,
+    });
+    expect(useChatStore.getState().privateDraftPeer?.id).toBe(5);
+
+    useChatStore.getState().setActiveConversation('draft:9');
+    expect(useChatStore.getState().activeConversationId).toBe('draft:9');
+    expect(useChatStore.getState().privateDraftPeer).toBeNull();
+  });
+
+  it('reuses existing private conversation instead of opening a draft', async () => {
+    useChatStore.setState((s) => ({
+      ...s,
+      conversations: [
+        {
+          id: 'priv-77',
+          type: 'private',
+          title: null,
+          avatar_url: null,
+          updated_at: '2026-05-07T12:00:00.000Z',
+          last_message: null,
+          unread_count: 0,
+          other_member: {
+            id: 77,
+            name: 'Новый',
+            first_name: 'Новый',
+            last_name: 'Участник',
+            avatar_url: null,
+          },
+        },
+      ],
+    }));
+
+    const ok = await useChatStore.getState().ensurePrivateDraftFromConversationId('draft:77');
+    expect(ok).toBe(true);
+    expect(useChatStore.getState().activeConversationId).toBe('priv-77');
+    expect(useChatStore.getState().privateDraftPeer).toBeNull();
+  });
 });

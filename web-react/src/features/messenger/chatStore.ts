@@ -46,6 +46,8 @@ const markReadCommittedByConv = new Map<string, bigint>();
 const pollVoteInFlightByMsg = new Set<string>();
 /** Один in-flight reaction-запрос на пару message+emoji. */
 const reactionInFlightByKey = new Set<string>();
+/** Поколение ensurePrivateDraft — отменяет устаревшие async-открытия draft:*. */
+let privateDraftEnsureGen = 0;
 
 /** Throttle: `ready` replay при каждом subscribeRealtimeMessages не должен ддосить API. */
 let lastMessengerReadySyncAt = 0;
@@ -997,13 +999,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ─── Active conversation ──────────────────────────────────
 
   setActiveConversation: (id) => {
-    set((s) => ({
-      activeConversationId: id,
-      replyToMessage: null,
-      replyingTo: null,
-      editingMessage: null,
-      privateDraftPeer: id && isDraftPrivateConversationId(id) ? s.privateDraftPeer : null,
-    }));
+    set((s) => {
+      let nextPeer: SearchMember | null = null;
+      if (id && isDraftPrivateConversationId(id)) {
+        const draftMemberId = parseDraftPrivateMemberId(id);
+        if (
+          draftMemberId != null &&
+          s.privateDraftPeer != null &&
+          Number(s.privateDraftPeer.id) === draftMemberId
+        ) {
+          nextPeer = s.privateDraftPeer;
+        }
+      }
+      return {
+        activeConversationId: id,
+        replyToMessage: null,
+        replyingTo: null,
+        editingMessage: null,
+        privateDraftPeer: nextPeer,
+      };
+    });
     if (id && !get().messagesByConv[id] && !isDraftPrivateConversationId(id)) {
       void get().loadMessages(id);
     }
@@ -1028,12 +1043,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
   ensurePrivateDraftFromConversationId: async (conversationId) => {
     const memberId = parseDraftPrivateMemberId(conversationId);
     if (memberId == null) return false;
+
+    const existingConv = (get().conversations || EMPTY_ARRAY).find(
+      (c) => c.type === 'private' && c.other_member != null && Number(c.other_member.id) === memberId,
+    );
+    if (existingConv) {
+      get().setActiveConversation(existingConv.id);
+      return true;
+    }
+
     const existing = get().privateDraftPeer;
     if (existing && Number(existing.id) === memberId) {
       get().openPrivateDraft(existing);
       return true;
     }
+
+    const ensureGen = ++privateDraftEnsureGen;
+    const activeBefore = get().activeConversationId;
     const peer = await api.fetchMessengerMember(memberId);
+    if (ensureGen !== privateDraftEnsureGen) return false;
+    const activeNow = get().activeConversationId;
+    // Пользователь ушёл в другой чат, пока грузили карточку — не перетираем.
+    if (activeNow !== activeBefore && activeNow !== conversationId) {
+      return false;
+    }
     if (!peer) {
       emitAppToast('Не удалось открыть чат с участником', 'error');
       return false;
