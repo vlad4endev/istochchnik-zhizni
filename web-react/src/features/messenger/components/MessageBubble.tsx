@@ -22,6 +22,7 @@ import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../.
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuReply, LuX } from 'react-icons/lu';
 import { isAssistantBotMessage } from '../messengerChannelKinds';
+import { renderAssistantMessageContent } from '../assistantMessageFormat';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { ChatVideoAttachmentPreview } from './ChatVideoAttachmentPreview';
@@ -1839,6 +1840,9 @@ function MessageBubbleInner({
     }
 
     // text (default)
+    if (systemBotAssistantMessage || (assistantChannel && !isMine && message.sender_id == null)) {
+      return renderAssistantMessageContent(String(message.content ?? ''), { isMine });
+    }
     return (
       <MentionRichText text={message.content} namesById={participantLabelById} isMine={isMine} />
     );
