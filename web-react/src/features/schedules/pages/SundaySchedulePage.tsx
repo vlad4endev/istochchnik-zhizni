@@ -26,6 +26,7 @@ import {
   LuX,
 } from 'react-icons/lu';
 
+import { useMobileBottomNavLock } from '../../../app/useMobileBottomNavLock';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 
 import { useMe } from '../../../hooks/useMe';
@@ -121,6 +122,7 @@ export function SundaySchedulePage() {
   const [leaderId, setLeaderId] = useState<number | ''>('');
   const [preacherId, setPreacherId] = useState<number | ''>('');
   const [cellEdit, setCellEdit] = useState<SundayScheduleTableCellEdit | null>(null);
+  useMobileBottomNavLock(Boolean(selectedPlan) || Boolean(cellEdit));
 
   const rangeFrom = useMemo(() => ymd(startOfWeek(startOfMonth(month), { weekStartsOn: 1 })), [month]);
   const rangeTo = useMemo(() => ymd(endOfWeek(endOfMonth(month), { weekStartsOn: 1 })), [month]);
@@ -316,7 +318,7 @@ export function SundaySchedulePage() {
   }
 
   return (
-    <div className="min-h-full bg-[var(--surface)] px-3 pb-28 pt-3 sm:px-4 sm:pb-12 sm:pt-4 shell:px-6 md:px-8">
+    <div className="min-h-full bg-[var(--surface)] px-3 pb-6 pt-3 sm:px-4 sm:pb-12 sm:pt-4 shell:px-6 md:px-8">
       <div className="mx-auto w-full max-w-5xl space-y-3 sm:space-y-4">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
@@ -366,7 +368,7 @@ export function SundaySchedulePage() {
               aria-selected={viewMode === id}
               onClick={() => setViewMode(id)}
               className={[
-                'tap-highlight-transparent min-h-[44px] flex-1 rounded-[10px] px-2 text-[13px] font-extrabold transition-colors sm:min-h-[40px] sm:px-3 sm:text-sm',
+                'tap-highlight-transparent min-h-[44px] flex-1 rounded-[10px] px-2 text-[13px] font-extrabold transition-colors sm:px-3 sm:text-sm',
                 viewMode === id
                   ? 'bg-white text-stone-900 shadow-sm ring-1 ring-stone-200/90'
                   : 'text-stone-600 hover:text-stone-900',
@@ -442,8 +444,8 @@ export function SundaySchedulePage() {
             </div>
           ) : (
             <>
-              {/* Мобильный компактный календарь */}
-              <div className="grid grid-cols-7 gap-px bg-stone-100 lg:hidden">
+              {/* Телефон: компактный календарь (точки статуса; имена — в списке ниже) */}
+              <div className="grid grid-cols-7 gap-px bg-stone-100 md:hidden">
                 {calendarDays.map((day) => {
                   const inMonth = isSameMonth(day, month);
                   const today = isToday(day);
@@ -459,8 +461,13 @@ export function SundaySchedulePage() {
                       type="button"
                       disabled={!clickable}
                       onClick={() => openSundayDate(dateKey)}
+                      aria-label={
+                        sunday
+                          ? `${format(day, 'd MMMM', { locale: ru })}${plan?.leader ? `, ведущий ${firstNameOnly(plan.leader.name)}` : ''}${plan?.preacher ? `, проповедник ${firstNameOnly(plan.preacher.name)}` : ''}`
+                          : format(day, 'd MMMM', { locale: ru })
+                      }
                       className={[
-                        'tap-highlight-transparent touch-manipulation flex min-h-[68px] flex-col items-center justify-start gap-0.5 bg-white p-1 active:bg-stone-50',
+                        'tap-highlight-transparent touch-manipulation flex min-h-[52px] flex-col items-center justify-start gap-1 bg-white p-1 active:bg-stone-50',
                         !inMonth ? 'opacity-35' : '',
                         today ? 'ring-1 ring-inset ring-primary/40 bg-primary/[0.03]' : '',
                         sunday && inMonth && !today ? 'bg-primary/[0.02]' : '',
@@ -476,27 +483,19 @@ export function SundaySchedulePage() {
                         {format(day, 'd')}
                       </span>
                       {sunday && (plan || canManage) ? (
-                        <div className="flex w-full flex-col items-center gap-0.5 px-0.5">
-                          <span
-                            className={[
-                              'h-1.5 w-1.5 rounded-full',
-                              plan
-                                ? hasAssignments
-                                  ? 'bg-primary'
-                                  : plan.has_program
-                                    ? 'bg-amber-400'
-                                    : 'bg-stone-300'
-                                : 'bg-stone-200',
-                            ].join(' ')}
-                            aria-hidden
-                          />
-                          <p className="w-full truncate text-center text-[8px] font-bold leading-tight text-stone-700">
-                            {plan ? firstNameOnly(plan.leader?.name) || (canManage ? '—' : '') : canManage ? '+' : ''}
-                          </p>
-                          <p className="w-full truncate text-center text-[8px] font-semibold leading-tight text-stone-500">
-                            {plan ? firstNameOnly(plan.preacher?.name) || (canManage ? '—' : '') : ''}
-                          </p>
-                        </div>
+                        <span
+                          className={[
+                            'h-1.5 w-1.5 rounded-full',
+                            plan
+                              ? hasAssignments
+                                ? 'bg-primary'
+                                : plan.has_program
+                                  ? 'bg-amber-400'
+                                  : 'bg-stone-300'
+                              : 'bg-stone-200',
+                          ].join(' ')}
+                          aria-hidden
+                        />
                       ) : (
                         <span className="min-h-[6px]" aria-hidden />
                       )}
@@ -505,8 +504,8 @@ export function SundaySchedulePage() {
                 })}
               </div>
 
-              {/* Десктоп: полная сетка с назначениями */}
-              <div className="hidden grid-cols-7 gap-1 p-2 lg:grid">
+              {/* Планшет/десктоп: полная сетка с назначениями */}
+              <div className="hidden grid-cols-7 gap-1 p-2 md:grid">
                 {calendarDays.map((day) => {
                   const inMonth = isSameMonth(day, month);
                   const today = isToday(day);
@@ -582,8 +581,8 @@ export function SundaySchedulePage() {
           </p>
         </section>
 
-        {/* Мобильный список воскресных служений */}
-        <section className="space-y-2 lg:hidden">
+        {/* Список воскресных служений — на телефоне под компактным календарём */}
+        <section className="space-y-2 md:hidden">
           <h2 className="px-1 text-sm font-extrabold text-stone-800">
             Служения — {capitalizeRuMonthTitle(format(month, 'LLLL', { locale: ru }))}
           </h2>

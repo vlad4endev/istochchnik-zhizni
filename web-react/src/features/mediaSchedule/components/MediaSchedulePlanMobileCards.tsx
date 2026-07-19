@@ -118,7 +118,7 @@ export function MediaSchedulePlanMobileCards({
                             <span className="text-xs font-semibold text-stone-500">{roleRow.name}</span>
                           </div>
                           <span
-                            className="shrink-0 rounded-lg px-2 py-1 text-[10px] font-extrabold"
+                            className="shrink-0 max-w-[5.5rem] truncate rounded-lg px-2 py-1 text-[10px] font-extrabold"
                             style={{
                               color: assignmentStatusBorderColor(assignment.status),
                               backgroundColor: `${assignmentStatusBorderColor(assignment.status)}14`,

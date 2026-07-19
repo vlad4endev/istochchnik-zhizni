@@ -80,7 +80,7 @@ export function UpcomingSundayServicesWidget({
       {plans.length === 0 ? (
         <p className="px-3 py-8 text-center text-sm font-semibold text-stone-500 sm:px-4">{emptyText}</p>
       ) : (
-        <div className="flex flex-col gap-2 p-3 sm:grid sm:grid-cols-3 sm:gap-3 sm:p-3">
+        <div className="flex flex-col gap-2 p-3 md:grid md:grid-cols-3 md:gap-3">
           {plans.map((plan, index) => {
             const isNext = index === 0;
             const body = (

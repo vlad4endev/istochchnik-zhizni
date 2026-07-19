@@ -56,8 +56,8 @@ function DayChips({
             className={[
               'inline-flex items-center justify-center rounded-lg font-extrabold text-primary',
               compact
-                ? 'min-h-[26px] min-w-[26px] bg-primary/10 px-1.5 py-0.5 text-[11px]'
-                : 'min-h-[28px] min-w-[28px] bg-primary/10 px-2 py-0.5 text-xs shadow-sm ring-1 ring-primary/10',
+                ? 'min-h-[36px] min-w-[36px] bg-primary/10 px-2 py-1 text-xs'
+                : 'min-h-[36px] min-w-[36px] bg-primary/10 px-2.5 py-1 text-xs shadow-sm ring-1 ring-primary/10 sm:min-h-[32px] sm:min-w-[32px]',
             ].join(' ')}
           >
             {day}
@@ -72,7 +72,7 @@ function DayChips({
     <button
       type="button"
       onClick={onClick}
-      className="tap-highlight-transparent w-full rounded-xl border border-transparent p-1 text-left transition hover:border-primary/20 hover:bg-primary/[0.04] active:bg-primary/[0.06]"
+      className="tap-highlight-transparent flex min-h-11 w-full items-center rounded-xl border border-transparent p-1.5 text-left transition hover:border-primary/20 hover:bg-primary/[0.04] active:bg-primary/[0.06]"
     >
       {content}
     </button>
@@ -203,14 +203,14 @@ function MobileSection({
               </span>
               <span className="min-w-0 text-sm font-extrabold leading-snug text-stone-900">{row.name}</span>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2">
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               {months.map((month, monthIndex) => (
                 <div
                   key={`${row.memberId}-${month.key}`}
-                  className="rounded-xl border border-stone-100 bg-stone-50/80 p-2"
+                  className="rounded-xl border border-stone-100 bg-stone-50/80 p-2.5"
                 >
-                  <p className="mb-1.5 truncate text-[10px] font-extrabold uppercase tracking-wide text-stone-500">
-                    {month.label.slice(0, 3)}
+                  <p className="mb-1.5 truncate text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
+                    {month.label}
                   </p>
                   <DayChips
                     value={row.monthCells[monthIndex] ?? ''}
