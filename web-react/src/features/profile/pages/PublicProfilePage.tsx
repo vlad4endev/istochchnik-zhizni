@@ -3,18 +3,14 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   LuCamera,
   LuChevronLeft,
-  LuEllipsis,
-  LuHeart,
   LuLayoutGrid,
-  LuMessageCircle,
-  LuPencil,
   LuPlus,
-  LuRepeat2,
   LuSettings,
-  LuTrash2,
   LuUser,
 } from 'react-icons/lu';
 
+import { CommentSheet } from '../../feed/components/CommentSheet';
+import { FeedPostCard, type FeedCardPost } from '../../feed/components/FeedPostCard';
 import { fetchMe, uploadMyAvatar, type MeResponse } from '../api';
 import {
   deleteProfilePost,
@@ -22,7 +18,6 @@ import {
   likeProfilePost,
   repostProfilePost,
   type ProfileFeedPost,
-  type ProfileFeedPostEmbedded,
   type ProfileFeedResponse,
   unlikeProfilePost,
 } from '../publicProfileApi';
@@ -45,66 +40,6 @@ function axiosMessage(err: unknown): string {
   return 'Не удалось загрузить профиль';
 }
 
-function sortMedia(post: Pick<ProfileFeedPost, 'media'>): ProfileFeedPost['media'] {
-  return [...post.media].sort((a, b) => a.order - b.order);
-}
-
-function formatPostDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleString('ru-RU', {
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return '';
-  }
-}
-
-function ProfilePostMediaBlock({ post }: { post: Pick<ProfileFeedPost, 'media'> }) {
-  const items = sortMedia(post);
-  if (items.length === 0) return null;
-  return (
-    <div className={styles.fbMedia}>
-      {items.map((m, idx) => {
-        const url = resolvePublicUrl(m.url) ?? '';
-        if (!url) return null;
-        if (m.type === 'video') {
-          return (
-            <video key={`${m.url}-${idx}`} src={url} controls playsInline preload="metadata" />
-          );
-        }
-        return <img key={`${m.url}-${idx}`} src={url} alt="" loading="lazy" />;
-      })}
-    </div>
-  );
-}
-
-function EmbeddedPostCard({ embed }: { embed: ProfileFeedPostEmbedded }) {
-  const av = resolvePublicUrl(embed.author.avatar_url) ?? undefined;
-  const uname = (embed.author.username ?? '').trim();
-  const isPlaceholderUsername = /^member-\d+$/i.test(uname);
-  const name =
-    memberNameFirstLast(embed.author) ||
-    embed.author.display_name?.trim() ||
-    (!isPlaceholderUsername && uname ? `@${uname}` : `Участник #${embed.member_id}`);
-  return (
-    <div className={styles.fbEmbed}>
-      <div className={styles.fbEmbedHead}>
-        <div className={styles.fbEmbedAvatar}>
-          {av ? <img src={av} alt="" /> : <LuUser className="h-4 w-4 m-1 opacity-40" aria-hidden />}
-        </div>
-        <span className={styles.fbEmbedWho}>{name}</span>
-      </div>
-      {embed.caption?.trim() ? <p className={styles.fbEmbedCaption}>{embed.caption.trim()}</p> : null}
-      <ProfilePostMediaBlock post={embed} />
-    </div>
-  );
-}
-
 export function PublicProfilePage() {
   const { username } = useParams<{ username: string }>();
   const location = useLocation();
@@ -125,11 +60,10 @@ export function PublicProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [editPost, setEditPost] = useState<ProfileFeedPost | null>(null);
-  const [postMenuId, setPostMenuId] = useState<string | null>(null);
+  const [commentPostId, setCommentPostId] = useState<string | null>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [postBusy, setPostBusy] = useState<Record<string, string | undefined>>({});
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
-  const postMenuRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     if (!decoded.trim()) {
@@ -158,22 +92,11 @@ export function PublicProfilePage() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    if (!postMenuId) return;
-    const onDown = (e: MouseEvent) => {
-      const el = postMenuRef.current;
-      if (el && !el.contains(e.target as Node)) {
-        setPostMenuId(null);
-      }
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [postMenuId]);
-
   const isOwner = me != null && data != null && me.id === data.profile.member_id;
   const postsVisible = data && (!data.profile.is_private || isOwner);
   const posts = postsVisible ? data.posts : [];
   const postsLabel = pluralizeRu(posts.length, ['публикация', 'публикации', 'публикаций']);
+  const isAdmin = (me?.app_role ?? '').toLowerCase() === 'admin';
 
   const displayName = useMemo(() => {
     if (!data) return decoded;
@@ -193,7 +116,6 @@ export function PublicProfilePage() {
     return u.length > 0 && /^member-\d+$/i.test(u);
   }, [data?.profile.username]);
 
-  /** Подпись @username под именем — только если это не дублирует заголовок. */
   const headerHandleLine = useMemo(() => {
     if (!data || isPlaceholderUsername) return null;
     const u = data.profile.username?.trim();
@@ -206,8 +128,19 @@ export function PublicProfilePage() {
 
   const avatarSrc = useMemo(() => {
     if (!data) return null;
-    const u = data.profile.avatar_url ?? null;
-    return resolvePublicUrl(u);
+    return resolvePublicUrl(data.profile.avatar_url ?? null);
+  }, [data]);
+
+  const fallbackAuthor = useMemo(() => {
+    if (!data) return undefined;
+    return {
+      member_id: data.profile.member_id,
+      username: data.profile.username,
+      first_name: data.profile.first_name,
+      last_name: data.profile.last_name,
+      display_name: data.profile.display_name,
+      avatar_url: data.profile.avatar_url,
+    };
   }, [data]);
 
   const patchPost = useCallback((postId: string, patch: Partial<ProfileFeedPost>) => {
@@ -228,9 +161,8 @@ export function PublicProfilePage() {
   }, []);
 
   const onDeletePost = useCallback(
-    async (post: ProfileFeedPost) => {
+    async (post: FeedCardPost) => {
       if (!window.confirm('Удалить эту публикацию? Действие необратимо.')) return;
-      setPostMenuId(null);
       const key = `del-${post.id}`;
       setPostBusy((b) => ({ ...b, [key]: '1' }));
       try {
@@ -250,7 +182,7 @@ export function PublicProfilePage() {
   );
 
   const onToggleLike = useCallback(
-    async (post: ProfileFeedPost) => {
+    async (post: FeedCardPost) => {
       if (!me) return;
       const busyKey = `like-${post.id}`;
       setPostBusy((b) => ({ ...b, [busyKey]: '1' }));
@@ -277,7 +209,7 @@ export function PublicProfilePage() {
   );
 
   const onRepost = useCallback(
-    async (post: ProfileFeedPost) => {
+    async (post: FeedCardPost) => {
       if (!me || post.reposted_by_me) return;
       const busyKey = `repost-${post.id}`;
       setPostBusy((b) => ({ ...b, [busyKey]: '1' }));
@@ -294,7 +226,7 @@ export function PublicProfilePage() {
         });
       }
     },
-    [me, patchPost, load],
+    [me, load],
   );
 
   const onPickAvatar = async (file: File | null) => {
@@ -348,8 +280,8 @@ export function PublicProfilePage() {
       <div className={profileRootCn} data-profile-root>
         <div className={styles.igError}>
           <p>{error ?? 'Профиль не найден'}</p>
-          <Link to="/dashboard" className={styles.igErrorLink}>
-            На главную
+          <Link to="/feed" className={styles.igErrorLink}>
+            В ленту
           </Link>
         </div>
       </div>
@@ -360,6 +292,8 @@ export function PublicProfilePage() {
     isPlaceholderUsername || !data.profile.username?.trim()
       ? displayName
       : `@${data.profile.username.trim()}`;
+
+  const profileLinkState = { backTo, backLabel };
 
   return (
     <div className={profileRootCn} data-profile-root>
@@ -494,124 +428,38 @@ export function PublicProfilePage() {
         </div>
 
         <main className={styles.fbFeed}>
-        {data.profile.is_private && !isOwner ? (
-          <div className={styles.igEmpty}>Этот профиль закрыт. Публикации доступны только владельцу.</div>
-        ) : posts.length === 0 ? (
-          <div className={styles.igEmpty}>
-            <p>Пока нет публикаций.</p>
-            {isOwner ? (
-              <button type="button" className={styles.igEmptyCta} onClick={() => setComposeOpen(true)}>
-                <LuPlus className="h-5 w-5" aria-hidden />
-                Создать первую публикацию
-              </button>
-            ) : null}
-          </div>
-        ) : (
-          posts.map((post) => {
-            const liked = post.liked_by_me ?? false;
-            const likeBusy = !!postBusy[`like-${post.id}`];
-            const repostBusy = !!postBusy[`repost-${post.id}`];
-            const reposted = post.reposted_by_me ?? false;
-            return (
-              <article key={post.id} className={styles.fbCard}>
-                <div className={styles.fbCardHead}>
-                  {isOwner ? (
-                    <div
-                      className={styles.fbCardMenuAnchor}
-                      ref={postMenuId === post.id ? postMenuRef : undefined}
-                    >
-                      <button
-                        type="button"
-                        className={styles.fbCardMenuBtn}
-                        aria-expanded={postMenuId === post.id}
-                        aria-haspopup="menu"
-                        aria-label="Действия с публикацией"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPostMenuId((id) => (id === post.id ? null : post.id));
-                        }}
-                      >
-                        <LuEllipsis className="h-5 w-5" strokeWidth={2.25} aria-hidden />
-                      </button>
-                      {postMenuId === post.id ? (
-                        <div className={styles.fbCardMenu} role="menu">
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className={styles.fbCardMenuItem}
-                            onClick={() => {
-                              setEditPost(post);
-                              setPostMenuId(null);
-                            }}
-                          >
-                            <LuPencil className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
-                            Редактировать
-                          </button>
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className={styles.fbCardMenuItemDanger}
-                            disabled={!!postBusy[`del-${post.id}`]}
-                            onClick={() => void onDeletePost(post)}
-                          >
-                            <LuTrash2 className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-                            Удалить
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  <div className={styles.fbCardHeadRow}>
-                    {post.shared_post ? (
-                      <p className={styles.fbRepostBadge}>
-                        <LuRepeat2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                        Репост
-                      </p>
-                    ) : (
-                      <span className={styles.fbCardHeadSpacer} aria-hidden />
-                    )}
-                    <time className={styles.fbCardTime} dateTime={post.created_at}>
-                      {formatPostDate(post.created_at)}
-                    </time>
-                  </div>
-                </div>
-                {post.caption?.trim() ? <p className={styles.fbCaption}>{post.caption.trim()}</p> : null}
-                {post.shared_post ? <EmbeddedPostCard embed={post.shared_post} /> : <ProfilePostMediaBlock post={post} />}
-                <div className={styles.fbActions}>
-                  <button
-                    type="button"
-                    className={`${styles.fbActionBtn} ${liked ? styles.fbActionBtnActive : ''}`}
-                    disabled={!me || likeBusy}
-                    onClick={() => void onToggleLike(post)}
-                    aria-pressed={liked}
-                  >
-                    <LuHeart
-                      className="h-4 w-4"
-                      strokeWidth={liked ? 2.5 : 2}
-                      fill={liked ? 'currentColor' : 'none'}
-                      aria-hidden
-                    />
-                    {post.like_count ?? 0}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.fbActionBtn}
-                    disabled={!me || repostBusy || reposted}
-                    onClick={() => void onRepost(post)}
-                    title={reposted ? 'Уже в вашей ленте' : 'Поделиться у себя'}
-                  >
-                    <LuRepeat2 className="h-4 w-4" aria-hidden />
-                    {post.repost_count ?? 0}
-                  </button>
-                  <span className={`${styles.fbActionBtn}`} style={{ cursor: 'default' }}>
-                    <LuMessageCircle className="h-4 w-4" aria-hidden />
-                    {post.comment_count ?? 0}
-                  </span>
-                </div>
-              </article>
-            );
-          })
-        )}
+          {data.profile.is_private && !isOwner ? (
+            <div className={styles.igEmpty}>Этот профиль закрыт. Публикации доступны только владельцу.</div>
+          ) : posts.length === 0 ? (
+            <div className={styles.igEmpty}>
+              <p>Пока нет публикаций.</p>
+              {isOwner ? (
+                <button type="button" className={styles.igEmptyCta} onClick={() => setComposeOpen(true)}>
+                  <LuPlus className="h-5 w-5" aria-hidden />
+                  Создать первую публикацию
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            posts.map((post) => (
+              <FeedPostCard
+                key={post.id}
+                post={post}
+                fallbackAuthor={fallbackAuthor}
+                canInteract={Boolean(me)}
+                isOwner={isOwner}
+                likeBusy={!!postBusy[`like-${post.id}`]}
+                repostBusy={!!postBusy[`repost-${post.id}`]}
+                deleteBusy={!!postBusy[`del-${post.id}`]}
+                profileLinkState={profileLinkState}
+                onToggleLike={(p) => void onToggleLike(p)}
+                onRepost={(p) => void onRepost(p)}
+                onOpenComments={(p) => setCommentPostId(p.id)}
+                onEdit={(p) => setEditPost(p as ProfileFeedPost)}
+                onDelete={(p) => void onDeletePost(p)}
+              />
+            ))
+          )}
         </main>
       </div>
 
@@ -637,6 +485,28 @@ export function PublicProfilePage() {
         post={editPost}
         onClose={() => setEditPost(null)}
         onSaved={(postId, caption) => patchPost(postId, { caption })}
+      />
+
+      <CommentSheet
+        open={commentPostId != null}
+        postId={commentPostId}
+        myMemberId={me?.id ?? null}
+        isAdmin={isAdmin}
+        profileLinkState={profileLinkState}
+        onClose={() => setCommentPostId(null)}
+        onCountChange={(postId, delta) => {
+          setData((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              posts: prev.posts.map((p) =>
+                p.id === postId
+                  ? { ...p, comment_count: Math.max(0, (p.comment_count ?? 0) + delta) }
+                  : p,
+              ),
+            };
+          });
+        }}
       />
     </div>
   );

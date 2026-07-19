@@ -39,6 +39,11 @@ const LazyPublicProfilePage = lazy(async () => {
   return { default: m.PublicProfilePage };
 });
 
+const LazyFeedPage = lazy(async () => {
+  const m = await import('../features/feed/pages/FeedPage');
+  return { default: m.FeedPage };
+});
+
 const DashboardPage = lazy(async () => {
   const m = await import('../features/dashboard/pages/DashboardPage');
   return { default: m.DashboardPage };
@@ -683,6 +688,18 @@ export function AppRouter() {
                 </Suspense>
               </RequireFullMember>
             </BlockParishionerGuest>
+          }
+        />
+        <Route
+          path="feed"
+          element={
+            <RequireFullMember>
+              <RequireSectionAccess sectionId="feed">
+                <ProfileRouteBoundary moduleName="лента" fallback={<RouteFallback />}>
+                  <LazyFeedPage />
+                </ProfileRouteBoundary>
+              </RequireSectionAccess>
+            </RequireFullMember>
           }
         />
         <Route

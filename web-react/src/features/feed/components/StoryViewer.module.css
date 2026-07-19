@@ -1,0 +1,158 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: #0c0a09;
+  color: #fafaf9;
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.16s ease;
+}
+
+.progressRow {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.65rem 0.65rem 0.35rem;
+  padding-top: calc(0.65rem + env(safe-area-inset-top, 0px));
+}
+
+.progressTrack {
+  flex: 1;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(250, 250, 249, 0.25);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: #fafaf9;
+  width: 0%;
+  border-radius: 999px;
+}
+
+.progressDone {
+  width: 100%;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.35rem 0.85rem 0.65rem;
+}
+
+.avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.time {
+  margin: 0;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.closeBtn,
+.deleteBtn {
+  display: grid;
+  place-items: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border: none;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.closeBtn:hover,
+.deleteBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.media {
+  max-width: 100%;
+  max-height: 100%;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0;
+  padding: 2.5rem 1.25rem 1.25rem;
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
+  font-size: 0.95rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.tapLeft,
+.tapRight {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 35%;
+  z-index: 2;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tapLeft {
+  left: 0;
+}
+
+.tapRight {
+  right: 0;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

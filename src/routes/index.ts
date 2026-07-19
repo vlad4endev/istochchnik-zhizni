@@ -13,8 +13,11 @@ import { requireAuthSession } from '../middleware/authSession';
 import { blockImpersonationForChats } from '../middleware/blockImpersonationForChats';
 import { requireBroadcastManager } from '../middleware/requireBroadcastManager';
 import {
+  deleteComment,
   deleteLike,
   deletePost,
+  getFeed,
+  getPostComments,
   getProfile,
   getProfileByUsername,
   patchPost,
@@ -24,6 +27,12 @@ import {
   postLike,
   postRepost,
 } from '../controllers/profileController';
+import {
+  deleteStory,
+  getStories,
+  postCreateStory,
+  postStoryView,
+} from '../controllers/storyController';
 import * as messenger from '../services/messengerService';
 import { profilePostUploadIfMultipart } from '../middleware/profileMediaUpload';
 
@@ -52,6 +61,13 @@ router.get('/profile/by-username/:username', getProfileByUsername);
 router.get('/profile/:id', getProfile);
 router.patch('/profile/settings', requireAuthSession, patchProfileSettings);
 
+router.get('/feed', requireAuthSession, getFeed);
+
+router.get('/stories', requireAuthSession, getStories);
+router.post('/stories', requireAuthSession, profilePostUploadIfMultipart, postCreateStory);
+router.post('/stories/:id/view', requireAuthSession, postStoryView);
+router.delete('/stories/:id', requireAuthSession, deleteStory);
+
 router.get('/events/unread-count', requireAuthSession, getUnreadEvents);
 router.post('/events/:id/read', requireAuthSession, postEventRead);
 
@@ -62,7 +78,9 @@ router.delete('/posts/:id/like', requireAuthSession, deleteLike);
 router.post('/posts/:id/repost', requireAuthSession, postRepost);
 router.patch('/posts/:id', requireAuthSession, patchPost);
 router.delete('/posts/:id', requireAuthSession, deletePost);
+router.get('/posts/:id/comments', requireAuthSession, getPostComments);
 router.post('/posts/:id/comment', requireAuthSession, postComment);
+router.delete('/posts/:id/comments/:commentId', requireAuthSession, deleteComment);
 
 type AuthReq = Request & { authUserId?: number };
 
