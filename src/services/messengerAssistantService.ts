@@ -13,7 +13,7 @@ import { AiAgentError, chatCompletion } from '../ai/llmClient';
 import type { ChatMessage } from '../ai/types';
 import { query as dbQuery } from '../config/db';
 import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
-import { encryptMessageText } from '../lib/messageCrypto';
+import { decryptMessageText, encryptMessageText } from '../lib/messageCrypto';
 import type { MessagePayload, MessageWithSender } from '../types/messenger';
 import { resolveEffectiveSystemPrompt, resolveLlmRuntimeConfig } from './aiSettingsService';
 import { getPrayerDataByDate } from './calendarService';
@@ -35,17 +35,10 @@ import { listPublishedSongs } from './songService';
 import { listSundayScheduleSlots } from './sundayScheduleSlots';
 
 const ASSISTANT_WELCOME =
-  'Здравствуйте! Я — ИИ помощник церкви «Источник жизни».\n\n' +
-  'Могу подсказать по событиям, программам служения (проповеди и темы), ' +
-  'песеннику, молитвенному календарю и расписаниям.\n\n' +
-  'Примеры вопросов:\n' +
-  '• Кто проповедует в следующее воскресенье и какая тема?\n' +
-  '• Какие события запланированы на ближайшие две недели?\n' +
-  '• Кто на музыке / медиа в ближайшее служение?\n' +
-  '• Что в молитвенном календаре на сегодня?\n' +
-  '• Найди песни про любовь или хвалу\n' +
-  '• Кто ведущий на ближайшее воскресенье?\n\n' +
-  'Я только читаю общие данные программы и не вижу личные переписки других участников. Просто напишите свой вопрос.';
+  'Здравствуйте! Я — ИИ помощник.\n\n' +
+  'Подскажу по событиям, проповедям, песням, молитвенному календарю и расписаниям.\n\n' +
+  'Выберите пример вопроса ниже или напишите свой. ' +
+  'Я читаю только общие данные программы и не вижу личные переписки.';
 
 const DEFAULT_ASSISTANT_SYSTEM_PROMPT = `Ты — «ИИ помощник», дружелюбный ассистент церковной платформы «Источник жизни».
 
@@ -548,6 +541,11 @@ export async function ensureAssistantConversation(
       `UPDATE conversations SET title = $2 WHERE id = $1::bigint AND title IS DISTINCT FROM $2`,
       [conversationId, MESSENGER_ASSISTANT_CHANNEL_TITLE],
     );
+    try {
+      await refreshAssistantWelcomeIfStale(conversationId);
+    } catch (e) {
+      console.warn('[assistant] welcome refresh failed:', e);
+    }
     return { conversationId, created: false };
   }
 
@@ -597,6 +595,54 @@ function isAssistantOwnedBy(metadata: unknown, memberId: number): boolean {
   if (!isMessengerAssistantChannelMetadata(metadata)) return false;
   const owner = String((metadata as Record<string, unknown>).owner_member_id ?? '');
   return owner === String(memberId);
+}
+
+/** Обновить устаревшее приветствие (длинный список примеров / старое имя), если в чате только оно. */
+async function refreshAssistantWelcomeIfStale(conversationId: string): Promise<void> {
+  const res = await dbQuery(
+    `SELECT id, content, sender_id, payload
+     FROM messages
+     WHERE conversation_id = $1::bigint AND COALESCE(is_deleted, FALSE) = FALSE
+     ORDER BY id ASC
+     LIMIT 3`,
+    [conversationId],
+  );
+  if (res.rows.length !== 1) return;
+  const row = res.rows[0] as {
+    id: unknown;
+    content?: unknown;
+    sender_id?: unknown;
+    payload?: unknown;
+  };
+  if (row.sender_id != null) return;
+  const payload =
+    row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload)
+      ? (row.payload as Record<string, unknown>)
+      : {};
+  if (payload.assistant !== true && String(payload.kind ?? '') !== MESSENGER_ASSISTANT_CHANNEL_KIND) {
+    return;
+  }
+
+  const current = decryptMessageText(String(row.content ?? '')).trim();
+  if (!current || current === ASSISTANT_WELCOME) return;
+  const looksStale =
+    current.includes('Примеры вопросов:') ||
+    current.includes('Ассистенот') ||
+    current.includes('Примеры вопросов');
+  if (!looksStale) return;
+
+  const contentForDb = encryptMessageText(ASSISTANT_WELCOME);
+  const nextPayload: MessagePayload = {
+    text: ASSISTANT_WELCOME,
+    assistant: true,
+    kind: MESSENGER_ASSISTANT_CHANNEL_KIND,
+  };
+  await dbQuery(
+    `UPDATE messages
+     SET content = $2, payload = $3::jsonb, updated_at = NOW()
+     WHERE id = $1::bigint`,
+    [String(row.id), contentForDb, JSON.stringify(nextPayload)],
+  );
 }
 
 /**
