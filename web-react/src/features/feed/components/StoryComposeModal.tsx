@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { LuImagePlus } from 'react-icons/lu';
 
 import { createStory } from '../feedApi';
@@ -40,6 +41,15 @@ export function StoryComposeModal({ open, onClose, onPublished }: StoryComposeMo
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
+  useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open]);
+
   if (!open) return null;
 
   const isVideo = file?.type.startsWith('video/') ?? false;
@@ -66,7 +76,7 @@ export function StoryComposeModal({ open, onClose, onPublished }: StoryComposeMo
     }
   };
 
-  return (
+  return createPortal(
     <div
       className={styles.backdrop}
       role="presentation"
@@ -128,6 +138,7 @@ export function StoryComposeModal({ open, onClose, onPublished }: StoryComposeMo
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
