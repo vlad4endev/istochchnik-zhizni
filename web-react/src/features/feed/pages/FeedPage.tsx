@@ -22,6 +22,7 @@ import {
   fetchChurchFeed,
   fetchStories,
   type FeedPost,
+  type FeedSortMode,
   type StoryAuthorGroup,
 } from '../feedApi';
 
@@ -64,6 +65,7 @@ export function FeedPage() {
   const [viewerGroup, setViewerGroup] = useState<StoryAuthorGroup | null>(null);
   const [busy, setBusy] = useState<Record<string, string | undefined>>({});
   const [headerScrolled, setHeaderScrolled] = useState(false);
+  const [sortMode, setSortMode] = useState<FeedSortMode>('smart');
 
   const storiesQ = useQuery({
     queryKey: STORIES_KEY,
@@ -83,7 +85,7 @@ export function FeedPage() {
     setLoading(true);
     setError(null);
     try {
-      const page = await fetchChurchFeed({ limit: 20 });
+      const page = await fetchChurchFeed({ limit: 20, sort: sortMode });
       setPosts(page.posts);
       setCursor(page.next_cursor);
     } catch {
@@ -93,7 +95,7 @@ export function FeedPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sortMode]);
 
   useEffect(() => {
     void loadFirst();
@@ -110,7 +112,7 @@ export function FeedPage() {
     if (!cursor || loadingMore) return;
     setLoadingMore(true);
     try {
-      const page = await fetchChurchFeed({ cursor, limit: 20 });
+      const page = await fetchChurchFeed({ cursor, limit: 20, sort: sortMode });
       setPosts((prev) => {
         const seen = new Set(prev.map((p) => p.id));
         const merged = [...prev];
@@ -125,7 +127,7 @@ export function FeedPage() {
     } finally {
       setLoadingMore(false);
     }
-  }, [cursor, loadingMore]);
+  }, [cursor, loadingMore, sortMode]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -260,7 +262,27 @@ export function FeedPage() {
   return (
     <div className={`${profileShell.profileRoot} ${styles.page}`} data-profile-root>
       <div className={`${styles.topBar} ${headerScrolled ? styles.topBarScrolled : ''}`}>
-        <h1 className={styles.title}>Лента</h1>
+        <div className={styles.topBarMain}>
+          <h1 className={styles.title}>Лента</h1>
+          <div className={styles.sortToggle} role="group" aria-label="Порядок ленты">
+            <button
+              type="button"
+              className={`${styles.sortBtn} ${sortMode === 'smart' ? styles.sortBtnActive : ''}`}
+              aria-pressed={sortMode === 'smart'}
+              onClick={() => setSortMode('smart')}
+            >
+              Для вас
+            </button>
+            <button
+              type="button"
+              className={`${styles.sortBtn} ${sortMode === 'recent' ? styles.sortBtnActive : ''}`}
+              aria-pressed={sortMode === 'recent'}
+              onClick={() => setSortMode('recent')}
+            >
+              Новые
+            </button>
+          </div>
+        </div>
         <div className={styles.topActions}>
           <button
             type="button"

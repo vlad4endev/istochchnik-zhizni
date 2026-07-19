@@ -309,11 +309,13 @@ export async function getFeed(req: Request, res: Response): Promise<void> {
   }
   const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : null;
   const limitRaw = typeof req.query.limit === 'string' ? Number(req.query.limit) : 20;
+  const sort = typeof req.query.sort === 'string' ? req.query.sort : 'smart';
   try {
     const data = await getChurchFeed({
       viewerMemberId: authUserId,
       cursor,
       limit: Number.isFinite(limitRaw) ? limitRaw : 20,
+      sort,
     });
     res.json(data);
   } catch (e) {

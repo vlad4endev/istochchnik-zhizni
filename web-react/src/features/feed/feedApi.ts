@@ -20,9 +20,12 @@ export type FeedPost = {
   shared_post: ProfileFeedPostEmbedded | null;
 };
 
+export type FeedSortMode = 'smart' | 'recent';
+
 export type ChurchFeedPage = {
   posts: FeedPost[];
   next_cursor: string | null;
+  sort?: FeedSortMode;
 };
 
 export type FeedComment = {
@@ -55,11 +58,13 @@ export type StoryAuthorGroup = {
 export async function fetchChurchFeed(params?: {
   cursor?: string | null;
   limit?: number;
+  sort?: FeedSortMode;
 }): Promise<ChurchFeedPage> {
   const { data } = await apiClient.get<ChurchFeedPage>('/api/feed', {
     params: {
       cursor: params?.cursor || undefined,
       limit: params?.limit ?? 20,
+      sort: params?.sort ?? 'smart',
     },
   });
   return data;
