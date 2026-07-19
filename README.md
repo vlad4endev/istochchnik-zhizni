@@ -101,6 +101,28 @@ VAPID_SUBJECT=mailto:your-support@domain.com
 
 - [Logo and icon guidelines](docs/logo-guidelines.md)
 
+## Обновление на сервере (одна команда)
+
+Из каталога клона на VPS:
+
+```bash
+npm run server:update
+# или: bash scripts/server-update.sh
+# или: npm run go:update
+```
+
+Скрипт `scripts/server-update.sh`:
+1. `git pull --ff-only` (сбрасывает локальные правки `package*.json`, мешающие merge)
+2. пересобирает образы и перезапускает Docker (`npm ci` внутри Dockerfile)
+3. применяет миграции (`initDb` + media/song CLI), если возможно
+4. ждёт health API/web и пишет лог в `.run/updates/`
+
+Полезные флаги:
+- `USE_PROD_OVERLAY=1` — overlay с API на loopback
+- `PREBUILT_WEB=1` / `HOST_BUILD=1` — сборка фронта на хосте + `release/web/`
+- `RUN_SUPABASE_PUSH=1` — дополнительно `supabase db push`
+- `SKIP_MIGRATE=1`, `OFFLINE=1`, `SKIP_DOCKER=1` — точечные пропуски шагов
+
 ## Docker Deployment (API + Postgres)
 
 ### Продакшен на VPS (полный чеклист)
@@ -115,6 +137,7 @@ VAPID_SUBJECT=mailto:your-support@domain.com
    ```bash
    bash scripts/deploy-production.sh
    ```
+   **Последующие обновления** с GitHub: `npm run server:update` (или `USE_PROD_OVERLAY=1 npm run server:update`).
    Локально / без ограничения API на loopback: `npm run prod:start` или `docker compose up -d --build`. Остановка этого режима: `npm run prod:stop`. Остановка после `prod:deploy`: `npm run prod:deploy:down`.
    **Только Postgres + API** (SPA на Vercel/Netlify): `cp .env.production .env`, задайте `POSTGRES_PASSWORD` и `DATABASE_URL` с хостом `db`, затем `npm run prod:vps:up` (`docker-compose.prod.yml`). Остановка: `npm run prod:vps:down`.
 4. **Проверка:** `http://<IP>:<WEB_PORT>/` — приложение; `http://<IP>:<WEB_PORT>/health` — health.
