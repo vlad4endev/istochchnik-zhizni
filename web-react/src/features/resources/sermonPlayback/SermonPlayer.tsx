@@ -255,9 +255,7 @@ export function SermonPlayer() {
     if (episode) saveProgress(episode.id, value, duration > 0 ? duration : null);
   }
 
-  const subtitle = parsed.author
-    ? parsed.author
-    : feedTitle ?? 'Проповедь';
+  const subtitle = parsed.author ? parsed.author : (feedTitle ?? 'Проповедь');
 
   return (
     <>
@@ -282,26 +280,30 @@ export function SermonPlayer() {
 
       <div
         className={[
-          'fixed inset-x-0 z-[80] px-3 transition-[bottom,transform] duration-300 ease-out lg:inset-x-auto lg:left-1/2 lg:w-full lg:max-w-lg lg:-translate-x-1/2 lg:px-6',
-          'bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] lg:bottom-6',
+          'fixed z-[80] w-full max-w-[100vw] transition-[bottom] duration-300 ease-out',
+          'left-0 right-0 px-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]',
+          'bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)]',
+          'lg:left-1/2 lg:right-auto lg:w-full lg:max-w-lg lg:-translate-x-1/2 lg:px-6 lg:pr-6 lg:bottom-6',
         ].join(' ')}
       >
         <div
           className={[
-            'overflow-hidden rounded-[1.75rem] border border-white/10 shadow-[0_20px_60px_rgba(28,25,23,0.35)]',
+            'overflow-hidden rounded-[1.35rem] border border-white/10 shadow-[0_20px_60px_rgba(28,25,23,0.35)] sm:rounded-[1.75rem]',
             'bg-[linear-gradient(165deg,color-mix(in_srgb,var(--primary)_92%,#1c1917)_0%,#1c1917_55%,#0c0a09_100%)]',
             'text-white',
-            expanded ? 'p-4 sm:p-5' : 'p-3',
+            expanded
+              ? 'max-h-[min(70dvh,32rem)] overflow-y-auto overscroll-contain p-3.5 sm:p-5'
+              : 'p-2.5 sm:p-3',
           ].join(' ')}
           role="region"
           aria-label="Плеер проповеди"
         >
           {!expanded ? (
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={() => setExpanded(true)}
-                className="relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/15"
+                className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-white/10 ring-1 ring-white/15 sm:h-12 sm:w-12 sm:rounded-2xl"
                 aria-label="Развернуть плеер"
               >
                 {episode.imageUrl ? (
@@ -323,11 +325,11 @@ export function SermonPlayer() {
               <button
                 type="button"
                 onClick={() => setExpanded(true)}
-                className="min-w-0 flex-1 text-left"
+                className="min-w-0 flex-1 touch-manipulation text-left"
               >
-                <p className="truncate text-[13px] font-extrabold leading-tight">{parsed.topic}</p>
-                <p className="mt-0.5 truncate text-[11px] font-semibold text-white/65">{subtitle}</p>
-                <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/15">
+                <p className="truncate text-[12px] font-extrabold leading-tight sm:text-[13px]">{parsed.topic}</p>
+                <p className="mt-0.5 truncate text-[10px] font-semibold text-white/65 sm:text-[11px]">{subtitle}</p>
+                <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/15 sm:mt-2">
                   <div
                     className="h-full rounded-full bg-white transition-[width] duration-150"
                     style={{ width: `${Math.round(ratio * 100)}%` }}
@@ -338,7 +340,7 @@ export function SermonPlayer() {
               <button
                 type="button"
                 onClick={() => void togglePlay()}
-                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-[var(--primary-dark)] shadow-lg shadow-black/25 transition active:scale-95"
+                className="inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full bg-white text-[var(--primary-dark)] shadow-lg shadow-black/25 transition active:scale-95"
                 aria-label={isPlaying ? 'Пауза' : 'Слушать'}
               >
                 {isPlaying ? (
@@ -351,26 +353,26 @@ export function SermonPlayer() {
               <button
                 type="button"
                 onClick={closePlayer}
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/80 ring-1 ring-white/10 hover:bg-white/15"
+                className="inline-flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-full bg-white/10 text-white/80 ring-1 ring-white/10 hover:bg-white/15"
                 aria-label="Закрыть плеер"
               >
                 <LuX className="h-4 w-4" strokeWidth={2} aria-hidden />
               </button>
             </div>
           ) : (
-            <div className="flex flex-col gap-4">
-              <div className="flex items-start gap-3">
-                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/15 sm:h-24 sm:w-24">
+            <div className="flex min-w-0 flex-col gap-3 sm:gap-4">
+              <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
+                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/15 sm:h-24 sm:w-24">
                   {episode.imageUrl ? (
                     <img src={episode.imageUrl} alt="" className="h-full w-full object-cover" />
                   ) : (
                     <div className="grid h-full w-full place-items-center text-white/55">
-                      <LuHeadphones className="h-8 w-8" strokeWidth={1.6} aria-hidden />
+                      <LuHeadphones className="h-7 w-7 sm:h-8 sm:w-8" strokeWidth={1.6} aria-hidden />
                     </div>
                   )}
                 </div>
                 <div className="min-w-0 flex-1 pt-0.5">
-                  <p className="line-clamp-2 text-[15px] font-extrabold leading-snug sm:text-base">
+                  <p className="line-clamp-2 text-[14px] font-extrabold leading-snug sm:text-base">
                     {parsed.topic}
                   </p>
                   <p className="mt-1 truncate text-xs font-semibold text-white/65">{subtitle}</p>
@@ -378,11 +380,11 @@ export function SermonPlayer() {
                     <p className="mt-0.5 truncate text-[11px] font-medium text-white/45">{feedTitle}</p>
                   ) : null}
                 </div>
-                <div className="flex shrink-0 flex-col gap-2">
+                <div className="flex shrink-0 gap-1.5 sm:flex-col sm:gap-2">
                   <button
                     type="button"
                     onClick={() => setExpanded(false)}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/10 hover:bg-white/15"
+                    className="inline-flex h-10 w-10 touch-manipulation items-center justify-center rounded-full bg-white/10 ring-1 ring-white/10 hover:bg-white/15"
                     aria-label="Свернуть"
                   >
                     <LuChevronsDown className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -390,7 +392,7 @@ export function SermonPlayer() {
                   <button
                     type="button"
                     onClick={closePlayer}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/10 hover:bg-white/15"
+                    className="inline-flex h-10 w-10 touch-manipulation items-center justify-center rounded-full bg-white/10 ring-1 ring-white/10 hover:bg-white/15"
                     aria-label="Закрыть плеер"
                   >
                     <LuX className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -398,37 +400,40 @@ export function SermonPlayer() {
                 </div>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="sr-only" htmlFor="sermon-scrubber">
                   Позиция воспроизведения
                 </label>
-                <input
-                  id="sermon-scrubber"
-                  ref={scrubRef}
-                  type="range"
-                  min={0}
-                  max={duration > 0 ? duration : 1}
-                  step={0.25}
-                  value={Math.min(position, duration || 1)}
-                  disabled={duration <= 0}
-                  onChange={(e) => onScrubInput(Number(e.target.value))}
-                  onPointerUp={(e) => onScrubCommit(Number((e.target as HTMLInputElement).value))}
-                  onKeyUp={(e) => onScrubCommit(Number((e.target as HTMLInputElement).value))}
-                  className="sermon-scrubber w-full"
-                  style={{ ['--scrub-pct' as string]: `${ratio * 100}%` }}
-                />
-                <div className="mt-1.5 flex items-center justify-between text-[11px] font-bold tabular-nums text-white/60">
+                <div className="flex h-8 items-center">
+                  <input
+                    id="sermon-scrubber"
+                    ref={scrubRef}
+                    type="range"
+                    min={0}
+                    max={duration > 0 ? duration : 1}
+                    step={0.25}
+                    value={Math.min(position, duration || 1)}
+                    disabled={duration <= 0}
+                    onChange={(e) => onScrubInput(Number(e.target.value))}
+                    onPointerUp={(e) => onScrubCommit(Number((e.target as HTMLInputElement).value))}
+                    onTouchEnd={(e) => onScrubCommit(Number((e.target as HTMLInputElement).value))}
+                    onKeyUp={(e) => onScrubCommit(Number((e.target as HTMLInputElement).value))}
+                    className="sermon-scrubber w-full touch-manipulation"
+                    style={{ ['--scrub-pct' as string]: `${ratio * 100}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-bold tabular-nums text-white/60">
                   <span>{formatClock(position)}</span>
                   <span>{formatClock(duration)}</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-2">
+              <div className="grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-1.5 sm:gap-2">
                 <button
                   type="button"
                   onClick={() => toggleFavorite(episode.id)}
                   className={[
-                    'inline-flex h-11 w-11 items-center justify-center rounded-2xl transition',
+                    'inline-flex h-11 w-11 touch-manipulation items-center justify-center rounded-2xl transition',
                     isFav ? 'bg-rose-500/25 text-rose-200 ring-1 ring-rose-300/40' : 'bg-white/10 text-white/80 ring-1 ring-white/10',
                   ].join(' ')}
                   aria-label={isFav ? 'Убрать из избранного' : 'В избранное'}
@@ -440,7 +445,7 @@ export function SermonPlayer() {
                 <button
                   type="button"
                   onClick={() => skip(-SKIP_SECONDS)}
-                  className="inline-flex h-12 min-w-[3.25rem] flex-col items-center justify-center rounded-2xl bg-white/10 text-white ring-1 ring-white/10 active:scale-95"
+                  className="inline-flex h-11 w-full min-w-0 touch-manipulation flex-col items-center justify-center rounded-2xl bg-white/10 text-white ring-1 ring-white/10 active:scale-95"
                   aria-label={`Назад на ${SKIP_SECONDS} секунд`}
                 >
                   <LuChevronsLeft className="h-5 w-5" strokeWidth={2.2} aria-hidden />
@@ -450,20 +455,20 @@ export function SermonPlayer() {
                 <button
                   type="button"
                   onClick={() => void togglePlay()}
-                  className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-white text-[var(--primary-dark)] shadow-xl shadow-black/30 transition active:scale-95"
+                  className="inline-flex h-12 w-12 touch-manipulation items-center justify-center rounded-full bg-white text-[var(--primary-dark)] shadow-xl shadow-black/30 transition active:scale-95 sm:h-14 sm:w-14"
                   aria-label={isPlaying ? 'Пауза' : 'Слушать'}
                 >
                   {isPlaying ? (
-                    <LuPause className="h-7 w-7" strokeWidth={2.3} aria-hidden />
+                    <LuPause className="h-6 w-6 sm:h-7 sm:w-7" strokeWidth={2.3} aria-hidden />
                   ) : (
-                    <LuPlay className="ml-0.5 h-7 w-7" strokeWidth={2.3} aria-hidden />
+                    <LuPlay className="ml-0.5 h-6 w-6 sm:h-7 sm:w-7" strokeWidth={2.3} aria-hidden />
                   )}
                 </button>
 
                 <button
                   type="button"
                   onClick={() => skip(SKIP_SECONDS)}
-                  className="inline-flex h-12 min-w-[3.25rem] flex-col items-center justify-center rounded-2xl bg-white/10 text-white ring-1 ring-white/10 active:scale-95"
+                  className="inline-flex h-11 w-full min-w-0 touch-manipulation flex-col items-center justify-center rounded-2xl bg-white/10 text-white ring-1 ring-white/10 active:scale-95"
                   aria-label={`Вперёд на ${SKIP_SECONDS} секунд`}
                 >
                   <LuChevronsRight className="h-5 w-5" strokeWidth={2.2} aria-hidden />
@@ -473,15 +478,15 @@ export function SermonPlayer() {
                 <button
                   type="button"
                   onClick={cycleRate}
-                  className="inline-flex h-11 min-w-[2.75rem] items-center justify-center rounded-2xl bg-white/10 px-2 text-xs font-extrabold tabular-nums text-white ring-1 ring-white/10"
+                  className="inline-flex h-11 min-w-[2.5rem] touch-manipulation items-center justify-center rounded-2xl bg-white/10 px-1.5 text-xs font-extrabold tabular-nums text-white ring-1 ring-white/10 sm:min-w-[2.75rem] sm:px-2"
                   aria-label={`Скорость ${rate}x`}
                   title="Скорость воспроизведения"
                 >
-                  {rate % 1 === 0 ? `${rate}×` : `${rate}×`}
+                  {rate}×
                 </button>
               </div>
 
-              <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
+              <p className="hidden text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40 sm:block">
                 Управление с экрана блокировки · продолжается в фоне
               </p>
             </div>
@@ -503,6 +508,7 @@ export function SermonPlayer() {
         .sermon-scrubber {
           -webkit-appearance: none;
           appearance: none;
+          width: 100%;
           height: 6px;
           border-radius: 999px;
           background: linear-gradient(
@@ -518,20 +524,30 @@ export function SermonPlayer() {
         .sermon-scrubber::-webkit-slider-thumb {
           -webkit-appearance: none;
           appearance: none;
-          width: 16px;
-          height: 16px;
+          width: 20px;
+          height: 20px;
+          border-radius: 999px;
+          background: #fff;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+          border: 0;
+          margin-top: -7px;
+        }
+        .sermon-scrubber::-webkit-slider-runnable-track {
+          height: 6px;
+          border-radius: 999px;
+        }
+        .sermon-scrubber::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
           border-radius: 999px;
           background: #fff;
           box-shadow: 0 2px 8px rgba(0,0,0,0.35);
           border: 0;
         }
-        .sermon-scrubber::-moz-range-thumb {
-          width: 16px;
-          height: 16px;
+        .sermon-scrubber::-moz-range-track {
+          height: 6px;
           border-radius: 999px;
-          background: #fff;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.35);
-          border: 0;
+          background: transparent;
         }
       `}</style>
     </>

@@ -145,20 +145,21 @@ export function PodcastsPage() {
     <div
       className={[
         'min-h-full bg-[var(--surface)] lg:pb-8',
-        playerOpen ? 'pb-[calc(var(--app-bottom-nav-total-height)+8.5rem)] lg:pb-36' : 'max-lg:pb-0',
+        /* main already pads for bottom nav — only reserve space for the sticky player */
+        playerOpen ? 'pb-24 max-lg:pb-[5.75rem] lg:pb-28' : 'max-lg:pb-0',
       ].join(' ')}
     >
       <div className={sectionHeroStickyClass}>
         <PageHeader title="Проповеди" />
       </div>
 
-      <div className="px-3 py-6 sm:px-4 sm:py-8 md:px-6 lg:px-8 xl:px-10">
+      <div className="py-5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] sm:py-8 sm:pl-[max(1rem,env(safe-area-inset-left,0px))] sm:pr-[max(1rem,env(safe-area-inset-right,0px))] md:pl-6 md:pr-6 lg:pl-8 lg:pr-8 xl:pl-10 xl:pr-10">
         <div className="mx-auto flex w-full max-w-lg flex-col gap-4 sm:gap-6 md:max-w-xl lg:max-w-4xl xl:max-w-6xl">
-          <section className="rounded-[1.35rem] border border-stone-200/70 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow-card)] sm:rounded-3xl sm:p-6 sm:shadow-[var(--shadow)] lg:p-8 shell:p-8">
-            <div className="mb-5 flex flex-col gap-4 sm:mb-6">
+          <section className="overflow-hidden rounded-[1.35rem] border border-stone-200/70 bg-[var(--surface-elevated)] p-3.5 shadow-[var(--shadow-card)] sm:rounded-3xl sm:p-6 sm:shadow-[var(--shadow)] lg:p-8 shell:p-8">
+            <div className="mb-4 flex flex-col gap-3.5 sm:mb-6 sm:gap-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70 sm:h-16 sm:w-16">
                     {feed?.imageUrl ? (
                       <img src={feed.imageUrl} alt="" className="h-full w-full object-cover" />
                     ) : (
@@ -185,13 +186,13 @@ export function PodcastsPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 self-start">
+                <div className="flex w-full flex-wrap items-center gap-2 self-start sm:w-auto">
                   {feed?.link ? (
                     <a
                       href={feed.link}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex h-10 items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-50 active:scale-[0.98]"
+                      className="inline-flex h-10 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-50 active:scale-[0.98] sm:flex-none sm:px-4"
                     >
                       <LuArrowUpRight className="h-4 w-4" strokeWidth={2} />
                       Сайт
@@ -200,7 +201,7 @@ export function PodcastsPage() {
                   {isAdmin ? (
                     <button
                       type="button"
-                      className="inline-flex h-10 items-center gap-2 rounded-xl bg-stone-100 px-4 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-200 hover:text-stone-900 active:scale-[0.98]"
+                      className="inline-flex h-10 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-stone-100 px-3 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-200 hover:text-stone-900 active:scale-[0.98] sm:flex-none sm:px-4"
                       onClick={() => {
                         setSettingsOpen(true);
                         setRssDraft('');
@@ -212,7 +213,7 @@ export function PodcastsPage() {
                   ) : null}
                   <button
                     type="button"
-                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-50 active:scale-[0.98] disabled:opacity-50"
+                    className="inline-flex h-10 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-50 active:scale-[0.98] disabled:opacity-50 sm:flex-none sm:px-4"
                     onClick={() => q.refetch()}
                     disabled={q.isFetching}
                   >
@@ -311,7 +312,7 @@ export function PodcastsPage() {
                 />
               </label>
 
-              <div className="flex flex-wrap gap-2" role="tablist" aria-label="Фильтр проповедей">
+              <div className="-mx-0.5 flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Фильтр проповедей">
                 {filterChips.map((chip) => {
                   const selected = listFilter === chip.id;
                   return (
@@ -322,7 +323,7 @@ export function PodcastsPage() {
                       aria-selected={selected}
                       onClick={() => setListFilter(chip.id)}
                       className={[
-                        'inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-extrabold transition',
+                        'inline-flex h-10 min-h-[40px] shrink-0 touch-manipulation items-center gap-1.5 rounded-xl px-3.5 text-xs font-extrabold transition',
                         selected
                           ? 'bg-stone-900 text-white shadow-sm'
                           : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
@@ -399,10 +400,10 @@ export function PodcastsPage() {
                   return (
                     <article
                       key={ep.id}
-                      className="overflow-hidden rounded-3xl border border-stone-200/70 bg-white/70 p-4 shadow-sm transition hover:bg-white sm:p-5"
+                      className="overflow-hidden rounded-2xl border border-stone-200/70 bg-white/70 p-3.5 shadow-sm transition hover:bg-white sm:rounded-3xl sm:p-5"
                     >
-                      <div className="flex min-w-0 items-start gap-3 sm:gap-4">
-                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70 sm:h-16 sm:w-16">
+                      <div className="flex min-w-0 items-start gap-2.5 sm:gap-4">
+                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-stone-100 ring-1 ring-stone-200/70 sm:h-16 sm:w-16 sm:rounded-2xl">
                           {ep.imageUrl ? (
                             <img src={ep.imageUrl} alt="" className="h-full w-full object-cover" />
                           ) : (
@@ -440,25 +441,27 @@ export function PodcastsPage() {
                               <div className="h-full bg-primary" style={{ width: `${Math.round(ratio * 100)}%` }} />
                             </div>
                           ) : null}
-                          <div className="mt-3 flex w-full min-w-0 items-center gap-2">
+                          <div className="mt-3 flex w-full min-w-0 items-center gap-1.5 sm:gap-2">
                             <button
                               type="button"
                               onClick={() => playEpisode(ep, feed?.title)}
                               className={[
-                                'inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl px-3 text-sm font-extrabold shadow-sm transition sm:flex-none sm:px-4',
+                                'inline-flex h-11 min-h-[44px] min-w-0 flex-1 touch-manipulation items-center justify-center gap-2 rounded-2xl px-3 text-sm font-extrabold shadow-sm transition sm:flex-none sm:px-4',
                                 isActive
                                   ? 'bg-primary text-white shadow-primary/25'
                                   : 'bg-stone-900 text-white hover:bg-stone-800',
                               ].join(' ')}
                             >
                               <LuPlay className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
-                              {isActive ? (isPlaying ? 'Играет' : 'В плеере') : 'Слушать'}
+                              <span className="truncate">
+                                {isActive ? (isPlaying ? 'Играет' : 'В плеере') : 'Слушать'}
+                              </span>
                             </button>
                             <button
                               type="button"
                               onClick={() => toggleFavorite(ep.id)}
                               className={[
-                                'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl shadow-sm transition sm:w-auto sm:gap-2 sm:px-3',
+                                'inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 touch-manipulation items-center justify-center rounded-2xl shadow-sm transition sm:w-auto sm:min-w-0 sm:gap-2 sm:px-3',
                                 isFav
                                   ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 hover:bg-rose-100'
                                   : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
@@ -476,7 +479,7 @@ export function PodcastsPage() {
                               <button
                                 type="button"
                                 onClick={() => void tryShare(ep.title, ep.pageUrl!)}
-                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                                className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 touch-manipulation items-center justify-center rounded-2xl border border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
                                 aria-label="Поделиться"
                                 title="Поделиться"
                               >
@@ -488,7 +491,7 @@ export function PodcastsPage() {
                                 href={ep.pageUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                                className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 touch-manipulation items-center justify-center rounded-2xl border border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
                                 aria-label="Открыть на сайте"
                                 title="Открыть"
                               >
