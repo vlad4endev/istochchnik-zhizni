@@ -213,9 +213,30 @@ export async function sendNotificationToSubscription(
   } catch (err: unknown) {
     const statusCode =
       err && typeof err === 'object' && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
+    const body =
+      err && typeof err === 'object' && 'body' in err ? String((err as { body?: unknown }).body ?? '') : '';
     if (statusCode === 404 || statusCode === 410) {
       // Subscription has expired or is no longer valid
-      console.log('Subscription expired. Removing from DB.', sub.endpoint);
+      console.log('[push] Subscription expired. Removing from DB.', sub.endpoint);
+      await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
+    } else if (
+      statusCode === 403 &&
+      (/vapid|UnauthorizedRegistration|InvalidToken|mismatch/i.test(body) ||
+        /vapid|UnauthorizedRegistration|InvalidToken|mismatch/i.test(
+          err instanceof Error ? err.message : String(err ?? ''),
+        ))
+    ) {
+      // VAPID key rotated or subscription bound to another applicationServerKey
+      console.warn('[push] VAPID/auth mismatch (403). Removing subscription.', {
+        endpointHost: (() => {
+          try {
+            return new URL(sub.endpoint).host;
+          } catch {
+            return 'unknown';
+          }
+        })(),
+        body: body.slice(0, 200),
+      });
       await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
     } else if (isPushNetworkTimeoutErr(err)) {
       const now = Date.now();
@@ -227,7 +248,18 @@ export async function sendNotificationToSubscription(
         );
       }
     } else {
-      console.error('Error sending push notification', err);
+      console.error('[push] Error sending web push notification', {
+        statusCode,
+        endpointHost: (() => {
+          try {
+            return new URL(sub.endpoint).host;
+          } catch {
+            return 'unknown';
+          }
+        })(),
+        message: err instanceof Error ? err.message : err,
+        body: body.slice(0, 300),
+      });
     }
   }
 }
@@ -410,11 +442,26 @@ export async function sendPush(
     });
     for (let j = 0; j < res.responses.length; j++) {
       const r = res.responses[j];
-      if (!r.success && isUnrecoverableFcmErrorCode(r.error?.code)) {
-        const t = slice[j];
+      if (r.success) continue;
+      const t = slice[j];
+      const code = r.error?.code;
+      const message = r.error?.message;
+      if (isUnrecoverableFcmErrorCode(code)) {
+        console.warn('[push] FCM token invalid — removing', {
+          memberId,
+          code,
+          tokenPrefix: t ? t.slice(0, 12) : null,
+        });
         if (t) {
           await deleteFcmToken(t);
         }
+      } else {
+        console.warn('[push] FCM send failed', {
+          memberId,
+          code: code ?? 'unknown',
+          message: message ?? null,
+          tokenPrefix: t ? t.slice(0, 12) : null,
+        });
       }
     }
   }

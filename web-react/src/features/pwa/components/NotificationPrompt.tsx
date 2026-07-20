@@ -32,10 +32,20 @@ export function NotificationPrompt() {
   }, [token, status, isSubscribed, loading, dismissed]);
 
   const handleAllow = async () => {
-    const success = await subscribe();
-    if (success) {
+    const result = await subscribe();
+    if (result.ok) {
       setVisible(false);
+      return;
     }
+    // Keep banner visible; surface the failure so users are not left thinking push is on.
+    const detail =
+      result.error?.trim() ||
+      'Не удалось сохранить подписку. Проверьте интернет и попробуйте снова — или откройте Профиль → Уведомления.';
+    window.dispatchEvent(
+      new CustomEvent('app:toast', {
+        detail: { message: detail, kind: 'error' as const },
+      }),
+    );
   };
 
   const handleDismiss = () => {

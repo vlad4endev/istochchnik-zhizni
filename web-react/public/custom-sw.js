@@ -214,12 +214,21 @@ self.addEventListener('pushsubscriptionchange', function (event) {
     (async function () {
       const old = event.oldSubscription;
       if (!old || typeof old.options !== 'object') return;
-      const newSubscription = await self.registration.pushManager.subscribe(old.options);
-      await fetch('/api/notifications/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSubscription),
-      });
+      try {
+        const newSubscription = await self.registration.pushManager.subscribe(old.options);
+        const res = await fetch('/api/notifications/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newSubscription),
+          credentials: 'include',
+          mode: 'same-origin',
+        });
+        if (!res.ok) {
+          console.warn('[sw] pushsubscriptionchange: subscribe failed', res.status);
+        }
+      } catch (e) {
+        console.warn('[sw] pushsubscriptionchange failed', e);
+      }
     })(),
   );
 });
