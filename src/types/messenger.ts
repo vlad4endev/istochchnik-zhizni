@@ -33,7 +33,8 @@ export type MessagePayloadType =
   | 'image'
   | 'file'
   | 'poll'
-  | 'access_request';
+  | 'access_request'
+  | 'story_reply';
 
 export interface ParticipantRow {
   conversation_id: string;

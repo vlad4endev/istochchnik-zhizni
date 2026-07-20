@@ -1,28 +1,83 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 130;
-  background: #0c0a09;
+  z-index: 220;
+  background: #000;
   color: #fafaf9;
-  display: flex;
-  flex-direction: column;
+  touch-action: none;
+  overscroll-behavior: none;
   animation: fadeIn 0.16s ease;
+}
+
+.overlayDragging {
+  transition: none;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.blurLayer {
+  position: absolute;
+  inset: -24px;
+  width: calc(100% + 48px);
+  height: calc(100% + 48px);
+  object-fit: cover;
+  filter: blur(28px) saturate(1.1);
+  transform: scale(1.08);
+  pointer-events: none;
+  user-select: none;
+}
+
+.blurScrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.42);
+  pointer-events: none;
+}
+
+.media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: transparent;
+  pointer-events: none;
+  user-select: none;
+}
+
+.mediaVideo {
+  object-fit: cover;
+}
+
+.chrome {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.22) 55%, transparent 100%);
+  pointer-events: none;
 }
 
 .progressRow {
   display: flex;
-  gap: 0.25rem;
-  padding: 0.65rem 0.65rem 0.35rem;
-  padding-top: calc(0.65rem + env(safe-area-inset-top, 0px));
+  gap: 0.3rem;
+  padding: 0.7rem 0.7rem 0.4rem;
+  padding-top: calc(0.55rem + env(safe-area-inset-top, 0px));
 }
 
 .progressTrack {
   flex: 1;
-  height: 2px;
+  height: 2.5px;
   border-radius: 999px;
-  background: rgba(250, 250, 249, 0.25);
+  background: rgba(250, 250, 249, 0.28);
   overflow: hidden;
 }
 
@@ -41,7 +96,8 @@
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  padding: 0.35rem 0.85rem 0.65rem;
+  padding: 0.2rem 0.65rem 0.85rem;
+  pointer-events: auto;
 }
 
 .avatar {
@@ -51,6 +107,7 @@
   overflow: hidden;
   background: rgba(255, 255, 255, 0.12);
   flex-shrink: 0;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.35);
 }
 
 .avatar img {
@@ -71,49 +128,41 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
 .time {
   margin: 0;
   font-size: 0.75rem;
-  opacity: 0.7;
+  opacity: 0.78;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 .closeBtn,
 .deleteBtn {
   display: grid;
   place-items: center;
-  width: 2.35rem;
-  height: 2.35rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border: none;
-  border-radius: 0.65rem;
+  border-radius: 9999px;
   background: transparent;
   color: inherit;
   cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.closeBtn:hover,
-.deleteBtn:hover {
-  background: rgba(255, 255, 255, 0.1);
+@media (hover: hover) and (pointer: fine) {
+  .closeBtn:hover,
+  .deleteBtn:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
 }
 
-.stage {
-  flex: 1;
-  min-height: 0;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.media {
-  max-width: 100%;
-  max-height: 100%;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: #000;
+.closeBtn:active,
+.deleteBtn:active {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .caption {
@@ -121,33 +170,139 @@
   left: 0;
   right: 0;
   bottom: 0;
+  z-index: 4;
   margin: 0;
-  padding: 2.5rem 1.25rem 1.25rem;
+  padding: 2.75rem 1.25rem 1.25rem;
+  padding-left: calc(1.25rem + env(safe-area-inset-left, 0px));
+  padding-right: calc(1.25rem + env(safe-area-inset-right, 0px));
   padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
   font-size: 0.95rem;
   line-height: 1.45;
   white-space: pre-wrap;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
-.tapLeft,
-.tapRight {
+.withReply .caption {
+  bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 1.1rem;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.55));
+}
+
+.footer {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 35%;
-  z-index: 2;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-}
-
-.tapLeft {
   left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  padding-left: calc(0.75rem + env(safe-area-inset-left, 0px));
+  padding-right: calc(0.75rem + env(safe-area-inset-right, 0px));
+  padding-bottom: calc(0.7rem + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.62) 28%, rgba(0, 0, 0, 0.78));
+  pointer-events: auto;
 }
 
-.tapRight {
-  right: 0;
+.replyFlash {
+  margin: 0;
+  align-self: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(8px);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fafaf9;
+}
+
+.reactionRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.2rem;
+  padding: 0 0.1rem;
+}
+
+.reactionBtn {
+  flex: 1;
+  min-width: 0;
+  height: 2.55rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s ease, background-color 0.12s ease;
+}
+
+.reactionBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.reactionBtn:not(:disabled):active {
+  transform: scale(1.18);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.replyForm {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.replyInput {
+  flex: 1;
+  min-width: 0;
+  height: 2.65rem;
+  border-radius: 999px;
+  border: 1.5px solid rgba(250, 250, 249, 0.55);
+  background: rgba(0, 0, 0, 0.28);
+  color: #fafaf9;
+  padding: 0 1rem;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.replyInput::placeholder {
+  color: rgba(250, 250, 249, 0.62);
+}
+
+.replyInput:focus {
+  border-color: rgba(250, 250, 249, 0.9);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.replyInput:disabled {
+  opacity: 0.6;
+}
+
+.replySend {
+  display: grid;
+  place-items: center;
+  width: 2.65rem;
+  height: 2.65rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(250, 250, 249, 0.18);
+  color: #fafaf9;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.replySend:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.replySend:not(:disabled):active {
+  background: rgba(250, 250, 249, 0.28);
 }
 
 @keyframes fadeIn {
@@ -156,5 +311,15 @@
   }
   to {
     opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay {
+    animation: none;
+  }
+
+  .reactionBtn {
+    transition: none;
   }
 }

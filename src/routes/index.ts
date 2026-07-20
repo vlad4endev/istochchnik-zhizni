@@ -37,6 +37,7 @@ import {
   deleteStory,
   getStories,
   postCreateStory,
+  postStoryReply,
   postStoryView,
 } from '../controllers/storyController';
 import * as messenger from '../services/messengerService';
@@ -75,6 +76,7 @@ router.post('/feed/mark-seen', requireAuthSession, postFeedMarkSeen);
 router.get('/stories', requireAuthSession, getStories);
 router.post('/stories', requireAuthSession, profilePostUploadIfMultipart, postCreateStory);
 router.post('/stories/:id/view', requireAuthSession, postStoryView);
+router.post('/stories/:id/reply', requireAuthSession, postStoryReply);
 router.delete('/stories/:id', requireAuthSession, deleteStory);
 
 router.get('/events/unread-count', requireAuthSession, getUnreadEvents);

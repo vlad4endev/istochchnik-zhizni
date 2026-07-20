@@ -180,3 +180,18 @@ export async function markStoryViewed(storyId: string): Promise<void> {
 export async function deleteStory(storyId: string): Promise<void> {
   await apiClient.delete(`/api/stories/${encodeURIComponent(storyId)}`);
 }
+
+/** Ответ/реакция на историю → сообщение в личный чат с автором. */
+export async function replyToStory(
+  storyId: string,
+  body: { text?: string; reaction?: string },
+): Promise<{ conversationId: string }> {
+  const { data } = await apiClient.post<{ conversationId?: string }>(
+    `/api/stories/${encodeURIComponent(storyId)}/reply`,
+    {
+      text: body.text?.trim() || undefined,
+      reaction: body.reaction?.trim() || undefined,
+    },
+  );
+  return { conversationId: String(data?.conversationId ?? '') };
+}
