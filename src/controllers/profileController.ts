@@ -13,6 +13,7 @@ import {
   likeComment,
   likePost,
   listComments,
+  listPostLikers,
   markFeedSeen,
   patchMyProfileSettings,
   unlikeComment,
@@ -302,6 +303,34 @@ export async function postLike(req: Request, res: Response): Promise<void> {
   } catch (e) {
     console.error('[profile] like error:', e);
     res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function getPostLikers(req: Request, res: Response): Promise<void> {
+  const authUserId = (req as AuthReq).authUserId;
+  if (!authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const postId = String(req.params.id ?? '').trim();
+  if (!postId) {
+    res.status(400).json({ error: 'Invalid post id' });
+    return;
+  }
+  const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : null;
+  const limitRaw = typeof req.query.limit === 'string' ? Number(req.query.limit) : 40;
+  try {
+    const data = await listPostLikers({
+      postId,
+      cursor,
+      limit: Number.isFinite(limitRaw) ? limitRaw : 40,
+    });
+    res.json(data);
+  } catch (e) {
+    console.error('[profile] list likers error:', e);
+    const msg = e instanceof Error ? e.message : 'Failed to load likers';
+    const code = msg.includes('не найдена') ? 404 : 500;
+    res.status(code).json({ error: code === 404 ? msg : 'Database error' });
   }
 }
 

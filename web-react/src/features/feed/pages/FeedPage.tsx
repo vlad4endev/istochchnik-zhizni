@@ -14,6 +14,7 @@ import {
 import profileShell from '../../profile/profileShell.module.css';
 import { CommentSheet } from '../components/CommentSheet';
 import { FeedPostCard, type FeedCardPost } from '../components/FeedPostCard';
+import { LikersSheet } from '../components/LikersSheet';
 import { StoryComposeModal } from '../components/StoryComposeModal';
 import { StoryRingBar } from '../components/StoryRingBar';
 import { StoryViewer } from '../components/StoryViewer';
@@ -66,6 +67,7 @@ export function FeedPage() {
     postId: string;
     authorName: string | null;
   } | null>(null);
+  const [likersPostId, setLikersPostId] = useState<string | null>(null);
   const [viewerGroup, setViewerGroup] = useState<StoryAuthorGroup | null>(null);
   const [busy, setBusy] = useState<Record<string, string | undefined>>({});
   const [headerScrolled, setHeaderScrolled] = useState(false);
@@ -421,6 +423,7 @@ export function FeedPage() {
                   null;
                 setCommentTarget({ postId: p.id, authorName });
               }}
+              onOpenLikers={(p) => setLikersPostId(p.id)}
             />
           ))}
 
@@ -440,13 +443,16 @@ export function FeedPage() {
 
       <motion.button
         type="button"
-        className={`${styles.fab} ${commentTarget != null ? styles.fabHidden : ''}`}
+        className={`${styles.fab} ${commentTarget != null || likersPostId != null ? styles.fabHidden : ''}`}
         aria-label="Новая публикация"
-        aria-hidden={commentTarget != null}
-        tabIndex={commentTarget != null ? -1 : 0}
+        aria-hidden={commentTarget != null || likersPostId != null}
+        tabIndex={commentTarget != null || likersPostId != null ? -1 : 0}
         onClick={() => setComposeOpen(true)}
         initial={reduceMotion ? false : { scale: 0.7, opacity: 0 }}
-        animate={{ scale: commentTarget != null ? 0.9 : 1, opacity: commentTarget != null ? 0 : 1 }}
+        animate={{
+          scale: commentTarget != null || likersPostId != null ? 0.9 : 1,
+          opacity: commentTarget != null || likersPostId != null ? 0 : 1,
+        }}
         transition={{ type: 'spring', stiffness: 380, damping: 18, delay: 0.15 }}
         whileTap={reduceMotion ? undefined : { scale: 0.94 }}
       >
@@ -486,6 +492,13 @@ export function FeedPage() {
             ),
           );
         }}
+      />
+
+      <LikersSheet
+        open={likersPostId != null}
+        postId={likersPostId}
+        profileLinkState={profileLinkState}
+        onClose={() => setLikersPostId(null)}
       />
 
       <StoryViewer
