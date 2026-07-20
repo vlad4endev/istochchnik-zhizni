@@ -11,6 +11,7 @@ import {
 
 import { CommentSheet } from '../../feed/components/CommentSheet';
 import { FeedPostCard, type FeedCardPost } from '../../feed/components/FeedPostCard';
+import { LikersSheet } from '../../feed/components/LikersSheet';
 import { fetchMe, uploadMyAvatar, type MeResponse } from '../api';
 import {
   deleteProfilePost,
@@ -65,6 +66,7 @@ export function PublicProfilePage() {
     postId: string;
     authorName: string | null;
   } | null>(null);
+  const [likersPostId, setLikersPostId] = useState<string | null>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [postBusy, setPostBusy] = useState<Record<string, string | undefined>>({});
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
@@ -488,6 +490,7 @@ export function PublicProfilePage() {
                     null;
                   setCommentTarget({ postId: p.id, authorName });
                 }}
+                onOpenLikers={(p) => setLikersPostId(p.id)}
                 onEdit={(p) => setEditPost(p as ProfileFeedPost)}
                 onDelete={(p) => void onDeletePost(p)}
               />
@@ -542,6 +545,13 @@ export function PublicProfilePage() {
             };
           });
         }}
+      />
+
+      <LikersSheet
+        open={likersPostId != null}
+        postId={likersPostId}
+        profileLinkState={profileLinkState}
+        onClose={() => setLikersPostId(null)}
       />
     </div>
   );

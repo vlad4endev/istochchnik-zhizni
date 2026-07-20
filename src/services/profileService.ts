@@ -614,6 +614,91 @@ export async function unlikePost(postId: string, memberId: number): Promise<{ li
   return { like_count: Number((cnt.rows[0] as { c?: unknown } | undefined)?.c ?? 0), removed: (del.rowCount ?? 0) > 0 };
 }
 
+export type PostLiker = ProfilePostAuthor & {
+  liked_at: string;
+};
+
+export type PostLikersPage = {
+  likers: PostLiker[];
+  next_cursor: string | null;
+  total: number;
+};
+
+function encodeLikersCursor(createdAt: string, memberId: number): string {
+  return `${createdAt}|${memberId}`;
+}
+
+function decodeLikersCursor(raw: string | null | undefined): { createdAt: string; memberId: number } | null {
+  if (!raw || !raw.trim()) return null;
+  const i = raw.lastIndexOf('|');
+  if (i <= 0) return null;
+  const createdAt = raw.slice(0, i).trim();
+  const memberId = Number(raw.slice(i + 1));
+  if (!createdAt || !Number.isInteger(memberId) || memberId <= 0) return null;
+  return { createdAt, memberId };
+}
+
+/** Кто поставил лайк публикации (как список «Отметки „Нравится“» в Instagram). */
+export async function listPostLikers(params: {
+  postId: string;
+  limit?: number;
+  cursor?: string | null;
+}): Promise<PostLikersPage> {
+  const postId = String(params.postId ?? '').trim();
+  if (!/^\d+$/.test(postId)) {
+    throw new Error('Публикация не найдена');
+  }
+  const exists = await query(`SELECT 1 FROM profile_posts WHERE id = $1::bigint LIMIT 1`, [postId]);
+  if ((exists.rowCount ?? 0) === 0) {
+    throw new Error('Публикация не найдена');
+  }
+
+  const limit = Math.min(Math.max(Number(params.limit) || 40, 1), 80);
+  const decoded = decodeLikersCursor(params.cursor);
+
+  const totalRes = await query(
+    `SELECT COUNT(*)::int AS c FROM profile_post_likes WHERE post_id = $1::bigint`,
+    [postId],
+  );
+  const total = Number((totalRes.rows[0] as { c?: unknown } | undefined)?.c ?? 0);
+
+  const rowsRes = decoded
+    ? await query(
+        `SELECT l.member_id, l.created_at::text AS liked_at
+         FROM profile_post_likes l
+         WHERE l.post_id = $1::bigint
+           AND (l.created_at, l.member_id) < ($2::timestamptz, $3::int)
+         ORDER BY l.created_at DESC, l.member_id DESC
+         LIMIT $4`,
+        [postId, decoded.createdAt, decoded.memberId, limit + 1],
+      )
+    : await query(
+        `SELECT l.member_id, l.created_at::text AS liked_at
+         FROM profile_post_likes l
+         WHERE l.post_id = $1::bigint
+         ORDER BY l.created_at DESC, l.member_id DESC
+         LIMIT $2`,
+        [postId, limit + 1],
+      );
+
+  const rows = rowsRes.rows as Array<{ member_id: number; liked_at: string }>;
+  const page = rows.slice(0, limit);
+  const authors = await loadAuthorsForMemberIds(page.map((r) => r.member_id));
+  const likers: PostLiker[] = page
+    .map((r) => {
+      const a = authors.get(r.member_id);
+      if (!a) return null;
+      return { ...a, liked_at: r.liked_at };
+    })
+    .filter((x): x is PostLiker => x != null);
+
+  const last = page[page.length - 1];
+  const next_cursor =
+    rows.length > limit && last ? encodeLikersCursor(last.liked_at, last.member_id) : null;
+
+  return { likers, next_cursor, total };
+}
+
 export type FeedPost = {
   id: string;
   member_id: number;

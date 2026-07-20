@@ -21,6 +21,7 @@ import {
   getFeed,
   getFeedUnread,
   getPostComments,
+  getPostLikers,
   getProfile,
   getProfileByUsername,
   patchPost,
@@ -83,6 +84,7 @@ router.post('/events/:id/read', requireAuthSession, postEventRead);
 router.post('/posts', requireAuthSession, profilePostUploadIfMultipart, postCreatePost);
 router.post('/posts/:id/like', requireAuthSession, postLike);
 router.delete('/posts/:id/like', requireAuthSession, deleteLike);
+router.get('/posts/:id/likes', requireAuthSession, getPostLikers);
 router.post('/posts/:id/repost', requireAuthSession, postRepost);
 router.patch('/posts/:id', requireAuthSession, patchPost);
 router.delete('/posts/:id', requireAuthSession, deletePost);

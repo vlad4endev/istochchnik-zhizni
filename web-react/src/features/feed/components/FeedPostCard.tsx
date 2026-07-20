@@ -177,6 +177,8 @@ export type FeedPostCardProps = {
   onToggleLike: (post: FeedCardPost) => void;
   onRepost: (post: FeedCardPost) => void;
   onOpenComments: (post: FeedCardPost) => void;
+  /** Открыть список «кто лайкнул» (как в Instagram). */
+  onOpenLikers?: (post: FeedCardPost) => void;
   onEdit?: (post: FeedCardPost) => void;
   onDelete?: (post: FeedCardPost) => void;
 };
@@ -194,6 +196,7 @@ export function FeedPostCard({
   onToggleLike,
   onRepost,
   onOpenComments,
+  onOpenLikers,
   onEdit,
   onDelete,
 }: FeedPostCardProps) {
@@ -420,23 +423,35 @@ export function FeedPostCard({
       </div>
 
       <div className={styles.actions}>
-        <button
-          type="button"
-          className={`${styles.actionBtn} ${liked ? styles.actionBtnActive : ''}`}
-          disabled={!canInteract || likeBusy}
-          onClick={likePost}
-          aria-pressed={liked}
-        >
-          <span className={`${styles.likeIcon} ${likePop ? styles.likeIconPop : ''}`}>
-            <LuHeart
-              className="h-4 w-4"
-              strokeWidth={liked ? 2.5 : 2}
-              fill={liked ? 'currentColor' : 'none'}
-              aria-hidden
-            />
-          </span>
-          <span className={countBump ? styles.countBump : undefined}>{post.like_count ?? 0}</span>
-        </button>
+        <div className={`${styles.likeGroup} ${liked ? styles.actionBtnActive : ''}`}>
+          <button
+            type="button"
+            className={`${styles.actionBtn} ${styles.likeHeartBtn}`}
+            disabled={!canInteract || likeBusy}
+            onClick={likePost}
+            aria-pressed={liked}
+            aria-label={liked ? 'Убрать отметку «Нравится»' : 'Нравится'}
+          >
+            <span className={`${styles.likeIcon} ${likePop ? styles.likeIconPop : ''}`}>
+              <LuHeart
+                className="h-4 w-4"
+                strokeWidth={liked ? 2.5 : 2}
+                fill={liked ? 'currentColor' : 'none'}
+                aria-hidden
+              />
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`${styles.actionBtn} ${styles.likeCountBtn}`}
+            disabled={!canInteract || !onOpenLikers || (post.like_count ?? 0) <= 0}
+            onClick={() => onOpenLikers?.(post)}
+            aria-label={`Кто поставил «Нравится»: ${post.like_count ?? 0}`}
+            title={(post.like_count ?? 0) > 0 ? 'Кто поставил «Нравится»' : undefined}
+          >
+            <span className={countBump ? styles.countBump : undefined}>{post.like_count ?? 0}</span>
+          </button>
+        </div>
         <button
           type="button"
           className={styles.actionBtn}

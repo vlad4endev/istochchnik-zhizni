@@ -96,6 +96,36 @@ export async function fetchPostComments(postId: string): Promise<FeedComment[]> 
   return data.comments ?? [];
 }
 
+export type PostLiker = ProfileFeedPostAuthor & {
+  liked_at: string;
+};
+
+export type PostLikersPage = {
+  likers: PostLiker[];
+  next_cursor: string | null;
+  total: number;
+};
+
+export async function fetchPostLikers(
+  postId: string,
+  params?: { cursor?: string | null; limit?: number },
+): Promise<PostLikersPage> {
+  const { data } = await apiClient.get<PostLikersPage>(
+    `/api/posts/${encodeURIComponent(postId)}/likes`,
+    {
+      params: {
+        cursor: params?.cursor || undefined,
+        limit: params?.limit ?? 40,
+      },
+    },
+  );
+  return {
+    likers: data.likers ?? [],
+    next_cursor: data.next_cursor ?? null,
+    total: Number(data.total ?? 0),
+  };
+}
+
 export async function createPostComment(postId: string, text: string): Promise<{ id: string; created_at: string }> {
   const { data } = await apiClient.post<{ id: string; created_at: string }>(
     `/api/posts/${encodeURIComponent(postId)}/comment`,

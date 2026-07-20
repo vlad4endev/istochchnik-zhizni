@@ -431,6 +431,27 @@
   background: transparent;
 }
 
+.likeGroup {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  color: var(--profile-text-soft, #78716c);
+}
+
+.likeHeartBtn {
+  padding-right: 0.2rem;
+}
+
+.likeCountBtn {
+  padding-left: 0.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.likeCountBtn:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
 .actionBtn {
   display: inline-flex;
   flex: 0 0 auto;
@@ -456,6 +477,10 @@
   touch-action: manipulation;
 }
 
+.likeGroup .actionBtn {
+  color: inherit;
+}
+
 .actionBtn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--profile-primary, #7d3640) 8%, transparent);
   color: var(--profile-text-heading, #1c1917);
@@ -470,11 +495,13 @@
   cursor: not-allowed;
 }
 
-.actionBtnActive {
+.actionBtnActive,
+.likeGroup.actionBtnActive {
   color: #e11d48;
 }
 
-.actionBtnActive:hover:not(:disabled) {
+.actionBtnActive:hover:not(:disabled),
+.likeGroup.actionBtnActive .actionBtn:hover:not(:disabled) {
   background: color-mix(in srgb, #e11d48 10%, transparent);
   color: #be123c;
 }
