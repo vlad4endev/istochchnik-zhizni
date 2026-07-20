@@ -19,6 +19,11 @@ const GENERAL_CHANNEL_DESCRIPTION = 'Напоминания и системны�
 /** Последний FCM-токен с устройства — пересохраняем при входе, если registration уже прошёл. */
 let lastRegisteredFcmToken: string | null = null;
 
+/** Classic APNs device token is 32 bytes → 64 hex chars. FCM tokens are longer / non-hex. */
+function looksLikeRawApnsToken(token: string): boolean {
+  return /^[0-9a-fA-F]{64}$/.test(token.trim());
+}
+
 function getOrCreateDeviceId(): string {
   if (typeof localStorage === 'undefined') {
     return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -74,6 +79,17 @@ async function postSaveTokenRequest(
 async function saveFcmTokenToServer(fcmToken: string, deviceId: string): Promise<boolean> {
   const session = useAuthStore.getState().token;
   if (!session?.trim()) return false;
+
+  if (Capacitor.getPlatform() === 'ios' && looksLikeRawApnsToken(fcmToken)) {
+    console.warn(
+      '[fcm] iOS returned an APNs token instead of FCM. Add GoogleService-Info.plist and FirebaseMessaging (see ios/PUSH_SETUP.md).',
+    );
+    emitAppToast(
+      'Push на iOS не настроен: нужен GoogleService-Info.plist из Firebase. Обратитесь к администратору приложения.',
+      'error',
+    );
+    return false;
+  }
 
   let lastErr: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {

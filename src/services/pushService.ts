@@ -10,6 +10,7 @@ import {
   getCombinedAppBadgeCount,
   insertMemberNotificationDelivery,
 } from './notificationDeliveryService';
+import { isParishionerAllowedPushKindOrType } from '../lib/parishionerPushAllowlist';
 
 const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
 
@@ -282,7 +283,11 @@ export type SendPushOptions = {
   recordDelivery?: boolean;
 };
 
-/** Push-доставки для роли «прихожанин»: только чаты, трансляция и «новый участник». */
+/**
+ * Push-доставки для роли «прихожанин»:
+ * чаты, трансляции, «новый участник» и общецерковные правила (молитва, ДР, проповеди…).
+ * Координаторские/служебные назначения (media_*, music_*, coordinator_*) — нет.
+ */
 function isParishionerAllowedPushData(data?: Record<string, string>): boolean {
   if (!data) return false;
   const conv =
@@ -290,14 +295,14 @@ function isParishionerAllowedPushData(data?: Record<string, string>): boolean {
   const chatTag = typeof data.tag === 'string' && data.tag.startsWith('chat-');
   if (conv || chatTag) return true;
 
-  const kind = typeof data.kind === 'string' ? data.kind.trim().toLowerCase() : '';
-  if (kind === 'broadcast' || kind === 'broadcast_start' || kind === 'member_joined') return true;
-
-  const type = typeof data.type === 'string' ? data.type.trim().toLowerCase() : '';
-  if (type.startsWith('broadcast') || type === 'member_joined') return true;
+  if (isParishionerAllowedPushKindOrType(data.kind)) return true;
+  if (isParishionerAllowedPushKindOrType(data.type)) return true;
 
   const tag = typeof data.tag === 'string' ? data.tag.trim().toLowerCase() : '';
   if (tag.startsWith('member-joined-')) return true;
+  if (tag.startsWith('rule-') && isParishionerAllowedPushKindOrType(tag.slice('rule-'.length))) {
+    return true;
+  }
 
   const url = typeof data.url === 'string' ? data.url.toLowerCase() : '';
   if (url.includes('/broadcast')) return true;
