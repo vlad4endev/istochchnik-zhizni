@@ -20,6 +20,7 @@ import {
   LuChevronLeft,
   LuChevronRight,
   LuChevronUp,
+  LuList,
   LuChurch,
   LuCloudOff,
   LuEye,
@@ -50,6 +51,7 @@ import { useMe } from '@/hooks/useMe';
 import { keys } from '@/lib/queryKeys';
 import { useCoordinatorNoteEditorRequestStore } from '../../dashboard/coordinatorNoteEditorRequestStore';
 import { NextWeekPrayerPlanSection } from '../components/NextWeekPrayerPlanSection';
+import { PrayerSectionViewersModal } from '../components/PrayerSectionViewersModal';
 import {
   userCanManageCoordinatorDashboardNotes,
   userCanTelegramPrayerDispatch,
@@ -801,6 +803,7 @@ export function DailyPrayerPage() {
   const [calendarExpanded, setCalendarExpanded] = useState(false);
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
   const [telegramDispatchModalOpen, setTelegramDispatchModalOpen] = useState(false);
+  const [prayerViewersModalOpen, setPrayerViewersModalOpen] = useState(false);
 
   const { data: me, isSuccess: meQuerySuccess } = useMe();
 
@@ -808,8 +811,14 @@ export function DailyPrayerPage() {
   const sectionBacksliderId = useId();
   const themesMinistriesRegionId = useId();
   const normalizedAppRole = me?.app_role?.trim().toLowerCase() ?? '';
+  const meRoles = Array.isArray((me as { app_roles?: string[] } | undefined)?.app_roles)
+    ? ((me as { app_roles: string[] }).app_roles ?? []).map((r) => r.trim().toLowerCase())
+    : [];
   const canViewPrayerSectionViewersStats =
-    normalizedAppRole === 'pastor' || normalizedAppRole === 'admin';
+    normalizedAppRole === 'pastor' ||
+    normalizedAppRole === 'admin' ||
+    meRoles.includes('pastor') ||
+    meRoles.includes('admin');
 
   const rolePermissionsQ = useQuery({
     queryKey: keys.rolePermissionsPublic,
@@ -1144,29 +1153,44 @@ export function DailyPrayerPage() {
 
       {me?.id && canViewPrayerSectionViewersStats ? (
         <div className="px-4 pb-6 pt-2 shell:px-6 shell:pb-8">
-          <div
-            className="mx-auto flex max-w-xl items-center justify-center gap-2.5 rounded-2xl border border-stone-200/70 bg-gradient-to-r from-[var(--surface-elevated)] via-white/90 to-[var(--surface-elevated)] px-4 py-2.5 text-center shadow-[0_2px_12px_rgba(0,0,0,0.04)] backdrop-blur-sm supports-[backdrop-filter]:bg-[var(--surface-elevated)]/75 dark:border-[var(--border)] dark:via-[var(--bg-elevated)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.25)]"
-            role="status"
-            aria-live="polite"
+          <button
+            type="button"
+            onClick={() => setPrayerViewersModalOpen(true)}
+            className="tap-highlight-transparent group mx-auto flex w-full max-w-xl items-center gap-2.5 rounded-2xl border border-stone-200/70 bg-gradient-to-r from-[var(--surface-elevated)] via-white/90 to-[var(--surface-elevated)] px-4 py-2.5 text-left shadow-[0_2px_12px_rgba(0,0,0,0.04)] backdrop-blur-sm transition-[border-color,box-shadow,transform] hover:border-primary/30 hover:shadow-[0_4px_18px_rgba(0,0,0,0.07)] active:scale-[0.99] supports-[backdrop-filter]:bg-[var(--surface-elevated)]/75 dark:border-[var(--border)] dark:via-[var(--bg-elevated)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.25)] dark:hover:border-primary/35"
+            aria-haspopup="dialog"
+            aria-expanded={prayerViewersModalOpen}
           >
             <span
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/[0.09] text-primary"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/[0.09] text-primary transition-colors group-hover:bg-primary/15"
               aria-hidden
             >
               <LuEye className="h-4 w-4" strokeWidth={2.25} />
             </span>
-            {prayerSectionViewersQ.isPending ? (
-              <span className="text-sm font-semibold text-[var(--text-muted)]">Считаем посещения…</span>
-            ) : (
-              <p className="text-sm font-semibold leading-snug text-[var(--text-secondary)]">
-                Сегодня раздел открыли{' '}
-                <span className="tabular-nums font-extrabold text-[var(--text)]">
-                  {prayerSectionViewersQ.data?.unique_viewers_today ?? 0}
-                </span>{' '}
-                {ruUniqueVisitorsWord(prayerSectionViewersQ.data?.unique_viewers_today ?? 0)}
-              </p>
-            )}
-          </div>
+            <div className="min-w-0 flex-1">
+              {prayerSectionViewersQ.isPending ? (
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Считаем посещения…</span>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold leading-snug text-[var(--text-secondary)]">
+                    Сегодня раздел открыли{' '}
+                    <span className="tabular-nums font-extrabold text-[var(--text)]">
+                      {prayerSectionViewersQ.data?.unique_viewers_today ?? 0}
+                    </span>{' '}
+                    {ruUniqueVisitorsWord(prayerSectionViewersQ.data?.unique_viewers_today ?? 0)}
+                  </p>
+                  <p className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-primary/80">
+                    <LuList className="h-3 w-3 shrink-0" strokeWidth={2.5} aria-hidden />
+                    Посмотреть список
+                  </p>
+                </>
+              )}
+            </div>
+            <LuChevronRight
+              className="h-[18px] w-[18px] shrink-0 text-[var(--text-muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+              strokeWidth={2.25}
+              aria-hidden
+            />
+          </button>
         </div>
       ) : null}
       </div>
@@ -1175,6 +1199,15 @@ export function DailyPrayerPage() {
         onClose={() => setTelegramDispatchModalOpen(false)}
         prayerCalendarDateYmd={dateKey}
       />
+      {canViewPrayerSectionViewersStats ? (
+        <PrayerSectionViewersModal
+          open={prayerViewersModalOpen}
+          onClose={() => setPrayerViewersModalOpen(false)}
+          dateYmd={prayerSectionViewersQ.data?.date ?? ''}
+          viewers={prayerSectionViewersQ.data?.viewers ?? []}
+          isLoading={prayerSectionViewersQ.isPending && !prayerSectionViewersQ.data}
+        />
+      ) : null}
     </div>
   );
 }

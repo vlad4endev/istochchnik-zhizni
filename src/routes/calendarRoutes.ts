@@ -94,7 +94,7 @@ router.delete('/events/:id', deleteEvent);
 router.get('/bot-message/today', getTodayPrayerBotMessage);
 router.get('/bot-message/:date', getPrayerBotMessage);
 
-router.get('/prayer-section/today-viewers', getPrayerSectionTodayViewers);
+router.get('/prayer-section/today-viewers', requireAuthSession, getPrayerSectionTodayViewers);
 router.post('/prayer-section/visit', requireAuthSession, postPrayerSectionVisit);
 
 router.get('/global/themes', getThemes);

@@ -6,6 +6,7 @@ import {
   getMemberAssignmentsForWeek,
   getPrayerDataByDate,
   getPrayerSectionStatsDateYmd,
+  listPrayerSectionVisitorsForDate,
   recordPrayerSectionVisitForMember,
   type WeekPlanKind,
 } from '../services/calendarService';
@@ -795,7 +796,22 @@ export async function getCuratorDistribution(req: Request, res: Response): Promi
   }
 }
 
-type AuthRequest = Request & { authUserId?: number };
+type AuthRequest = Request & {
+  authUserId?: number;
+  authUserRole?: string;
+  authUserRoles?: string[];
+};
+
+function canViewPrayerSectionViewersStats(req: Request): boolean {
+  const authReq = req as AuthRequest;
+  const primary = String(authReq.authUserRole ?? '')
+    .trim()
+    .toLowerCase();
+  const roles = Array.isArray(authReq.authUserRoles)
+    ? authReq.authUserRoles.map((r) => String(r).trim().toLowerCase())
+    : [];
+  return primary === 'pastor' || primary === 'admin' || roles.includes('pastor') || roles.includes('admin');
+}
 
 export async function postPrayerSectionVisit(req: Request, res: Response): Promise<void> {
   const memberId = (req as AuthRequest).authUserId;
@@ -812,11 +828,23 @@ export async function postPrayerSectionVisit(req: Request, res: Response): Promi
   }
 }
 
-export async function getPrayerSectionTodayViewers(_req: Request, res: Response): Promise<void> {
+export async function getPrayerSectionTodayViewers(req: Request, res: Response): Promise<void> {
+  const memberId = (req as AuthRequest).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  if (!canViewPrayerSectionViewersStats(req)) {
+    res.status(403).json({ error: 'Доступ только для пастора и администратора' });
+    return;
+  }
   try {
     const visitDateYmd = getPrayerSectionStatsDateYmd();
-    const unique_viewers_today = await countPrayerSectionVisitorsForDate(visitDateYmd);
-    res.json({ date: visitDateYmd, unique_viewers_today });
+    const [unique_viewers_today, viewers] = await Promise.all([
+      countPrayerSectionVisitorsForDate(visitDateYmd),
+      listPrayerSectionVisitorsForDate(visitDateYmd),
+    ]);
+    res.json({ date: visitDateYmd, unique_viewers_today, viewers });
   } catch (err) {
     console.error('getPrayerSectionTodayViewers error:', err);
     res.status(500).json({ error: 'Database error' });
