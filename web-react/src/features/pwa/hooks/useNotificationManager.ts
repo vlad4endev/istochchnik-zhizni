@@ -55,7 +55,7 @@ export function useNotificationManager() {
     return () => window.removeEventListener('focus', onFocus);
   }, [checkStatus]);
 
-  const subscribe = useCallback(async () => {
+  const subscribe = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
     setLoading(true);
     setError(null);
     try {
@@ -72,16 +72,27 @@ export function useNotificationManager() {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: convertedVapidKey
+        applicationServerKey: convertedVapidKey,
       });
 
       await subscribeToPushApi(subscription);
       setIsSubscribed(true);
-      return true;
-    } catch (err: any) {
+      return { ok: true };
+    } catch (err: unknown) {
       console.error('Push Subscription Error:', err);
-      setError(err.message || 'Ошибка при подписке на уведомления');
-      return false;
+      let message = 'Ошибка при подписке на уведомления';
+      if (err && typeof err === 'object' && 'response' in err) {
+        const data = (err as { response?: { data?: { error?: string }; status?: number } }).response;
+        if (data?.status === 401) {
+          message = 'Войдите снова, чтобы сохранить подписку на уведомления.';
+        } else if (typeof data?.data?.error === 'string' && data.data.error.trim()) {
+          message = data.data.error;
+        }
+      } else if (err instanceof Error && err.message) {
+        message = err.message;
+      }
+      setError(message);
+      return { ok: false, error: message };
     } finally {
       setLoading(false);
     }

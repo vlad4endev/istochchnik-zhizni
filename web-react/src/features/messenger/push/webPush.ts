@@ -129,7 +129,7 @@ async function initMessengerPushNotificationsInternal(): Promise<void> {
         await syncSubscriptionWithServer(existing, vapidPublicKey);
       } catch (err) {
         console.error('[push] POST /subscribe (sync existing) failed:', err);
-        emitAppToast({ message: readPushSubscribeError(err), kind: 'error', adminOnly: true });
+        emitAppToast({ message: readPushSubscribeError(err), kind: 'error' });
       }
       return;
     }
@@ -145,7 +145,7 @@ async function initMessengerPushNotificationsInternal(): Promise<void> {
       await syncSubscriptionWithServer(subscription, vapidPublicKey);
     } catch (err) {
       console.error('[push] POST /subscribe (new) failed:', err);
-      emitAppToast({ message: readPushSubscribeError(err), kind: 'error', adminOnly: true });
+      emitAppToast({ message: readPushSubscribeError(err), kind: 'error' });
       try {
         await subscription.unsubscribe();
       } catch {
@@ -160,7 +160,6 @@ async function initMessengerPushNotificationsInternal(): Promise<void> {
       message:
         'Не удалось включить push в браузере. Проверьте интернет и откройте сайт по HTTPS; на iPhone — ярлык с экрана «Домой».',
       kind: 'error',
-      adminOnly: true,
     });
   }
 }
