@@ -7,14 +7,11 @@ import { useAuthStore } from '../../auth/authStore';
 import profileShell from '../profileShell.module.css';
 
 export function PushSettings() {
-<<<<<<< HEAD
   const role = useAuthStore((s) => s.role);
   const roles = useAuthStore((s) => s.roles);
   const isParishioner =
     role === 'parishioner' || (Array.isArray(roles) && roles.includes('parishioner'));
 
-=======
->>>>>>> origin/main
   const {
     isSubscribed,
     status,
@@ -28,7 +25,6 @@ export function PushSettings() {
 
   // Native Capacitor uses FCM via useFCM — this toggle is for browser / PWA only.
   if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
-<<<<<<< HEAD
     return (
       <div className={profileShell.profileRoot} data-profile-root>
         <p className="text-sm text-[color:var(--profile-text-muted)]">
@@ -43,9 +39,6 @@ export function PushSettings() {
         ) : null}
       </div>
     );
-=======
-    return null;
->>>>>>> origin/main
   }
 
   const loading = managerLoading || localLoading;
@@ -55,25 +48,16 @@ export function PushSettings() {
 
     try {
       if (!isSubscribed) {
-<<<<<<< HEAD
-        const success = await subscribe();
-        if (success) {
-=======
         const result = await subscribe();
         if (result.ok) {
->>>>>>> origin/main
           setMsg({ kind: 'ok', text: 'Уведомления включены.' });
         } else {
           setMsg({
             kind: 'err',
-<<<<<<< HEAD
-            text: managerError || 'Не удалось включить уведомления. Проверьте интернет и повторите.',
-=======
             text:
               result.error?.trim() ||
               managerError?.trim() ||
               'Не удалось включить уведомления. Проверьте интернет и повторите.',
->>>>>>> origin/main
           });
         }
       } else {
@@ -108,12 +92,8 @@ export function PushSettings() {
       <div className={profileShell.profileRoot} data-profile-root>
         <div className="mt-4 rounded-xl border border-[color:var(--profile-card-ring)] bg-[color:color-mix(in_srgb,var(--profile-surface-elevated)_70%,var(--profile-surface))] p-4">
           <p className="text-sm text-[color:var(--profile-text-muted)]">
-<<<<<<< HEAD
             Браузер не поддерживает Push-уведомления. На iPhone добавьте сайт на экран «Домой» и откройте
             ярлык.
-=======
-            Браузер не поддерживает Push-уведомления. На iPhone добавьте сайт на экран «Домой» и откройте ярлык.
->>>>>>> origin/main
           </p>
         </div>
       </div>
@@ -121,14 +101,7 @@ export function PushSettings() {
   }
 
   return (
-<<<<<<< HEAD
     <div className={`${profileShell.profileRoot} mt-0 border-0 pt-0`} data-profile-root>
-=======
-    <div
-      className={`${profileShell.profileRoot} mt-0 border-0 pt-0`}
-      data-profile-root
-    >
->>>>>>> origin/main
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h3 className="flex items-center gap-2 text-sm font-bold text-[color:var(--profile-text-heading)]">
