@@ -587,18 +587,50 @@ export async function deleteDashboardCoordinatorNote(
   return normalizeDashboardCoordinatorResponse(data);
 }
 
+export interface PrayerSectionViewer {
+  member_id: number;
+  name: string;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+  first_seen_at: string;
+}
+
 export interface PrayerSectionTodayViewersResponse {
   date: string;
   unique_viewers_today: number;
+  viewers: PrayerSectionViewer[];
+}
+
+function normalizePrayerSectionViewer(raw: unknown): PrayerSectionViewer | null {
+  if (!isRecord(raw)) return null;
+  const memberId = Number(raw.member_id);
+  if (!Number.isFinite(memberId) || memberId <= 0) return null;
+  const name =
+    typeof raw.name === 'string' && raw.name.trim()
+      ? raw.name.trim()
+      : `#${memberId}`;
+  return {
+    member_id: memberId,
+    name,
+    first_name: typeof raw.first_name === 'string' ? raw.first_name : null,
+    last_name: typeof raw.last_name === 'string' ? raw.last_name : null,
+    avatar_url: typeof raw.avatar_url === 'string' ? raw.avatar_url : null,
+    first_seen_at: typeof raw.first_seen_at === 'string' ? raw.first_seen_at : '',
+  };
 }
 
 function normalizePrayerSectionTodayViewers(raw: unknown): PrayerSectionTodayViewersResponse {
-  if (!isRecord(raw)) return { date: '', unique_viewers_today: 0 };
+  if (!isRecord(raw)) return { date: '', unique_viewers_today: 0, viewers: [] };
   const date = typeof raw.date === 'string' ? raw.date : '';
   const n = raw.unique_viewers_today;
   const unique_viewers_today =
     typeof n === 'number' && Number.isFinite(n) ? n : Number.isFinite(Number(n)) ? Number(n) : 0;
-  return { date, unique_viewers_today };
+  const viewersRaw = Array.isArray(raw.viewers) ? raw.viewers : [];
+  const viewers = viewersRaw
+    .map(normalizePrayerSectionViewer)
+    .filter((v): v is PrayerSectionViewer => v != null);
+  return { date, unique_viewers_today, viewers };
 }
 
 /** Сколько разных участников заходили в раздел «Молитва» за текущий календарный день (по времени церкви на сервере). */

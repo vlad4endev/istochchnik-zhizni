@@ -631,3 +631,56 @@ export async function countPrayerSectionVisitorsForDate(visitDateYmd: string): P
   const row = result.rows[0] as { c?: string } | undefined;
   return Number(row?.c ?? 0);
 }
+
+export type PrayerSectionVisitorRow = {
+  member_id: number;
+  name: string;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+  first_seen_at: string;
+};
+
+/** Участники, открывшие раздел «Молитва» в указанный календарный день (по одному разу). */
+export async function listPrayerSectionVisitorsForDate(
+  visitDateYmd: string,
+): Promise<PrayerSectionVisitorRow[]> {
+  const result = await query(
+    `SELECT
+       v.member_id,
+       COALESCE(NULLIF(TRIM(m.name), ''), CONCAT_WS(' ', m.first_name, m.last_name), CONCAT('#', v.member_id::text)) AS name,
+       m.first_name,
+       m.last_name,
+       m.avatar_url,
+       v.first_seen_at
+     FROM prayer_section_daily_visits v
+     INNER JOIN members m ON m.id = v.member_id
+     WHERE v.visit_date = $1::date
+     ORDER BY v.first_seen_at DESC, v.member_id ASC`,
+    [visitDateYmd],
+  );
+
+  return (result.rows as Array<{
+    member_id: number | string;
+    name: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    avatar_url: string | null;
+    first_seen_at: Date | string;
+  }>).map((row) => {
+    const seen =
+      row.first_seen_at instanceof Date
+        ? row.first_seen_at.toISOString()
+        : typeof row.first_seen_at === 'string'
+          ? row.first_seen_at
+          : new Date().toISOString();
+    return {
+      member_id: Number(row.member_id),
+      name: String(row.name ?? '').trim() || `#${row.member_id}`,
+      first_name: row.first_name ?? null,
+      last_name: row.last_name ?? null,
+      avatar_url: row.avatar_url ?? null,
+      first_seen_at: seen,
+    };
+  });
+}
