@@ -63,19 +63,38 @@ async function pushToAllMembers(
   title: string,
   body: string,
   url: string,
+  kind: string,
   extra?: Record<string, string>,
 ): Promise<void> {
   const ids = await getMemberIdsWithAnyPushSubscription();
-  const payload: Record<string, string> = { url, ...(extra ?? {}) };
+  const normalizedKind = kind.trim().toLowerCase() || 'general';
+  const payload: Record<string, string> = {
+    url,
+    kind: normalizedKind,
+    type: normalizedKind,
+    tag: `rule-${normalizedKind}`,
+    ...(extra ?? {}),
+  };
   for (const id of ids) {
     await sendPush(id, title, body, payload);
   }
 }
 
-async function pushToCoordinators(title: string, body: string, url: string): Promise<void> {
+async function pushToCoordinators(
+  title: string,
+  body: string,
+  url: string,
+  kind: string,
+): Promise<void> {
   const ids = await getCoordinatorMemberIdsWithPush();
+  const normalizedKind = kind.trim().toLowerCase() || 'coordinator';
   for (const id of ids) {
-    await sendPush(id, title, body, { url });
+    await sendPush(id, title, body, {
+      url,
+      kind: normalizedKind,
+      type: normalizedKind,
+      tag: `rule-${normalizedKind}`,
+    });
   }
 }
 
@@ -213,6 +232,7 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
         'Время молитвы',
         resolveBody(rule, 'Напоминание: уделите время молитве за нужды церкви.', { date: todayYmd }),
         '/prayer',
+        'prayer_reminder',
       );
       return;
     }
@@ -227,6 +247,7 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
           date: ymdFromZoned(z),
         }),
         '/dashboard',
+        'birthday_today',
       );
       return;
     }
@@ -238,6 +259,7 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
         'Дни рождения на этой неделе',
         resolveBody(rule, namesJoined, { names: namesJoined }),
         '/dashboard',
+        'birthday_week',
       );
       return;
     }
@@ -255,6 +277,7 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
         title,
         resolveBody(rule, 'Трансляция началась — присоединяйтесь к эфиру.'),
         '/dashboard',
+        'broadcast_start',
         { kind: 'broadcast' },
       );
       await markBroadcastStartNotificationSent(candidate.id);
@@ -277,6 +300,7 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
         'Обновление',
         resolveBody(rule, 'Вышла новая версия приложения. Обновите страницу или установите свежую сборку.'),
         '/dashboard',
+        'system_update',
       );
       await patchNotificationRuntimeState((d) => ({
         ...d,
@@ -295,7 +319,12 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
         return;
       }
       if (rs.lastSermonEpisodeId === epId) return;
-      await pushToAllMembers('Новая проповедь', resolveBody(rule, 'В ленте появилась новая запись.'), '/sermons');
+      await pushToAllMembers(
+        'Новая проповедь',
+        resolveBody(rule, 'В ленте появилась новая запись.'),
+        '/sermons',
+        'new_sermon',
+      );
       await patchNotificationRuntimeState((d) => ({
         ...d,
         runtimeState: { ...d.runtimeState, lastSermonEpisodeId: epId },
@@ -317,6 +346,7 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
         'Новое событие',
         resolveBody(rule, 'В календаре церкви добавлено или обновлено событие.'),
         '/dashboard',
+        'new_event',
       );
       await patchNotificationRuntimeState((d) => ({
         ...d,
@@ -337,6 +367,7 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
         'Сбор нужд на следующую неделю',
         resolveBody(rule, body, { participants: participantsList }),
         '/calendar',
+        'coordinator_week_digest',
       );
       return;
     }

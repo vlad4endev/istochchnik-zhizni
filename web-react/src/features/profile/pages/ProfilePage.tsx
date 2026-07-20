@@ -35,6 +35,7 @@ import { fetchDirectionTemplates, type MinistryDirectionTemplate } from '../../a
 import { fetchProfileByMemberId, patchPublicProfileSettings } from '../publicProfileApi';
 import { fetchMyPreacherSermonHistory, type PreacherSermonHistoryRow } from '../../servicePlanner/sermonFeedbackApi';
 import { ProfileAccessibilitySection } from '../components/ProfileAccessibilitySection';
+import { PushSettings } from '../components/PushSettings';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { memberNameFirstLast } from '../memberDisplayName';
 
@@ -636,6 +637,13 @@ export function ProfilePage() {
         </section>
 
         <ProfileAccessibilitySection />
+
+        <section className={CARD}>
+          <p className={LABEL}>Уведомления</p>
+          <div className="mt-3">
+            <PushSettings />
+          </div>
+        </section>
 
         {/* ═══════════════════════════════════════════════════
             3. ПРОФИЛЬ — данные / редактирование
