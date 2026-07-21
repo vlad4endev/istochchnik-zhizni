@@ -345,10 +345,6 @@ export const useAuthStore = create<AuthState>()(
           const t = window.setTimeout(() => ctrl.abort(), 12_000);
           try {
             const refreshResult = await performAuthRefresh();
-            if (refreshResult.status === 'unauthorized') {
-              get().clearSession();
-              return;
-            }
             if (refreshResult.status === 'refreshed') {
               const nextToken = refreshResult.token;
               const meRes = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
@@ -375,6 +371,9 @@ export const useAuthStore = create<AuthState>()(
               return;
             }
 
+            // refresh unauthorized/unchanged: НЕ чистим сессию сразу.
+            // На телефоне (Capacitor / iOS PWA) refresh-cookie часто недоступен,
+            // а Bearer в localStorage ещё валиден — иначе «выбивает» при каждом открытии.
             const existing = get().token;
             if (!existing || isCookieOnlySessionToken(existing)) {
               const r = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
@@ -398,10 +397,6 @@ export const useAuthStore = create<AuthState>()(
             });
             if (r.status === 401) {
               const again = await performAuthRefresh();
-              if (again.status === 'unauthorized') {
-                get().clearSession();
-                return;
-              }
               if (again.status === 'refreshed') {
                 bearer = again.token;
                 r = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
@@ -409,6 +404,10 @@ export const useAuthStore = create<AuthState>()(
                   signal: ctrl.signal,
                   headers: { Authorization: `Bearer ${bearer}` },
                 });
+              } else if (again.status === 'unauthorized') {
+                // И access, и refresh мертвы — только тогда выход.
+                get().clearSession();
+                return;
               }
             }
             if (r.status === 200) {

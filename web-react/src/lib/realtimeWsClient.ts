@@ -5,6 +5,7 @@
 import { useEffect } from 'react';
 
 import { normalizeRegistrationStatus, useAuthStore } from '../features/auth/authStore';
+import { performAuthRefresh } from './authRefresh';
 import { COOKIE_ONLY_SESSION_TOKEN } from './authSessionConstants';
 import { AUTH_API_PREFIX, resolveAxiosBaseURL, resolveRealtimeWebSocketUrl } from './config';
 
@@ -241,51 +242,60 @@ function scheduleReconnect(): void {
   }, delay);
 }
 
-async function refreshAccessToken(): Promise<void> {
-  const origin =
-    resolveAxiosBaseURL() ||
-    (typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '');
-  if (!origin) {
-    throw new Error('missing base URL for auth refresh');
+async function refreshAccessToken(): Promise<'refreshed' | 'unchanged' | 'unauthorized'> {
+  const result = await performAuthRefresh();
+  if (result.status === 'refreshed') {
+    const auth = useAuthStore.getState();
+    auth.setSession({
+      token: result.token,
+      firstName: auth.firstName,
+      lastName: auth.lastName,
+      role: auth.role,
+      roles: auth.roles,
+      registrationStatus: auth.registrationStatus,
+      username: auth.username,
+      memberId: auth.memberId,
+    });
+    authToken = result.token;
+    // Профиль подтянем лениво; для WS достаточно нового access token.
+    const origin =
+      resolveAxiosBaseURL() ||
+      (typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '');
+    if (origin) {
+      try {
+        const userResponse = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
+          credentials: 'include',
+          headers: { Authorization: `Bearer ${result.token}` },
+        });
+        if (userResponse.status === 200) {
+          const user = (await userResponse.json()) as {
+            id?: number;
+            first_name?: string | null;
+            last_name?: string | null;
+            app_role?: string;
+            app_roles?: string[];
+            registration_status?: string;
+            username?: string;
+          };
+          useAuthStore.getState().setSession({
+            token: result.token || COOKIE_ONLY_SESSION_TOKEN,
+            firstName: (user.first_name ?? '').trim(),
+            lastName: (user.last_name ?? '').trim(),
+            role: (user.app_role ?? 'member').trim() || 'member',
+            roles: Array.isArray(user.app_roles) ? user.app_roles : undefined,
+            registrationStatus: normalizeRegistrationStatus(user.registration_status),
+            username: (user.username ?? '').trim(),
+            memberId: typeof user.id === 'number' ? user.id : null,
+          });
+          authToken = useAuthStore.getState().token;
+        }
+      } catch {
+        /* профиль опционален */
+      }
+    }
+    return 'refreshed';
   }
-  const refreshResponse = await fetch(`${origin}${AUTH_API_PREFIX}/refresh`, {
-    method: 'POST',
-    credentials: 'include',
-  });
-  if (refreshResponse.status !== 200) {
-    throw new Error(`token refresh failed (${refreshResponse.status})`);
-  }
-  const refreshPayload = (await refreshResponse.json()) as { accessToken?: string; token?: string };
-  const nextToken = String(refreshPayload.accessToken ?? refreshPayload.token ?? '').trim();
-  if (!nextToken) {
-    throw new Error('token refresh response has no access token');
-  }
-  const userResponse = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
-    credentials: 'include',
-  });
-  if (userResponse.status !== 200) {
-    throw new Error(`auth profile refresh failed (${userResponse.status})`);
-  }
-  const user = (await userResponse.json()) as {
-    id?: number;
-    first_name?: string | null;
-    last_name?: string | null;
-    app_role?: string;
-    app_roles?: string[];
-    registration_status?: string;
-    username?: string;
-  };
-  useAuthStore.getState().setSession({
-    token: nextToken || COOKIE_ONLY_SESSION_TOKEN,
-    firstName: (user.first_name ?? '').trim(),
-    lastName: (user.last_name ?? '').trim(),
-    role: (user.app_role ?? 'member').trim() || 'member',
-    roles: Array.isArray(user.app_roles) ? user.app_roles : undefined,
-    registrationStatus: normalizeRegistrationStatus(user.registration_status),
-    username: (user.username ?? '').trim(),
-    memberId: typeof user.id === 'number' ? user.id : null,
-  });
-  authToken = useAuthStore.getState().token;
+  return result.status;
 }
 
 function openSocket(): void {
@@ -441,11 +451,21 @@ function openSocket(): void {
       }
       logWarn('auth rejected, refreshing token before reconnect');
       void refreshAccessToken()
-        .then(() => {
+        .then((status) => {
+          if (status === 'refreshed') {
+            scheduleReconnect();
+            return;
+          }
+          // Не logout(): на телефоне refresh-cookie часто недоступен, а REST-сессия ещё жива.
+          // Просто пауза realtime; следующий REST 401 / KeepAlive решит судьбу сессии.
+          if (status === 'unauthorized') {
+            logWarn('auth refresh rejected — realtime paused (session kept)');
+            return;
+          }
           scheduleReconnect();
         })
         .catch(() => {
-          void useAuthStore.getState().logout();
+          scheduleReconnect();
         });
       return;
     }
