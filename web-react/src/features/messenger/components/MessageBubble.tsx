@@ -27,6 +27,7 @@ import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { ChatVideoAttachmentPreview } from './ChatVideoAttachmentPreview';
 import { PollVotersSheet } from './PollVotersSheet';
+import { MessageReadersSheet } from './MessageReadersSheet';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { useMediaViewer, type MediaItem } from '../../../components/MediaViewer';
 import { DocumentViewerModal, canPreviewDocumentInline } from '../../../components/DocumentViewerModal';
@@ -886,6 +887,10 @@ function MessageBubbleInner({
   const openViewer = useMediaViewer((s) => s.openViewer);
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const convIdKey = String(message.conversation_id);
+  const conversationType = useChatStore((s) => {
+    const c = s.conversations.find((x) => String(x.id) === convIdKey);
+    return c?.type ?? null;
+  });
   const convReadCursors = useChatStore((s) => s.readCursorsByConv[convIdKey] || EMPTY_READ_CURSORS);
   const addReaction = useChatStore((s) => s.addReaction);
   const removeReaction = useChatStore((s) => s.removeReaction);
@@ -898,6 +903,7 @@ function MessageBubbleInner({
   const [showReactions, setShowReactions] = useState(false);
   /** Плашка реакций над пузырьком (long-press), как в Telegram */
   const [showReactionBar, setShowReactionBar] = useState(false);
+  const [showReadersSheet, setShowReadersSheet] = useState(false);
   const [documentViewer, setDocumentViewer] = useState<{ url: string; name: string; mime: string } | null>(null);
   const [mainImageLoaded, setMainImageLoaded] = useState(false);
   const [albumSlotLoaded, setAlbumSlotLoaded] = useState<Record<number, boolean>>({});
@@ -937,6 +943,21 @@ function MessageBubbleInner({
     if (!/^\d+$/.test(message.id)) return false;
     return BigInt(message.id) <= maxOtherReadId;
   }, [isMine, isOptimistic, message.id, maxOtherReadId]);
+
+  /** Список «кто прочитал» — только свои сообщения в группе/канале. */
+  const canViewReaders =
+    isMine &&
+    !isOptimistic &&
+    !isDeleted &&
+    /^\d+$/.test(String(message.id)) &&
+    (conversationType === 'group' || conversationType === 'channel');
+
+  const openReadersSheet = useCallback(() => {
+    if (!canViewReaders) return;
+    setShowActions(false);
+    setShowReactionBar(false);
+    setShowReadersSheet(true);
+  }, [canViewReaders]);
 
   const formattedTime = useMemo(() => {
     const d = new Date(message.created_at);
@@ -2099,7 +2120,9 @@ function MessageBubbleInner({
       : status === 'error'
         ? null // у «error» интерактивный элемент — label живёт на <button>
         : isReadByOther
-          ? 'Прочитано'
+          ? canViewReaders
+            ? 'Прочитано. Нажмите, чтобы увидеть, кто прочитал'
+            : 'Прочитано'
           : status === 'delivered'
             ? 'Доставлено'
             : 'Отправлено';
@@ -2132,12 +2155,27 @@ function MessageBubbleInner({
               <LuX className="h-2 w-2" strokeWidth={3} aria-hidden focusable={false} />
             </button>
           ) : isReadByOther ? (
-            <IoCheckmarkDone
-              className="h-3.5 w-3.5 shrink-0 text-sky-200"
-              role="img"
-              aria-label={statusIconLabel ?? undefined}
-              focusable={false}
-            />
+            canViewReaders ? (
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center rounded-sm text-sky-200 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+                aria-label={statusIconLabel ?? 'Прочитано'}
+                title="Кто прочитал"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openReadersSheet();
+                }}
+              >
+                <IoCheckmarkDone className="h-3.5 w-3.5 shrink-0" aria-hidden focusable={false} />
+              </button>
+            ) : (
+              <IoCheckmarkDone
+                className="h-3.5 w-3.5 shrink-0 text-sky-200"
+                role="img"
+                aria-label={statusIconLabel ?? undefined}
+                focusable={false}
+              />
+            )
           ) : status === 'delivered' ? (
             <IoCheckmarkDone
               className="h-3.5 w-3.5 shrink-0 text-white/70"
@@ -2438,6 +2476,16 @@ function MessageBubbleInner({
                 <span>🗑</span> Удалить
               </button>
             )}
+            {canViewReaders ? (
+              <button
+                type="button"
+                onClick={() => {
+                  openReadersSheet();
+                }}
+              >
+                <span>✓</span> Кто прочитал
+              </button>
+            ) : null}
             <button type="button" onClick={() => { setShowReactions(!showReactions); }}>
               <span>😀</span> Реакция
             </button>
@@ -2476,6 +2524,13 @@ function MessageBubbleInner({
       fileMime={documentViewer?.mime}
       onClose={() => setDocumentViewer(null)}
     />
+    {canViewReaders ? (
+      <MessageReadersSheet
+        open={showReadersSheet}
+        onClose={() => setShowReadersSheet(false)}
+        messageId={String(message.id)}
+      />
+    ) : null}
     </>
   );
 }

@@ -2305,6 +2305,175 @@ export async function deleteMessage(
 
 // ─── Read Receipts ────────────────────────────────────────────
 
+export type MessageReaderDto = {
+  member_id: number;
+  display_name: string;
+  avatar_url: string | null;
+  /** ISO time when the reader’s cursor reached at least this message (may be null on legacy rows). */
+  read_at: string | null;
+};
+
+/**
+ * Who has read a message (Telegram-style). Only the message author may call this,
+ * and only in group/channel chats. Uses per-participant `last_read_message_id` cursors.
+ */
+export async function getMessageReadersForSender(
+  messageId: string,
+  requesterMemberId: number,
+): Promise<{
+  conversationId: string;
+  conversationType: string;
+  readers: MessageReaderDto[];
+  /** Active members excluding the author (denominator for “N of M”). */
+  other_member_count: number;
+}> {
+  const mid = String(messageId || '').trim();
+  if (!/^\d+$/.test(mid)) {
+    throw new Error('Invalid message id');
+  }
+
+  const msgRows = await dbQuery(
+    `SELECT m.id,
+            m.conversation_id,
+            m.sender_id,
+            m.is_deleted,
+            m.payload_type::text AS payload_type,
+            c.type::text AS conversation_type
+     FROM messages m
+     JOIN conversations c ON c.id = m.conversation_id
+     WHERE m.id = $1
+     LIMIT 1`,
+    [mid],
+  );
+  const msg = msgRows.rows[0] as
+    | {
+        id: unknown;
+        conversation_id: unknown;
+        sender_id: unknown;
+        is_deleted: unknown;
+        payload_type: unknown;
+        conversation_type: unknown;
+      }
+    | undefined;
+  if (!msg) {
+    throw new Error('Message not found');
+  }
+  if (msg.is_deleted) {
+    throw new Error('Message not found');
+  }
+
+  const senderId = msg.sender_id == null ? null : Number(msg.sender_id);
+  if (senderId == null || !Number.isFinite(senderId) || senderId !== requesterMemberId) {
+    throw new Error('Forbidden');
+  }
+
+  const convType = String(msg.conversation_type || '');
+  if (convType !== 'group' && convType !== 'channel') {
+    throw new Error('Only available in group chats');
+  }
+
+  const convId = String(msg.conversation_id);
+  const inChat = await isMemberInConversation(convId, requesterMemberId);
+  if (!inChat) {
+    throw new Error('Forbidden');
+  }
+
+  const payloadType = String(msg.payload_type || '');
+  if (payloadType === 'access_request' || payloadType === 'system' || payloadType === 'notification') {
+    return {
+      conversationId: convId,
+      conversationType: convType,
+      readers: [],
+      other_member_count: 0,
+    };
+  }
+
+  const countRows = await dbQuery(
+    `SELECT COUNT(*)::int AS c
+     FROM conversation_participants
+     WHERE conversation_id = $1::bigint
+       AND left_at IS NULL
+       AND member_id <> $2`,
+    [convId, requesterMemberId],
+  );
+  const otherMemberCount = Number((countRows.rows[0] as { c?: unknown } | undefined)?.c ?? 0);
+
+  const readerRows = await dbQuery(
+    `SELECT
+       cp.member_id::int AS member_id,
+       mb.first_name,
+       mb.last_name,
+       mb.name,
+       mb.avatar_url,
+       cp.last_read_at
+     FROM conversation_participants cp
+     INNER JOIN members mb ON mb.id = cp.member_id
+     WHERE cp.conversation_id = $1::bigint
+       AND cp.left_at IS NULL
+       AND cp.member_id <> $2
+       AND cp.last_read_message_id IS NOT NULL
+       AND cp.last_read_message_id >= $3::bigint
+     ORDER BY
+       cp.last_read_at DESC NULLS LAST,
+       LOWER(TRIM(COALESCE(mb.first_name, '') || ' ' || COALESCE(mb.last_name, ''))) ASC,
+       LOWER(TRIM(COALESCE(mb.name, ''))) ASC,
+       cp.member_id ASC`,
+    [convId, requesterMemberId, mid],
+  ).catch(async (e: unknown) => {
+    if (!isPgUndefinedColumnError(e)) throw e;
+    return dbQuery(
+      `SELECT
+         cp.member_id::int AS member_id,
+         mb.first_name,
+         mb.last_name,
+         mb.name,
+         mb.avatar_url,
+         NULL::timestamptz AS last_read_at
+       FROM conversation_participants cp
+       INNER JOIN members mb ON mb.id = cp.member_id
+       WHERE cp.conversation_id = $1::bigint
+         AND cp.left_at IS NULL
+         AND cp.member_id <> $2
+         AND cp.last_read_message_id IS NOT NULL
+         AND cp.last_read_message_id >= $3::bigint
+       ORDER BY
+         LOWER(TRIM(COALESCE(mb.first_name, '') || ' ' || COALESCE(mb.last_name, ''))) ASC,
+         LOWER(TRIM(COALESCE(mb.name, ''))) ASC,
+         cp.member_id ASC`,
+      [convId, requesterMemberId, mid],
+    );
+  });
+
+  const readers: MessageReaderDto[] = readerRows.rows.map((r) => {
+    const row = r as {
+      member_id: unknown;
+      first_name: string | null;
+      last_name: string | null;
+      name: string | null;
+      avatar_url: string | null;
+      last_read_at: string | Date | null;
+    };
+    const avatarRaw = row.avatar_url != null ? String(row.avatar_url).trim() : '';
+    const readAtRaw = row.last_read_at;
+    return {
+      member_id: Number(row.member_id),
+      display_name: pollVoterDisplayName(row),
+      avatar_url: avatarRaw.length > 0 ? rewriteMessengerPublicUrl(avatarRaw) : null,
+      read_at:
+        readAtRaw != null
+          ? new Date(readAtRaw as string | Date).toISOString()
+          : null,
+    };
+  });
+
+  return {
+    conversationId: convId,
+    conversationType: convType,
+    readers,
+    other_member_count: Number.isFinite(otherMemberCount) ? otherMemberCount : 0,
+  };
+}
+
 /**
  * Mark messages as read up to a given message ID.
  * @returns false если строка не обновлена (сообщения нет в этом чате, участник вышел, гонка с кэшем) — не ошибка.
@@ -2353,6 +2522,13 @@ export async function markRead(
        last_read_message_id = CASE
          WHEN cp.last_read_message_id IS NULL THEN (SELECT id FROM target_message)
          ELSE GREATEST(cp.last_read_message_id, (SELECT id FROM target_message))
+       END,
+       last_read_at = CASE
+         WHEN (SELECT id FROM target_message) IS NULL THEN cp.last_read_at
+         WHEN cp.last_read_message_id IS NULL
+           OR cp.last_read_message_id < (SELECT id FROM target_message)
+         THEN COALESCE($4::timestamptz, NOW())
+         ELSE COALESCE(cp.last_read_at, COALESCE($4::timestamptz, NOW()))
        END
      WHERE cp.conversation_id = $1::bigint
        AND cp.member_id = $2
@@ -2360,7 +2536,37 @@ export async function markRead(
        AND EXISTS (SELECT 1 FROM target_message)
      RETURNING cp.last_read_message_id`,
     [conversationId, memberId, hasMessageId ? normalizedMessageId : '', hasReadAt ? normalizedReadAt : null],
-  );
+  ).catch(async (e: unknown) => {
+    // Старые БД без last_read_at — не ломаем mark-read.
+    if (!isPgUndefinedColumnError(e)) throw e;
+    return dbQuery(
+      `WITH target_message AS (
+         SELECT id
+         FROM messages
+         WHERE conversation_id = $1::bigint
+           AND (
+             ($3::text <> '' AND id = $3::bigint)
+             OR
+             ($3::text = '' AND $4::timestamptz IS NOT NULL AND created_at <= $4::timestamptz)
+           )
+           AND payload_type::text NOT IN ('access_request', 'system', 'notification')
+         ORDER BY id DESC
+         LIMIT 1
+       )
+       UPDATE conversation_participants cp
+       SET
+         last_read_message_id = CASE
+           WHEN cp.last_read_message_id IS NULL THEN (SELECT id FROM target_message)
+           ELSE GREATEST(cp.last_read_message_id, (SELECT id FROM target_message))
+         END
+       WHERE cp.conversation_id = $1::bigint
+         AND cp.member_id = $2
+         AND cp.left_at IS NULL
+         AND EXISTS (SELECT 1 FROM target_message)
+       RETURNING cp.last_read_message_id`,
+      [conversationId, memberId, hasMessageId ? normalizedMessageId : '', hasReadAt ? normalizedReadAt : null],
+    );
+  });
 
   if (result.rows.length === 0) {
     console.debug('[messenger] markRead skipped (no matching message or not a participant)', {

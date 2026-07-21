@@ -586,6 +586,28 @@ export async function fetchPollVoters(messageId: string): Promise<PollVotersResp
   return data;
 }
 
+export type MessageReader = {
+  member_id: number;
+  display_name: string;
+  avatar_url: string | null;
+  read_at: string | null;
+};
+
+export type MessageReadersResponse = {
+  conversationId: string;
+  conversationType: string;
+  readers: MessageReader[];
+  other_member_count: number;
+};
+
+/** Who read this message — only the author may call; group/channel only. */
+export async function fetchMessageReaders(messageId: string): Promise<MessageReadersResponse> {
+  const { data } = await apiClient.get<MessageReadersResponse>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/readers`,
+  );
+  return data;
+}
+
 export async function searchMembers(q: string): Promise<SearchMember[]> {
   const { data } = await apiClient.get<SearchMember[]>(`${BASE}/members/search`, { params: { q } });
   return data;
