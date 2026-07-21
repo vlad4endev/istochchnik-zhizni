@@ -181,7 +181,7 @@ export async function gptunnelAssistantChat(
           : rawText.slice(0, 400);
     throw new AiAgentError(
       errMsg.includes('Assistant not found')
-        ? `Ассистент GPTunnel «${assistantCode}» не найден. Проверьте код в кабинете GPTunnel → Ассистенты (формат вроде ai08158128) и что к нему подключена RAG-база.`
+        ? `Ассистент GPTunnel «${assistantCode}» не найден. Проверьте код в кабинете GPTunnel → Ассистенты (например Christian) и что к нему подключена RAG-база.`
         : `GPTunnel assistant/chat: ${errMsg}`,
       'ai_http_error',
       { status: res.status, bodySnippet: rawText.slice(0, 500) },
