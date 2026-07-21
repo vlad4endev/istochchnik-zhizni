@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
+  assistantMarkdownToPlainText,
   normalizeAssistantMarkdown,
   renderAssistantMessageContent,
 } from '../src/features/messenger/assistantMessageFormat';
@@ -68,5 +69,31 @@ describe('assistantMessageFormat', () => {
     expect(html).toContain('Иоанна');
     expect(html).toContain('3:16');
     expect(html).not.toContain('> Ибо');
+  });
+
+  it('renders a full faith answer without raw markdown markers', () => {
+    const sample = `Конечно! С радостью помогу разобраться.
+
+### 1. Определение веры
+
+> «Вера же есть осуществление ожидаемого» (Евреям 11:1).
+
+**Простыми словами:** Вера — это доверие.
+
+---
+
+**Практический совет:** читайте Евангелие.`;
+    const html = renderToStaticMarkup(<>{renderAssistantMessageContent(sample)}</>);
+    expect(html).toContain('<strong');
+    expect(html).toMatch(/<h[1-4]/);
+    expect(html).toContain('<blockquote');
+    expect(html).toContain('<hr');
+    expect(html).not.toContain('###');
+    expect(html).not.toContain('**Простыми');
+    expect(html).not.toContain('> «Вера');
+    const plain = assistantMarkdownToPlainText(sample);
+    expect(plain).not.toContain('###');
+    expect(plain).not.toContain('**');
+    expect(plain).toContain('Простыми словами');
   });
 });

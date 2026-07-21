@@ -2112,6 +2112,25 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Markdown ИИ: блоки (h/ul/blockquote), не «преформатированная» простыня */
+.msg-content .assistant-md {
+  white-space: normal;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.msg-content .assistant-md p {
+  white-space: pre-wrap;
+}
+
+.msg-content .assistant-md h1,
+.msg-content .assistant-md h2,
+.msg-content .assistant-md h3,
+.msg-content .assistant-md h4 {
+  white-space: normal;
+}
+
 /* BiDi: в Chromium (Chrome, Яндекс) `plaintext` разрывает цифры — только `isolate`. */
 .tg-messenger .messenger-bidi-text,
 .tg-messenger .msg-content,

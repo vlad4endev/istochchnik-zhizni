@@ -22,9 +22,28 @@ export function isAssistantMessengerChannel(metadata: unknown): boolean {
   );
 }
 
+function asPayloadRecord(payload: unknown): Record<string, unknown> | null {
+  if (payload == null) return null;
+  if (typeof payload === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(payload);
+      if (parsed != null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+  if (typeof payload === 'object' && !Array.isArray(payload)) {
+    return payload as Record<string, unknown>;
+  }
+  return null;
+}
+
 export function isAssistantBotMessage(payload: unknown, senderId: number | null | undefined): boolean {
   if (senderId != null) return false;
-  if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) return false;
-  const p = payload as Record<string, unknown>;
+  const p = asPayloadRecord(payload);
+  if (!p) return false;
   return p.assistant === true || String(p.kind ?? '') === MESSENGER_ASSISTANT_CHANNEL_KIND;
 }
