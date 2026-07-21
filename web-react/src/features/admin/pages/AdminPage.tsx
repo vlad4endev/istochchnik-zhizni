@@ -99,7 +99,6 @@ import {
 } from '../../../lib/memberRosterName';
 import type { AppUser } from '../types';
 import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
-import { useMe } from '@/hooks/useMe';
 import { Link } from 'react-router-dom';
 import { useImpersonation } from '../hooks/useImpersonation';
 import { isAppAdministratorSession } from '../../auth/authStore';
