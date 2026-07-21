@@ -327,7 +327,19 @@ export function applyNewMessage(
         if (!isProvisionalLocalId(String(m.id)) || m.client_msg_id !== msgClientId) return m;
         const prevSt = m.status;
         const nextStatus = prevSt === 'delivered' ? ('delivered' as const) : ('sent' as const);
-        return { ...msg, status: nextStatus };
+        const next: MessageWithSender = { ...msg, status: nextStatus };
+        if (
+          (msg.payload_type === 'poll' || m.payload_type === 'poll') &&
+          (!Array.isArray(msg.poll_tallies) || msg.poll_tallies.length === 0) &&
+          Array.isArray(m.poll_tallies) &&
+          m.poll_tallies.length > 0
+        ) {
+          next.poll_tallies = [...m.poll_tallies];
+          next.poll_my_options = Array.isArray(msg.poll_my_options)
+            ? msg.poll_my_options
+            : m.poll_my_options ?? [];
+        }
+        return next;
       })
     : [...existing, msg];
   const newMsgs = dedupeMessages(merged);

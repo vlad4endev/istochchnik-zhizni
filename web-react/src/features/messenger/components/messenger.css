@@ -3795,3 +3795,16 @@ html.dark .msg-videonote-circle--placeholder {
     animation: none !important;
   }
 }
+
+/* Poll inside bubble — keep percentages tight (no spaced digits) */
+.msg-poll,
+.msg-poll__option,
+.msg-poll__result {
+  letter-spacing: normal;
+}
+
+.msg-poll .tabular-nums {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0 !important;
+  font-feature-settings: "tnum" 1;
+}

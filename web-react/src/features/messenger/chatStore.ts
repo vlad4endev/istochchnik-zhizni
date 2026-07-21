@@ -1405,7 +1405,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   (String(m.id).startsWith('temp-') || m.status === 'error'));
               if (!match) return m;
               const keepStatus = m.status === 'delivered' ? 'delivered' : ('sent' as const);
-              return { ...real, status: keepStatus };
+              // Preserve optimistic poll tallies if server omitted them.
+              const merged: MessageWithSender = { ...real, status: keepStatus };
+              if (
+                (real.payload_type ?? pt) === 'poll' &&
+                (!Array.isArray(real.poll_tallies) || real.poll_tallies.length === 0) &&
+                Array.isArray(m.poll_tallies) &&
+                m.poll_tallies.length > 0
+              ) {
+                merged.poll_tallies = [...m.poll_tallies];
+                merged.poll_my_options = Array.isArray(real.poll_my_options)
+                  ? real.poll_my_options
+                  : m.poll_my_options ?? [];
+              }
+              return merged;
             }),
           ),
         },
