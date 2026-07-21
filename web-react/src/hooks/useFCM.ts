@@ -94,10 +94,18 @@ async function saveFcmTokenToServer(fcmToken: string, deviceId: string): Promise
   let lastErr: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      await apiClient.post('/api/notifications/save-token', {
-        fcm_token: fcmToken,
-        device_id: deviceId,
-      });
+      await apiClient.post(
+        '/api/notifications/save-token',
+        {
+          fcm_token: fcmToken,
+          device_id: deviceId,
+        },
+        {
+          // Фоновый sync FCM не должен выкидывать пользователя (как Web Push subscribe).
+          skipAuthClearOn401: true,
+          silentErrorToast: true,
+        },
+      );
       return true;
     } catch (err) {
       lastErr = err;
@@ -112,7 +120,7 @@ async function saveFcmTokenToServer(fcmToken: string, deviceId: string): Promise
     }
   }
   console.warn('[fcm] save-token failed after retries', lastErr, resolveAxiosBaseURL());
-  emitAppToast('Не удалось отправить push-токен на сервер. Проверьте интернет и войдите снова.', 'error');
+  emitAppToast('Не удалось отправить push-токен на сервер. Проверьте интернет.', 'error');
   return false;
 }
 
