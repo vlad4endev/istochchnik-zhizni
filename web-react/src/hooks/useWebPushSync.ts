@@ -2,14 +2,14 @@ import { useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 
 import { useAuthStore } from '../features/auth/authStore';
-import {
-  initMessengerPushNotifications,
-  resetWebPushSyncCache,
-} from '../features/messenger/push/webPush';
+import { initMessengerPushNotifications } from '../features/messenger/push/webPush';
 
 /**
  * Синхронизирует Web Push подписку с бэкендом для всего приложения (не только экран «Чаты»).
  * Нативные устройства обрабатываются в useFCM (FCM токен).
+ *
+ * Важно: не форсим POST /subscribe на каждый visibilitychange — это дёргало 401-interceptor
+ * и сбрасывало сессию при возврате во вкладку / PWA.
  */
 export function useWebPushSync(): void {
   const token = useAuthStore((s) => s.token);
@@ -20,30 +20,24 @@ export function useWebPushSync(): void {
     if (Capacitor.isNativePlatform()) return;
     if (typeof window === 'undefined') return;
 
+    // Один раз после входа / смены токена.
     void initMessengerPushNotifications({ force: true });
 
     const sw = navigator.serviceWorker;
     if (!sw?.addEventListener) return;
 
-    const resync = (force = false) => {
+    const resyncAfterSwChange = () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         debounceRef.current = undefined;
-        if (force) resetWebPushSyncCache();
-        void initMessengerPushNotifications({ force });
+        // Новый SW мог ротировать push subscription — нужно пересохранить endpoint.
+        void initMessengerPushNotifications({ force: true });
       }, 800);
     };
 
-    const onControllerChange = () => resync(true);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') resync(true);
-    };
-
-    sw.addEventListener('controllerchange', onControllerChange);
-    document.addEventListener('visibilitychange', onVisible);
+    sw.addEventListener('controllerchange', resyncAfterSwChange);
     return () => {
-      sw.removeEventListener('controllerchange', onControllerChange);
-      document.removeEventListener('visibilitychange', onVisible);
+      sw.removeEventListener('controllerchange', resyncAfterSwChange);
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [token]);

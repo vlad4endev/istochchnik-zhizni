@@ -104,7 +104,11 @@ async function syncSubscriptionWithServer(
 ): Promise<void> {
   const endpoint = subscription.endpoint;
   if (!force && lastSyncedEndpoint === endpoint) return;
-  await apiClient.post('/api/notifications/subscribe', subscriptionToJsonBody(subscription));
+  await apiClient.post('/api/notifications/subscribe', subscriptionToJsonBody(subscription), {
+    // Не сбрасывать сессию и не показывать глобальный «войдите снова» из 401-interceptor.
+    skipAuthClearOn401: true,
+    silentErrorToast: true,
+  });
   localStorage.setItem(LS_VAPID_PUBLIC_KEY, vapidPublicKey);
   lastSyncedEndpoint = endpoint;
 }
@@ -153,7 +157,14 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<v
       } catch (err) {
         console.error('[push] POST /subscribe (sync existing) failed:', err);
         lastSyncedEndpoint = null;
-        emitAppToast({ message: readPushSubscribeError(err), kind: 'error' });
+        // 401 здесь не значит «выйти» — сессию не трогаем; пользователю не мешаем.
+        const status =
+          err && typeof err === 'object' && 'response' in err
+            ? (err as { response?: { status?: number } }).response?.status
+            : undefined;
+        if (status !== 401) {
+          emitAppToast({ message: readPushSubscribeError(err), kind: 'error' });
+        }
       }
       return;
     }
