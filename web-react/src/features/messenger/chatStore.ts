@@ -48,6 +48,18 @@ export function parseDraftPrivateMemberId(id: string): number | null {
 
 /** Дебаунс markReadUpTo при потоке входящих WS-сообщений — иначе сотни параллельных POST → ERR_INSUFFICIENT_RESOURCES. */
 const markReadDebounceByConv = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Автосброс индикатора «ИИ отвечает», если ответ так и не пришёл. */
+const assistantThinkingTimeoutByConv = new Map<string, ReturnType<typeof setTimeout>>();
+const ASSISTANT_THINKING_TIMEOUT_MS = 120_000;
+
+function clearAssistantThinkingTimeout(conversationId: string): void {
+  const t = assistantThinkingTimeoutByConv.get(String(conversationId));
+  if (t != null) {
+    clearTimeout(t);
+    assistantThinkingTimeoutByConv.delete(String(conversationId));
+  }
+}
 /** Один in-flight mark-read на чат + очередь последнего id, чтобы не плодить timeout'ы. */
 const markReadInFlightByConv = new Map<string, bigint>();
 const markReadQueuedByConv = new Map<string, bigint>();
@@ -152,6 +164,10 @@ export interface ChatState {
 
   // --- Typing indicator: convId → memberId[] ---
   typingByConv: Record<string, TypingUser[]>;
+
+  /** ИИ-канал: ждём ответ бота после отправки вопроса. */
+  assistantThinkingByConv: Record<string, boolean>;
+  setAssistantThinking: (conversationId: string, thinking: boolean) => void;
 
   /** Счётчик для перезагрузки закреплённых сообщений (WS `conv:updated`). */
   pinnedBumpByConv: Record<string, number>;
@@ -960,6 +976,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
   readCursorsByConv: {},
   myReadCursorByConv: {},
   typingByConv: {},
+  assistantThinkingByConv: {},
+  setAssistantThinking: (conversationId, thinking) => {
+    const idKey = String(conversationId);
+    clearAssistantThinkingTimeout(idKey);
+    if (thinking) {
+      assistantThinkingTimeoutByConv.set(
+        idKey,
+        setTimeout(() => {
+          assistantThinkingTimeoutByConv.delete(idKey);
+          set((s) => {
+            if (!s.assistantThinkingByConv[idKey]) return s;
+            return {
+              assistantThinkingByConv: { ...s.assistantThinkingByConv, [idKey]: false },
+            };
+          });
+        }, ASSISTANT_THINKING_TIMEOUT_MS),
+      );
+    }
+    set((s) => {
+      if (Boolean(s.assistantThinkingByConv[idKey]) === thinking) return s;
+      return {
+        assistantThinkingByConv: { ...s.assistantThinkingByConv, [idKey]: thinking },
+      };
+    });
+  },
   pinnedBumpByConv: {},
   onlineMembers: new Set(),
   memberLastSeenAt: {},
@@ -1376,6 +1417,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       reactions: [],
     };
 
+    const isAssistantConv = isAssistantMessengerChannel(
+      get().conversations.find((c) => String(c.id) === String(convId))?.metadata,
+    );
+
     set((s) => ({
       messagesByConv: {
         ...s.messagesByConv,
@@ -1387,6 +1432,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         updated_at: optimistic.created_at,
       })),
     }));
+    if (isAssistantConv) {
+      get().setAssistantThinking(convId, true);
+    }
 
     scheduleServerAckTimer(get, convId, tempId, clientMsgId);
 
@@ -1445,6 +1493,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const apiErr = messengerApiErrorText(e);
       emitAppToast(apiErr ?? 'Не удалось отправить сообщение', 'error');
       clearServerAckTimer(convId, clientMsgId);
+      if (isAssistantConv) {
+        get().setAssistantThinking(convId, false);
+      }
       // Mark failed optimistic message
       set((s) => ({
         messagesByConv: {
@@ -2440,6 +2491,9 @@ function createWsBatchRuntime(
       const prev = wsTypingAutoStopTimers.get(key);
       if (prev != null) clearTimeout(prev);
       wsTypingAutoStopTimers.delete(key);
+    },
+    clearAssistantThinkingTimer: (convId) => {
+      clearAssistantThinkingTimeout(convId);
     },
     hydrateCacheIfNewMember: (memberId, prevMemberId) => {
       if (prevMemberId != null && prevMemberId !== memberId) {
