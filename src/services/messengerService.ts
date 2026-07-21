@@ -1732,6 +1732,205 @@ export async function persistPreparedMessage(prep: PreparedMessageSend): Promise
   return { message: mapMessageWithSender(row), isNew };
 }
 
+export type ForwardedFromInfo = {
+  message_id: string;
+  conversation_id: string;
+  sender_id: number | null;
+  sender_name: string | null;
+  created_at: string | null;
+};
+
+function buildForwardedFromInfo(row: {
+  id: unknown;
+  conversation_id: unknown;
+  sender_id: unknown;
+  created_at: unknown;
+  sender_name?: unknown;
+  sender_first_name?: unknown;
+  sender_last_name?: unknown;
+}): ForwardedFromInfo {
+  const fl = `${row.sender_first_name ?? ''} ${row.sender_last_name ?? ''}`.trim();
+  const name =
+    fl ||
+    (row.sender_name != null ? String(row.sender_name).trim() : '') ||
+    null;
+  return {
+    message_id: String(row.id),
+    conversation_id: String(row.conversation_id),
+    sender_id: row.sender_id == null ? null : Number(row.sender_id),
+    sender_name: name,
+    created_at:
+      row.created_at != null ? new Date(row.created_at as string | Date).toISOString() : null,
+  };
+}
+
+/**
+ * Forward a message into one or more chats the requester belongs to.
+ * Copies content/payload and stores `forwarded_from` metadata (Telegram-style).
+ */
+export async function forwardMessageToConversations(
+  sourceMessageId: string,
+  requesterId: number,
+  targetConversationIds: string[],
+): Promise<Array<{ conversationId: string; message: MessageWithSender }>> {
+  const mid = String(sourceMessageId || '').trim();
+  if (!/^\d+$/.test(mid)) {
+    throw new Error('Invalid message id');
+  }
+
+  const targets = [
+    ...new Set(
+      (targetConversationIds || [])
+        .map((id) => String(id || '').trim())
+        .filter((id) => /^\d+$/.test(id)),
+    ),
+  ].slice(0, 20);
+  if (targets.length === 0) {
+    throw new Error('No target conversations');
+  }
+
+  const srcRows = await dbQuery(
+    `SELECT m.id,
+            m.conversation_id,
+            m.sender_id,
+            m.content,
+            m.payload_type::text AS payload_type,
+            m.payload,
+            m.is_deleted,
+            m.is_e2ee,
+            m.encrypted_payload,
+            m.created_at,
+            mb.name AS sender_name,
+            mb.first_name AS sender_first_name,
+            mb.last_name AS sender_last_name
+     FROM messages m
+     LEFT JOIN members mb ON mb.id = m.sender_id
+     WHERE m.id = $1
+     LIMIT 1`,
+    [mid],
+  );
+  const src = srcRows.rows[0];
+  if (!src || src.is_deleted) {
+    throw new Error('Message not found');
+  }
+
+  const sourceConvId = String(src.conversation_id);
+  const canView = await isMemberInConversation(sourceConvId, requesterId);
+  if (!canView) {
+    throw new Error('Forbidden');
+  }
+
+  const rawPt = String(src.payload_type ?? '');
+  if (rawPt === 'access_request' || rawPt === 'system' || rawPt === 'notification') {
+    throw new Error('Cannot forward this message');
+  }
+  const pt = normalizePayloadType(src.payload_type);
+
+  const contentStored = decryptMessageText(String(src.content ?? ''));
+  const payloadNorm = rewriteStorageUrlsInRecord(
+    normalizePayload(src.payload) as Record<string, unknown>,
+  ) as MessagePayload;
+  // Drop poll votes / ephemeral fields — fresh poll in target chat.
+  const payloadForForward =
+    pt === 'poll'
+      ? (() => {
+          const opts = Array.isArray(payloadNorm.options) ? payloadNorm.options : [];
+          return {
+            options: opts,
+            allows_multiple: Boolean(payloadNorm.allows_multiple),
+            anonymous: Boolean(payloadNorm.anonymous),
+          } as MessagePayload;
+        })()
+      : payloadNorm;
+  const payloadJson = JSON.stringify(payloadForForward);
+  const forwardedFrom = buildForwardedFromInfo(src);
+  const forwardedJson = JSON.stringify(forwardedFrom);
+  const contentForDb = encryptMessageText(contentStored);
+  const isE2EE = Boolean(src.is_e2ee);
+  const encryptedPayload =
+    src.encrypted_payload != null ? String(src.encrypted_payload) : null;
+
+  const out: Array<{ conversationId: string; message: MessageWithSender }> = [];
+
+  for (const targetId of targets) {
+    if (targetId === sourceConvId && targets.length === 1) {
+      // Allow forwarding into the same chat (Telegram does).
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const ok = await isMemberInConversation(targetId, requesterId);
+    if (!ok) {
+      throw new Error(`Forbidden target: ${targetId}`);
+    }
+
+    const clientMsgId = `fwd-${mid}-${targetId}-${randomUUID().slice(0, 8)}`;
+    // eslint-disable-next-line no-await-in-loop
+    await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [targetId]);
+    // eslint-disable-next-line no-await-in-loop
+    const result = await dbQuery(
+      `
+      WITH inserted AS (
+        INSERT INTO messages (
+          conversation_id, sender_id, content, reply_to_message_id, client_msg_id,
+          payload_type, payload, is_e2ee, encrypted_payload, forwarded_from
+        )
+        VALUES ($1, $2, $3, NULL, $4, $5, $6::jsonb, $7, $8, $9::jsonb)
+        RETURNING *, true AS is_new
+      )
+      SELECT
+        ins.*,
+        m.name        AS sender_name,
+        m.first_name  AS sender_first_name,
+        m.last_name   AS sender_last_name,
+        NULL::bigint  AS rp_id,
+        NULL::text    AS rp_content,
+        NULL::boolean AS rp_is_deleted,
+        NULL::text    AS rp_sender_name,
+        (
+          SELECT COALESCE(json_agg(sub.c ORDER BY sub.i), '[]'::json)
+          FROM (
+            SELECT gs.i AS i,
+              COALESCE((
+                SELECT COUNT(*)::int FROM message_poll_votes v
+                WHERE v.message_id = ins.id AND v.option_index = gs.i
+              ), 0) AS c
+            FROM generate_series(
+              0,
+              GREATEST(0, jsonb_array_length(COALESCE(ins.payload->'options', '[]'::jsonb)) - 1)
+            ) AS gs(i)
+          ) sub
+        ) AS poll_tallies_json,
+        (
+          SELECT COALESCE(json_agg(v.option_index ORDER BY v.option_index), '[]'::json)
+          FROM message_poll_votes v
+          WHERE v.message_id = ins.id AND v.member_id = $10
+        ) AS poll_my_options_json
+      FROM inserted ins
+      LEFT JOIN members m ON m.id = ins.sender_id
+      `,
+      [
+        targetId,
+        requesterId,
+        contentForDb,
+        clientMsgId,
+        pt,
+        payloadJson,
+        isE2EE,
+        encryptedPayload,
+        forwardedJson,
+        requesterId,
+      ],
+    );
+    const row = result.rows[0];
+    if (!row) continue;
+    out.push({ conversationId: targetId, message: mapMessageWithSender(row) });
+  }
+
+  if (out.length === 0) {
+    throw new Error('Failed to forward message');
+  }
+  return out;
+}
+
 /** Send a message. Returns the full message with sender info. */
 export async function sendMessage(
   conversationId: string,
@@ -3125,6 +3324,45 @@ export async function markAccessRequestMessengerResolved(
 
 // ─── Map helper ───────────────────────────────────────────────
 
+function normalizeForwardedFromField(v: unknown): ForwardedFromInfo | null {
+  if (v == null) return null;
+  let obj: unknown = v;
+  if (typeof v === 'string') {
+    const t = v.trim();
+    if (!t || t === '[object Object]') return null;
+    try {
+      obj = JSON.parse(t);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null;
+  const o = obj as Record<string, unknown>;
+  const messageId = o.message_id != null ? String(o.message_id) : '';
+  const conversationId = o.conversation_id != null ? String(o.conversation_id) : '';
+  if (!messageId && !conversationId && o.sender_id == null && o.sender_name == null) {
+    return null;
+  }
+  return {
+    message_id: messageId,
+    conversation_id: conversationId,
+    sender_id:
+      o.sender_id == null || o.sender_id === ''
+        ? null
+        : Number.isFinite(Number(o.sender_id))
+          ? Number(o.sender_id)
+          : null,
+    sender_name:
+      o.sender_name == null || String(o.sender_name).trim() === ''
+        ? null
+        : String(o.sender_name).trim(),
+    created_at:
+      o.created_at != null && String(o.created_at).trim() !== ''
+        ? String(o.created_at)
+        : null,
+  };
+}
+
 function mapMessageWithSender(r: Record<string, unknown>): MessageWithSender {
   const asString = (v: unknown): string => (v == null ? '' : String(v));
   const asNullableString = (v: unknown): string | null => (v == null ? null : String(v));
@@ -3167,7 +3405,7 @@ function mapMessageWithSender(r: Record<string, unknown>): MessageWithSender {
     payload: payloadNorm,
     interaction_count: Number(r.interaction_count ?? 0),
     reply_to_message_id: r.reply_to_message_id ? bigint(r.reply_to_message_id) : null,
-    forwarded_from: asNullableString(r.forwarded_from),
+    forwarded_from: normalizeForwardedFromField(r.forwarded_from),
     is_edited: asBoolean(r.is_edited),
     is_deleted: asBoolean(r.is_deleted),
     is_pinned: asBoolean(r.is_pinned),

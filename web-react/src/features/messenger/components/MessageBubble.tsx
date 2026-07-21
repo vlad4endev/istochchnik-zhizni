@@ -28,6 +28,7 @@ import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { ChatVideoAttachmentPreview } from './ChatVideoAttachmentPreview';
 import { PollVotersSheet } from './PollVotersSheet';
 import { MessageReadersSheet } from './MessageReadersSheet';
+import { ForwardMessageSheet } from './ForwardMessageSheet';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { useMediaViewer, type MediaItem } from '../../../components/MediaViewer';
 import { DocumentViewerModal, canPreviewDocumentInline } from '../../../components/DocumentViewerModal';
@@ -842,21 +843,7 @@ function messengerDocTileClasses(tone: MessengerDocTone, isMine: boolean): strin
   }
 }
 
-const QUICK_REACTIONS = [
-  '❤️',
-  '👍',
-  '😂',
-  '😮',
-  '😢',
-  '🙏',
-  '😡',
-  '😍',
-  '🔥',
-  '💯',
-  '✨',
-  '👏',
-];
-const EMPTY_READ_CURSORS: Record<string, string> = {};
+const EMPTY_READ_CURSORS: Record<number, string> = {};
 
 interface MessageBubbleProps {
   message: MessageWithSender;
@@ -900,16 +887,18 @@ function MessageBubbleInner({
   const deleteMessage = useChatStore((s) => s.deleteMessage);
   const retrySendMessage = useChatStore((s) => s.retrySendMessage);
   const [showActions, setShowActions] = useState(false);
-  const [showReactions, setShowReactions] = useState(false);
   /** Плашка реакций над пузырьком (long-press), как в Telegram */
   const [showReactionBar, setShowReactionBar] = useState(false);
   const [showReadersSheet, setShowReadersSheet] = useState(false);
+  const [showForwardSheet, setShowForwardSheet] = useState(false);
   const [documentViewer, setDocumentViewer] = useState<{ url: string; name: string; mime: string } | null>(null);
   const [mainImageLoaded, setMainImageLoaded] = useState(false);
   const [albumSlotLoaded, setAlbumSlotLoaded] = useState<Record<number, boolean>>({});
   const longPressTimer = useRef<number | null>(null);
   const longPressOrigin = useRef<{ x: number; y: number } | null>(null);
-  const lastTapUpRef = useRef<{ t: number; x: number; y: number } | null>(null);
+  const longPressFiredRef = useRef(false);
+  const pointerMovedRef = useRef(false);
+  const suppressMenuUntilRef = useRef(0);
 
   const isOptimistic = message.id.startsWith('temp-');
   const isMine = isOptimistic || (currentMemberId != null && message.sender_id === currentMemberId);
@@ -959,6 +948,13 @@ function MessageBubbleInner({
     setShowReadersSheet(true);
   }, [canViewReaders]);
 
+  const openForwardSheet = useCallback(() => {
+    if (isOptimistic || isDeleted || !/^\d+$/.test(String(message.id))) return;
+    setShowActions(false);
+    setShowReactionBar(false);
+    setShowForwardSheet(true);
+  }, [isOptimistic, isDeleted, message.id]);
+
   const formattedTime = useMemo(() => {
     const d = new Date(message.created_at);
     return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -983,6 +979,30 @@ function MessageBubbleInner({
     !isDeleted &&
     !isMine &&
     isAssistantBotMessage(payload, message.sender_id);
+
+  const forwardedFromLabel = useMemo(() => {
+    const raw = message.forwarded_from;
+    if (raw == null) return null;
+    let obj: unknown = raw;
+    if (typeof raw === 'string') {
+      try {
+        obj = JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+    if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null;
+    const name = String((obj as { sender_name?: unknown }).sender_name ?? '').trim();
+    return name || 'сообщения';
+  }, [message.forwarded_from]);
+
+  const canForwardMessage =
+    !isOptimistic &&
+    !isDeleted &&
+    !systemBotAccessMessage &&
+    /^\d+$/.test(String(message.id)) &&
+    payloadType !== 'access_request';
+
   const senderName = String(
     message.sender_name ??
       [message.sender_first_name, message.sender_last_name].filter(Boolean).join(' ') ??
@@ -1954,7 +1974,8 @@ function MessageBubbleInner({
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     if (!isDeleted && !isOptimistic) {
-      setShowActions(!showActions);
+      setShowReactionBar(false);
+      setShowActions(true);
     }
   };
 
@@ -1966,12 +1987,26 @@ function MessageBubbleInner({
     longPressOrigin.current = null;
   };
 
+  const isInteractiveMsgTarget = (target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return false;
+    return Boolean(
+      target.closest(
+        'button, a, input, textarea, select, [role="button"], [data-no-msg-menu], .msg-reaction-chip',
+      ),
+    );
+  };
+
   const handlePointerDownCapture = (e: React.PointerEvent) => {
     if (e.button !== 0 || isDeleted || isOptimistic) return;
+    if (isInteractiveMsgTarget(e.target)) return;
+    longPressFiredRef.current = false;
+    pointerMovedRef.current = false;
     longPressOrigin.current = { x: e.clientX, y: e.clientY };
     longPressTimer.current = window.setTimeout(() => {
       longPressTimer.current = null;
-      longPressOrigin.current = null;
+      longPressFiredRef.current = true;
+      suppressMenuUntilRef.current = Date.now() + 450;
+      setShowActions(false);
       setShowReactionBar(true);
       if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
         navigator.vibrate(12);
@@ -1981,13 +2016,35 @@ function MessageBubbleInner({
       } catch {
         /* ignore */
       }
-    }, 420);
+    }, 480);
   };
 
   const handlePointerMoveCapture = (e: React.PointerEvent) => {
     if (longPressOrigin.current == null || longPressTimer.current == null) return;
     const o = longPressOrigin.current;
-    if (Math.hypot(e.clientX - o.x, e.clientY - o.y) > 14) clearLongPressTimer();
+    if (Math.hypot(e.clientX - o.x, e.clientY - o.y) > 14) {
+      pointerMovedRef.current = true;
+      clearLongPressTimer();
+    }
+  };
+
+  const handlePointerUpCapture = (e: React.PointerEvent) => {
+    const longPressFired = longPressFiredRef.current;
+    const moved = pointerMovedRef.current;
+    const hadTimer = longPressTimer.current != null;
+    clearLongPressTimer();
+
+    if (e.button !== 0 || isDeleted || isOptimistic) return;
+    if (longPressFired || moved) return;
+    if (Date.now() < suppressMenuUntilRef.current) return;
+    if (isInteractiveMsgTarget(e.target)) return;
+    if (!hadTimer) return;
+
+    // Мышь: меню по правому клику. Тач/стилус: короткий тап = меню, удержание = реакции.
+    if (e.pointerType === 'mouse') return;
+
+    setShowReactionBar(false);
+    setShowActions(true);
   };
 
   useEffect(() => {
@@ -1995,7 +2052,6 @@ function MessageBubbleInner({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setShowActions(false);
-        setShowReactions(false);
         setShowReactionBar(false);
       }
     };
@@ -2020,30 +2076,6 @@ function MessageBubbleInner({
     },
     [message.reactions, message.id, addReaction, removeReaction],
   );
-
-  const handleBubblePointerUp = (e: React.PointerEvent) => {
-    if (e.button !== 0 || isOptimistic) return;
-    if (showReactionBar || showActions) return;
-    const target = e.target as HTMLElement;
-    if (target.closest('button, a, [role="button"]')) return;
-    if (target.closest('.msg-reaction-chip')) return;
-    const now = Date.now();
-    const prev = lastTapUpRef.current;
-    if (
-      prev &&
-      now - prev.t <= 450 &&
-      Math.hypot(e.clientX - prev.x, e.clientY - prev.y) <= 32
-    ) {
-      lastTapUpRef.current = null;
-      const heart = '❤️';
-      const row = message.reactions.find((x) => x.emoji === heart);
-      if (row?.reacted_by_me) void removeReaction(message.id, heart);
-      else void addReaction(message.id, heart);
-      e.preventDefault();
-      return;
-    }
-    lastTapUpRef.current = { t: now, x: e.clientX, y: e.clientY };
-  };
 
   if (isDeleted) {
     return (
@@ -2177,12 +2209,40 @@ function MessageBubbleInner({
               />
             )
           ) : status === 'delivered' ? (
-            <IoCheckmarkDone
-              className="h-3.5 w-3.5 shrink-0 text-white/70"
-              role="img"
-              aria-label={statusIconLabel ?? undefined}
-              focusable={false}
-            />
+            canViewReaders ? (
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center rounded-sm text-white/70 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+                aria-label="Доставлено. Нажмите, чтобы увидеть, кто прочитал"
+                title="Кто прочитал"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openReadersSheet();
+                }}
+              >
+                <IoCheckmarkDone className="h-3.5 w-3.5 shrink-0" aria-hidden focusable={false} />
+              </button>
+            ) : (
+              <IoCheckmarkDone
+                className="h-3.5 w-3.5 shrink-0 text-white/70"
+                role="img"
+                aria-label={statusIconLabel ?? undefined}
+                focusable={false}
+              />
+            )
+          ) : canViewReaders ? (
+            <button
+              type="button"
+              className="inline-flex shrink-0 items-center rounded-sm text-white/70 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+              aria-label="Отправлено. Нажмите, чтобы увидеть, кто прочитал"
+              title="Кто прочитал"
+              onClick={(e) => {
+                e.stopPropagation();
+                openReadersSheet();
+              }}
+            >
+              <IoCheckmark className="h-3.5 w-3.5 shrink-0" aria-hidden focusable={false} />
+            </button>
           ) : (
             <IoCheckmark
               className="h-3.5 w-3.5 shrink-0 text-white/70"
@@ -2217,8 +2277,11 @@ function MessageBubbleInner({
       onContextMenu={handleContextMenu}
       onPointerDownCapture={handlePointerDownCapture}
       onPointerMoveCapture={handlePointerMoveCapture}
-      onPointerUpCapture={() => clearLongPressTimer()}
-      onPointerCancelCapture={() => clearLongPressTimer()}
+      onPointerUpCapture={handlePointerUpCapture}
+      onPointerCancelCapture={() => {
+        clearLongPressTimer();
+        pointerMovedRef.current = true;
+      }}
     >
       <div className="relative">
         {showReactionBar ? (
@@ -2247,18 +2310,6 @@ function MessageBubbleInner({
                   {emoji}
                 </button>
               ))}
-              <button
-                type="button"
-                className="msg-reaction-floating__more"
-                title="Ещё действия"
-                aria-label="Ещё действия"
-                onClick={() => {
-                  setShowReactionBar(false);
-                  setShowActions(true);
-                }}
-              >
-                ⋯
-              </button>
             </div>
           </>
         ) : null}
@@ -2278,8 +2329,10 @@ function MessageBubbleInner({
           dragConstraints={systemBotAccessMessage ? undefined : { left: 0, right: 0 }}
           dragElastic={systemBotAccessMessage ? undefined : 0.2}
           style={{ x }}
-          onPointerUp={handleBubblePointerUp}
-          onDragStart={() => clearLongPressTimer()}
+          onDragStart={() => {
+            pointerMovedRef.current = true;
+            clearLongPressTimer();
+          }}
           onDragEnd={(_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
             if (systemBotAccessMessage) return;
             const dx = info.offset.x;
@@ -2326,6 +2379,17 @@ function MessageBubbleInner({
         ) : null}
 
         {/* Reply preview (tap to jump) */}
+        {forwardedFromLabel ? (
+          <div
+            className={[
+              'mb-1 text-[12px] font-semibold leading-tight',
+              isMine ? 'text-sky-100/90' : 'text-primary',
+            ].join(' ')}
+          >
+            Переслано от {forwardedFromLabel}
+          </div>
+        ) : null}
+
         {message.reply_preview && (
           <button
             type="button"
@@ -2425,7 +2489,7 @@ function MessageBubbleInner({
         </div>
       )}
 
-      {/* Actions Popup (Context Menu) */}
+      {/* Actions Popup (Context Menu) — тап; реакции — удержание */}
       {showActions && (
         <>
           <div
@@ -2437,8 +2501,19 @@ function MessageBubbleInner({
           />
           <div className={`msg-actions ${isMine ? 'msg-actions--mine' : ''}`}>
             {!systemBotAccessMessage ? (
-              <button type="button" onClick={() => { setReplyTo(message); setShowActions(false); }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setReplyTo(message);
+                  setShowActions(false);
+                }}
+              >
                 <span>↩️</span> Ответить
+              </button>
+            ) : null}
+            {canForwardMessage ? (
+              <button type="button" onClick={() => openForwardSheet()}>
+                <span>↪️</span> Переслать
               </button>
             ) : null}
             {payloadType === 'text' && String(message.content ?? '').trim() ? (
@@ -2455,6 +2530,22 @@ function MessageBubbleInner({
                 <span>📋</span> Копировать
               </button>
             ) : null}
+            {isMine && payloadType !== 'poll' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(message);
+                  setShowActions(false);
+                }}
+              >
+                <span>✏️</span> Редактировать
+              </button>
+            ) : null}
+            {canViewReaders ? (
+              <button type="button" onClick={() => openReadersSheet()}>
+                <span>✓</span> Кто прочитал
+              </button>
+            ) : null}
             {canPinMessages && !isOptimistic && /^\d+$/.test(String(message.id)) ? (
               <button
                 type="button"
@@ -2463,55 +2554,31 @@ function MessageBubbleInner({
                   setShowActions(false);
                 }}
               >
-                <span>{message.is_pinned ? '📍' : '📌'}</span> {message.is_pinned ? 'Открепить' : 'Закрепить'}
+                <span>{message.is_pinned ? '📍' : '📌'}</span>{' '}
+                {message.is_pinned ? 'Открепить' : 'Закрепить'}
               </button>
             ) : null}
-            {isMine && payloadType !== 'poll' && (
-              <button type="button" onClick={() => { setEditing(message); setShowActions(false); }}>
-                <span>✏️</span> Редактировать
-              </button>
-            )}
-            {isMine && (
-              <button type="button" className="msg-actions__danger" onClick={() => { void deleteMessage(message.id); setShowActions(false); }}>
-                <span>🗑</span> Удалить
-              </button>
-            )}
-            {canViewReaders ? (
-              <button
-                type="button"
-                onClick={() => {
-                  openReadersSheet();
-                }}
-              >
-                <span>✓</span> Кто прочитал
-              </button>
-            ) : null}
-            <button type="button" onClick={() => { setShowReactions(!showReactions); }}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowActions(false);
+                setShowReactionBar(true);
+              }}
+            >
               <span>😀</span> Реакция
             </button>
-            {showReactions && (
-              <div className="msg-quick-reactions">
-                {QUICK_REACTIONS.map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    className="msg-quick-reaction"
-                    onClick={() => {
-                      const row = message.reactions.find((x) => x.emoji === emoji);
-                      if (row?.reacted_by_me) {
-                        void removeReaction(message.id, emoji);
-                      } else {
-                        void addReaction(message.id, emoji);
-                      }
-                      setShowActions(false);
-                      setShowReactions(false);
-                    }}
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            )}
+            {isMine ? (
+              <button
+                type="button"
+                className="msg-actions__danger"
+                onClick={() => {
+                  void deleteMessage(message.id);
+                  setShowActions(false);
+                }}
+              >
+                <span>🗑</span> Удалить
+              </button>
+            ) : null}
           </div>
         </>
       )}
@@ -2529,6 +2596,14 @@ function MessageBubbleInner({
         open={showReadersSheet}
         onClose={() => setShowReadersSheet(false)}
         messageId={String(message.id)}
+      />
+    ) : null}
+    {canForwardMessage ? (
+      <ForwardMessageSheet
+        open={showForwardSheet}
+        onClose={() => setShowForwardSheet(false)}
+        messageId={String(message.id)}
+        sourceConversationId={String(message.conversation_id)}
       />
     ) : null}
     </>

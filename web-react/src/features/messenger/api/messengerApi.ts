@@ -608,6 +608,23 @@ export async function fetchMessageReaders(messageId: string): Promise<MessageRea
   return data;
 }
 
+export type ForwardMessageResult = {
+  ok: boolean;
+  forwarded: Array<{ conversationId: string; message: MessageWithSender }>;
+};
+
+/** Forward a message into one or more chats. */
+export async function forwardMessage(
+  messageId: string,
+  conversationIds: string[],
+): Promise<ForwardMessageResult> {
+  const { data } = await apiClient.post<ForwardMessageResult>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/forward`,
+    { conversationIds },
+  );
+  return data;
+}
+
 export async function searchMembers(q: string): Promise<SearchMember[]> {
   const { data } = await apiClient.get<SearchMember[]>(`${BASE}/members/search`, { params: { q } });
   return data;

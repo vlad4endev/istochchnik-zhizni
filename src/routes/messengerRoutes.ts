@@ -1518,6 +1518,61 @@ router.get('/messages/:id/readers', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/messenger/messages/:id/forward
+ * Body: { conversationIds: string[] }
+ * Forward a message into other chats (membership required in source + each target).
+ */
+router.post('/messages/:id/forward', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const msgId = String(req.params.id || '').trim();
+  if (!/^\d+$/.test(msgId)) {
+    res.status(400).json({ error: 'Invalid message id' });
+    return;
+  }
+  const rawIds = req.body?.conversationIds ?? req.body?.conversation_ids ?? [];
+  const conversationIds = Array.isArray(rawIds) ? rawIds.map((x: unknown) => String(x ?? '')) : [];
+  try {
+    const results = await svc.forwardMessageToConversations(msgId, userId, conversationIds);
+    for (const item of results) {
+      const convKey = String(item.conversationId);
+      const messageForRealtime = { ...item.message, is_read: false as const };
+      sendToRoomAll(convKey, {
+        type: 'msg:new',
+        conversationId: convKey,
+        message: messageForRealtime,
+      });
+    }
+    res.json({
+      ok: true,
+      forwarded: results.map((r) => ({
+        conversationId: r.conversationId,
+        message: r.message,
+      })),
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message === 'Forbidden' || message.startsWith('Forbidden target:')) {
+      res.status(403).json({ error: 'Нет доступа к чату для пересылки' });
+      return;
+    }
+    if (message === 'Message not found' || message === 'Invalid message id') {
+      res.status(404).json({ error: 'Сообщение не найдено' });
+      return;
+    }
+    if (message === 'No target conversations') {
+      res.status(400).json({ error: 'Выберите хотя бы один чат' });
+      return;
+    }
+    if (message === 'Cannot forward this message') {
+      res.status(400).json({ error: 'Это сообщение нельзя переслать' });
+      return;
+    }
+    console.error('[messenger] forward message error:', e);
+    res.status(500).json({ error: 'Failed to forward message' });
+  }
+});
+
 /** PATCH /api/messenger/messages/:id { content } */
 router.get('/messages/:id/attachment-url', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
