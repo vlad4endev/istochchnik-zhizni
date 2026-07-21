@@ -86,6 +86,9 @@ export function ChatWindow({
   const conversations = useChatStore((s) => s.conversations);
   const draftPeer = useChatStore((s) => s.privateDraftPeer);
   const typingUsers = useChatStore((s) => s.typingByConv[conversationId] || EMPTY_ARRAY);
+  const assistantThinking = useChatStore(
+    (s) => Boolean(s.assistantThinkingByConv[conversationId]),
+  );
   const memberLastSeenAt = useChatStore((s) => s.memberLastSeenAt);
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const pinnedBump = useChatStore((s) => s.pinnedBumpByConv[conversationId] ?? 0);
@@ -767,6 +770,15 @@ export function ChatWindow({
     }
   }, [messages, conversationId, listCount, virtualListTotalSize, rowVirtualizer]);
 
+  useEffect(() => {
+    if (!assistantThinking || !nearBottomRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+  }, [assistantThinking, conversationId]);
+
   const displayName = useMemo(() => {
     if (isDraft && draftPeer) {
       const fn = draftPeer.first_name || '';
@@ -798,6 +810,9 @@ export function ChatWindow({
     if (typingUsers.length > 0) {
       return '';
     }
+    if (isAssistantChannel && assistantThinking) {
+      return '';
+    }
     if (isDraft) return 'черновик · чат появится после 1 сообщения';
     if (!conv) return '';
     if (isAssistantChannel) return 'Христианский помощник · Библия, вера и программа церкви';
@@ -827,6 +842,7 @@ export function ChatWindow({
     chatHeadReady,
     conv,
     typingUsers,
+    assistantThinking,
     isPrivatePeerOnline,
     isDraft,
     isAssistantChannel,
@@ -888,7 +904,7 @@ export function ChatWindow({
   const typingPresentVerb = typingFirstNames.length > 1 ? 'печатают' : 'печатает';
 
   const headerStatusClass =
-    typingUsers.length > 0
+    typingUsers.length > 0 || (isAssistantChannel && assistantThinking)
       ? 'font-medium text-primary'
       : isDraft || (conv && conv.type !== 'private')
         ? 'text-gray-500'
@@ -1000,6 +1016,18 @@ export function ChatWindow({
                       aria-label={`${typingFirstNames.join(', ')} ${typingPresentVerb}`}
                     >
                       <span>{typingFirstNames.join(', ')} {typingPresentVerb}</span>
+                      <span className="tg-typing-dots" aria-hidden>
+                        <span className="tg-typing-dots__dot" />
+                        <span className="tg-typing-dots__dot" />
+                        <span className="tg-typing-dots__dot" />
+                      </span>
+                    </div>
+                  ) : isAssistantChannel && assistantThinking ? (
+                    <div
+                      className={['truncate text-xs leading-tight sm:text-sm', headerStatusClass].join(' ')}
+                      aria-label="ИИ отвечает"
+                    >
+                      <span>ИИ отвечает</span>
                       <span className="tg-typing-dots" aria-hidden>
                         <span className="tg-typing-dots__dot" />
                         <span className="tg-typing-dots__dot" />
@@ -1275,6 +1303,16 @@ export function ChatWindow({
             })}
           </div>
         )}
+        {isAssistantChannel && assistantThinking ? (
+          <div className="tg-assistant-thinking" role="status" aria-live="polite">
+            <span>ИИ отвечает</span>
+            <span className="tg-typing-dots" aria-hidden>
+              <span className="tg-typing-dots__dot" />
+              <span className="tg-typing-dots__dot" />
+              <span className="tg-typing-dots__dot" />
+            </span>
+          </div>
+        ) : null}
         </div>
       </div>
 
@@ -1289,16 +1327,16 @@ export function ChatWindow({
         ) : (
           <>
             {isAssistantChannel && canPostMessages ? (
-              <div className="mb-2 min-w-0">
+              <div className="tg-assistant-examples mb-2.5 min-w-0">
                 <p className="mb-1.5 px-0.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                   Примеры вопросов
                 </p>
-                <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="flex w-full snap-x snap-mandatory gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {ASSISTANT_EXAMPLE_QUESTIONS.map((q) => (
                     <button
                       key={q.text}
                       type="button"
-                      className="max-w-[85%] shrink-0 snap-start rounded-2xl border border-primary/20 bg-primary/[0.06] px-3 py-2 text-left text-[13px] font-medium leading-snug text-[var(--text)] transition-colors hover:bg-primary/10 active:bg-primary/15"
+                      className="tg-suggest-chip max-w-[min(85%,16rem)] shrink-0 snap-start rounded-2xl border border-primary/20 bg-primary/[0.06] px-3 py-2 text-left text-[13px] font-medium leading-snug text-[var(--text)] transition-colors hover:bg-primary/10 active:bg-primary/15"
                       onClick={() => {
                         void useChatStore.getState().sendMessage(conversationId, q.text);
                       }}
@@ -1309,21 +1347,23 @@ export function ChatWindow({
                 </div>
               </div>
             ) : null}
-            <ChatInput
-              conversationId={conversationId}
-              sendTypingStart={sendTypingStart}
-              sendTypingStop={sendTypingStop}
-              canSend={canPostMessages}
-              canSendAttachments={canSendAttachments}
-              textOnly={isAssistantChannel}
-              mentionParticipants={
-                conv && conv.type !== 'private' && !isAssistantChannel ? mentionList : []
-              }
-              participantLabelById={participantLabelById}
-              placeholder={
-                isAssistantChannel ? 'Спросите о вере, Библии или программе церкви…' : 'Сообщение'
-              }
-            />
+            <div className="tg-input-area-wrap w-full min-w-0">
+              <ChatInput
+                conversationId={conversationId}
+                sendTypingStart={sendTypingStart}
+                sendTypingStop={sendTypingStop}
+                canSend={canPostMessages}
+                canSendAttachments={canSendAttachments}
+                textOnly={isAssistantChannel}
+                mentionParticipants={
+                  conv && conv.type !== 'private' && !isAssistantChannel ? mentionList : []
+                }
+                participantLabelById={participantLabelById}
+                placeholder={
+                  isAssistantChannel ? 'Спросите о вере, Библии или программе церкви…' : 'Сообщение'
+                }
+              />
+            </div>
           </>
         )}
       </div>

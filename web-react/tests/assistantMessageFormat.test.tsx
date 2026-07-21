@@ -13,6 +13,11 @@ describe('assistantMessageFormat', () => {
     );
   });
 
+  it('collapses spaced bold markers from LLM', () => {
+    expect(normalizeAssistantMarkdown('* *Важно:* * не спешите')).toBe('**Важно:** не спешите');
+    expect(normalizeAssistantMarkdown('* * Важно * *')).toBe('**Важно**');
+  });
+
   it('renders bold and list items as HTML', () => {
     const html = renderToStaticMarkup(
       <>
@@ -29,6 +34,25 @@ describe('assistantMessageFormat', () => {
     expect(html).toContain('Музыка');
     expect(html).not.toContain('**');
     expect(html).not.toContain('\\-');
+  });
+
+  it('renders headings without hash marks', () => {
+    const html = renderToStaticMarkup(
+      <>{renderAssistantMessageContent('### План «Первые шаги»\n\nТекст')}</>,
+    );
+    expect(html).toMatch(/<h[1-4]/);
+    expect(html).toContain('План');
+    expect(html).not.toContain('###');
+  });
+
+  it('renders spaced bold as real strong tags', () => {
+    const html = renderToStaticMarkup(
+      <>{renderAssistantMessageContent('* *Важно:* * не пропускайте дни')}</>,
+    );
+    expect(html).toContain('<strong');
+    expect(html).toContain('Важно');
+    expect(html).not.toContain('* *');
+    expect(html).not.toContain('**');
   });
 
   it('renders Bible blockquotes', () => {

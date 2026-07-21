@@ -14,7 +14,7 @@ import { sendRealtimeJson } from '../../lib/realtimeWsClient';
 import { isMessengerChatReadSurfaceOpen } from './messengerReadSurface';
 import { getAvatarInitial } from './avatarUtils';
 import { inferMessengerPayloadType } from './payloadMedia';
-import { isAssistantMessengerChannel } from './messengerChannelKinds';
+import { isAssistantBotMessage, isAssistantMessengerChannel } from './messengerChannelKinds';
 import type { ChatState } from './chatStore';
 
 export type WsInboundMessage = Record<string, unknown> & { type?: string };
@@ -42,6 +42,7 @@ export type WsBatchEffect =
   | { type: 'clear_server_ack'; convId: string; clientMsgId: string }
   | { type: 'arm_typing_timer'; convId: string; memberId: number }
   | { type: 'clear_typing_timer'; convId: string; memberId: number }
+  | { type: 'clear_assistant_thinking_timer'; convId: string }
   | { type: 'save_snapshot' }
   | { type: 'hydrate_cache_if_new_member'; memberId: number; prevMemberId: number | null };
 
@@ -369,12 +370,29 @@ export function applyNewMessage(
     });
   }
 
-  const next: ChatState = {
+  let next: ChatState = {
     ...s,
     messagesByConv: { ...s.messagesByConv, [idKey]: newMsgs },
     conversations: updatedConvs,
     totalUnread,
   };
+
+  const assistantConv = isAssistantMessengerChannel(
+    (updatedConvs.find((c) => c.id === idKey) ?? targetConversation)?.metadata,
+  );
+  if (
+    assistantConv &&
+    !isOwn &&
+    !alreadyPresent &&
+    (msg.sender_id == null || isAssistantBotMessage(msg.payload, msg.sender_id)) &&
+    Boolean(s.assistantThinkingByConv?.[idKey])
+  ) {
+    next = {
+      ...next,
+      assistantThinkingByConv: { ...(s.assistantThinkingByConv ?? {}), [idKey]: false },
+    };
+    effects.push({ type: 'clear_assistant_thinking_timer', convId: idKey });
+  }
 
   if (!next.conversations.some((c) => c.id === idKey)) {
     effects.push({ type: 'load_conversations', force: true });
@@ -868,6 +886,7 @@ export type WsBatchRuntime = {
   markReadySyncDone: () => void;
   armTypingAutoStop: (convId: string, memberId: number, onStop: () => void) => void;
   clearTypingTimer: (convId: string, memberId: number) => void;
+  clearAssistantThinkingTimer: (convId: string) => void;
   hydrateCacheIfNewMember: (memberId: number, prevMemberId: number | null) => void;
   saveSnapshot: () => void;
 };
@@ -937,6 +956,9 @@ export function runWsBatchEffects(effects: WsBatchEffect[], rt: WsBatchRuntime):
         break;
       case 'clear_typing_timer':
         rt.clearTypingTimer(effect.convId, effect.memberId);
+        break;
+      case 'clear_assistant_thinking_timer':
+        rt.clearAssistantThinkingTimer(effect.convId);
         break;
       case 'hydrate_cache_if_new_member':
         rt.hydrateCacheIfNewMember(effect.memberId, effect.prevMemberId);
