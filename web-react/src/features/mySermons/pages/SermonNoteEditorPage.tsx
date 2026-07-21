@@ -1,16 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { LuArrowLeft, LuTrash2 } from 'react-icons/lu';
+import { LuArrowLeft, LuShare2, LuTrash2 } from 'react-icons/lu';
 
-import { PageHeader } from '@/components/layout/PageHeader';
 import { keys } from '@/lib/queryKeys';
-import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
 import { emitAppToast } from '@/lib/uiFeedback';
+import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
 
-import { deleteSermonNote, fetchSermonNote, updateSermonNote } from '../api';
+import {
+  deleteSermonNote,
+  fetchSermonNote,
+  updateSermonNote,
+  type SermonNote,
+} from '../api';
+import { bodyToEditorHtml } from '../bodyContent';
+import { SermonDocEditor } from '../components/SermonDocEditor';
+import { ShareSermonNoteModal } from '../components/ShareSermonNoteModal';
 
-const AUTOSAVE_MS = 600;
+const AUTOSAVE_MS = 700;
 
 type Draft = {
   title: string;
@@ -32,26 +39,42 @@ export function SermonNoteEditorPage() {
   });
 
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [editorSeedHtml, setEditorSeedHtml] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [shareOpen, setShareOpen] = useState(false);
   const loadedIdRef = useRef<string | null>(null);
   const skipSaveRef = useRef(true);
+
+  useEffect(() => {
+    dispatchLayoutMainChrome(false);
+    return () => dispatchLayoutMainChrome(true);
+  }, []);
 
   useEffect(() => {
     if (!noteQ.data) return;
     if (loadedIdRef.current === noteQ.data.id) return;
     loadedIdRef.current = noteQ.data.id;
     skipSaveRef.current = true;
+    const html = bodyToEditorHtml(noteQ.data.body, noteQ.data.body_format);
     setDraft({
       title: noteQ.data.title ?? '',
       topic: noteQ.data.topic ?? '',
       scripture: noteQ.data.scripture ?? '',
-      body: noteQ.data.body ?? '',
+      body: html,
     });
+    setEditorSeedHtml(html);
     setSaveState('idle');
   }, [noteQ.data]);
 
   const saveMut = useMutation({
-    mutationFn: (patch: Draft) => updateSermonNote(noteId, patch),
+    mutationFn: (patch: Draft) =>
+      updateSermonNote(noteId, {
+        title: patch.title,
+        topic: patch.topic,
+        scripture: patch.scripture,
+        body: patch.body,
+        body_format: 'html',
+      }),
     onMutate: () => setSaveState('saving'),
     onSuccess: (note) => {
       setSaveState('saved');
@@ -74,7 +97,6 @@ export function SermonNoteEditorPage() {
       saveMut.mutate(draft);
     }, AUTOSAVE_MS);
     return () => window.clearTimeout(timer);
-    // Intentionally depend on draft fields; saveMut identity changes are ignored.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, noteId]);
 
@@ -86,117 +108,116 @@ export function SermonNoteEditorPage() {
       emitAppToast('Конспект удалён', 'success');
       void navigate('/my-sermons');
     },
-    onError: () => {
-      emitAppToast('Не удалось удалить', 'error');
-    },
+    onError: () => emitAppToast('Не удалось удалить', 'error'),
   });
 
-  const saveLabel =
-    saveState === 'saving'
-      ? 'Сохранение…'
-      : saveState === 'saved'
-        ? 'Сохранено'
-        : saveState === 'error'
-          ? 'Ошибка сохранения'
-          : '';
+  const note = noteQ.data;
+  const saveLabel = useMemo(() => {
+    if (saveState === 'saving') return 'Сохранение…';
+    if (saveState === 'saved') return 'Сохранено';
+    if (saveState === 'error') return 'Ошибка сохранения';
+    return '';
+  }, [saveState]);
+
+  const onNoteUpdated = (updated: SermonNote) => {
+    void qc.setQueryData(keys.sermonNote(noteId), updated);
+    void qc.invalidateQueries({ queryKey: keys.sermonNotes });
+  };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className={sectionHeroStickyClass}>
-        <PageHeader title="Конспект" />
-      </div>
-
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-3 px-4 py-4 sm:px-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="flex min-h-0 flex-1 flex-col bg-[var(--surface)]">
+      <header className="sticky top-0 z-20 border-b border-stone-200/80 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-4xl items-center gap-2 px-3 py-2.5 sm:px-5">
           <Link
             to="/my-sermons"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-stone-600 hover:text-primary"
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-semibold text-stone-600 hover:bg-stone-100 hover:text-primary"
           >
             <LuArrowLeft className="h-4 w-4" aria-hidden />
-            К списку
+            <span className="hidden sm:inline">К списку</span>
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-stone-800">
+              {draft?.title.trim() || 'Без названия'}
+            </p>
             {saveLabel ? (
-              <span
-                className={`text-xs font-medium ${
-                  saveState === 'error' ? 'text-red-600' : 'text-stone-500'
-                }`}
-              >
+              <p className={`text-[11px] ${saveState === 'error' ? 'text-red-600' : 'text-stone-500'}`}>
                 {saveLabel}
-              </span>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => {
-                if (!window.confirm('Удалить этот конспект?')) return;
-                deleteMut.mutate();
-              }}
-              disabled={deleteMut.isPending}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
-            >
-              <LuTrash2 className="h-4 w-4" aria-hidden />
-              Удалить
-            </button>
+              </p>
+            ) : (
+              <p className="text-[11px] text-stone-400">Автосохранение</p>
+            )}
           </div>
+          <button
+            type="button"
+            onClick={() => setShareOpen(true)}
+            disabled={!note}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+          >
+            <LuShare2 className="h-4 w-4" aria-hidden />
+            <span className="hidden sm:inline">Поделиться</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!window.confirm('Удалить этот документ?')) return;
+              deleteMut.mutate();
+            }}
+            disabled={deleteMut.isPending}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+          >
+            <LuTrash2 className="h-4 w-4" aria-hidden />
+          </button>
         </div>
+      </header>
 
+      <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-3 py-4 sm:px-5">
         {noteQ.isLoading || !draft ? (
-          <p className="py-10 text-center text-sm text-stone-500">Загрузка…</p>
+          <p className="py-16 text-center text-sm text-stone-500">Открываем документ…</p>
         ) : noteQ.isError ? (
-          <p className="py-10 text-center text-sm text-red-600">Конспект не найден или нет доступа.</p>
+          <p className="py-16 text-center text-sm text-red-600">Документ не найден или нет доступа.</p>
         ) : (
-          <div className="flex flex-1 flex-col gap-3 pb-10">
+          <div className="flex flex-1 flex-col rounded-2xl border border-stone-200 bg-white px-3 py-4 shadow-sm sm:px-8 sm:py-6">
             <input
               type="text"
               value={draft.title}
               onChange={(e) => setDraft((d) => (d ? { ...d, title: e.target.value } : d))}
-              placeholder="Название конспекта"
-              className="w-full border-0 border-b border-stone-200 bg-transparent py-2 text-xl font-semibold text-stone-900 outline-none placeholder:text-stone-300 focus:border-primary"
+              placeholder="Название документа"
+              className="w-full border-0 bg-transparent text-3xl font-bold tracking-tight text-stone-900 outline-none placeholder:text-stone-300"
             />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-stone-500">
-                  Тема
-                </span>
-                <input
-                  type="text"
-                  value={draft.topic}
-                  onChange={(e) => setDraft((d) => (d ? { ...d, topic: e.target.value } : d))}
-                  placeholder="Тема проповеди"
-                  className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm outline-none ring-primary/30 focus:ring-2"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-stone-500">
-                  Писание
-                </span>
-                <input
-                  type="text"
-                  value={draft.scripture}
-                  onChange={(e) => setDraft((d) => (d ? { ...d, scripture: e.target.value } : d))}
-                  placeholder="Например, Иоанна 3:16"
-                  className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm outline-none ring-primary/30 focus:ring-2"
-                />
-              </label>
-            </div>
-            <label className="flex min-h-0 flex-1 flex-col">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-stone-500">
-                Конспект
-              </span>
-              <textarea
-                value={draft.body}
-                onChange={(e) => setDraft((d) => (d ? { ...d, body: e.target.value } : d))}
-                placeholder="Пишите план и текст проповеди…"
-                rows={18}
-                className="min-h-[50dvh] w-full flex-1 resize-y rounded-xl border border-stone-200 bg-white px-3 py-3 text-sm leading-relaxed text-stone-900 outline-none ring-primary/30 placeholder:text-stone-300 focus:ring-2"
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <input
+                type="text"
+                value={draft.topic}
+                onChange={(e) => setDraft((d) => (d ? { ...d, topic: e.target.value } : d))}
+                placeholder="Тема проповеди"
+                className="w-full rounded-lg border border-transparent bg-stone-50 px-3 py-2 text-sm text-stone-700 outline-none ring-primary/25 placeholder:text-stone-400 focus:border-stone-200 focus:bg-white focus:ring-2"
               />
-            </label>
-            <p className="text-xs text-stone-400">
-              Полноценный редактор документов, импорт, шаринг и привязка к программе — скоро.
-            </p>
+              <input
+                type="text"
+                value={draft.scripture}
+                onChange={(e) => setDraft((d) => (d ? { ...d, scripture: e.target.value } : d))}
+                placeholder="Писание (например, Иоанна 3:16)"
+                className="w-full rounded-lg border border-transparent bg-stone-50 px-3 py-2 text-sm text-stone-700 outline-none ring-primary/25 placeholder:text-stone-400 focus:border-stone-200 focus:bg-white focus:ring-2"
+              />
+            </div>
+            <div className="mt-4 flex-1 border-t border-stone-100 pt-3">
+              <SermonDocEditor
+                initialHtml={editorSeedHtml}
+                onChangeHtml={(html) => setDraft((d) => (d ? { ...d, body: html } : d))}
+              />
+            </div>
           </div>
         )}
       </div>
+
+      {note ? (
+        <ShareSermonNoteModal
+          note={note}
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          onUpdated={onNoteUpdated}
+        />
+      ) : null}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import {
   getEditableServicePlanMeta,
   getEditableServicePlan,
   getPublicServicePlan,
+  getPublicSermonNote,
   getPublicSetlist,
   patchEditableServicePlanBlock,
 } from '../controllers/publicController';
@@ -24,6 +25,7 @@ const publicEditableTokenRateLimit = createIpRateLimiter({
 });
 
 router.get('/setlists/:token', publicTokenRateLimit, getPublicSetlist);
+router.get('/sermon-notes/:token', publicTokenRateLimit, getPublicSermonNote);
 router.get('/service-plans/:token', publicTokenRateLimit, getPublicServicePlan);
 router.get('/service-plans-edit/:token', publicEditableTokenRateLimit, getEditableServicePlan);
 router.get('/service-plans-edit/:token/meta', publicEditableTokenRateLimit, getEditableServicePlanMeta);

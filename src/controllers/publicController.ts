@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 
 import { notifyRealtime } from '../realtime/notify';
 import { getPublicSetlistByToken } from '../services/studioService';
+import { getPublicSermonNoteByToken } from '../services/sermonNotesService';
 import {
   getEditablePlanMetaByToken,
   getEditablePlanByToken,
@@ -20,6 +21,21 @@ export async function getPublicSetlist(req: Request, res: Response): Promise<voi
     res.json(payload);
   } catch (e) {
     console.error(e);
+    res.status(500).json({ error: 'Ошибка' });
+  }
+}
+
+export async function getPublicSermonNote(req: Request, res: Response): Promise<void> {
+  try {
+    const token = typeof req.params.token === 'string' ? req.params.token : '';
+    const payload = await getPublicSermonNoteByToken(token);
+    if (!payload) {
+      res.status(404).json({ error: 'Не найдено или ссылка недействительна' });
+      return;
+    }
+    res.json(payload);
+  } catch (e) {
+    console.error('[public] sermon-note:', e);
     res.status(500).json({ error: 'Ошибка' });
   }
 }

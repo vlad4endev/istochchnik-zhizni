@@ -2180,15 +2180,32 @@ CREATE TABLE IF NOT EXISTS sermon_notes (
   topic VARCHAR(500) NOT NULL DEFAULT '',
   scripture VARCHAR(500) NOT NULL DEFAULT '',
   body TEXT NOT NULL DEFAULT '',
+  body_format VARCHAR(32) NOT NULL DEFAULT 'plain',
+  is_public BOOLEAN NOT NULL DEFAULT FALSE,
+  share_token UUID UNIQUE DEFAULT gen_random_uuid(),
+  share_token_issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   service_plan_id BIGINT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE sermon_notes ADD COLUMN IF NOT EXISTS body_format VARCHAR(32) NOT NULL DEFAULT 'plain';
+ALTER TABLE sermon_notes ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE sermon_notes ADD COLUMN IF NOT EXISTS share_token UUID UNIQUE DEFAULT gen_random_uuid();
+ALTER TABLE sermon_notes ADD COLUMN IF NOT EXISTS share_token_issued_at TIMESTAMPTZ;
+UPDATE sermon_notes SET share_token = gen_random_uuid() WHERE share_token IS NULL;
+UPDATE sermon_notes
+SET share_token_issued_at = COALESCE(share_token_issued_at, created_at, NOW())
+WHERE share_token_issued_at IS NULL;
+ALTER TABLE sermon_notes ALTER COLUMN share_token_issued_at SET DEFAULT NOW();
+ALTER TABLE sermon_notes ALTER COLUMN share_token_issued_at SET NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_sermon_notes_member_updated
   ON sermon_notes (member_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sermon_notes_service_plan
   ON sermon_notes (service_plan_id)
   WHERE service_plan_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sermon_notes_share_token
+  ON sermon_notes (share_token)
+  WHERE is_public = TRUE;
 DO $$
 BEGIN
   IF EXISTS (

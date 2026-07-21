@@ -179,6 +179,11 @@ const PublicSetlistPage = lazy(async () => {
   return { default: m.PublicSetlistPage };
 });
 
+const PublicSermonNotePage = lazy(async () => {
+  const m = await import('../features/mySermons/pages/PublicSermonNotePage');
+  return { default: m.PublicSermonNotePage };
+});
+
 const PublicServicePlanPage = lazy(async () => {
   const m = await import('../features/servicePlanner/pages/PublicServicePlanPage');
   return { default: m.PublicServicePlanPage };
@@ -247,6 +252,14 @@ export function AppRouter() {
         element={
           <Suspense fallback={<RouteFallback />}>
             <PublicSetlistPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/sermon-notes/share/:token"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <PublicSermonNotePage />
           </Suspense>
         }
       />

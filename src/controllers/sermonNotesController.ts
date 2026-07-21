@@ -7,6 +7,7 @@ import {
   getSermonNote,
   listSermonNotes,
   updateSermonNote,
+  updateSermonNoteShare,
 } from '../services/sermonNotesService';
 
 type AuthReq = Request & {
@@ -36,17 +37,19 @@ export async function sermonNotesCreate(req: Request, res: Response): Promise<vo
   try {
     const r = req as AuthReq;
     if (!(await ensureMySermonsAccess(r, res))) return;
-    const body = req.body as {
+    const payload = req.body as {
       title?: string;
       topic?: string;
       scripture?: string;
       body?: string;
+      body_format?: string;
     };
     const note = await createSermonNote(r.authUserId!, {
-      title: typeof body.title === 'string' ? body.title : undefined,
-      topic: typeof body.topic === 'string' ? body.topic : undefined,
-      scripture: typeof body.scripture === 'string' ? body.scripture : undefined,
-      body: typeof body.body === 'string' ? body.body : undefined,
+      title: typeof payload.title === 'string' ? payload.title : undefined,
+      topic: typeof payload.topic === 'string' ? payload.topic : undefined,
+      scripture: typeof payload.scripture === 'string' ? payload.scripture : undefined,
+      body: typeof payload.body === 'string' ? payload.body : undefined,
+      body_format: payload.body_format === 'plain' ? 'plain' : 'html',
     });
     res.status(201).json(note);
   } catch (e) {
@@ -85,17 +88,27 @@ export async function sermonNotesUpdate(req: Request, res: Response): Promise<vo
       res.status(400).json({ error: 'Некорректный id' });
       return;
     }
-    const body = req.body as {
+    const payload = req.body as {
       title?: string;
       topic?: string;
       scripture?: string;
       body?: string;
+      body_format?: string;
     };
-    const patch: { title?: string; topic?: string; scripture?: string; body?: string } = {};
-    if (typeof body.title === 'string') patch.title = body.title;
-    if (typeof body.topic === 'string') patch.topic = body.topic;
-    if (typeof body.scripture === 'string') patch.scripture = body.scripture;
-    if (typeof body.body === 'string') patch.body = body.body;
+    const patch: {
+      title?: string;
+      topic?: string;
+      scripture?: string;
+      body?: string;
+      body_format?: 'plain' | 'html';
+    } = {};
+    if (typeof payload.title === 'string') patch.title = payload.title;
+    if (typeof payload.topic === 'string') patch.topic = payload.topic;
+    if (typeof payload.scripture === 'string') patch.scripture = payload.scripture;
+    if (typeof payload.body === 'string') patch.body = payload.body;
+    if (payload.body_format === 'plain' || payload.body_format === 'html') {
+      patch.body_format = payload.body_format;
+    }
     const updated = await updateSermonNote(r.authUserId!, id, patch);
     if (!updated) {
       res.status(404).json({ error: 'Конспект не найден' });
@@ -126,5 +139,34 @@ export async function sermonNotesDelete(req: Request, res: Response): Promise<vo
   } catch (e) {
     console.error('[sermon-notes] delete:', e);
     res.status(500).json({ error: 'Не удалось удалить конспект' });
+  }
+}
+
+export async function sermonNotesShare(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureMySermonsAccess(r, res))) return;
+    const id = parseNoteId(String(req.params.id ?? ''));
+    if (id == null) {
+      res.status(400).json({ error: 'Некорректный id' });
+      return;
+    }
+    const payload = req.body as { is_public?: unknown; rotate_token?: unknown };
+    if (typeof payload.is_public !== 'boolean') {
+      res.status(400).json({ error: 'Укажите is_public: true|false' });
+      return;
+    }
+    const updated = await updateSermonNoteShare(r.authUserId!, id, {
+      is_public: payload.is_public,
+      rotate_token: payload.rotate_token === true,
+    });
+    if (!updated) {
+      res.status(404).json({ error: 'Конспект не найден' });
+      return;
+    }
+    res.json(updated);
+  } catch (e) {
+    console.error('[sermon-notes] share:', e);
+    res.status(500).json({ error: 'Не удалось обновить доступ по ссылке' });
   }
 }
