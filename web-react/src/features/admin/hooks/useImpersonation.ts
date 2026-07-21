@@ -14,7 +14,11 @@ export type ImpersonationStatus = {
 const Q_IMPERSONATION_STATUS = ['admin', 'impersonation', 'status'] as const;
 
 async function fetchImpersonationStatus(): Promise<ImpersonationStatus> {
-  const { data } = await apiClient.get<ImpersonationStatus>('/api/admin/impersonate/status');
+  const { data } = await apiClient.get<ImpersonationStatus>('/api/admin/impersonate/status', {
+    // Не сбрасывать сессию, если фоновый статус-пинг поймал краткоживущий 401.
+    skipAuthClearOn401: true,
+    silentErrorToast: true,
+  });
   return data;
 }
 
@@ -22,13 +26,15 @@ export function useImpersonation() {
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
   const token = useAuthStore((s) => s.token);
+  const isAdmin = isAppAdministratorSession();
 
   const statusQuery = useQuery({
     queryKey: Q_IMPERSONATION_STATUS,
     queryFn: fetchImpersonationStatus,
     staleTime: 30_000,
     retry: 1,
-    enabled: Boolean(token),
+    // Только админам — обычным пользователям эндпоинт не нужен и давал лишние 401 в консоли.
+    enabled: Boolean(token) && isAdmin,
   });
 
   const isImpersonating = statusQuery.data?.isImpersonating === true;
