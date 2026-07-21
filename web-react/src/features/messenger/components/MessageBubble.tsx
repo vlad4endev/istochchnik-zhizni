@@ -1,4 +1,5 @@
-import { memo, useState, useRef, useMemo, useEffect, useCallback, type ReactNode } from 'react';
+import { memo, useState, useRef, useMemo, useEffect, useCallback, useLayoutEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { handleMessengerTextCopy, messengerTextForCopy, normalizeChatDisplayText } from '../normalizeChatDisplayText';
 import { renderMessengerPlainText } from '../messengerPlainText';
 import { useQueryClient } from '@tanstack/react-query';
@@ -460,8 +461,15 @@ function MessageBubbleInner({
   const suppressMenuUntilRef = useRef(0);
 
   const isOptimistic = message.id.startsWith('temp-');
-  const isMine = isOptimistic || (currentMemberId != null && message.sender_id === currentMemberId);
+  /** Number() — WS/API иногда отдают sender_id строкой; иначе «свои» пункты меню пропадают. */
+  const isMine =
+    isOptimistic ||
+    (currentMemberId != null &&
+      message.sender_id != null &&
+      Number(message.sender_id) === Number(currentMemberId));
 
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const [menuPos, setMenuPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
   const x = useMotionValue(0);
   const replyOpacity = useTransform(x, (v: number) => {
     const t = isMine ? Math.max(0, -v) : Math.max(0, v);
@@ -561,6 +569,16 @@ function MessageBubbleInner({
     !systemBotAccessMessage &&
     /^\d+$/.test(String(message.id)) &&
     payloadType !== 'access_request';
+
+  const canEditOwnMessage =
+    isMine &&
+    !isOptimistic &&
+    !isDeleted &&
+    !systemBotAccessMessage &&
+    payloadType !== 'poll' &&
+    payloadType !== 'access_request';
+
+  const canDeleteOwnMessage = isMine && !isDeleted && !systemBotAccessMessage;
 
   const senderName = String(
     message.sender_name ??
@@ -1566,6 +1584,7 @@ function MessageBubbleInner({
       longPressFiredRef.current = true;
       suppressMenuUntilRef.current = Date.now() + 450;
       setShowActions(false);
+      setMenuPos(null);
       setShowReactionBar(true);
       if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
         navigator.vibrate(12);
@@ -1604,6 +1623,41 @@ function MessageBubbleInner({
     setShowActions(true);
   };
 
+  useLayoutEffect(() => {
+    if (!showActions) {
+      setMenuPos(null);
+      return;
+    }
+    const el = shellRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      const menuWidth = Math.min(280, window.innerWidth - 16);
+      let left = isMine ? rect.right - menuWidth : rect.left;
+      left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8));
+      const spaceAbove = rect.top;
+      const placeAbove = spaceAbove > 300;
+      if (placeAbove) {
+        setMenuPos({
+          left,
+          bottom: Math.max(8, window.innerHeight - rect.top + 6),
+        });
+      } else {
+        setMenuPos({
+          left,
+          top: Math.min(rect.bottom + 6, window.innerHeight - 8),
+        });
+      }
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [showActions, isMine]);
+
   useEffect(() => {
     if (!showActions && !showReactionBar) return;
     const onKey = (e: KeyboardEvent) => {
@@ -1615,6 +1669,11 @@ function MessageBubbleInner({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [showActions, showReactionBar]);
+
+  const closeActionsMenu = useCallback(() => {
+    setShowActions(false);
+    setMenuPos(null);
+  }, []);
 
   const toggleReaction = (emoji: string, reactedByMe: boolean) => {
     if (reactedByMe) {
@@ -1830,6 +1889,7 @@ function MessageBubbleInner({
   return (
     <>
     <div
+      ref={shellRef}
       className={shellClassName}
       onContextMenu={handleContextMenu}
       onPointerDownCapture={handlePointerDownCapture}
@@ -2046,99 +2106,130 @@ function MessageBubbleInner({
         </div>
       )}
 
-      {/* Actions Popup (Context Menu) — тап; реакции — удержание */}
-      {showActions && (
-        <>
-          <div
-            className="msg-actions-overlay"
-            onClick={() => {
-              setShowActions(false);
-              setShowReactionBar(false);
-            }}
-          />
-          <div className={`msg-actions ${isMine ? 'msg-actions--mine' : ''}`}>
-            {!systemBotAccessMessage ? (
-              <button
-                type="button"
+      {/* Actions Popup — portal, чтобы не обрезалось списком сообщений */}
+      {showActions && typeof document !== 'undefined'
+        ? createPortal(
+            <>
+              <div
+                className="msg-actions-overlay"
                 onClick={() => {
-                  setReplyTo(message);
-                  setShowActions(false);
+                  closeActionsMenu();
+                  setShowReactionBar(false);
                 }}
+              />
+              <div
+                className={`msg-actions msg-actions--portal ${isMine ? 'msg-actions--mine' : ''}`}
+                style={
+                  menuPos
+                    ? {
+                        position: 'fixed',
+                        left: menuPos.left,
+                        top: menuPos.top,
+                        bottom: menuPos.bottom,
+                        right: 'auto',
+                        margin: 0,
+                      }
+                    : { position: 'fixed', visibility: 'hidden' }
+                }
+                role="menu"
+                aria-label="Действия с сообщением"
               >
-                <span>↩️</span> Ответить
-              </button>
-            ) : null}
-            {canForwardMessage ? (
-              <button type="button" onClick={() => openForwardSheet()}>
-                <span>↪️</span> Переслать
-              </button>
-            ) : null}
-            {payloadType === 'text' && String(message.content ?? '').trim() ? (
-              <button
-                type="button"
-                onClick={() => {
-                  void navigator.clipboard
-                    .writeText(messengerTextForCopy(String(message.content ?? '')))
-                    .then(() => emitAppToast('Текст скопирован', 'success'))
-                    .catch(() => emitAppToast('Не удалось скопировать', 'error'));
-                  setShowActions(false);
-                }}
-              >
-                <span>📋</span> Копировать
-              </button>
-            ) : null}
-            {isMine && payloadType !== 'poll' ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditing(message);
-                  setShowActions(false);
-                }}
-              >
-                <span>✏️</span> Редактировать
-              </button>
-            ) : null}
-            {canViewReaders ? (
-              <button type="button" onClick={() => openReadersSheet()}>
-                <span>✓</span> Кто прочитал
-              </button>
-            ) : null}
-            {canPinMessages && !isOptimistic && /^\d+$/.test(String(message.id)) ? (
-              <button
-                type="button"
-                onClick={() => {
-                  void onPinToggle?.(String(message.id), !message.is_pinned);
-                  setShowActions(false);
-                }}
-              >
-                <span>{message.is_pinned ? '📍' : '📌'}</span>{' '}
-                {message.is_pinned ? 'Открепить' : 'Закрепить'}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => {
-                setShowActions(false);
-                setShowReactionBar(true);
-              }}
-            >
-              <span>😀</span> Реакция
-            </button>
-            {isMine ? (
-              <button
-                type="button"
-                className="msg-actions__danger"
-                onClick={() => {
-                  void deleteMessage(message.id);
-                  setShowActions(false);
-                }}
-              >
-                <span>🗑</span> Удалить
-              </button>
-            ) : null}
-          </div>
-        </>
-      )}
+                {!systemBotAccessMessage ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setReplyTo(message);
+                      closeActionsMenu();
+                    }}
+                  >
+                    <span>↩️</span> Ответить
+                  </button>
+                ) : null}
+                {canEditOwnMessage ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setEditing(message);
+                      closeActionsMenu();
+                    }}
+                  >
+                    <span>✏️</span> Редактировать
+                  </button>
+                ) : null}
+                {canDeleteOwnMessage ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="msg-actions__danger"
+                    onClick={() => {
+                      void deleteMessage(message.id);
+                      closeActionsMenu();
+                    }}
+                  >
+                    <span>🗑</span> Удалить
+                  </button>
+                ) : null}
+                {canForwardMessage ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      openForwardSheet();
+                    }}
+                  >
+                    <span>↪️</span> Переслать
+                  </button>
+                ) : null}
+                {payloadType === 'text' && String(message.content ?? '').trim() ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      void navigator.clipboard
+                        .writeText(messengerTextForCopy(String(message.content ?? '')))
+                        .then(() => emitAppToast('Текст скопирован', 'success'))
+                        .catch(() => emitAppToast('Не удалось скопировать', 'error'));
+                      closeActionsMenu();
+                    }}
+                  >
+                    <span>📋</span> Копировать
+                  </button>
+                ) : null}
+                {canViewReaders ? (
+                  <button type="button" role="menuitem" onClick={() => openReadersSheet()}>
+                    <span>✓</span> Кто прочитал
+                  </button>
+                ) : null}
+                {canPinMessages && !isOptimistic && /^\d+$/.test(String(message.id)) ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      void onPinToggle?.(String(message.id), !message.is_pinned);
+                      closeActionsMenu();
+                    }}
+                  >
+                    <span>{message.is_pinned ? '📍' : '📌'}</span>{' '}
+                    {message.is_pinned ? 'Открепить' : 'Закрепить'}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    closeActionsMenu();
+                    setShowReactionBar(true);
+                  }}
+                >
+                  <span>😀</span> Реакция
+                </button>
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
     </div>
 
     <DocumentViewerModal

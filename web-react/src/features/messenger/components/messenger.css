@@ -2454,7 +2454,7 @@ html.dark .msg-reaction-floating {
 .msg-actions-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 120040;
   background: transparent;
 }
 
@@ -2477,6 +2477,20 @@ html.dark .msg-reaction-floating {
 .msg-actions--mine {
   left: auto;
   right: 0;
+}
+
+.msg-actions--portal {
+  position: fixed;
+  z-index: 120050;
+  max-height: min(70dvh, 420px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.msg-actions--portal.msg-actions--mine {
+  right: auto;
 }
 
 .msg-actions button {
