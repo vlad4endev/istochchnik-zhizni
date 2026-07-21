@@ -6,9 +6,7 @@ import { useChatStore } from '../chatStore';
 import {
   buildMessengerAttachmentFileUrl,
   fetchMessageAttachmentUrl,
-  fetchPollVoters,
   type MessageWithSender,
-  type PollVoter,
 } from '../api/messengerApi';
 import {
   getAlbumImageUrl,
@@ -26,8 +24,9 @@ import { renderAssistantMessageContent } from '../assistantMessageFormat';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { ChatVideoAttachmentPreview } from './ChatVideoAttachmentPreview';
-import { PollVotersSheet } from './PollVotersSheet';
-import { AppAvatar } from '../../../components/AppAvatar';
+import { MessengerPollCard } from './MessengerPollCard';
+import { MessageReadersSheet } from './MessageReadersSheet';
+import { ForwardMessageSheet } from './ForwardMessageSheet';
 import { useMediaViewer, type MediaItem } from '../../../components/MediaViewer';
 import { DocumentViewerModal, canPreviewDocumentInline } from '../../../components/DocumentViewerModal';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
@@ -86,444 +85,6 @@ function MentionRichText({
         );
       })}
     </span>
-  );
-}
-
-function formatVoteCountRU(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 14) return `${n} голосов`;
-  if (mod10 === 1) return `${n} голос`;
-  if (mod10 >= 2 && mod10 <= 4) return `${n} голоса`;
-  return `${n} голосов`;
-}
-
-/** Короткая строка имён под вариантом опроса (как превью в Telegram). */
-function formatPollVoterPreviewLine(voters: PollVoter[], maxNames = 2): string {
-  if (voters.length === 0) return '';
-  if (voters.length === 1) return voters[0].display_name;
-  const shown = voters.slice(0, maxNames);
-  const rest = voters.length - shown.length;
-  if (rest === 0) return shown.map((v) => v.display_name).join(', ');
-  return `${shown.map((v) => v.display_name).join(', ')} и ещё ${rest}`;
-}
-
-/** Telegram-style poll option list shell (inside message bubble). */
-function MessengerPollCard({
-  message,
-  isMine,
-  isOptimistic,
-}: {
-  message: MessageWithSender;
-  isMine: boolean;
-  isOptimistic: boolean;
-}) {
-  const votePoll = useChatStore((s) => s.votePoll);
-  const payload = (message.payload ?? {}) as Record<string, unknown>;
-  const options = Array.isArray(payload.options) ? payload.options.map((x) => String(x ?? '')) : [];
-  const allowsMultiple = Boolean(payload.allows_multiple);
-  const isAnonymous = Boolean(payload.anonymous);
-  const tallies =
-    message.poll_tallies?.length === options.length ? message.poll_tallies! : options.map(() => 0);
-  const myVotes = message.poll_my_options ?? [];
-  const mySet = new Set(myVotes);
-  const total = tallies.reduce((a, b) => a + b, 0);
-  const hasMyVote = mySet.size > 0;
-  const [multiEdit, setMultiEdit] = useState(false);
-  const [multiPick, setMultiPick] = useState<Set<number>>(() => new Set());
-  const [pollVotersFor, setPollVotersFor] = useState<{ optionIndex: number; label: string } | null>(null);
-  /** null — не загружали; объект — списки по индексу варианта (пустой {} при ошибке) */
-  const [votersPreviewByOption, setVotersPreviewByOption] = useState<Record<number, PollVoter[]> | null>(null);
-
-  const toggleMulti = (i: number) => {
-    setMultiPick((prev) => {
-      const next = new Set(prev);
-      if (next.has(i)) next.delete(i);
-      else next.add(i);
-      return next;
-    });
-  };
-
-  const startMultiEdit = () => {
-    setMultiPick(new Set(myVotes));
-    setMultiEdit(true);
-  };
-
-  const submitMulti = () => {
-    void votePoll(message.id, [...multiPick].sort((a, b) => a - b));
-    setMultiEdit(false);
-  };
-
-  const muted = isMine ? 'text-white/70' : 'text-[var(--text-secondary)]';
-  const qCls = isMine ? 'text-white' : 'text-[var(--text)]';
-  const listShell = isMine
-    ? 'rounded-[12px] border border-white/18 bg-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]'
-    : 'rounded-[12px] border border-black/[0.06] bg-black/[0.03] shadow-[0_0.5px_0_rgba(0,0,0,0.04)]';
-  const rowDivider = isMine ? 'border-white/12' : 'border-black/[0.06]';
-  const pctCls = isMine ? 'text-white/90 tabular-nums' : 'text-primary tabular-nums';
-  const barTint = isMine ? 'bg-white/[0.22]' : 'bg-primary/[0.14]';
-  const barTintPicked = isMine ? 'bg-white/[0.38]' : 'bg-primary/[0.26]';
-
-  if (!options.length) {
-    return <span className={qCls}>Опрос недоступен</span>;
-  }
-
-  if (isOptimistic) {
-    return (
-      <div className="w-full max-w-[18.5rem] space-y-2.5">
-        <p
-          className={['text-[15px] font-semibold leading-snug tracking-[-0.01em] [font-variant-emoji:emoji]', qCls].join(
-            ' ',
-          )}
-        >
-          {message.content || '—'}
-        </p>
-        <ul className={['overflow-hidden', listShell].join(' ')}>
-          {options.map((label, i) => (
-            <li
-              key={i}
-              className={[
-                'border-b px-3 py-2.5 text-[15px] font-normal leading-snug [font-variant-emoji:emoji] last:border-b-0',
-                rowDivider,
-                isMine ? 'text-white/95' : 'text-[var(--text-secondary)]',
-              ].join(' ')}
-            >
-              {label || `Вариант ${i + 1}`}
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-
-  const showMultiPicker = allowsMultiple && (!hasMyVote || multiEdit);
-  const showSinglePicker = !allowsMultiple && !hasMyVote;
-  const showPollResults = !showSinglePicker && !(allowsMultiple && showMultiPicker);
-
-  useEffect(() => {
-    if (isOptimistic || isAnonymous || !showPollResults) {
-      setVotersPreviewByOption(null);
-      return;
-    }
-    let cancelled = false;
-    void fetchPollVoters(String(message.id))
-      .then((res) => {
-        if (cancelled) return;
-        if (res.anonymous) {
-          setVotersPreviewByOption({});
-          return;
-        }
-        const rec: Record<number, PollVoter[]> = {};
-        for (const o of res.options) {
-          rec[o.index] = o.voters;
-        }
-        setVotersPreviewByOption(rec);
-      })
-      .catch(() => {
-        if (!cancelled) setVotersPreviewByOption({});
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    isAnonymous,
-    isOptimistic,
-    message.id,
-    showPollResults,
-    message.poll_tallies,
-    message.poll_my_options,
-  ]);
-
-  return (
-    <div className="w-full max-w-[18.5rem] space-y-2">
-      <p
-        className={['text-[15px] font-semibold leading-snug tracking-[-0.01em] [font-variant-emoji:emoji]', qCls].join(
-          ' ',
-        )}
-      >
-        {message.content || '—'}
-      </p>
-
-      <ul className={['overflow-hidden', listShell].join(' ')}>
-        {options.map((label, i) => {
-          const count = tallies[i] ?? 0;
-          const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-          const picked = mySet.has(i);
-
-          if (showSinglePicker) {
-            return (
-              <li key={i} className={['border-b last:border-b-0', rowDivider].join(' ')}>
-                <button
-                  type="button"
-                  onClick={() => void votePoll(message.id, [i])}
-                  className={[
-                    'flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors active:opacity-90',
-                    isMine ? 'hover:bg-white/[0.07]' : 'hover:bg-black/[0.03]',
-                  ].join(' ')}
-                >
-                  <span
-                    className={[
-                      'mt-0.5 h-[18px] w-[18px] shrink-0 rounded-full border-2',
-                      isMine ? 'border-white/50' : 'border-stone-300',
-                    ].join(' ')}
-                    aria-hidden
-                  />
-                  <span
-                    className={['min-w-0 flex-1 text-[15px] font-normal leading-snug [font-variant-emoji:emoji]', qCls].join(
-                      ' ',
-                    )}
-                  >
-                    {label}
-                  </span>
-                </button>
-              </li>
-            );
-          }
-
-          if (allowsMultiple && showMultiPicker) {
-            const checked = multiPick.has(i);
-            return (
-              <li key={i} className={['border-b last:border-b-0', rowDivider].join(' ')}>
-                <button
-                  type="button"
-                  onClick={() => toggleMulti(i)}
-                  className={[
-                    'flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors active:opacity-90',
-                    isMine ? 'hover:bg-white/[0.07]' : 'hover:bg-black/[0.03]',
-                  ].join(' ')}
-                >
-                  <span
-                    className={[
-                      'mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border-2 text-[11px] font-bold',
-                      isMine
-                        ? checked
-                          ? 'border-white bg-white text-primary'
-                          : 'border-white/50'
-                        : checked
-                          ? 'border-primary bg-primary text-white'
-                          : 'border-stone-300',
-                    ].join(' ')}
-                    aria-hidden
-                  >
-                    {checked ? <IoCheckmark className="h-3.5 w-3.5" /> : null}
-                  </span>
-                  <span
-                    className={['min-w-0 flex-1 text-[15px] font-normal leading-snug [font-variant-emoji:emoji]', qCls].join(
-                      ' ',
-                    )}
-                  >
-                    {label}
-                  </span>
-                </button>
-              </li>
-            );
-          }
-
-          return (
-            <li key={i} className={['relative overflow-hidden border-b last:border-b-0', rowDivider].join(' ')}>
-              <div
-                className={['pointer-events-none absolute inset-y-0 left-0 transition-[width] duration-500 ease-out', picked ? barTintPicked : barTint].join(
-                  ' ',
-                )}
-                style={{ width: `${pct}%` }}
-                aria-hidden
-              />
-              <div className="relative z-10 flex items-stretch">
-                <button
-                  type="button"
-                  disabled={allowsMultiple}
-                  onClick={() => {
-                    if (!allowsMultiple) void votePoll(message.id, [i]);
-                  }}
-                  className={[
-                    'flex min-w-0 flex-1 items-start gap-2.5 px-3 py-2.5 text-left',
-                    allowsMultiple ? 'cursor-default' : 'transition-opacity active:opacity-90',
-                    isMine ? (allowsMultiple ? '' : 'hover:bg-white/[0.05]') : allowsMultiple ? '' : 'hover:bg-black/[0.02]',
-                  ].join(' ')}
-                >
-                  <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center" aria-hidden>
-                    {allowsMultiple ? (
-                      picked ? (
-                        <span
-                          className={[
-                            'flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border-2 text-white',
-                            isMine ? 'border-white bg-white/30' : 'border-primary bg-primary',
-                          ].join(' ')}
-                        >
-                          <IoCheckmark className="h-3.5 w-3.5" />
-                        </span>
-                      ) : (
-                        <span
-                          className={[
-                            'block h-[18px] w-[18px] rounded-[5px] border-2',
-                            isMine ? 'border-white/35' : 'border-stone-300/90',
-                          ].join(' ')}
-                        />
-                      )
-                    ) : picked ? (
-                      <span
-                        className={[
-                          'flex h-[18px] w-[18px] items-center justify-center rounded-full border-2',
-                          isMine ? 'border-white bg-white/25' : 'border-primary bg-primary',
-                        ].join(' ')}
-                      >
-                        <span className="h-2 w-2 rounded-full bg-white" />
-                      </span>
-                    ) : (
-                      <span
-                        className={[
-                          'block h-[18px] w-[18px] rounded-full border-2',
-                          isMine ? 'border-white/35' : 'border-stone-300/90',
-                        ].join(' ')}
-                      />
-                    )}
-                  </span>
-                  <span
-                    className={['min-w-0 flex-1 text-[15px] font-normal leading-snug [font-variant-emoji:emoji]', qCls].join(
-                      ' ',
-                    )}
-                  >
-                    {label}
-                  </span>
-                </button>
-                {isAnonymous ? (
-                  <span className={['shrink-0 px-3 py-2.5 text-[15px] font-medium', pctCls].join(' ')}>{pct}%</span>
-                ) : (
-                  <button
-                    type="button"
-                    className={[
-                      'shrink-0 px-3 py-2.5 text-[15px] font-medium transition-colors',
-                      pctCls,
-                      isMine ? 'hover:bg-white/12 active:bg-white/16' : 'hover:bg-black/[0.04] active:bg-black/[0.06]',
-                    ].join(' ')}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setPollVotersFor({ optionIndex: i, label });
-                    }}
-                    aria-label={`Кто проголосовал: ${label}. ${formatVoteCountRU(count)}`}
-                  >
-                    {pct}%
-                  </button>
-                )}
-              </div>
-              {!isAnonymous &&
-              votersPreviewByOption &&
-              (votersPreviewByOption[i]?.length ?? 0) > 0 ? (
-                <button
-                  type="button"
-                  className={[
-                    'relative z-10 flex w-full items-center gap-2 border-t px-3 py-2 text-left transition-colors',
-                    isMine ? 'border-white/10 text-white/75 hover:bg-white/[0.06]' : 'border-black/[0.06] text-[var(--text-secondary)] hover:bg-black/[0.03]',
-                  ].join(' ')}
-                  onClick={() => setPollVotersFor({ optionIndex: i, label })}
-                  aria-label={`Полный список голосов: ${label}`}
-                >
-                  <div className="flex shrink-0 -space-x-2 ps-0.5" aria-hidden>
-                    {votersPreviewByOption[i]!.slice(0, 4).map((v, vi) => (
-                      <AppAvatar
-                        key={`${v.member_id}-${vi}`}
-                        className={[
-                          'relative h-7 w-7 shrink-0 rounded-full ring-2',
-                          isMine ? 'ring-[color:var(--tg-bubble-out-solid,#6d2f38)]' : 'ring-white',
-                        ].join(' ')}
-                        src={v.avatar_url}
-                        alt=""
-                        initialsFallbackText={v.display_name}
-                        initialsColorSeed={String(v.member_id)}
-                        priority
-                        fallback={<span className="block h-full w-full rounded-full bg-stone-200" />}
-                      />
-                    ))}
-                  </div>
-                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium leading-snug">
-                    {formatPollVoterPreviewLine(votersPreviewByOption[i]!)}
-                  </span>
-                </button>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-
-      {allowsMultiple && showMultiPicker ? (
-        <div className="flex flex-wrap items-center gap-2 pt-0.5">
-          {hasMyVote && multiEdit ? (
-            <button
-              type="button"
-              onClick={() => setMultiEdit(false)}
-              className={[
-                'rounded-full px-3 py-1.5 text-[13px] font-medium',
-                isMine ? 'bg-white/14 text-white' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
-              ].join(' ')}
-            >
-              Отмена
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void submitMulti()}
-            disabled={multiPick.size === 0}
-            className={[
-              'rounded-full px-4 py-2 text-[13px] font-semibold disabled:opacity-40',
-              isMine ? 'bg-white text-primary' : 'bg-primary text-white',
-            ].join(' ')}
-          >
-            {hasMyVote ? 'Сохранить' : 'Голосовать'}
-          </button>
-        </div>
-      ) : null}
-
-      <div className={['flex flex-wrap items-center gap-x-1.5 text-[13px] font-normal', muted].join(' ')}>
-        <span>{formatVoteCountRU(total)}</span>
-        {allowsMultiple ? (
-          <>
-            <span aria-hidden>·</span>
-            <span>Несколько ответов</span>
-          </>
-        ) : null}
-        {isAnonymous ? (
-          <>
-            <span aria-hidden>·</span>
-            <span>Анонимный опрос</span>
-          </>
-        ) : null}
-      </div>
-
-      {showPollResults && total > 0 && !isAnonymous ? (
-        <p className={['text-[11px] font-normal leading-snug', muted].join(' ')}>
-          Нажмите на процент справа от варианта, чтобы увидеть список проголосовавших.
-        </p>
-      ) : null}
-
-      {allowsMultiple && hasMyVote && !multiEdit ? (
-        <button
-          type="button"
-          onClick={startMultiEdit}
-          className={[
-            'text-[13px] font-medium underline-offset-2 hover:underline',
-            isMine ? 'text-white/90' : 'text-primary',
-          ].join(' ')}
-        >
-          Изменить голос
-        </button>
-      ) : null}
-
-      {!allowsMultiple && hasMyVote ? (
-        <p className={['text-[12px] font-normal leading-snug', muted].join(' ')}>
-          Нажмите другой вариант, чтобы изменить голос
-        </p>
-      ) : null}
-
-      <PollVotersSheet
-        key={pollVotersFor ? `${message.id}-${pollVotersFor.optionIndex}` : `${message.id}-poll-voters`}
-        open={pollVotersFor != null}
-        onClose={() => setPollVotersFor(null)}
-        messageId={message.id}
-        optionIndex={pollVotersFor?.optionIndex ?? 0}
-        optionLabel={pollVotersFor?.label ?? ''}
-      />
-    </div>
   );
 }
 
@@ -841,21 +402,7 @@ function messengerDocTileClasses(tone: MessengerDocTone, isMine: boolean): strin
   }
 }
 
-const QUICK_REACTIONS = [
-  '❤️',
-  '👍',
-  '😂',
-  '😮',
-  '😢',
-  '🙏',
-  '😡',
-  '😍',
-  '🔥',
-  '💯',
-  '✨',
-  '👏',
-];
-const EMPTY_READ_CURSORS: Record<string, string> = {};
+const EMPTY_READ_CURSORS: Record<number, string> = {};
 
 interface MessageBubbleProps {
   message: MessageWithSender;
@@ -886,6 +433,10 @@ function MessageBubbleInner({
   const openViewer = useMediaViewer((s) => s.openViewer);
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const convIdKey = String(message.conversation_id);
+  const conversationType = useChatStore((s) => {
+    const c = s.conversations.find((x) => String(x.id) === convIdKey);
+    return c?.type ?? null;
+  });
   const convReadCursors = useChatStore((s) => s.readCursorsByConv[convIdKey] || EMPTY_READ_CURSORS);
   const addReaction = useChatStore((s) => s.addReaction);
   const removeReaction = useChatStore((s) => s.removeReaction);
@@ -895,15 +446,18 @@ function MessageBubbleInner({
   const deleteMessage = useChatStore((s) => s.deleteMessage);
   const retrySendMessage = useChatStore((s) => s.retrySendMessage);
   const [showActions, setShowActions] = useState(false);
-  const [showReactions, setShowReactions] = useState(false);
   /** Плашка реакций над пузырьком (long-press), как в Telegram */
   const [showReactionBar, setShowReactionBar] = useState(false);
+  const [showReadersSheet, setShowReadersSheet] = useState(false);
+  const [showForwardSheet, setShowForwardSheet] = useState(false);
   const [documentViewer, setDocumentViewer] = useState<{ url: string; name: string; mime: string } | null>(null);
   const [mainImageLoaded, setMainImageLoaded] = useState(false);
   const [albumSlotLoaded, setAlbumSlotLoaded] = useState<Record<number, boolean>>({});
   const longPressTimer = useRef<number | null>(null);
   const longPressOrigin = useRef<{ x: number; y: number } | null>(null);
-  const lastTapUpRef = useRef<{ t: number; x: number; y: number } | null>(null);
+  const longPressFiredRef = useRef(false);
+  const pointerMovedRef = useRef(false);
+  const suppressMenuUntilRef = useRef(0);
 
   const isOptimistic = message.id.startsWith('temp-');
   const isMine = isOptimistic || (currentMemberId != null && message.sender_id === currentMemberId);
@@ -938,6 +492,28 @@ function MessageBubbleInner({
     return BigInt(message.id) <= maxOtherReadId;
   }, [isMine, isOptimistic, message.id, maxOtherReadId]);
 
+  /** Список «кто прочитал» — только свои сообщения в группе/канале. */
+  const canViewReaders =
+    isMine &&
+    !isOptimistic &&
+    !isDeleted &&
+    /^\d+$/.test(String(message.id)) &&
+    (conversationType === 'group' || conversationType === 'channel');
+
+  const openReadersSheet = useCallback(() => {
+    if (!canViewReaders) return;
+    setShowActions(false);
+    setShowReactionBar(false);
+    setShowReadersSheet(true);
+  }, [canViewReaders]);
+
+  const openForwardSheet = useCallback(() => {
+    if (isOptimistic || isDeleted || !/^\d+$/.test(String(message.id))) return;
+    setShowActions(false);
+    setShowReactionBar(false);
+    setShowForwardSheet(true);
+  }, [isOptimistic, isDeleted, message.id]);
+
   const formattedTime = useMemo(() => {
     const d = new Date(message.created_at);
     return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -962,6 +538,30 @@ function MessageBubbleInner({
     !isDeleted &&
     !isMine &&
     isAssistantBotMessage(payload, message.sender_id);
+
+  const forwardedFromLabel = useMemo(() => {
+    const raw = message.forwarded_from;
+    if (raw == null) return null;
+    let obj: unknown = raw;
+    if (typeof raw === 'string') {
+      try {
+        obj = JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+    if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null;
+    const name = String((obj as { sender_name?: unknown }).sender_name ?? '').trim();
+    return name || 'сообщения';
+  }, [message.forwarded_from]);
+
+  const canForwardMessage =
+    !isOptimistic &&
+    !isDeleted &&
+    !systemBotAccessMessage &&
+    /^\d+$/.test(String(message.id)) &&
+    payloadType !== 'access_request';
+
   const senderName = String(
     message.sender_name ??
       [message.sender_first_name, message.sender_last_name].filter(Boolean).join(' ') ??
@@ -1933,7 +1533,8 @@ function MessageBubbleInner({
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     if (!isDeleted && !isOptimistic) {
-      setShowActions(!showActions);
+      setShowReactionBar(false);
+      setShowActions(true);
     }
   };
 
@@ -1945,12 +1546,26 @@ function MessageBubbleInner({
     longPressOrigin.current = null;
   };
 
+  const isInteractiveMsgTarget = (target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return false;
+    return Boolean(
+      target.closest(
+        'button, a, input, textarea, select, [role="button"], [data-no-msg-menu], .msg-reaction-chip',
+      ),
+    );
+  };
+
   const handlePointerDownCapture = (e: React.PointerEvent) => {
     if (e.button !== 0 || isDeleted || isOptimistic) return;
+    if (isInteractiveMsgTarget(e.target)) return;
+    longPressFiredRef.current = false;
+    pointerMovedRef.current = false;
     longPressOrigin.current = { x: e.clientX, y: e.clientY };
     longPressTimer.current = window.setTimeout(() => {
       longPressTimer.current = null;
-      longPressOrigin.current = null;
+      longPressFiredRef.current = true;
+      suppressMenuUntilRef.current = Date.now() + 450;
+      setShowActions(false);
       setShowReactionBar(true);
       if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
         navigator.vibrate(12);
@@ -1960,13 +1575,33 @@ function MessageBubbleInner({
       } catch {
         /* ignore */
       }
-    }, 420);
+    }, 480);
   };
 
   const handlePointerMoveCapture = (e: React.PointerEvent) => {
     if (longPressOrigin.current == null || longPressTimer.current == null) return;
     const o = longPressOrigin.current;
-    if (Math.hypot(e.clientX - o.x, e.clientY - o.y) > 14) clearLongPressTimer();
+    if (Math.hypot(e.clientX - o.x, e.clientY - o.y) > 14) {
+      pointerMovedRef.current = true;
+      clearLongPressTimer();
+    }
+  };
+
+  const handlePointerUpCapture = (e: React.PointerEvent) => {
+    const longPressFired = longPressFiredRef.current;
+    const moved = pointerMovedRef.current;
+    const hadTimer = longPressTimer.current != null;
+    clearLongPressTimer();
+
+    if (e.button !== 0 || isDeleted || isOptimistic) return;
+    if (longPressFired || moved) return;
+    if (Date.now() < suppressMenuUntilRef.current) return;
+    if (isInteractiveMsgTarget(e.target)) return;
+    if (!hadTimer) return;
+
+    // Короткий тап/клик — контекстное меню; удержание — реакции.
+    setShowReactionBar(false);
+    setShowActions(true);
   };
 
   useEffect(() => {
@@ -1974,7 +1609,6 @@ function MessageBubbleInner({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setShowActions(false);
-        setShowReactions(false);
         setShowReactionBar(false);
       }
     };
@@ -1999,30 +1633,6 @@ function MessageBubbleInner({
     },
     [message.reactions, message.id, addReaction, removeReaction],
   );
-
-  const handleBubblePointerUp = (e: React.PointerEvent) => {
-    if (e.button !== 0 || isOptimistic) return;
-    if (showReactionBar || showActions) return;
-    const target = e.target as HTMLElement;
-    if (target.closest('button, a, [role="button"]')) return;
-    if (target.closest('.msg-reaction-chip')) return;
-    const now = Date.now();
-    const prev = lastTapUpRef.current;
-    if (
-      prev &&
-      now - prev.t <= 450 &&
-      Math.hypot(e.clientX - prev.x, e.clientY - prev.y) <= 32
-    ) {
-      lastTapUpRef.current = null;
-      const heart = '❤️';
-      const row = message.reactions.find((x) => x.emoji === heart);
-      if (row?.reacted_by_me) void removeReaction(message.id, heart);
-      else void addReaction(message.id, heart);
-      e.preventDefault();
-      return;
-    }
-    lastTapUpRef.current = { t: now, x: e.clientX, y: e.clientY };
-  };
 
   if (isDeleted) {
     return (
@@ -2099,7 +1709,9 @@ function MessageBubbleInner({
       : status === 'error'
         ? null // у «error» интерактивный элемент — label живёт на <button>
         : isReadByOther
-          ? 'Прочитано'
+          ? canViewReaders
+            ? 'Прочитано. Нажмите, чтобы увидеть, кто прочитал'
+            : 'Прочитано'
           : status === 'delivered'
             ? 'Доставлено'
             : 'Отправлено';
@@ -2132,19 +1744,62 @@ function MessageBubbleInner({
               <LuX className="h-2 w-2" strokeWidth={3} aria-hidden focusable={false} />
             </button>
           ) : isReadByOther ? (
-            <IoCheckmarkDone
-              className="h-3.5 w-3.5 shrink-0 text-sky-200"
-              role="img"
-              aria-label={statusIconLabel ?? undefined}
-              focusable={false}
-            />
+            canViewReaders ? (
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center rounded-sm text-sky-200 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+                aria-label={statusIconLabel ?? 'Прочитано'}
+                title="Кто прочитал"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openReadersSheet();
+                }}
+              >
+                <IoCheckmarkDone className="h-3.5 w-3.5 shrink-0" aria-hidden focusable={false} />
+              </button>
+            ) : (
+              <IoCheckmarkDone
+                className="h-3.5 w-3.5 shrink-0 text-sky-200"
+                role="img"
+                aria-label={statusIconLabel ?? undefined}
+                focusable={false}
+              />
+            )
           ) : status === 'delivered' ? (
-            <IoCheckmarkDone
-              className="h-3.5 w-3.5 shrink-0 text-white/70"
-              role="img"
-              aria-label={statusIconLabel ?? undefined}
-              focusable={false}
-            />
+            canViewReaders ? (
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center rounded-sm text-white/70 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+                aria-label="Доставлено. Нажмите, чтобы увидеть, кто прочитал"
+                title="Кто прочитал"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openReadersSheet();
+                }}
+              >
+                <IoCheckmarkDone className="h-3.5 w-3.5 shrink-0" aria-hidden focusable={false} />
+              </button>
+            ) : (
+              <IoCheckmarkDone
+                className="h-3.5 w-3.5 shrink-0 text-white/70"
+                role="img"
+                aria-label={statusIconLabel ?? undefined}
+                focusable={false}
+              />
+            )
+          ) : canViewReaders ? (
+            <button
+              type="button"
+              className="inline-flex shrink-0 items-center rounded-sm text-white/70 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+              aria-label="Отправлено. Нажмите, чтобы увидеть, кто прочитал"
+              title="Кто прочитал"
+              onClick={(e) => {
+                e.stopPropagation();
+                openReadersSheet();
+              }}
+            >
+              <IoCheckmark className="h-3.5 w-3.5 shrink-0" aria-hidden focusable={false} />
+            </button>
           ) : (
             <IoCheckmark
               className="h-3.5 w-3.5 shrink-0 text-white/70"
@@ -2179,8 +1834,11 @@ function MessageBubbleInner({
       onContextMenu={handleContextMenu}
       onPointerDownCapture={handlePointerDownCapture}
       onPointerMoveCapture={handlePointerMoveCapture}
-      onPointerUpCapture={() => clearLongPressTimer()}
-      onPointerCancelCapture={() => clearLongPressTimer()}
+      onPointerUpCapture={handlePointerUpCapture}
+      onPointerCancelCapture={() => {
+        clearLongPressTimer();
+        pointerMovedRef.current = true;
+      }}
     >
       <div className="relative">
         {showReactionBar ? (
@@ -2209,18 +1867,6 @@ function MessageBubbleInner({
                   {emoji}
                 </button>
               ))}
-              <button
-                type="button"
-                className="msg-reaction-floating__more"
-                title="Ещё действия"
-                aria-label="Ещё действия"
-                onClick={() => {
-                  setShowReactionBar(false);
-                  setShowActions(true);
-                }}
-              >
-                ⋯
-              </button>
             </div>
           </>
         ) : null}
@@ -2240,8 +1886,10 @@ function MessageBubbleInner({
           dragConstraints={systemBotAccessMessage ? undefined : { left: 0, right: 0 }}
           dragElastic={systemBotAccessMessage ? undefined : 0.2}
           style={{ x }}
-          onPointerUp={handleBubblePointerUp}
-          onDragStart={() => clearLongPressTimer()}
+          onDragStart={() => {
+            pointerMovedRef.current = true;
+            clearLongPressTimer();
+          }}
           onDragEnd={(_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
             if (systemBotAccessMessage) return;
             const dx = info.offset.x;
@@ -2288,6 +1936,17 @@ function MessageBubbleInner({
         ) : null}
 
         {/* Reply preview (tap to jump) */}
+        {forwardedFromLabel ? (
+          <div
+            className={[
+              'mb-1 text-[12px] font-semibold leading-tight',
+              isMine ? 'text-sky-100/90' : 'text-primary',
+            ].join(' ')}
+          >
+            Переслано от {forwardedFromLabel}
+          </div>
+        ) : null}
+
         {message.reply_preview && (
           <button
             type="button"
@@ -2387,7 +2046,7 @@ function MessageBubbleInner({
         </div>
       )}
 
-      {/* Actions Popup (Context Menu) */}
+      {/* Actions Popup (Context Menu) — тап; реакции — удержание */}
       {showActions && (
         <>
           <div
@@ -2399,8 +2058,19 @@ function MessageBubbleInner({
           />
           <div className={`msg-actions ${isMine ? 'msg-actions--mine' : ''}`}>
             {!systemBotAccessMessage ? (
-              <button type="button" onClick={() => { setReplyTo(message); setShowActions(false); }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setReplyTo(message);
+                  setShowActions(false);
+                }}
+              >
                 <span>↩️</span> Ответить
+              </button>
+            ) : null}
+            {canForwardMessage ? (
+              <button type="button" onClick={() => openForwardSheet()}>
+                <span>↪️</span> Переслать
               </button>
             ) : null}
             {payloadType === 'text' && String(message.content ?? '').trim() ? (
@@ -2417,6 +2087,22 @@ function MessageBubbleInner({
                 <span>📋</span> Копировать
               </button>
             ) : null}
+            {isMine && payloadType !== 'poll' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(message);
+                  setShowActions(false);
+                }}
+              >
+                <span>✏️</span> Редактировать
+              </button>
+            ) : null}
+            {canViewReaders ? (
+              <button type="button" onClick={() => openReadersSheet()}>
+                <span>✓</span> Кто прочитал
+              </button>
+            ) : null}
             {canPinMessages && !isOptimistic && /^\d+$/.test(String(message.id)) ? (
               <button
                 type="button"
@@ -2425,45 +2111,31 @@ function MessageBubbleInner({
                   setShowActions(false);
                 }}
               >
-                <span>{message.is_pinned ? '📍' : '📌'}</span> {message.is_pinned ? 'Открепить' : 'Закрепить'}
+                <span>{message.is_pinned ? '📍' : '📌'}</span>{' '}
+                {message.is_pinned ? 'Открепить' : 'Закрепить'}
               </button>
             ) : null}
-            {isMine && payloadType !== 'poll' && (
-              <button type="button" onClick={() => { setEditing(message); setShowActions(false); }}>
-                <span>✏️</span> Редактировать
-              </button>
-            )}
-            {isMine && (
-              <button type="button" className="msg-actions__danger" onClick={() => { void deleteMessage(message.id); setShowActions(false); }}>
-                <span>🗑</span> Удалить
-              </button>
-            )}
-            <button type="button" onClick={() => { setShowReactions(!showReactions); }}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowActions(false);
+                setShowReactionBar(true);
+              }}
+            >
               <span>😀</span> Реакция
             </button>
-            {showReactions && (
-              <div className="msg-quick-reactions">
-                {QUICK_REACTIONS.map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    className="msg-quick-reaction"
-                    onClick={() => {
-                      const row = message.reactions.find((x) => x.emoji === emoji);
-                      if (row?.reacted_by_me) {
-                        void removeReaction(message.id, emoji);
-                      } else {
-                        void addReaction(message.id, emoji);
-                      }
-                      setShowActions(false);
-                      setShowReactions(false);
-                    }}
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            )}
+            {isMine ? (
+              <button
+                type="button"
+                className="msg-actions__danger"
+                onClick={() => {
+                  void deleteMessage(message.id);
+                  setShowActions(false);
+                }}
+              >
+                <span>🗑</span> Удалить
+              </button>
+            ) : null}
           </div>
         </>
       )}
@@ -2476,6 +2148,21 @@ function MessageBubbleInner({
       fileMime={documentViewer?.mime}
       onClose={() => setDocumentViewer(null)}
     />
+    {canViewReaders ? (
+      <MessageReadersSheet
+        open={showReadersSheet}
+        onClose={() => setShowReadersSheet(false)}
+        messageId={String(message.id)}
+      />
+    ) : null}
+    {canForwardMessage ? (
+      <ForwardMessageSheet
+        open={showForwardSheet}
+        onClose={() => setShowForwardSheet(false)}
+        messageId={String(message.id)}
+        sourceConversationId={String(message.conversation_id)}
+      />
+    ) : null}
     </>
   );
 }

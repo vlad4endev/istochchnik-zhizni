@@ -213,7 +213,13 @@ export function PollCreateModal({ open, onClose, conversationId }: PollCreateMod
         allows_multiple: allowsMultiple,
         anonymous,
       });
-      if (ok) onClose();
+      if (ok) {
+        onClose();
+        return;
+      }
+      // sendMessage already toasts; keep modal open so the user can retry.
+    } catch {
+      // Defensive: store usually handles errors; avoid uncaught rejection closing silently.
     } finally {
       setSending(false);
     }

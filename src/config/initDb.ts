@@ -1503,6 +1503,10 @@ ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS ui_folder VARCHAR
 ALTER TABLE conversation_participants
   ADD COLUMN IF NOT EXISTS last_read_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL;
 
+-- Когда участник последний раз продвинул курсор прочтения (для «кто прочитал» в группах).
+ALTER TABLE conversation_participants
+  ADD COLUMN IF NOT EXISTS last_read_at TIMESTAMPTZ;
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_conv_participants_member
   ON conversation_participants (member_id) WHERE left_at IS NULL;
