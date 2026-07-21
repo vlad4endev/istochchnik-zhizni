@@ -350,7 +350,7 @@ export function AiSettingsSection() {
               className={fieldClass()}
               value={form.gptunnel_assistant_code}
               onChange={(e) => setForm((s) => ({ ...s, gptunnel_assistant_code: e.target.value }))}
-              placeholder="например ai08158128"
+              placeholder="например Christian"
               autoComplete="off"
             />
             <p className="mt-1 text-xs text-[var(--text-secondary)]">
