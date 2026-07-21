@@ -712,10 +712,10 @@ export interface AiPromptScopeOption {
   label: string;
 }
 
-export type AiConnectionPresetId = 'openai' | 'deepseek' | 'openrouter' | 'custom';
+export type AiConnectionPresetId = 'openai' | 'deepseek' | 'openrouter' | 'gptunnel' | 'custom';
 
 export interface AiPresetCatalogEntry {
-  id: 'openai' | 'deepseek' | 'openrouter';
+  id: 'openai' | 'deepseek' | 'openrouter' | 'gptunnel';
   label: string;
   description: string;
   base_url: string;
@@ -739,6 +739,8 @@ export interface AiSettingsAdminResponse {
   section_prompts: Record<string, string | null>;
   temperature: number;
   max_tokens: number;
+  /** Код ассистента GPTunnel для RAG (например ai08158128) */
+  gptunnel_assistant_code: string | null;
 }
 
 export async function fetchAiSettingsAdmin(): Promise<AiSettingsAdminResponse> {
@@ -756,6 +758,7 @@ export async function patchAiSettings(body: {
   section_prompts?: Partial<Record<string, string | null>>;
   temperature?: number | null;
   max_tokens?: number | null;
+  gptunnel_assistant_code?: string | null;
 }): Promise<AiSettingsAdminResponse> {
   const { data } = await apiClient.patch<AiSettingsAdminResponse>('/api/settings/ai', body);
   return data;

@@ -49,6 +49,7 @@ export async function patchAiSettingsHandler(req: Request, res: Response): Promi
     section_prompts?: Partial<Record<AiPromptScopeId, string | null>>;
     temperature?: number | null;
     max_tokens?: number | null;
+    gptunnel_assistant_code?: string | null;
   } = {};
 
   if (body.enabled !== undefined) {
@@ -60,7 +61,7 @@ export async function patchAiSettingsHandler(req: Request, res: Response): Promi
   }
   if (body.connection_preset !== undefined) {
     if (body.connection_preset !== null && typeof body.connection_preset !== 'string') {
-      res.status(400).json({ error: 'Поле connection_preset: строка (openai|deepseek|openrouter|custom) или null' });
+      res.status(400).json({ error: 'Поле connection_preset: строка (openai|deepseek|openrouter|gptunnel|custom) или null' });
       return;
     }
     if (body.connection_preset !== null && !isConnectionPresetId(body.connection_preset)) {
@@ -134,6 +135,13 @@ export async function patchAiSettingsHandler(req: Request, res: Response): Promi
       return;
     }
     patch.max_tokens = body.max_tokens as number | null;
+  }
+  if (body.gptunnel_assistant_code !== undefined) {
+    if (body.gptunnel_assistant_code !== null && typeof body.gptunnel_assistant_code !== 'string') {
+      res.status(400).json({ error: 'Поле gptunnel_assistant_code: строка или null' });
+      return;
+    }
+    patch.gptunnel_assistant_code = body.gptunnel_assistant_code as string | null;
   }
 
   try {

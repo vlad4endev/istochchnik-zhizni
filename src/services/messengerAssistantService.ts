@@ -11,6 +11,10 @@
 import { randomUUID } from 'node:crypto';
 
 import { AiAgentError, chatCompletion } from '../ai/llmClient';
+import {
+  gptunnelAssistantChat,
+  gptunnelChatIdFromConversation,
+} from '../ai/gptunnelAssistantClient';
 import type { ChatMessage } from '../ai/types';
 import { query as dbQuery } from '../config/db';
 import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
@@ -766,58 +770,94 @@ export async function replyAsAssistantBot(input: {
   }
 
   let adminSectionPrompt: string | null = null;
+  let gptunnelAssistantCode: string | null = null;
   try {
     const cfg = await resolveLlmRuntimeConfig();
     const fromSettings = resolveEffectiveSystemPrompt(cfg, 'messenger');
     if (typeof fromSettings === 'string' && fromSettings.trim()) {
       adminSectionPrompt = fromSettings.trim();
     }
+    if (typeof cfg.gptunnel_assistant_code === 'string' && cfg.gptunnel_assistant_code.trim()) {
+      gptunnelAssistantCode = cfg.gptunnel_assistant_code.trim();
+    }
   } catch {
     /* ignore */
   }
 
-  const messages: ChatMessage[] = [
-    { role: 'system', content: DEFAULT_ASSISTANT_SYSTEM_PROMPT },
-    ...(adminSectionPrompt && adminSectionPrompt !== DEFAULT_ASSISTANT_SYSTEM_PROMPT
-      ? [
-          {
-            role: 'system' as const,
-            content: `Дополнительные инструкции из настроек ИИ (раздел «Мессенджер»):\n${adminSectionPrompt}`,
-          },
-        ]
-      : []),
-    {
-      role: 'system',
-      content:
-        'Данные из базы (только чтение, общие данные программы церкви; используй для вопросов о событиях, служениях, песнях и расписании; не раскрывай личные переписки).\n' +
-        'Для вопросов веры, Библии и доктрины опирайся на Священное Писание и протестантское учение — этот блок не ограничивает библейские ответы.\n\n' +
-        digest,
-    },
-    ...chatHistory,
-  ];
+  let answer: string | null = null;
 
-  let answer: string;
-  try {
-    answer = await chatCompletion(messages, {
-      section: 'messenger',
-      skipSystemPrompt: true,
-      temperature: 0.55,
-      max_tokens: 2800,
-    });
-  } catch (e) {
-    if (e instanceof AiAgentError) {
-      if (e.code === 'ai_disabled') {
+  // GPTunnel Assistant API: RAG-базы подключены к ассистенту в кабинете.
+  if (gptunnelAssistantCode) {
+    const userPayload =
+      `${text}\n\n` +
+      `---\n` +
+      `Контекст программы церкви (только факты из приложения; для веры/Библии опирайся на Писание и RAG):\n` +
+      `${digest.slice(0, 6000)}`;
+    try {
+      const gpt = await gptunnelAssistantChat({
+        chatId: gptunnelChatIdFromConversation(conversationId),
+        assistantCode: gptunnelAssistantCode,
+        message: userPayload.slice(0, 12000),
+        maxContext: 16,
+      });
+      answer = gpt.message;
+    } catch (e) {
+      if (e instanceof AiAgentError && e.code === 'ai_disabled') {
         answer =
           'Модуль ИИ сейчас выключен в настройках. Администратор может включить его в разделе «Админка → Интеграции → ИИ».';
-      } else if (e.code === 'ai_not_configured') {
-        answer =
-          'ИИ ещё не настроен: нужен API-ключ в админке (или переменная AI_API_KEY). Пока могу подсказать только после настройки.';
+      } else if (e instanceof AiAgentError && e.code === 'ai_not_configured') {
+        console.warn('[assistant] gptunnel not configured, falling back to chat completions:', e.message);
+      } else if (e instanceof AiAgentError) {
+        console.warn('[assistant] gptunnel assistant chat failed, falling back:', e.message);
       } else {
-        answer = `Не удалось получить ответ ИИ: ${e.message}`;
+        console.warn('[assistant] gptunnel assistant chat failed, falling back:', e);
       }
-    } else {
-      console.error('[assistant] chatCompletion failed:', e);
-      answer = 'Произошла ошибка при обращении к ИИ. Попробуйте ещё раз чуть позже.';
+    }
+  }
+
+  if (answer == null) {
+    const messages: ChatMessage[] = [
+      { role: 'system', content: DEFAULT_ASSISTANT_SYSTEM_PROMPT },
+      ...(adminSectionPrompt && adminSectionPrompt !== DEFAULT_ASSISTANT_SYSTEM_PROMPT
+        ? [
+            {
+              role: 'system' as const,
+              content: `Дополнительные инструкции из настроек ИИ (раздел «Мессенджер»):\n${adminSectionPrompt}`,
+            },
+          ]
+        : []),
+      {
+        role: 'system',
+        content:
+          'Данные из базы (только чтение, общие данные программы церкви; используй для вопросов о событиях, служениях, песнях и расписании; не раскрывай личные переписки).\n' +
+          'Для вопросов веры, Библии и доктрины опирайся на Священное Писание и протестантское учение — этот блок не ограничивает библейские ответы.\n\n' +
+          digest,
+      },
+      ...chatHistory,
+    ];
+
+    try {
+      answer = await chatCompletion(messages, {
+        section: 'messenger',
+        skipSystemPrompt: true,
+        temperature: 0.55,
+        max_tokens: 2800,
+      });
+    } catch (e) {
+      if (e instanceof AiAgentError) {
+        if (e.code === 'ai_disabled') {
+          answer =
+            'Модуль ИИ сейчас выключен в настройках. Администратор может включить его в разделе «Админка → Интеграции → ИИ».';
+        } else if (e.code === 'ai_not_configured') {
+          answer =
+            'ИИ ещё не настроен: нужен API-ключ в админке (или переменная AI_API_KEY / GPTUNNEL_API_KEY). Пока могу подсказать только после настройки.';
+        } else {
+          answer = `Не удалось получить ответ ИИ: ${e.message}`;
+        }
+      } else {
+        console.error('[assistant] chatCompletion failed:', e);
+        answer = 'Произошла ошибка при обращении к ИИ. Попробуйте ещё раз чуть позже.';
+      }
     }
   }
 

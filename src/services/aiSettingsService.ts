@@ -20,10 +20,22 @@ async function ensureColumn(): Promise<void> {
 }
 
 function envApiKey(): string | null {
+  const g =
+    typeof process.env.GPTUNNEL_API_KEY === 'string' ? process.env.GPTUNNEL_API_KEY.trim() : '';
+  if (g) return g;
   const a = typeof process.env.AI_API_KEY === 'string' ? process.env.AI_API_KEY.trim() : '';
   if (a) return a;
   const b = typeof process.env.OPENAI_API_KEY === 'string' ? process.env.OPENAI_API_KEY.trim() : '';
   return b || null;
+}
+
+function envAssistantCode(): string | null {
+  const a =
+    typeof process.env.GPTUNNEL_ASSISTANT_CODE === 'string'
+      ? process.env.GPTUNNEL_ASSISTANT_CODE.trim()
+      : '';
+  if (!a) return null;
+  return a.replace(/^@+/, '');
 }
 
 function envBaseUrl(): string | null {
@@ -71,6 +83,7 @@ export async function saveAiSettingsDocument(doc: AiSettingsDocument): Promise<v
 export async function getAiSettingsAdmin(): Promise<AiSettingsAdminView> {
   const doc = await loadAiSettingsDocument();
   const key = doc.api_key ?? envApiKey();
+  const assistantCode = doc.gptunnel_assistant_code ?? envAssistantCode();
   return {
     enabled: doc.enabled,
     provider: doc.provider,
@@ -85,6 +98,7 @@ export async function getAiSettingsAdmin(): Promise<AiSettingsAdminView> {
     section_prompts: buildSectionPromptsAdminView(doc),
     temperature: doc.temperature,
     max_tokens: doc.max_tokens,
+    gptunnel_assistant_code: assistantCode,
   };
 }
 
@@ -100,6 +114,8 @@ export interface AiSettingsPatch {
   section_prompts?: Partial<Record<AiPromptScopeId, string | null>>;
   temperature?: number | null;
   max_tokens?: number | null;
+  /** Код ассистента GPTunnel; null — сбросить */
+  gptunnel_assistant_code?: string | null;
 }
 
 export async function updateAiSettings(patch: AiSettingsPatch): Promise<AiSettingsAdminView> {
@@ -179,6 +195,14 @@ export async function updateAiSettings(patch: AiSettingsPatch): Promise<AiSettin
       next.max_tokens = patch.max_tokens;
     }
   }
+  if (patch.gptunnel_assistant_code !== undefined) {
+    if (patch.gptunnel_assistant_code === null) {
+      next.gptunnel_assistant_code = null;
+    } else if (typeof patch.gptunnel_assistant_code === 'string') {
+      const t = patch.gptunnel_assistant_code.trim().replace(/^@+/, '');
+      next.gptunnel_assistant_code = t.length > 0 ? t : null;
+    }
+  }
 
   const normalized = normalizeAiSettingsDocument(next);
   await saveAiSettingsDocument(normalized);
@@ -195,6 +219,7 @@ export interface ResolvedLlmConfig {
   section_prompts: AiSectionPrompts;
   temperature: number;
   max_tokens: number;
+  gptunnel_assistant_code: string | null;
 }
 
 /** Эффективный системный промпт: для `section` — свой текст, иначе общий `system_prompt`. */
@@ -216,8 +241,16 @@ export async function resolveLlmRuntimeConfig(): Promise<ResolvedLlmConfig> {
   const apiKey = doc.api_key ?? envApiKey();
   const baseFromEnv = envBaseUrl();
   const modelFromEnv = envModel();
+  const envEnabledRaw =
+    typeof process.env.AI_ENABLED === 'string' ? process.env.AI_ENABLED.trim().toLowerCase() : '';
+  const envEnabled =
+    envEnabledRaw === '1' || envEnabledRaw === 'true' || envEnabledRaw === 'yes'
+      ? true
+      : envEnabledRaw === '0' || envEnabledRaw === 'false' || envEnabledRaw === 'no'
+        ? false
+        : null;
   return {
-    enabled: doc.enabled,
+    enabled: envEnabled ?? doc.enabled,
     base_url: baseFromEnv ?? doc.base_url,
     api_key: apiKey,
     default_model: modelFromEnv ?? doc.default_model,
@@ -225,5 +258,6 @@ export async function resolveLlmRuntimeConfig(): Promise<ResolvedLlmConfig> {
     section_prompts: doc.section_prompts,
     temperature: doc.temperature,
     max_tokens: doc.max_tokens,
+    gptunnel_assistant_code: doc.gptunnel_assistant_code ?? envAssistantCode(),
   };
 }

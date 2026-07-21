@@ -27,6 +27,11 @@ export interface AiSettingsDocument {
   section_prompts: AiSectionPrompts;
   temperature: number;
   max_tokens: number;
+  /**
+   * Код ассистента GPTunnel (Assistant API + RAG).
+   * Если задан — мессенджер «ИИ помощник» использует /v1/assistant/chat.
+   */
+  gptunnel_assistant_code: string | null;
 }
 
 export interface AiPromptScopeOption {
@@ -51,6 +56,7 @@ export interface AiSettingsAdminView {
   preset_catalog: AiPresetCatalogEntry[];
   temperature: number;
   max_tokens: number;
+  gptunnel_assistant_code: string | null;
 }
 
 const DEFAULT_BASE = 'https://api.openai.com/v1';
@@ -115,6 +121,11 @@ export function normalizeAiSettingsDocument(raw: unknown): AiSettingsDocument {
       ? o.connection_preset
       : inferConnectionPresetFromBaseUrl(base_url);
 
+  const gptunnel_assistant_code =
+    typeof o.gptunnel_assistant_code === 'string' && o.gptunnel_assistant_code.trim().length > 0
+      ? o.gptunnel_assistant_code.trim().replace(/^@+/, '')
+      : null;
+
   return {
     enabled,
     provider,
@@ -126,6 +137,7 @@ export function normalizeAiSettingsDocument(raw: unknown): AiSettingsDocument {
     section_prompts,
     temperature,
     max_tokens,
+    gptunnel_assistant_code,
   };
 }
 
