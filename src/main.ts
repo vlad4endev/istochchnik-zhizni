@@ -50,6 +50,7 @@ import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
 import { ensurePushSubscriptionsSchema } from './services/pushSubscriptionsSchema';
+import { ensureFeedSchema } from './services/feedSchema';
 import { writeAppLog } from './services/appLogService';
 import { getAuthAccessTtlMinutes, getRefreshTtlDays } from './config/authCookie';
 import { cleanupExpiredSessions } from './services/authService';
@@ -486,6 +487,12 @@ async function start(): Promise<void> {
         console.log('[push] push_subscriptions schema ensured');
       } catch (e) {
         console.warn('[push] ensurePushSubscriptionsSchema failed:', e);
+      }
+      try {
+        await ensureFeedSchema();
+        console.log('[feed] feed schema ensured');
+      } catch (e) {
+        console.warn('[feed] ensureFeedSchema failed:', e);
       }
       try {
         await ensureMediaScheduleSchema();
