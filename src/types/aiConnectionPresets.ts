@@ -1,5 +1,5 @@
 /** Выбранный «шлюз» API: три готовых + свой URL. */
-export type AiConnectionPresetId = 'openai' | 'deepseek' | 'openrouter' | 'custom';
+export type AiConnectionPresetId = 'openai' | 'deepseek' | 'openrouter' | 'gptunnel' | 'custom';
 
 export interface AiPresetModelOption {
   id: string;
@@ -61,6 +61,20 @@ export const AI_PRESET_CATALOG: readonly AiPresetCatalogEntry[] = [
       { id: 'google/gemini-3.1-flash-lite-preview', label: 'Google: Gemini 3.1 Flash Lite Preview' },
     ],
   },
+  {
+    id: 'gptunnel',
+    label: 'GPTunnel',
+    description: 'Российский шлюз + RAG-базы и Assistant API для христианского помощника',
+    base_url: 'https://gptunnel.ru/v1',
+    default_model: 'gpt-4o-mini',
+    key_hint: 'gptunnel.ru → API ключи; для RAG укажите код ассистента ниже',
+    model_options: [
+      { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
+      { id: 'gpt-4o', label: 'GPT-4o' },
+      { id: 'deepseek-chat', label: 'DeepSeek Chat' },
+      { id: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet' },
+    ],
+  },
 ];
 
 const PRESET_BASES = new Map(
@@ -74,9 +88,10 @@ function normalizeBase(u: string): string {
 export function inferConnectionPresetFromBaseUrl(baseUrl: string): AiConnectionPresetId {
   const n = normalizeBase(baseUrl);
   const id = PRESET_BASES.get(n);
-  if (id === 'openai' || id === 'deepseek' || id === 'openrouter') {
+  if (id === 'openai' || id === 'deepseek' || id === 'openrouter' || id === 'gptunnel') {
     return id;
   }
+  if (/gptunnel\.ru/i.test(n)) return 'gptunnel';
   return 'custom';
 }
 
@@ -88,5 +103,11 @@ export function getPresetDefaults(
 }
 
 export function isConnectionPresetId(s: unknown): s is AiConnectionPresetId {
-  return s === 'openai' || s === 'deepseek' || s === 'openrouter' || s === 'custom';
+  return (
+    s === 'openai' ||
+    s === 'deepseek' ||
+    s === 'openrouter' ||
+    s === 'gptunnel' ||
+    s === 'custom'
+  );
 }

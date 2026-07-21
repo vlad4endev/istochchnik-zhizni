@@ -3,7 +3,7 @@
  * В коде передавайте `section` в `chatCompletion(..., { section: 'messenger' })`.
  */
 export const AI_PROMPT_SCOPE_LIST = [
-  { id: 'messenger', label: 'Мессенджер (ИИ помощник)' },
+  { id: 'messenger', label: 'Мессенджер (христианский ИИ помощник)' },
   { id: 'songbook', label: 'Песенник и аккорды' },
   { id: 'studio', label: 'Студия и сет-листы' },
   { id: 'calendar', label: 'Молитвенный календарь' },

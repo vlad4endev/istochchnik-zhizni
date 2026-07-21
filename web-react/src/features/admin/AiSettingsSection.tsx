@@ -65,6 +65,7 @@ export function AiSettingsSection() {
     system_prompt: '',
     temperature: 0.7,
     max_tokens: 2048,
+    gptunnel_assistant_code: '',
   });
   const [sectionPrompts, setSectionPrompts] = useState<Record<string, string>>({});
   const [testPrompt, setTestPrompt] = useState('');
@@ -84,6 +85,7 @@ export function AiSettingsSection() {
       system_prompt: data.system_prompt ?? '',
       temperature: data.temperature,
       max_tokens: data.max_tokens,
+      gptunnel_assistant_code: data.gptunnel_assistant_code ?? '',
     });
     const sp: Record<string, string> = {};
     for (const s of data.prompt_scopes ?? []) {
@@ -124,6 +126,9 @@ export function AiSettingsSection() {
         section_prompts: section_payload,
         temperature: form.temperature,
         max_tokens: form.max_tokens,
+        gptunnel_assistant_code: form.gptunnel_assistant_code.trim()
+          ? form.gptunnel_assistant_code.trim().replace(/^@+/, '')
+          : null,
       });
     },
     onSuccess: (next) => {
@@ -233,7 +238,7 @@ export function AiSettingsSection() {
           <span className="rounded-full bg-[var(--surface)] px-3 py-1.5 text-[var(--text-secondary)]">3 · Сохранить</span>
         </div>
 
-        <div className="mt-5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {settings.preset_catalog.map((entry) => {
             const active = form.connection_preset === entry.id;
             return (
@@ -318,6 +323,7 @@ export function AiSettingsSection() {
             />
             <p className="mt-1 text-xs text-[var(--text-secondary)]">
               Оставьте пустым при сохранении, если ключ не меняется. Для сервера можно задать{' '}
+              <code className="rounded bg-[var(--surface)] px-1">GPTUNNEL_API_KEY</code>,{' '}
               <code className="rounded bg-[var(--surface)] px-1">AI_API_KEY</code> или{' '}
               <code className="rounded bg-[var(--surface)] px-1">OPENAI_API_KEY</code>.
             </p>
@@ -334,6 +340,25 @@ export function AiSettingsSection() {
                 Удалить ключ из базы
               </button>
             ) : null}
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-[var(--text-secondary)]">
+              Код ассистента GPTunnel (RAG)
+            </label>
+            <input
+              className={fieldClass()}
+              value={form.gptunnel_assistant_code}
+              onChange={(e) => setForm((s) => ({ ...s, gptunnel_assistant_code: e.target.value }))}
+              placeholder="например Christian"
+              autoComplete="off"
+            />
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              Если задан — чат «ИИ помощник» ходит в{' '}
+              <code className="rounded bg-[var(--surface)] px-1">/v1/assistant/chat</code> и использует
+              векторные базы, привязанные к ассистенту в кабинете GPTunnel. Можно задать через{' '}
+              <code className="rounded bg-[var(--surface)] px-1">GPTUNNEL_ASSISTANT_CODE</code>.
+            </p>
           </div>
 
           {form.connection_preset === 'custom' ? (
@@ -480,7 +505,7 @@ export function AiSettingsSection() {
             <p className="mt-1 text-xs text-stone-600">
               Опционально: отдельный текст для{' '}
               <code className="rounded bg-white px-1 font-mono text-xs">chatCompletion(..., &#123; section: &apos;…&apos; &#125;)</code>
-              . Раздел «Мессенджер (ИИ помощник)» дополняет промпт ИИ-чата в мессенджере.
+              . Раздел «Мессенджер (ИИ помощник)» дополняет встроенный промпт христианского помощника в чате.
             </p>
             <div className="mt-4 space-y-4">
               {(settings.prompt_scopes ?? []).map((scope) => (

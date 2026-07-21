@@ -26,6 +26,18 @@ const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
 
 const ASSISTANT_EXAMPLE_QUESTIONS: ReadonlyArray<{ label: string; text: string }> = [
   {
+    label: 'План чтения Библии',
+    text: 'Составь мне простой план чтения Библии на 30 дней для новичка',
+  },
+  {
+    label: 'Что значит вера?',
+    text: 'Объясни просто, что такое вера по Библии, со ссылками на стихи',
+  },
+  {
+    label: 'Как молиться?',
+    text: 'Помоги понять, как молиться по Писанию, и дай короткий пример молитвы',
+  },
+  {
     label: 'Кто проповедует?',
     text: 'Кто проповедует в следующее воскресенье и какая тема?',
   },
@@ -34,20 +46,8 @@ const ASSISTANT_EXAMPLE_QUESTIONS: ReadonlyArray<{ label: string; text: string }
     text: 'Какие события запланированы на ближайшие две недели?',
   },
   {
-    label: 'Музыка и медиа',
-    text: 'Кто на музыке / медиа в ближайшее служение?',
-  },
-  {
     label: 'Молитва на сегодня',
     text: 'Что в молитвенном календаре на сегодня?',
-  },
-  {
-    label: 'Песни про хвалу',
-    text: 'Найди песни про любовь или хвалу',
-  },
-  {
-    label: 'Кто ведущий?',
-    text: 'Кто ведущий на ближайшее воскресенье?',
   },
 ];
 
@@ -800,7 +800,7 @@ export function ChatWindow({
     }
     if (isDraft) return 'черновик · чат появится после 1 сообщения';
     if (!conv) return '';
-    if (isAssistantChannel) return 'Отвечает по событиям, проповедям, песням и расписанию';
+    if (isAssistantChannel) return 'Христианский помощник · Библия, вера и программа церкви';
     if (isAccessRequestsChannel) return 'Системные уведомления';
     if (conv.type === 'private' && conv.other_member) {
       if (isPrivatePeerOnline) return 'в сети';
@@ -1321,7 +1321,7 @@ export function ChatWindow({
               }
               participantLabelById={participantLabelById}
               placeholder={
-                isAssistantChannel ? 'Задайте вопрос ИИ помощнику…' : 'Сообщение'
+                isAssistantChannel ? 'Спросите о вере, Библии или программе церкви…' : 'Сообщение'
               }
             />
           </>
