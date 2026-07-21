@@ -85,7 +85,6 @@ import {
   type TelegramDispatchSettingsResponse,
   type SmsSettingsResponse,
 } from '../api';
-import { NextWeekPrayerPlanSection } from '../../calendar/components/NextWeekPrayerPlanSection';
 import { CHURCH_EVENT_CATEGORY_OPTIONS_FALLBACK } from '../churchEventCategoryOptions';
 import { GlobalNeedsSection } from '../GlobalNeedsSection';
 import { UserListSkeleton } from '../../../components/skeletons/UserListSkeleton';
@@ -3204,7 +3203,6 @@ function CalendarPrayerCycleRoster() {
 
 function CalendarSection() {
   const qc = useQueryClient();
-  const meQ = useMe();
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const mut = useMutation({
@@ -3227,7 +3225,6 @@ function CalendarSection() {
             {[
               { id: 'cal-anchor', label: 'Дата старта' },
               { id: 'cal-roster', label: 'Очередь' },
-              { id: 'cal-collection', label: 'Нужды' },
               { id: 'cal-content', label: 'Контент' },
             ].map((step, i, arr) => (
               <div key={step.id} className="flex flex-1 items-start">
@@ -3330,35 +3327,6 @@ function CalendarSection() {
           </button>
         </div>
         <CalendarPrayerCycleRoster />
-      </section>
-
-      <section
-        id="cal-collection"
-        className="scroll-mt-6 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]"
-      >
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-base font-semibold text-stone-900">Сбор нужд</h3>
-            <p className="mt-1 text-sm text-stone-600">
-              Список нужд участников и план сбора по неделям для приложения.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="rounded-md bg-[#7B2D3F] px-3.5 py-2 text-xs font-medium text-white transition hover:opacity-95"
-            title="Отправка выполняется в разделе Telegram"
-          >
-            Отправить нужды в Telegram
-          </button>
-        </div>
-        <div className="rounded-xl border border-stone-200/80 bg-white p-4">
-          <NextWeekPrayerPlanSection
-            canView
-            currentUserId={meQ.data?.id ?? null}
-            currentUserRole={meQ.data?.app_role ?? null}
-            isAdmin={meQ.data?.app_role?.trim().toLowerCase() === 'admin'}
-          />
-        </div>
       </section>
 
       <section
