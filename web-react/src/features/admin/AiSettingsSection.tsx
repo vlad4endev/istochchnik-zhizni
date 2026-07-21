@@ -480,7 +480,7 @@ export function AiSettingsSection() {
             <p className="mt-1 text-xs text-stone-600">
               Опционально: отдельный текст для{' '}
               <code className="rounded bg-white px-1 font-mono text-xs">chatCompletion(..., &#123; section: &apos;…&apos; &#125;)</code>
-              . Раздел «Мессенджер (ИИ помощник)» дополняет промпт ИИ-чата в мессенджере.
+              . Раздел «Мессенджер (ИИ помощник)» дополняет встроенный промпт христианского помощника в чате.
             </p>
             <div className="mt-4 space-y-4">
               {(settings.prompt_scopes ?? []).map((scope) => (

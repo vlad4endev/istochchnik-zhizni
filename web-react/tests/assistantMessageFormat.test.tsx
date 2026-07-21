@@ -30,4 +30,19 @@ describe('assistantMessageFormat', () => {
     expect(html).not.toContain('**');
     expect(html).not.toContain('\\-');
   });
+
+  it('renders Bible blockquotes', () => {
+    const html = renderToStaticMarkup(
+      <>
+        {renderAssistantMessageContent(
+          'Как сказано в Иоанна 3:16:\n\n> Ибо так возлюбил Бог мир…\n> Иоанна 3:16',
+        )}
+      </>,
+    );
+    expect(html).toContain('<blockquote');
+    expect(html).toContain('возлюбил Бог');
+    expect(html).toContain('Иоанна');
+    expect(html).toContain('3:16');
+    expect(html).not.toContain('> Ибо');
+  });
 });

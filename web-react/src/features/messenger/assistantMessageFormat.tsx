@@ -5,7 +5,7 @@ import { renderMessengerPlainText } from './messengerPlainText';
 /** Убрать экранирование, типичное для ответов LLM (`\-`, `\*`). */
 export function normalizeAssistantMarkdown(raw: string): string {
   return String(raw ?? '')
-    .replace(/\\([-*_`])/g, '$1')
+    .replace(/\\([-*_`>])/g, '$1')
     .replace(/\r\n/g, '\n')
     .trim();
 }
@@ -41,8 +41,16 @@ function listItemBody(line: string): string {
   return line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '');
 }
 
+function isBlockquoteLine(line: string): boolean {
+  return /^\s*>\s?/.test(line);
+}
+
+function blockquoteBody(line: string): string {
+  return line.replace(/^\s*>\s?/, '');
+}
+
 /**
- * Лёгкий рендер ответов ИИ: абзацы, списки, **жирный**.
+ * Лёгкий рендер ответов ИИ: абзацы, списки, цитаты (blockquote), **жирный**.
  * Без полноценного Markdown-парсера — достаточно для читаемых ответов в чате.
  */
 export function renderAssistantMessageContent(
@@ -65,6 +73,28 @@ export function renderAssistantMessageContent(
     const line = lines[i] ?? '';
     if (!line.trim()) {
       i += 1;
+      continue;
+    }
+
+    if (isBlockquoteLine(line)) {
+      const quoteLines: string[] = [];
+      while (i < lines.length && isBlockquoteLine(lines[i] ?? '')) {
+        quoteLines.push(blockquoteBody(lines[i] ?? ''));
+        i += 1;
+      }
+      blocks.push(
+        <blockquote
+          key={`bq-${blockIdx}`}
+          className="my-1.5 border-l-[3px] border-current/35 pl-3 italic leading-relaxed opacity-95"
+        >
+          {quoteLines.map((ql, j) => (
+            <p key={`bq-${blockIdx}-${j}`} className="mb-1 last:mb-0">
+              {renderInlineMarkdown(ql || '\u00a0', `q-${blockIdx}-${j}`, linkClassName)}
+            </p>
+          ))}
+        </blockquote>,
+      );
+      blockIdx += 1;
       continue;
     }
 
@@ -94,7 +124,7 @@ export function renderAssistantMessageContent(
     while (i < lines.length) {
       const cur = lines[i] ?? '';
       if (!cur.trim()) break;
-      if (isListLine(cur)) break;
+      if (isListLine(cur) || isBlockquoteLine(cur)) break;
       para.push(cur);
       i += 1;
     }
