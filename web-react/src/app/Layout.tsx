@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { IconType } from 'react-icons';
 import {
+  LuBookOpen,
   LuCalendarClock,
   LuChevronLeft,
   LuChevronRight,
@@ -45,6 +46,7 @@ import { SermonPlayer } from '../features/resources/sermonPlayback/SermonPlayer'
 import { useBrowserNotificationScheduler } from '../features/notifications/useBrowserNotificationScheduler';
 import { useProfileDraftStore } from '../features/profile/profileDraftStore';
 import { canAccessStudio } from '../features/auth/studioAccess';
+import { canAccessMySermons } from '../features/mySermons/mySermonsAccess';
 import { canViewAnySchedule } from '../features/schedules/ministryScheduleAccess';
 import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
@@ -67,6 +69,7 @@ type NavItem = {
   Icon: IconType;
   adminOnly?: boolean;
   studioOnly?: boolean;
+  preacherOnly?: boolean;
   sectionId?: AppSectionId;
   adminOrMediaMinistryOnly?: boolean;
   mediaMinistryOnly?: boolean;
@@ -84,6 +87,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/schedules', label: 'Расписание', Icon: LuCalendarClock, scheduleAccessOnly: true },
   { to: '/studio', label: 'Студия', Icon: LuDisc3, studioOnly: true, sectionId: 'studio' },
   { to: '/sermons', label: 'Проповеди', Icon: LuMic, sectionId: 'sermons' },
+  { to: '/my-sermons', label: 'Мои проповеди', Icon: LuBookOpen, preacherOnly: true, sectionId: 'my_sermons' },
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle, sectionId: 'messenger' },
   { to: '/broadcast', label: 'Трансляция', Icon: LuTv, adminOrMediaMinistryOnly: true },
   { to: '/admin', label: 'Админ', Icon: LuShield, adminOnly: true },
@@ -433,6 +437,7 @@ export function Layout() {
     roles,
   );
   const canSeeStudioNav = canAccessStudio(role, meQ.data?.ministry_direction, roles);
+  const canSeeMySermonsNav = canAccessMySermons(role, meQ.data?.ministry_role, roles);
   const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
   const profileUsername = useAuthStore((s) => s.username ?? '');
   const profileMemberId = useAuthStore((s) => s.memberId);
@@ -466,6 +471,7 @@ export function Layout() {
       (item) =>
         (!item.adminOnly || isAdmin) &&
         (!item.studioOnly || canSeeStudioNav) &&
+        (!item.preacherOnly || canSeeMySermonsNav) &&
         (!item.adminOrMediaMinistryOnly || canSeeBroadcastNav) &&
         (!item.scheduleAccessOnly || canSeeScheduleNav) &&
         (!item.sectionId ||
@@ -482,6 +488,7 @@ export function Layout() {
     canSeeBroadcastNav,
     canSeeScheduleNav,
     canSeeStudioNav,
+    canSeeMySermonsNav,
   ]);
   const sidebarItems = items;
   /** На телефоне «Настройки» нет в NAV_ITEMS — добавляем в лист «Ещё», как в подвале сайдбара на lg+. */

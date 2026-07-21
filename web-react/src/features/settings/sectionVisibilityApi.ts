@@ -8,6 +8,7 @@ export const APP_SECTION_IDS = [
   'service_planner',
   'studio',
   'sermons',
+  'my_sermons',
   'messenger',
 ] as const;
 export type AppSectionId = (typeof APP_SECTION_IDS)[number];
@@ -57,6 +58,7 @@ export function appSectionLabel(section: AppSectionId): string {
   if (section === 'service_planner') return 'Планировщик';
   if (section === 'studio') return 'Студия';
   if (section === 'sermons') return 'Проповеди';
+  if (section === 'my_sermons') return 'Мои проповеди';
   return 'Чаты';
 }
 

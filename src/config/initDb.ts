@@ -2172,6 +2172,40 @@ CREATE INDEX IF NOT EXISTS idx_media_assignments_event_ref_id ON media_assignmen
 CREATE INDEX IF NOT EXISTS idx_media_assignments_member_id ON media_assignments (member_id);
 CREATE INDEX IF NOT EXISTS idx_media_assignments_role_id ON media_assignments (role_id);
 
+-- Personal sermon outline documents ("Мои проповеди")
+CREATE TABLE IF NOT EXISTS sermon_notes (
+  id BIGSERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  title VARCHAR(500) NOT NULL DEFAULT '',
+  topic VARCHAR(500) NOT NULL DEFAULT '',
+  scripture VARCHAR(500) NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  service_plan_id BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_sermon_notes_member_updated
+  ON sermon_notes (member_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sermon_notes_service_plan
+  ON sermon_notes (service_plan_id)
+  WHERE service_plan_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'service_plans'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_schema = 'public'
+      AND table_name = 'sermon_notes'
+      AND constraint_name = 'sermon_notes_service_plan_id_fkey'
+  ) THEN
+    ALTER TABLE sermon_notes
+      ADD CONSTRAINT sermon_notes_service_plan_id_fkey
+      FOREIGN KEY (service_plan_id) REFERENCES service_plans(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 -- Offline sync MVP columns
 ALTER TABLE songs ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE songs ADD COLUMN IF NOT EXISTS client_id UUID;

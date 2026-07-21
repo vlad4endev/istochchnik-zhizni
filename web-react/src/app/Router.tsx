@@ -24,6 +24,7 @@ import {
   RequireSundayScheduleAccess,
   RequireSectionAccess,
   RequireStudioAccess,
+  RequireMySermonsAccess,
   RouteFallback,
 } from './routeGuards';
 import { LegacyStudioEditRedirect } from './LegacyStudioEditRedirect';
@@ -67,6 +68,16 @@ const BroadcastPage = lazy(async () => {
 const PodcastsPage = lazy(async () => {
   const m = await import('../features/resources/pages/PodcastsPage');
   return { default: m.PodcastsPage };
+});
+
+const MySermonsPage = lazy(async () => {
+  const m = await import('../features/mySermons/pages/MySermonsPage');
+  return { default: m.MySermonsPage };
+});
+
+const SermonNoteEditorPage = lazy(async () => {
+  const m = await import('../features/mySermons/pages/SermonNoteEditorPage');
+  return { default: m.SermonNoteEditorPage };
 });
 
 const ResourcesRoutes = lazy(async () => {
@@ -421,6 +432,38 @@ export function AppRouter() {
                 </Suspense>
               </RequireSectionAccess>
             </RequireFullMember>
+          }
+        />
+        <Route
+          path="my-sermons"
+          element={
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireMySermonsAccess>
+                  <RequireSectionAccess sectionId="my_sermons">
+                    <Suspense fallback={<RouteFallback />}>
+                      <MySermonsPage />
+                    </Suspense>
+                  </RequireSectionAccess>
+                </RequireMySermonsAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
+          }
+        />
+        <Route
+          path="my-sermons/:id"
+          element={
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireMySermonsAccess>
+                  <RequireSectionAccess sectionId="my_sermons">
+                    <Suspense fallback={<RouteFallback />}>
+                      <SermonNoteEditorPage />
+                    </Suspense>
+                  </RequireSectionAccess>
+                </RequireMySermonsAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
           }
         />
         <Route

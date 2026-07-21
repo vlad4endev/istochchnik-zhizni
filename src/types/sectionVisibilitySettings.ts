@@ -6,6 +6,7 @@ export const APP_SECTION_IDS = [
   'service_planner',
   'studio',
   'sermons',
+  'my_sermons',
   'messenger',
 ] as const;
 
@@ -60,6 +61,7 @@ export function defaultSectionVisibilitySettings(): SectionVisibilitySettingsDoc
       },
       studio: defaultRule(),
       sermons: defaultRule(),
+      my_sermons: defaultRule(),
       messenger: defaultRule(),
     },
   };
