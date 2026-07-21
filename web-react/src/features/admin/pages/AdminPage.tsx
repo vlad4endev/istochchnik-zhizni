@@ -42,18 +42,12 @@ import {
   apiErrorMessage,
   bulkCreateAdminMembers,
   createAdminMember,
-  createBacksliderApi,
   createAdminEvent,
   createDirectionTemplate,
-  createGlobalThemeApi,
-  createMinistryApi,
   createRoleTemplate,
   deleteAdminMember,
-  deleteBacksliderApi,
   deleteAdminEvent,
   deleteDirectionTemplate,
-  deleteGlobalThemeApi,
-  deleteMinistryApi,
   deleteRoleTemplate,
   fetchAdminMembers,
   fetchPrayerCycleRoster,
@@ -62,9 +56,6 @@ import {
   fetchAdminEvents,
   fetchChurchEventCategoryOptions,
   uploadChurchEventPoster,
-  fetchGlobalBacksliders,
-  fetchGlobalMinistries,
-  fetchGlobalThemes,
   fetchRoleTemplates,
   fetchTelegramDispatchRecipients,
   fetchTelegramDispatchSettings,
@@ -87,9 +78,6 @@ import {
   startPrayerCycle,
   updateAdminEvent,
   updateAdminMember,
-  updateBacksliderApi,
-  updateGlobalThemeApi,
-  updateMinistryApi,
   type MinistryDirectionTemplate,
   type ChurchEventItem,
   type TelegramSettingsResponse,
@@ -99,6 +87,7 @@ import {
 } from '../api';
 import { NextWeekPrayerPlanSection } from '../../calendar/components/NextWeekPrayerPlanSection';
 import { CHURCH_EVENT_CATEGORY_OPTIONS_FALLBACK } from '../churchEventCategoryOptions';
+import { GlobalNeedsSection } from '../GlobalNeedsSection';
 import { UserListSkeleton } from '../../../components/skeletons/UserListSkeleton';
 import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
 import { BirthDayMonthFields } from '@/components/BirthDayMonthFields';
@@ -217,9 +206,6 @@ function appRoleBadgeClass(role: string): string {
 const Q_MEMBERS = ['admin', 'members'] as const;
 const Q_ROLES = ['admin', 'templates', 'roles'] as const;
 const Q_DIRS = ['admin', 'templates', 'directions'] as const;
-const Q_GT = ['admin', 'global', 'themes'] as const;
-const Q_GM = ['admin', 'global', 'ministries'] as const;
-const Q_GB = ['admin', 'global', 'backsliders'] as const;
 const Q_EVENTS = ['admin', 'events'] as const;
 const Q_EVENT_CATEGORY_OPTIONS = ['admin', 'church-event-category-options'] as const;
 const Q_TG = ['admin', 'telegram', 'settings'] as const;
@@ -3379,25 +3365,14 @@ function CalendarSection() {
         id="cal-content"
         className="scroll-mt-6 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]"
       >
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-base font-semibold text-stone-900">Контент «Молитва»</h3>
-            <p className="mt-1 text-sm text-stone-600">
-              Тема, стих и молитвенные блоки для карточек и Telegram-превью.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="rounded-md bg-[#7B2D3F] px-3.5 py-2 text-xs font-medium text-white transition hover:opacity-95"
-            title="Сохранение выполняется в блоках ниже"
-          >
-            Сохранить шаблон
-          </button>
+        <div className="mb-4 min-w-0">
+          <h3 className="text-base font-semibold text-stone-900">Контент «Молитва»</h3>
+          <p className="mt-1 text-sm text-stone-600">
+            Глобальные темы, служения и отступники для ежедневных карточек. Поиск по тексту, полное
+            чтение и удобное редактирование в отдельном окне.
+          </p>
         </div>
         <div className="rounded-xl border border-stone-200/80 bg-white p-4">
-          <div className="mb-3 rounded-lg border border-stone-200 bg-stone-50/70 px-3 py-2 text-xs text-stone-600">
-            Предпросмотр отправки формируется из полей ниже.
-          </div>
           <GlobalNeedsSection />
         </div>
       </section>
@@ -3812,498 +3787,6 @@ function EventsSection() {
               </button>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function GlobalNeedsSection() {
-  const qc = useQueryClient();
-  const themes = useQuery({ queryKey: Q_GT, queryFn: fetchGlobalThemes });
-  const ministries = useQuery({ queryKey: Q_GM, queryFn: fetchGlobalMinistries });
-  const backsliders = useQuery({ queryKey: Q_GB, queryFn: fetchGlobalBacksliders });
-
-  const [tTitle, setTTitle] = useState('');
-  const [tVerse, setTVerse] = useState('');
-  const [tPoints, setTPoints] = useState('');
-  const [mTitle, setMTitle] = useState('');
-  const [mPoints, setMPoints] = useState('');
-  const [bName, setBName] = useState('');
-  const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
-  const [tEdit, setTEdit] = useState<{
-    id: number;
-    title: string;
-    bible_verse: string;
-    prayer_points: string;
-  } | null>(null);
-  const [mEdit, setMEdit] = useState<{ id: number; title: string; prayer_points: string } | null>(null);
-  const [bEdit, setBEdit] = useState<{ id: number; name: string } | null>(null);
-
-  const invT = () => void qc.invalidateQueries({ queryKey: Q_GT });
-  const invM = () => void qc.invalidateQueries({ queryKey: Q_GM });
-  const invB = () => void qc.invalidateQueries({ queryKey: Q_GB });
-
-  const addT = useMutation({
-    mutationFn: () =>
-      createGlobalThemeApi({
-        title: tTitle.trim(),
-        ...(tVerse.trim() ? { bible_verse: tVerse.trim() } : {}),
-        ...(tPoints.trim() ? { prayer_points: tPoints.trim() } : {}),
-      }),
-    onSuccess: () => {
-      setTTitle('');
-      setTVerse('');
-      setTPoints('');
-      setNote({ type: 'ok', text: 'Тема добавлена.' });
-      invT();
-    },
-    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-  });
-
-  const delT = useMutation({
-    mutationFn: (id: number) => deleteGlobalThemeApi(id),
-    onSuccess: () => {
-      setNote({ type: 'ok', text: 'Удалено.' });
-      invT();
-    },
-    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-  });
-
-  const updT = useMutation({
-    mutationFn: (draft: { id: number; title: string; bible_verse: string; prayer_points: string }) =>
-      updateGlobalThemeApi(draft.id, {
-        title: draft.title.trim(),
-        bible_verse: draft.bible_verse.trim() || null,
-        prayer_points: draft.prayer_points.trim() || null,
-      }),
-    onSuccess: () => {
-      setTEdit(null);
-      setNote({ type: 'ok', text: 'Тема обновлена.' });
-      invT();
-    },
-    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-  });
-
-  const addM = useMutation({
-    mutationFn: () =>
-      createMinistryApi({
-        title: mTitle.trim(),
-        ...(mPoints.trim() ? { prayer_points: mPoints.trim() } : {}),
-      }),
-    onSuccess: () => {
-      setMTitle('');
-      setMPoints('');
-      setNote({ type: 'ok', text: 'Служение добавлено.' });
-      invM();
-    },
-    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-  });
-
-  const delM = useMutation({
-    mutationFn: (id: number) => deleteMinistryApi(id),
-    onSuccess: () => {
-      setNote({ type: 'ok', text: 'Удалено.' });
-      invM();
-    },
-    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-  });
-
-  const updM = useMutation({
-    mutationFn: (draft: { id: number; title: string; prayer_points: string }) =>
-      updateMinistryApi(draft.id, {
-        title: draft.title.trim(),
-        prayer_points: draft.prayer_points.trim() || null,
-      }),
-    onSuccess: () => {
-      setMEdit(null);
-      setNote({ type: 'ok', text: 'Служение обновлено.' });
-      invM();
-    },
-    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-  });
-
-  const addB = useMutation({
-    mutationFn: () => createBacksliderApi(bName.trim()),
-    onSuccess: () => {
-      setBName('');
-      setNote({ type: 'ok', text: 'Добавлено.' });
-      invB();
-    },
-    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-  });
-
-  const delB = useMutation({
-    mutationFn: (id: number) => deleteBacksliderApi(id),
-    onSuccess: () => {
-      setNote({ type: 'ok', text: 'Удалено.' });
-      invB();
-    },
-    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-  });
-
-  const updB = useMutation({
-    mutationFn: (draft: { id: number; name: string }) => updateBacksliderApi(draft.id, draft.name.trim()),
-    onSuccess: () => {
-      setBEdit(null);
-      setNote({ type: 'ok', text: 'Запись обновлена.' });
-      invB();
-    },
-    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-  });
-
-  const loading = themes.isLoading || ministries.isLoading || backsliders.isLoading;
-
-  return (
-    <div>
-      {note && (
-        <div
-          className={
-            note.type === 'ok'
-              ? 'mb-4 flex justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900'
-              : 'mb-4 flex justify-between gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900'
-          }
-        >
-          <span>{note.text}</span>
-          <button type="button" className="text-stone-500 hover:text-stone-800" onClick={() => setNote(null)}>
-            ✕
-          </button>
-        </div>
-      )}
-      {loading ? (
-        <div className="grid gap-4 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-64 animate-pulse rounded-2xl bg-stone-200/50" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-6 lg:grid-cols-3">
-          <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
-            <h4 className="text-sm font-extrabold text-stone-900">Глобальные темы</h4>
-            <p className="mt-1 text-xs text-stone-500">Заголовок, стих, акценты молитвы.</p>
-            <input
-              className={`${fieldClass()} mt-3`}
-              placeholder="Заголовок *"
-              value={tTitle}
-              onChange={(e) => setTTitle(e.target.value)}
-            />
-            <input
-              className={`${fieldClass()} mt-2`}
-              placeholder="Стих (необязательно)"
-              value={tVerse}
-              onChange={(e) => setTVerse(e.target.value)}
-            />
-            <textarea
-              className={`${fieldClass()} mt-2 min-h-[72px]`}
-              placeholder="Акценты молитвы"
-              value={tPoints}
-              onChange={(e) => setTPoints(e.target.value)}
-            />
-            <button
-              type="button"
-              className={`${btnPrimary('mt-3 w-full')}`}
-              disabled={!tTitle.trim() || addT.isPending}
-              onClick={() => {
-                setNote(null);
-                addT.mutate();
-              }}
-            >
-              Добавить тему
-            </button>
-            <ul className="mt-3 max-h-52 space-y-1.5 overflow-y-auto text-sm">
-              {(themes.data ?? []).length === 0 ? (
-                <li className="py-4 text-center text-xs text-stone-400">Пока нет тем</li>
-              ) : (
-                (themes.data ?? []).map((x) =>
-                  tEdit?.id === x.id ? (
-                    <li
-                      key={x.id}
-                      className="space-y-2 rounded-xl border border-amber-200/80 bg-amber-50/50 px-3 py-2.5"
-                    >
-                      <input
-                        className={fieldClass()}
-                        placeholder="Заголовок *"
-                        value={tEdit.title}
-                        onChange={(e) => setTEdit((s) => (s ? { ...s, title: e.target.value } : s))}
-                      />
-                      <input
-                        className={fieldClass()}
-                        placeholder="Стих"
-                        value={tEdit.bible_verse}
-                        onChange={(e) => setTEdit((s) => (s ? { ...s, bible_verse: e.target.value } : s))}
-                      />
-                      <textarea
-                        className={`${fieldClass()} min-h-[64px]`}
-                        placeholder="Акценты молитвы"
-                        value={tEdit.prayer_points}
-                        onChange={(e) => setTEdit((s) => (s ? { ...s, prayer_points: e.target.value } : s))}
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          className={btnPrimary('flex-1')}
-                          disabled={!tEdit.title.trim() || updT.isPending}
-                          onClick={() => {
-                            setNote(null);
-                            updT.mutate(tEdit);
-                          }}
-                        >
-                          Сохранить
-                        </button>
-                        <button
-                          type="button"
-                          className={btnSecondary('flex-1')}
-                          disabled={updT.isPending}
-                          onClick={() => setTEdit(null)}
-                        >
-                          Отмена
-                        </button>
-                      </div>
-                    </li>
-                  ) : (
-                    <li
-                      key={x.id}
-                      className="flex items-start justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2"
-                    >
-                      <span className="min-w-0 font-medium text-stone-800">{x.title}</span>
-                      <div className="flex shrink-0 gap-2">
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-stone-600 hover:underline"
-                          onClick={() => {
-                            setNote(null);
-                            setTEdit({
-                              id: x.id,
-                              title: x.title,
-                              bible_verse: x.bible_verse ?? '',
-                              prayer_points: x.prayer_points ?? '',
-                            });
-                          }}
-                        >
-                          Изменить
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-red-600 hover:underline"
-                          onClick={() => {
-                            setNote(null);
-                            setTEdit(null);
-                            delT.mutate(x.id);
-                          }}
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                    </li>
-                  ),
-                )
-              )}
-            </ul>
-          </section>
-          <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
-            <h4 className="text-sm font-extrabold text-stone-900">Служения</h4>
-            <p className="mt-1 text-xs text-stone-500">Название и текст для блока служений.</p>
-            <input
-              className={`${fieldClass()} mt-3`}
-              placeholder="Название *"
-              value={mTitle}
-              onChange={(e) => setMTitle(e.target.value)}
-            />
-            <textarea
-              className={`${fieldClass()} mt-2 min-h-[72px]`}
-              placeholder="Акценты молитвы"
-              value={mPoints}
-              onChange={(e) => setMPoints(e.target.value)}
-            />
-            <button
-              type="button"
-              className={`${btnPrimary('mt-3 w-full')}`}
-              disabled={!mTitle.trim() || addM.isPending}
-              onClick={() => {
-                setNote(null);
-                addM.mutate();
-              }}
-            >
-              Добавить служение
-            </button>
-            <ul className="mt-3 max-h-52 space-y-1.5 overflow-y-auto text-sm">
-              {(ministries.data ?? []).length === 0 ? (
-                <li className="py-4 text-center text-xs text-stone-400">Пока нет записей</li>
-              ) : (
-                (ministries.data ?? []).map((x) =>
-                  mEdit?.id === x.id ? (
-                    <li
-                      key={x.id}
-                      className="space-y-2 rounded-xl border border-amber-200/80 bg-amber-50/50 px-3 py-2.5"
-                    >
-                      <input
-                        className={fieldClass()}
-                        placeholder="Название *"
-                        value={mEdit.title}
-                        onChange={(e) => setMEdit((s) => (s ? { ...s, title: e.target.value } : s))}
-                      />
-                      <textarea
-                        className={`${fieldClass()} min-h-[64px]`}
-                        placeholder="Акценты молитвы"
-                        value={mEdit.prayer_points}
-                        onChange={(e) => setMEdit((s) => (s ? { ...s, prayer_points: e.target.value } : s))}
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          className={btnPrimary('flex-1')}
-                          disabled={!mEdit.title.trim() || updM.isPending}
-                          onClick={() => {
-                            setNote(null);
-                            updM.mutate(mEdit);
-                          }}
-                        >
-                          Сохранить
-                        </button>
-                        <button
-                          type="button"
-                          className={btnSecondary('flex-1')}
-                          disabled={updM.isPending}
-                          onClick={() => setMEdit(null)}
-                        >
-                          Отмена
-                        </button>
-                      </div>
-                    </li>
-                  ) : (
-                    <li
-                      key={x.id}
-                      className="flex items-start justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2"
-                    >
-                      <span className="min-w-0 font-medium text-stone-800">{x.title}</span>
-                      <div className="flex shrink-0 gap-2">
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-stone-600 hover:underline"
-                          onClick={() => {
-                            setNote(null);
-                            setMEdit({
-                              id: x.id,
-                              title: x.title,
-                              prayer_points: x.prayer_points ?? '',
-                            });
-                          }}
-                        >
-                          Изменить
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-red-600 hover:underline"
-                          onClick={() => {
-                            setNote(null);
-                            setMEdit(null);
-                            delM.mutate(x.id);
-                          }}
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                    </li>
-                  ),
-                )
-              )}
-            </ul>
-          </section>
-          <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
-            <h4 className="text-sm font-extrabold text-stone-900">Отступники</h4>
-            <p className="mt-1 text-xs text-stone-500">Имена для блока «Отпавшие».</p>
-            <div className="mt-3 flex gap-2">
-              <input
-                className={fieldClass()}
-                placeholder="Имя *"
-                value={bName}
-                onChange={(e) => setBName(e.target.value)}
-              />
-              <button
-                type="button"
-                className={`${btnPrimary('shrink-0 px-5')}`}
-                disabled={!bName.trim() || addB.isPending}
-                onClick={() => {
-                  setNote(null);
-                  addB.mutate();
-                }}
-              >
-                +
-              </button>
-            </div>
-            <ul className="mt-3 max-h-60 space-y-1.5 overflow-y-auto text-sm">
-              {(backsliders.data ?? []).length === 0 ? (
-                <li className="py-4 text-center text-xs text-stone-400">Список пуст</li>
-              ) : (
-                (backsliders.data ?? []).map((x) =>
-                  bEdit?.id === x.id ? (
-                    <li
-                      key={x.id}
-                      className="space-y-2 rounded-xl border border-amber-200/80 bg-amber-50/50 px-3 py-2.5"
-                    >
-                      <input
-                        className={fieldClass()}
-                        placeholder="Имя *"
-                        value={bEdit.name}
-                        onChange={(e) => setBEdit((s) => (s ? { ...s, name: e.target.value } : s))}
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          className={btnPrimary('flex-1')}
-                          disabled={!bEdit.name.trim() || updB.isPending}
-                          onClick={() => {
-                            setNote(null);
-                            updB.mutate(bEdit);
-                          }}
-                        >
-                          Сохранить
-                        </button>
-                        <button
-                          type="button"
-                          className={btnSecondary('flex-1')}
-                          disabled={updB.isPending}
-                          onClick={() => setBEdit(null)}
-                        >
-                          Отмена
-                        </button>
-                      </div>
-                    </li>
-                  ) : (
-                    <li
-                      key={x.id}
-                      className="flex items-start justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2"
-                    >
-                      <span className="min-w-0 font-medium text-stone-800">{x.name}</span>
-                      <div className="flex shrink-0 gap-2">
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-stone-600 hover:underline"
-                          onClick={() => {
-                            setNote(null);
-                            setBEdit({ id: x.id, name: x.name });
-                          }}
-                        >
-                          Изменить
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-red-600 hover:underline"
-                          onClick={() => {
-                            setNote(null);
-                            setBEdit(null);
-                            delB.mutate(x.id);
-                          }}
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                    </li>
-                  ),
-                )
-              )}
-            </ul>
-          </section>
         </div>
       )}
     </div>
