@@ -183,6 +183,11 @@ function isStudioApiPath(path: string): boolean {
   return path.startsWith('/api/studio/');
 }
 
+function isSermonNotesApiPath(path: string): boolean {
+  const p = path.split('?')[0] || '';
+  return p === '/api/sermon-notes' || p.startsWith('/api/sermon-notes/');
+}
+
 function isServicePlannerMutation(method: string, path: string): boolean {
   if (SAFE_METHODS.has(method)) return false;
   const p = path.split('?')[0];
@@ -377,6 +382,12 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
         console.error('[roleAccess] studio permission lookup failed:', e);
         res.status(500).json({ error: 'Не удалось проверить права доступа' });
       });
+    return;
+  }
+
+  /** Детальный гейт проповедника — в sermonNotesController / sermonNotesAccess. */
+  if (isSermonNotesApiPath(fullPath) && authId) {
+    next();
     return;
   }
 

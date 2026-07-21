@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { canAccessStudio, canModerateSongCatalogSession } from '../features/auth/studioAccess';
+import { canAccessMySermons } from '../features/mySermons/mySermonsAccess';
 import { canViewMediaSchedule } from '../features/mediaSchedule/mediaAccess';
 import { canViewMusicSchedule } from '../features/musicSchedule/musicAccess';
 import { canViewAnySchedule, canViewSundaySchedule } from '../features/schedules/ministryScheduleAccess';
@@ -141,6 +142,18 @@ export function RequireStudioAccess({ children }: { children: ReactNode }) {
   if (meQ.isLoading) return <RouteFallback />;
   if (!canAccessStudio(role, meQ.data?.ministry_direction, roles)) {
     return <Navigate to={getStudioRoleDeniedPath()} replace />;
+  }
+  return <>{children}</>;
+}
+
+export function RequireMySermonsAccess({ children }: { children: ReactNode }) {
+  const role = useAuthStore((s) => s.role);
+  const roles = useAuthStore((s) => s.roles ?? [s.role]);
+  const token = useAuthStore((s) => s.token);
+  const meQ = useMe(Boolean(token));
+  if (meQ.isLoading) return <RouteFallback />;
+  if (!canAccessMySermons(role, meQ.data?.ministry_role, roles)) {
+    return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;
 }

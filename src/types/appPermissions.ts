@@ -54,6 +54,12 @@ export const APP_PERMISSION_DEFS = [
   { id: 'section.service_planner', category: 'sections', label: 'Планировщик', description: 'Раздел планировщика служений.' },
   { id: 'section.studio', category: 'sections', label: 'Студия', description: 'Студия аранжировок и репетиций.' },
   { id: 'section.sermons', category: 'sections', label: 'Проповеди', description: 'Архив проповедей.' },
+  {
+    id: 'section.my_sermons',
+    category: 'sections',
+    label: 'Мои проповеди',
+    description: 'Личные конспекты проповедей.',
+  },
   { id: 'section.messenger', category: 'sections', label: 'Чаты', description: 'Мессенджер и групповые чаты.' },
   { id: 'admin.panel', category: 'admin', label: 'Админ-панель', description: 'Вход в раздел /admin.' },
   { id: 'admin.users_manage', category: 'admin', label: 'Пользователи', description: 'Просмотр и редактирование карточек участников.' },

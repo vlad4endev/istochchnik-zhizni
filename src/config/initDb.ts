@@ -2176,6 +2176,57 @@ CREATE INDEX IF NOT EXISTS idx_media_assignments_event_ref_id ON media_assignmen
 CREATE INDEX IF NOT EXISTS idx_media_assignments_member_id ON media_assignments (member_id);
 CREATE INDEX IF NOT EXISTS idx_media_assignments_role_id ON media_assignments (role_id);
 
+-- Personal sermon outline documents ("Мои проповеди")
+CREATE TABLE IF NOT EXISTS sermon_notes (
+  id BIGSERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  title VARCHAR(500) NOT NULL DEFAULT '',
+  topic VARCHAR(500) NOT NULL DEFAULT '',
+  scripture VARCHAR(500) NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  body_format VARCHAR(32) NOT NULL DEFAULT 'plain',
+  is_public BOOLEAN NOT NULL DEFAULT FALSE,
+  share_token UUID UNIQUE DEFAULT gen_random_uuid(),
+  share_token_issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  service_plan_id BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE sermon_notes ADD COLUMN IF NOT EXISTS body_format VARCHAR(32) NOT NULL DEFAULT 'plain';
+ALTER TABLE sermon_notes ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE sermon_notes ADD COLUMN IF NOT EXISTS share_token UUID UNIQUE DEFAULT gen_random_uuid();
+ALTER TABLE sermon_notes ADD COLUMN IF NOT EXISTS share_token_issued_at TIMESTAMPTZ;
+UPDATE sermon_notes SET share_token = gen_random_uuid() WHERE share_token IS NULL;
+UPDATE sermon_notes
+SET share_token_issued_at = COALESCE(share_token_issued_at, created_at, NOW())
+WHERE share_token_issued_at IS NULL;
+ALTER TABLE sermon_notes ALTER COLUMN share_token_issued_at SET DEFAULT NOW();
+ALTER TABLE sermon_notes ALTER COLUMN share_token_issued_at SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sermon_notes_member_updated
+  ON sermon_notes (member_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sermon_notes_service_plan
+  ON sermon_notes (service_plan_id)
+  WHERE service_plan_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sermon_notes_share_token
+  ON sermon_notes (share_token)
+  WHERE is_public = TRUE;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'service_plans'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_schema = 'public'
+      AND table_name = 'sermon_notes'
+      AND constraint_name = 'sermon_notes_service_plan_id_fkey'
+  ) THEN
+    ALTER TABLE sermon_notes
+      ADD CONSTRAINT sermon_notes_service_plan_id_fkey
+      FOREIGN KEY (service_plan_id) REFERENCES service_plans(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 -- Offline sync MVP columns
 ALTER TABLE songs ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE songs ADD COLUMN IF NOT EXISTS client_id UUID;

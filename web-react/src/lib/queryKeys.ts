@@ -21,5 +21,7 @@ export const keys = {
   calendarDay: (dateKey: string) => ['calendar', 'day', dateKey] as const,
   dashboardNotes: (dateKey: string) => ['calendar', 'dashboard-coordinator-notes', dateKey] as const,
   broadcastArchive: (limit: number) => ['broadcast', 'archive', limit] as const,
+  sermonNotes: ['sermon-notes', 'list'] as const,
+  sermonNote: (id: string | number) => ['sermon-notes', 'detail', String(id)] as const,
 } as const;
 

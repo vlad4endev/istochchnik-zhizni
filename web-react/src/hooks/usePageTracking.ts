@@ -13,6 +13,7 @@ function resolvePageKey(pathname: string): string {
   if (pathname.startsWith('/profile')) return 'profile';
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/sermons')) return 'sermons';
+  if (pathname.startsWith('/my-sermons')) return 'my_sermons';
   if (pathname.startsWith('/resources')) return 'resources';
   return 'other';
 }

@@ -24,6 +24,7 @@ import {
   RequireSundayScheduleAccess,
   RequireSectionAccess,
   RequireStudioAccess,
+  RequireMySermonsAccess,
   RouteFallback,
 } from './routeGuards';
 import { LegacyStudioEditRedirect } from './LegacyStudioEditRedirect';
@@ -67,6 +68,16 @@ const BroadcastPage = lazy(async () => {
 const PodcastsPage = lazy(async () => {
   const m = await import('../features/resources/pages/PodcastsPage');
   return { default: m.PodcastsPage };
+});
+
+const MySermonsPage = lazy(async () => {
+  const m = await import('../features/mySermons/pages/MySermonsPage');
+  return { default: m.MySermonsPage };
+});
+
+const SermonNoteEditorPage = lazy(async () => {
+  const m = await import('../features/mySermons/pages/SermonNoteEditorPage');
+  return { default: m.SermonNoteEditorPage };
 });
 
 const ResourcesRoutes = lazy(async () => {
@@ -168,6 +179,11 @@ const PublicSetlistPage = lazy(async () => {
   return { default: m.PublicSetlistPage };
 });
 
+const PublicSermonNotePage = lazy(async () => {
+  const m = await import('../features/mySermons/pages/PublicSermonNotePage');
+  return { default: m.PublicSermonNotePage };
+});
+
 const PublicServicePlanPage = lazy(async () => {
   const m = await import('../features/servicePlanner/pages/PublicServicePlanPage');
   return { default: m.PublicServicePlanPage };
@@ -236,6 +252,14 @@ export function AppRouter() {
         element={
           <Suspense fallback={<RouteFallback />}>
             <PublicSetlistPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/sermon-notes/share/:token"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <PublicSermonNotePage />
           </Suspense>
         }
       />
@@ -421,6 +445,38 @@ export function AppRouter() {
                 </Suspense>
               </RequireSectionAccess>
             </RequireFullMember>
+          }
+        />
+        <Route
+          path="my-sermons"
+          element={
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireMySermonsAccess>
+                  <RequireSectionAccess sectionId="my_sermons">
+                    <Suspense fallback={<RouteFallback />}>
+                      <MySermonsPage />
+                    </Suspense>
+                  </RequireSectionAccess>
+                </RequireMySermonsAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
+          }
+        />
+        <Route
+          path="my-sermons/:id"
+          element={
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireMySermonsAccess>
+                  <RequireSectionAccess sectionId="my_sermons">
+                    <Suspense fallback={<RouteFallback />}>
+                      <SermonNoteEditorPage />
+                    </Suspense>
+                  </RequireSectionAccess>
+                </RequireMySermonsAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
           }
         />
         <Route
