@@ -9,6 +9,19 @@ import {
   markNotificationDeliveryOpened,
 } from '../services/notificationDeliveryService';
 import { removeSubscription, saveSubscription } from '../services/pushService';
+import { ensurePushSubscriptionsSchema } from '../services/pushSubscriptionsSchema';
+
+let pushSchemaEnsurePromise: Promise<void> | null = null;
+
+async function ensurePushSchemaOnce(): Promise<void> {
+  if (!pushSchemaEnsurePromise) {
+    pushSchemaEnsurePromise = ensurePushSubscriptionsSchema().catch((err) => {
+      pushSchemaEnsurePromise = null;
+      throw err;
+    });
+  }
+  await pushSchemaEnsurePromise;
+}
 
 type AuthReq = Request & { authUserId?: number };
 type PushSubscriptionBody = {
@@ -61,6 +74,11 @@ router.post('/subscribe', requireAuthSession, async (req: Request, res: Response
   }
 
   try {
+    try {
+      await ensurePushSchemaOnce();
+    } catch (schemaErr) {
+      console.warn('[notifications] ensurePushSubscriptionsSchema on subscribe failed:', schemaErr);
+    }
     const normalized: NormalizedPushSubscription = {
       endpoint: String(subscription.endpoint),
       keys: {

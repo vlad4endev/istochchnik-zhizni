@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { saveSubscription, removeSubscription } from '../services/pushService';
+import { ensurePushSubscriptionsSchema } from '../services/pushSubscriptionsSchema';
 
 type AuthReq = Request & { authUserId?: number };
 type PushSubscriptionBody = {
@@ -40,6 +41,11 @@ export const subscribeToPush = async (req: Request, res: Response) => {
   }
 
   try {
+    try {
+      await ensurePushSubscriptionsSchema();
+    } catch (schemaErr) {
+      console.warn('[push] ensurePushSubscriptionsSchema on subscribe failed:', schemaErr);
+    }
     const normalized: NormalizedPushSubscription = {
       endpoint: String(subscription.endpoint),
       keys: {
