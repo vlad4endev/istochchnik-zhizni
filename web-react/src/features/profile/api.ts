@@ -112,7 +112,13 @@ export async function subscribeToPushApi(subscription: PushSubscription): Promis
     typeof subscription.toJSON === 'function'
       ? (subscription.toJSON() as Record<string, unknown>)
       : (subscription as unknown as Record<string, unknown>);
-  await apiClient.post('/api/notifications/subscribe', body);
+  if (typeof navigator !== 'undefined') {
+    (body as Record<string, unknown>).userAgent = navigator.userAgent;
+  }
+  await apiClient.post('/api/notifications/subscribe', body, {
+    skipAuthClearOn401: true,
+    silentErrorToast: true,
+  });
 }
 
 export async function unsubscribeFromPushApi(endpoint: string): Promise<void> {

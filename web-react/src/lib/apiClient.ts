@@ -11,6 +11,11 @@ declare module 'axios' {
   export interface AxiosRequestConfig {
     /** Не показывать глобальный toast при ошибке ответа. */
     silentErrorToast?: boolean;
+    /**
+     * Фоновые запросы (например sync Web Push): при 401 не вызывать clearSession.
+     * Refresh/cookie-retry всё равно пробуются; при неуспехе ошибка уходит вызывающему коду.
+     */
+    skipAuthClearOn401?: boolean;
   }
 }
 
@@ -52,6 +57,8 @@ type RetryableAxiosConfig = InternalAxiosRequestConfig & {
   _suppressAuthClear?: boolean;
   /** Не показывать глобальный toast при 4xx/5xx (ошибку обрабатывает экран). */
   silentErrorToast?: boolean;
+  /** Фоновый запрос: не сбрасывать сессию при окончательном 401. */
+  skipAuthClearOn401?: boolean;
 };
 
 function readAuthorizationHeader(config: InternalAxiosRequestConfig): string | undefined {
@@ -200,6 +207,11 @@ apiClient.interceptors.response.use(
       }
 
       if ((cfg as RetryableAxiosConfig | undefined)?._suppressAuthClear) {
+        return Promise.reject(error);
+      }
+
+      // Фоновые sync-запросы (push subscribe и т.п.) не должны выкидывать пользователя.
+      if ((cfg as RetryableAxiosConfig | undefined)?.skipAuthClearOn401) {
         return Promise.reject(error);
       }
 
