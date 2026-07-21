@@ -1,17 +1,20 @@
 import type { ReactNode } from 'react';
 
+import { displayMessengerText } from './normalizeChatDisplayText';
 import { renderMessengerPlainText } from './messengerPlainText';
 
 /**
  * Нормализация ответов LLM к читаемому Markdown:
+ * - NFKC / BiDi-мусор;
  * - снимает экранирование `\-`, `\*`;
  * - схлопывает «разъехавшиеся» жирные маркеры `* *текст* *` → `**текст**`;
  * - убирает лишние пробелы вокруг `**`.
  */
 export function normalizeAssistantMarkdown(raw: string): string {
-  let s = String(raw ?? '')
+  let s = displayMessengerText(String(raw ?? ''))
     .replace(/\\([-*_`#>])/g, '$1')
-    .replace(/\r\n/g, '\n');
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
 
   // `* *Важно* *` / `* * Важно * *` → `**Важно**`
   s = s.replace(/\*\s+\*\s*([^*\n]+?)\s*\*\s+\*/g, '**$1**');
@@ -21,6 +24,47 @@ export function normalizeAssistantMarkdown(raw: string): string {
   s = s.replace(/\*\*([^*\n]+?)\s+\*\*/g, '**$1**');
 
   return s.trim();
+}
+
+/** Есть ли в тексте типичные маркеры Markdown ответа ИИ. */
+export function looksLikeAssistantMarkdown(raw: string): boolean {
+  const s = String(raw ?? '');
+  if (!s.trim()) return false;
+  return (
+    /(^|\n)\s{0,3}#{1,6}\s+\S/.test(s) ||
+    /(^|\n)\s*>\s+\S/.test(s) ||
+    /\*\*[^*\n]+\*\*/.test(s) ||
+    /\*\s+\*\s*[^*\n]+\s*\*\s+\*/.test(s) ||
+    /(^|\n)\s*[-*•]\s+\S/.test(s) ||
+    /(^|\n)\s*---\s*($|\n)/.test(s)
+  );
+}
+
+/** Плоский текст без Markdown-маркеров — для «Копировать». */
+export function assistantMarkdownToPlainText(raw: string): string {
+  const text = normalizeAssistantMarkdown(raw);
+  if (!text) return '';
+  return text
+    .split('\n')
+    .map((line) => {
+      const t = line.trim();
+      if (/^---+$/.test(t)) return '';
+      const heading = t.match(/^#{1,6}\s+(.+)$/);
+      if (heading) return heading[1]!.trim();
+      if (/^>\s?/.test(t)) return t.replace(/^>\s?/, '');
+      if (/^(?:[-*•]|\d+[.)])\s+/.test(t) && !t.startsWith('**')) {
+        return `• ${t.replace(/^(?:[-*•]|\d+[.)])\s+/, '')}`;
+      }
+      return line;
+    })
+    .join('\n')
+    .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+    .replace(/__([^_\n]+)__/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/_([^_\n]+)_/g, '$1')
+    .replace(/`([^`\n]+)`/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function renderInlineMarkdown(
@@ -74,6 +118,10 @@ function renderInlineMarkdown(
   return out;
 }
 
+function isHrLine(line: string): boolean {
+  return /^\s*-{3,}\s*$/.test(line);
+}
+
 function isListLine(line: string): boolean {
   // Не считаем `**жирный**` и `*курсив*` началом списка
   if (/^\s*\*\*/.test(line)) return false;
@@ -94,9 +142,12 @@ function blockquoteBody(line: string): string {
 }
 
 function headingMatch(line: string): { level: number; text: string } | null {
-  const m = line.match(/^\s*(#{1,6})\s+(.+?)\s*$/);
+  // Допускаем `###Заголовок` без пробела — модели иногда так пишут
+  const m = line.match(/^\s*(#{1,6})\s*(.+?)\s*$/);
   if (!m) return null;
-  return { level: m[1]!.length, text: m[2]! };
+  const text = m[2]!.replace(/^#+\s*/, '').trim();
+  if (!text || /^#+$/.test(text)) return null;
+  return { level: m[1]!.length, text };
 }
 
 /**
@@ -121,6 +172,18 @@ export function renderAssistantMessageContent(
   while (i < lines.length) {
     const line = lines[i] ?? '';
     if (!line.trim()) {
+      i += 1;
+      continue;
+    }
+
+    if (isHrLine(line)) {
+      blocks.push(
+        <hr
+          key={`hr-${blockIdx}`}
+          className="my-2 border-0 border-t border-current/20"
+        />,
+      );
+      blockIdx += 1;
       i += 1;
       continue;
     }
@@ -192,7 +255,7 @@ export function renderAssistantMessageContent(
     while (i < lines.length) {
       const cur = lines[i] ?? '';
       if (!cur.trim()) break;
-      if (headingMatch(cur) || isListLine(cur) || isBlockquoteLine(cur)) break;
+      if (isHrLine(cur) || headingMatch(cur) || isListLine(cur) || isBlockquoteLine(cur)) break;
       para.push(cur);
       i += 1;
     }

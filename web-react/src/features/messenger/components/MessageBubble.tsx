@@ -21,7 +21,10 @@ import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../.
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuReply, LuX } from 'react-icons/lu';
 import { isAssistantBotMessage } from '../messengerChannelKinds';
-import { renderAssistantMessageContent } from '../assistantMessageFormat';
+import {
+  assistantMarkdownToPlainText,
+  renderAssistantMessageContent,
+} from '../assistantMessageFormat';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { ChatVideoAttachmentPreview } from './ChatVideoAttachmentPreview';
@@ -540,12 +543,28 @@ function MessageBubbleInner({
     payloadType === 'access_request' &&
     message.sender_id == null &&
     !isDeleted;
-  const payload = (message.payload ?? {}) as Record<string, unknown>;
+  const payload = useMemo(() => {
+    const raw = message.payload;
+    if (raw != null && typeof raw === 'object' && !Array.isArray(raw)) {
+      return raw as Record<string, unknown>;
+    }
+    if (typeof raw === 'string') {
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (parsed != null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return {} as Record<string, unknown>;
+  }, [message.payload]);
   const systemBotAssistantMessage =
-    assistantChannel &&
     !isDeleted &&
     !isMine &&
-    isAssistantBotMessage(payload, message.sender_id);
+    (isAssistantBotMessage(payload, message.sender_id) ||
+      (assistantChannel && message.sender_id == null));
 
   const forwardedFromLabel = useMemo(() => {
     const raw = message.forwarded_from;
@@ -1527,9 +1546,16 @@ function MessageBubbleInner({
       );
     }
 
-    // text (default)
-    if (systemBotAssistantMessage || (assistantChannel && !isMine && message.sender_id == null)) {
-      return renderAssistantMessageContent(String(message.content ?? ''), { isMine });
+    // text (default) — в канале ИИ / от бота-помощника всегда Markdown-рендер
+    const assistantText = String(message.content ?? payload.text ?? '');
+    const useAssistantMarkdown =
+      !isDeleted &&
+      !isMine &&
+      (assistantChannel ||
+        systemBotAssistantMessage ||
+        isAssistantBotMessage(payload, message.sender_id));
+    if (useAssistantMarkdown) {
+      return renderAssistantMessageContent(assistantText, { isMine });
     }
     return (
       <MentionRichText text={message.content} namesById={participantLabelById} isMine={isMine} />
@@ -2182,13 +2208,18 @@ function MessageBubbleInner({
                     <span>↪️</span> Переслать
                   </button>
                 ) : null}
-                {payloadType === 'text' && String(message.content ?? '').trim() ? (
+                {payloadType === 'text' && String(message.content ?? payload.text ?? '').trim() ? (
                   <button
                     type="button"
                     role="menuitem"
                     onClick={() => {
+                      const raw = String(message.content ?? payload.text ?? '');
+                      const forClipboard =
+                        systemBotAssistantMessage || assistantChannel
+                          ? assistantMarkdownToPlainText(raw)
+                          : messengerTextForCopy(raw);
                       void navigator.clipboard
-                        .writeText(messengerTextForCopy(String(message.content ?? '')))
+                        .writeText(forClipboard)
                         .then(() => emitAppToast('Текст скопирован', 'success'))
                         .catch(() => emitAppToast('Не удалось скопировать', 'error'));
                       closeActionsMenu();
