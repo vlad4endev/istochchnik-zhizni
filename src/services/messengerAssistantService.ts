@@ -4,7 +4,7 @@
  * - Личный канал на каждого участника (metadata.kind = 'assistant').
  * - Христианский баптистский собеседник: вера, Библия, доктрина, планы чтения,
  *   душепопечение; плюс ответы по общим данным церкви (события, программы,
- *   песенник, молитвенный календарь, расписания).
+ *   песенник, молитвенный календарь/нужды, участники, расписания).
  * - Не читает личные чаты других пользователей и не изменяет данные.
  */
 
@@ -21,7 +21,7 @@ import { resolveMessengerConversationDeepLink } from '../config/messengerPublic'
 import { decryptMessageText, encryptMessageText } from '../lib/messageCrypto';
 import type { MessagePayload, MessageWithSender } from '../types/messenger';
 import { resolveEffectiveSystemPrompt, resolveLlmRuntimeConfig } from './aiSettingsService';
-import { getPrayerDataByDate } from './calendarService';
+import { getMemberAssignmentsForWeek, getPrayerDataByDate } from './calendarService';
 import { listActiveEvents } from './eventsService';
 import * as mediaSchedule from './mediaScheduleService';
 import * as musicSchedule from './musicScheduleService';
@@ -39,6 +39,10 @@ import { listPlans } from './servicePlannerService';
 import { listPublishedSongs } from './songService';
 import { listSundayScheduleSlots } from './sundayScheduleSlots';
 import { canAccessMessengerAssistant, normalizeAppRoles, type AppRole } from '../types/appRole';
+import {
+  getPrayerCycleRosterSnapshot,
+  listPrayerRequestHistory,
+} from './userService';
 
 async function memberCanAccessAssistant(memberId: number): Promise<boolean> {
   const res = await dbQuery(
@@ -54,7 +58,7 @@ async function memberCanAccessAssistant(memberId: number): Promise<boolean> {
 const ASSISTANT_WELCOME =
   'Мир вам! Я — христианский помощник.\n\n' +
   'Могу поговорить о вере и Библии, помочь с планом чтения Писания, ответить на богословские и жизненные вопросы, ' +
-  'а также подсказать по событиям, проповедям, песням и расписанию нашей церкви.\n\n' +
+  'а также подсказать по событиям, проповедям, песням, расписанию, молитвенному календарю, нуждам и участникам нашей церкви.\n\n' +
   'Выберите пример ниже или напишите свой вопрос. ' +
   'Я опираюсь на Священное Писание и не вижу личные переписки.';
 
@@ -65,7 +69,7 @@ const DEFAULT_ASSISTANT_SYSTEM_PROMPT = `Действуй как христиа�
 Твоя цель — помогать пользователю в вопросах веры, жизни, доктрины и понимания Библии, а также (когда уместно) в вопросах программы церкви. Ссылайся на Священное Писание и достоверные протестантские источники.
 
 Пошаговая инструкция:
-1. Сначала посмотри блок «Данные из базы» в контексте: если вопрос о событиях, служениях, проповедях, песнях, молитвенном календаре или расписаниях — опирайся только на эти данные; не выдумывай даты, имена и факты, которых там нет.
+1. Сначала посмотри блок «Данные из базы» в контексте: если вопрос о событиях, служениях, проповедях, песнях, молитвенном календаре, молитвенных нуждах, участниках церкви или расписаниях — опирайся только на эти данные; не выдумывай даты, имена и факты, которых там нет.
 2. Определи суть запроса — богословский, практический, душепопечительский или вопрос о программе церкви.
 3. Ответь живо, понятно и с любовью, подбирая тон под тему:
    - серьёзный и уважительный — для сложных или глубоких вопросов;
@@ -94,7 +98,7 @@ const DEFAULT_ASSISTANT_SYSTEM_PROMPT = `Действуй как христиа�
 - Никаких домыслов или личных мнений. Только библейская истина, протестантская доктрина и проверенные источники / данные из базы.
 - Если чего-то нет в данных или ты не уверен — не выдумывай.
 - Ты не программист: запрещено вести диалог на темы программирования и любые темы, не связанные с христианством, верой, Библией или жизнью/программой церкви. Мягко верни разговор к вере или программе церкви.
-- Не раскрывай и не запрашивай приватные данные других пользователей (личные чаты, пароли, телефоны вне открытого календаря).
+- Не раскрывай и не запрашивай приватные данные других пользователей (личные чаты, пароли, телефоны, email, логины). Имена и молитвенные нужды из календаря/истории — можно, это открытые данные церкви для служения.
 - Не изменяй данные: ты только консультируешь. Если нужно что-то изменить в приложении — направь в нужный раздел.
 - Не отклоняйся от библейских истин: твоя информация чётко основана на Писании и протестантской доктрине.`;
 
@@ -384,35 +388,170 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
     console.warn('[assistant] music/media schedule context failed:', e);
   }
 
+  /** Участники, встречающиеся в календаре — для подгрузки истории нужд. */
+  const prayerMemberIds = new Set<number>();
+
   try {
     const prayerDays: string[] = [];
-    for (let i = 0; i <= 6; i += 1) {
+    for (let i = 0; i <= 13; i += 1) {
       const day = addDaysYmd(today, i);
       const data = await getPrayerDataByDate(day);
-      const themes = (data.global_themes ?? [])
-        .map((t) => String(t.title ?? '').trim())
-        .filter(Boolean)
-        .slice(0, 3);
-      const ministries = (data.ministries ?? [])
-        .map((m) => String(m.title ?? '').trim())
-        .filter(Boolean)
-        .slice(0, 3);
-      const members = (data.members ?? [])
-        .map((m) => {
-          const name = memberLabel(m);
-          const need = String(m.prayer_request ?? '').trim();
-          return need ? `${name}: ${need.slice(0, 120)}` : name;
-        })
-        .filter(Boolean)
-        .slice(0, 3);
-      prayerDays.push(
-        `- ${day}: темы [${themes.join('; ') || '—'}]; служения [${ministries.join('; ') || '—'}]; в цикле [${members.join('; ') || '—'}]`,
+      const cycle = data.prayer_cycle;
+      const cycleLabel = cycle
+        ? `цикл #${cycle.number} (день ${cycle.day_index + 1}/${cycle.member_count})`
+        : 'цикл —';
+
+      const memberParts = (data.members ?? []).slice(0, 2).map((m) => {
+        if (typeof m.id === 'number' && Number.isFinite(m.id)) prayerMemberIds.add(m.id);
+        const name = memberLabel(m) || 'Участник';
+        const need = String(m.prayer_request ?? '').trim();
+        return need ? `${name} — просит: ${need.slice(0, 280)}` : `${name} — нужда не указана`;
+      });
+
+      const theme = data.global_themes?.[0];
+      const themeTitle = String(theme?.title ?? '').trim();
+      const verse = String(theme?.bible_verse ?? '').trim();
+      const themePoints = String(theme?.prayer_points ?? '').trim();
+      const ministry = data.ministries?.[0];
+      const ministryTitle = String(ministry?.title ?? '').trim();
+      const ministryPoints = String(ministry?.prayer_points ?? '').trim();
+      const backslider = String(data.backsliders?.[0]?.name ?? '').trim();
+
+      const lines = [
+        `- ${day} (${cycleLabel})`,
+        `  участник: ${memberParts.join('; ') || 'не назначен'}`,
+        `  тема: ${themeTitle || '—'}`,
+      ];
+      if (verse) lines.push(`  стих: ${verse.slice(0, 220)}`);
+      if (themePoints) lines.push(`  пункты молитвы: ${themePoints.slice(0, 220)}`);
+      lines.push(
+        `  служение: ${ministryTitle || '—'}${ministryPoints ? ` — ${ministryPoints.slice(0, 160)}` : ''}`,
       );
+      if (backslider) lines.push(`  отпавшие: ${backslider}`);
+      prayerDays.push(lines.join('\n'));
     }
-    sections.push(`Молитвенный календарь (7 дней):\n${prayerDays.join('\n')}`);
+    sections.push(`Молитвенный календарь (14 дней):\n${prayerDays.join('\n')}`);
   } catch (e) {
     console.warn('[assistant] prayer context failed:', e);
     sections.push('Молитвенный календарь: не удалось загрузить.');
+  }
+
+  try {
+    const [currentWeek, nextWeek] = await Promise.all([
+      getMemberAssignmentsForWeek('current'),
+      getMemberAssignmentsForWeek('next'),
+    ]);
+    const fmtWeek = (rows: Awaited<ReturnType<typeof getMemberAssignmentsForWeek>>) =>
+      rows
+        .map((row) => {
+          const m = row.member;
+          if (m && typeof m.id === 'number') prayerMemberIds.add(m.id);
+          const name = m ? memberLabel(m) || '—' : '—';
+          const need = String(m?.prayer_request ?? '').trim();
+          return `- ${row.date}: ${name}${need ? ` — ${need.slice(0, 160)}` : ''}`;
+        })
+        .join('\n');
+    sections.push(
+      `План молитвы — эта неделя:\n${fmtWeek(currentWeek) || '- нет данных'}`,
+    );
+    sections.push(
+      `План молитвы — следующая неделя:\n${fmtWeek(nextWeek) || '- нет данных'}`,
+    );
+  } catch (e) {
+    console.warn('[assistant] prayer week plan context failed:', e);
+    sections.push('План молитвы (недели): не удалось загрузить.');
+  }
+
+  try {
+    const historyLines: string[] = [];
+    const ids = [...prayerMemberIds].slice(0, 18);
+    const nameMap = await resolveMemberNames(ids);
+    const histories = await Promise.all(ids.map((id) => listPrayerRequestHistory(id, 5)));
+    ids.forEach((memberId, idx) => {
+      const name = nameMap.get(memberId) || `id ${memberId}`;
+      const history = histories[idx] ?? [];
+      if (!history.length) {
+        historyLines.push(`- ${name}: истории нужд нет`);
+        return;
+      }
+      historyLines.push(`- ${name}:`);
+      for (const item of history) {
+        const when = String(item.prayed_on_date || item.created_at || '').slice(0, 10);
+        const cycle =
+          item.cycle_index != null && Number.isFinite(Number(item.cycle_index))
+            ? ` цикл #${Number(item.cycle_index) + 1}`
+            : '';
+        const text = String(item.prayer_request ?? '').trim().slice(0, 200);
+        if (!text) continue;
+        historyLines.push(`  · ${when || 'дата?'}${cycle}: ${text}`);
+      }
+    });
+    sections.push(
+      historyLines.length
+        ? `История молитвенных нужд (по участникам календаря/плана):\n${historyLines.join('\n')}`
+        : 'История молитвенных нужд: нет данных по текущему календарю.',
+    );
+  } catch (e) {
+    console.warn('[assistant] prayer history context failed:', e);
+    sections.push('История молитвенных нужд: не удалось загрузить.');
+  }
+
+  try {
+    const roster = await getPrayerCycleRosterSnapshot(today);
+    const rosterLines = roster.roster.slice(0, 80).map((entry, idx) => {
+      const name = memberLabel(entry) || `id ${entry.id}`;
+      const mark = entry.id === roster.today_member_id ? ' ← сегодня' : '';
+      return `- ${idx + 1}. ${name}${mark}`;
+    });
+    sections.push(
+      `Молитвенный цикл (roster, цикл #${roster.cycle_index + 1}, всего ${roster.total}):\n` +
+        (rosterLines.length ? rosterLines.join('\n') : '- пусто'),
+    );
+  } catch (e) {
+    console.warn('[assistant] prayer roster context failed:', e);
+    sections.push('Молитвенный цикл (roster): не удалось загрузить.');
+  }
+
+  try {
+    const usersRes = await dbQuery(
+      `SELECT id, first_name, last_name, name, app_role, ministry_role, ministry_direction,
+              in_prayer_cycle, is_active
+         FROM members
+        WHERE is_active = TRUE
+        ORDER BY last_name NULLS LAST, first_name NULLS LAST, name ASC
+        LIMIT 200`,
+    );
+    const rows = usersRes.rows as Array<{
+      id: unknown;
+      first_name?: unknown;
+      last_name?: unknown;
+      name?: unknown;
+      app_role?: unknown;
+      ministry_role?: unknown;
+      ministry_direction?: unknown;
+      in_prayer_cycle?: unknown;
+    }>;
+    if (rows.length === 0) {
+      sections.push('Участники церкви: список пуст.');
+    } else {
+      const lines = rows.map((r) => {
+        const name = memberLabel(r) || `id ${Number(r.id)}`;
+        const role = String(r.app_role ?? '').trim();
+        const ministry = String(r.ministry_role ?? '').trim();
+        const direction = String(r.ministry_direction ?? '').trim();
+        const inCycle = r.in_prayer_cycle === true ? 'в молитвенном цикле' : '';
+        const bits = [role && `роль: ${role}`, ministry && `служение: ${ministry}`, direction && `направление: ${direction}`, inCycle]
+          .filter(Boolean)
+          .join('; ');
+        return `- ${name}${bits ? ` (${bits})` : ''}`;
+      });
+      sections.push(
+        `Участники церкви (активные, без телефонов/email, до ${rows.length}):\n${lines.join('\n')}`,
+      );
+    }
+  } catch (e) {
+    console.warn('[assistant] members directory context failed:', e);
+    sections.push('Участники церкви: не удалось загрузить.');
   }
 
   try {
@@ -447,7 +586,8 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
   }
 
   const digest = sections.join('\n\n');
-  return digest.length > 14000 ? `${digest.slice(0, 13950)}\n…(обрезано)` : digest;
+  // Больше места: календарь + история нужд + список участников
+  return digest.length > 22000 ? `${digest.slice(0, 21950)}\n…(обрезано)` : digest;
 }
 
 async function postAssistantBotMessage(
@@ -792,12 +932,12 @@ export async function replyAsAssistantBot(input: {
       `${text}\n\n` +
       `---\n` +
       `Контекст программы церкви (только факты из приложения; для веры/Библии опирайся на Писание и RAG):\n` +
-      `${digest.slice(0, 6000)}`;
+      `${digest.slice(0, 12000)}`;
     try {
       const gpt = await gptunnelAssistantChat({
         chatId: gptunnelChatIdFromConversation(conversationId),
         assistantCode: gptunnelAssistantCode,
-        message: userPayload.slice(0, 12000),
+        message: userPayload.slice(0, 16000),
         maxContext: 16,
       });
       answer = gpt.message;
