@@ -49,6 +49,7 @@ import { initPushCronJobs } from './cron/pushJobs';
 import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
+import { ensurePushSubscriptionsSchema } from './services/pushSubscriptionsSchema';
 import { writeAppLog } from './services/appLogService';
 import { getAuthAccessTtlMinutes, getRefreshTtlDays } from './config/authCookie';
 import { cleanupExpiredSessions } from './services/authService';
@@ -481,6 +482,12 @@ async function start(): Promise<void> {
 
     if (pool) {
       try {
+        await ensurePushSubscriptionsSchema();
+        console.log('[push] push_subscriptions schema ensured');
+      } catch (e) {
+        console.warn('[push] ensurePushSubscriptionsSchema failed:', e);
+      }
+      try {
         await ensureMediaScheduleSchema();
         console.log('[media-schedule] schema ensured');
       } catch (e) {
@@ -496,6 +503,17 @@ async function start(): Promise<void> {
         console.warn('[music-schedule] ensureMusicScheduleSchema failed:', e);
       }
     }
+  }
+
+  const vapidOk = Boolean(
+    process.env.VAPID_PUBLIC_KEY?.trim() &&
+      process.env.VAPID_PRIVATE_KEY?.trim() &&
+      process.env.VAPID_SUBJECT?.trim(),
+  );
+  if (!vapidOk) {
+    console.warn(
+      '[push] VAPID keys are not configured (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT) — Web Push / PWA notifications will not work.',
+    );
   }
 
   if (!process.env.SUPABASE_URL?.trim() || !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {

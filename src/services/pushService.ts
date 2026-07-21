@@ -79,6 +79,50 @@ type SaveSubscriptionRow = {
 
 export type SaveSubscriptionResult = 'created' | 'updated' | 'noop';
 
+function isMissingPushColumnError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const o = err as { code?: string; message?: string };
+  return (
+    o.code === '42703' ||
+    (typeof o.message === 'string' && /column .* does not exist/i.test(o.message))
+  );
+}
+
+/** Минимальный upsert без user_agent/last_used_at — для БД до миграции. */
+async function saveSubscriptionLegacy(
+  memberId: number,
+  endpoint: string,
+  p256dh: string,
+  auth: string,
+): Promise<SaveSubscriptionResult> {
+  const existing = await query(
+    `SELECT member_id, keys_p256dh, keys_auth
+     FROM push_subscriptions
+     WHERE endpoint = $1
+     LIMIT 1`,
+    [endpoint],
+  );
+  const row = (existing.rows[0] as Omit<SaveSubscriptionRow, 'user_agent'> | undefined) ?? null;
+  if (!row) {
+    await query(
+      `INSERT INTO push_subscriptions (member_id, endpoint, keys_p256dh, keys_auth)
+       VALUES ($1, $2, $3, $4)`,
+      [memberId, endpoint, p256dh, auth],
+    );
+    return 'created';
+  }
+  if (row.member_id === memberId && row.keys_p256dh === p256dh && row.keys_auth === auth) {
+    return 'noop';
+  }
+  await query(
+    `UPDATE push_subscriptions
+     SET member_id = $1, keys_p256dh = $2, keys_auth = $3
+     WHERE endpoint = $4`,
+    [memberId, p256dh, auth, endpoint],
+  );
+  return 'updated';
+}
+
 export async function saveSubscription(
   memberId: number,
   sub: PushSubscriptionData,
@@ -87,52 +131,63 @@ export async function saveSubscription(
   const endpoint = String(sub.endpoint ?? '').trim();
   const p256dh = String(sub.keys?.p256dh ?? '').trim();
   const auth = String(sub.keys?.auth ?? '').trim();
+  if (!endpoint || !p256dh || !auth) {
+    throw new Error('Invalid push subscription: endpoint and keys are required');
+  }
   const normalizedUserAgent =
     typeof userAgent === 'string' && userAgent.trim().length > 0 ? userAgent.trim() : null;
 
-  const existing = await query(
-    `SELECT member_id, keys_p256dh, keys_auth, user_agent
-     FROM push_subscriptions
-     WHERE endpoint = $1
-     LIMIT 1`,
-    [endpoint],
-  );
-  const row = (existing.rows[0] as SaveSubscriptionRow | undefined) ?? null;
-
-  if (!row) {
-    await query(
-      `INSERT INTO push_subscriptions (member_id, endpoint, keys_p256dh, keys_auth, user_agent, last_used_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())`,
-      [memberId, endpoint, p256dh, auth, normalizedUserAgent],
-    );
-    return 'created';
-  }
-
-  const sameMember = row.member_id === memberId;
-  const sameKeys = row.keys_p256dh === p256dh && row.keys_auth === auth;
-  const sameUserAgent =
-    normalizedUserAgent == null || row.user_agent === normalizedUserAgent;
-  if (sameMember && sameKeys && sameUserAgent) {
-    await query(
-      `UPDATE push_subscriptions
-       SET last_used_at = NOW()
-       WHERE endpoint = $1`,
+  try {
+    const existing = await query(
+      `SELECT member_id, keys_p256dh, keys_auth, user_agent
+       FROM push_subscriptions
+       WHERE endpoint = $1
+       LIMIT 1`,
       [endpoint],
     );
-    return 'noop';
-  }
+    const row = (existing.rows[0] as SaveSubscriptionRow | undefined) ?? null;
 
-  await query(
-    `UPDATE push_subscriptions
-     SET member_id = $1,
-         keys_p256dh = $2,
-         keys_auth = $3,
-         user_agent = COALESCE($4, push_subscriptions.user_agent),
-         last_used_at = NOW()
-     WHERE endpoint = $5`,
-    [memberId, p256dh, auth, normalizedUserAgent, endpoint],
-  );
-  return 'updated';
+    if (!row) {
+      await query(
+        `INSERT INTO push_subscriptions (member_id, endpoint, keys_p256dh, keys_auth, user_agent, last_used_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [memberId, endpoint, p256dh, auth, normalizedUserAgent],
+      );
+      return 'created';
+    }
+
+    const sameMember = row.member_id === memberId;
+    const sameKeys = row.keys_p256dh === p256dh && row.keys_auth === auth;
+    const sameUserAgent =
+      normalizedUserAgent == null || row.user_agent === normalizedUserAgent;
+    if (sameMember && sameKeys && sameUserAgent) {
+      await query(
+        `UPDATE push_subscriptions
+         SET last_used_at = NOW()
+         WHERE endpoint = $1`,
+        [endpoint],
+      );
+      return 'noop';
+    }
+
+    await query(
+      `UPDATE push_subscriptions
+       SET member_id = $1,
+           keys_p256dh = $2,
+           keys_auth = $3,
+           user_agent = COALESCE($4, push_subscriptions.user_agent),
+           last_used_at = NOW()
+       WHERE endpoint = $5`,
+      [memberId, p256dh, auth, normalizedUserAgent, endpoint],
+    );
+    return 'updated';
+  } catch (err) {
+    if (!isMissingPushColumnError(err)) throw err;
+    console.warn(
+      '[push] push_subscriptions missing user_agent/last_used_at — using legacy upsert. Apply ensurePushSubscriptionsSchema / migration.',
+    );
+    return saveSubscriptionLegacy(memberId, endpoint, p256dh, auth);
+  }
 }
 
 export async function removeSubscription(memberId: number, endpoint: string): Promise<void> {

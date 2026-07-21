@@ -5,6 +5,7 @@ import { fetchVapidPublicKey } from '../../profile/api';
 /** Последний известный публичный VAPID с сервера — чтобы при смене ключей пересоздать подписку. */
 const LS_VAPID_PUBLIC_KEY = 'web_push_vapid_public_key';
 let pushSyncInFlight: Promise<void> | null = null;
+/** Endpoint, успешно сохранённый на сервере в этой вкладке. */
 let lastSyncedEndpoint: string | null = null;
 
 function subscriptionToJsonBody(sub: PushSubscription): Record<string, unknown> {
@@ -21,7 +22,21 @@ function subscriptionToJsonBody(sub: PushSubscription): Record<string, unknown> 
       },
     };
   }
-  
+
+  // Ensure keys exist even when toJSON() omitted them (rare browser quirks).
+  const keys = (body.keys && typeof body.keys === 'object' ? body.keys : {}) as Record<
+    string,
+    unknown
+  >;
+  if (typeof keys.p256dh !== 'string' || !keys.p256dh) {
+    keys.p256dh = bufferToUrlBase64(sub.getKey('p256dh'));
+  }
+  if (typeof keys.auth !== 'string' || !keys.auth) {
+    keys.auth = bufferToUrlBase64(sub.getKey('auth'));
+  }
+  body.keys = keys;
+  body.endpoint = typeof body.endpoint === 'string' ? body.endpoint : sub.endpoint;
+
   if (typeof navigator !== 'undefined') {
     body.userAgent = navigator.userAgent;
   }
@@ -37,8 +52,8 @@ function bufferToUrlBase64(buf: ArrayBuffer | null): string {
 }
 
 function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const rawData = window.atob(base64);
   const outputArray = new Uint8Array(rawData.length);
   for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
@@ -57,18 +72,19 @@ function readPushSubscribeError(err: unknown): string {
     const r = (err as { response?: { status?: number; data?: { error?: string } } }).response;
     const msg = r?.data && typeof r.data.error === 'string' ? r.data.error : '';
     if (r?.status === 401) return 'Войдите снова, чтобы сохранить подписку на уведомления.';
+    if (r?.status === 503) return 'Сервер push не настроен (VAPID). Обратитесь к администратору.';
     if (msg) return msg;
   }
   if (err instanceof Error && err.message) return err.message;
   return 'Не удалось сохранить подписку на сервере.';
 }
 
-export async function initMessengerPushNotifications(): Promise<void> {
+export async function initMessengerPushNotifications(opts?: { force?: boolean }): Promise<void> {
   if (pushSyncInFlight) {
     await pushSyncInFlight;
     return;
   }
-  pushSyncInFlight = initMessengerPushNotificationsInternal();
+  pushSyncInFlight = initMessengerPushNotificationsInternal(opts?.force === true);
   try {
     await pushSyncInFlight;
   } finally {
@@ -76,18 +92,24 @@ export async function initMessengerPushNotifications(): Promise<void> {
   }
 }
 
+/** Сбросить кэш успешной синхронизации (после ошибки / возврата во вкладку). */
+export function resetWebPushSyncCache(): void {
+  lastSyncedEndpoint = null;
+}
+
 async function syncSubscriptionWithServer(
   subscription: PushSubscription,
   vapidPublicKey: string,
+  force: boolean,
 ): Promise<void> {
   const endpoint = subscription.endpoint;
-  if (lastSyncedEndpoint === endpoint) return;
+  if (!force && lastSyncedEndpoint === endpoint) return;
   await apiClient.post('/api/notifications/subscribe', subscriptionToJsonBody(subscription));
   localStorage.setItem(LS_VAPID_PUBLIC_KEY, vapidPublicKey);
   lastSyncedEndpoint = endpoint;
 }
 
-async function initMessengerPushNotificationsInternal(): Promise<void> {
+async function initMessengerPushNotificationsInternal(force: boolean): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
   if (!('PushManager' in window)) return;
 
@@ -97,15 +119,15 @@ async function initMessengerPushNotificationsInternal(): Promise<void> {
   try {
     const registration = await navigator.serviceWorker.ready;
 
-    const envKey = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY as string | undefined;
+    const envKey = (import.meta as { env?: { VITE_VAPID_PUBLIC_KEY?: string } }).env
+      ?.VITE_VAPID_PUBLIC_KEY;
     let serverVapidKey = '';
     try {
       serverVapidKey = (await fetchVapidPublicKey()).trim();
     } catch {
       /* офлайн / CORS — fallback на ключ из сборки */
     }
-    const vapidPublicKey =
-      serverVapidKey || (envKey && envKey.trim() ? envKey.trim() : '');
+    const vapidPublicKey = serverVapidKey || (envKey && envKey.trim() ? envKey.trim() : '');
     if (!vapidPublicKey) {
       console.warn('[push] VAPID public key is missing, skipping push subscribe.');
       return;
@@ -122,13 +144,15 @@ async function initMessengerPushNotificationsInternal(): Promise<void> {
       }
       existing = null;
       localStorage.removeItem(LS_VAPID_PUBLIC_KEY);
+      lastSyncedEndpoint = null;
     }
 
     if (existing) {
       try {
-        await syncSubscriptionWithServer(existing, vapidPublicKey);
+        await syncSubscriptionWithServer(existing, vapidPublicKey, force);
       } catch (err) {
         console.error('[push] POST /subscribe (sync existing) failed:', err);
+        lastSyncedEndpoint = null;
         emitAppToast({ message: readPushSubscribeError(err), kind: 'error' });
       }
       return;
@@ -142,7 +166,7 @@ async function initMessengerPushNotificationsInternal(): Promise<void> {
     });
 
     try {
-      await syncSubscriptionWithServer(subscription, vapidPublicKey);
+      await syncSubscriptionWithServer(subscription, vapidPublicKey, true);
     } catch (err) {
       console.error('[push] POST /subscribe (new) failed:', err);
       emitAppToast({ message: readPushSubscribeError(err), kind: 'error' });
@@ -156,6 +180,7 @@ async function initMessengerPushNotificationsInternal(): Promise<void> {
     }
   } catch (err) {
     console.error('[push] initMessengerPushNotifications failed:', err);
+    lastSyncedEndpoint = null;
     emitAppToast({
       message:
         'Не удалось включить push в браузере. Проверьте интернет и откройте сайт по HTTPS; на iPhone — ярлык с экрана «Домой».',
@@ -163,4 +188,3 @@ async function initMessengerPushNotificationsInternal(): Promise<void> {
     });
   }
 }
-
