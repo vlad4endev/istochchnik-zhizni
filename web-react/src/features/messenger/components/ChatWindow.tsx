@@ -1309,7 +1309,7 @@ export function ChatWindow({
         </div>
       </div>
 
-      <div className="tg-chat-window__composer message-input-bar z-20 w-full min-w-0 max-w-full shrink-0 border-t border-transparent bg-[var(--tg-bg)] px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+      <div className="tg-chat-window__composer message-input-bar z-20 w-full min-w-0 max-w-full shrink-0 border-t border-transparent bg-[var(--tg-bg)] px-3 pt-2">
         {isAccessRequestsChannel ? (
           <div className="pb-1 pt-0.5 text-center">
             <p className="mx-auto max-w-md px-2 text-[13px] leading-snug text-[var(--text-secondary)]">
@@ -1318,23 +1318,19 @@ export function ChatWindow({
             </p>
           </div>
         ) : (
-          <div className="tg-input-area-wrap w-full min-w-0">
-            <ChatInput
-              conversationId={conversationId}
-              sendTypingStart={sendTypingStart}
-              sendTypingStop={sendTypingStop}
-              canSend={canPostMessages}
-              canSendAttachments={canSendAttachments}
-              textOnly={isAssistantChannel}
-              mentionParticipants={
-                conv && conv.type !== 'private' && !isAssistantChannel ? mentionList : []
-              }
-              participantLabelById={participantLabelById}
-              placeholder={
-                isAssistantChannel ? 'Ваш вопрос…' : 'Сообщение'
-              }
-            />
-          </div>
+          <ChatInput
+            conversationId={conversationId}
+            sendTypingStart={sendTypingStart}
+            sendTypingStop={sendTypingStop}
+            canSend={canPostMessages}
+            canSendAttachments={canSendAttachments}
+            textOnly={isAssistantChannel}
+            mentionParticipants={
+              conv && conv.type !== 'private' && !isAssistantChannel ? mentionList : []
+            }
+            participantLabelById={participantLabelById}
+            placeholder={isAssistantChannel ? 'Ваш вопрос…' : 'Сообщение'}
+          />
         )}
       </div>
 

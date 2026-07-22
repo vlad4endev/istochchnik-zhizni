@@ -1172,6 +1172,8 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   align-items: stretch;
   width: 100%;
   min-width: 0;
+  /* Единственный safe-area снизу у композера (не дублировать во внутренних обёртках). */
+  padding-bottom: max(0.75rem, var(--app-bottom-nav-safe-pad, 0px));
 }
 
 .tg-chat-window__composer .tg-input-area-wrap,
@@ -1179,6 +1181,19 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   width: 100%;
   min-width: 0;
   flex: 0 0 auto;
+}
+
+/*
+ * Композер уже даёт отступы и safe-area.
+ * Вложенный .tg-input-area-wrap не должен дублировать padding/фон/тень —
+ * иначе строка ввода «плывёт» над лишней белой полосой (home indicator ×2).
+ */
+.tg-chat-window__composer .tg-input-area-wrap {
+  padding: 0 !important;
+  padding-bottom: 0 !important;
+  background: transparent !important;
+  border-top: none !important;
+  box-shadow: none !important;
 }
 
 .tg-assistant-thinking {
@@ -3327,10 +3342,6 @@ html.dark .msg-quick-reaction:hover {
     padding-bottom: max(0.5rem, 12px) !important;
   }
 
-  html.app-native-shell.app-keyboard-open[data-chat-open='1'] .tg-chat-window .tg-input-area-wrap {
-    padding-bottom: 8px !important;
-  }
-
   /* Список чатов: без второго env(safe-area) поверх уже уменьшенного visual viewport. */
   html.app-native-shell.app-keyboard-open[data-messenger-open='1'] .tg-chatlist-scroll,
   html.app-native-shell.app-keyboard-open[data-messenger-open='1'] .tg-chatlist-root .overflow-y-auto {
@@ -3372,6 +3383,14 @@ html.dark .msg-quick-reaction:hover {
 html[data-chat-open='1'] .tg-chat-window .tg-input-area.tg-composer-pill-layout,
 html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-area.tg-composer-pill-layout {
   align-items: center !important;
+}
+
+/* Базовый .tg-send-btn { align-self: flex-end } ломает ряд pill-layout (микрофон «выше» капсулы). */
+.tg-input-area.tg-composer-pill-layout .tg-send-btn,
+.tg-input-area.tg-composer-pill-layout .sendBtn,
+.tg-chat-window__composer .tg-input-area.tg-composer-pill-layout .tg-send-btn,
+.tg-chat-window__composer .tg-input-area.tg-composer-pill-layout .sendBtn {
+  align-self: center !important;
 }
 
 .tg-input-container.tg-composer-pill-layout,
