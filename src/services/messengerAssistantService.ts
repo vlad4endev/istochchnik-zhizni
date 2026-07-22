@@ -180,6 +180,39 @@ async function memberCanAccessAssistant(memberId: number): Promise<boolean> {
   return canAccessMessengerAssistant(roles);
 }
 
+/** Профиль собеседника для ИИ: имя + роли/служение (без телефона/email). */
+async function loadAssistantSpeakerProfile(memberId: number): Promise<string | null> {
+  if (!Number.isFinite(memberId) || memberId < 1) return null;
+  const res = await dbQuery(
+    `SELECT id, first_name, last_name, name, app_role, app_roles, ministry_role, ministry_direction,
+            in_prayer_cycle, is_collection_coordinator
+       FROM members
+      WHERE id = $1 AND is_active = TRUE
+      LIMIT 1`,
+    [memberId],
+  );
+  const row = res.rows[0] as AssistantMemberRow | undefined;
+  if (!row) return null;
+  const name = memberLabel(row);
+  if (!name) return null;
+  const roles = normalizeAppRoles(row.app_roles, row.app_role) as AppRole[];
+  const rolesRu = formatAppRolesRu(roles);
+  const ministry = parseMinistryRoles(row.ministry_role).join(', ');
+  const direction = parseMinistryDirections(row.ministry_direction).join(', ');
+  const flags: string[] = [];
+  if (row.is_collection_coordinator === true) flags.push('координатор сбора');
+  if (row.in_prayer_cycle === true) flags.push('в молитвенном календаре');
+  const bits = [
+    rolesRu && `роли: ${rolesRu}`,
+    ministry && `служение: ${ministry}`,
+    direction && `направление: ${direction}`,
+    ...flags,
+  ]
+    .filter(Boolean)
+    .join('; ');
+  return bits ? `${name} (${bits})` : name;
+}
+
 const ASSISTANT_WELCOME =
   'Мир вам! Я — христианский помощник.\n\n' +
   'Могу поговорить о вере и Библии, помочь с планом чтения Писания, ответить на богословские и жизненные вопросы, ' +
@@ -222,7 +255,8 @@ const DEFAULT_ASSISTANT_SYSTEM_PROMPT = `Ты — христианский ба�
 - По вопросам веры, доктрины и литературы ты ограничен данными из searchDatabase (и Священным Писанием); не выдумывай источники.
 - Не раскрывай пароли, телефоны, email, логины и личные переписки. Имена и молитвенные нужды из контекста программы церкви — можно.
 - Не изменяй данные в приложении: только консультируй.
-- Очередь молитвы в церкви называй только «молитвенный календарь». Не используй формулировку «молитвенный цикл».`;
+- Очередь молитвы в церкви называй только «молитвенный календарь». Не используй формулировку «молитвенный цикл».
+- Если в контексте указан собеседник — ты разговариваешь именно с ним: обращайся по имени, когда уместно, учитывай его роли и служение. Не путай его с другими участниками из справочника.`;
 
 function ymdLocal(d: Date): string {
   const y = d.getFullYear();
@@ -1059,6 +1093,17 @@ export async function replyAsAssistantBot(input: {
     digest = 'Контекст базы временно недоступен.';
   }
 
+  let speakerProfile: string | null = null;
+  try {
+    speakerProfile = await loadAssistantSpeakerProfile(memberId);
+  } catch (e) {
+    console.warn('[assistant] speaker profile failed:', e);
+  }
+  const speakerBlock = speakerProfile
+    ? `Собеседник (ты разговариваешь с этим человеком): ${speakerProfile}.\n` +
+      `Обращайся по имени, когда уместно; учитывай его роли и служение.\n\n`
+    : '';
+
   let adminSectionPrompt: string | null = null;
   let gptunnelAssistantCode: string | null = null;
   try {
@@ -1081,6 +1126,7 @@ export async function replyAsAssistantBot(input: {
     const userPayload =
       `${text}\n\n` +
       `---\n` +
+      speakerBlock +
       `Контекст программы церкви (события, расписание, участники и их роли/служения — кто чем занимается; для веры/Библии опирайся на Писание и RAG):\n` +
       `${digest.slice(0, 12000)}`;
     try {
@@ -1119,6 +1165,7 @@ export async function replyAsAssistantBot(input: {
       {
         role: 'system',
         content:
+          speakerBlock +
           'Данные из базы (только чтение): события, служения, песни, расписание, участники и их роли (кто чем занимается). Не раскрывай личные переписки, телефоны и email.\n' +
           'Для вопросов веры, Библии и доктрины опирайся на Священное Писание и протестантское учение — этот блок не ограничивает библейские ответы.\n\n' +
           digest,
