@@ -15,7 +15,7 @@ import { playAudio } from '../../utils/audio';
 import { extractMentionMemberIdsFromText, normalizeMentionsToCanonical } from './mentionUtils';
 import { normalizeChatDisplayText } from './normalizeChatDisplayText';
 import { inferMessengerPayloadType } from './payloadMedia';
-import { isAssistantMessengerChannel } from './messengerChannelKinds';
+import { isAssistantBotMessage, isAssistantMessengerChannel } from './messengerChannelKinds';
 import {
   applyNewMessage,
   processMessengerWsBatch,
@@ -297,6 +297,29 @@ export interface ChatState {
 }
 
 export type ChatTab = 'all' | 'personal' | 'services' | 'notifications';
+
+/** Сброс «ИИ отвечает», если последнее сообщение в ленте — ответ бота (HTTP load/catch-up). */
+function clearAssistantThinkingIfBotReplied(
+  get: () => ChatState,
+  conversationId: string,
+): void {
+  const idKey = String(conversationId);
+  const s = get();
+  if (!s.assistantThinkingByConv[idKey]) return;
+  const meta = s.conversations.find((c) => String(c.id) === idKey)?.metadata;
+  if (!isAssistantMessengerChannel(meta)) return;
+  const list = s.messagesByConv[idKey] || [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const m = list[i];
+    if (!m || m.is_deleted) continue;
+    const fromBot =
+      m.sender_id == null || isAssistantBotMessage(m.payload, m.sender_id);
+    if (fromBot) {
+      get().setAssistantThinking(idKey, false);
+    }
+    break;
+  }
+}
 
 export const EMPTY_ARRAY: any[] = [];
 export const EMPTY_OBJECT: any = {};
@@ -1214,6 +1237,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             : { ...s.messagesLastLoadedAt, [conversationId]: Date.now() },
         };
       });
+      clearAssistantThinkingIfBotReplied(get, conversationId);
       saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] loadMessages error:', e);
@@ -1292,6 +1316,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           messagesLastLoadedAt: { ...s.messagesLastLoadedAt, [conversationId]: Date.now() },
         };
       });
+      clearAssistantThinkingIfBotReplied(get, conversationId);
       saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] catchUpMessagesAfter error:', e);
