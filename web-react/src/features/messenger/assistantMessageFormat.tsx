@@ -8,7 +8,8 @@ import { renderMessengerPlainText } from './messengerPlainText';
  * - NFKC / BiDi-мусор;
  * - снимает экранирование `\-`, `\*`;
  * - схлопывает «разъехавшиеся» жирные маркеры `* *текст* *` → `**текст**`;
- * - убирает лишние пробелы вокруг `**`.
+ * - trim пробелов внутри каждой пары `**…**` (без склейки соседних пар);
+ * - вставляет пробел, если `**` прилип к буквам/цифрам.
  */
 export function normalizeAssistantMarkdown(raw: string): string {
   let s = displayMessengerText(String(raw ?? ''))
@@ -17,11 +18,26 @@ export function normalizeAssistantMarkdown(raw: string): string {
     .replace(/\r/g, '\n');
 
   // `* *Важно* *` / `* * Важно * *` → `**Важно**`
-  s = s.replace(/\*\s+\*\s*([^*\n]+?)\s*\*\s+\*/g, '**$1**');
-  // лишние пробелы внутри `** … **`
-  s = s.replace(/\*\*\s+([^*\n]+?)\s+\*\*/g, '**$1**');
-  s = s.replace(/\*\*\s+([^*\n]+?)\*\*/g, '**$1**');
-  s = s.replace(/\*\*([^*\n]+?)\s+\*\*/g, '**$1**');
+  // Повторяем: после замены могут остаться соседние группы.
+  for (let i = 0; i < 4; i += 1) {
+    const next = s.replace(/\*\s+\*\s*([^*\n]+?)\s*\*\s+\*/g, '**$1**');
+    if (next === s) break;
+    s = next;
+  }
+
+  // Trim внутри каждой цельной пары `**…**` и пробел у границ, если маркер
+  // прилип к слову. Нельзя делать `\*\*\s+…\s+\*\*` по всему тексту — это
+  // склеивает `**а** слово **б**` (закрытие первой пары + открытие второй).
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, (full, inner: string, offset: number, str: string) => {
+    const content = `**${inner.trim()}**`;
+    const before = offset > 0 ? str[offset - 1]! : '';
+    const afterIdx = offset + full.length;
+    const after = afterIdx < str.length ? str[afterIdx]! : '';
+    // Пробел, если `**` прилип к слову или к знаку вроде «см.:**Важно**»
+    const lead = before && /[\p{L}\p{N}.:;!?…]/u.test(before) ? ' ' : '';
+    const trail = after && /[\p{L}\p{N}]/u.test(after) ? ' ' : '';
+    return `${lead}${content}${trail}`;
+  });
 
   return s.trim();
 }

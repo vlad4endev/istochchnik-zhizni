@@ -19,6 +19,18 @@ describe('assistantMessageFormat', () => {
     expect(normalizeAssistantMarkdown('* * Важно * *')).toBe('**Важно**');
   });
 
+  it('does not eat spaces between adjacent bold spans', () => {
+    expect(normalizeAssistantMarkdown('а * *б* * в * *г* * д')).toBe('а **б** в **г** д');
+    expect(normalizeAssistantMarkdown('**а** слово **б**')).toBe('**а** слово **б**');
+    expect(normalizeAssistantMarkdown('Между ** словами ** пробелы')).toBe('Между **словами** пробелы');
+  });
+
+  it('inserts spaces when bold markers are glued to words', () => {
+    expect(normalizeAssistantMarkdown('слово**жирный**слово')).toBe('слово **жирный** слово');
+    expect(normalizeAssistantMarkdown('**Заголовок**Текст абзаца')).toBe('**Заголовок** Текст абзаца');
+    expect(normalizeAssistantMarkdown('смотрите:**Важно**далее')).toBe('смотрите: **Важно** далее');
+  });
+
   it('renders bold and list items as HTML', () => {
     const html = renderToStaticMarkup(
       <>

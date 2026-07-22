@@ -585,6 +585,49 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
   return digest.length > 22000 ? `${digest.slice(0, 21950)}\n…(обрезано)` : digest;
 }
 
+/** Жёсткий потолок длины ответа бота в сообщении (символы). */
+const ASSISTANT_ANSWER_MAX_CHARS = 28_000;
+
+/**
+ * Обрезает ответ ИИ по границе абзаца/предложения, а не посередине слова.
+ * Раньше `.slice(0, 8000)` обрывал длинные ответы на полуслове.
+ */
+export function truncateAssistantAnswer(
+  text: string,
+  maxChars: number = ASSISTANT_ANSWER_MAX_CHARS,
+): string {
+  const s = String(text ?? '').trim();
+  if (!s) return '';
+  const limit = Number.isFinite(maxChars)
+    ? Math.max(64, Math.floor(maxChars))
+    : ASSISTANT_ANSWER_MAX_CHARS;
+  if (s.length <= limit) return s;
+
+  const note = '\n\n…(ответ обрезан — уточните вопрос, продолжу)';
+  const budget = Math.max(32, limit - note.length);
+  const hard = s.slice(0, budget);
+  const minKeep = Math.floor(budget * 0.72);
+
+  const para = hard.lastIndexOf('\n\n');
+  if (para >= minKeep) {
+    return `${hard.slice(0, para).trimEnd()}${note}`;
+  }
+  const nl = hard.lastIndexOf('\n');
+  if (nl >= minKeep) {
+    return `${hard.slice(0, nl).trimEnd()}${note}`;
+  }
+  const sentence = Math.max(
+    hard.lastIndexOf('. '),
+    hard.lastIndexOf('! '),
+    hard.lastIndexOf('? '),
+    hard.lastIndexOf('。'),
+  );
+  if (sentence >= minKeep) {
+    return `${hard.slice(0, sentence + 1).trimEnd()}${note}`;
+  }
+  return `${hard.trimEnd()}${note}`;
+}
+
 async function postAssistantBotMessage(
   conversationId: string,
   content: string,
@@ -976,7 +1019,8 @@ export async function replyAsAssistantBot(input: {
         section: 'messenger',
         skipSystemPrompt: true,
         temperature: 0.55,
-        max_tokens: 2800,
+        // Длинные ответы по вере/Писанию часто >2k токенов; 2800 обрезало середину фразы.
+        max_tokens: 6000,
       });
     } catch (e) {
       if (e instanceof AiAgentError) {
@@ -996,17 +1040,18 @@ export async function replyAsAssistantBot(input: {
     }
   }
 
-  const cleaned = String(answer ?? '')
-    .replace(/\\([-*_`>])/g, '$1')
-    .replace(/\r\n/g, '\n')
-    .replace(/```[\s\S]*?```/g, (block) =>
-      block
-        .replace(/^```[a-zA-Z0-9_-]*\n?/, '')
-        .replace(/\n?```$/, '')
-        .trim(),
-    )
-    .trim()
-    .slice(0, 8000);
+  const cleaned = truncateAssistantAnswer(
+    String(answer ?? '')
+      .replace(/\\([-*_`>])/g, '$1')
+      .replace(/\r\n/g, '\n')
+      .replace(/```[\s\S]*?```/g, (block) =>
+        block
+          .replace(/^```[a-zA-Z0-9_-]*\n?/, '')
+          .replace(/\n?```$/, '')
+          .trim(),
+      )
+      .trim(),
+  );
   if (!cleaned) return;
 
   await postAssistantBotMessage(conversationId, cleaned, userMessageId);
