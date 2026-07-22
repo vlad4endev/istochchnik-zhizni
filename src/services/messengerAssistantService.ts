@@ -83,7 +83,7 @@ export function formatAssistantMemberDirectoryLine(row: AssistantMemberRow): str
   const direction = parseMinistryDirections(row.ministry_direction).join(', ');
   const flags: string[] = [];
   if (row.is_collection_coordinator === true) flags.push('координатор сбора');
-  if (row.in_prayer_cycle === true) flags.push('в молитвенном цикле');
+  if (row.in_prayer_cycle === true) flags.push('в молитвенном календаре');
   const bits = [
     rolesRu && `роли: ${rolesRu}`,
     ministry && `служение: ${ministry}`,
@@ -221,7 +221,8 @@ const DEFAULT_ASSISTANT_SYSTEM_PROMPT = `Ты — христианский ба�
 - Только библейские истины, без домыслов.
 - По вопросам веры, доктрины и литературы ты ограничен данными из searchDatabase (и Священным Писанием); не выдумывай источники.
 - Не раскрывай пароли, телефоны, email, логины и личные переписки. Имена и молитвенные нужды из контекста программы церкви — можно.
-- Не изменяй данные в приложении: только консультируй.`;
+- Не изменяй данные в приложении: только консультируй.
+- Очередь молитвы в церкви называй только «молитвенный календарь». Не используй формулировку «молитвенный цикл».`;
 
 function ymdLocal(d: Date): string {
   const y = d.getFullYear();
@@ -519,8 +520,8 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
       const data = await getPrayerDataByDate(day);
       const cycle = data.prayer_cycle;
       const cycleLabel = cycle
-        ? `цикл #${cycle.number} (день ${cycle.day_index + 1}/${cycle.member_count})`
-        : 'цикл —';
+        ? `календарный круг #${cycle.number} (день ${cycle.day_index + 1}/${cycle.member_count})`
+        : 'круг —';
 
       const memberParts = (data.members ?? []).slice(0, 2).map((m) => {
         if (typeof m.id === 'number' && Number.isFinite(m.id)) prayerMemberIds.add(m.id);
@@ -598,13 +599,13 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
       historyLines.push(`- ${name}:`);
       for (const item of history) {
         const when = String(item.prayed_on_date || item.created_at || '').slice(0, 10);
-        const cycle =
+        const round =
           item.cycle_index != null && Number.isFinite(Number(item.cycle_index))
-            ? ` цикл #${Number(item.cycle_index) + 1}`
+            ? ` круг #${Number(item.cycle_index) + 1}`
             : '';
         const text = String(item.prayer_request ?? '').trim().slice(0, 200);
         if (!text) continue;
-        historyLines.push(`  · ${when || 'дата?'}${cycle}: ${text}`);
+        historyLines.push(`  · ${when || 'дата?'}${round}: ${text}`);
       }
     });
     sections.push(
@@ -625,12 +626,12 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
       return `- ${idx + 1}. ${name}${mark}`;
     });
     sections.push(
-      `Молитвенный цикл (roster, цикл #${roster.cycle_index + 1}, всего ${roster.total}):\n` +
+      `Молитвенный календарь — очередь участников (круг #${roster.cycle_index + 1}, всего ${roster.total}):\n` +
         (rosterLines.length ? rosterLines.join('\n') : '- пусто'),
     );
   } catch (e) {
     console.warn('[assistant] prayer roster context failed:', e);
-    sections.push('Молитвенный цикл (roster): не удалось загрузить.');
+    sections.push('Молитвенный календарь (очередь участников): не удалось загрузить.');
   }
 
   try {
