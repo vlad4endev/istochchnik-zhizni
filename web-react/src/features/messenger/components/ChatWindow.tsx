@@ -1392,7 +1392,7 @@ export function ChatWindow({
                 }
                 participantLabelById={participantLabelById}
                 placeholder={
-                  isAssistantChannel ? 'Спросите о вере, Библии или программе церкви…' : 'Сообщение'
+                  isAssistantChannel ? 'Ваш вопрос…' : 'Сообщение'
                 }
               />
             </div>
