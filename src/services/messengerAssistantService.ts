@@ -39,10 +39,135 @@ import { listPlans } from './servicePlannerService';
 import { listPublishedSongs } from './songService';
 import { listSundayScheduleSlots } from './sundayScheduleSlots';
 import { canAccessMessengerAssistant, normalizeAppRoles, type AppRole } from '../types/appRole';
+import { parseMinistryRoles } from '../utils/ministryRoleMatch';
+import { parseMinistryDirections } from '../utils/ministryScheduleAccess';
 import {
   getPrayerCycleRosterSnapshot,
   listPrayerRequestHistory,
 } from './userService';
+
+const APP_ROLE_LABELS_RU: Record<AppRole, string> = {
+  parishioner: 'прихожанин',
+  member: 'член церкви',
+  minister: 'служитель',
+  pastor: 'пастор',
+  musician: 'музыкант',
+  editor: 'редактор',
+  admin: 'администратор',
+};
+
+/** Русские названия ролей приложения для контекста ИИ. */
+export function formatAppRolesRu(roles: readonly AppRole[]): string {
+  return roles.map((r) => APP_ROLE_LABELS_RU[r] ?? r).join(', ');
+}
+
+type AssistantMemberRow = {
+  id: unknown;
+  first_name?: unknown;
+  last_name?: unknown;
+  name?: unknown;
+  app_role?: unknown;
+  app_roles?: unknown;
+  ministry_role?: unknown;
+  ministry_direction?: unknown;
+  in_prayer_cycle?: unknown;
+  is_collection_coordinator?: unknown;
+};
+
+/** Строка карточки участника для digest (без телефонов/email). */
+export function formatAssistantMemberDirectoryLine(row: AssistantMemberRow): string {
+  const name = memberLabel(row) || `id ${Number(row.id)}`;
+  const roles = normalizeAppRoles(row.app_roles, row.app_role) as AppRole[];
+  const rolesRu = formatAppRolesRu(roles);
+  const ministry = parseMinistryRoles(row.ministry_role).join(', ');
+  const direction = parseMinistryDirections(row.ministry_direction).join(', ');
+  const flags: string[] = [];
+  if (row.is_collection_coordinator === true) flags.push('координатор сбора');
+  if (row.in_prayer_cycle === true) flags.push('в молитвенном цикле');
+  const bits = [
+    rolesRu && `роли: ${rolesRu}`,
+    ministry && `служение: ${ministry}`,
+    direction && `направление: ${direction}`,
+    ...flags,
+  ]
+    .filter(Boolean)
+    .join('; ');
+  return `- ${name}${bits ? ` (${bits})` : ''}`;
+}
+
+/** Компактный индекс «кто чем занимается» по служениям / направлениям / ролям. */
+export function buildWhoDoesWhatSections(rows: AssistantMemberRow[]): string[] {
+  const byMinistry = new Map<string, string[]>();
+  const byDirection = new Map<string, string[]>();
+  const byAppRole = new Map<AppRole, string[]>();
+
+  const pushUnique = (map: Map<string, string[]>, key: string, name: string) => {
+    const k = key.trim();
+    if (!k || !name) return;
+    const list = map.get(k) ?? [];
+    if (!list.includes(name)) list.push(name);
+    map.set(k, list);
+  };
+
+  for (const r of rows) {
+    const name = memberLabel(r);
+    if (!name) continue;
+    for (const role of parseMinistryRoles(r.ministry_role)) {
+      pushUnique(byMinistry, role, name);
+    }
+    for (const dir of parseMinistryDirections(r.ministry_direction)) {
+      pushUnique(byDirection, dir, name);
+    }
+    const appRoles = normalizeAppRoles(r.app_roles, r.app_role) as AppRole[];
+    for (const ar of appRoles) {
+      if (ar === 'parishioner' || ar === 'member') continue;
+      const list = byAppRole.get(ar) ?? [];
+      if (!list.includes(name)) list.push(name);
+      byAppRole.set(ar, list);
+    }
+    if (r.is_collection_coordinator === true) {
+      pushUnique(byMinistry, 'Координатор сбора молитвенных нужд', name);
+    }
+  }
+
+  const formatGrouped = (
+    title: string,
+    map: Map<string, string[]>,
+    maxGroups = 40,
+    maxNames = 14,
+  ): string | null => {
+    const entries = [...map.entries()]
+      .filter(([, names]) => names.length > 0)
+      .sort((a, b) => a[0].localeCompare(b[0], 'ru') || b[1].length - a[1].length);
+    if (entries.length === 0) return null;
+    const lines = entries.slice(0, maxGroups).map(([key, names]) => {
+      const shown = names.slice(0, maxNames);
+      const more = names.length > shown.length ? ` и ещё ${names.length - shown.length}` : '';
+      return `- ${key}: ${shown.join(', ')}${more}`;
+    });
+    return `${title}:\n${lines.join('\n')}`;
+  };
+
+  const out: string[] = [];
+  const ministryBlock = formatGrouped('Кто чем занимается (по служению / должности)', byMinistry);
+  if (ministryBlock) out.push(ministryBlock);
+  const directionBlock = formatGrouped('Кто в каком направлении служения', byDirection);
+  if (directionBlock) out.push(directionBlock);
+
+  const roleOrder: AppRole[] = ['admin', 'pastor', 'minister', 'musician', 'editor'];
+  const roleLines = roleOrder
+    .filter((r) => (byAppRole.get(r)?.length ?? 0) > 0)
+    .map((r) => {
+      const names = byAppRole.get(r)!;
+      const shown = names.slice(0, 20);
+      const more = names.length > shown.length ? ` и ещё ${names.length - shown.length}` : '';
+      return `- ${APP_ROLE_LABELS_RU[r]}: ${shown.join(', ')}${more}`;
+    });
+  if (roleLines.length) {
+    out.push(`Ключевые роли в приложении (доступ/ответственность):\n${roleLines.join('\n')}`);
+  }
+  return out;
+}
 
 async function memberCanAccessAssistant(memberId: number): Promise<boolean> {
   const res = await dbQuery(
@@ -58,7 +183,7 @@ async function memberCanAccessAssistant(memberId: number): Promise<boolean> {
 const ASSISTANT_WELCOME =
   'Мир вам! Я — христианский помощник.\n\n' +
   'Могу поговорить о вере и Библии, помочь с планом чтения Писания, ответить на богословские и жизненные вопросы, ' +
-  'а также подсказать по событиям, проповедям, песням, расписанию, молитвенному календарю, нуждам и участникам нашей церкви.\n\n' +
+  'а также подсказать по событиям, проповедям, песням, расписанию, молитвенному календарю, нуждам, участникам и кто чем занимается в церкви.\n\n' +
   'Выберите пример ниже или напишите свой вопрос. ' +
   'Я опираюсь на Священное Писание и не вижу личные переписки.';
 
@@ -68,7 +193,7 @@ const DEFAULT_ASSISTANT_SYSTEM_PROMPT = `Ты — христианский ба�
 
 Твоя цель — помогать пользователю с вопросами и задачами, опираясь на авторитет Библии, Иисуса Христа и Бога. Подстраивайся под запрос, давая чёткие, живые и душевные ответы со ссылками на Библию (книга, глава, стих). Если данные взяты из книги, загруженной в векторную базу, в конце укажи книгу и автора.
 
-Если в сообщении есть блок «Контекст программы церкви» / «Данные из базы» — для вопросов о событиях, служениях, проповедях, песнях, расписании, молитвенном календаре, нуждах и участниках опирайся только на эти факты; не выдумывай даты, имена и детали, которых там нет.
+Если в сообщении есть блок «Контекст программы церкви» / «Данные из базы» — для вопросов о событиях, служениях, проповедях, песнях, расписании, молитвенном календаре, нуждах, участниках и их ролях (кто чем занимается: служение, направление, роли в приложении) опирайся только на эти факты; не выдумывай даты, имена, должности и детали, которых там нет.
 
 Функции:
 - Отвечай на вопросы о вере и жизни, ссылаясь на Библию.
@@ -78,6 +203,7 @@ const DEFAULT_ASSISTANT_SYSTEM_PROMPT = `Ты — христианский ба�
 - Рассказывай о других религиях через призму христианства.
 - Подсказывай адреса баптистских церквей, если данные доступны.
 - Ищи стихи или информацию из литературы по запросу.
+- По вопросам «кто проповедует / кто ведёт / кто в музыке / медиа / кто координатор» смотри блоки «Кто чем занимается», «Ключевые роли» и справочник участников в контексте.
 
 Стиль:
 - Дружелюбный, тёплый, профессиональный, с духовной заботой.
@@ -509,39 +635,24 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
 
   try {
     const usersRes = await dbQuery(
-      `SELECT id, first_name, last_name, name, app_role, ministry_role, ministry_direction,
-              in_prayer_cycle, is_active
+      `SELECT id, first_name, last_name, name, app_role, app_roles, ministry_role, ministry_direction,
+              in_prayer_cycle, is_collection_coordinator, is_active
          FROM members
         WHERE is_active = TRUE
         ORDER BY last_name NULLS LAST, first_name NULLS LAST, name ASC
-        LIMIT 200`,
+        LIMIT 250`,
     );
-    const rows = usersRes.rows as Array<{
-      id: unknown;
-      first_name?: unknown;
-      last_name?: unknown;
-      name?: unknown;
-      app_role?: unknown;
-      ministry_role?: unknown;
-      ministry_direction?: unknown;
-      in_prayer_cycle?: unknown;
-    }>;
+    const rows = usersRes.rows as AssistantMemberRow[];
     if (rows.length === 0) {
       sections.push('Участники церкви: список пуст.');
     } else {
-      const lines = rows.map((r) => {
-        const name = memberLabel(r) || `id ${Number(r.id)}`;
-        const role = String(r.app_role ?? '').trim();
-        const ministry = String(r.ministry_role ?? '').trim();
-        const direction = String(r.ministry_direction ?? '').trim();
-        const inCycle = r.in_prayer_cycle === true ? 'в молитвенном цикле' : '';
-        const bits = [role && `роль: ${role}`, ministry && `служение: ${ministry}`, direction && `направление: ${direction}`, inCycle]
-          .filter(Boolean)
-          .join('; ');
-        return `- ${name}${bits ? ` (${bits})` : ''}`;
-      });
+      for (const block of buildWhoDoesWhatSections(rows)) {
+        sections.push(block);
+      }
+      const lines = rows.map((r) => formatAssistantMemberDirectoryLine(r));
       sections.push(
-        `Участники церкви (активные, без телефонов/email, до ${rows.length}):\n${lines.join('\n')}`,
+        `Справочник участников (активные, с ролями и служениями, без телефонов/email, до ${rows.length}):\n` +
+          `${lines.join('\n')}`,
       );
     }
   } catch (e) {
@@ -581,8 +692,8 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
   }
 
   const digest = sections.join('\n\n');
-  // Больше места: календарь + история нужд + список участников
-  return digest.length > 22000 ? `${digest.slice(0, 21950)}\n…(обрезано)` : digest;
+  // Больше места: календарь + роли/служения + справочник участников
+  return digest.length > 26000 ? `${digest.slice(0, 25950)}\n…(обрезано)` : digest;
 }
 
 /** Жёсткий потолок длины ответа бота в сообщении (символы). */
@@ -969,7 +1080,7 @@ export async function replyAsAssistantBot(input: {
     const userPayload =
       `${text}\n\n` +
       `---\n` +
-      `Контекст программы церкви (только факты из приложения; для веры/Библии опирайся на Писание и RAG):\n` +
+      `Контекст программы церкви (события, расписание, участники и их роли/служения — кто чем занимается; для веры/Библии опирайся на Писание и RAG):\n` +
       `${digest.slice(0, 12000)}`;
     try {
       const gpt = await gptunnelAssistantChat({
@@ -1007,7 +1118,7 @@ export async function replyAsAssistantBot(input: {
       {
         role: 'system',
         content:
-          'Данные из базы (только чтение, общие данные программы церкви; используй для вопросов о событиях, служениях, песнях и расписании; не раскрывай личные переписки).\n' +
+          'Данные из базы (только чтение): события, служения, песни, расписание, участники и их роли (кто чем занимается). Не раскрывай личные переписки, телефоны и email.\n' +
           'Для вопросов веры, Библии и доктрины опирайся на Священное Писание и протестантское учение — этот блок не ограничивает библейские ответы.\n\n' +
           digest,
       },
