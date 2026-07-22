@@ -52,6 +52,7 @@ import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
 import { ensurePushSubscriptionsSchema } from './services/pushSubscriptionsSchema';
 import { ensureFeedSchema } from './services/feedSchema';
+import { ensureSermonNotesSchema } from './services/sermonNotesService';
 import { writeAppLog } from './services/appLogService';
 import { getAuthAccessTtlMinutes, getRefreshTtlDays } from './config/authCookie';
 import { cleanupExpiredSessions } from './services/authService';
@@ -510,6 +511,12 @@ async function start(): Promise<void> {
         console.log('[music-schedule] schema ensured');
       } catch (e) {
         console.warn('[music-schedule] ensureMusicScheduleSchema failed:', e);
+      }
+      try {
+        await ensureSermonNotesSchema();
+        console.log('[sermon-notes] schema ensured');
+      } catch (e) {
+        console.warn('[sermon-notes] ensureSermonNotesSchema failed:', e);
       }
     }
   }

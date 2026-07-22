@@ -5,6 +5,107 @@ const PUBLIC_SHARE_TOKEN_MAX_AGE_DAYS = Math.min(
   Math.max(1, Math.floor(Number(process.env.PUBLIC_SHARE_TOKEN_MAX_AGE_DAYS ?? '365') || 365)),
 );
 
+let schemaInit: Promise<void> | null = null;
+
+/**
+ * Гарантирует таблицу sermon_notes даже при SKIP_DB_INIT_ON_START в проде.
+ * Вызывается на boot и перед каждым запросом к API.
+ */
+export async function ensureSermonNotesSchema(): Promise<void> {
+  if (!schemaInit) {
+    schemaInit = (async () => {
+      await query(`
+        CREATE TABLE IF NOT EXISTS public.sermon_notes (
+          id BIGSERIAL PRIMARY KEY,
+          member_id INTEGER NOT NULL REFERENCES public.members(id) ON DELETE CASCADE,
+          title VARCHAR(500) NOT NULL DEFAULT '',
+          topic VARCHAR(500) NOT NULL DEFAULT '',
+          scripture VARCHAR(500) NOT NULL DEFAULT '',
+          body TEXT NOT NULL DEFAULT '',
+          body_format VARCHAR(32) NOT NULL DEFAULT 'plain',
+          is_public BOOLEAN NOT NULL DEFAULT FALSE,
+          share_token UUID UNIQUE DEFAULT gen_random_uuid(),
+          share_token_issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          service_plan_id BIGINT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await query(
+        `ALTER TABLE public.sermon_notes ADD COLUMN IF NOT EXISTS body_format VARCHAR(32) NOT NULL DEFAULT 'plain'`,
+      );
+      await query(
+        `ALTER TABLE public.sermon_notes ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE`,
+      );
+      await query(
+        `ALTER TABLE public.sermon_notes ADD COLUMN IF NOT EXISTS share_token UUID UNIQUE DEFAULT gen_random_uuid()`,
+      );
+      await query(
+        `ALTER TABLE public.sermon_notes ADD COLUMN IF NOT EXISTS share_token_issued_at TIMESTAMPTZ`,
+      );
+      await query(`UPDATE public.sermon_notes SET share_token = gen_random_uuid() WHERE share_token IS NULL`);
+      await query(`
+        UPDATE public.sermon_notes
+        SET share_token_issued_at = COALESCE(share_token_issued_at, created_at, NOW())
+        WHERE share_token_issued_at IS NULL
+      `);
+      await query(
+        `ALTER TABLE public.sermon_notes ALTER COLUMN share_token_issued_at SET DEFAULT NOW()`,
+      );
+      await query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'sermon_notes'
+              AND column_name = 'share_token_issued_at'
+              AND is_nullable = 'YES'
+          ) THEN
+            ALTER TABLE public.sermon_notes ALTER COLUMN share_token_issued_at SET NOT NULL;
+          END IF;
+        END $$
+      `);
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_sermon_notes_member_updated
+          ON public.sermon_notes (member_id, updated_at DESC)
+      `);
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_sermon_notes_service_plan
+          ON public.sermon_notes (service_plan_id)
+          WHERE service_plan_id IS NOT NULL
+      `);
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_sermon_notes_share_token
+          ON public.sermon_notes (share_token)
+          WHERE is_public = TRUE
+      `);
+      await query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = 'service_plans'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE constraint_schema = 'public'
+              AND table_name = 'sermon_notes'
+              AND constraint_name = 'sermon_notes_service_plan_id_fkey'
+          ) THEN
+            ALTER TABLE public.sermon_notes
+              ADD CONSTRAINT sermon_notes_service_plan_id_fkey
+              FOREIGN KEY (service_plan_id) REFERENCES public.service_plans(id) ON DELETE SET NULL;
+          END IF;
+        END $$
+      `);
+    })().catch((e) => {
+      schemaInit = null;
+      throw e;
+    });
+  }
+  await schemaInit;
+}
+
 export type SermonNoteBodyFormat = 'plain' | 'html';
 
 export interface SermonNoteListItem {
@@ -67,6 +168,7 @@ function mapFullRow(r: Record<string, unknown>): SermonNoteRow {
 }
 
 export async function listSermonNotes(memberId: number): Promise<SermonNoteListItem[]> {
+  await ensureSermonNotesSchema();
   const result = await query(
     `SELECT id, member_id, title, topic, scripture, service_plan_id, created_at, updated_at,
             is_public, body_format
@@ -82,6 +184,7 @@ export async function getSermonNote(
   memberId: number,
   noteId: number,
 ): Promise<SermonNoteRow | null> {
+  await ensureSermonNotesSchema();
   const result = await query(
     `SELECT * FROM sermon_notes WHERE id = $1 AND member_id = $2`,
     [noteId, memberId],
@@ -100,6 +203,7 @@ export async function createSermonNote(
     body_format?: SermonNoteBodyFormat;
   } = {},
 ): Promise<SermonNoteRow> {
+  await ensureSermonNotesSchema();
   const title = typeof input.title === 'string' ? input.title.trim() : '';
   const topic = typeof input.topic === 'string' ? input.topic.trim() : '';
   const scripture = typeof input.scripture === 'string' ? input.scripture.trim() : '';
@@ -125,6 +229,7 @@ export async function updateSermonNote(
     body_format?: SermonNoteBodyFormat;
   },
 ): Promise<SermonNoteRow | null> {
+  await ensureSermonNotesSchema();
   const fields: string[] = [];
   const vals: unknown[] = [];
   let n = 0;
@@ -154,6 +259,7 @@ export async function updateSermonNote(
 }
 
 export async function deleteSermonNote(memberId: number, noteId: number): Promise<boolean> {
+  await ensureSermonNotesSchema();
   const result = await query(`DELETE FROM sermon_notes WHERE id = $1 AND member_id = $2`, [
     noteId,
     memberId,
@@ -166,6 +272,7 @@ export async function updateSermonNoteShare(
   noteId: number,
   input: { is_public: boolean; rotate_token?: boolean },
 ): Promise<SermonNoteRow | null> {
+  await ensureSermonNotesSchema();
   const result = await query(
     `UPDATE sermon_notes
      SET is_public = $1,
@@ -187,6 +294,7 @@ export async function updateSermonNoteShare(
 }
 
 export async function getPublicSermonNoteByToken(token: string): Promise<PublicSermonNote | null> {
+  await ensureSermonNotesSchema();
   const t = token.trim();
   if (!/^[0-9a-fA-F-]{36}$/.test(t)) {
     return null;
