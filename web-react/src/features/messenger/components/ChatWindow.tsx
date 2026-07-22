@@ -28,45 +28,6 @@ import './messenger.css';
 
 const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
 
-const ASSISTANT_EXAMPLE_QUESTIONS: ReadonlyArray<{ label: string; text: string }> = [
-  {
-    label: 'План чтения Библии',
-    text: 'Составь мне простой план чтения Библии на 30 дней для новичка',
-  },
-  {
-    label: 'Что значит вера?',
-    text: 'Объясни просто, что такое вера по Библии, со ссылками на стихи',
-  },
-  {
-    label: 'Как молиться?',
-    text: 'Помоги понять, как молиться по Писанию, и дай короткий пример молитвы',
-  },
-  {
-    label: 'Кто проповедует?',
-    text: 'Кто проповедует в следующее воскресенье и какая тема?',
-  },
-  {
-    label: 'Кто чем занимается?',
-    text: 'Кто в церкви за что отвечает: пасторы, служители, музыка, медиа, координаторы? Перечисли по ролям и служениям.',
-  },
-  {
-    label: 'События на 2 недели',
-    text: 'Какие события запланированы на ближайшие две недели?',
-  },
-  {
-    label: 'Молитва на сегодня',
-    text: 'Что в молитвенном календаре на сегодня? Кто молится, какая тема и нужда?',
-  },
-  {
-    label: 'История нужд',
-    text: 'Покажи историю молитвенных нужд участников, которые сейчас в календаре на ближайшие дни',
-  },
-  {
-    label: 'Кто в молитвенном календаре?',
-    text: 'Кто сейчас в молитвенном календаре и в каком порядке? Кто молится сегодня?',
-  },
-];
-
 /** Склонение «N участников» по-русски (как в интерфейсах мессенджеров). */
 function formatParticipantCountRU(n: number): string {
   const mod10 = n % 10;
@@ -1357,46 +1318,23 @@ export function ChatWindow({
             </p>
           </div>
         ) : (
-          <>
-            {isAssistantChannel && canPostMessages ? (
-              <div className="tg-assistant-examples mb-2.5 min-w-0">
-                <p className="mb-1.5 px-0.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-                  Примеры вопросов
-                </p>
-                <div className="flex w-full snap-x snap-mandatory gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {ASSISTANT_EXAMPLE_QUESTIONS.map((q) => (
-                    <button
-                      key={q.text}
-                      type="button"
-                      className="tg-suggest-chip max-w-[min(85%,16rem)] shrink-0 snap-start rounded-2xl border border-primary/20 bg-primary/[0.06] px-3 py-2 text-left text-[13px] font-medium leading-snug text-[var(--text)] transition-colors hover:bg-primary/10 active:bg-primary/15"
-                      onClick={() => {
-                        void useChatStore.getState().sendMessage(conversationId, q.text);
-                      }}
-                    >
-                      {q.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            <div className="tg-input-area-wrap w-full min-w-0">
-              <ChatInput
-                conversationId={conversationId}
-                sendTypingStart={sendTypingStart}
-                sendTypingStop={sendTypingStop}
-                canSend={canPostMessages}
-                canSendAttachments={canSendAttachments}
-                textOnly={isAssistantChannel}
-                mentionParticipants={
-                  conv && conv.type !== 'private' && !isAssistantChannel ? mentionList : []
-                }
-                participantLabelById={participantLabelById}
-                placeholder={
-                  isAssistantChannel ? 'Ваш вопрос…' : 'Сообщение'
-                }
-              />
-            </div>
-          </>
+          <div className="tg-input-area-wrap w-full min-w-0">
+            <ChatInput
+              conversationId={conversationId}
+              sendTypingStart={sendTypingStart}
+              sendTypingStop={sendTypingStop}
+              canSend={canPostMessages}
+              canSendAttachments={canSendAttachments}
+              textOnly={isAssistantChannel}
+              mentionParticipants={
+                conv && conv.type !== 'private' && !isAssistantChannel ? mentionList : []
+              }
+              participantLabelById={participantLabelById}
+              placeholder={
+                isAssistantChannel ? 'Ваш вопрос…' : 'Сообщение'
+              }
+            />
+          </div>
         )}
       </div>
 
