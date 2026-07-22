@@ -13,7 +13,11 @@ import { AppAvatar } from '../../../components/AppAvatar';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { groupMessages } from '../groupMessages';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
-import { isAccessRequestsMessengerChannel, isAssistantMessengerChannel } from '../messengerChannelKinds';
+import {
+  isAccessRequestsMessengerChannel,
+  isAssistantBotMessage,
+  isAssistantMessengerChannel,
+} from '../messengerChannelKinds';
 import { isAppAdministratorRole } from '../manage/messengerManageAccess';
 import { useCallStore } from '../../calls/callStore';
 import { requestCallNotificationsFromUserGesture } from '../../calls/incomingCallBackground';
@@ -790,6 +794,22 @@ export function ChatWindow({
       el.scrollTop = el.scrollHeight;
     });
   }, [assistantThinking, conversationId]);
+
+  // Страховка: ответ уже в ленте, а индикатор «ИИ отвечает» ещё горит (WS/HTTP гонка).
+  const setAssistantThinking = useChatStore((s) => s.setAssistantThinking);
+  useEffect(() => {
+    if (!isAssistantChannel || !assistantThinking) return;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const m = messages[i];
+      if (!m || m.is_deleted) continue;
+      const fromBot =
+        m.sender_id == null || isAssistantBotMessage(m.payload, m.sender_id);
+      if (fromBot) {
+        setAssistantThinking(conversationId, false);
+      }
+      break;
+    }
+  }, [assistantThinking, conversationId, isAssistantChannel, messages, setAssistantThinking]);
 
   const displayName = useMemo(() => {
     if (isDraft && draftPeer) {

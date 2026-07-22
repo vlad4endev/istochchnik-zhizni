@@ -308,7 +308,25 @@ export function applyNewMessage(
     effects.push({ type: 'mark_read_up_to', convId: idKey, msgId: serverMsgId });
   }
 
-  if (existing.some((m) => String(m.id) === serverMsgId)) return s;
+  const clearAssistantThinkingOnReply = (state: ChatState): ChatState => {
+    const meta = state.conversations.find((c) => String(c.id) === idKey)?.metadata;
+    if (!isAssistantMessengerChannel(meta)) return state;
+    if (!Boolean(state.assistantThinkingByConv?.[idKey])) return state;
+    if (isOwn) return state;
+    const fromBot =
+      msg.sender_id == null || isAssistantBotMessage(msg.payload, msg.sender_id);
+    if (!fromBot) return state;
+    effects.push({ type: 'clear_assistant_thinking_timer', convId: idKey });
+    return {
+      ...state,
+      assistantThinkingByConv: { ...(state.assistantThinkingByConv ?? {}), [idKey]: false },
+    };
+  };
+
+  // Уже есть в ленте (часто HTTP catch-up раньше WS) — всё равно сбросить «ИИ отвечает».
+  if (existing.some((m) => String(m.id) === serverMsgId)) {
+    return clearAssistantThinkingOnReply(s);
+  }
 
   const hasProvisionalTwin =
     msgClientId != null &&
@@ -377,22 +395,7 @@ export function applyNewMessage(
     totalUnread,
   };
 
-  const assistantConv = isAssistantMessengerChannel(
-    (updatedConvs.find((c) => c.id === idKey) ?? targetConversation)?.metadata,
-  );
-  if (
-    assistantConv &&
-    !isOwn &&
-    !alreadyPresent &&
-    (msg.sender_id == null || isAssistantBotMessage(msg.payload, msg.sender_id)) &&
-    Boolean(s.assistantThinkingByConv?.[idKey])
-  ) {
-    next = {
-      ...next,
-      assistantThinkingByConv: { ...(s.assistantThinkingByConv ?? {}), [idKey]: false },
-    };
-    effects.push({ type: 'clear_assistant_thinking_timer', convId: idKey });
-  }
+  next = clearAssistantThinkingOnReply(next);
 
   if (!next.conversations.some((c) => c.id === idKey)) {
     effects.push({ type: 'load_conversations', force: true });
