@@ -45,11 +45,17 @@ import {
   fetchEditableServicePlan,
   fetchEditableServicePlanMeta,
   patchEditableServicePlanBlockByToken,
+  uploadEditableServicePlanSermonAttachment,
   type EditableServicePlanPayload,
   type EditableServicePlanMetaPayload,
 } from '../api';
+import {
+  SermonAttachmentsLinks,
+  SermonAttachmentsPanel,
+} from '../components/SermonAttachmentsPanel';
 import { asPlainContentJson, safeServicePlanTimelineStart } from '../planPayloadNormalize';
 import { isSharePlanRateLimitError, sharePlanQueryRetry, sharePlanQueryRetryDelay } from '../sharePlanQueryHelpers';
+import { SERMON_ATTACHMENTS_CONTENT_KEY } from '../sermonAttachments';
 
 type EditableBlock = EditableServicePlanPayload['blocks'][number];
 type EditableMember = EditableServicePlanMetaPayload['members'][number];
@@ -257,6 +263,7 @@ const CONTENT_JSON_EXCLUDED_FOR_GENERIC: Set<string> = new Set([
   'poem_theme',
   'sermon_topic',
   'sermon_scripture',
+  SERMON_ATTACHMENTS_CONTENT_KEY,
   'direction',
   'notes',
   'text',
@@ -744,6 +751,9 @@ export function EditableServicePlanPage() {
                           </div>
                         ) : null}
                         {isPoemBlockType(b) ? <PoemInlineDetails contentJson={b.content_json} /> : null}
+                        {isSermonBlockType(b) ? (
+                          <SermonAttachmentsLinks contentJson={b.content_json} className="mt-1" />
+                        ) : null}
                         <BlockStageSetupPreview contentJson={b.content_json} />
                         <BlockExtraInfoPanel rows={getBlockExtraDisplayRows(b)} variant="card" />
                       </div>
@@ -1075,6 +1085,18 @@ export function EditableServicePlanPage() {
                             />
                           </div>
                         </div>
+                        {token ? (
+                          <SermonAttachmentsPanel
+                            contentJson={(editingBlock.content_json ?? {}) as Record<string, unknown>}
+                            onChange={(content_json) => {
+                              dirtyShareBlockIdsRef.current.add(editingBlock.id);
+                              setDraftBlocks((prev) =>
+                                prev.map((x) => (x.id === editingBlock.id ? { ...x, content_json } : x)),
+                              );
+                            }}
+                            onUploadFile={(file) => uploadEditableServicePlanSermonAttachment(token, file)}
+                          />
+                        ) : null}
                       </div>
                     ) : null}
                     <BlockExtraInfoPanel rows={getEditFormAuxiliaryRows(editingBlock)} variant="edit" />

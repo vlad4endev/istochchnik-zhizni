@@ -23,9 +23,11 @@ import {
   type PublicServicePlanPayload,
 } from '../api';
 import { BlockStageSetupPreview } from '../components/BlockStageSetupFields';
+import { SermonAttachmentsLinks } from '../components/SermonAttachmentsPanel';
 import { ShareBroadcastTeamPanel } from '../components/ShareBroadcastTeamPanel';
 import { SharePlanBackBar } from '../components/SharePlanBackBar';
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
+import { parseSermonAttachments } from '../sermonAttachments';
 import { stageSetupProgramLines } from '../stageSetupFlags';
 import { safeServicePlanTimelineStart } from '../planPayloadNormalize';
 import { sharePlanQueryRetry, sharePlanQueryRetryDelay } from '../sharePlanQueryHelpers';
@@ -42,6 +44,7 @@ type PublicBlockView = {
   scheduleList: string[];
   sermon: boolean;
   sermonScripture: string;
+  sermonHasFiles: boolean;
   headingDisplay: string;
   showSongLine: boolean;
   songLine: string;
@@ -82,6 +85,7 @@ function derivePublicBlockView(b: PublicPlanBlock): PublicBlockView {
     typeof b.content_json.sermon_topic === 'string' ? b.content_json.sermon_topic.trim() : '';
   const sermonScripture =
     typeof b.content_json.sermon_scripture === 'string' ? b.content_json.sermon_scripture.trim() : '';
+  const sermonHasFiles = sermon && parseSermonAttachments(b.content_json).length > 0;
   const sermonPreacher = b.assigned_member_name ?? 'Проповедник';
   const heading = poem
     ? `СТИХ - ${b.assigned_member_name ?? 'Чтец'}`
@@ -107,6 +111,7 @@ function derivePublicBlockView(b: PublicPlanBlock): PublicBlockView {
   let extraSections = 0;
   if (poemSubline) extraSections += 1;
   if (sermon && sermonScripture) extraSections += 1;
+  if (sermonHasFiles) extraSections += 1;
   if (birthdays) extraSections += 1;
   if (scheduleList.length > 0) extraSections += 1;
   if (showSongLine) extraSections += 1;
@@ -131,6 +136,7 @@ function derivePublicBlockView(b: PublicPlanBlock): PublicBlockView {
     scheduleList,
     sermon,
     sermonScripture,
+    sermonHasFiles,
     headingDisplay,
     showSongLine,
     songLine,
@@ -147,6 +153,7 @@ function derivePublicBlockView(b: PublicPlanBlock): PublicBlockView {
       scheduleList: [],
       sermon: false,
       sermonScripture: '',
+      sermonHasFiles: false,
       headingDisplay: titleFallback,
       showSongLine: false,
       songLine: '',
@@ -486,6 +493,9 @@ export function PublicServicePlanPage() {
                       <p className="mt-0 text-xs leading-snug text-stone-600 sm:mt-0.5 sm:text-sm">
                         Писание: {m.sermonScripture}
                       </p>
+                    ) : null}
+                    {m.sermon && m.sermonHasFiles ? (
+                      <SermonAttachmentsLinks contentJson={b.content_json} className="mt-0.5 sm:mt-1" />
                     ) : null}
                     {m.birthdays ? (
                       m.birthdaysList.length > 0 ? (

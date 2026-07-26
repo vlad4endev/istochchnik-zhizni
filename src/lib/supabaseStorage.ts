@@ -428,3 +428,11 @@ export function buildUserMediaEventPosterPath(extension: string): string {
   const id = randomUUID();
   return `event-posters/${id}${safeExt}`;
 }
+
+/** Бакет `user-media`: презентации/файлы к блоку «Проповедь» в плане служения. */
+export function buildUserMediaSermonAttachmentPath(extension: string): string {
+  const ext = String(extension || '').trim();
+  const safeExt = ext && ext.length <= 12 ? ext.toLowerCase() : '';
+  const id = randomUUID();
+  return `sermon-attachments/${id}${safeExt}`;
+}

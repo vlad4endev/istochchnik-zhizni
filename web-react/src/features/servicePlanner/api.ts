@@ -357,3 +357,41 @@ export async function patchEditableServicePlanBlockByToken(
     payload,
   );
 }
+
+export type SermonAttachmentDto = {
+  id: string;
+  url: string;
+  name: string;
+  size: number;
+  mime: string;
+  uploaded_at?: string;
+};
+
+export async function uploadServicePlanSermonAttachment(file: File): Promise<SermonAttachmentDto> {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await apiClient.post<{ attachment: SermonAttachmentDto }>(
+    '/api/service-plans/sermon-attachment',
+    form,
+  );
+  if (!data?.attachment?.url) {
+    throw new Error('Сервер не вернул ссылку на файл');
+  }
+  return data.attachment;
+}
+
+export async function uploadEditableServicePlanSermonAttachment(
+  token: string,
+  file: File,
+): Promise<SermonAttachmentDto> {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await apiClient.post<{ attachment: SermonAttachmentDto }>(
+    `/api/public/service-plans-edit/${encodeURIComponent(token)}/sermon-attachment`,
+    form,
+  );
+  if (!data?.attachment?.url) {
+    throw new Error('Сервер не вернул ссылку на файл');
+  }
+  return data.attachment;
+}
