@@ -30,6 +30,7 @@ import { emitAppToast } from '@/lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { BlockStageSetupFields, BlockStageSetupPreview } from '../components/BlockStageSetupFields';
 import { DurationMinutesInput } from '../components/DurationMinutesInput';
+import { LinkedSermonNoteCard } from '../components/LinkedSermonNoteCard';
 import { ServicePlannerMemberPicker } from '../components/ServicePlannerMemberPicker';
 import { ServicePlannerSongPicker } from '../components/ServicePlannerSongPicker';
 import { ShareBroadcastTeamPanel } from '../components/ShareBroadcastTeamPanel';
@@ -746,6 +747,13 @@ export function EditableServicePlanPage() {
                         {isPoemBlockType(b) ? <PoemInlineDetails contentJson={b.content_json} /> : null}
                         <BlockStageSetupPreview contentJson={b.content_json} />
                         <BlockExtraInfoPanel rows={getBlockExtraDisplayRows(b)} variant="card" />
+                        {isSermonBlockType(b) && planQ.data?.linked_sermon_note ? (
+                          <LinkedSermonNoteCard
+                            note={planQ.data.linked_sermon_note}
+                            compact
+                            className="mt-2"
+                          />
+                        ) : null}
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
                         <button
@@ -1075,6 +1083,12 @@ export function EditableServicePlanPage() {
                             />
                           </div>
                         </div>
+                        {planQ.data?.linked_sermon_note ? (
+                          <LinkedSermonNoteCard
+                            note={planQ.data.linked_sermon_note}
+                            className="mt-1"
+                          />
+                        ) : null}
                       </div>
                     ) : null}
                     <BlockExtraInfoPanel rows={getEditFormAuxiliaryRows(editingBlock)} variant="edit" />

@@ -67,6 +67,18 @@ export type PlannerBlock = {
   content_json: Record<string, unknown>;
 };
 
+export type LinkedSermonNoteSummary = {
+  id: string;
+  title: string;
+  topic: string;
+  scripture: string;
+  member_id: number;
+  author_name: string | null;
+  is_public: boolean;
+  share_token: string | null;
+  updated_at: string;
+};
+
 export type PlannerPlanDetails = PlannerPlanListItem & {
   notes: string | null;
   created_at: string;
@@ -75,6 +87,7 @@ export type PlannerPlanDetails = PlannerPlanListItem & {
   last_edited_at: string | null;
   last_edited_by_name: string | null;
   blocks: PlannerBlock[];
+  linked_sermon_note: LinkedSermonNoteSummary | null;
 };
 
 export type PublicBroadcastAssignmentRow = {
@@ -97,6 +110,7 @@ export type PublicPlannerPlanPayload = {
     preacher_name: string | null;
   };
   broadcast_assignments: PublicBroadcastAssignmentRow[];
+  linked_sermon_note: LinkedSermonNoteSummary | null;
   blocks: Array<{
     id: number;
     order_index: number;
@@ -128,6 +142,7 @@ export type PublicEditablePlannerPlanPayload = {
     music_ministry_name: string | null;
   };
   broadcast_assignments: PublicBroadcastAssignmentRow[];
+  linked_sermon_note: LinkedSermonNoteSummary | null;
   blocks: Array<{
     id: number;
     block_type_id: number;
@@ -858,6 +873,8 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
   const birthdayPayload = hasBirthdayBlocks ? await getWeekBirthdays(base.service_date) : null;
   const hasScheduleBlocks = blocksRes.rows.some((r) => isWeeklyScheduleBlock(r as DbRecord));
   const schedulePayload = hasScheduleBlocks ? await getNextWeekSchedule(base.service_date) : null;
+  const { getLinkedSermonNoteForPlan } = await import('./sermonNotesService');
+  const linked_sermon_note = await getLinkedSermonNoteForPlan(planId);
   return {
     ...base,
     notes: row.notes == null ? null : String(row.notes),
@@ -870,6 +887,7 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
       row.last_edited_by_name == null || String(row.last_edited_by_name).trim() === ''
         ? null
         : String(row.last_edited_by_name).trim(),
+    linked_sermon_note,
     blocks: blocksRes.rows.map((r) => {
       const record = r as DbRecord;
       const mapped = mapBlockRow(record);
@@ -1026,6 +1044,8 @@ export async function getPublicPlanByToken(token: string): Promise<PublicPlanner
   const hasScheduleBlocks = blocksRes.rows.some((r) => isWeeklyScheduleBlock(r as DbRecord));
   const schedulePayload = hasScheduleBlocks ? await getNextWeekSchedule(serviceDate) : null;
   const broadcast_assignments = await loadPublicBroadcastAssignments(Number(row.id));
+  const { getLinkedSermonNoteForPlan } = await import('./sermonNotesService');
+  const linked_sermon_note = await getLinkedSermonNoteForPlan(Number(row.id));
 
   return {
     plan: {
@@ -1041,6 +1061,7 @@ export async function getPublicPlanByToken(token: string): Promise<PublicPlanner
       preacher_name: row.preacher_name == null ? null : String(row.preacher_name),
     },
     broadcast_assignments,
+    linked_sermon_note,
     blocks: blocksRes.rows.map((r) => {
       const x = r as DbRecord;
       return {
@@ -1141,6 +1162,8 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
   const hasScheduleBlocks = blocksRes.rows.some((r) => isWeeklyScheduleBlock(r as DbRecord));
   const schedulePayload = hasScheduleBlocks ? await getNextWeekSchedule(serviceDate) : null;
   const broadcast_assignments = await loadPublicBroadcastAssignments(Number(row.id));
+  const { getLinkedSermonNoteForPlan } = await import('./sermonNotesService');
+  const linked_sermon_note = await getLinkedSermonNoteForPlan(Number(row.id));
 
   return {
     plan: {
@@ -1160,6 +1183,7 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
       music_ministry_name: row.music_ministry_name == null ? null : String(row.music_ministry_name),
     },
     broadcast_assignments,
+    linked_sermon_note,
     blocks: blocksRes.rows.map((r) => {
       const x = r as DbRecord;
       return {

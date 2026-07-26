@@ -67,6 +67,18 @@ export type ServicePlanBlock = {
   content_json: Record<string, unknown>;
 };
 
+export type LinkedSermonNoteSummary = {
+  id: string;
+  title: string;
+  topic: string;
+  scripture: string;
+  member_id: number;
+  author_name: string | null;
+  is_public: boolean;
+  share_token: string | null;
+  updated_at: string;
+};
+
 export type ServicePlanDetails = ServicePlanListItem & {
   notes: string | null;
   created_at: string;
@@ -75,6 +87,7 @@ export type ServicePlanDetails = ServicePlanListItem & {
   last_edited_at: string | null;
   last_edited_by_name: string | null;
   blocks: ServicePlanBlock[];
+  linked_sermon_note: LinkedSermonNoteSummary | null;
 };
 
 export type PublicBroadcastAssignment = {
@@ -97,6 +110,7 @@ export type PublicServicePlanPayload = {
     preacher_name: string | null;
   };
   broadcast_assignments: PublicBroadcastAssignment[];
+  linked_sermon_note: LinkedSermonNoteSummary | null;
   blocks: Array<{
     id: number;
     order_index: number;
@@ -128,6 +142,7 @@ export type EditableServicePlanPayload = {
     music_ministry_name: string | null;
   };
   broadcast_assignments: PublicBroadcastAssignment[];
+  linked_sermon_note: LinkedSermonNoteSummary | null;
   blocks: Array<{
     id: number;
     block_type_id: number;

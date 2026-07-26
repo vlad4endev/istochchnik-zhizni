@@ -119,6 +119,10 @@ export interface SermonNoteListItem {
   service_plan_id: number | null;
   is_public: boolean;
   body_format: SermonNoteBodyFormat;
+  /** Дата служения привязанной программы (YYYY-MM-DD). */
+  plan_service_date: string | null;
+  plan_start_time: string | null;
+  plan_template_name: string | null;
 }
 
 export interface SermonNoteRow extends SermonNoteListItem {
@@ -138,8 +142,29 @@ export interface PublicSermonNote {
   author_name: string | null;
 }
 
+/** Краткая карточка конспекта для блока «Проповедь» в программе. */
+export interface LinkedSermonNoteSummary {
+  id: string;
+  title: string;
+  topic: string;
+  scripture: string;
+  member_id: number;
+  author_name: string | null;
+  is_public: boolean;
+  share_token: string | null;
+  updated_at: string;
+}
+
 function normalizeBodyFormat(raw: unknown): SermonNoteBodyFormat {
   return String(raw ?? '').toLowerCase() === 'html' ? 'html' : 'plain';
+}
+
+function toTimeHm(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  return `${m[1]!.padStart(2, '0')}:${m[2]}`;
 }
 
 function mapListRow(r: Record<string, unknown>): SermonNoteListItem {
@@ -155,6 +180,12 @@ function mapListRow(r: Record<string, unknown>): SermonNoteListItem {
     service_plan_id: planRaw == null || planRaw === '' ? null : Number(planRaw),
     is_public: Boolean(r.is_public),
     body_format: normalizeBodyFormat(r.body_format),
+    plan_service_date: r.plan_service_date == null ? null : String(r.plan_service_date),
+    plan_start_time: toTimeHm(r.plan_start_time),
+    plan_template_name:
+      r.plan_template_name == null || String(r.plan_template_name).trim() === ''
+        ? null
+        : String(r.plan_template_name).trim(),
   };
 }
 
@@ -167,14 +198,113 @@ function mapFullRow(r: Record<string, unknown>): SermonNoteRow {
   };
 }
 
+const NOTE_SELECT_WITH_PLAN = `
+  n.id, n.member_id, n.title, n.topic, n.scripture, n.body, n.body_format,
+  n.service_plan_id, n.is_public, n.share_token, n.share_token_issued_at,
+  n.created_at, n.updated_at,
+  p.service_date::text AS plan_service_date,
+  p.start_time AS plan_start_time,
+  t.name AS plan_template_name
+`;
+
+async function syncSermonBlocksFromNote(note: {
+  id: string;
+  service_plan_id: number | null;
+  topic: string;
+  scripture: string;
+  title: string;
+}): Promise<void> {
+  const planId = note.service_plan_id;
+  if (planId == null || !Number.isFinite(planId) || planId <= 0) return;
+
+  const planRes = await query(
+    `SELECT preacher_member_id,
+            COALESCE(
+              NULLIF(TRIM(CONCAT_WS(' ', pr.first_name, pr.last_name)), ''),
+              NULLIF(TRIM(pr.name), ''),
+              'Проповедник'
+            ) AS preacher_name
+     FROM public.service_plans p
+     LEFT JOIN public.members pr ON pr.id = p.preacher_member_id
+     WHERE p.id = $1
+     LIMIT 1`,
+    [planId],
+  );
+  const planRow = planRes.rows[0] as
+    | { preacher_member_id?: unknown; preacher_name?: unknown }
+    | undefined;
+  if (!planRow) return;
+
+  const preacherName = String(planRow.preacher_name ?? 'Проповедник').trim() || 'Проповедник';
+  const topic = note.topic.trim() || note.title.trim();
+  const scripture = note.scripture.trim();
+  const blockTitle = topic ? `${preacherName} - ${topic}` : preacherName;
+  const noteIdNum = Number(note.id);
+
+  await query(
+    `UPDATE public.service_blocks b
+     SET title = $2,
+         content_json = COALESCE(b.content_json, '{}'::jsonb)
+           || jsonb_build_object(
+                'sermon_topic', $3::text,
+                'sermon_scripture', $4::text,
+                'sermon_note_id', $5::bigint
+              )
+     FROM public.block_types bt
+     WHERE b.service_plan_id = $1
+       AND bt.id = b.block_type_id
+       AND (bt.code = 'sermon' OR lower(bt.name) LIKE '%проповед%')`,
+    [planId, blockTitle, topic, scripture, Number.isFinite(noteIdNum) ? noteIdNum : null],
+  );
+}
+
+export async function getLinkedSermonNoteForPlan(
+  planId: number,
+): Promise<LinkedSermonNoteSummary | null> {
+  await ensureSermonNotesSchema();
+  if (!Number.isFinite(planId) || planId <= 0) return null;
+  const result = await query(
+    `SELECT n.id, n.title, n.topic, n.scripture, n.member_id, n.is_public,
+            n.share_token::text AS share_token, n.updated_at::text AS updated_at,
+            COALESCE(
+              NULLIF(TRIM(CONCAT_WS(' ', m.first_name, m.last_name)), ''),
+              NULLIF(TRIM(m.name), '')
+            ) AS author_name
+     FROM public.sermon_notes n
+     LEFT JOIN public.members m ON m.id = n.member_id
+     LEFT JOIN public.service_plans p ON p.id = n.service_plan_id
+     WHERE n.service_plan_id = $1
+     ORDER BY
+       CASE WHEN p.preacher_member_id IS NOT NULL AND n.member_id = p.preacher_member_id THEN 0 ELSE 1 END,
+       n.updated_at DESC
+     LIMIT 1`,
+    [planId],
+  );
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+  const isPublic = Boolean(row.is_public);
+  return {
+    id: String(row.id),
+    title: String(row.title ?? ''),
+    topic: String(row.topic ?? ''),
+    scripture: String(row.scripture ?? ''),
+    member_id: Number(row.member_id),
+    author_name: row.author_name != null ? String(row.author_name) : null,
+    is_public: isPublic,
+    share_token: isPublic && row.share_token != null ? String(row.share_token) : null,
+    updated_at: String(row.updated_at ?? ''),
+  };
+}
+
 export async function listSermonNotes(memberId: number): Promise<SermonNoteListItem[]> {
   await ensureSermonNotesSchema();
   const result = await query(
-    `SELECT id, member_id, title, topic, scripture, service_plan_id, created_at, updated_at,
-            is_public, body_format
-     FROM sermon_notes
-     WHERE member_id = $1
-     ORDER BY updated_at DESC`,
+    `SELECT ${NOTE_SELECT_WITH_PLAN}
+     FROM sermon_notes n
+     LEFT JOIN public.service_plans p ON p.id = n.service_plan_id
+     LEFT JOIN public.service_templates t ON t.id = p.template_id
+     WHERE n.member_id = $1
+     ORDER BY n.updated_at DESC`,
     [memberId],
   );
   return result.rows.map((row) => mapListRow(row as Record<string, unknown>));
@@ -186,7 +316,11 @@ export async function getSermonNote(
 ): Promise<SermonNoteRow | null> {
   await ensureSermonNotesSchema();
   const result = await query(
-    `SELECT * FROM sermon_notes WHERE id = $1 AND member_id = $2`,
+    `SELECT ${NOTE_SELECT_WITH_PLAN}
+     FROM sermon_notes n
+     LEFT JOIN public.service_plans p ON p.id = n.service_plan_id
+     LEFT JOIN public.service_templates t ON t.id = p.template_id
+     WHERE n.id = $1 AND n.member_id = $2`,
     [noteId, memberId],
   );
   const row = result.rows[0] as Record<string, unknown> | undefined;
@@ -201,6 +335,7 @@ export async function createSermonNote(
     scripture?: string;
     body?: string;
     body_format?: SermonNoteBodyFormat;
+    service_plan_id?: number | null;
   } = {},
 ): Promise<SermonNoteRow> {
   await ensureSermonNotesSchema();
@@ -209,13 +344,33 @@ export async function createSermonNote(
   const scripture = typeof input.scripture === 'string' ? input.scripture.trim() : '';
   const body = typeof input.body === 'string' ? input.body : '';
   const bodyFormat: SermonNoteBodyFormat = input.body_format === 'html' ? 'html' : 'html';
+  let planId: number | null = null;
+  if (input.service_plan_id !== undefined) {
+    if (input.service_plan_id == null) planId = null;
+    else if (Number.isInteger(input.service_plan_id) && input.service_plan_id > 0) {
+      planId = input.service_plan_id;
+    }
+  }
+  if (planId != null) {
+    await query(
+      `UPDATE sermon_notes SET service_plan_id = NULL, updated_at = NOW()
+       WHERE member_id = $1 AND service_plan_id = $2`,
+      [memberId, planId],
+    );
+  }
   const result = await query(
-    `INSERT INTO sermon_notes (member_id, title, topic, scripture, body, body_format, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, NOW())
-     RETURNING *`,
-    [memberId, title, topic, scripture, body, bodyFormat],
+    `INSERT INTO sermon_notes (member_id, title, topic, scripture, body, body_format, service_plan_id, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+     RETURNING id`,
+    [memberId, title, topic, scripture, body, bodyFormat, planId],
   );
-  return mapFullRow(result.rows[0] as Record<string, unknown>);
+  const id = Number((result.rows[0] as { id: unknown }).id);
+  const created = await getSermonNote(memberId, id);
+  if (!created) throw new Error('Failed to load created sermon note');
+  if (created.service_plan_id != null) {
+    await syncSermonBlocksFromNote(created);
+  }
+  return created;
 }
 
 export async function updateSermonNote(
@@ -227,6 +382,7 @@ export async function updateSermonNote(
     scripture?: string;
     body?: string;
     body_format?: SermonNoteBodyFormat;
+    service_plan_id?: number | null;
   },
 ): Promise<SermonNoteRow | null> {
   await ensureSermonNotesSchema();
@@ -245,17 +401,44 @@ export async function updateSermonNote(
   if (input.body_format !== undefined) {
     push('body_format', input.body_format === 'html' ? 'html' : 'plain');
   }
+  if (input.service_plan_id !== undefined) {
+    const planId =
+      input.service_plan_id == null
+        ? null
+        : Number.isInteger(input.service_plan_id) && input.service_plan_id > 0
+          ? input.service_plan_id
+          : null;
+    if (planId != null) {
+      await query(
+        `UPDATE sermon_notes SET service_plan_id = NULL, updated_at = NOW()
+         WHERE member_id = $1 AND service_plan_id = $2 AND id <> $3`,
+        [memberId, planId, noteId],
+      );
+    }
+    push('service_plan_id', planId);
+  }
   if (fields.length === 0) {
     return getSermonNote(memberId, noteId);
   }
   fields.push('updated_at = NOW()');
   vals.push(noteId, memberId);
   const result = await query(
-    `UPDATE sermon_notes SET ${fields.join(', ')} WHERE id = $${n + 1} AND member_id = $${n + 2} RETURNING *`,
+    `UPDATE sermon_notes SET ${fields.join(', ')} WHERE id = $${n + 1} AND member_id = $${n + 2} RETURNING id`,
     vals,
   );
-  const row = result.rows[0] as Record<string, unknown> | undefined;
-  return row ? mapFullRow(row) : null;
+  if (!result.rows[0]) return null;
+  const updated = await getSermonNote(memberId, noteId);
+  if (
+    updated &&
+    updated.service_plan_id != null &&
+    (input.service_plan_id !== undefined ||
+      input.topic !== undefined ||
+      input.scripture !== undefined ||
+      input.title !== undefined)
+  ) {
+    await syncSermonBlocksFromNote(updated);
+  }
+  return updated;
 }
 
 export async function deleteSermonNote(memberId: number, noteId: number): Promise<boolean> {
@@ -286,11 +469,11 @@ export async function updateSermonNoteShare(
          END,
          updated_at = NOW()
      WHERE id = $2 AND member_id = $3
-     RETURNING *`,
+     RETURNING id`,
     [input.is_public, noteId, memberId, Boolean(input.rotate_token)],
   );
-  const row = result.rows[0] as Record<string, unknown> | undefined;
-  return row ? mapFullRow(row) : null;
+  if (!result.rows[0]) return null;
+  return getSermonNote(memberId, noteId);
 }
 
 export async function getPublicSermonNoteByToken(token: string): Promise<PublicSermonNote | null> {

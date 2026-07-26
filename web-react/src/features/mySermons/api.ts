@@ -15,6 +15,9 @@ export interface SermonNoteListItem {
   service_plan_id: number | null;
   is_public: boolean;
   body_format: SermonNoteBodyFormat;
+  plan_service_date: string | null;
+  plan_start_time: string | null;
+  plan_template_name: string | null;
 }
 
 export interface SermonNote extends SermonNoteListItem {
@@ -50,6 +53,7 @@ export async function createSermonNote(input?: {
   scripture?: string;
   body?: string;
   body_format?: SermonNoteBodyFormat;
+  service_plan_id?: number | null;
 }): Promise<SermonNote> {
   const { data } = await apiClient.post<SermonNote>(BASE, {
     body_format: 'html',
@@ -66,6 +70,7 @@ export async function updateSermonNote(
     scripture?: string;
     body?: string;
     body_format?: SermonNoteBodyFormat;
+    service_plan_id?: number | null;
   },
 ): Promise<SermonNote> {
   const { data } = await apiClient.patch<SermonNote>(`${BASE}/${id}`, patch);
@@ -96,4 +101,16 @@ export function sermonNoteSharePath(token: string): string {
 export function sermonNoteShareUrl(token: string): string {
   if (typeof window === 'undefined') return sermonNoteSharePath(token);
   return `${window.location.origin}${sermonNoteSharePath(token)}`;
+}
+
+export function formatPlanServiceDate(isoDate: string | null | undefined): string {
+  if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return '';
+  const d = new Date(`${isoDate}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return isoDate;
+  return new Intl.DateTimeFormat('ru-RU', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(d);
 }

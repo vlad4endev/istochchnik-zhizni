@@ -23,6 +23,7 @@ import {
   type PublicServicePlanPayload,
 } from '../api';
 import { BlockStageSetupPreview } from '../components/BlockStageSetupFields';
+import { LinkedSermonNoteCard } from '../components/LinkedSermonNoteCard';
 import { ShareBroadcastTeamPanel } from '../components/ShareBroadcastTeamPanel';
 import { SharePlanBackBar } from '../components/SharePlanBackBar';
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
@@ -336,6 +337,7 @@ export function PublicServicePlanPage() {
     return <EditableServicePlanPage />;
   }
   const broadcastAssignments = q.data.broadcast_assignments ?? [];
+  const linkedSermonNote = q.data.linked_sermon_note ?? null;
   const dateText = new Intl.DateTimeFormat('ru-RU', {
     day: 'numeric',
     month: 'long',
@@ -486,6 +488,9 @@ export function PublicServicePlanPage() {
                       <p className="mt-0 text-xs leading-snug text-stone-600 sm:mt-0.5 sm:text-sm">
                         Писание: {m.sermonScripture}
                       </p>
+                    ) : null}
+                    {m.sermon && linkedSermonNote ? (
+                      <LinkedSermonNoteCard note={linkedSermonNote} className="mt-1.5" />
                     ) : null}
                     {m.birthdays ? (
                       m.birthdaysList.length > 0 ? (

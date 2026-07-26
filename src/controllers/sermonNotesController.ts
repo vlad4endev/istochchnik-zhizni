@@ -43,13 +43,26 @@ export async function sermonNotesCreate(req: Request, res: Response): Promise<vo
       scripture?: string;
       body?: string;
       body_format?: string;
+      service_plan_id?: unknown;
     };
+    let servicePlanId: number | null | undefined;
+    if (payload.service_plan_id === null) servicePlanId = null;
+    else if (
+      typeof payload.service_plan_id === 'number' &&
+      Number.isInteger(payload.service_plan_id) &&
+      payload.service_plan_id > 0
+    ) {
+      servicePlanId = payload.service_plan_id;
+    } else if (typeof payload.service_plan_id === 'string' && /^\d+$/.test(payload.service_plan_id)) {
+      servicePlanId = Number(payload.service_plan_id);
+    }
     const note = await createSermonNote(r.authUserId!, {
       title: typeof payload.title === 'string' ? payload.title : undefined,
       topic: typeof payload.topic === 'string' ? payload.topic : undefined,
       scripture: typeof payload.scripture === 'string' ? payload.scripture : undefined,
       body: typeof payload.body === 'string' ? payload.body : undefined,
       body_format: payload.body_format === 'plain' ? 'plain' : 'html',
+      service_plan_id: servicePlanId,
     });
     res.status(201).json(note);
   } catch (e) {
@@ -94,6 +107,7 @@ export async function sermonNotesUpdate(req: Request, res: Response): Promise<vo
       scripture?: string;
       body?: string;
       body_format?: string;
+      service_plan_id?: unknown;
     };
     const patch: {
       title?: string;
@@ -101,6 +115,7 @@ export async function sermonNotesUpdate(req: Request, res: Response): Promise<vo
       scripture?: string;
       body?: string;
       body_format?: 'plain' | 'html';
+      service_plan_id?: number | null;
     } = {};
     if (typeof payload.title === 'string') patch.title = payload.title;
     if (typeof payload.topic === 'string') patch.topic = payload.topic;
@@ -108,6 +123,17 @@ export async function sermonNotesUpdate(req: Request, res: Response): Promise<vo
     if (typeof payload.body === 'string') patch.body = payload.body;
     if (payload.body_format === 'plain' || payload.body_format === 'html') {
       patch.body_format = payload.body_format;
+    }
+    if (payload.service_plan_id === null) {
+      patch.service_plan_id = null;
+    } else if (
+      typeof payload.service_plan_id === 'number' &&
+      Number.isInteger(payload.service_plan_id) &&
+      payload.service_plan_id > 0
+    ) {
+      patch.service_plan_id = payload.service_plan_id;
+    } else if (typeof payload.service_plan_id === 'string' && /^\d+$/.test(payload.service_plan_id)) {
+      patch.service_plan_id = Number(payload.service_plan_id);
     }
     const updated = await updateSermonNote(r.authUserId!, id, patch);
     if (!updated) {

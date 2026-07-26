@@ -81,6 +81,7 @@ import { emitAppToast } from '@/lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { BlockStageSetupFields, BlockStageSetupPreview } from '../components/BlockStageSetupFields';
 import { DurationMinutesInput } from '../components/DurationMinutesInput';
+import { LinkedSermonNoteCard } from '../components/LinkedSermonNoteCard';
 import { ServicePlannerMemberPicker } from '../components/ServicePlannerMemberPicker';
 import { ServicePlannerSongPicker } from '../components/ServicePlannerSongPicker';
 import { stageSetupProgramLines } from '../stageSetupFlags';
@@ -3156,6 +3157,17 @@ export function ServicePlannerPage() {
                                   Писание: {sermonScripture(block)}
                                 </p>
                               ) : null}
+                              {!isSeparatorBlock(block) && isSermonBlock(block) && draft?.linked_sermon_note ? (
+                                <LinkedSermonNoteCard
+                                  note={draft.linked_sermon_note}
+                                  compact
+                                  canOpenEditor={
+                                    authMemberId != null &&
+                                    draft.linked_sermon_note.member_id === authMemberId
+                                  }
+                                  className="mt-1"
+                                />
+                              ) : null}
                               {!isSeparatorBlock(block) ? (
                                 <BlockStageSetupPreview contentJson={block.content_json} />
                               ) : null}
@@ -3646,6 +3658,22 @@ export function ServicePlannerPage() {
                         className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
                         placeholder="Стихи из Библии"
                       />
+                      {draft?.linked_sermon_note ? (
+                        <div className="sm:col-span-2">
+                          <LinkedSermonNoteCard
+                            note={draft.linked_sermon_note}
+                            canOpenEditor={
+                              authMemberId != null &&
+                              draft.linked_sermon_note.member_id === authMemberId
+                            }
+                          />
+                        </div>
+                      ) : (
+                        <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-2 py-2 text-xs text-stone-600 sm:col-span-2">
+                          Чтобы показать конспект здесь, откройте «Мои проповеди» и привяжите документ к
+                          этой программе служения.
+                        </p>
+                      )}
                     </>
                   ) : null}
                   {(blockTypes.find((t) => t.id === editingBlock.block_type_id)?.kind ?? 'custom') === 'song' ? (
