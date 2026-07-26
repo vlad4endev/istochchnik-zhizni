@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
+import { sermonAttachmentUploadMiddleware } from '../middleware/sermonAttachmentUpload';
 import {
   deleteServiceBlockById,
   deleteServicePlanById,
@@ -21,6 +22,7 @@ import {
   runSermonFeedbackNotificationTick,
   postServicePlan,
   postServiceTemplate,
+  uploadServicePlanSermonAttachment,
 } from '../controllers/servicePlannerController';
 
 const router = Router();
@@ -38,6 +40,12 @@ router.get('/service-plans/:id', requireAuthSession, getServicePlanById);
 router.post('/service-plans', requireAuthSession, postServicePlan);
 router.patch('/service-plans/:id', requireAuthSession, patchServicePlanById);
 router.delete('/service-plans/:id', requireAuthSession, deleteServicePlanById);
+router.post(
+  '/service-plans/sermon-attachment',
+  requireAuthSession,
+  sermonAttachmentUploadMiddleware,
+  uploadServicePlanSermonAttachment,
+);
 
 router.patch('/service-blocks/reorder', requireAuthSession, patchServiceBlocksReorder);
 router.post('/service-blocks', requireAuthSession, postServiceBlock);

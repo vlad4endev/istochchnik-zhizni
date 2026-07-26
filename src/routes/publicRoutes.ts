@@ -7,8 +7,10 @@ import {
   getPublicSermonNote,
   getPublicSetlist,
   patchEditableServicePlanBlock,
+  uploadEditableServicePlanSermonAttachment,
 } from '../controllers/publicController';
 import { createIpRateLimiter } from '../middleware/rateLimit';
+import { sermonAttachmentUploadMiddleware } from '../middleware/sermonAttachmentUpload';
 
 const router = Router();
 const publicTokenRateLimit = createIpRateLimiter({
@@ -29,6 +31,12 @@ router.get('/sermon-notes/:token', publicTokenRateLimit, getPublicSermonNote);
 router.get('/service-plans/:token', publicTokenRateLimit, getPublicServicePlan);
 router.get('/service-plans-edit/:token', publicEditableTokenRateLimit, getEditableServicePlan);
 router.get('/service-plans-edit/:token/meta', publicEditableTokenRateLimit, getEditableServicePlanMeta);
+router.post(
+  '/service-plans-edit/:token/sermon-attachment',
+  publicEditableTokenRateLimit,
+  sermonAttachmentUploadMiddleware,
+  uploadEditableServicePlanSermonAttachment,
+);
 router.patch('/service-plans-edit/:token/blocks/:blockId', publicEditableTokenRateLimit, patchEditableServicePlanBlock);
 
 export default router;

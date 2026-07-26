@@ -3,6 +3,7 @@ import { query } from '../config/db';
 import { notifyRealtime } from '../realtime/notify';
 import { syncAndNotifySetlistFromPublishedPlan } from '../services/plannerSetlistService';
 import { sendPush } from '../services/pushService';
+import { storeSermonAttachmentFile } from '../services/sermonAttachmentUploadService';
 import { listUsers } from '../services/userService';
 import {
   createPlan,
@@ -1009,4 +1010,24 @@ export async function deleteServicePlanById(req: Request, res: Response): Promis
     console.error('[service-planner] deleteServicePlanById:', e);
     res.status(500).json({ error: 'Не удалось удалить план' });
   }
+}
+
+/** Загрузка файла (презентации) для блока «Проповедь» — URL затем сохраняется в content_json.sermon_attachments. */
+export async function uploadServicePlanSermonAttachment(req: Request, res: Response): Promise<void> {
+  if (!(await ensurePlannerBlockEditor(req, res))) return;
+  const file = (req as Request & { file?: Express.Multer.File }).file;
+  if (!file) {
+    res.status(400).json({ error: 'Файл обязателен' });
+    return;
+  }
+  const result = await storeSermonAttachmentFile(file);
+  if (!result.ok) {
+    res.status(result.status).json({
+      error: result.error,
+      ...(result.code ? { code: result.code } : {}),
+      ...(result.missingEnv ? { missingEnv: result.missingEnv } : {}),
+    });
+    return;
+  }
+  res.json({ attachment: result.attachment });
 }

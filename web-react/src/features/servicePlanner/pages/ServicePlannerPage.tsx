@@ -64,6 +64,7 @@ import {
   patchServicePlan,
   patchServiceTemplate,
   reorderServiceBlocks,
+  uploadServicePlanSermonAttachment,
   type ServicePlanBlock,
   type ServicePlanDetails,
   type ServiceTemplateDetails,
@@ -76,12 +77,17 @@ import {
   resolveServicePlanPdfFontPx,
   type ServicePlanPrintRow,
 } from '../servicePlanPrintSheet';
+import { parseSermonAttachments } from '../sermonAttachments';
 import { useServicePlanEditorsPresence } from '../useServicePlanEditorsPresence';
 import { emitAppToast } from '@/lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { BlockStageSetupFields, BlockStageSetupPreview } from '../components/BlockStageSetupFields';
 import { DurationMinutesInput } from '../components/DurationMinutesInput';
 import { LinkedSermonNoteCard } from '../components/LinkedSermonNoteCard';
+import {
+  SermonAttachmentsLinks,
+  SermonAttachmentsPanel,
+} from '../components/SermonAttachmentsPanel';
 import { ServicePlannerMemberPicker } from '../components/ServicePlannerMemberPicker';
 import { ServicePlannerSongPicker } from '../components/ServicePlannerSongPicker';
 import { stageSetupProgramLines } from '../stageSetupFlags';
@@ -1174,6 +1180,11 @@ export function ServicePlannerPage() {
       }
       if (isSermonBlock(block) && sermonScripture(block)) {
         details.push(`Писание: ${sermonScripture(block)}`);
+      }
+      if (isSermonBlock(block)) {
+        for (const file of parseSermonAttachments(block.content_json)) {
+          details.push(`Файл: ${file.name}`);
+        }
       }
       for (const line of stageSetupProgramLines(block.content_json)) {
         details.push(line);
@@ -3168,6 +3179,9 @@ export function ServicePlannerPage() {
                                   className="mt-1"
                                 />
                               ) : null}
+                              {!isSeparatorBlock(block) && isSermonBlock(block) ? (
+                                <SermonAttachmentsLinks contentJson={block.content_json} className="mt-0.5" />
+                              ) : null}
                               {!isSeparatorBlock(block) ? (
                                 <BlockStageSetupPreview contentJson={block.content_json} />
                               ) : null}
@@ -3674,6 +3688,12 @@ export function ServicePlannerPage() {
                           этой программе служения.
                         </p>
                       )}
+                      <SermonAttachmentsPanel
+                        className="sm:col-span-2"
+                        contentJson={editingBlock.content_json ?? {}}
+                        onChange={(content_json) => updateDraftBlock(editingBlock.id, { content_json })}
+                        onUploadFile={uploadServicePlanSermonAttachment}
+                      />
                     </>
                   ) : null}
                   {(blockTypes.find((t) => t.id === editingBlock.block_type_id)?.kind ?? 'custom') === 'song' ? (

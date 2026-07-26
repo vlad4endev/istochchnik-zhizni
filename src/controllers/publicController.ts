@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 
 import { notifyRealtime } from '../realtime/notify';
 import { getPublicSetlistByToken } from '../services/studioService';
+import { storeSermonAttachmentFile } from '../services/sermonAttachmentUploadService';
 import { getPublicSermonNoteByToken } from '../services/sermonNotesService';
 import {
   getEditablePlanMetaByToken,
@@ -82,6 +83,43 @@ export async function getEditableServicePlanMeta(req: Request, res: Response): P
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Ошибка' });
+  }
+}
+
+/** Загрузка файла проповеди по edit-токену (совместное редактирование по ссылке). */
+export async function uploadEditableServicePlanSermonAttachment(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const token = typeof req.params.token === 'string' ? req.params.token.trim() : '';
+    if (!token) {
+      res.status(400).json({ error: 'Токен не указан' });
+      return;
+    }
+    const plan = await getEditablePlanByToken(token);
+    if (!plan) {
+      res.status(404).json({ error: 'Программа не найдена или ссылка недействительна' });
+      return;
+    }
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) {
+      res.status(400).json({ error: 'Файл обязателен' });
+      return;
+    }
+    const result = await storeSermonAttachmentFile(file);
+    if (!result.ok) {
+      res.status(result.status).json({
+        error: result.error,
+        ...(result.code ? { code: result.code } : {}),
+        ...(result.missingEnv ? { missingEnv: result.missingEnv } : {}),
+      });
+      return;
+    }
+    res.json({ attachment: result.attachment });
+  } catch (e) {
+    console.error('[public] sermon-attachment upload:', e);
+    res.status(500).json({ error: 'Не удалось загрузить файл' });
   }
 }
 
