@@ -15,6 +15,7 @@ import {
 } from '../api';
 import { bodyToEditorHtml } from '../bodyContent';
 import { SermonDocEditor } from '../components/SermonDocEditor';
+import { ServicePlanLinkPicker } from '../components/ServicePlanLinkPicker';
 import { ShareSermonNoteModal } from '../components/ShareSermonNoteModal';
 
 const AUTOSAVE_MS = 700;
@@ -111,6 +112,22 @@ export function SermonNoteEditorPage() {
     onError: () => emitAppToast('Не удалось удалить', 'error'),
   });
 
+  const linkPlanMut = useMutation({
+    mutationFn: (service_plan_id: number | null) => updateSermonNote(noteId, { service_plan_id }),
+    onSuccess: (updated) => {
+      void qc.setQueryData(keys.sermonNote(noteId), updated);
+      void qc.invalidateQueries({ queryKey: keys.sermonNotes });
+      void qc.invalidateQueries({ queryKey: ['service-planner'] });
+      emitAppToast(
+        updated.service_plan_id
+          ? 'Документ привязан к программе служения'
+          : 'Привязка к программе снята',
+        'success',
+      );
+    },
+    onError: () => emitAppToast('Не удалось обновить привязку', 'error'),
+  });
+
   const note = noteQ.data;
   const saveLabel = useMemo(() => {
     if (saveState === 'saving') return 'Сохранение…';
@@ -198,6 +215,22 @@ export function SermonNoteEditorPage() {
                 onChange={(e) => setDraft((d) => (d ? { ...d, scripture: e.target.value } : d))}
                 placeholder="Писание (например, Иоанна 3:16)"
                 className="w-full rounded-lg border border-transparent bg-stone-50 px-3 py-2 text-sm text-stone-700 outline-none ring-primary/25 placeholder:text-stone-400 focus:border-stone-200 focus:bg-white focus:ring-2"
+              />
+            </div>
+            <div className="mt-3">
+              <ServicePlanLinkPicker
+                value={note?.service_plan_id ?? null}
+                selectedLabel={
+                  note?.service_plan_id
+                    ? {
+                        service_date: note.plan_service_date,
+                        start_time: note.plan_start_time,
+                        template_name: note.plan_template_name,
+                      }
+                    : null
+                }
+                onChange={(planId) => linkPlanMut.mutate(planId)}
+                disabled={linkPlanMut.isPending || !note}
               />
             </div>
             <div className="mt-4 flex-1 border-t border-stone-100 pt-3">

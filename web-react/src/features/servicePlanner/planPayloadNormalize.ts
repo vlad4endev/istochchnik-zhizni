@@ -1,6 +1,12 @@
 import { parse } from 'date-fns';
 
-import type { EditableServicePlanMetaPayload, EditableServicePlanPayload, PublicBroadcastAssignment, PublicServicePlanPayload } from './api';
+import type {
+  EditableServicePlanMetaPayload,
+  EditableServicePlanPayload,
+  LinkedSermonNoteSummary,
+  PublicBroadcastAssignment,
+  PublicServicePlanPayload,
+} from './api';
 
 type PlannerBlockKind = EditableServicePlanMetaPayload['block_types'][number]['kind'];
 
@@ -39,6 +45,24 @@ function normalizeBroadcastAssignments(raw: unknown): PublicBroadcastAssignment[
     .filter((x): x is PublicBroadcastAssignment => x != null);
 }
 
+function normalizeLinkedSermonNote(raw: unknown): LinkedSermonNoteSummary | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const item = raw as Record<string, unknown>;
+  const id = item.id == null ? '' : String(item.id);
+  if (!id) return null;
+  return {
+    id,
+    title: typeof item.title === 'string' ? item.title : '',
+    topic: typeof item.topic === 'string' ? item.topic : '',
+    scripture: typeof item.scripture === 'string' ? item.scripture : '',
+    member_id: Number(item.member_id) || 0,
+    author_name: item.author_name == null ? null : String(item.author_name),
+    is_public: Boolean(item.is_public),
+    share_token: item.share_token == null || item.share_token === '' ? null : String(item.share_token),
+    updated_at: typeof item.updated_at === 'string' ? item.updated_at : '',
+  };
+}
+
 export function normalizePublicServicePlanPayload(raw: PublicServicePlanPayload): PublicServicePlanPayload {
   const plan = raw?.plan ?? ({} as PublicServicePlanPayload['plan']);
   const blocks = Array.isArray(raw?.blocks) ? raw.blocks : [];
@@ -58,6 +82,9 @@ export function normalizePublicServicePlanPayload(raw: PublicServicePlanPayload)
       preacher_name: plan.preacher_name == null ? null : String(plan.preacher_name),
     },
     broadcast_assignments: normalizeBroadcastAssignments(raw?.broadcast_assignments),
+    linked_sermon_note: normalizeLinkedSermonNote(
+      (raw as PublicServicePlanPayload | undefined)?.linked_sermon_note,
+    ),
     blocks: blocks.map((b) => ({
       ...b,
       id: Number(b.id) || 0,
@@ -96,6 +123,9 @@ export function normalizeEditableServicePlanPayload(raw: EditableServicePlanPayl
       music_ministry_name: plan.music_ministry_name == null ? null : String(plan.music_ministry_name),
     },
     broadcast_assignments: normalizeBroadcastAssignments(raw?.broadcast_assignments),
+    linked_sermon_note: normalizeLinkedSermonNote(
+      (raw as EditableServicePlanPayload | undefined)?.linked_sermon_note,
+    ),
     blocks: blocks.map((b) => ({
       ...b,
       id: Number(b.id) || 0,

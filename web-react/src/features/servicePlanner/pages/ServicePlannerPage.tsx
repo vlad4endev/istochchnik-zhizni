@@ -83,6 +83,7 @@ import { emitAppToast } from '@/lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { BlockStageSetupFields, BlockStageSetupPreview } from '../components/BlockStageSetupFields';
 import { DurationMinutesInput } from '../components/DurationMinutesInput';
+import { LinkedSermonNoteCard } from '../components/LinkedSermonNoteCard';
 import {
   SermonAttachmentsLinks,
   SermonAttachmentsPanel,
@@ -3167,6 +3168,17 @@ export function ServicePlannerPage() {
                                   Писание: {sermonScripture(block)}
                                 </p>
                               ) : null}
+                              {!isSeparatorBlock(block) && isSermonBlock(block) && draft?.linked_sermon_note ? (
+                                <LinkedSermonNoteCard
+                                  note={draft.linked_sermon_note}
+                                  compact
+                                  canOpenEditor={
+                                    authMemberId != null &&
+                                    draft.linked_sermon_note.member_id === authMemberId
+                                  }
+                                  className="mt-1"
+                                />
+                              ) : null}
                               {!isSeparatorBlock(block) && isSermonBlock(block) ? (
                                 <SermonAttachmentsLinks contentJson={block.content_json} className="mt-0.5" />
                               ) : null}
@@ -3660,6 +3672,22 @@ export function ServicePlannerPage() {
                         className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
                         placeholder="Стихи из Библии"
                       />
+                      {draft?.linked_sermon_note ? (
+                        <div className="sm:col-span-2">
+                          <LinkedSermonNoteCard
+                            note={draft.linked_sermon_note}
+                            canOpenEditor={
+                              authMemberId != null &&
+                              draft.linked_sermon_note.member_id === authMemberId
+                            }
+                          />
+                        </div>
+                      ) : (
+                        <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-2 py-2 text-xs text-stone-600 sm:col-span-2">
+                          Чтобы показать конспект здесь, откройте «Мои проповеди» и привяжите документ к
+                          этой программе служения.
+                        </p>
+                      )}
                       <SermonAttachmentsPanel
                         className="sm:col-span-2"
                         contentJson={editingBlock.content_json ?? {}}

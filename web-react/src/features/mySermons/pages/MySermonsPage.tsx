@@ -8,7 +8,12 @@ import { keys } from '@/lib/queryKeys';
 import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
 import { emitAppToast } from '@/lib/uiFeedback';
 
-import { createSermonNote, fetchSermonNotes, type SermonNoteListItem } from '../api';
+import {
+  createSermonNote,
+  fetchSermonNotes,
+  formatPlanServiceDate,
+  type SermonNoteListItem,
+} from '../api';
 
 function formatUpdatedAt(iso: string): string {
   const d = new Date(iso);
@@ -145,6 +150,17 @@ export function MySermonsPage() {
                     ) : null}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-stone-500">
+                    {note.service_plan_id && note.plan_service_date ? (
+                      <span className="truncate font-medium text-[#6B2D3E]">
+                        {[
+                          formatPlanServiceDate(note.plan_service_date),
+                          note.plan_start_time?.slice(0, 5),
+                          note.plan_template_name?.trim(),
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    ) : null}
                     {note.scripture.trim() ? <span className="truncate">{note.scripture.trim()}</span> : null}
                     {note.topic.trim() && note.topic.trim() !== note.title.trim() ? (
                       <span className="truncate">{note.topic.trim()}</span>
