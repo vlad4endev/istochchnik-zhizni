@@ -80,10 +80,10 @@ function dedupeMessages(messages: MessageWithSender[]): MessageWithSender[] {
         chosen = msg;
       }
     }
-    canonicalByClient.set(ckRaw, chosen);
+    canonicalByClient.set(ckRaw, mergeSameIdMessage(prev, chosen));
   }
 
-  const byId = new Set<string>();
+  const byId = new Map<string, number>();
   const out: MessageWithSender[] = [];
   for (const msg of messages) {
     const idKey = String(msg.id);
@@ -92,11 +92,23 @@ function dedupeMessages(messages: MessageWithSender[]): MessageWithSender[] {
       const canonical = canonicalByClient.get(ckRaw);
       if (canonical && msg !== canonical) continue;
     }
-    if (byId.has(idKey)) continue;
-    byId.add(idKey);
+    const existingIdx = byId.get(idKey);
+    if (existingIdx !== undefined) {
+      out[existingIdx] = mergeSameIdMessage(out[existingIdx], msg);
+      continue;
+    }
+    byId.set(idKey, out.length);
     out.push(msg);
   }
   return out;
+}
+
+function mergeSameIdMessage(prev: MessageWithSender, next: MessageWithSender): MessageWithSender {
+  const deleted = Boolean(prev.is_deleted) || Boolean(next.is_deleted);
+  if (deleted) {
+    return { ...next, is_deleted: true, content: '' };
+  }
+  return next;
 }
 
 function moveConversationToTop(
