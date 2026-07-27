@@ -11,6 +11,19 @@ import { loadNotificationSettings } from './notificationSettingsService';
 import { formatYmdInTimeZone, getZonedNow } from '../utils/zonedTime';
 import { getMemberAssignmentsForWeek, getPrayerDataByDate, type PrayerPlanSections } from './calendarService';
 
+export interface TelegramProxyStatus {
+  /** Включено ли использование прокси из настроек проекта (БД) */
+  enabled: boolean;
+  /** Маскированный URL активного прокси (БД или env) */
+  url_masked: string | null;
+  /** Есть ли сохранённый URL в БД */
+  has_url: boolean;
+  /** Откуда сейчас берётся прокси для исходящих запросов */
+  active_source: 'db' | 'env' | null;
+  /** Env TELEGRAM_HTTPS_PROXY / HTTPS_PROXY / HTTP_PROXY задан (fallback) */
+  env_configured: boolean;
+}
+
 export interface TelegramSettings {
   enabled: boolean;
   bot_token_masked: string | null;
@@ -19,6 +32,7 @@ export interface TelegramSettings {
   default_chat_id: string | null;
   prayer_template: string | null;
   has_bot_token: boolean;
+  proxy: TelegramProxyStatus;
 }
 
 export interface TelegramDispatchRecipient {
@@ -64,6 +78,13 @@ export interface TelegramSettingsUpdate {
   coordinator_chat_id?: string | null;
   default_chat_id?: string | null;
   prayer_template?: string | null;
+  /** Включить исходящий HTTPS-прокси для всех запросов к api.telegram.org */
+  proxy_enabled?: boolean;
+  /**
+   * URL прокси, напр. http://user:pass@host:8080.
+   * undefined — не менять; null — очистить; строка — сохранить.
+   */
+  proxy_url?: string | null;
 }
 
 type TelegramPurpose = 'prayer' | 'coordinator' | 'default';
@@ -80,6 +101,54 @@ function maskBotToken(raw: string | null): string | null {
   if (!raw) return null;
   if (raw.length <= 10) return '********';
   return `${raw.slice(0, 6)}...${raw.slice(-4)}`;
+}
+
+/** Скрывает пароль в URL прокси для ответа API */
+function maskProxyUrl(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    if (u.password) {
+      u.password = '***';
+    }
+    return u.toString();
+  } catch {
+    if (raw.length <= 12) return '********';
+    return `${raw.slice(0, 8)}…`;
+  }
+}
+
+function getEnvTelegramProxyUrl(): string | null {
+  return (
+    normalizeOptionalString(process.env.TELEGRAM_HTTPS_PROXY) ??
+    normalizeOptionalString(process.env.HTTPS_PROXY) ??
+    normalizeOptionalString(process.env.HTTP_PROXY)
+  );
+}
+
+/**
+ * Нормализует и валидирует URL HTTP(S)-прокси для undici ProxyAgent.
+ * SOCKS не поддерживается — используйте HTTP CONNECT / HTTPS-прокси.
+ */
+function normalizeAndValidateProxyUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error('telegram_proxy_url_invalid');
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error('telegram_proxy_url_invalid');
+  }
+  const protocol = parsed.protocol.toLowerCase();
+  if (protocol !== 'http:' && protocol !== 'https:') {
+    throw new Error('telegram_proxy_protocol_unsupported');
+  }
+  if (!parsed.hostname) {
+    throw new Error('telegram_proxy_url_invalid');
+  }
+  return trimmed;
 }
 
 /** Bot tokens are ASCII; remove accidental spaces/newlines from paste */
@@ -122,41 +191,164 @@ function isTransientTelegramFetchFailure(e: unknown): boolean {
   );
 }
 
-/** Только для Telegram API: TELEGRAM_HTTPS_PROXY приоритетнее HTTPS_PROXY/HTTP_PROXY */
-let telegramProxyAgent: ProxyAgent | null | undefined;
+/**
+ * Исходящий прокси только для Telegram API.
+ * Приоритет: настройки проекта (БД) → TELEGRAM_HTTPS_PROXY → HTTPS_PROXY → HTTP_PROXY.
+ */
+type TelegramProxyResolution = {
+  url: string | null;
+  source: 'db' | 'env' | null;
+};
 
-function getTelegramProxyAgent(): ProxyAgent | undefined {
-  if (telegramProxyAgent !== undefined) return telegramProxyAgent ?? undefined;
-  const u =
-    normalizeOptionalString(process.env.TELEGRAM_HTTPS_PROXY) ??
-    normalizeOptionalString(process.env.HTTPS_PROXY) ??
-    normalizeOptionalString(process.env.HTTP_PROXY);
-  telegramProxyAgent = u ? new ProxyAgent(u) : null;
-  if (telegramProxyAgent) {
-    console.info('[telegram] using outbound HTTPS proxy for api.telegram.org');
-  }
-  return telegramProxyAgent ?? undefined;
-}
+let telegramProxyCache: {
+  url: string | null;
+  source: 'db' | 'env' | null;
+  agent: ProxyAgent | null;
+} | null = null;
+let telegramProxyLoadPromise: Promise<TelegramProxyResolution> | null = null;
 
-async function fetchTelegramHttp(url: string, init: RequestInit): Promise<Response> {
-  const dispatcher = getTelegramProxyAgent();
-  const initWithProxy = dispatcher ? { ...init, dispatcher } : init;
-  let last: unknown;
-  for (let attempt = 0; attempt < TELEGRAM_HTTP_RETRIES; attempt++) {
+export function invalidateTelegramProxyCache(): void {
+  const prev = telegramProxyCache?.agent ?? null;
+  telegramProxyCache = null;
+  telegramProxyLoadPromise = null;
+  if (prev) {
     try {
-      return (await undiciFetch(url, initWithProxy as Parameters<typeof undiciFetch>[1])) as unknown as Response;
-    } catch (e) {
-      last = e;
-      const canRetry = attempt < TELEGRAM_HTTP_RETRIES - 1 && isTransientTelegramFetchFailure(e);
-      if (canRetry) {
-        console.warn(`[telegram] HTTP fetch retry ${attempt + 2}/${TELEGRAM_HTTP_RETRIES}`, e);
-        await delay(TELEGRAM_RETRY_DELAYS_MS[attempt] ?? 1200);
-        continue;
-      }
-      throw e;
+      void prev.close();
+    } catch {
+      /* ignore */
     }
   }
-  throw last;
+}
+
+async function resolveTelegramProxyFromSettings(): Promise<TelegramProxyResolution> {
+  const cached = telegramProxyCache;
+  if (cached) {
+    return { url: cached.url, source: cached.source };
+  }
+  let loadPromise = telegramProxyLoadPromise;
+  if (!loadPromise) {
+    loadPromise = (async (): Promise<TelegramProxyResolution> => {
+      let dbUrl: string | null = null;
+      try {
+        const row = await readSettingsRow();
+        dbUrl = row.telegram_proxy_enabled
+          ? normalizeOptionalString(row.telegram_https_proxy)
+          : null;
+      } catch (e) {
+        console.warn('[telegram] proxy settings read failed, falling back to env', e);
+      }
+      if (dbUrl) {
+        return { url: dbUrl, source: 'db' };
+      }
+      const envUrl = getEnvTelegramProxyUrl();
+      if (envUrl) {
+        return { url: envUrl, source: 'env' };
+      }
+      return { url: null, source: null };
+    })();
+    telegramProxyLoadPromise = loadPromise;
+    void loadPromise.finally(() => {
+      if (telegramProxyLoadPromise === loadPromise) {
+        telegramProxyLoadPromise = null;
+      }
+    });
+  }
+  const resolved = await loadPromise;
+  // Между await другой запрос мог уже заполнить кэш тем же URL.
+  const afterAwait = telegramProxyCache;
+  if (afterAwait && afterAwait.url === resolved.url && afterAwait.source === resolved.source) {
+    return resolved;
+  }
+  const prevAgent = afterAwait?.agent ?? null;
+  let agent: ProxyAgent | null = null;
+  if (resolved.url) {
+    try {
+      agent = new ProxyAgent(resolved.url);
+      console.info(
+        `[telegram] using outbound HTTPS proxy for api.telegram.org (source=${resolved.source})`,
+      );
+    } catch (e) {
+      console.error('[telegram] failed to create ProxyAgent', e);
+      throw new Error('telegram_proxy_agent_invalid');
+    }
+  }
+  telegramProxyCache = { url: resolved.url, source: resolved.source, agent };
+  if (prevAgent && prevAgent !== agent) {
+    try {
+      void prevAgent.close();
+    } catch {
+      /* ignore */
+    }
+  }
+  return resolved;
+}
+
+async function getTelegramProxyAgent(): Promise<ProxyAgent | undefined> {
+  await resolveTelegramProxyFromSettings();
+  return telegramProxyCache?.agent ?? undefined;
+}
+
+export async function getActiveTelegramProxyStatus(): Promise<{
+  used: boolean;
+  source: 'db' | 'env' | null;
+  url_masked: string | null;
+}> {
+  const resolved = await resolveTelegramProxyFromSettings();
+  return {
+    used: Boolean(resolved.url),
+    source: resolved.source,
+    url_masked: maskProxyUrl(resolved.url),
+  };
+}
+
+async function fetchTelegramHttp(
+  url: string,
+  init: RequestInit,
+  proxyUrlOverride?: string | null,
+): Promise<Response> {
+  let dispatcher: ProxyAgent | undefined;
+  let overrideAgent: ProxyAgent | null = null;
+  if (proxyUrlOverride !== undefined) {
+    const override = normalizeOptionalString(proxyUrlOverride);
+    if (override) {
+      try {
+        overrideAgent = new ProxyAgent(normalizeAndValidateProxyUrl(override));
+        dispatcher = overrideAgent;
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith('telegram_proxy_')) throw e;
+        throw new Error('telegram_proxy_agent_invalid');
+      }
+    }
+  } else {
+    dispatcher = await getTelegramProxyAgent();
+  }
+  const initWithProxy = dispatcher ? { ...init, dispatcher } : init;
+  let last: unknown;
+  try {
+    for (let attempt = 0; attempt < TELEGRAM_HTTP_RETRIES; attempt++) {
+      try {
+        return (await undiciFetch(url, initWithProxy as Parameters<typeof undiciFetch>[1])) as unknown as Response;
+      } catch (e) {
+        last = e;
+        const canRetry = attempt < TELEGRAM_HTTP_RETRIES - 1 && isTransientTelegramFetchFailure(e);
+        if (canRetry) {
+          console.warn(`[telegram] HTTP fetch retry ${attempt + 2}/${TELEGRAM_HTTP_RETRIES}`, e);
+          await delay(TELEGRAM_RETRY_DELAYS_MS[attempt] ?? 1200);
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw last;
+  } finally {
+    if (overrideAgent) {
+      try {
+        void overrideAgent.close();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 }
 
 /** Base URL `https://api.telegram.org/bot<token>` without trailing slash; never throws URIError */
@@ -255,6 +447,10 @@ async function ensureSettingsColumns(): Promise<void> {
   await query("ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_target VARCHAR(16) NOT NULL DEFAULT 'all'");
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_member_ids INTEGER[] NOT NULL DEFAULT ARRAY[]::INTEGER[]');
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_last_sent_at TIMESTAMPTZ');
+  await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_https_proxy TEXT');
+  await query(
+    'ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_proxy_enabled BOOLEAN NOT NULL DEFAULT FALSE',
+  );
 }
 
 async function ensureMembersTelegramColumn(): Promise<void> {
@@ -278,6 +474,8 @@ async function readSettingsRow(): Promise<{
   telegram_dispatch_target: 'all' | 'selected';
   telegram_dispatch_member_ids: number[];
   telegram_dispatch_last_sent_at: string | null;
+  telegram_https_proxy: string | null;
+  telegram_proxy_enabled: boolean;
 }> {
   await ensureSettingsColumns();
   await query(
@@ -299,7 +497,9 @@ async function readSettingsRow(): Promise<{
        telegram_dispatch_once_at::text,
        telegram_dispatch_target,
        telegram_dispatch_member_ids,
-       telegram_dispatch_last_sent_at::text
+       telegram_dispatch_last_sent_at::text,
+       telegram_https_proxy,
+       telegram_proxy_enabled
      FROM global_settings
      WHERE id = 1`,
   );
@@ -318,6 +518,8 @@ async function readSettingsRow(): Promise<{
         telegram_dispatch_target?: unknown;
         telegram_dispatch_member_ids?: unknown;
         telegram_dispatch_last_sent_at?: string | null;
+        telegram_https_proxy?: string | null;
+        telegram_proxy_enabled?: boolean;
       }
     | undefined;
   return {
@@ -338,6 +540,24 @@ async function readSettingsRow(): Promise<{
           .filter((x) => Number.isInteger(x) && x > 0)
       : [],
     telegram_dispatch_last_sent_at: normalizeOptionalString(row?.telegram_dispatch_last_sent_at),
+    telegram_https_proxy: normalizeOptionalString(row?.telegram_https_proxy),
+    telegram_proxy_enabled: Boolean(row?.telegram_proxy_enabled),
+  };
+}
+
+function buildProxyStatusFromRow(row: {
+  telegram_https_proxy: string | null;
+  telegram_proxy_enabled: boolean;
+}): TelegramProxyStatus {
+  const envUrl = getEnvTelegramProxyUrl();
+  const dbUrl = row.telegram_proxy_enabled ? row.telegram_https_proxy : null;
+  const activeSource: 'db' | 'env' | null = dbUrl ? 'db' : envUrl ? 'env' : null;
+  return {
+    enabled: row.telegram_proxy_enabled,
+    url_masked: maskProxyUrl(row.telegram_https_proxy ?? (activeSource === 'env' ? envUrl : null)),
+    has_url: Boolean(row.telegram_https_proxy),
+    active_source: activeSource,
+    env_configured: Boolean(envUrl),
   };
 }
 
@@ -353,12 +573,21 @@ export async function getTelegramSettings(): Promise<TelegramSettings> {
     default_chat_id: row.telegram_default_chat_id,
     prayer_template: row.telegram_prayer_template,
     has_bot_token: Boolean(botToken),
+    proxy: buildProxyStatusFromRow(row),
   };
 }
 
 export async function updateTelegramSettings(input: TelegramSettingsUpdate): Promise<TelegramSettings> {
   await ensureSettingsColumns();
   const current = await readSettingsRow();
+  let nextProxyUrl = current.telegram_https_proxy;
+  if (input.proxy_url !== undefined) {
+    if (input.proxy_url === null) {
+      nextProxyUrl = null;
+    } else {
+      nextProxyUrl = normalizeAndValidateProxyUrl(String(input.proxy_url));
+    }
+  }
   const next = {
     telegram_enabled: typeof input.enabled === 'boolean' ? input.enabled : current.telegram_enabled,
     telegram_bot_token:
@@ -383,6 +612,9 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       input.prayer_template !== undefined
         ? normalizeOptionalString(input.prayer_template)
         : current.telegram_prayer_template,
+    telegram_proxy_enabled:
+      typeof input.proxy_enabled === 'boolean' ? input.proxy_enabled : current.telegram_proxy_enabled,
+    telegram_https_proxy: nextProxyUrl,
   };
 
   await query(
@@ -394,9 +626,11 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_prayer_chat_id,
        telegram_coordinator_chat_id,
        telegram_default_chat_id,
-       telegram_prayer_template
+       telegram_prayer_template,
+       telegram_proxy_enabled,
+       telegram_https_proxy
      )
-     VALUES (1, CURRENT_DATE, $1, $2, $3, $4, $5, $6)
+     VALUES (1, CURRENT_DATE, $1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (id) DO UPDATE
      SET
        telegram_enabled = EXCLUDED.telegram_enabled,
@@ -404,7 +638,9 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_prayer_chat_id = EXCLUDED.telegram_prayer_chat_id,
        telegram_coordinator_chat_id = EXCLUDED.telegram_coordinator_chat_id,
        telegram_default_chat_id = EXCLUDED.telegram_default_chat_id,
-       telegram_prayer_template = EXCLUDED.telegram_prayer_template`,
+       telegram_prayer_template = EXCLUDED.telegram_prayer_template,
+       telegram_proxy_enabled = EXCLUDED.telegram_proxy_enabled,
+       telegram_https_proxy = EXCLUDED.telegram_https_proxy`,
     [
       next.telegram_enabled,
       next.telegram_bot_token,
@@ -412,8 +648,11 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       next.telegram_coordinator_chat_id,
       next.telegram_default_chat_id,
       next.telegram_prayer_template,
+      next.telegram_proxy_enabled,
+      next.telegram_https_proxy,
     ],
   );
+  invalidateTelegramProxyCache();
   return getTelegramSettings();
 }
 
@@ -923,7 +1162,10 @@ export async function syncMembersTelegramProfiles(): Promise<TelegramMembersProf
   return result;
 }
 
-async function fetchTelegramGetMeRaw(botToken: string): Promise<{
+async function fetchTelegramGetMeRaw(
+  botToken: string,
+  proxyUrlOverride?: string | null,
+): Promise<{
   ok: boolean;
   status: number;
   body: { ok?: unknown; result?: unknown; description?: unknown } | null;
@@ -932,7 +1174,11 @@ async function fetchTelegramGetMeRaw(botToken: string): Promise<{
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
     const endpoint = `${telegramApiBaseForBot(botToken)}/getMe`;
-    const response = await fetchTelegramHttp(endpoint, { method: 'GET', signal: controller.signal });
+    const response = await fetchTelegramHttp(
+      endpoint,
+      { method: 'GET', signal: controller.signal },
+      proxyUrlOverride,
+    );
     let body: unknown = null;
     try {
       body = (await response.json()) as unknown;
@@ -946,6 +1192,9 @@ async function fetchTelegramGetMeRaw(botToken: string): Promise<{
     };
   } catch (e) {
     if (e instanceof Error && e.message === 'telegram_bot_token_invalid_chars') {
+      throw e;
+    }
+    if (e instanceof Error && e.message.startsWith('telegram_proxy_')) {
       throw e;
     }
     if (isLikelyAbortError(e) || (e instanceof Error && e.name === 'AbortError')) {
@@ -966,8 +1215,17 @@ async function fetchTelegramGetMeRaw(botToken: string): Promise<{
   }
 }
 
+export interface TelegramConnectionTestResult extends TelegramGetMeResult {
+  proxy: {
+    used: boolean;
+    source: 'db' | 'env' | null;
+    url_masked: string | null;
+  };
+  latency_ms: number;
+}
+
 /** Проверка токена через Telegram getMe. Опционально передать токен из формы до сохранения в БД. */
-export async function testTelegramBotConnection(botTokenFromRequest?: string): Promise<TelegramGetMeResult> {
+export async function testTelegramBotConnection(botTokenFromRequest?: string): Promise<TelegramConnectionTestResult> {
   let row: Awaited<ReturnType<typeof readSettingsRow>>;
   try {
     row = await readSettingsRow();
@@ -984,7 +1242,107 @@ export async function testTelegramBotConnection(botTokenFromRequest?: string): P
   if (!token) {
     throw new Error('telegram_missing_token');
   }
+  const started = Date.now();
   const raw = await fetchTelegramGetMeRaw(token);
+  const latency_ms = Date.now() - started;
+  if (!raw.ok || raw.body?.ok !== true) {
+    const description =
+      typeof raw.body?.description === 'string' ? raw.body.description.trim() : '';
+    throw new Error(
+      description ? `telegram_getme_failed:${raw.status}:${description}` : `telegram_getme_failed:${raw.status}`,
+    );
+  }
+  const result = raw.body.result;
+  if (!result || typeof result !== 'object') {
+    throw new Error('telegram_getme_failed:0:invalid_response');
+  }
+  const r = result as Record<string, unknown>;
+  const id = Number(r.id);
+  if (!Number.isInteger(id)) {
+    throw new Error('telegram_getme_failed:0:invalid_response');
+  }
+  const proxy = await getActiveTelegramProxyStatus();
+  return {
+    id,
+    is_bot: Boolean(r.is_bot),
+    username: typeof r.username === 'string' ? r.username : null,
+    first_name: typeof r.first_name === 'string' ? r.first_name : null,
+    proxy,
+    latency_ms,
+  };
+}
+
+export interface TelegramProxyTestResult {
+  ok: true;
+  latency_ms: number;
+  proxy: {
+    used: boolean;
+    source: 'db' | 'env' | 'override' | null;
+    url_masked: string | null;
+  };
+  bot: TelegramGetMeResult;
+}
+
+/**
+ * Проверка исходящего прокси: getMe через указанный URL (из формы) или через активные настройки.
+ * Не сохраняет настройки.
+ */
+export async function testTelegramProxyConnection(opts?: {
+  proxy_url?: string | null;
+  bot_token?: string | null;
+}): Promise<TelegramProxyTestResult> {
+  let row: Awaited<ReturnType<typeof readSettingsRow>>;
+  try {
+    row = await readSettingsRow();
+  } catch (e) {
+    console.error('[telegram] testTelegramProxyConnection: readSettingsRow failed', e);
+    throw new Error('telegram_settings_read');
+  }
+
+  const tokenOverride = normalizeOptionalString(opts?.bot_token);
+  const rawToken = tokenOverride ?? row.telegram_bot_token ?? normalizeOptionalString(process.env.TELEGRAM_BOT_TOKEN);
+  if (!rawToken) {
+    throw new Error('telegram_missing_token');
+  }
+  const token = sanitizeBotTokenForHttp(rawToken);
+  if (!token) {
+    throw new Error('telegram_missing_token');
+  }
+
+  const proxyOverrideRaw = opts?.proxy_url !== undefined ? normalizeOptionalString(opts.proxy_url) : undefined;
+  let proxyUrlForRequest: string | null | undefined;
+  let source: 'db' | 'env' | 'override' | null;
+  let urlMasked: string | null;
+
+  if (proxyOverrideRaw !== undefined) {
+    if (proxyOverrideRaw) {
+      const validated = normalizeAndValidateProxyUrl(proxyOverrideRaw);
+      proxyUrlForRequest = validated;
+      source = 'override';
+      urlMasked = maskProxyUrl(validated);
+    } else {
+      // Явно пустой override → проверка без прокси
+      proxyUrlForRequest = null;
+      source = null;
+      urlMasked = null;
+    }
+  } else {
+    const active = await getActiveTelegramProxyStatus();
+    proxyUrlForRequest = undefined; // использовать кэш/настройки
+    source = active.source;
+    urlMasked = active.url_masked;
+    if (!active.used) {
+      throw new Error('telegram_proxy_not_configured');
+    }
+  }
+
+  if (proxyOverrideRaw !== undefined && proxyOverrideRaw && !proxyUrlForRequest) {
+    throw new Error('telegram_proxy_url_invalid');
+  }
+
+  const started = Date.now();
+  const raw = await fetchTelegramGetMeRaw(token, proxyUrlForRequest);
+  const latency_ms = Date.now() - started;
   if (!raw.ok || raw.body?.ok !== true) {
     const description =
       typeof raw.body?.description === 'string' ? raw.body.description.trim() : '';
@@ -1002,10 +1360,22 @@ export async function testTelegramBotConnection(botTokenFromRequest?: string): P
     throw new Error('telegram_getme_failed:0:invalid_response');
   }
   return {
-    id,
-    is_bot: Boolean(r.is_bot),
-    username: typeof r.username === 'string' ? r.username : null,
-    first_name: typeof r.first_name === 'string' ? r.first_name : null,
+    ok: true,
+    latency_ms,
+    proxy: {
+      used:
+        proxyUrlForRequest === undefined
+          ? Boolean(source)
+          : Boolean(proxyUrlForRequest),
+      source,
+      url_masked: urlMasked,
+    },
+    bot: {
+      id,
+      is_bot: Boolean(r.is_bot),
+      username: typeof r.username === 'string' ? r.username : null,
+      first_name: typeof r.first_name === 'string' ? r.first_name : null,
+    },
   };
 }
 

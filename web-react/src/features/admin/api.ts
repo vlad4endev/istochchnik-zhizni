@@ -491,6 +491,14 @@ export async function rejectAccessRequest(id: number, review_note?: string): Pro
   });
 }
 
+export interface TelegramProxyStatus {
+  enabled: boolean;
+  url_masked: string | null;
+  has_url: boolean;
+  active_source: 'db' | 'env' | null;
+  env_configured: boolean;
+}
+
 export interface TelegramSettingsResponse {
   enabled: boolean;
   bot_token_masked: string | null;
@@ -499,6 +507,7 @@ export interface TelegramSettingsResponse {
   default_chat_id: string | null;
   prayer_template: string | null;
   has_bot_token: boolean;
+  proxy: TelegramProxyStatus;
 }
 
 export interface TelegramDispatchSettingsResponse {
@@ -561,6 +570,8 @@ export async function patchTelegramSettings(body: {
   coordinator_chat_id?: string | null;
   default_chat_id?: string | null;
   prayer_template?: string | null;
+  proxy_enabled?: boolean;
+  proxy_url?: string | null;
 }): Promise<TelegramSettingsResponse> {
   const { data } = await apiClient.patch<TelegramSettingsResponse>('/api/telegram/settings', body);
   return data;
@@ -616,10 +627,40 @@ export interface TelegramTestConnectionResponse {
   is_bot: boolean;
   username: string | null;
   first_name: string | null;
+  latency_ms?: number;
+  proxy?: {
+    used: boolean;
+    source: 'db' | 'env' | null;
+    url_masked: string | null;
+  };
 }
 
 export async function testTelegramConnection(body?: { bot_token?: string }): Promise<TelegramTestConnectionResponse> {
   const { data } = await apiClient.post<TelegramTestConnectionResponse>('/api/telegram/test-connection', body ?? {});
+  return data;
+}
+
+export interface TelegramTestProxyResponse {
+  ok: true;
+  latency_ms: number;
+  proxy: {
+    used: boolean;
+    source: 'db' | 'env' | 'override' | null;
+    url_masked: string | null;
+  };
+  bot: {
+    id: number;
+    is_bot: boolean;
+    username: string | null;
+    first_name: string | null;
+  };
+}
+
+export async function testTelegramProxy(body?: {
+  proxy_url?: string | null;
+  bot_token?: string;
+}): Promise<TelegramTestProxyResponse> {
+  const { data } = await apiClient.post<TelegramTestProxyResponse>('/api/telegram/test-proxy', body ?? {});
   return data;
 }
 
@@ -642,14 +683,14 @@ export function humanizeTelegramError(err: unknown, fallback: string): string {
   if (msg.includes('Запрос к Telegram не выполнен')) {
     return [
       'При отправке сообщения не удалось выполнить HTTPS к api.telegram.org (то же, что и при проверке токена).',
-      'Проверьте исходящий 443, DNS и сеть контейнера; на сервере: curl -I https://api.telegram.org',
+      'Если Telegram недоступен напрямую — включите исходящий HTTP-прокси в настройках Telegram (Админка) и нажмите «Проверить прокси».',
     ].join(' ');
   }
   if (msg.includes('Telegram getMe')) {
     return 'Проверка токена не прошла. Убедитесь, что Bot Token верный и не отозван.';
   }
   if (msg.includes('Таймаут при обращении к Telegram API')) {
-    return 'Таймаут при обращении к Telegram. Повторите попытку или проверьте сеть.';
+    return 'Таймаут при обращении к Telegram. Повторите попытку или проверьте сеть/прокси.';
   }
   if (msg.includes('Нет связи с Telegram API')) {
     const afterColon = msg.includes('Нет связи с Telegram API:')
@@ -658,13 +699,19 @@ export function humanizeTelegramError(err: unknown, fallback: string): string {
     const tech = afterColon.replace(/\s*Исходящий HTTPS.*$/i, '').trim();
     return [
       'Backend не может установить HTTPS-соединение с api.telegram.org (порт 443).',
-      'Если curl показывает «Connection reset by peer» — часто режут TLS или IP Telegram; попробуйте другой хостинг/VPN на уровне сервера или исходящий HTTP-прокси.',
-      'Для API за прокси задайте на сервере TELEGRAM_HTTPS_PROXY (или HTTPS_PROXY), например http://user:pass@proxy.example.com:8080, и перезапустите backend.',
-      'На сервере: curl -4 -I https://api.telegram.org (ключ -4 — через IPv4, иногда помогает).',
+      'Если curl показывает «Connection reset by peer» — часто режут TLS или IP Telegram.',
+      'Укажите исходящий HTTP-прокси прямо в Админке → Telegram (без установки прокси на сервер) и нажмите «Проверить прокси».',
+      'Формат: http://user:pass@host:8080 или http://host:3128.',
       tech ? `Ответ Node: ${tech.slice(0, 240)}` : '',
     ]
       .filter(Boolean)
       .join(' ');
+  }
+  if (msg.includes('Некорректный URL прокси') || msg.includes('Поддерживаются только HTTP')) {
+    return msg;
+  }
+  if (msg.includes('Прокси не настроен')) {
+    return 'Прокси не настроен. Вставьте URL HTTP-прокси и включите переключатель, либо передайте URL в проверку.';
   }
   if (msg.includes('Не удалось прочитать настройки из базы данных')) {
     return 'Ошибка базы при чтении настроек. Проверьте подключение к БД.';
