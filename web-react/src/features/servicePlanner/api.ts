@@ -47,7 +47,7 @@ export type ServicePlanListItem = {
   preacher_member_id: number | null;
   /** Ответственный за музыкальное служение (блоки «Песня»). */
   music_ministry_member_id: number | null;
-  /** Ответственный за стихи (блоки «Стих»). */
+  /** Ответственный за стихи (кто заполняет блоки «Стих», не чтец). */
   poem_ministry_member_id: number | null;
   total_duration_minutes: number;
   current_block_id: number | null;

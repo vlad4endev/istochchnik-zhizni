@@ -47,7 +47,7 @@ export type PlannerPlanListItem = {
   preacher_member_id: number | null;
   /** Ответственный за музыкальное служение — протягивается в блоки типа «Песня». */
   music_ministry_member_id: number | null;
-  /** Ответственный за стихи — протягивается в блоки типа «Стих». */
+  /** Ответственный за стихи — кто заполняет блоки «Стих» (не чтец в программе). */
   poem_ministry_member_id: number | null;
   total_duration_minutes: number;
   current_block_id: number | null;
@@ -666,34 +666,6 @@ async function syncSongBlocksMusicMinistryMember(planId: number, memberId: numbe
        and bt.id = b.block_type_id
        and bt.kind = 'song'`,
     [planId, memberId],
-  );
-}
-
-/** После смены ответственного за стихи в настройках плана — обновить блоки стихов. */
-async function syncPoemBlocksMinistryMember(planId: number, memberId: number | null): Promise<void> {
-  await ensurePlannerSchema();
-
-  let readerName = 'Чтец';
-  if (memberId != null) {
-    const memberRes = await query(
-      `select first_name, last_name, name from public.members where id = $1 limit 1`,
-      [memberId],
-    );
-    const row = memberRes.rows[0] as
-      | { first_name?: unknown; last_name?: unknown; name?: unknown }
-      | undefined;
-    if (row) readerName = personName(row);
-  }
-
-  const title = `СТИХ - ${readerName}`;
-  await query(
-    `update public.service_blocks b
-     set assigned_member_id = $2, title = $3
-     from public.block_types bt
-     where b.service_plan_id = $1
-       and bt.id = b.block_type_id
-       and (bt.code = 'poem' or lower(bt.name) like '%стих%')`,
-    [planId, memberId, title],
   );
 }
 
@@ -1719,8 +1691,6 @@ export async function patchPlan(
   values.push(planId);
   const shouldSyncSongAssignees = patch.music_ministry_member_id !== undefined;
   const nextMusicId = patch.music_ministry_member_id;
-  const shouldSyncPoemAssignees = patch.poem_ministry_member_id !== undefined;
-  const nextPoemId = patch.poem_ministry_member_id;
   const shouldSyncPreacherAssignees = patch.preacher_member_id !== undefined;
   const nextPreacherId = patch.preacher_member_id;
   const res = await query(
@@ -1732,9 +1702,6 @@ export async function patchPlan(
   const ok = (res.rowCount ?? 0) > 0;
   if (ok && shouldSyncSongAssignees) {
     await syncSongBlocksMusicMinistryMember(planId, nextMusicId ?? null);
-  }
-  if (ok && shouldSyncPoemAssignees) {
-    await syncPoemBlocksMinistryMember(planId, nextPoemId ?? null);
   }
   if (ok && shouldSyncPreacherAssignees) {
     await syncSermonBlocksPreacher(planId, nextPreacherId ?? null);
