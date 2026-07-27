@@ -387,12 +387,9 @@ export function TelegramSettingsSection() {
   });
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [showToken, setShowToken] = useState(false);
-<<<<<<< HEAD
   const [showProxyUrl, setShowProxyUrl] = useState(false);
-=======
   const prayerTemplateRef = useRef<HTMLTextAreaElement | null>(null);
   const programTemplateRef = useRef<HTMLTextAreaElement | null>(null);
->>>>>>> 1e3b585 (feat(telegram): clearer template placeholders and more plan data)
 
   useEffect(() => {
     if (!data) return;
