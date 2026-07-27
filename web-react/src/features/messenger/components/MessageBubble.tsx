@@ -472,7 +472,8 @@ function MessageBubbleInner({
       Number(message.sender_id) === Number(currentMemberId));
 
   const shellRef = useRef<HTMLDivElement | null>(null);
-  const [menuPos, setMenuPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
   const x = useMotionValue(0);
   const replyOpacity = useTransform(x, (v: number) => {
     const t = isMine ? Math.max(0, -v) : Math.max(0, v);
@@ -1656,31 +1657,55 @@ function MessageBubbleInner({
     }
     const el = shellRef.current;
     if (!el) return;
+    const vv = window.visualViewport;
     const update = () => {
       const rect = el.getBoundingClientRect();
+      const viewTop = vv?.offsetTop ?? 0;
+      const viewH = vv?.height ?? window.innerHeight;
+      const viewBottom = viewTop + viewH;
       const menuWidth = Math.min(280, window.innerWidth - 16);
+      const menuEl = menuRef.current;
+      const menuH = Math.min(
+        menuEl?.offsetHeight || 280,
+        Math.min(viewH * 0.7, 420),
+      );
       let left = isMine ? rect.right - menuWidth : rect.left;
       left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8));
-      const spaceAbove = rect.top;
-      const placeAbove = spaceAbove > 300;
-      if (placeAbove) {
+
+      const gap = 6;
+      const spaceAbove = rect.top - viewTop;
+      const spaceBelow = viewBottom - rect.bottom;
+      const preferAbove = spaceAbove >= spaceBelow && spaceAbove > 120;
+
+      if (preferAbove) {
+        // Anchor bottom edge just above the bubble; clamp so menu stays in view.
+        const bottomEdge = Math.min(rect.top - gap, viewBottom - 8);
+        const topEdge = Math.max(viewTop + 8, bottomEdge - menuH);
         setMenuPos({
           left,
-          bottom: Math.max(8, window.innerHeight - rect.top + 6),
+          top: topEdge,
         });
       } else {
-        setMenuPos({
-          left,
-          top: Math.min(rect.bottom + 6, window.innerHeight - 8),
-        });
+        let top = Math.max(viewTop + 8, rect.bottom + gap);
+        if (top + menuH > viewBottom - 8) {
+          top = Math.max(viewTop + 8, viewBottom - menuH - 8);
+        }
+        setMenuPos({ left, top });
       }
     };
     update();
+    // Second pass after menu paints — real height for clamping.
+    const raf = window.requestAnimationFrame(update);
     window.addEventListener('resize', update);
     window.addEventListener('scroll', update, true);
+    vv?.addEventListener('resize', update);
+    vv?.addEventListener('scroll', update);
     return () => {
+      window.cancelAnimationFrame(raf);
       window.removeEventListener('resize', update);
       window.removeEventListener('scroll', update, true);
+      vv?.removeEventListener('resize', update);
+      vv?.removeEventListener('scroll', update);
     };
   }, [showActions, isMine]);
 
@@ -2144,6 +2169,7 @@ function MessageBubbleInner({
                 }}
               />
               <div
+                ref={menuRef}
                 className={`msg-actions msg-actions--portal ${isMine ? 'msg-actions--mine' : ''}`}
                 style={
                   menuPos
@@ -2151,11 +2177,11 @@ function MessageBubbleInner({
                         position: 'fixed',
                         left: menuPos.left,
                         top: menuPos.top,
-                        bottom: menuPos.bottom,
+                        bottom: 'auto',
                         right: 'auto',
                         margin: 0,
                       }
-                    : { position: 'fixed', visibility: 'hidden' }
+                    : { position: 'fixed', visibility: 'hidden', left: 0, top: 0 }
                 }
                 role="menu"
                 aria-label="Действия с сообщением"
