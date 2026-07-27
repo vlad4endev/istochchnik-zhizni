@@ -14,6 +14,7 @@ import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { groupMessages } from '../groupMessages';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
 import {
+  hasMessengerSenderId,
   isAccessRequestsMessengerChannel,
   isAssistantBotMessage,
   isAssistantMessengerChannel,
@@ -861,7 +862,7 @@ export function ChatWindow({
       const m = messages[i];
       if (!m || m.is_deleted) continue;
       const fromBot =
-        m.sender_id == null || isAssistantBotMessage(m.payload, m.sender_id);
+        !hasMessengerSenderId(m.sender_id) || isAssistantBotMessage(m.payload, m.sender_id);
       if (fromBot) {
         setAssistantThinking(conversationId, false);
       }

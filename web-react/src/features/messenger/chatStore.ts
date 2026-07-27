@@ -15,7 +15,7 @@ import { playAudio } from '../../utils/audio';
 import { extractMentionMemberIdsFromText, normalizeMentionsToCanonical } from './mentionUtils';
 import { normalizeChatDisplayText } from './normalizeChatDisplayText';
 import { inferMessengerPayloadType } from './payloadMedia';
-import { isAssistantBotMessage, isAssistantMessengerChannel } from './messengerChannelKinds';
+import { hasMessengerSenderId, isAssistantBotMessage, isAssistantMessengerChannel } from './messengerChannelKinds';
 import {
   applyNewMessage,
   processMessengerWsBatch,
@@ -313,7 +313,7 @@ function clearAssistantThinkingIfBotReplied(
     const m = list[i];
     if (!m || m.is_deleted) continue;
     const fromBot =
-      m.sender_id == null || isAssistantBotMessage(m.payload, m.sender_id);
+      !hasMessengerSenderId(m.sender_id) || isAssistantBotMessage(m.payload, m.sender_id);
     if (fromBot) {
       get().setAssistantThinking(idKey, false);
     }

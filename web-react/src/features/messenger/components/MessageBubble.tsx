@@ -20,7 +20,7 @@ import {
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuReply, LuX } from 'react-icons/lu';
-import { isAssistantBotMessage } from '../messengerChannelKinds';
+import { hasMessengerSenderId, isAssistantBotMessage, isServicePlanMondayMailingPayload } from '../messengerChannelKinds';
 import {
   assistantMarkdownToPlainText,
   renderAssistantMessageContent,
@@ -464,11 +464,13 @@ function MessageBubbleInner({
   const suppressMenuUntilRef = useRef(0);
 
   const isOptimistic = message.id.startsWith('temp-');
-  /** Number() — WS/API иногда отдают sender_id строкой; иначе «свои» пункты меню пропадают. */
+  /** Number() — WS/API иногда отдают sender_id строкой; иначе «свои» пункты меню пропадают.
+   *  sender_id 0/null — системные (рассылка): Number(null)===0 ломало isMine/canDelete. */
+  const hasSender = hasMessengerSenderId(message.sender_id);
   const isMine =
     isOptimistic ||
     (currentMemberId != null &&
-      message.sender_id != null &&
+      hasSender &&
       Number(message.sender_id) === Number(currentMemberId));
 
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -542,7 +544,7 @@ function MessageBubbleInner({
   const systemBotAccessMessage =
     accessRequestsSystemChannel &&
     payloadType === 'access_request' &&
-    message.sender_id == null &&
+    !hasSender &&
     !isDeleted;
   const payload = useMemo(() => {
     const raw = message.payload;
@@ -565,7 +567,7 @@ function MessageBubbleInner({
     !isDeleted &&
     !isMine &&
     (isAssistantBotMessage(payload, message.sender_id) ||
-      (assistantChannel && message.sender_id == null));
+      (assistantChannel && !hasSender));
 
   const forwardedFromLabel = useMemo(() => {
     const raw = message.forwarded_from;
@@ -598,13 +600,13 @@ function MessageBubbleInner({
     payloadType !== 'poll' &&
     payloadType !== 'access_request';
 
-  /** Свои + системные (рассылка и т.п. без sender_id), кроме заявок. */
+  /** Свои + системные (рассылка без sender / kind mailing), кроме заявок. */
   const canDeleteMessage =
     !isDeleted &&
     !isOptimistic &&
     !systemBotAccessMessage &&
     payloadType !== 'access_request' &&
-    (isMine || message.sender_id == null);
+    (isMine || !hasSender || isServicePlanMondayMailingPayload(payload));
 
   const senderName = String(
     message.sender_name ??

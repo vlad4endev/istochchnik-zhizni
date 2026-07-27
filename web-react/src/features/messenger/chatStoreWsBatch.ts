@@ -14,7 +14,7 @@ import { sendRealtimeJson } from '../../lib/realtimeWsClient';
 import { isMessengerChatReadSurfaceOpen } from './messengerReadSurface';
 import { getAvatarInitial } from './avatarUtils';
 import { inferMessengerPayloadType } from './payloadMedia';
-import { isAssistantBotMessage, isAssistantMessengerChannel } from './messengerChannelKinds';
+import { hasMessengerSenderId, isAssistantBotMessage, isAssistantMessengerChannel } from './messengerChannelKinds';
 import type { ChatState } from './chatStore';
 
 export type WsInboundMessage = Record<string, unknown> & { type?: string };
@@ -314,7 +314,7 @@ export function applyNewMessage(
     if (!Boolean(state.assistantThinkingByConv?.[idKey])) return state;
     if (isOwn) return state;
     const fromBot =
-      msg.sender_id == null || isAssistantBotMessage(msg.payload, msg.sender_id);
+      !hasMessengerSenderId(msg.sender_id) || isAssistantBotMessage(msg.payload, msg.sender_id);
     if (!fromBot) return state;
     effects.push({ type: 'clear_assistant_thinking_timer', convId: idKey });
     return {

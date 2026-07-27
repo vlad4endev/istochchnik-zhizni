@@ -2489,7 +2489,7 @@ export async function getPollVotersForMember(
 /**
  * Soft-delete a message.
  * - свои сообщения: только отправитель;
- * - системные (sender_id IS NULL, напр. рассылка программы): любой участник чата,
+ * - системные (sender_id IS NULL или kind=service_plan_monday_mailing): любой участник чата,
  *   кроме заявок access_request (ими управляют через кнопки принять/отклонить).
  */
 export async function deleteMessage(
@@ -2507,38 +2507,29 @@ export async function deleteMessage(
   );
   if (own.rows.length > 0) return true;
 
+  const systemSql = (withLeftAt: boolean) =>
+    `UPDATE messages m
+     SET is_deleted = TRUE, content = ''
+     FROM conversation_participants cp
+     WHERE m.id = $1::bigint
+       AND m.is_deleted = FALSE
+       AND m.payload_type::text IS DISTINCT FROM 'access_request'
+       AND (
+         m.sender_id IS NULL
+         OR coalesce(m.payload->>'kind', '') = 'service_plan_monday_mailing'
+       )
+       AND cp.conversation_id = m.conversation_id
+       AND cp.member_id = $2
+       ${withLeftAt ? 'AND cp.left_at IS NULL' : ''}
+     RETURNING m.id`;
+
   try {
-    const system = await dbQuery(
-      `UPDATE messages m
-       SET is_deleted = TRUE, content = ''
-       FROM conversation_participants cp
-       WHERE m.id = $1::bigint
-         AND m.sender_id IS NULL
-         AND m.is_deleted = FALSE
-         AND m.payload_type::text IS DISTINCT FROM 'access_request'
-         AND cp.conversation_id = m.conversation_id
-         AND cp.member_id = $2
-         AND cp.left_at IS NULL
-       RETURNING m.id`,
-      [mid, requesterId],
-    );
+    const system = await dbQuery(systemSql(true), [mid, requesterId]);
     return system.rows.length > 0;
   } catch (e) {
     if (!isPgUndefinedColumnError(e)) throw e;
     // older DB without left_at
-    const legacy = await dbQuery(
-      `UPDATE messages m
-       SET is_deleted = TRUE, content = ''
-       FROM conversation_participants cp
-       WHERE m.id = $1::bigint
-         AND m.sender_id IS NULL
-         AND m.is_deleted = FALSE
-         AND m.payload_type::text IS DISTINCT FROM 'access_request'
-         AND cp.conversation_id = m.conversation_id
-         AND cp.member_id = $2
-       RETURNING m.id`,
-      [mid, requesterId],
-    );
+    const legacy = await dbQuery(systemSql(false), [mid, requesterId]);
     return legacy.rows.length > 0;
   }
 }
@@ -3585,9 +3576,13 @@ function mapMessageWithSender(r: Record<string, unknown>): MessageWithSender {
   const asNullableString = (v: unknown): string | null => (v == null ? null : String(v));
   const asBoolean = (v: unknown, fallback = false): boolean => (typeof v === 'boolean' ? v : fallback);
   const asNumberOrNull = (v: unknown): number | null => {
-    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    // Number(null) === 0 — нельзя пропускать null/undefined через Number(),
+    // иначе системные сообщения (рассылка) получают sender_id: 0 и фронт
+    // не даёт их удалять.
+    if (v == null || v === '') return null;
+    if (typeof v === 'number' && Number.isFinite(v)) return v > 0 ? v : null;
     const n = Number(v);
-    return Number.isFinite(n) ? n : null;
+    return Number.isFinite(n) && n > 0 ? n : null;
   };
 
   let reactions: MessageWithSender['reactions'] = [];

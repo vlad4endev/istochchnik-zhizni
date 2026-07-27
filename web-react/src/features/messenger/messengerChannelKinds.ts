@@ -41,9 +41,23 @@ function asPayloadRecord(payload: unknown): Record<string, unknown> | null {
   return null;
 }
 
+/** Реальный отправитель (member id > 0). `null`/`0` — системные сообщения (рассылка и т.п.). */
+export function hasMessengerSenderId(senderId: number | null | undefined): boolean {
+  if (senderId == null) return false;
+  const n = Number(senderId);
+  return Number.isFinite(n) && n > 0;
+}
+
 export function isAssistantBotMessage(payload: unknown, senderId: number | null | undefined): boolean {
-  if (senderId != null) return false;
+  if (hasMessengerSenderId(senderId)) return false;
   const p = asPayloadRecord(payload);
   if (!p) return false;
   return p.assistant === true || String(p.kind ?? '') === MESSENGER_ASSISTANT_CHANNEL_KIND;
+}
+
+/** Понедельничная авторассылка программы в канал планирования. */
+export function isServicePlanMondayMailingPayload(payload: unknown): boolean {
+  const p = asPayloadRecord(payload);
+  if (!p) return false;
+  return String(p.kind ?? '') === 'service_plan_monday_mailing';
 }
