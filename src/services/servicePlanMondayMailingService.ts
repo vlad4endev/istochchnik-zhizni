@@ -1,7 +1,7 @@
 import { query } from '../config/db';
 import { addCalendarDaysYmd, formatYmdInTimeZone, getZonedNow } from '../utils/zonedTime';
 import { getPlanDetails } from './servicePlannerService';
-import { sendTelegramByPurpose } from './telegramService';
+import { getTelegramSettings, sendTelegramByPurpose } from './telegramService';
 import {
   ensureServicePlanPlanningMessengerChannel,
   postServicePlanMondayMailingMessengerNotification,
@@ -9,6 +9,23 @@ import {
 
 const DEFAULT_TZ = 'Europe/Moscow';
 const DEFAULT_PUBLIC_ORIGIN = 'https://app.church-tambov.ru';
+
+/** Шаблон по умолчанию (можно переопределить в админке → Telegram). */
+export const DEFAULT_SERVICE_PLAN_MONDAY_MAILING_TEMPLATE = [
+  '{{sunday_heading}}',
+  '1. Проповедник — {{preacher}}',
+  '{{sermon_topic_block}}{{sermon_scripture_block}}2. Группа прославления — {{music}}, в среду или ранее нужно внести в программу гимны и порядок куплетов и припевов для каждой песни.',
+  '3. Стих — {{poem}}, в среду или ранее нужно сказать, будет стих или нет, если будет, то нужно прислать:',
+  '    1. Чтец',
+  '    2. Название',
+  '    3. Автор',
+  '    4. Текст/тема',
+  '4. {{choir_line}}',
+  '5. Ведущий — {{leader}}, в четверг нужно будет приступить к формированию программы.',
+  '6. Проповедник — {{preacher}}, в четверг нужно предоставить информацию по проповеди для трансляции: название, тезисы, тексты Писания (если будут изменения), если есть презентация, то загрузить в блок проповеди файл презентации к воскресенью 8:00 утра.',
+  '7. Медиа-команда, с пятницы по субботу готовит все материалы для трансляции.',
+  '8. Ссылка на программу: {{share_url}}',
+].join('\n');
 
 export type MondayMailingMemberRef = {
   id: number | null;
@@ -28,6 +45,8 @@ export type MondayMailingBuildInput = {
   sermonTopic: string | null;
   sermonScripture: string | null;
   choirLine: string;
+  /** Кастомный шаблон из настроек; пустой → DEFAULT */
+  template?: string | null;
 };
 
 export type ServicePlanMondayMailingResult = {
@@ -86,6 +105,10 @@ function memberMention(ref: MondayMailingMemberRef): string {
   return d || 'не назначен';
 }
 
+function renderMailingTemplate(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, key: string) => vars[key] ?? '');
+}
+
 /**
  * Текст понедельничной рассылки программы служения (мессенджер + Telegram).
  */
@@ -101,31 +124,28 @@ export function buildServicePlanMondayMailingText(input: MondayMailingBuildInput
 
   const topic = (input.sermonTopic ?? '').trim();
   const scripture = (input.sermonScripture ?? '').trim();
+  const sermonTopicBlock = topic ? `Тема: «${topic}»\n` : '';
+  const sermonScriptureBlock = scripture ? `Текст: ${scripture}\n` : '';
 
-  const lines: string[] = [
-    heading,
-    `1. Проповедник — ${preacher}`,
-  ];
-  if (topic) {
-    lines.push(`Тема: «${topic}»`);
-  }
-  if (scripture) {
-    lines.push(`Текст: ${scripture}`);
-  }
-  lines.push(
-    `2. Группа прославления — ${music}, в среду или ранее нужно внести в программу гимны и порядок куплетов и припевов для каждой песни.`,
-    `3. Стих — ${poem}, в среду или ранее нужно сказать, будет стих или нет, если будет, то нужно прислать:`,
-    `    1. Чтец`,
-    `    2. Название`,
-    `    3. Автор`,
-    `    4. Текст/тема`,
-    `4. ${input.choirLine}`,
-    `5. Ведущий — ${leader}, в четверг нужно будет приступить к формированию программы.`,
-    `6. Проповедник — ${preacher}, в четверг нужно предоставить информацию по проповеди для трансляции: название, тезисы, тексты Писания (если будут изменения), если есть презентация, то загрузить в блок проповеди файл презентации к воскресенью 8:00 утра.`,
-    `7. Медиа-команда, с пятницы по субботу готовит все материалы для трансляции.`,
-    `8. Ссылка на программу: ${shareUrl}`,
-  );
-  return lines.join('\n');
+  const templateRaw = (input.template ?? '').trim();
+  const template = templateRaw || DEFAULT_SERVICE_PLAN_MONDAY_MAILING_TEMPLATE;
+
+  const rendered = renderMailingTemplate(template, {
+    sunday_heading: heading,
+    date: heading,
+    preacher,
+    music,
+    poem,
+    leader,
+    choir_line: input.choirLine,
+    sermon_topic: topic,
+    sermon_scripture: scripture,
+    sermon_topic_block: sermonTopicBlock,
+    sermon_scripture_block: sermonScriptureBlock,
+    share_url: shareUrl,
+  });
+
+  return rendered.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 export function resolveChoirLineFromBlocks(
@@ -353,6 +373,13 @@ export async function runServicePlanMondayMailing(options?: {
   const sermon = pickSermonFields(blocksForMailing, plan.linked_sermon_note);
   const choirLine = resolveChoirLineFromBlocks(blocksForMailing, mentionById);
 
+  let tgSettings: Awaited<ReturnType<typeof getTelegramSettings>> | null = null;
+  try {
+    tgSettings = await getTelegramSettings();
+  } catch (e) {
+    console.warn('[service-plan-monday-mailing] telegram settings load failed:', e);
+  }
+
   const text = buildServicePlanMondayMailingText({
     serviceDateYmd: plan.service_date,
     shareToken: plan.share_token,
@@ -365,6 +392,7 @@ export async function runServicePlanMondayMailing(options?: {
     sermonTopic: sermon.topic,
     sermonScripture: sermon.scripture,
     choirLine,
+    template: tgSettings?.service_plan_template ?? null,
   });
 
   if (dryRun) {
@@ -395,7 +423,10 @@ export async function runServicePlanMondayMailing(options?: {
   }
 
   try {
-    const chatOverride = process.env.TELEGRAM_SERVICE_PLAN_CHAT_ID?.trim() || null;
+    const chatOverride =
+      tgSettings?.service_plan_chat_id?.trim() ||
+      process.env.TELEGRAM_SERVICE_PLAN_CHAT_ID?.trim() ||
+      null;
     await sendTelegramByPurpose({
       purpose: 'default',
       text,

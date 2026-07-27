@@ -143,6 +143,8 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
         coordinator_chat_id?: unknown;
         default_chat_id?: unknown;
         prayer_template?: unknown;
+        service_plan_chat_id?: unknown;
+        service_plan_template?: unknown;
       }
     | undefined;
 
@@ -186,6 +188,22 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
     res.status(400).json({ error: 'Поле "prayer_template" должно быть строкой или null' });
     return;
   }
+  if (
+    body?.service_plan_chat_id !== undefined &&
+    body.service_plan_chat_id !== null &&
+    typeof body.service_plan_chat_id !== 'string'
+  ) {
+    res.status(400).json({ error: 'Поле "service_plan_chat_id" должно быть строкой или null' });
+    return;
+  }
+  if (
+    body?.service_plan_template !== undefined &&
+    body.service_plan_template !== null &&
+    typeof body.service_plan_template !== 'string'
+  ) {
+    res.status(400).json({ error: 'Поле "service_plan_template" должно быть строкой или null' });
+    return;
+  }
 
   try {
     const settings = await updateTelegramSettings({
@@ -195,6 +213,8 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
       coordinator_chat_id: body?.coordinator_chat_id as string | null | undefined,
       default_chat_id: body?.default_chat_id as string | null | undefined,
       prayer_template: body?.prayer_template as string | null | undefined,
+      service_plan_chat_id: body?.service_plan_chat_id as string | null | undefined,
+      service_plan_template: body?.service_plan_template as string | null | undefined,
     });
     notifyRealtime(['admin']);
     res.json(settings);

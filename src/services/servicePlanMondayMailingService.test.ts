@@ -45,6 +45,24 @@ function run(): void {
     /8\. Ссылка на программу: https:\/\/app\.church-tambov\.ru\/service-plan\/share\/bb479541-bec5-4931-b991-f65f0e8ce4cc/,
   );
 
+  const custom = buildServicePlanMondayMailingText({
+    serviceDateYmd: '2026-07-26',
+    shareToken: 'bb479541-bec5-4931-b991-f65f0e8ce4cc',
+    publicOrigin: 'https://app.church-tambov.ru',
+    preacher: { id: 1, mention: '@zhigunov72', displayName: 'Жигунов' },
+    music: { id: 2, mention: '@N_i_k_o_l_a_sss', displayName: 'Николай' },
+    poem: { id: 3, mention: 'Надежда', displayName: 'Надежда' },
+    leader: { id: 4, mention: '@zhigunovdm', displayName: 'Дмитрий' },
+    sermonTopic: 'Тема',
+    sermonScripture: 'Ин. 1:1',
+    choirLine: 'Хор петь не будет.',
+    template: '{{sunday_heading}}\nПроповедник: {{preacher}}\n{{share_url}}',
+  });
+  assert.equal(
+    custom,
+    'Воскресенье — 26 июля\nПроповедник: @zhigunov72\nhttps://app.church-tambov.ru/service-plan/share/bb479541-bec5-4931-b991-f65f0e8ce4cc',
+  );
+
   assert.equal(resolveChoirLineFromBlocks([], new Map()), 'Хор петь не будет.');
   assert.equal(
     resolveChoirLineFromBlocks(

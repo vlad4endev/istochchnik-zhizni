@@ -4094,6 +4094,8 @@ function TelegramSection() {
     coordinator_chat_id: '',
     default_chat_id: '',
     prayer_template: '',
+    service_plan_chat_id: '',
+    service_plan_template: '',
   });
   const [customText, setCustomText] = useState('');
   const [customChatId, setCustomChatId] = useState('');
@@ -4121,6 +4123,8 @@ function TelegramSection() {
       coordinator_chat_id: data.coordinator_chat_id ?? '',
       default_chat_id: data.default_chat_id ?? '',
       prayer_template: data.prayer_template ?? '',
+      service_plan_chat_id: data.service_plan_chat_id ?? '',
+      service_plan_template: data.service_plan_template ?? '',
     });
   }, [data]);
 
@@ -4138,6 +4142,8 @@ function TelegramSection() {
         coordinator_chat_id: normalizeUiString(form.coordinator_chat_id),
         default_chat_id: normalizeUiString(form.default_chat_id),
         prayer_template: normalizeUiString(form.prayer_template),
+        service_plan_chat_id: normalizeUiString(form.service_plan_chat_id),
+        service_plan_template: normalizeUiString(form.service_plan_template),
       }),
     onSuccess: (next) => {
       setNote({ type: 'ok', text: 'Telegram настройки сохранены.' });
@@ -4243,6 +4249,8 @@ function TelegramSection() {
     coordinator_chat_id: null,
     default_chat_id: null,
     prayer_template: null,
+    service_plan_chat_id: null,
+    service_plan_template: null,
     has_bot_token: false,
   }) satisfies TelegramSettingsResponse;
 
@@ -4446,6 +4454,20 @@ function TelegramSection() {
               placeholder="-1001234567890"
             />
           </div>
+          <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-4">
+            <label className="mb-1 block text-xs font-semibold text-stone-700">
+              Программа служения (понедельник 10:00)
+            </label>
+            <p className="mb-2 text-xs leading-relaxed text-stone-500">
+              Сюда уходит авторассылка ближайшего воскресенья. Если пусто — используется запасной чат выше.
+            </p>
+            <input
+              className={fieldClass()}
+              value={form.service_plan_chat_id}
+              onChange={(e) => setForm((s) => ({ ...s, service_plan_chat_id: e.target.value }))}
+              placeholder="-1001234567890"
+            />
+          </div>
         </div>
       </section>
 
@@ -4491,6 +4513,47 @@ function TelegramSection() {
         </div>
       </section>
 
+      <section className="overflow-hidden rounded-2xl border border-[#F0E9EA] bg-white shadow-sm">
+        {tgStepHead(
+          4,
+          'Текст рассылки программы служения',
+          'Каждый понедельник в 10:00 (МСК) бот отправляет этот текст в чат из шага 2 и в мессенджер «Богослужение (планирование)». Пустое поле = стандартный шаблон.',
+        )}
+        <div className="p-5 pt-0">
+          <textarea
+            className="min-h-[220px] w-full resize-y rounded-xl border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            value={form.service_plan_template}
+            onChange={(e) => setForm((s) => ({ ...s, service_plan_template: e.target.value }))}
+            placeholder={
+              '{{sunday_heading}}\n1. Проповедник — {{preacher}}\n{{sermon_topic_block}}{{sermon_scripture_block}}2. Группа прославления — {{music}}, в среду или ранее нужно внести в программу гимны…\n3. Стих — {{poem}}, …\n4. {{choir_line}}\n5. Ведущий — {{leader}}, …\n6. Проповедник — {{preacher}}, …\n7. Медиа-команда, …\n8. Ссылка на программу: {{share_url}}'
+            }
+          />
+          <details className="mt-3 rounded-lg border border-stone-100 bg-stone-50/80 px-3 py-2">
+            <summary className="cursor-pointer text-xs font-semibold text-stone-700">Подстановки в шаблоне</summary>
+            <p className="mt-2 flex flex-wrap gap-1 text-xs leading-relaxed text-stone-500">
+              {[
+                '{{sunday_heading}}',
+                '{{date}}',
+                '{{preacher}}',
+                '{{music}}',
+                '{{poem}}',
+                '{{leader}}',
+                '{{choir_line}}',
+                '{{sermon_topic}}',
+                '{{sermon_scripture}}',
+                '{{sermon_topic_block}}',
+                '{{sermon_scripture_block}}',
+                '{{share_url}}',
+              ].map((v) => (
+                <code key={v} className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-stone-700 shadow-sm">
+                  {v}
+                </code>
+              ))}
+            </p>
+          </details>
+        </div>
+      </section>
+
       <div className="flex flex-col gap-3 rounded-2xl border-2 border-primary/25 bg-gradient-to-br from-primary/[0.06] to-transparent px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm leading-relaxed text-stone-700">
           <span className="font-semibold text-stone-900">Сохранить шаги 1–3:</span> переключатель модуля, токен, все chat_id и шаблон. Планировщик ниже сохраняется отдельной кнопкой.
@@ -4510,7 +4573,7 @@ function TelegramSection() {
 
       <section className="overflow-hidden rounded-2xl border border-[#F0E9EA] bg-white shadow-sm">
         {tgStepHead(
-          4,
+          5,
           'Авторассылка «молитва на сегодня»',
           `Отправка людям с Telegram ID в карточке. Расписание по часам сервера (${dispatchForm.server_timezone}); проверка каждые ~30 с.`,
         )}
@@ -4687,7 +4750,7 @@ function TelegramSection() {
 
       <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
         {tgStepHead(
-          5,
+          6,
           'Ручные проверки (в каналы)',
           'Эти кнопки отправляют в группы по chat_id из шага 2. Рассылка «всем с Telegram ID» идёт в личные чаты участников, не в канал.',
         )}

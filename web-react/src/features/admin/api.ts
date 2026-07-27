@@ -498,6 +498,8 @@ export interface TelegramSettingsResponse {
   coordinator_chat_id: string | null;
   default_chat_id: string | null;
   prayer_template: string | null;
+  service_plan_chat_id: string | null;
+  service_plan_template: string | null;
   has_bot_token: boolean;
 }
 
@@ -561,6 +563,8 @@ export async function patchTelegramSettings(body: {
   coordinator_chat_id?: string | null;
   default_chat_id?: string | null;
   prayer_template?: string | null;
+  service_plan_chat_id?: string | null;
+  service_plan_template?: string | null;
 }): Promise<TelegramSettingsResponse> {
   const { data } = await apiClient.patch<TelegramSettingsResponse>('/api/telegram/settings', body);
   return data;
