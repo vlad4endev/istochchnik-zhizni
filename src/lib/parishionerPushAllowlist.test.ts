@@ -11,6 +11,7 @@ function run(): void {
   assert.equal(isParishionerAllowedPushKindOrType('feed_like'), true);
   assert.equal(isParishionerAllowedPushKindOrType('feed_comment'), true);
   assert.equal(isParishionerAllowedPushKindOrType('feed_repost'), true);
+  assert.equal(isParishionerAllowedPushKindOrType('feed_new_post'), true);
 
   assert.equal(isParishionerAllowedPushKindOrType('coordinator_week_digest'), false);
   assert.equal(isParishionerAllowedPushKindOrType('media_assignment'), false);

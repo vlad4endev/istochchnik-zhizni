@@ -1,4 +1,5 @@
 import { query } from '../config/db';
+import { getMemberIdsWithAnyPushSubscription } from './fcmSubscriptionService';
 import { resolveRepostRoot } from './profileService';
 import { sendPush } from './pushService';
 
@@ -107,4 +108,59 @@ export async function notifyPostReposted(sourcePostId: string, actorMemberId: nu
     postId: rootId,
     tag: `feed-repost-${rootId}-${actorMemberId}`,
   });
+}
+
+async function isAuthorProfilePrivate(memberId: number): Promise<boolean> {
+  const r = await query(
+    `SELECT COALESCE(is_private, FALSE) AS is_private FROM user_profiles WHERE member_id = $1 LIMIT 1`,
+    [memberId],
+  );
+  return Boolean((r.rows[0] as { is_private?: boolean } | undefined)?.is_private);
+}
+
+async function resolvePostCaption(postId: string): Promise<string | null> {
+  const r = await query(`SELECT caption FROM profile_posts WHERE id = $1::bigint LIMIT 1`, [postId]);
+  const cap = (r.rows[0] as { caption?: string | null } | undefined)?.caption;
+  if (typeof cap !== 'string') return null;
+  const t = cap.trim();
+  return t.length > 0 ? t : null;
+}
+
+/**
+ * Пуш всем с подпиской (кроме автора): в ленте новый пост.
+ * Приватный профиль — не шлём (пост не виден в общей ленте).
+ */
+export async function notifyMembersAboutNewFeedPost(
+  postId: string,
+  authorMemberId: number,
+): Promise<void> {
+  const authorId = Number(authorMemberId);
+  if (!Number.isFinite(authorId) || authorId <= 0) return;
+  if (!/^\d+$/.test(String(postId).trim())) return;
+
+  if (await isAuthorProfilePrivate(authorId)) return;
+
+  const recipients = (await getMemberIdsWithAnyPushSubscription()).filter((id) => id !== authorId);
+  if (recipients.length === 0) return;
+
+  const author = await resolveActorLabel(authorId);
+  const caption = await resolvePostCaption(postId);
+  const body = caption ? truncateText(caption, 140) : 'новая публикация в ленте';
+
+  const data: Record<string, string> = {
+    url: '/feed',
+    kind: 'feed_new_post',
+    type: 'feed_new_post',
+    postId: String(postId),
+    actorId: String(authorId),
+    tag: `feed-new-post-${postId}`,
+    badge: '/assets/pwa-64x64.png',
+    icon: '/assets/pwa-192x192.png',
+  };
+
+  const chunkSize = 25;
+  for (let i = 0; i < recipients.length; i += chunkSize) {
+    const slice = recipients.slice(i, i + chunkSize);
+    await Promise.allSettled(slice.map((id) => sendPush(id, author, body, data)));
+  }
 }

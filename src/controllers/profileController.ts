@@ -22,6 +22,7 @@ import {
   type MediaType,
 } from '../services/profileService';
 import {
+  notifyMembersAboutNewFeedPost,
   notifyPostCommented,
   notifyPostLiked,
   notifyPostReposted,
@@ -35,6 +36,12 @@ import {
 } from '../lib/supabaseStorage';
 
 type AuthReq = Request & { authUserId?: number };
+
+function scheduleNewFeedPostPush(postId: string, authorMemberId: number): void {
+  void notifyMembersAboutNewFeedPost(postId, authorMemberId).catch((e) => {
+    console.warn('[profile] new post push failed (best-effort):', e);
+  });
+}
 
 function parsePositiveInt(raw: unknown): number | null {
   const n = typeof raw === 'string' ? Number(raw) : typeof raw === 'number' ? raw : NaN;
@@ -168,6 +175,7 @@ export async function postCreatePost(req: Request, res: Response): Promise<void>
       }
       const created = await createPost({ kind: 'uploads', memberId: authUserId, caption, uploads });
       res.status(201).json({ id: created.id, media: uploads });
+      scheduleNewFeedPostPush(created.id, authUserId);
       return;
     }
 
@@ -194,6 +202,7 @@ export async function postCreatePost(req: Request, res: Response): Promise<void>
       if (textBody.length > 0) {
         const created = await createPost({ kind: 'text', memberId: authUserId, caption: textBody });
         res.status(201).json({ id: created.id });
+        scheduleNewFeedPostPush(created.id, authUserId);
         return;
       }
       res.status(400).json({ error: 'Добавьте текст, медиа или загрузите файлы' });
@@ -202,6 +211,7 @@ export async function postCreatePost(req: Request, res: Response): Promise<void>
 
     const created = await createPost({ kind: 'urls', memberId: authUserId, caption, media });
     res.status(201).json({ id: created.id });
+    scheduleNewFeedPostPush(created.id, authUserId);
   } catch (e) {
     console.error('[profile] createPost error:', e);
     const msg = e instanceof Error ? e.message : 'Failed to create post';
