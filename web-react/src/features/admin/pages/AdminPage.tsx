@@ -4295,7 +4295,8 @@ function TelegramSection() {
             <h2 className="text-xl font-bold tracking-tight text-stone-900">Telegram</h2>
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-stone-600">
               Один бот от @BotFather: сначала токен и проверка, затем чаты для разных типов сообщений, шаблон «молитва на
-              сегодня», при желании — авторассылка по расписанию людям с Telegram ID в карточках участников.
+              сегодня», шаблон и чат авторассылки программы служения (понедельник 10:00), при желании — авторассылка
+              молитвы по расписанию людям с Telegram ID в карточках участников.
             </p>
           </div>
         </div>
