@@ -4,6 +4,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'framer-motion';
 
 import { useMe } from '../../../hooks/useMe';
+import { getAppScrollRoot, getAppScrollTop, setAppScrollTop } from '../../../lib/appScroll';
+import {
+  readFeedScrollAnchor,
+  saveFeedScrollAnchor,
+} from '../../../lib/persistAppLocation';
 import { ProfileComposeModal } from '../../profile/components/ProfileComposeModal';
 import {
   likeProfilePost,
@@ -74,6 +79,9 @@ export function FeedPage() {
   const [sortMode, setSortMode] = useState<FeedSortMode>('smart');
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
+  const restoredFeedScrollRef = useRef(false);
+  const feedPersistRafRef = useRef<number | null>(null);
+  const feedRestorePagesRef = useRef(0);
 
   const storiesQ = useQuery({
     queryKey: STORIES_KEY,
@@ -116,14 +124,63 @@ export function FeedPage() {
 
   useEffect(() => {
     void loadFirst();
+    restoredFeedScrollRef.current = false;
+    feedRestorePagesRef.current = 0;
   }, [loadFirst]);
 
+  const persistFeedScroll = useCallback(() => {
+    const y = getAppScrollTop();
+    let postId: string | undefined;
+    try {
+      const root = getAppScrollRoot();
+      const probeY =
+        (root?.getBoundingClientRect().top ?? 0) +
+        (root?.clientHeight ?? window.innerHeight) * 0.25;
+      const nodes = document.querySelectorAll<HTMLElement>('[data-feed-post-id]');
+      for (const node of nodes) {
+        const rect = node.getBoundingClientRect();
+        if (probeY >= rect.top && probeY <= rect.bottom) {
+          postId = node.dataset.feedPostId;
+          break;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    saveFeedScrollAnchor({ y, postId, sort: sortMode });
+  }, [sortMode]);
+
   useEffect(() => {
-    const onScroll = () => setHeaderScrolled(window.scrollY > 12);
+    const onScroll = () => {
+      setHeaderScrolled(getAppScrollTop() > 12);
+      if (feedPersistRafRef.current != null) return;
+      feedPersistRafRef.current = requestAnimationFrame(() => {
+        feedPersistRafRef.current = null;
+        persistFeedScroll();
+      });
+    };
     onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+    const el = getAppScrollRoot();
+    const target: HTMLElement | Window = el ?? window;
+    target.addEventListener('scroll', onScroll, { passive: true });
+
+    const onHide = () => persistFeedScroll();
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') onHide();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('pagehide', onHide);
+
+    return () => {
+      target.removeEventListener('scroll', onScroll);
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pagehide', onHide);
+      if (feedPersistRafRef.current != null) {
+        cancelAnimationFrame(feedPersistRafRef.current);
+        feedPersistRafRef.current = null;
+      }
+    };
+  }, [persistFeedScroll]);
 
   useEffect(() => {
     if (!sortMenuOpen) return;
@@ -155,6 +212,61 @@ export function FeedPage() {
       setLoadingMore(false);
     }
   }, [cursor, loadingMore, sortMode]);
+
+  /** После загрузки постов вернуть позицию (или пост), сохранённую до сворачивания. */
+  useEffect(() => {
+    if (loading || loadingMore) return;
+    if (posts.length === 0) return;
+    const saved = readFeedScrollAnchor();
+    if (!saved || (saved.sort && saved.sort !== sortMode)) {
+      restoredFeedScrollRef.current = true;
+      return;
+    }
+
+    if (saved.postId) {
+      const node = document.querySelector<HTMLElement>(
+        `[data-feed-post-id="${CSS.escape(saved.postId)}"]`,
+      );
+      if (!node) {
+        // Пост глубже первой страницы — догружаем, пока не найдём или не кончатся страницы.
+        if (cursor && !restoredFeedScrollRef.current && feedRestorePagesRef.current < 8) {
+          feedRestorePagesRef.current += 1;
+          void loadMore();
+          return;
+        }
+        restoredFeedScrollRef.current = true;
+        if (saved.y > 0) setAppScrollTop(saved.y);
+        return;
+      }
+    }
+
+    if (restoredFeedScrollRef.current) return;
+    restoredFeedScrollRef.current = true;
+
+    const apply = () => {
+      if (saved.postId) {
+        const node = document.querySelector<HTMLElement>(
+          `[data-feed-post-id="${CSS.escape(saved.postId)}"]`,
+        );
+        if (node) {
+          const root = getAppScrollRoot();
+          if (root) {
+            const delta =
+              node.getBoundingClientRect().top - root.getBoundingClientRect().top;
+            root.scrollTop = Math.max(0, root.scrollTop + delta - 72);
+          } else {
+            node.scrollIntoView({ block: 'start', behavior: 'auto' });
+          }
+          return;
+        }
+      }
+      if (saved.y > 0) setAppScrollTop(saved.y);
+    };
+    requestAnimationFrame(() => {
+      apply();
+      requestAnimationFrame(apply);
+    });
+  }, [loading, loadingMore, posts, sortMode, cursor, loadMore]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -404,27 +516,28 @@ export function FeedPage() {
 
         {!loading &&
           posts.map((post, index) => (
-            <FeedPostCard
-              key={post.id}
-              post={post}
-              appearIndex={index}
-              canInteract={Boolean(me)}
-              likeBusy={!!busy[`like-${post.id}`]}
-              repostBusy={!!busy[`repost-${post.id}`]}
-              profileLinkState={profileLinkState}
-              onToggleLike={(p) => void onToggleLike(p)}
-              onRepost={(p) => void onRepost(p)}
-              onOpenComments={(p) => {
-                const a = p.author;
-                const uname = a?.username?.trim() ?? '';
-                const authorName =
-                  (uname && !/^member-\d+$/i.test(uname) ? uname : null) ||
-                  a?.display_name?.trim() ||
-                  null;
-                setCommentTarget({ postId: p.id, authorName });
-              }}
-              onOpenLikers={(p) => setLikersPostId(p.id)}
-            />
+            <div key={post.id} data-feed-post-id={post.id}>
+              <FeedPostCard
+                post={post}
+                appearIndex={index}
+                canInteract={Boolean(me)}
+                likeBusy={!!busy[`like-${post.id}`]}
+                repostBusy={!!busy[`repost-${post.id}`]}
+                profileLinkState={profileLinkState}
+                onToggleLike={(p) => void onToggleLike(p)}
+                onRepost={(p) => void onRepost(p)}
+                onOpenComments={(p) => {
+                  const a = p.author;
+                  const uname = a?.username?.trim() ?? '';
+                  const authorName =
+                    (uname && !/^member-\d+$/i.test(uname) ? uname : null) ||
+                    a?.display_name?.trim() ||
+                    null;
+                  setCommentTarget({ postId: p.id, authorName });
+                }}
+                onOpenLikers={(p) => setLikersPostId(p.id)}
+              />
+            </div>
           ))}
 
         {cursor ? <div ref={sentinelRef} className={styles.sentinel} aria-hidden /> : null}
