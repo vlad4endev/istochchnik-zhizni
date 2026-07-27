@@ -2516,7 +2516,7 @@ export function ServicePlannerPage() {
               </div>
             ) : null}
           </div>
-          <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+          <div className="flex w-full min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <div className="hidden w-full flex-wrap items-center justify-end gap-1 overflow-x-auto pb-0.5 sm:flex sm:w-auto sm:overflow-visible sm:pb-0">
               {canManageTemplates ? (
                 <>
@@ -2567,8 +2567,15 @@ export function ServicePlannerPage() {
               </button>
             </div>
 
-            <div className="flex w-full items-center justify-end gap-1 overflow-x-auto pb-0.5 sm:hidden [mask-image:linear-gradient(to_right,black_88%,transparent_100%)]">
-              {/* UX #6: шаблоны — в «⋯», архив/удаление остаются на виду */}
+            <div
+              className={[
+                'grid w-full min-w-0 gap-1.5 sm:hidden',
+                canManageTemplates
+                  ? 'grid-cols-[2.25rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]'
+                  : 'grid-cols-[repeat(3,minmax(0,1fr))]',
+              ].join(' ')}
+            >
+              {/* UX #6: шаблоны — в «⋯», PDF / архив / удаление всегда на виду */}
               {canManageTemplates ? (
                 <div className="relative">
                   <button
@@ -2576,7 +2583,7 @@ export function ServicePlannerPage() {
                     onClick={() => setPlanHeaderMoreOpen((v) => !v)}
                     aria-expanded={planHeaderMoreOpen}
                     aria-haspopup="menu"
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-stone-300 text-stone-700 hover:bg-stone-50"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-stone-300 text-stone-700 hover:bg-stone-50"
                     aria-label="Другие действия с программой"
                   >
                     <LuEllipsis className="h-5 w-5" strokeWidth={2.25} aria-hidden />
@@ -2584,7 +2591,7 @@ export function ServicePlannerPage() {
                   {planHeaderMoreOpen ? (
                     <div
                       role="menu"
-                      className="absolute right-0 top-full z-[55] mt-1 min-w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
+                      className="absolute left-0 top-full z-[55] mt-1 min-w-[min(18rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
                     >
                       {canCreateTemplateFromPlan ? (
                         <button
@@ -2611,28 +2618,6 @@ export function ServicePlannerPage() {
                       >
                         Конструктор шаблона
                       </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="flex w-full px-3 py-2 text-left text-xs font-semibold text-amber-800 hover:bg-amber-50"
-                        onClick={() => {
-                          setPlanHeaderMoreOpen(false);
-                          void toggleArchiveCurrentPlan();
-                        }}
-                      >
-                        {draft.is_archived ? 'Вернуть из архива' : 'В архив'}
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="flex w-full px-3 py-2 text-left text-xs font-semibold text-rose-700 hover:bg-rose-50"
-                        onClick={() => {
-                          setPlanHeaderMoreOpen(false);
-                          void deleteCurrentPlan();
-                        }}
-                      >
-                        Удалить программу
-                      </button>
                     </div>
                   ) : null}
                 </div>
@@ -2644,30 +2629,33 @@ export function ServicePlannerPage() {
                   void handlePrintPlanSheet();
                 }}
                 disabled={pdfExporting}
-                className="inline-flex min-h-[36px] shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-semibold text-stone-800 hover:border-primary hover:text-primary disabled:cursor-wait disabled:opacity-60 sm:hidden"
+                className="inline-flex min-h-9 min-w-0 items-center justify-center gap-1 rounded-lg border border-stone-300 px-2 py-1.5 text-xs font-semibold text-stone-800 hover:border-primary hover:text-primary disabled:cursor-wait disabled:opacity-60"
                 title="Скачать программу в PDF"
               >
                 <LuDownload className="h-4 w-4 shrink-0" aria-hidden />
                 {pdfExporting ? 'PDF…' : 'PDF'}
               </button>
-              {!canManageTemplates ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => void toggleArchiveCurrentPlan()}
-                    className="min-h-[36px] shrink-0 whitespace-nowrap rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-50"
-                  >
-                    {draft.is_archived ? 'Вернуть из архива' : 'В архив'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void deleteCurrentPlan()}
-                    className="min-h-[36px] shrink-0 whitespace-nowrap rounded-lg border border-rose-300 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-                  >
-                    Удалить программу
-                  </button>
-                </>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  setPlanHeaderMoreOpen(false);
+                  void toggleArchiveCurrentPlan();
+                }}
+                className="inline-flex min-h-9 min-w-0 items-center justify-center rounded-lg border border-amber-300 px-2 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50"
+              >
+                {draft.is_archived ? 'Из архива' : 'В архив'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPlanHeaderMoreOpen(false);
+                  void deleteCurrentPlan();
+                }}
+                className="inline-flex min-h-9 min-w-0 items-center justify-center rounded-lg border border-rose-300 px-2 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                aria-label="Удалить программу"
+              >
+                Удалить
+              </button>
             </div>
           </div>
         </div>
