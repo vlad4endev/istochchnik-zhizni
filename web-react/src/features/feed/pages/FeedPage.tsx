@@ -16,7 +16,7 @@ import { CommentSheet } from '../components/CommentSheet';
 import { FeedPostCard, type FeedCardPost } from '../components/FeedPostCard';
 import { LikersSheet } from '../components/LikersSheet';
 import { StoryComposeModal } from '../components/StoryComposeModal';
-import { StoryRingBar } from '../components/StoryRingBar';
+import { normalizeStoryRingGroups, StoryRingBar } from '../components/StoryRingBar';
 import { StoryViewer } from '../components/StoryViewer';
 import { keys } from '../../../lib/queryKeys';
 import {
@@ -84,7 +84,7 @@ export function FeedPage() {
 
   const storyGroups = useMemo((): StoryAuthorGroup[] => {
     const remote = storiesQ.data;
-    if (remote && remote.length > 0) return remote;
+    if (remote && remote.length > 0) return normalizeStoryRingGroups(remote);
     if (me) return [meAsStoryGroup(me)];
     return [];
   }, [storiesQ.data, me]);
