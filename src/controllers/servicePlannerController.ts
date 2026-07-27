@@ -30,7 +30,7 @@ import {
   listPreacherSermonHistory,
   upsertSermonFeedbackComment,
 } from '../services/sermonFeedbackService';
-import { runServicePlanMondayMailing } from '../services/servicePlanMondayMailingService';
+import { runServicePlanMondayMailing, notifyServicePlanPublishedTelegram } from '../services/servicePlanMondayMailingService';
 import { normalizeAppRole, normalizeAppRoles, type AppRole } from '../types/appRole';
 import { roleHasPermission } from '../types/appPermissions';
 import { loadRolePermissionsSettings } from '../services/rolePermissionsSettingsService';
@@ -698,6 +698,26 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
     const justPublished = patch.status === 'published' && previousStatus !== 'published';
     if (patch.status === 'published' || previousStatus === 'published') {
       await syncPlannerSetlistIfPublished(id, { notifyOnPublish: justPublished });
+    }
+    if (justPublished) {
+      const publishedDate = nextServiceDate || String(beforeRow?.service_date ?? '');
+      if (shareToken && publishedDate) {
+        try {
+          const tg = await notifyServicePlanPublishedTelegram({
+            serviceDateYmd: publishedDate,
+            shareToken,
+          });
+          if (tg.ok) {
+            console.log(`[service-planner] published telegram notify → ${tg.chat_id}`);
+          } else if (tg.skipped) {
+            console.log(`[service-planner] published telegram skipped: ${tg.reason ?? 'unknown'}`);
+          } else {
+            console.warn(`[service-planner] published telegram failed: ${tg.reason ?? 'unknown'}`);
+          }
+        } catch (tgErr) {
+          console.warn('[service-planner] published telegram notify failed:', tgErr);
+        }
+      }
     }
     notifyServicePlannerRealtime();
     res.json({ ok: true });

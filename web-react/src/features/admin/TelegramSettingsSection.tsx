@@ -191,6 +191,7 @@ export function TelegramSettingsSection() {
     prayer_template: '',
     service_plan_chat_id: '',
     service_plan_template: '',
+    service_plan_published_chat_id: '',
   });
   const [customText, setCustomText] = useState('');
   const [customChatId, setCustomChatId] = useState('');
@@ -223,6 +224,7 @@ export function TelegramSettingsSection() {
       prayer_template: data.prayer_template ?? '',
       service_plan_chat_id: data.service_plan_chat_id ?? '',
       service_plan_template: data.service_plan_template ?? '',
+      service_plan_published_chat_id: data.service_plan_published_chat_id ?? '',
     });
   }, [data]);
 
@@ -242,6 +244,7 @@ export function TelegramSettingsSection() {
         prayer_template: normalizeUiString(form.prayer_template),
         service_plan_chat_id: normalizeUiString(form.service_plan_chat_id),
         service_plan_template: normalizeUiString(form.service_plan_template),
+        service_plan_published_chat_id: normalizeUiString(form.service_plan_published_chat_id),
       }),
     onSuccess: (next) => {
       setNote({ type: 'ok', text: 'Настройки сохранены.' });
@@ -392,6 +395,7 @@ export function TelegramSettingsSection() {
     prayer_template: null,
     service_plan_chat_id: null,
     service_plan_template: null,
+    service_plan_published_chat_id: null,
     has_bot_token: false,
   }) satisfies TelegramSettingsResponse;
 
@@ -574,6 +578,14 @@ export function TelegramSettingsSection() {
                 value={form.service_plan_chat_id}
                 onChange={(service_plan_chat_id) => setForm((s) => ({ ...s, service_plan_chat_id }))}
               />
+              <ChatField
+                label="Финальная программа"
+                hint="При нажатии «Опубликовать» · ссылка + кнопка"
+                value={form.service_plan_published_chat_id}
+                onChange={(service_plan_published_chat_id) =>
+                  setForm((s) => ({ ...s, service_plan_published_chat_id }))
+                }
+              />
             </div>
           </div>
         ) : null}
@@ -617,7 +629,8 @@ export function TelegramSettingsSection() {
               <h3 className="text-sm font-semibold text-stone-900">Рассылка программы служения</h3>
               <p className="mt-0.5 text-xs text-stone-500">
                 Автоматически каждый понедельник в 10:00 (МСК) — в Telegram и чат «Богослужение
-                (планирование)». Чат задаётся во вкладке «Чаты».
+                (планирование)». Чат задаётся во вкладке «Чаты». Отдельно: при «Опубликовать»
+                уходит короткое уведомление в чат «Финальная программа».
               </p>
             </div>
             <textarea
