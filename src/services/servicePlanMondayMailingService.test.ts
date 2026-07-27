@@ -86,6 +86,50 @@ function run(): void {
     'Хор петь не будет.',
   );
 
+  const rich = buildServicePlanMondayMailingText({
+    serviceDateYmd: '2026-07-26',
+    shareToken: 'bb479541-bec5-4931-b991-f65f0e8ce4cc',
+    editToken: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    publicOrigin: 'https://app.church-tambov.ru',
+    preacher: { id: 1, mention: '@zhigunov72', displayName: 'Жигунов' },
+    music: { id: 2, mention: '@N_i_k_o_l_a_sss', displayName: 'Николай' },
+    poem: { id: 3, mention: 'Надежда', displayName: 'Надежда Иванова' },
+    leader: { id: 4, mention: '@zhigunovdm', displayName: 'Дмитрий' },
+    sermonTopic: 'Тема',
+    sermonScripture: 'Ин. 1:1',
+    choirLine: 'Хор — @choir.',
+    startTime: '10:00',
+    status: 'draft',
+    notes: 'Важно: репетиция в субботу',
+    templateName: 'Воскресное',
+    durationMinutes: 90,
+    planId: 42,
+    poemReader: { id: 5, mention: '@reader', displayName: 'Чтец' },
+    poemAuthor: 'Пушкин',
+    poemTheme: 'Вера',
+    poemText: 'Текст стиха…',
+    songs: ['Великий Бог', 'Ты достоин'],
+    mediaTeamLines: ['Камера — Иван', 'Звук — Пётр'],
+    template: [
+      '{{sunday_heading}}',
+      '{{date_short}} {{start_time}} {{status_ru}}',
+      '{{preacher_name}} / {{preacher_mention}}',
+      '{{songs_inline}} ({{songs_count}})',
+      '{{poem_reader}} · {{poem_author}} · {{poem_theme}}',
+      '{{media_team_inline}}',
+      '{{notes}}',
+      '{{edit_url}}',
+      '{{share_url}}',
+    ].join('\n'),
+  });
+  assert.match(rich, /26\.07\.2026 10:00 черновик/);
+  assert.match(rich, /Жигунов \/ @zhigunov72/);
+  assert.match(rich, /Великий Бог, Ты достоин \(2\)/);
+  assert.match(rich, /@reader · Пушкин · Вера/);
+  assert.match(rich, /Камера — Иван, Звук — Пётр/);
+  assert.match(rich, /Важно: репетиция в субботу/);
+  assert.match(rich, /service-plan\/edit\/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/);
+
   console.log('servicePlanMondayMailingService.test.ts: OK');
 }
 

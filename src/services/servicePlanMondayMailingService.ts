@@ -1,5 +1,6 @@
 import { query } from '../config/db';
 import { addCalendarDaysYmd, formatYmdInTimeZone, getZonedNow } from '../utils/zonedTime';
+import { getAssignmentsForPlan } from './mediaScheduleService';
 import { getPlanDetails } from './servicePlannerService';
 import { getTelegramSettings, sendTelegramByPurpose, sendTelegramToChat } from './telegramService';
 import {
@@ -47,6 +48,20 @@ export type MondayMailingBuildInput = {
   choirLine: string;
   /** Кастомный шаблон из настроек; пустой → DEFAULT */
   template?: string | null;
+  /** Доп. поля программы (необязательны — для обратной совместимости тестов). */
+  startTime?: string | null;
+  status?: 'draft' | 'published' | string | null;
+  notes?: string | null;
+  templateName?: string | null;
+  durationMinutes?: number | null;
+  planId?: number | null;
+  editToken?: string | null;
+  poemReader?: MondayMailingMemberRef | null;
+  poemAuthor?: string | null;
+  poemTheme?: string | null;
+  poemText?: string | null;
+  songs?: string[];
+  mediaTeamLines?: string[];
 };
 
 export type ServicePlanMondayMailingResult = {
@@ -109,6 +124,37 @@ function renderMailingTemplate(template: string, vars: Record<string, string>): 
   return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, key: string) => vars[key] ?? '');
 }
 
+function formatDateShortRu(serviceDateYmd: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(serviceDateYmd.trim());
+  if (!m) return serviceDateYmd;
+  return `${m[3]}.${m[2]}.${m[1]}`;
+}
+
+function formatDateLongRu(serviceDateYmd: string): string {
+  const d = new Date(`${serviceDateYmd}T12:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return serviceDateYmd;
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(d);
+}
+
+function statusRu(status: string | null | undefined): string {
+  const s = String(status ?? '').trim().toLowerCase();
+  if (s === 'published') return 'опубликована';
+  if (s === 'draft') return 'черновик';
+  return s || 'неизвестно';
+}
+
+function memberDisplayName(ref: MondayMailingMemberRef | null | undefined): string {
+  if (!ref) return 'не назначен';
+  const d = ref.displayName.trim();
+  if (d) return d;
+  return memberMention(ref);
+}
+
 /**
  * Текст понедельничной рассылки программы служения (мессенджер + Telegram).
  */
@@ -116,6 +162,8 @@ export function buildServicePlanMondayMailingText(input: MondayMailingBuildInput
   const heading = formatSundayMailingHeading(input.serviceDateYmd);
   const origin = input.publicOrigin.replace(/\/+$/, '') || DEFAULT_PUBLIC_ORIGIN;
   const shareUrl = `${origin}/service-plan/share/${input.shareToken}`;
+  const editToken = (input.editToken ?? '').trim();
+  const editUrl = editToken ? `${origin}/service-plan/edit/${editToken}` : '';
 
   const preacher = memberMention(input.preacher);
   const music = memberMention(input.music);
@@ -127,22 +175,97 @@ export function buildServicePlanMondayMailingText(input: MondayMailingBuildInput
   const sermonTopicBlock = topic ? `Тема: «${topic}»\n` : '';
   const sermonScriptureBlock = scripture ? `Текст: ${scripture}\n` : '';
 
+  const poemAuthor = (input.poemAuthor ?? '').trim();
+  const poemTheme = (input.poemTheme ?? '').trim();
+  const poemText = (input.poemText ?? '').trim();
+  const poemReader = input.poemReader ? memberMention(input.poemReader) : 'не назначен';
+  const poemReaderName = memberDisplayName(input.poemReader);
+  const poemBlockParts: string[] = [];
+  if (poemReader && poemReader !== 'не назначен') poemBlockParts.push(`Чтец: ${poemReader}`);
+  if (poemTheme) poemBlockParts.push(`Тема: ${poemTheme}`);
+  if (poemAuthor) poemBlockParts.push(`Автор: ${poemAuthor}`);
+  if (poemText) poemBlockParts.push(poemText);
+  const poemBlock = poemBlockParts.join('\n');
+
+  const songs = (input.songs ?? []).map((s) => s.trim()).filter(Boolean);
+  const songsList = songs.length > 0 ? songs.map((s, i) => `${i + 1}. ${s}`).join('\n') : 'песни не указаны';
+  const songsInline = songs.length > 0 ? songs.join(', ') : 'песни не указаны';
+
+  const mediaLines = (input.mediaTeamLines ?? []).map((s) => s.trim()).filter(Boolean);
+  const mediaTeam =
+    mediaLines.length > 0 ? mediaLines.map((l) => `• ${l}`).join('\n') : 'медиа-команда не назначена';
+  const mediaTeamInline = mediaLines.length > 0 ? mediaLines.join(', ') : 'медиа-команда не назначена';
+  const mediaTeamOrDefault =
+    mediaLines.length > 0
+      ? mediaTeam
+      : 'Медиа-команда, с пятницы по субботу готовит все материалы для трансляции.';
+
+  const notes = (input.notes ?? '').trim();
+  const startTime = (input.startTime ?? '').trim();
+  const templateName = (input.templateName ?? '').trim();
+  const duration =
+    input.durationMinutes != null && Number.isFinite(input.durationMinutes)
+      ? String(Math.max(0, Math.round(Number(input.durationMinutes))))
+      : '';
+  const planId =
+    input.planId != null && Number.isFinite(input.planId) ? String(Math.trunc(Number(input.planId))) : '';
+  const status = String(input.status ?? '').trim();
+
   const templateRaw = (input.template ?? '').trim();
   const template = templateRaw || DEFAULT_SERVICE_PLAN_MONDAY_MAILING_TEMPLATE;
 
   const rendered = renderMailingTemplate(template, {
     sunday_heading: heading,
     date: heading,
+    service_date: input.serviceDateYmd,
+    date_short: formatDateShortRu(input.serviceDateYmd),
+    date_long: formatDateLongRu(input.serviceDateYmd),
+    start_time: startTime || 'не указано',
+    status: status || 'неизвестно',
+    status_ru: statusRu(status),
+    notes: notes || 'нет заметок',
+    template_name: templateName || 'без шаблона',
+    duration_minutes: duration || '0',
+    plan_id: planId,
+
     preacher,
+    preacher_name: memberDisplayName(input.preacher),
+    preacher_mention: preacher,
     music,
+    music_name: memberDisplayName(input.music),
+    music_mention: music,
     poem,
+    poem_name: memberDisplayName(input.poem),
+    poem_mention: poem,
     leader,
+    leader_name: memberDisplayName(input.leader),
+    leader_mention: leader,
+
     choir_line: input.choirLine,
-    sermon_topic: topic,
-    sermon_scripture: scripture,
+    choir: input.choirLine,
+
+    sermon_topic: topic || 'тема не указана',
+    sermon_scripture: scripture || 'текст не указан',
     sermon_topic_block: sermonTopicBlock,
     sermon_scripture_block: sermonScriptureBlock,
+
+    poem_reader: poemReader,
+    poem_reader_name: poemReaderName,
+    poem_author: poemAuthor || 'автор не указан',
+    poem_theme: poemTheme || 'тема стиха не указана',
+    poem_text: poemText || 'текст стиха не указан',
+    poem_block: poemBlock || 'данные стиха не заполнены',
+
+    songs_list: songsList,
+    songs_inline: songsInline,
+    songs_count: String(songs.length),
+
+    media_team: mediaTeam,
+    media_team_inline: mediaTeamInline,
+    media_team_or_default: mediaTeamOrDefault,
+
     share_url: shareUrl,
+    edit_url: editUrl || shareUrl,
   });
 
   return rendered.replace(/\n{3,}/g, '\n\n').trim();
@@ -290,6 +413,84 @@ function pickSermonFields(
   return { topic, scripture };
 }
 
+type MailingBlockMeta = {
+  title: string;
+  assigned_member_id: number | null;
+  content_json: Record<string, unknown>;
+  block_type_code?: string | null;
+  song_title?: string | null;
+};
+
+function isPoemBlockMeta(b: MailingBlockMeta): boolean {
+  const code = String(b.block_type_code ?? '').toLowerCase();
+  const title = String(b.title ?? '').toLowerCase();
+  return code === 'poem' || title.includes('стих');
+}
+
+function isSongBlockMeta(b: MailingBlockMeta): boolean {
+  const code = String(b.block_type_code ?? '').toLowerCase();
+  return code === 'song' || Boolean(b.song_title?.trim());
+}
+
+function contentString(cj: Record<string, unknown>, key: string): string {
+  const v = cj[key];
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+export function pickPoemFields(
+  blocks: MailingBlockMeta[],
+  memberMap: Map<number, MondayMailingMemberRef>,
+): {
+  reader: MondayMailingMemberRef | null;
+  author: string | null;
+  theme: string | null;
+  text: string | null;
+} {
+  const poem = blocks.find(isPoemBlockMeta);
+  if (!poem) {
+    return { reader: null, author: null, theme: null, text: null };
+  }
+  const readerId = poem.assigned_member_id;
+  const reader =
+    readerId != null && memberMap.has(readerId) ? (memberMap.get(readerId) ?? null) : null;
+  const author = contentString(poem.content_json, 'poem_author') || null;
+  const theme = contentString(poem.content_json, 'poem_theme') || null;
+  const text =
+    contentString(poem.content_json, 'notes') ||
+    contentString(poem.content_json, 'text') ||
+    contentString(poem.content_json, 'poem_text') ||
+    null;
+  return { reader, author, theme, text };
+}
+
+export function pickSongTitles(blocks: MailingBlockMeta[]): string[] {
+  const out: string[] = [];
+  for (const b of blocks) {
+    if (!isSongBlockMeta(b) && String(b.block_type_code ?? '').toLowerCase() !== 'song') continue;
+    const songTitle = (b.song_title ?? '').trim();
+    const blockTitle = String(b.title ?? '').trim();
+    const label = songTitle || blockTitle;
+    if (label) out.push(label);
+  }
+  return out;
+}
+
+async function loadMediaTeamLines(planId: number): Promise<string[]> {
+  try {
+    const assignments = await getAssignmentsForPlan(planId);
+    return assignments
+      .filter((a) => a.status !== 'declined')
+      .map((a) => {
+        const role = String(a.role?.name ?? '').trim() || 'роль';
+        const name = String(a.member?.name ?? '').trim() || 'не назначен';
+        return `${role} — ${name}`;
+      });
+  } catch (e) {
+    console.warn('[service-plan-monday-mailing] media assignments load failed:', e);
+    return [];
+  }
+}
+
 /**
  * Собирает и отправляет понедельничную рассылку программы на ближайшее воскресенье.
  * По умолчанию идемпотентна: один раз на каждое воскресенье (ключ в global_settings).
@@ -351,27 +552,45 @@ export async function runServicePlanMondayMailing(options?: {
     mentionById.set(id, ref.mention);
   }
 
-  // getPlanDetails не отдаёт block_type_code в mapped blocks — подгружаем коды отдельно
+  // getPlanDetails не отдаёт block_type_code / song_title в mapped blocks — подгружаем отдельно
   const codesRes = await query(
-    `SELECT b.id, bt.code AS block_type_code
+    `SELECT
+       b.id,
+       bt.code AS block_type_code,
+       s.title AS song_title
      FROM public.service_blocks b
      LEFT JOIN public.block_types bt ON bt.id = b.block_type_id
+     LEFT JOIN public.songs s ON s.id = b.song_id
      WHERE b.service_plan_id = $1`,
     [planId],
   );
-  const codeByBlockId = new Map<number, string>();
-  for (const row of codesRes.rows as Array<{ id: number; block_type_code: string | null }>) {
-    codeByBlockId.set(Number(row.id), String(row.block_type_code ?? ''));
+  const metaByBlockId = new Map<number, { block_type_code: string; song_title: string | null }>();
+  for (const row of codesRes.rows as Array<{
+    id: number;
+    block_type_code: string | null;
+    song_title: string | null;
+  }>) {
+    metaByBlockId.set(Number(row.id), {
+      block_type_code: String(row.block_type_code ?? ''),
+      song_title: row.song_title == null ? null : String(row.song_title),
+    });
   }
-  const blocksForMailing = plan.blocks.map((b) => ({
-    title: b.title,
-    assigned_member_id: b.assigned_member_id,
-    content_json: b.content_json,
-    block_type_code: codeByBlockId.get(b.id) ?? null,
-  }));
+  const blocksForMailing: MailingBlockMeta[] = plan.blocks.map((b) => {
+    const meta = metaByBlockId.get(b.id);
+    return {
+      title: b.title,
+      assigned_member_id: b.assigned_member_id,
+      content_json: b.content_json,
+      block_type_code: meta?.block_type_code ?? null,
+      song_title: meta?.song_title ?? null,
+    };
+  });
 
   const sermon = pickSermonFields(blocksForMailing, plan.linked_sermon_note);
   const choirLine = resolveChoirLineFromBlocks(blocksForMailing, mentionById);
+  const poemFields = pickPoemFields(blocksForMailing, memberMap);
+  const songs = pickSongTitles(blocksForMailing);
+  const mediaTeamLines = await loadMediaTeamLines(planId);
 
   let tgSettings: Awaited<ReturnType<typeof getTelegramSettings>> | null = null;
   try {
@@ -393,6 +612,19 @@ export async function runServicePlanMondayMailing(options?: {
     sermonScripture: sermon.scripture,
     choirLine,
     template: tgSettings?.service_plan_template ?? null,
+    startTime: plan.start_time,
+    status: plan.status,
+    notes: plan.notes,
+    templateName: plan.template_name,
+    durationMinutes: plan.total_duration_minutes,
+    planId,
+    editToken: plan.edit_token,
+    poemReader: poemFields.reader,
+    poemAuthor: poemFields.author,
+    poemTheme: poemFields.theme,
+    poemText: poemFields.text,
+    songs,
+    mediaTeamLines,
   });
 
   if (dryRun) {

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { LuCheck, LuCircleAlert, LuClock, LuSend } from 'react-icons/lu';
 
 import {
@@ -36,35 +36,151 @@ const TABS: { id: TgTab; label: string }[] = [
   { id: 'dispatch', label: 'Рассылка' },
 ];
 
-const PRAYER_PLACEHOLDERS = [
-  '{{date}}',
-  '{{member_name}}',
-  '{{member_prayer_request}}',
-  '{{member_prayer_request_bullets}}',
-  '{{theme_title}}',
-  '{{theme_bible_verse}}',
-  '{{theme_prayer_points}}',
-  '{{ministry_title}}',
-  '{{ministry_prayer_points}}',
-  '{{backslider_name}}',
-  '{{all_themes_block}}',
-  '{{all_ministries_block}}',
-  '{{all_backsliders_inline}}',
+type PlaceholderItem = {
+  token: string;
+  label: string;
+  example?: string;
+};
+
+type PlaceholderGroup = {
+  title: string;
+  items: PlaceholderItem[];
+};
+
+const PRAYER_PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
+  {
+    title: 'Дата и человек дня',
+    items: [
+      { token: '{{date}}', label: 'Дата молитвы (по-русски)', example: '27 июля 2026' },
+      { token: '{{member_name}}', label: 'Имя члена церкви на сегодня' },
+      { token: '{{member_prayer_request}}', label: 'Просьба о молитве целиком (текст)' },
+      {
+        token: '{{member_prayer_request_bullets}}',
+        label: 'Просьба о молитве списком (каждый пункт с «-»)',
+      },
+    ],
+  },
+  {
+    title: 'Первая тема / служение / отпавший',
+    items: [
+      { token: '{{theme_title}}', label: 'Название первой глобальной темы' },
+      { token: '{{theme_bible_verse}}', label: 'Библейский стих первой темы' },
+      { token: '{{theme_prayer_points}}', label: 'Пункты молитвы первой темы' },
+      { token: '{{ministry_title}}', label: 'Название первого служения' },
+      { token: '{{ministry_prayer_points}}', label: 'Нужды первого служения' },
+      { token: '{{backslider_name}}', label: 'Имя первого отпавшего в списке' },
+    ],
+  },
+  {
+    title: 'Все сразу (блоки)',
+    items: [
+      { token: '{{all_themes_block}}', label: 'Все глобальные темы молитвы (готовый блок)' },
+      { token: '{{all_ministries_block}}', label: 'Все служения и их нужды (готовый блок)' },
+      { token: '{{all_backsliders_inline}}', label: 'Все отпавшие через запятую' },
+    ],
+  },
 ];
 
-const PROGRAM_PLACEHOLDERS = [
-  '{{sunday_heading}}',
-  '{{date}}',
-  '{{preacher}}',
-  '{{music}}',
-  '{{poem}}',
-  '{{leader}}',
-  '{{choir_line}}',
-  '{{sermon_topic}}',
-  '{{sermon_scripture}}',
-  '{{sermon_topic_block}}',
-  '{{sermon_scripture_block}}',
-  '{{share_url}}',
+const PROGRAM_PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
+  {
+    title: 'Дата и программа',
+    items: [
+      {
+        token: '{{sunday_heading}}',
+        label: 'Заголовок дня',
+        example: 'Воскресенье — 26 июля',
+      },
+      { token: '{{date}}', label: 'То же, что sunday_heading (алиас)' },
+      { token: '{{date_short}}', label: 'Короткая дата', example: '26.07.2026' },
+      { token: '{{date_long}}', label: 'Полная дата', example: '26 июля 2026 г.' },
+      { token: '{{service_date}}', label: 'Дата YYYY-MM-DD', example: '2026-07-26' },
+      { token: '{{start_time}}', label: 'Время начала служения', example: '10:00' },
+      { token: '{{status_ru}}', label: 'Статус по-русски', example: 'черновик / опубликована' },
+      { token: '{{status}}', label: 'Статус кода', example: 'draft / published' },
+      { token: '{{notes}}', label: 'Заметки к программе' },
+      { token: '{{template_name}}', label: 'Название шаблона программы' },
+      { token: '{{duration_minutes}}', label: 'Длительность программы (минуты)' },
+      { token: '{{plan_id}}', label: 'ID программы в базе' },
+    ],
+  },
+  {
+    title: 'Люди (роли программы)',
+    items: [
+      {
+        token: '{{preacher}}',
+        label: 'Проповедник: @username или имя',
+      },
+      { token: '{{preacher_name}}', label: 'Проповедник — только имя' },
+      { token: '{{preacher_mention}}', label: 'Проповедник — упоминание (@…)' },
+      { token: '{{music}}', label: 'Ответственный за прославление (@ или имя)' },
+      { token: '{{music_name}}', label: 'Прославление — только имя' },
+      { token: '{{music_mention}}', label: 'Прославление — упоминание' },
+      {
+        token: '{{poem}}',
+        label: 'Ответственный за стихи (кто заполняет блок, не чтец)',
+      },
+      { token: '{{poem_name}}', label: 'Ответственный за стихи — имя' },
+      { token: '{{poem_mention}}', label: 'Ответственный за стихи — упоминание' },
+      { token: '{{leader}}', label: 'Ведущий (@ или имя)' },
+      { token: '{{leader_name}}', label: 'Ведущий — только имя' },
+      { token: '{{leader_mention}}', label: 'Ведущий — упоминание' },
+    ],
+  },
+  {
+    title: 'Проповедь',
+    items: [
+      { token: '{{sermon_topic}}', label: 'Тема проповеди' },
+      { token: '{{sermon_scripture}}', label: 'Текст Писания' },
+      {
+        token: '{{sermon_topic_block}}',
+        label: 'Готовая строка «Тема: «…»» (пусто, если темы нет)',
+      },
+      {
+        token: '{{sermon_scripture_block}}',
+        label: 'Готовая строка «Текст: …» (пусто, если текста нет)',
+      },
+    ],
+  },
+  {
+    title: 'Стих и хор',
+    items: [
+      { token: '{{choir_line}}', label: 'Готовая фраза про хор', example: 'Хор петь не будет.' },
+      { token: '{{choir}}', label: 'То же, что choir_line' },
+      { token: '{{poem_reader}}', label: 'Чтец стиха (@ или имя)' },
+      { token: '{{poem_reader_name}}', label: 'Чтец стиха — только имя' },
+      { token: '{{poem_author}}', label: 'Автор стиха' },
+      { token: '{{poem_theme}}', label: 'Тема стиха' },
+      { token: '{{poem_text}}', label: 'Текст / заметки блока стиха' },
+      {
+        token: '{{poem_block}}',
+        label: 'Сводка по стиху: чтец, тема, автор, текст',
+      },
+    ],
+  },
+  {
+    title: 'Песни и медиа',
+    items: [
+      { token: '{{songs_list}}', label: 'Список песен (нумерованный, по строкам)' },
+      { token: '{{songs_inline}}', label: 'Песни через запятую' },
+      { token: '{{songs_count}}', label: 'Число песен' },
+      {
+        token: '{{media_team}}',
+        label: 'Медиа-команда списком: «роль — имя»',
+      },
+      { token: '{{media_team_inline}}', label: 'Медиа-команда через запятую' },
+      {
+        token: '{{media_team_or_default}}',
+        label: 'Медиа-команда или стандартный текст про подготовку',
+      },
+    ],
+  },
+  {
+    title: 'Ссылки',
+    items: [
+      { token: '{{share_url}}', label: 'Публичная ссылка на программу' },
+      { token: '{{edit_url}}', label: 'Ссылка для редактирования программы' },
+    ],
+  },
 ];
 
 function fieldClass() {
@@ -90,6 +206,27 @@ function normalizeUiString(value: string): string | null {
 function normalizeUiOptionalUpdateString(value: string): string | undefined {
   const t = value.trim();
   return t.length > 0 ? t : undefined;
+}
+
+function insertAtCursor(
+  textarea: HTMLTextAreaElement | null,
+  token: string,
+  current: string,
+  setValue: (next: string) => void,
+) {
+  if (!textarea) {
+    setValue(current + token);
+    return;
+  }
+  const start = textarea.selectionStart ?? current.length;
+  const end = textarea.selectionEnd ?? current.length;
+  const next = `${current.slice(0, start)}${token}${current.slice(end)}`;
+  setValue(next);
+  requestAnimationFrame(() => {
+    textarea.focus();
+    const pos = start + token.length;
+    textarea.setSelectionRange(pos, pos);
+  });
 }
 
 function Toggle({
@@ -123,20 +260,55 @@ function Toggle({
   );
 }
 
-function PlaceholderHelp({ items }: { items: string[] }) {
+function PlaceholderPicker({
+  groups,
+  onInsert,
+  defaultOpen = true,
+}: {
+  groups: PlaceholderGroup[];
+  onInsert: (token: string) => void;
+  defaultOpen?: boolean;
+}) {
   return (
-    <details className="rounded-lg border border-stone-100 bg-stone-50/80 px-3 py-2">
-      <summary className="cursor-pointer text-xs font-semibold text-stone-700">Подстановки</summary>
-      <p className="mt-2 flex flex-wrap gap-1.5">
-        {items.map((v) => (
-          <code
-            key={v}
-            className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-stone-700 shadow-sm"
-          >
-            {v}
-          </code>
+    <details
+      open={defaultOpen}
+      className="rounded-xl border border-stone-200 bg-stone-50/90 open:pb-3"
+    >
+      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-bold text-stone-900 marker:content-none [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center justify-between gap-2">
+          <span>Подстановки — нажмите, чтобы вставить в шаблон</span>
+          <span className="text-xs font-medium text-stone-500">показать / скрыть</span>
+        </span>
+      </summary>
+      <div className="space-y-4 border-t border-stone-200/80 px-3 pt-3 sm:px-4">
+        {groups.map((group) => (
+          <div key={group.title}>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">
+              {group.title}
+            </p>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {group.items.map((item) => (
+                <li key={item.token}>
+                  <button
+                    type="button"
+                    onClick={() => onInsert(item.token)}
+                    className="flex w-full flex-col items-start gap-1 rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-left shadow-sm transition hover:border-primary/40 hover:bg-primary/[0.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                    title={`Вставить ${item.token}`}
+                  >
+                    <code className="rounded-md bg-stone-100 px-2 py-1 font-mono text-[13px] font-semibold text-[#7B2D3F]">
+                      {item.token}
+                    </code>
+                    <span className="text-sm leading-snug text-stone-800">{item.label}</span>
+                    {item.example ? (
+                      <span className="text-xs text-stone-500">напр.: {item.example}</span>
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
-      </p>
+      </div>
     </details>
   );
 }
@@ -215,7 +387,12 @@ export function TelegramSettingsSection() {
   });
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [showToken, setShowToken] = useState(false);
+<<<<<<< HEAD
   const [showProxyUrl, setShowProxyUrl] = useState(false);
+=======
+  const prayerTemplateRef = useRef<HTMLTextAreaElement | null>(null);
+  const programTemplateRef = useRef<HTMLTextAreaElement | null>(null);
+>>>>>>> 1e3b585 (feat(telegram): clearer template placeholders and more plan data)
 
   useEffect(() => {
     if (!data) return;
@@ -757,6 +934,7 @@ export function TelegramSettingsSection() {
               </p>
             </div>
             <textarea
+              ref={prayerTemplateRef}
               className="min-h-[200px] w-full resize-y rounded-xl border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               value={form.prayer_template}
               onChange={(e) => setForm((s) => ({ ...s, prayer_template: e.target.value }))}
@@ -764,7 +942,14 @@ export function TelegramSettingsSection() {
                 'Сегодня {{date}} мы молимся за члена церкви:\n\n📌 {{member_name}}\nпросит молиться:\n{{member_prayer_request_bullets}}'
               }
             />
-            <PlaceholderHelp items={PRAYER_PLACEHOLDERS} />
+            <PlaceholderPicker
+              groups={PRAYER_PLACEHOLDER_GROUPS}
+              onInsert={(token) =>
+                insertAtCursor(prayerTemplateRef.current, token, form.prayer_template, (next) =>
+                  setForm((s) => ({ ...s, prayer_template: next })),
+                )
+              }
+            />
             <div className="flex flex-wrap gap-2 border-t border-stone-100 pt-4">
               <button
                 type="button"
@@ -792,14 +977,25 @@ export function TelegramSettingsSection() {
               </p>
             </div>
             <textarea
-              className="min-h-[240px] w-full resize-y rounded-xl border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              ref={programTemplateRef}
+              className="min-h-[280px] w-full resize-y rounded-xl border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               value={form.service_plan_template}
               onChange={(e) => setForm((s) => ({ ...s, service_plan_template: e.target.value }))}
               placeholder={
                 '{{sunday_heading}}\n1. Проповедник — {{preacher}}\n{{sermon_topic_block}}{{sermon_scripture_block}}2. Группа прославления — {{music}}…\n8. Ссылка: {{share_url}}'
               }
             />
-            <PlaceholderHelp items={PROGRAM_PLACEHOLDERS} />
+            <PlaceholderPicker
+              groups={PROGRAM_PLACEHOLDER_GROUPS}
+              onInsert={(token) =>
+                insertAtCursor(
+                  programTemplateRef.current,
+                  token,
+                  form.service_plan_template,
+                  (next) => setForm((s) => ({ ...s, service_plan_template: next })),
+                )
+              }
+            />
             <div className="flex flex-wrap gap-2 border-t border-stone-100 pt-4">
               <button
                 type="button"
