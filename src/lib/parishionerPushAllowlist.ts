@@ -12,6 +12,10 @@ export const PARISHIONER_ALLOWED_PUSH_KINDS = [
   'new_sermon',
   'new_event',
   'system_update',
+  'feed_like',
+  'feed_comment',
+  'feed_repost',
+  'feed_new_post',
 ] as const;
 
 export type ParishionerAllowedPushKind = (typeof PARISHIONER_ALLOWED_PUSH_KINDS)[number];

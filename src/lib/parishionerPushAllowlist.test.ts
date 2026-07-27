@@ -8,6 +8,11 @@ function run(): void {
   assert.equal(isParishionerAllowedPushKindOrType('broadcast'), true);
   assert.equal(isParishionerAllowedPushKindOrType('broadcast_start'), true);
 
+  assert.equal(isParishionerAllowedPushKindOrType('feed_like'), true);
+  assert.equal(isParishionerAllowedPushKindOrType('feed_comment'), true);
+  assert.equal(isParishionerAllowedPushKindOrType('feed_repost'), true);
+  assert.equal(isParishionerAllowedPushKindOrType('feed_new_post'), true);
+
   assert.equal(isParishionerAllowedPushKindOrType('coordinator_week_digest'), false);
   assert.equal(isParishionerAllowedPushKindOrType('media_assignment'), false);
   assert.equal(isParishionerAllowedPushKindOrType('music_reminder'), false);
