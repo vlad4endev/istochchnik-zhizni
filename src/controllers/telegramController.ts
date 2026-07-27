@@ -10,6 +10,7 @@ import {
   sendTodayPrayerTelegramToAllMembers,
   sendTelegramByPurpose,
   testTelegramBotConnection,
+  testTelegramProxyConnection,
   updateTelegramDispatchSettings,
   updateTelegramSettings,
 } from '../services/telegramService';
@@ -119,6 +120,29 @@ function errorToStatus(error: unknown): { status: number; message: string } {
   if (msg === 'telegram_settings_read') {
     return { status: 503, message: 'Не удалось прочитать настройки из базы данных' };
   }
+  if (msg === 'telegram_proxy_url_invalid') {
+    return {
+      status: 400,
+      message:
+        'Некорректный URL прокси. Пример: http://user:pass@host:8080 или http://host:3128',
+    };
+  }
+  if (msg === 'telegram_proxy_protocol_unsupported') {
+    return {
+      status: 400,
+      message: 'Поддерживаются только HTTP и HTTPS прокси (не SOCKS). Пример: http://host:8080',
+    };
+  }
+  if (msg === 'telegram_proxy_agent_invalid') {
+    return { status: 400, message: 'Не удалось создать клиент прокси. Проверьте URL.' };
+  }
+  if (msg === 'telegram_proxy_not_configured') {
+    return {
+      status: 400,
+      message:
+        'Прокси не настроен. Укажите URL в настройках Telegram или во временном поле проверки.',
+    };
+  }
   return { status: 500, message: 'Внутренняя ошибка Telegram модуля' };
 }
 
@@ -146,6 +170,8 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
         service_plan_chat_id?: unknown;
         service_plan_template?: unknown;
         service_plan_published_chat_id?: unknown;
+        proxy_enabled?: unknown;
+        proxy_url?: unknown;
       }
     | undefined;
 
@@ -213,6 +239,14 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
     res.status(400).json({ error: 'Поле "service_plan_published_chat_id" должно быть строкой или null' });
     return;
   }
+  if (body?.proxy_enabled !== undefined && typeof body.proxy_enabled !== 'boolean') {
+    res.status(400).json({ error: 'Поле "proxy_enabled" должно быть boolean' });
+    return;
+  }
+  if (body?.proxy_url !== undefined && body.proxy_url !== null && typeof body.proxy_url !== 'string') {
+    res.status(400).json({ error: 'Поле "proxy_url" должно быть строкой или null' });
+    return;
+  }
 
   try {
     const settings = await updateTelegramSettings({
@@ -225,11 +259,18 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
       service_plan_chat_id: body?.service_plan_chat_id as string | null | undefined,
       service_plan_template: body?.service_plan_template as string | null | undefined,
       service_plan_published_chat_id: body?.service_plan_published_chat_id as string | null | undefined,
+      proxy_enabled: body?.proxy_enabled as boolean | undefined,
+      proxy_url: body?.proxy_url as string | null | undefined,
     });
     notifyRealtime(['admin']);
     res.json(settings);
   } catch (error) {
     console.error('[telegram] patch settings failed:', error);
+    const mapped = errorToStatus(error);
+    if (mapped.status !== 500) {
+      res.status(mapped.status).json({ error: mapped.message });
+      return;
+    }
     res.status(500).json({ error: 'Не удалось сохранить Telegram настройки' });
   }
 }
@@ -429,6 +470,43 @@ export async function postTelegramTestConnectionHandler(req: Request, res: Respo
     let mapped = errorToStatus(error);
     if (mapped.status === 500 && error instanceof Error && error.message && !error.message.startsWith('telegram_')) {
       mapped = { status: 502, message: `Проверка Telegram: ${error.message}` };
+    }
+    res.status(mapped.status).json({ error: mapped.message });
+  }
+}
+
+export async function postTelegramTestProxyHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const body = req.body as { proxy_url?: unknown; bot_token?: unknown } | undefined;
+  if (body?.proxy_url !== undefined && body.proxy_url !== null && typeof body.proxy_url !== 'string') {
+    res.status(400).json({ error: 'Поле "proxy_url" должно быть строкой или null' });
+    return;
+  }
+  if (body?.bot_token !== undefined && body.bot_token !== null && typeof body.bot_token !== 'string') {
+    res.status(400).json({ error: 'Поле "bot_token" должно быть строкой или null' });
+    return;
+  }
+  const proxyUrl =
+    body?.proxy_url === undefined
+      ? undefined
+      : body.proxy_url === null
+        ? null
+        : String(body.proxy_url);
+  const botToken =
+    typeof body?.bot_token === 'string' && body.bot_token.trim().length > 0
+      ? body.bot_token.trim()
+      : undefined;
+  try {
+    const result = await testTelegramProxyConnection({
+      proxy_url: proxyUrl,
+      bot_token: botToken,
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('[telegram] test-proxy failed:', error);
+    let mapped = errorToStatus(error);
+    if (mapped.status === 500 && error instanceof Error && error.message && !error.message.startsWith('telegram_')) {
+      mapped = { status: 502, message: `Проверка прокси: ${error.message}` };
     }
     res.status(mapped.status).json({ error: mapped.message });
   }

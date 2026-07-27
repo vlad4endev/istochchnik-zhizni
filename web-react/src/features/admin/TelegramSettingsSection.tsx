@@ -16,6 +16,7 @@ import {
   runTelegramDispatchNow,
   sendTelegramMessage,
   testTelegramConnection,
+  testTelegramProxy,
   type TelegramDispatchRecipient,
   type TelegramDispatchSettingsResponse,
   type TelegramSettingsResponse,
@@ -192,6 +193,8 @@ export function TelegramSettingsSection() {
     service_plan_chat_id: '',
     service_plan_template: '',
     service_plan_published_chat_id: '',
+    proxy_enabled: false,
+    proxy_url: '',
   });
   const [customText, setCustomText] = useState('');
   const [customChatId, setCustomChatId] = useState('');
@@ -212,6 +215,7 @@ export function TelegramSettingsSection() {
   });
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [showToken, setShowToken] = useState(false);
+  const [showProxyUrl, setShowProxyUrl] = useState(false);
 
   useEffect(() => {
     if (!data) return;
@@ -225,6 +229,8 @@ export function TelegramSettingsSection() {
       service_plan_chat_id: data.service_plan_chat_id ?? '',
       service_plan_template: data.service_plan_template ?? '',
       service_plan_published_chat_id: data.service_plan_published_chat_id ?? '',
+      proxy_enabled: data.proxy?.enabled ?? false,
+      proxy_url: '',
     });
   }, [data]);
 
@@ -245,14 +251,30 @@ export function TelegramSettingsSection() {
         service_plan_chat_id: normalizeUiString(form.service_plan_chat_id),
         service_plan_template: normalizeUiString(form.service_plan_template),
         service_plan_published_chat_id: normalizeUiString(form.service_plan_published_chat_id),
+        proxy_enabled: form.proxy_enabled,
+        proxy_url: normalizeUiOptionalUpdateString(form.proxy_url),
       }),
     onSuccess: (next) => {
       setNote({ type: 'ok', text: 'Настройки сохранены.' });
       qc.setQueryData(Q_TG, next);
-      setForm((prev) => ({ ...prev, bot_token: '' }));
+      setForm((prev) => ({ ...prev, bot_token: '', proxy_url: '' }));
     },
     onError: (e) =>
       setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить настройки.') }),
+  });
+
+  const clearProxyMut = useMutation({
+    mutationFn: () =>
+      patchTelegramSettings({
+        proxy_enabled: false,
+        proxy_url: null,
+      }),
+    onSuccess: (next) => {
+      setNote({ type: 'ok', text: 'Прокси из настроек проекта очищен.' });
+      qc.setQueryData(Q_TG, next);
+      setForm((prev) => ({ ...prev, proxy_enabled: false, proxy_url: '' }));
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось очистить прокси.') }),
   });
 
   const sendMut = useMutation({
@@ -313,13 +335,40 @@ export function TelegramSettingsSection() {
     onSuccess: (r) => {
       const handle = r.username ? `@${r.username}` : `id ${r.id}`;
       const name = r.first_name?.trim() ? r.first_name : 'бот';
-      setNote({ type: 'ok', text: `Подключение OK: ${handle}, ${name}.` });
+      const via =
+        r.proxy?.used && r.proxy.url_masked
+          ? ` через прокси (${r.proxy.source ?? '?'}: ${r.proxy.url_masked})`
+          : ' напрямую';
+      const latency = typeof r.latency_ms === 'number' ? ` · ${r.latency_ms} мс` : '';
+      setNote({ type: 'ok', text: `Подключение OK: ${handle}, ${name}${via}${latency}.` });
     },
     onError: (e) =>
       setNote({
         type: 'err',
         text: humanizeTelegramError(e, 'Не удалось проверить подключение к Telegram.'),
       }),
+  });
+
+  const testProxyMut = useMutation({
+    mutationFn: () => {
+      const draftUrl = form.proxy_url.trim();
+      return testTelegramProxy({
+        ...(draftUrl ? { proxy_url: draftUrl } : {}),
+        ...(form.bot_token.trim() ? { bot_token: form.bot_token.trim() } : {}),
+      });
+    },
+    onSuccess: (r) => {
+      const handle = r.bot.username ? `@${r.bot.username}` : `id ${r.bot.id}`;
+      const via =
+        r.proxy.used && r.proxy.url_masked
+          ? `${r.proxy.source ?? 'прокси'}: ${r.proxy.url_masked}`
+          : 'без прокси';
+      setNote({
+        type: 'ok',
+        text: `Прокси OK (${r.latency_ms} мс) · ${via} · бот ${handle}.`,
+      });
+    },
+    onError: (e) => setNote({ type: 'err', text: humanizeTelegramError(e, 'Не удалось проверить прокси.') }),
   });
 
   const programMailingMut = useMutation({
@@ -397,10 +446,33 @@ export function TelegramSettingsSection() {
     service_plan_template: null,
     service_plan_published_chat_id: null,
     has_bot_token: false,
+    proxy: {
+      enabled: false,
+      url_masked: null,
+      has_url: false,
+      active_source: null,
+      env_configured: false,
+    },
   }) satisfies TelegramSettingsResponse;
 
   const recipientsCount = recipientsQ.data?.length ?? 0;
   const tokenReady = settings.has_bot_token || form.bot_token.trim().length > 0;
+  const proxyReady =
+    form.proxy_url.trim().length > 0 ||
+    (form.proxy_enabled && settings.proxy.has_url) ||
+    settings.proxy.active_source != null;
+  const proxyStatusLabel = (() => {
+    if (settings.proxy.active_source === 'db' && settings.proxy.url_masked) {
+      return `Активен из настроек: ${settings.proxy.url_masked}`;
+    }
+    if (settings.proxy.active_source === 'env' && settings.proxy.url_masked) {
+      return `Активен из env: ${settings.proxy.url_masked}`;
+    }
+    if (settings.proxy.has_url && settings.proxy.url_masked) {
+      return `Сохранён (выключен): ${settings.proxy.url_masked}`;
+    }
+    return 'Прокси не используется';
+  })();
 
   function saveSettings() {
     setNote(null);
@@ -457,6 +529,15 @@ export function TelegramSettingsSection() {
                     ? `Токен ${settings.bot_token_masked}`
                     : 'Токен задан'
                   : 'Нет токена'}
+              </span>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${
+                  settings.proxy.active_source
+                    ? 'border-sky-200 bg-sky-50 text-sky-900'
+                    : 'border-stone-200 bg-stone-50 text-stone-600'
+                }`}
+              >
+                {settings.proxy.active_source ? 'Прокси активен' : 'Прокси выкл.'}
               </span>
             </div>
           </div>
@@ -545,6 +626,83 @@ export function TelegramSettingsSection() {
             >
               {testConnectionMut.isPending ? 'Проверка…' : 'Проверить подключение'}
             </button>
+
+            <div className="border-t border-stone-100 pt-4">
+              <h3 className="text-sm font-semibold text-stone-900">Исходящий HTTP-прокси</h3>
+              <p className="mt-1 text-xs leading-relaxed text-stone-500">
+                Если api.telegram.org недоступен с сервера — укажите внешний HTTP(S)-прокси. Не нужно ставить прокси на
+                сервер: backend сам ходит через URL. Приоритет: настройки проекта →{' '}
+                <code className="rounded bg-stone-100 px-1">TELEGRAM_HTTPS_PROXY</code>.
+              </p>
+              <div
+                className={`mt-3 rounded-xl border px-3 py-2.5 text-sm ${
+                  settings.proxy.active_source
+                    ? 'border-sky-200 bg-sky-50/80 text-sky-950'
+                    : 'border-stone-200 bg-stone-50/80 text-stone-700'
+                }`}
+              >
+                <p className="font-semibold">Статус: {proxyStatusLabel}</p>
+              </div>
+              <div className="mt-3">
+                <Toggle
+                  checked={form.proxy_enabled}
+                  onChange={(proxy_enabled) => setForm((s) => ({ ...s, proxy_enabled }))}
+                  label="Использовать прокси из настроек"
+                  hint="Включите после сохранения URL. Пока выключено — может работать env-прокси."
+                />
+              </div>
+              <div className="mt-3">
+                <label className="mb-1 block text-xs font-semibold text-stone-600" htmlFor="tg-proxy-url">
+                  URL прокси
+                </label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    id="tg-proxy-url"
+                    type={showProxyUrl ? 'text' : 'password'}
+                    className={fieldClass()}
+                    value={form.proxy_url}
+                    onChange={(e) => setForm((s) => ({ ...s, proxy_url: e.target.value }))}
+                    placeholder={
+                      settings.proxy.url_masked
+                        ? `Оставьте пустым, чтобы не менять (${settings.proxy.url_masked})`
+                        : 'http://user:pass@host:8080'
+                    }
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    className={btnSecondary('shrink-0')}
+                    onClick={() => setShowProxyUrl((v) => !v)}
+                  >
+                    {showProxyUrl ? 'Скрыть' : 'Показать'}
+                  </button>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={btnSecondary()}
+                  disabled={testProxyMut.isPending || !tokenReady || !proxyReady}
+                  onClick={() => {
+                    setNote(null);
+                    testProxyMut.mutate();
+                  }}
+                >
+                  {testProxyMut.isPending ? 'Проверка…' : 'Проверить прокси'}
+                </button>
+                <button
+                  type="button"
+                  className={btnSecondary()}
+                  disabled={clearProxyMut.isPending || (!settings.proxy.has_url && !settings.proxy.enabled)}
+                  onClick={() => {
+                    setNote(null);
+                    clearProxyMut.mutate();
+                  }}
+                >
+                  {clearProxyMut.isPending ? 'Очистка…' : 'Очистить прокси'}
+                </button>
+              </div>
+            </div>
           </div>
         ) : null}
 

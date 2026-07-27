@@ -9,6 +9,7 @@ import {
   postTelegramDispatchRunNowHandler,
   postTelegramSendHandler,
   postTelegramTestConnectionHandler,
+  postTelegramTestProxyHandler,
 } from '../controllers/telegramController';
 
 const router = Router();
@@ -21,6 +22,7 @@ router.get('/dispatch/recipients', getTelegramDispatchRecipientsHandler);
 router.get('/dispatch/preview-prayer', getTelegramDispatchPreviewPrayerHandler);
 router.post('/dispatch/run-now', postTelegramDispatchRunNowHandler);
 router.post('/test-connection', postTelegramTestConnectionHandler);
+router.post('/test-proxy', postTelegramTestProxyHandler);
 router.post('/send', postTelegramSendHandler);
 
 export default router;
