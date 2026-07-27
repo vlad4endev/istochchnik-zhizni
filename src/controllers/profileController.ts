@@ -22,6 +22,11 @@ import {
   type MediaType,
 } from '../services/profileService';
 import {
+  notifyPostCommented,
+  notifyPostLiked,
+  notifyPostReposted,
+} from '../services/feedInteractionNotifyService';
+import {
   buildUserMediaProfilePath,
   getSupabaseStorageMissingEnv,
   isSupabaseStorageConfigured,
@@ -258,6 +263,9 @@ export async function postRepost(req: Request, res: Response): Promise<void> {
   try {
     const created = await createRepost(authUserId, postId, caption);
     res.status(201).json({ ok: true, id: created.id });
+    void notifyPostReposted(postId, authUserId).catch((e) => {
+      console.warn('[profile] repost push failed (best-effort):', e);
+    });
   } catch (e) {
     console.error('[profile] repost error:', e);
     const msg = e instanceof Error ? e.message : 'Failed to repost';
@@ -300,6 +308,11 @@ export async function postLike(req: Request, res: Response): Promise<void> {
   try {
     const r = await likePost(postId, authUserId);
     res.json({ ok: true, like_count: r.like_count, inserted: r.inserted });
+    if (r.inserted) {
+      void notifyPostLiked(postId, authUserId).catch((e) => {
+        console.warn('[profile] like push failed (best-effort):', e);
+      });
+    }
   } catch (e) {
     console.error('[profile] like error:', e);
     res.status(500).json({ error: 'Database error' });
@@ -442,6 +455,9 @@ export async function postComment(req: Request, res: Response): Promise<void> {
   try {
     const created = await addComment(postId, authUserId, text);
     res.status(201).json({ ok: true, id: created.id, created_at: created.created_at });
+    void notifyPostCommented(postId, authUserId, text).catch((e) => {
+      console.warn('[profile] comment push failed (best-effort):', e);
+    });
   } catch (e) {
     console.error('[profile] comment error:', e);
     const msg = e instanceof Error ? e.message : 'Database error';
