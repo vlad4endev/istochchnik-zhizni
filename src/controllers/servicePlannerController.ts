@@ -592,6 +592,10 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
     patch.music_ministry_member_id =
       body.music_ministry_member_id == null ? null : parseId(body.music_ministry_member_id);
   }
+  if (body.poem_ministry_member_id !== undefined) {
+    patch.poem_ministry_member_id =
+      body.poem_ministry_member_id == null ? null : parseId(body.poem_ministry_member_id);
+  }
   if (body.current_block_id !== undefined) {
     patch.current_block_id = body.current_block_id == null ? null : parseId(body.current_block_id);
   }

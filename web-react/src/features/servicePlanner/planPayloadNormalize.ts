@@ -121,6 +121,8 @@ export function normalizeEditableServicePlanPayload(raw: EditableServicePlanPayl
       preacher_name: plan.preacher_name == null ? null : String(plan.preacher_name),
       music_ministry_member_id: normalizeOptionalPositiveInt(plan.music_ministry_member_id),
       music_ministry_name: plan.music_ministry_name == null ? null : String(plan.music_ministry_name),
+      poem_ministry_member_id: normalizeOptionalPositiveInt(plan.poem_ministry_member_id),
+      poem_ministry_name: plan.poem_ministry_name == null ? null : String(plan.poem_ministry_name),
     },
     broadcast_assignments: normalizeBroadcastAssignments(raw?.broadcast_assignments),
     linked_sermon_note: normalizeLinkedSermonNote(

@@ -417,6 +417,8 @@ export function EditableServicePlanPage() {
   const planPreacherName = planQ.data?.plan.preacher_name ?? null;
   const planMusicMinistryId = planQ.data?.plan.music_ministry_member_id ?? null;
   const planMusicMinistryName = planQ.data?.plan.music_ministry_name ?? null;
+  const planPoemMinistryId = planQ.data?.plan.poem_ministry_member_id ?? null;
+  const planPoemMinistryName = planQ.data?.plan.poem_ministry_name ?? null;
 
   useEffect(() => {
     if (!planQ.data) return;
@@ -429,6 +431,9 @@ export function EditableServicePlanPage() {
     const musicId = planQ.data.plan.music_ministry_member_id ?? null;
     const musicRaw = musicId ? (metaQ.data?.members ?? []).find((m) => m.id === musicId) ?? null : null;
     const musicLabel = musicRaw ? userLabel(musicRaw) : (planQ.data.plan.music_ministry_name ?? '').trim();
+    const poemId = planQ.data.plan.poem_ministry_member_id ?? null;
+    const poemRaw = poemId ? (metaQ.data?.members ?? []).find((m) => m.id === poemId) ?? null : null;
+    const poemLabel = poemRaw ? userLabel(poemRaw) : (planQ.data.plan.poem_ministry_name ?? '').trim();
     const typeById = new Map((metaQ.data?.block_types ?? []).map((t) => [t.id, t]));
     const dirtyIds = dirtyShareBlockIdsRef.current;
     setDraftBlocks((prevLocal) => {
@@ -451,6 +456,14 @@ export function EditableServicePlanPage() {
               ...next,
               assigned_member_id: musicId ?? block.assigned_member_id,
               assigned_member_name: musicLabel || block.assigned_member_name || null,
+            };
+          }
+          if (isPoemBlockType(block) && poemId != null) {
+            next = {
+              ...next,
+              assigned_member_id: poemId,
+              assigned_member_name: poemLabel || null,
+              title: poemLabel ? `СТИХ - ${poemLabel}` : 'СТИХ - Чтец',
             };
           }
           return next;
@@ -496,11 +509,19 @@ export function EditableServicePlanPage() {
       const blockMeta = (metaQ.data?.block_types ?? []).find((t) => t.id === block.block_type_id) ?? null;
       const isSermon = isSermonBlockType(block);
       const isSong = isSongPlannerBlockType(blockMeta);
+      const isPoem = isPoemBlockType(block);
       const musicLabelForSave =
         planMusicMinistryId != null
           ? (() => {
               const raw = (metaQ.data?.members ?? []).find((m) => m.id === planMusicMinistryId) ?? null;
               return raw ? userLabel(raw) : planMusicMinistryName ?? null;
+            })()
+          : null;
+      const poemLabelForSave =
+        planPoemMinistryId != null
+          ? (() => {
+              const raw = (metaQ.data?.members ?? []).find((m) => m.id === planPoemMinistryId) ?? null;
+              return raw ? userLabel(raw) : planPoemMinistryName ?? null;
             })()
           : null;
       const normalizedBlock = isSermon
@@ -518,7 +539,22 @@ export function EditableServicePlanPage() {
                   ? musicLabelForSave
                   : block.assigned_member_name,
             }
-          : block;
+          : isPoem
+            ? {
+                ...block,
+                assigned_member_id: planPoemMinistryId ?? block.assigned_member_id,
+                assigned_member_name:
+                  planPoemMinistryId != null
+                    ? poemLabelForSave
+                    : block.assigned_member_name,
+                title:
+                  planPoemMinistryId != null
+                    ? poemLabelForSave
+                      ? `СТИХ - ${poemLabelForSave}`
+                      : 'СТИХ - Чтец'
+                    : block.title,
+              }
+            : block;
       await patchEditableServicePlanBlockByToken(token, block.id, {
         title: normalizedBlock.title,
         duration_minutes: Math.max(1, Number(normalizedBlock.duration_minutes) || 1),
@@ -626,7 +662,7 @@ export function EditableServicePlanPage() {
     editingBlockTypeMeta?.code === 'prayer' || normalizeText(editingBlockTypeMeta?.name ?? '').includes('молитв');
   const responsibleCandidates = isEditingSermonBlock
     ? preacherCandidates
-    : isEditingSongBlock
+    : isEditingSongBlock || isEditingPoemBlock
       ? []
       : isEditingPrayerBlock
         ? prayerCandidates
@@ -649,6 +685,9 @@ export function EditableServicePlanPage() {
             </span>
             <span className="rounded-full bg-stone-100 px-2 py-0.5">
               Музыка: {plan.music_ministry_name ?? 'Не назначена'}
+            </span>
+            <span className="rounded-full bg-stone-100 px-2 py-0.5">
+              Стихи: {plan.poem_ministry_name ?? 'Не назначены'}
             </span>
           </div>
           <ShareBroadcastTeamPanel assignments={planQ.data.broadcast_assignments ?? []} />
@@ -888,9 +927,11 @@ export function EditableServicePlanPage() {
                           ? 'Проповедник'
                           : isEditingSongBlock
                             ? 'Музыкальное служение'
-                            : isEditingPrayerBlock
-                              ? 'Молитва'
-                              : 'Ответственный'}
+                            : isEditingPoemBlock
+                              ? 'Ответственный за стихи'
+                              : isEditingPrayerBlock
+                                ? 'Молитва'
+                                : 'Ответственный'}
                       </p>
                       <div className="flex min-w-0 items-center gap-2 sm:block">
                         <ServicePlannerMemberPicker
@@ -902,9 +943,11 @@ export function EditableServicePlanPage() {
                               ? planPreacherId
                               : isEditingSongBlock
                                 ? planMusicMinistryId
-                                : editingBlock.assigned_member_id
+                                : isEditingPoemBlock
+                                  ? planPoemMinistryId
+                                  : editingBlock.assigned_member_id
                           }
-                          disabled={isEditingSermonBlock || isEditingSongBlock}
+                          disabled={isEditingSermonBlock || isEditingSongBlock || isEditingPoemBlock}
                           disabledHint={
                             isEditingSermonBlock
                               ? planPreacherId
@@ -914,25 +957,24 @@ export function EditableServicePlanPage() {
                                 ? planMusicMinistryId
                                   ? (planMusicMinistryName ?? 'Ответственный за музыку')
                                   : 'В настройках программы не выбран ответственный за музыку'
-                                : null
+                                : isEditingPoemBlock
+                                  ? planPoemMinistryId
+                                    ? (planPoemMinistryName ?? 'Чтец')
+                                    : 'В настройках программы не выбран ответственный за стихи'
+                                  : null
                           }
                           clearLabel={
                             isEditingPrayerBlock ? 'Служитель молитвы не назначен' : 'Ответственный не назначен'
                           }
                           orphanLabel={editingBlock.assigned_member_name}
                           onChange={(memberId, member) => {
-                            if (isEditingSermonBlock || isEditingSongBlock) return;
+                            if (isEditingSermonBlock || isEditingSongBlock || isEditingPoemBlock) return;
                             dirtyShareBlockIdsRef.current.add(editingBlock.id);
                             setDraftBlocks((prev) =>
                               prev.map((x) =>
                                 x.id === editingBlock.id
                                   ? {
                                       ...x,
-                                      title: isEditingPoemBlock
-                                        ? member
-                                          ? `СТИХ - ${userLabel(member)}`
-                                          : 'СТИХ - Чтец'
-                                        : x.title,
                                       assigned_member_id: memberId,
                                       assigned_member_name: member ? userLabel(member) : null,
                                     }

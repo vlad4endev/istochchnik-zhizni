@@ -462,6 +462,7 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
       if (p.leader_member_id) nameIds.push(p.leader_member_id);
       if (p.preacher_member_id) nameIds.push(p.preacher_member_id);
       if (p.music_ministry_member_id) nameIds.push(p.music_ministry_member_id);
+      if (p.poem_ministry_member_id) nameIds.push(p.poem_ministry_member_id);
     }
     const names = await resolveMemberNames(nameIds);
     const blockLines = await loadPlanSermonAndSongLines(recent.map((p) => p.id));
@@ -471,11 +472,13 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
       const leader = p.leader_member_id ? names.get(p.leader_member_id) : null;
       const preacher = p.preacher_member_id ? names.get(p.preacher_member_id) : null;
       const music = p.music_ministry_member_id ? names.get(p.music_ministry_member_id) : null;
+      const poem = p.poem_ministry_member_id ? names.get(p.poem_ministry_member_id) : null;
       planLines.push(
         `- ${p.service_date} ${p.start_time || ''} «${p.template_name || 'Служение'}» (статус: ${p.status})` +
           `${leader ? `; ведущий: ${leader}` : ''}` +
           `${preacher ? `; проповедник: ${preacher}` : ''}` +
-          `${music ? `; музыка: ${music}` : ''}`,
+          `${music ? `; музыка: ${music}` : ''}` +
+          `${poem ? `; стихи: ${poem}` : ''}`,
       );
       const extra = blockLines.get(p.id) ?? [];
       planLines.push(...extra.slice(0, 12));

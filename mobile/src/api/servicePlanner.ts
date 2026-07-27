@@ -10,6 +10,7 @@ export type ServicePlanListItem = {
   leader_member_id: number | null;
   preacher_member_id: number | null;
   music_ministry_member_id: number | null;
+  poem_ministry_member_id: number | null;
   total_duration_minutes: number;
   current_block_id: number | null;
   share_token: string;

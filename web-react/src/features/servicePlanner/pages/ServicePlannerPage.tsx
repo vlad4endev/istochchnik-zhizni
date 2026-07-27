@@ -484,10 +484,18 @@ export function ServicePlannerPage() {
           .filter((t) => t.code === 'song' || t.kind === 'song')
           .map((t) => t.id),
       );
+      const poemTypeIds = new Set(
+        (blockTypesQ.data ?? [])
+          .filter((t) => t.code === 'poem' || (t.name ?? '').toLowerCase().includes('стих'))
+          .map((t) => t.id),
+      );
       const preacherId = planQ.data.preacher_member_id ?? null;
       const preacher = preacherId ? (membersQ.data ?? []).find((u) => u.id === preacherId) ?? null : null;
       const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
       const musicId = planQ.data.music_ministry_member_id ?? null;
+      const poemId = planQ.data.poem_ministry_member_id ?? null;
+      const poemMember = poemId ? (membersQ.data ?? []).find((u) => u.id === poemId) ?? null : null;
+      const poemName = poemMember ? userLabel(poemMember) : 'Чтец';
       const pendingDeletes = pendingPlanBlockDeleteTimersRef.current;
       const blocks = planQ.data.blocks
         .filter((b) => !pendingDeletes.has(b.id))
@@ -504,6 +512,13 @@ export function ServicePlannerPage() {
           }
           if (songTypeIds.has(b.block_type_id)) {
             x = { ...x, assigned_member_id: musicId };
+          }
+          if (poemTypeIds.has(b.block_type_id) && poemId != null) {
+            x = {
+              ...x,
+              assigned_member_id: poemId,
+              title: `СТИХ - ${poemName}`,
+            };
           }
           return x;
         });
@@ -702,6 +717,7 @@ export function ServicePlannerPage() {
           leader_member_id: draft.leader_member_id,
           preacher_member_id: draft.preacher_member_id,
           music_ministry_member_id: draft.music_ministry_member_id,
+          poem_ministry_member_id: draft.poem_ministry_member_id,
           current_block_id: draft.current_block_id,
           status: draft.status,
         });
@@ -712,10 +728,14 @@ export function ServicePlannerPage() {
         const isSongMeta = meta?.code === 'song' || meta?.kind === 'song';
         const isSermonMeta =
           meta?.code === 'sermon' || (meta?.name ?? '').toLowerCase().includes('проповед');
+        const isPoemMeta =
+          meta?.code === 'poem' || (meta?.name ?? '').toLowerCase().includes('стих');
         let assigned_member_id = b.assigned_member_id;
         if (isSermonMeta) assigned_member_id = draft.preacher_member_id ?? null;
         else if (isSongMeta)
           assigned_member_id = draft.music_ministry_member_id ?? b.assigned_member_id ?? null;
+        else if (isPoemMeta)
+          assigned_member_id = draft.poem_ministry_member_id ?? b.assigned_member_id ?? null;
         await patchServiceBlock(b.id, {
           title: b.title,
           block_type_id: b.block_type_id,
@@ -863,10 +883,14 @@ export function ServicePlannerPage() {
       const isSongMeta = meta?.code === 'song' || meta?.kind === 'song';
       const isSermonMeta =
         meta?.code === 'sermon' || (meta?.name ?? '').toLowerCase().includes('проповед');
+      const isPoemMeta =
+        meta?.code === 'poem' || (meta?.name ?? '').toLowerCase().includes('стих');
       let assigned_member_id = b.assigned_member_id;
       if (isSermonMeta) assigned_member_id = plan.preacher_member_id ?? null;
       else if (isSongMeta)
         assigned_member_id = plan.music_ministry_member_id ?? b.assigned_member_id ?? null;
+      else if (isPoemMeta)
+        assigned_member_id = plan.poem_ministry_member_id ?? b.assigned_member_id ?? null;
       await patchServiceBlock(b.id, {
         title: b.title,
         block_type_id: b.block_type_id,
@@ -904,6 +928,7 @@ export function ServicePlannerPage() {
           leader_member_id: nextDraft.leader_member_id,
           preacher_member_id: nextDraft.preacher_member_id,
           music_ministry_member_id: nextDraft.music_ministry_member_id,
+          poem_ministry_member_id: nextDraft.poem_ministry_member_id,
           current_block_id: nextDraft.current_block_id,
           status: nextStatus,
         });
@@ -978,7 +1003,11 @@ export function ServicePlannerPage() {
   }
 
   function poemHeading(block: ServicePlanBlock): string {
-    const reader = block.assigned_member_id ? usersById.get(block.assigned_member_id) : null;
+    const fromPlan = draft?.poem_ministry_member_id
+      ? usersById.get(draft.poem_ministry_member_id) ?? null
+      : null;
+    const reader =
+      fromPlan ?? (block.assigned_member_id ? usersById.get(block.assigned_member_id) : null);
     return reader ? `СТИХ - ${userLabel(reader)}` : 'СТИХ - Чтец';
   }
 
@@ -1070,6 +1099,11 @@ export function ServicePlannerPage() {
     }
     if (isSongBlock(block)) {
       const id = draft.music_ministry_member_id;
+      const m = id ? usersById.get(id) : null;
+      return m ? userLabel(m) : null;
+    }
+    if (isPoemBlock(block)) {
+      const id = draft.poem_ministry_member_id ?? block.assigned_member_id;
       const m = id ? usersById.get(id) : null;
       return m ? userLabel(m) : null;
     }
@@ -2798,6 +2832,31 @@ export function ServicePlannerPage() {
               });
             }}
           />
+          <ServicePlannerMemberPicker
+            members={users}
+            value={draft.poem_ministry_member_id ?? null}
+            disabled={isBlocksOnlyEditor}
+            clearLabel="Ответственный за стихи не назначен"
+            placeholder="Поиск ответственного за стихи…"
+            onChange={(poemId, poemMember) => {
+              const poemName = poemMember ? userLabel(poemMember) : 'Чтец';
+              setDraft((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  poem_ministry_member_id: poemId,
+                  blocks: prev.blocks.map((b) => {
+                    if (!isPoemBlock(b)) return b;
+                    return {
+                      ...b,
+                      assigned_member_id: poemId,
+                      title: `СТИХ - ${poemName}`,
+                    };
+                  }),
+                };
+              });
+            }}
+          />
           <div className="md:col-span-2 rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-600">
             <LuLink className="mr-1 inline h-3.5 w-3.5" /> /service-plan/share/{draft.share_token}
           </div>
@@ -2814,6 +2873,7 @@ export function ServicePlannerPage() {
                 leader_member_id: draft.leader_member_id,
                 preacher_member_id: draft.preacher_member_id,
                 music_ministry_member_id: draft.music_ministry_member_id,
+                poem_ministry_member_id: draft.poem_ministry_member_id,
               },
             })
           }
@@ -3556,6 +3616,17 @@ export function ServicePlannerPage() {
                         if ((typeMeta?.code ?? '').toLowerCase() === 'song' || typeMeta?.kind === 'song') {
                           nextPatch.assigned_member_id = draft?.music_ministry_member_id ?? null;
                         }
+                        if (
+                          (typeMeta?.code ?? '').toLowerCase() === 'poem' ||
+                          (typeMeta?.name ?? '').toLowerCase().includes('стих')
+                        ) {
+                          const poem =
+                            draft?.poem_ministry_member_id != null
+                              ? usersById.get(draft.poem_ministry_member_id) ?? null
+                              : null;
+                          nextPatch.assigned_member_id = draft?.poem_ministry_member_id ?? null;
+                          nextPatch.title = poem ? `СТИХ - ${userLabel(poem)}` : 'СТИХ - Чтец';
+                        }
                         updateDraftBlock(editingBlock.id, nextPatch);
                       }}
                       className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm font-normal"
@@ -3589,9 +3660,15 @@ export function ServicePlannerPage() {
                           ? (draft?.preacher_member_id ?? null)
                           : isSongBlock(editingBlock)
                             ? (draft?.music_ministry_member_id ?? null)
-                            : (editingBlock.assigned_member_id ?? null)
+                            : isPoemBlock(editingBlock)
+                              ? (draft?.poem_ministry_member_id ?? null)
+                              : (editingBlock.assigned_member_id ?? null)
                       }
-                      disabled={isSermonBlock(editingBlock) || isSongBlock(editingBlock)}
+                      disabled={
+                        isSermonBlock(editingBlock) ||
+                        isSongBlock(editingBlock) ||
+                        isPoemBlock(editingBlock)
+                      }
                       disabledHint={
                         isSermonBlock(editingBlock)
                           ? draft?.preacher_member_id
@@ -3607,16 +3684,25 @@ export function ServicePlannerPage() {
                                   return m ? userLabel(m) : 'Музыкальное служение';
                                 })()
                               : 'В настройках программы не выбран ответственный за музыку'
-                            : null
+                            : isPoemBlock(editingBlock)
+                              ? draft?.poem_ministry_member_id
+                                ? (() => {
+                                    const m = usersById.get(draft.poem_ministry_member_id) ?? null;
+                                    return m ? userLabel(m) : 'Чтец';
+                                  })()
+                                : 'В настройках программы не выбран ответственный за стихи'
+                              : null
                       }
                       clearLabel={isPoemBlock(editingBlock) ? 'Чтец не назначен' : 'Ответственный не назначен'}
                       placeholder="Поиск ответственного…"
-                      onChange={(memberId, member) => {
-                        if (isSermonBlock(editingBlock) || isSongBlock(editingBlock)) return;
+                      onChange={(memberId) => {
+                        if (
+                          isSermonBlock(editingBlock) ||
+                          isSongBlock(editingBlock) ||
+                          isPoemBlock(editingBlock)
+                        )
+                          return;
                         const nextPatch: Partial<ServicePlanBlock> = { assigned_member_id: memberId };
-                        if (isPoemBlock(editingBlock)) {
-                          nextPatch.title = member ? `СТИХ - ${userLabel(member)}` : 'СТИХ - Чтец';
-                        }
                         updateDraftBlock(editingBlock.id, nextPatch);
                       }}
                     />
@@ -3758,11 +3844,16 @@ export function ServicePlannerPage() {
                   const isSongMeta = meta?.code === 'song' || meta?.kind === 'song';
                   const isSermonMeta =
                     meta?.code === 'sermon' || (meta?.name ?? '').toLowerCase().includes('проповед');
+                  const isPoemMeta =
+                    meta?.code === 'poem' || (meta?.name ?? '').toLowerCase().includes('стих');
                   let assigned_member_id = editingBlock.assigned_member_id;
                   if (isSermonMeta) assigned_member_id = draft?.preacher_member_id ?? null;
                   else if (isSongMeta)
                     assigned_member_id =
                       draft?.music_ministry_member_id ?? editingBlock.assigned_member_id ?? null;
+                  else if (isPoemMeta)
+                    assigned_member_id =
+                      draft?.poem_ministry_member_id ?? editingBlock.assigned_member_id ?? null;
                   void updateBlockMut.mutateAsync({
                     id: editingBlock.id,
                     body: {
