@@ -20,6 +20,7 @@ import {
   patchServiceTemplateById,
   postServiceBlock,
   runSermonFeedbackNotificationTick,
+  runServicePlanMondayMailingNow,
   postServicePlan,
   postServiceTemplate,
   uploadServicePlanSermonAttachment,
@@ -36,6 +37,11 @@ router.patch('/service-templates/:id', requireAuthSession, patchServiceTemplateB
 router.delete('/service-templates/:id', requireAuthSession, deleteServiceTemplateById);
 
 router.get('/service-plans', requireAuthSession, getServicePlans);
+router.post(
+  '/service-plans/monday-mailing/run',
+  requireAuthSession,
+  runServicePlanMondayMailingNow,
+);
 router.get('/service-plans/:id', requireAuthSession, getServicePlanById);
 router.post('/service-plans', requireAuthSession, postServicePlan);
 router.patch('/service-plans/:id', requireAuthSession, patchServicePlanById);

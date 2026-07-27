@@ -18,6 +18,10 @@ export interface TelegramSettings {
   coordinator_chat_id: string | null;
   default_chat_id: string | null;
   prayer_template: string | null;
+  /** Chat id для понедельничной рассылки программы служения */
+  service_plan_chat_id: string | null;
+  /** Шаблон текста рассылки программы ({{sunday_heading}}, {{preacher}}, …) */
+  service_plan_template: string | null;
   has_bot_token: boolean;
 }
 
@@ -64,6 +68,8 @@ export interface TelegramSettingsUpdate {
   coordinator_chat_id?: string | null;
   default_chat_id?: string | null;
   prayer_template?: string | null;
+  service_plan_chat_id?: string | null;
+  service_plan_template?: string | null;
 }
 
 type TelegramPurpose = 'prayer' | 'coordinator' | 'default';
@@ -255,6 +261,8 @@ async function ensureSettingsColumns(): Promise<void> {
   await query("ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_target VARCHAR(16) NOT NULL DEFAULT 'all'");
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_member_ids INTEGER[] NOT NULL DEFAULT ARRAY[]::INTEGER[]');
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_last_sent_at TIMESTAMPTZ');
+  await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_chat_id TEXT');
+  await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_template TEXT');
 }
 
 async function ensureMembersTelegramColumn(): Promise<void> {
@@ -271,6 +279,8 @@ async function readSettingsRow(): Promise<{
   telegram_coordinator_chat_id: string | null;
   telegram_default_chat_id: string | null;
   telegram_prayer_template: string | null;
+  telegram_service_plan_chat_id: string | null;
+  telegram_service_plan_template: string | null;
   telegram_dispatch_enabled: boolean;
   telegram_dispatch_kind: 'daily' | 'once';
   telegram_dispatch_time: string | null;
@@ -293,6 +303,8 @@ async function readSettingsRow(): Promise<{
        telegram_coordinator_chat_id,
        telegram_default_chat_id,
        telegram_prayer_template,
+       telegram_service_plan_chat_id,
+       telegram_service_plan_template,
        telegram_dispatch_enabled,
        telegram_dispatch_kind,
        telegram_dispatch_time,
@@ -311,6 +323,8 @@ async function readSettingsRow(): Promise<{
         telegram_coordinator_chat_id?: string | null;
         telegram_default_chat_id?: string | null;
         telegram_prayer_template?: string | null;
+        telegram_service_plan_chat_id?: string | null;
+        telegram_service_plan_template?: string | null;
         telegram_dispatch_enabled?: boolean;
         telegram_dispatch_kind?: unknown;
         telegram_dispatch_time?: string | null;
@@ -327,6 +341,12 @@ async function readSettingsRow(): Promise<{
     telegram_coordinator_chat_id: normalizeOptionalString(row?.telegram_coordinator_chat_id),
     telegram_default_chat_id: normalizeOptionalString(row?.telegram_default_chat_id),
     telegram_prayer_template: normalizeOptionalString(row?.telegram_prayer_template),
+    telegram_service_plan_chat_id: normalizeOptionalString(row?.telegram_service_plan_chat_id),
+    telegram_service_plan_template:
+      typeof row?.telegram_service_plan_template === 'string' &&
+      row.telegram_service_plan_template.trim().length > 0
+        ? row.telegram_service_plan_template.replace(/\r\n/g, '\n')
+        : null,
     telegram_dispatch_enabled: Boolean(row?.telegram_dispatch_enabled),
     telegram_dispatch_kind: row?.telegram_dispatch_kind === 'once' ? 'once' : 'daily',
     telegram_dispatch_time: normalizeOptionalString(row?.telegram_dispatch_time),
@@ -352,8 +372,17 @@ export async function getTelegramSettings(): Promise<TelegramSettings> {
     coordinator_chat_id: row.telegram_coordinator_chat_id,
     default_chat_id: row.telegram_default_chat_id,
     prayer_template: row.telegram_prayer_template,
+    service_plan_chat_id: row.telegram_service_plan_chat_id,
+    service_plan_template: row.telegram_service_plan_template,
     has_bot_token: Boolean(botToken),
   };
+}
+
+function normalizeServicePlanTemplateInput(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== 'string') return null;
+  const normalized = value.replace(/\r\n/g, '\n');
+  return normalized.trim().length > 0 ? normalized : null;
 }
 
 export async function updateTelegramSettings(input: TelegramSettingsUpdate): Promise<TelegramSettings> {
@@ -383,6 +412,14 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       input.prayer_template !== undefined
         ? normalizeOptionalString(input.prayer_template)
         : current.telegram_prayer_template,
+    telegram_service_plan_chat_id:
+      input.service_plan_chat_id !== undefined
+        ? normalizeOptionalString(input.service_plan_chat_id)
+        : current.telegram_service_plan_chat_id,
+    telegram_service_plan_template:
+      input.service_plan_template !== undefined
+        ? normalizeServicePlanTemplateInput(input.service_plan_template)
+        : current.telegram_service_plan_template,
   };
 
   await query(
@@ -394,9 +431,11 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_prayer_chat_id,
        telegram_coordinator_chat_id,
        telegram_default_chat_id,
-       telegram_prayer_template
+       telegram_prayer_template,
+       telegram_service_plan_chat_id,
+       telegram_service_plan_template
      )
-     VALUES (1, CURRENT_DATE, $1, $2, $3, $4, $5, $6)
+     VALUES (1, CURRENT_DATE, $1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (id) DO UPDATE
      SET
        telegram_enabled = EXCLUDED.telegram_enabled,
@@ -404,7 +443,9 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_prayer_chat_id = EXCLUDED.telegram_prayer_chat_id,
        telegram_coordinator_chat_id = EXCLUDED.telegram_coordinator_chat_id,
        telegram_default_chat_id = EXCLUDED.telegram_default_chat_id,
-       telegram_prayer_template = EXCLUDED.telegram_prayer_template`,
+       telegram_prayer_template = EXCLUDED.telegram_prayer_template,
+       telegram_service_plan_chat_id = EXCLUDED.telegram_service_plan_chat_id,
+       telegram_service_plan_template = EXCLUDED.telegram_service_plan_template`,
     [
       next.telegram_enabled,
       next.telegram_bot_token,
@@ -412,6 +453,8 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       next.telegram_coordinator_chat_id,
       next.telegram_default_chat_id,
       next.telegram_prayer_template,
+      next.telegram_service_plan_chat_id,
+      next.telegram_service_plan_template,
     ],
   );
   return getTelegramSettings();
