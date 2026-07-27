@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState, useRef, lazy, Suspense } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
 import { useMessengerWsContext } from '../MessengerWsContext';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
@@ -7,6 +7,10 @@ import { ChatList } from './ChatList';
 import { LuPlus, LuMessageSquare, LuSlidersHorizontal } from 'react-icons/lu';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
+import {
+  readActiveMessengerConversation,
+  saveActiveMessengerConversation,
+} from '../../../lib/persistAppLocation';
 import './messenger.css';
 
 const ChatWindow = lazy(async () => {
@@ -40,13 +44,24 @@ function blurActiveElement() {
   }
 }
 
+function messengerPathWithConversation(id: string | null): string {
+  if (!id) return '/messenger';
+  return `/messenger?conversationId=${encodeURIComponent(id)}`;
+}
+
 export function MessengerPage() {
   const activeId = useChatStore((s) => s.activeConversationId);
   const setActive = useChatStore((s) => s.setActiveConversation);
   const ensurePrivateDraftFromConversationId = useChatStore((s) => s.ensurePrivateDraftFromConversationId);
   const loadConversations = useChatStore((s) => s.loadConversations);
   const [showNewChat, setShowNewChat] = useState(false);
-  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
+  const [mobileView, setMobileView] = useState<'list' | 'chat'>(() => {
+    if (typeof window === 'undefined') return 'list';
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('conversationId')?.trim()) return 'chat';
+    if (readActiveMessengerConversation()) return 'chat';
+    return 'list';
+  });
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [density, setDensity] = useState<'comfortable' | 'compact'>(() => {
     if (typeof window === 'undefined') return 'comfortable';
@@ -54,7 +69,9 @@ export function MessengerPage() {
   });
   const messengerRef = useRef<HTMLDivElement>(null);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restoredActiveRef = useRef(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const clearTransitionTimer = useCallback(() => {
     if (transitionTimerRef.current != null) {
       clearTimeout(transitionTimerRef.current);
@@ -128,12 +145,13 @@ export function MessengerPage() {
     window.localStorage.setItem('messenger:desktop-density', density);
   }, [density]);
 
-  // Deep-link from push / dashboard: /messenger?conversationId=123|draft:42
+  // Deep-link from push / dashboard / cold start: /messenger?conversationId=123|draft:42
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const convId = params.get('conversationId')?.trim() ?? '';
     if (!convId) return;
     setMobileView('chat');
+    saveActiveMessengerConversation(convId);
     if (isDraftPrivateConversationId(convId)) {
       void ensurePrivateDraftFromConversationId(convId);
       return;
@@ -141,12 +159,40 @@ export function MessengerPage() {
     setActive(convId);
   }, [location.search, setActive, ensurePrivateDraftFromConversationId]);
 
+  // Cold start without query: restore last active chat from localStorage.
+  useEffect(() => {
+    if (restoredActiveRef.current) return;
+    restoredActiveRef.current = true;
+    const params = new URLSearchParams(location.search);
+    if (params.get('conversationId')?.trim()) return;
+    if (activeId) {
+      setMobileView('chat');
+      navigate(messengerPathWithConversation(activeId), { replace: true });
+      return;
+    }
+    const saved = readActiveMessengerConversation();
+    if (!saved) return;
+    setMobileView('chat');
+    if (isDraftPrivateConversationId(saved)) {
+      void ensurePrivateDraftFromConversationId(saved);
+    } else {
+      setActive(saved);
+    }
+    navigate(messengerPathWithConversation(saved), { replace: true });
+  }, [activeId, ensurePrivateDraftFromConversationId, location.search, navigate, setActive]);
+
+  useEffect(() => {
+    saveActiveMessengerConversation(activeId);
+  }, [activeId]);
+
   const handleSelectConversation = useCallback((id: string) => {
     blurActiveElement();
     runTransitionWindow();
     setActive(id);
     setMobileView('chat');
-  }, [runTransitionWindow, setActive]);
+    saveActiveMessengerConversation(id);
+    navigate(messengerPathWithConversation(id), { replace: true });
+  }, [navigate, runTransitionWindow, setActive]);
 
   const handleBack = useCallback(() => {
     blurActiveElement();
@@ -158,9 +204,11 @@ export function MessengerPage() {
     // и продолжает markAsRead / WS auto-read, пока виден только список.
     if (activeId && (stackLayout || isDraftPrivateConversationId(activeId))) {
       setActive(null);
+      saveActiveMessengerConversation(null);
     }
     setMobileView('list');
-  }, [activeId, runTransitionWindow, setActive]);
+    navigate('/messenger', { replace: true });
+  }, [activeId, navigate, runTransitionWindow, setActive]);
 
   return (
     <div className="tg-messenger-page messenger-layout relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">

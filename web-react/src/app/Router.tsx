@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { AuthLandingPage } from '../features/auth/pages/AuthLandingPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
+import { RestoreLastRouteOrDashboard } from '../components/RestoreLastRouteOrDashboard';
 
 import { OfflinePage } from '../pages/Offline';
 import { Layout } from './Layout';
@@ -376,7 +377,7 @@ export function AppRouter() {
         </Route>
 
         <Route element={<Layout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route index element={<RestoreLastRouteOrDashboard />} />
           <Route
             path="dashboard"
             element={

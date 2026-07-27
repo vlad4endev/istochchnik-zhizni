@@ -24,6 +24,11 @@ import { requestCallNotificationsFromUserGesture } from '../../calls/incomingCal
 import { sendRealtimeJson } from '../../../lib/realtimeWsClient';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { useAuthStore } from '../../auth/authStore';
+import {
+  clearChatScrollAnchor,
+  readChatScrollAnchor,
+  saveChatScrollAnchor,
+} from '../../../lib/persistAppLocation';
 import './messenger.css';
 
 const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
@@ -52,7 +57,6 @@ export function ChatWindow({
   sendTypingStop,
 }: ChatWindowProps) {
   const navigate = useNavigate();
-  const chatScrollStorageKey = `messenger:chat-window-scroll:${conversationId}`;
   const isDraft = isDraftPrivateConversationId(conversationId);
   const messages = useChatStore((s) => s.messagesByConv[conversationId] || EMPTY_ARRAY);
   const loading = useChatStore((s) => s.messagesLoading[conversationId] || false);
@@ -376,15 +380,38 @@ export function ChatWindow({
     [conversationId],
   );
 
-  useEffect(() => {
-    nearBottomRef.current = true;
+  /**
+   * Сброс stick-to-bottom / якоря — только при смене чата (layout, до stick-to-bottom).
+   * Нельзя вешать на authToken: SessionKeepAlive обновляет токен при resume
+   * (visibility/pageshow/focus) и раньше сбрасывал nearBottom → прыжок вниз ленты.
+   */
+  useLayoutEffect(() => {
+    const saved = readChatScrollAnchor(conversationId);
+    if (saved && saved.nearBottom === false) {
+      nearBottomRef.current = false;
+    } else {
+      nearBottomRef.current = true;
+    }
     restoredChatScrollRef.current = false;
     restoreScrollRef.current = null;
-    if (!isDraft && authToken) {
-      // При открытии чата всегда подтягиваем первую страницу (как в Telegram), без антидребезга 1.5s.
-      void loadMessages(conversationId, false, { force: true });
-    }
-  }, [conversationId, loadMessages, authToken, isDraft]);
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (isDraft) return;
+    if (!useAuthStore.getState().token) return;
+    // При открытии чата всегда подтягиваем первую страницу (как в Telegram), без антидребезга 1.5s.
+    void loadMessages(conversationId, false, { force: true });
+  }, [conversationId, loadMessages, isDraft]);
+
+  /** Токен появился позже (гидрация) — один раз догрузить, не трогая nearBottom. */
+  useEffect(() => {
+    if (isDraft || !authToken) return;
+    const st = useChatStore.getState();
+    if (st.messagesLoading[conversationId]) return;
+    const existing = st.messagesByConv[conversationId];
+    if (existing && existing.length > 0) return;
+    void loadMessages(conversationId, false, { force: true });
+  }, [authToken, conversationId, loadMessages, isDraft]);
 
   const lastNumericMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -659,6 +686,8 @@ export function ChatWindow({
   const scrollToBottomSmooth = useCallback(() => {
     nearBottomRef.current = true;
     setShowNewBelow(false);
+    clearChatScrollAnchor(conversationId);
+    saveChatScrollAnchor(conversationId, { y: 0, nearBottom: true });
     const n = groupedMessages.length;
     if (n > 0) {
       rowVirtualizer.scrollToIndex(n - 1, { align: 'end', behavior: 'smooth' });
@@ -666,7 +695,7 @@ export function ChatWindow({
       const el = scrollRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     }
-  }, [groupedMessages.length, rowVirtualizer]);
+  }, [conversationId, groupedMessages.length, rowVirtualizer]);
 
   const handleScroll = useCallback(() => {
     if (scrollMeasureRafRef.current != null) return;
@@ -678,6 +707,28 @@ export function ChatWindow({
       const near = el.scrollHeight - el.scrollTop - el.clientHeight < pad;
       nearBottomRef.current = near;
       if (near) setShowNewBelow(false);
+
+      // Persist position so minimize/resume / remount can restore.
+      let messageId: string | undefined;
+      try {
+        const areaRect = el.getBoundingClientRect();
+        const midY = areaRect.top + el.clientHeight * 0.35;
+        const nodes = el.querySelectorAll<HTMLElement>('[data-msg-id]');
+        for (const node of nodes) {
+          const rect = node.getBoundingClientRect();
+          if (midY >= rect.top && midY <= rect.bottom) {
+            messageId = node.dataset.msgId;
+            break;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      saveChatScrollAnchor(conversationId, {
+        y: el.scrollTop,
+        messageId,
+        nearBottom: near,
+      });
 
       if (
         authToken &&
@@ -696,21 +747,34 @@ export function ChatWindow({
     if (restoredChatScrollRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
-    const raw = sessionStorage.getItem(chatScrollStorageKey);
-    if (!raw) {
+    const saved = readChatScrollAnchor(conversationId);
+    if (!saved || saved.nearBottom) {
       restoredChatScrollRef.current = true;
       return;
     }
-    const top = Number(raw);
     restoredChatScrollRef.current = true;
-    if (!Number.isFinite(top) || top <= 0) return;
     nearBottomRef.current = false;
-    requestAnimationFrame(() => {
+
+    const apply = () => {
       const node = scrollRef.current;
       if (!node) return;
-      node.scrollTop = top;
+      if (saved.messageId && listCount > 0) {
+        const idx = groupedMessages.findIndex((m) => String(m.id) === String(saved.messageId));
+        if (idx >= 0) {
+          rowVirtualizer.scrollToIndex(idx, { align: 'center', behavior: 'auto' });
+          return;
+        }
+      }
+      if (Number.isFinite(saved.y) && saved.y > 0) {
+        node.scrollTop = saved.y;
+      }
+    };
+    requestAnimationFrame(() => {
+      apply();
+      // Virtualizer may measure after first paint — second pass.
+      requestAnimationFrame(apply);
     });
-  }, [chatScrollStorageKey, messages.length]);
+  }, [conversationId, messages.length, listCount, groupedMessages, rowVirtualizer]);
 
   useEffect(() => {
     return () => {
@@ -718,8 +782,41 @@ export function ChatWindow({
         cancelAnimationFrame(scrollMeasureRafRef.current);
         scrollMeasureRafRef.current = null;
       }
+      // Flush final position on unmount (navigate away / remount).
+      const el = scrollRef.current;
+      if (el) {
+        const pad = 140;
+        const near = el.scrollHeight - el.scrollTop - el.clientHeight < pad;
+        saveChatScrollAnchor(conversationId, {
+          y: el.scrollTop,
+          nearBottom: near,
+        });
+      }
     };
-  }, []);
+  }, [conversationId]);
+
+  // Persist on background so resume after process kill still has an anchor.
+  useEffect(() => {
+    const persist = () => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const pad = 140;
+      const near = el.scrollHeight - el.scrollTop - el.clientHeight < pad;
+      saveChatScrollAnchor(conversationId, {
+        y: el.scrollTop,
+        nearBottom: near,
+      });
+    };
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') persist();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('pagehide', persist);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pagehide', persist);
+    };
+  }, [conversationId]);
 
   const virtualListTotalSize = rowVirtualizer.getTotalSize();
 
@@ -915,15 +1012,22 @@ export function ChatWindow({
   }, [isDraft, draftPeer, conv]);
 
   const onHeaderInfoClick = useCallback(() => {
-    const currentTop = scrollRef.current?.scrollTop ?? 0;
-    sessionStorage.setItem(chatScrollStorageKey, String(currentTop));
+    const el = scrollRef.current;
+    const currentTop = el?.scrollTop ?? 0;
+    const pad = 140;
+    const near =
+      el != null ? el.scrollHeight - el.scrollTop - el.clientHeight < pad : true;
+    saveChatScrollAnchor(conversationId, {
+      y: currentTop,
+      nearBottom: near,
+    });
     const backTo = `/messenger?conversationId=${encodeURIComponent(conversationId)}`;
     if (interlocutorProfilePath) {
       navigate(interlocutorProfilePath, { state: { backTo, backLabel: 'В чат' } });
       return;
     }
     navigate(`/messenger/chat/${conversationId}/manage`);
-  }, [interlocutorProfilePath, navigate, conversationId, chatScrollStorageKey]);
+  }, [interlocutorProfilePath, navigate, conversationId]);
 
   const headerInfoAriaLabel =
     interlocutorProfilePath != null ? 'Открыть страницу собеседника' : 'Сведения о чате';
