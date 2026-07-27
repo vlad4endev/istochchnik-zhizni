@@ -122,7 +122,7 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     label: 'Telegram',
     Icon: LuSend,
     short: 'Бот',
-    description: 'Скрытый админ-модуль для отправки молитв и недельных списков в Telegram.',
+    description: 'Бот, чаты, тексты молитвы и программы служения, авторассылки.',
   },
   {
     id: 'diagnostics',

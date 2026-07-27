@@ -570,6 +570,38 @@ export async function patchTelegramSettings(body: {
   return data;
 }
 
+export async function runServicePlanMondayMailing(body?: {
+  force?: boolean;
+  dry_run?: boolean;
+}): Promise<{
+  ok: boolean;
+  result: {
+    ok: boolean;
+    skipped?: boolean;
+    reason?: string;
+    service_date?: string;
+    plan_id?: number;
+    messenger_ok?: boolean;
+    telegram_ok?: boolean;
+    text?: string;
+  };
+}> {
+  const { data } = await apiClient.post<{
+    ok: boolean;
+    result: {
+      ok: boolean;
+      skipped?: boolean;
+      reason?: string;
+      service_date?: string;
+      plan_id?: number;
+      messenger_ok?: boolean;
+      telegram_ok?: boolean;
+      text?: string;
+    };
+  }>('/api/service-plans/monday-mailing/run', body ?? {});
+  return data;
+}
+
 export async function sendTelegramMessage(body: {
   kind: 'prayer_today' | 'next_week' | 'custom' | 'prayer_today_all_members';
   chat_id?: string;
