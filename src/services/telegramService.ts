@@ -22,6 +22,8 @@ export interface TelegramSettings {
   service_plan_chat_id: string | null;
   /** Шаблон текста рассылки программы ({{sunday_heading}}, {{preacher}}, …) */
   service_plan_template: string | null;
+  /** Chat id для уведомления «финальная программа опубликована» */
+  service_plan_published_chat_id: string | null;
   has_bot_token: boolean;
 }
 
@@ -70,6 +72,7 @@ export interface TelegramSettingsUpdate {
   prayer_template?: string | null;
   service_plan_chat_id?: string | null;
   service_plan_template?: string | null;
+  service_plan_published_chat_id?: string | null;
 }
 
 type TelegramPurpose = 'prayer' | 'coordinator' | 'default';
@@ -263,6 +266,7 @@ async function ensureSettingsColumns(): Promise<void> {
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_last_sent_at TIMESTAMPTZ');
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_chat_id TEXT');
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_template TEXT');
+  await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_published_chat_id TEXT');
 }
 
 async function ensureMembersTelegramColumn(): Promise<void> {
@@ -281,6 +285,7 @@ async function readSettingsRow(): Promise<{
   telegram_prayer_template: string | null;
   telegram_service_plan_chat_id: string | null;
   telegram_service_plan_template: string | null;
+  telegram_service_plan_published_chat_id: string | null;
   telegram_dispatch_enabled: boolean;
   telegram_dispatch_kind: 'daily' | 'once';
   telegram_dispatch_time: string | null;
@@ -305,6 +310,7 @@ async function readSettingsRow(): Promise<{
        telegram_prayer_template,
        telegram_service_plan_chat_id,
        telegram_service_plan_template,
+       telegram_service_plan_published_chat_id,
        telegram_dispatch_enabled,
        telegram_dispatch_kind,
        telegram_dispatch_time,
@@ -325,6 +331,7 @@ async function readSettingsRow(): Promise<{
         telegram_prayer_template?: string | null;
         telegram_service_plan_chat_id?: string | null;
         telegram_service_plan_template?: string | null;
+        telegram_service_plan_published_chat_id?: string | null;
         telegram_dispatch_enabled?: boolean;
         telegram_dispatch_kind?: unknown;
         telegram_dispatch_time?: string | null;
@@ -347,6 +354,9 @@ async function readSettingsRow(): Promise<{
       row.telegram_service_plan_template.trim().length > 0
         ? row.telegram_service_plan_template.replace(/\r\n/g, '\n')
         : null,
+    telegram_service_plan_published_chat_id: normalizeOptionalString(
+      row?.telegram_service_plan_published_chat_id,
+    ),
     telegram_dispatch_enabled: Boolean(row?.telegram_dispatch_enabled),
     telegram_dispatch_kind: row?.telegram_dispatch_kind === 'once' ? 'once' : 'daily',
     telegram_dispatch_time: normalizeOptionalString(row?.telegram_dispatch_time),
@@ -374,6 +384,7 @@ export async function getTelegramSettings(): Promise<TelegramSettings> {
     prayer_template: row.telegram_prayer_template,
     service_plan_chat_id: row.telegram_service_plan_chat_id,
     service_plan_template: row.telegram_service_plan_template,
+    service_plan_published_chat_id: row.telegram_service_plan_published_chat_id,
     has_bot_token: Boolean(botToken),
   };
 }
@@ -420,6 +431,10 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       input.service_plan_template !== undefined
         ? normalizeServicePlanTemplateInput(input.service_plan_template)
         : current.telegram_service_plan_template,
+    telegram_service_plan_published_chat_id:
+      input.service_plan_published_chat_id !== undefined
+        ? normalizeOptionalString(input.service_plan_published_chat_id)
+        : current.telegram_service_plan_published_chat_id,
   };
 
   await query(
@@ -433,9 +448,10 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_default_chat_id,
        telegram_prayer_template,
        telegram_service_plan_chat_id,
-       telegram_service_plan_template
+       telegram_service_plan_template,
+       telegram_service_plan_published_chat_id
      )
-     VALUES (1, CURRENT_DATE, $1, $2, $3, $4, $5, $6, $7, $8)
+     VALUES (1, CURRENT_DATE, $1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (id) DO UPDATE
      SET
        telegram_enabled = EXCLUDED.telegram_enabled,
@@ -445,7 +461,8 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_default_chat_id = EXCLUDED.telegram_default_chat_id,
        telegram_prayer_template = EXCLUDED.telegram_prayer_template,
        telegram_service_plan_chat_id = EXCLUDED.telegram_service_plan_chat_id,
-       telegram_service_plan_template = EXCLUDED.telegram_service_plan_template`,
+       telegram_service_plan_template = EXCLUDED.telegram_service_plan_template,
+       telegram_service_plan_published_chat_id = EXCLUDED.telegram_service_plan_published_chat_id`,
     [
       next.telegram_enabled,
       next.telegram_bot_token,
@@ -455,6 +472,7 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       next.telegram_prayer_template,
       next.telegram_service_plan_chat_id,
       next.telegram_service_plan_template,
+      next.telegram_service_plan_published_chat_id,
     ],
   );
   return getTelegramSettings();
@@ -619,7 +637,12 @@ export function splitTextForTelegramDispatch(text: string, maxLen = TELEGRAM_BOT
   return chunks;
 }
 
-async function sendTelegramMessageRaw(botToken: string, chatId: string, text: string): Promise<{
+async function sendTelegramMessageRaw(
+  botToken: string,
+  chatId: string,
+  text: string,
+  replyMarkup?: Record<string, unknown> | null,
+): Promise<{
   ok: boolean;
   status: number;
   body: { description?: unknown; ok?: unknown } | null;
@@ -635,15 +658,19 @@ async function sendTelegramMessageRaw(botToken: string, chatId: string, text: st
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
     const endpoint = `${telegramApiBaseForBot(botToken)}/sendMessage`;
+    const payload: Record<string, unknown> = {
+      chat_id: chat,
+      text,
+      disable_web_page_preview: true,
+    };
+    if (replyMarkup && typeof replyMarkup === 'object') {
+      payload.reply_markup = replyMarkup;
+    }
     const response = await fetchTelegramHttp(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
-      body: JSON.stringify({
-        chat_id: chat,
-        text,
-        disable_web_page_preview: true,
-      }),
+      body: JSON.stringify(payload),
     });
     let body: unknown = null;
     try {
@@ -673,7 +700,12 @@ async function sendTelegramMessageRaw(botToken: string, chatId: string, text: st
   }
 }
 
-async function sendTelegramMessageRawSequence(botToken: string, chatId: string, text: string): Promise<{
+async function sendTelegramMessageRawSequence(
+  botToken: string,
+  chatId: string,
+  text: string,
+  replyMarkup?: Record<string, unknown> | null,
+): Promise<{
   ok: boolean;
   status: number;
   body: { description?: unknown; ok?: unknown } | null;
@@ -687,11 +719,14 @@ async function sendTelegramMessageRawSequence(botToken: string, chatId: string, 
     status: 0,
     body: null,
   };
-  for (const part of parts) {
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i]!;
     if (part.length > TELEGRAM_BOT_MESSAGE_MAX_LENGTH) {
       throw new Error('telegram_message_text_too_long_internal');
     }
-    last = await sendTelegramMessageRaw(botToken, chatId, part);
+    // Inline-кнопку вешаем только на последнюю часть длинного текста.
+    const markup = i === parts.length - 1 ? replyMarkup : null;
+    last = await sendTelegramMessageRaw(botToken, chatId, part, markup);
     if (!last.ok) {
       return last;
     }
@@ -1388,6 +1423,48 @@ export async function sendTelegramByPurpose(args: {
     throw new Error('telegram_empty_text');
   }
   const sent = await sendTelegramMessageRawSequence(cfg.botToken, chatId, text);
+  if (!sent.ok) {
+    const description =
+      typeof sent.body?.description === 'string' ? sent.body.description.trim() : '';
+    throw new Error(
+      description ? `telegram_send_failed:${sent.status}:${description}` : `telegram_send_failed:${sent.status}`,
+    );
+  }
+  return { chat_id: chatId, status: sent.status };
+}
+
+/**
+ * Отправка в конкретный чат с опциональной inline-кнопкой (url).
+ */
+export async function sendTelegramToChat(args: {
+  chatId: string;
+  text: string;
+  inlineUrlButton?: { text: string; url: string } | null;
+}): Promise<{ chat_id: string; status: number }> {
+  const cfg = await resolveTelegramConfig();
+  if (!cfg.enabled) {
+    throw new Error('telegram_disabled');
+  }
+  if (!cfg.botToken) {
+    throw new Error('telegram_missing_token');
+  }
+  const chatId = normalizeOptionalString(args.chatId);
+  if (!chatId) {
+    throw new Error('telegram_missing_chat');
+  }
+  const text = args.text.trim();
+  if (!text) {
+    throw new Error('telegram_empty_text');
+  }
+  const buttonText = args.inlineUrlButton?.text?.trim() ?? '';
+  const buttonUrl = args.inlineUrlButton?.url?.trim() ?? '';
+  const replyMarkup =
+    buttonText && /^https?:\/\//i.test(buttonUrl)
+      ? {
+          inline_keyboard: [[{ text: buttonText, url: buttonUrl }]],
+        }
+      : null;
+  const sent = await sendTelegramMessageRawSequence(cfg.botToken, chatId, text, replyMarkup);
   if (!sent.ok) {
     const description =
       typeof sent.body?.description === 'string' ? sent.body.description.trim() : '';

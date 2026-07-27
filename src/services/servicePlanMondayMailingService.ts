@@ -1,7 +1,7 @@
 import { query } from '../config/db';
 import { addCalendarDaysYmd, formatYmdInTimeZone, getZonedNow } from '../utils/zonedTime';
 import { getPlanDetails } from './servicePlannerService';
-import { getTelegramSettings, sendTelegramByPurpose } from './telegramService';
+import { getTelegramSettings, sendTelegramByPurpose, sendTelegramToChat } from './telegramService';
 import {
   ensureServicePlanPlanningMessengerChannel,
   postServicePlanMondayMailingMessengerNotification,
@@ -460,4 +460,70 @@ export async function runServicePlanMondayMailing(options?: {
     text,
     ...(messengerOk || telegramOk ? {} : { reason: 'delivery_failed', skipped: false }),
   };
+}
+
+function formatPublishedDateRu(serviceDateYmd: string): string {
+  const d = new Date(`${serviceDateYmd}T12:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return serviceDateYmd;
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(d);
+}
+
+/**
+ * При публикации программы: сообщение в отдельный Telegram-чат + inline-кнопка со ссылкой.
+ */
+export async function notifyServicePlanPublishedTelegram(input: {
+  serviceDateYmd: string;
+  shareToken: string;
+}): Promise<{ ok: boolean; skipped?: boolean; reason?: string; chat_id?: string }> {
+  const shareToken = String(input.shareToken ?? '').trim();
+  const serviceDateYmd = String(input.serviceDateYmd ?? '').trim();
+  if (!shareToken || !serviceDateYmd) {
+    return { ok: false, skipped: true, reason: 'missing_plan_fields' };
+  }
+
+  let settings: Awaited<ReturnType<typeof getTelegramSettings>> | null = null;
+  try {
+    settings = await getTelegramSettings();
+  } catch (e) {
+    console.warn('[service-plan-published] telegram settings load failed:', e);
+  }
+
+  const chatId =
+    settings?.service_plan_published_chat_id?.trim() ||
+    process.env.TELEGRAM_SERVICE_PLAN_PUBLISHED_CHAT_ID?.trim() ||
+    null;
+  if (!chatId) {
+    return { ok: false, skipped: true, reason: 'missing_published_chat' };
+  }
+
+  const origin = resolvePublicWebOrigin();
+  const shareUrl = `${origin}/service-plan/share/${shareToken}`;
+  const dateText = formatPublishedDateRu(serviceDateYmd);
+  const text = `Финальная программа служения на ${dateText} готова\n\n${shareUrl}`;
+
+  try {
+    const sent = await sendTelegramToChat({
+      chatId,
+      text,
+      inlineUrlButton: { text: 'Открыть программу', url: shareUrl },
+    });
+    return { ok: true, chat_id: sent.chat_id };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (
+      msg === 'telegram_disabled' ||
+      msg === 'telegram_missing_token' ||
+      msg === 'telegram_missing_chat'
+    ) {
+      console.warn(`[service-plan-published] telegram skipped: ${msg}`);
+      return { ok: false, skipped: true, reason: msg };
+    }
+    console.error('[service-plan-published] telegram send failed:', e);
+    return { ok: false, reason: msg };
+  }
 }
