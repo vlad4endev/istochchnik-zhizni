@@ -2507,6 +2507,13 @@ html.dark .msg-reaction-floating {
 
 .msg-actions--portal {
   position: fixed;
+  /* Reset absolute-anchor rules from .msg-actions — otherwise bottom:100% + top
+     collapses the portal menu into a thin empty bar (tall bubbles / place-below). */
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  margin-bottom: 0;
   z-index: 120050;
   max-height: min(70dvh, 420px);
   overflow-x: hidden;
