@@ -130,6 +130,43 @@ function run(): void {
   assert.match(rich, /Важно: репетиция в субботу/);
   assert.match(rich, /service-plan\/edit\/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/);
 
+  const sermonRich = buildServicePlanMondayMailingText({
+    serviceDateYmd: '2026-07-26',
+    shareToken: 'bb479541-bec5-4931-b991-f65f0e8ce4cc',
+    publicOrigin: 'https://app.church-tambov.ru',
+    preacher: { id: 1, mention: '@zhigunov72', displayName: 'Жигунов' },
+    music: { id: 2, mention: '@music', displayName: 'Музыка' },
+    poem: { id: 3, mention: 'Надежда', displayName: 'Надежда' },
+    leader: { id: 4, mention: '@lead', displayName: 'Ведущий' },
+    sermonTopic: 'Четыре этапа',
+    sermonScripture: 'Быт. 37',
+    choirLine: 'Хор петь не будет.',
+    sermonTitle: 'Проповедь на воскресенье',
+    sermonBlockNotes: 'Нужна презентация до субботы',
+    sermonBody: '<p>Тезис 1</p><p>Тезис 2</p>',
+    sermonNoteAuthor: 'Жигунов',
+    sermonNoteShareToken: '11111111-2222-3333-4444-555555555555',
+    sermonHasNote: true,
+    sermonAttachments: [{ name: 'slides.pptx', url: '/uploads/slides.pptx' }],
+    template: [
+      '{{sermon_title}}',
+      '{{sermon_topic}} · {{sermon_scripture}}',
+      '{{sermon_body}}',
+      '{{sermon_presentation}}',
+      '{{sermon_presentation_url}}',
+      '{{sermon_note_url}}',
+      '{{sermon_for_broadcast}}',
+    ].join('\n'),
+  });
+  assert.match(sermonRich, /Проповедь на воскресенье/);
+  assert.match(sermonRich, /Четыре этапа · Быт\. 37/);
+  assert.match(sermonRich, /Тезис 1/);
+  assert.match(sermonRich, /Тезис 2/);
+  assert.match(sermonRich, /slides\.pptx/);
+  assert.match(sermonRich, /https:\/\/app\.church-tambov\.ru\/uploads\/slides\.pptx/);
+  assert.match(sermonRich, /sermon-notes\/share\/11111111-2222-3333-4444-555555555555/);
+  assert.match(sermonRich, /Презентация: slides\.pptx/);
+
   console.log('servicePlanMondayMailingService.test.ts: OK');
 }
 

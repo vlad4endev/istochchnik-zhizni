@@ -35,6 +35,11 @@ export type MondayMailingMemberRef = {
   displayName: string;
 };
 
+export type MondayMailingSermonAttachment = {
+  name: string;
+  url: string;
+};
+
 export type MondayMailingBuildInput = {
   serviceDateYmd: string;
   shareToken: string;
@@ -62,6 +67,14 @@ export type MondayMailingBuildInput = {
   poemText?: string | null;
   songs?: string[];
   mediaTeamLines?: string[];
+  /** Доп. данные проповеди / конспекта. */
+  sermonTitle?: string | null;
+  sermonBlockNotes?: string | null;
+  sermonBody?: string | null;
+  sermonNoteAuthor?: string | null;
+  sermonNoteShareToken?: string | null;
+  sermonHasNote?: boolean;
+  sermonAttachments?: MondayMailingSermonAttachment[];
 };
 
 export type ServicePlanMondayMailingResult = {
@@ -155,6 +168,39 @@ function memberDisplayName(ref: MondayMailingMemberRef | null | undefined): stri
   return memberMention(ref);
 }
 
+function stripHtmlToPlain(raw: string): string {
+  return raw
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/\s*p\s*>/gi, '\n')
+    .replace(/<\/\s*div\s*>/gi, '\n')
+    .replace(/<\/\s*li\s*>/gi, '\n')
+    .replace(/<\s*li[^>]*>/gi, '• ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function resolveAttachmentUrl(url: string, origin: string): string {
+  const u = url.trim();
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u)) return u;
+  if (u.startsWith('/')) return `${origin}${u}`;
+  return u;
+}
+
+function excerptText(text: string, maxLen = 500): string {
+  const t = text.trim();
+  if (t.length <= maxLen) return t;
+  return `${t.slice(0, Math.max(0, maxLen - 1)).trimEnd()}…`;
+}
+
 /**
  * Текст понедельничной рассылки программы служения (мессенджер + Telegram).
  */
@@ -172,8 +218,54 @@ export function buildServicePlanMondayMailingText(input: MondayMailingBuildInput
 
   const topic = (input.sermonTopic ?? '').trim();
   const scripture = (input.sermonScripture ?? '').trim();
+  const sermonTitle = (input.sermonTitle ?? '').trim();
+  const sermonBlockNotes = (input.sermonBlockNotes ?? '').trim();
+  const sermonBodyRaw = (input.sermonBody ?? '').trim();
+  const sermonBody = sermonBodyRaw ? stripHtmlToPlain(sermonBodyRaw) : '';
+  const sermonBodyExcerpt = sermonBody ? excerptText(sermonBody, 500) : '';
+  const sermonNoteAuthor = (input.sermonNoteAuthor ?? '').trim();
+  const sermonNoteShareToken = (input.sermonNoteShareToken ?? '').trim();
+  const sermonNoteUrl = sermonNoteShareToken
+    ? `${origin}/sermon-notes/share/${sermonNoteShareToken}`
+    : '';
+  const sermonHasNote = input.sermonHasNote === true || Boolean(sermonTitle || sermonBody || sermonNoteUrl);
+
   const sermonTopicBlock = topic ? `Тема: «${topic}»\n` : '';
   const sermonScriptureBlock = scripture ? `Текст: ${scripture}\n` : '';
+  const sermonTitleBlock = sermonTitle ? `Название: «${sermonTitle}»\n` : '';
+
+  const attachments = (input.sermonAttachments ?? [])
+    .map((a) => ({
+      name: String(a.name ?? '').trim(),
+      url: resolveAttachmentUrl(String(a.url ?? ''), origin),
+    }))
+    .filter((a) => a.name && a.url);
+  const sermonAttachmentsList =
+    attachments.length > 0
+      ? attachments.map((a, i) => `${i + 1}. ${a.name}\n${a.url}`).join('\n')
+      : 'вложения не загружены';
+  const sermonAttachmentsInline =
+    attachments.length > 0 ? attachments.map((a) => a.name).join(', ') : 'вложения не загружены';
+  const firstAttachment = attachments[0] ?? null;
+
+  const sermonSummaryParts: string[] = [];
+  if (sermonTitle) sermonSummaryParts.push(`Название: «${sermonTitle}»`);
+  if (topic) sermonSummaryParts.push(`Тема: «${topic}»`);
+  if (scripture) sermonSummaryParts.push(`Писание: ${scripture}`);
+  if (sermonNoteAuthor) sermonSummaryParts.push(`Автор конспекта: ${sermonNoteAuthor}`);
+  if (attachments.length > 0) {
+    sermonSummaryParts.push(`Файлы: ${attachments.map((a) => a.name).join(', ')}`);
+  }
+  if (sermonBlockNotes) sermonSummaryParts.push(sermonBlockNotes);
+  const sermonBlock = sermonSummaryParts.join('\n') || 'данные проповеди не заполнены';
+
+  const broadcastParts: string[] = [];
+  if (topic) broadcastParts.push(`Тема: «${topic}»`);
+  if (scripture) broadcastParts.push(`Текст: ${scripture}`);
+  if (firstAttachment) broadcastParts.push(`Презентация: ${firstAttachment.name}\n${firstAttachment.url}`);
+  else broadcastParts.push('Презентация: не загружена');
+  if (sermonNoteUrl) broadcastParts.push(`Конспект: ${sermonNoteUrl}`);
+  const sermonForBroadcast = broadcastParts.join('\n');
 
   const poemAuthor = (input.poemAuthor ?? '').trim();
   const poemTheme = (input.poemTheme ?? '').trim();
@@ -248,6 +340,22 @@ export function buildServicePlanMondayMailingText(input: MondayMailingBuildInput
     sermon_scripture: scripture || 'текст не указан',
     sermon_topic_block: sermonTopicBlock,
     sermon_scripture_block: sermonScriptureBlock,
+    sermon_title: sermonTitle || 'название не указано',
+    sermon_title_block: sermonTitleBlock,
+    sermon_notes: sermonBlockNotes || 'заметок нет',
+    sermon_body: sermonBody || 'конспект не привязан',
+    sermon_body_excerpt: sermonBodyExcerpt || 'конспект не привязан',
+    sermon_note_author: sermonNoteAuthor || 'автор конспекта не указан',
+    sermon_author: sermonNoteAuthor || 'автор конспекта не указан',
+    sermon_note_url: sermonNoteUrl || 'конспект не опубликован',
+    sermon_has_note: sermonHasNote ? 'да' : 'нет',
+    sermon_attachments_list: sermonAttachmentsList,
+    sermon_attachments_inline: sermonAttachmentsInline,
+    sermon_attachments_count: String(attachments.length),
+    sermon_presentation: firstAttachment?.name ?? 'презентация не загружена',
+    sermon_presentation_url: firstAttachment?.url ?? '',
+    sermon_block: sermonBlock,
+    sermon_for_broadcast: sermonForBroadcast,
 
     poem_reader: poemReader,
     poem_reader_name: poemReaderName,
@@ -397,9 +505,29 @@ function emptyMemberRef(): MondayMailingMemberRef {
 
 function pickSermonFields(
   blocks: Array<{ content_json: Record<string, unknown>; block_type_code?: string | null; title: string }>,
-  linked: { topic?: string | null; scripture?: string | null } | null,
-): { topic: string | null; scripture: string | null } {
-  const sermon = blocks.find((b) => String(b.block_type_code ?? '').toLowerCase() === 'sermon');
+  linked: {
+    title?: string | null;
+    topic?: string | null;
+    scripture?: string | null;
+    author_name?: string | null;
+    share_token?: string | null;
+    is_public?: boolean;
+  } | null,
+): {
+  topic: string | null;
+  scripture: string | null;
+  title: string | null;
+  blockNotes: string | null;
+  noteAuthor: string | null;
+  noteShareToken: string | null;
+  hasNote: boolean;
+  attachments: MondayMailingSermonAttachment[];
+} {
+  const sermon = blocks.find((b) => {
+    const code = String(b.block_type_code ?? '').toLowerCase();
+    const title = String(b.title ?? '').toLowerCase();
+    return code === 'sermon' || title.includes('проповед');
+  });
   const fromBlockTopic =
     sermon && typeof sermon.content_json.sermon_topic === 'string'
       ? sermon.content_json.sermon_topic.trim()
@@ -408,9 +536,68 @@ function pickSermonFields(
     sermon && typeof sermon.content_json.sermon_scripture === 'string'
       ? sermon.content_json.sermon_scripture.trim()
       : '';
+  const blockNotes = sermon
+    ? contentString(sermon.content_json, 'notes') || contentString(sermon.content_json, 'text') || null
+    : null;
   const topic = fromBlockTopic || (linked?.topic ?? '').trim() || null;
   const scripture = fromBlockScripture || (linked?.scripture ?? '').trim() || null;
-  return { topic, scripture };
+  const title = (linked?.title ?? '').trim() || null;
+  const noteAuthor = (linked?.author_name ?? '').trim() || null;
+  const noteShareToken =
+    linked?.is_public && linked.share_token ? String(linked.share_token).trim() : null;
+  const attachments = sermon ? parseSermonAttachmentsFromContent(sermon.content_json) : [];
+  const hasNote = Boolean(linked?.title || linked?.topic || linked?.scripture || linked?.share_token);
+  return {
+    topic,
+    scripture,
+    title,
+    blockNotes,
+    noteAuthor,
+    noteShareToken,
+    hasNote,
+    attachments,
+  };
+}
+
+export function parseSermonAttachmentsFromContent(
+  contentJson: Record<string, unknown>,
+): MondayMailingSermonAttachment[] {
+  const raw = contentJson.sermon_attachments;
+  if (!Array.isArray(raw)) return [];
+  const out: MondayMailingSermonAttachment[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const row = item as Record<string, unknown>;
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    const url = typeof row.url === 'string' ? row.url.trim() : '';
+    if (!name || !url) continue;
+    out.push({ name, url });
+    if (out.length >= 5) break;
+  }
+  return out;
+}
+
+async function loadLinkedSermonBody(planId: number): Promise<string | null> {
+  try {
+    const res = await query(
+      `SELECT n.body
+       FROM public.sermon_notes n
+       LEFT JOIN public.service_plans p ON p.id = n.service_plan_id
+       WHERE n.service_plan_id = $1
+       ORDER BY
+         CASE WHEN p.preacher_member_id IS NOT NULL AND n.member_id = p.preacher_member_id THEN 0 ELSE 1 END,
+         n.updated_at DESC
+       LIMIT 1`,
+      [planId],
+    );
+    const body = (res.rows[0] as { body?: unknown } | undefined)?.body;
+    if (body == null) return null;
+    const text = String(body).trim();
+    return text || null;
+  } catch (e) {
+    console.warn('[service-plan-monday-mailing] sermon body load failed:', e);
+    return null;
+  }
 }
 
 type MailingBlockMeta = {
@@ -587,6 +774,7 @@ export async function runServicePlanMondayMailing(options?: {
   });
 
   const sermon = pickSermonFields(blocksForMailing, plan.linked_sermon_note);
+  const sermonBody = await loadLinkedSermonBody(planId);
   const choirLine = resolveChoirLineFromBlocks(blocksForMailing, mentionById);
   const poemFields = pickPoemFields(blocksForMailing, memberMap);
   const songs = pickSongTitles(blocksForMailing);
@@ -625,6 +813,13 @@ export async function runServicePlanMondayMailing(options?: {
     poemText: poemFields.text,
     songs,
     mediaTeamLines,
+    sermonTitle: sermon.title,
+    sermonBlockNotes: sermon.blockNotes,
+    sermonBody,
+    sermonNoteAuthor: sermon.noteAuthor,
+    sermonNoteShareToken: sermon.noteShareToken,
+    sermonHasNote: sermon.hasNote,
+    sermonAttachments: sermon.attachments,
   });
 
   if (dryRun) {

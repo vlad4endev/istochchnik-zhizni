@@ -129,7 +129,12 @@ const PROGRAM_PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
   {
     title: 'Проповедь',
     items: [
-      { token: '{{sermon_topic}}', label: 'Тема проповеди' },
+      { token: '{{sermon_title}}', label: 'Название документа проповеди («Мои проповеди»)' },
+      {
+        token: '{{sermon_title_block}}',
+        label: 'Готовая строка «Название: «…»» (пусто, если названия нет)',
+      },
+      { token: '{{sermon_topic}}', label: 'Тема проповеди (из блока или конспекта)' },
       { token: '{{sermon_scripture}}', label: 'Текст Писания' },
       {
         token: '{{sermon_topic_block}}',
@@ -138,6 +143,53 @@ const PROGRAM_PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
       {
         token: '{{sermon_scripture_block}}',
         label: 'Готовая строка «Текст: …» (пусто, если текста нет)',
+      },
+      { token: '{{sermon_notes}}', label: 'Заметки в блоке «Проповедь»' },
+      {
+        token: '{{sermon_body}}',
+        label: 'Полный текст/тезисы конспекта из «Мои проповеди»',
+      },
+      {
+        token: '{{sermon_body_excerpt}}',
+        label: 'Краткий фрагмент конспекта (до ~500 символов)',
+      },
+      {
+        token: '{{sermon_note_author}}',
+        label: 'Автор привязанного конспекта',
+      },
+      {
+        token: '{{sermon_note_url}}',
+        label: 'Публичная ссылка на конспект (если опубликован)',
+      },
+      {
+        token: '{{sermon_has_note}}',
+        label: 'Есть ли привязанный конспект',
+        example: 'да / нет',
+      },
+      {
+        token: '{{sermon_presentation}}',
+        label: 'Имя файла презентации (первое вложение)',
+      },
+      {
+        token: '{{sermon_presentation_url}}',
+        label: 'Ссылка на презентацию (первое вложение)',
+      },
+      {
+        token: '{{sermon_attachments_list}}',
+        label: 'Все вложения проповеди (имя + ссылка, по строкам)',
+      },
+      {
+        token: '{{sermon_attachments_inline}}',
+        label: 'Имена вложений через запятую',
+      },
+      { token: '{{sermon_attachments_count}}', label: 'Число вложений' },
+      {
+        token: '{{sermon_block}}',
+        label: 'Сводка: название, тема, Писание, автор, файлы',
+      },
+      {
+        token: '{{sermon_for_broadcast}}',
+        label: 'Готовый блок для медиа: тема, текст, презентация, конспект',
       },
     ],
   },
