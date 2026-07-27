@@ -1,12 +1,25 @@
 import assert from 'node:assert/strict';
 import {
   buildServicePlanMondayMailingText,
+  formatMailingPerson,
   formatSundayMailingHeading,
+  isInternalProfileUsername,
   resolveChoirLineFromBlocks,
   resolveUpcomingSundayYmd,
 } from './servicePlanMondayMailingService';
 
 function run(): void {
+  assert.equal(isInternalProfileUsername('member-57'), true);
+  assert.equal(isInternalProfileUsername('@member-57'), false);
+  assert.equal(isInternalProfileUsername('zhigunov72'), false);
+  assert.equal(
+    formatMailingPerson({ id: 57, mention: '@member-57', displayName: 'Иван Петров' }, 'name'),
+    'Иван Петров',
+  );
+  assert.equal(
+    formatMailingPerson({ id: 57, mention: '@member-57', displayName: 'Иван Петров' }, 'messenger'),
+    '@[57]',
+  );
   assert.equal(formatSundayMailingHeading('2026-07-26'), 'Воскресенье — 26 июля');
 
   // Понедельник 27 июля 2026 → ближайшее воскресенье 2 августа
@@ -31,14 +44,14 @@ function run(): void {
   });
 
   assert.match(text, /^Воскресенье — 26 июля\n/);
-  assert.match(text, /1\. Проповедник — @zhigunov72/);
+  assert.match(text, /1\. Проповедник — Жигунов/);
   assert.match(text, /Тема: «Четыре этапа нашей жизни»/);
   assert.match(text, /Текст: Быт\. 37:1-3; 37:23-24; 41:41-44/);
-  assert.match(text, /2\. Группа прославления — @N_i_k_o_l_a_sss/);
+  assert.match(text, /2\. Группа прославления — Николай/);
   assert.match(text, /3\. Стих — Надежда/);
   assert.match(text, /4\. Хор петь не будет\./);
-  assert.match(text, /5\. Ведущий — @zhigunovdm/);
-  assert.match(text, /6\. Проповедник — @zhigunov72/);
+  assert.match(text, /5\. Ведущий — Дмитрий/);
+  assert.match(text, /6\. Проповедник — Жигунов/);
   assert.match(text, /7\. Медиа-команда/);
   assert.match(
     text,
@@ -60,7 +73,7 @@ function run(): void {
   });
   assert.equal(
     custom,
-    'Воскресенье — 26 июля\nПроповедник: @zhigunov72\nhttps://app.church-tambov.ru/service-plan/share/bb479541-bec5-4931-b991-f65f0e8ce4cc',
+    'Воскресенье — 26 июля\nПроповедник: Жигунов\nhttps://app.church-tambov.ru/service-plan/share/bb479541-bec5-4931-b991-f65f0e8ce4cc',
   );
 
   assert.equal(resolveChoirLineFromBlocks([], new Map()), 'Хор петь не будет.');
@@ -123,9 +136,9 @@ function run(): void {
     ].join('\n'),
   });
   assert.match(rich, /26\.07\.2026 10:00 черновик/);
-  assert.match(rich, /Жигунов \/ @zhigunov72/);
+  assert.match(rich, /Жигунов \/ Жигунов/);
   assert.match(rich, /Великий Бог, Ты достоин \(2\)/);
-  assert.match(rich, /@reader · Пушкин · Вера/);
+  assert.match(rich, /Чтец · Пушкин · Вера/);
   assert.match(rich, /Камера — Иван, Звук — Пётр/);
   assert.match(rich, /Важно: репетиция в субботу/);
   assert.match(rich, /service-plan\/edit\/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/);
@@ -166,6 +179,22 @@ function run(): void {
   assert.match(sermonRich, /https:\/\/app\.church-tambov\.ru\/uploads\/slides\.pptx/);
   assert.match(sermonRich, /sermon-notes\/share\/11111111-2222-3333-4444-555555555555/);
   assert.match(sermonRich, /Презентация: slides\.pptx/);
+
+  const messengerPeople = buildServicePlanMondayMailingText({
+    serviceDateYmd: '2026-07-26',
+    shareToken: 'bb479541-bec5-4931-b991-f65f0e8ce4cc',
+    publicOrigin: 'https://app.church-tambov.ru',
+    preacher: { id: 57, mention: '@member-57', displayName: 'Жигунов' },
+    music: { id: 57, mention: '@member-57', displayName: 'Жигунов' },
+    poem: { id: 3, mention: 'Надежда', displayName: 'Надежда' },
+    leader: { id: 29, mention: '@member-29', displayName: 'Дмитрий' },
+    sermonTopic: null,
+    sermonScripture: null,
+    choirLine: 'Хор петь не будет.',
+    personStyle: 'messenger',
+    template: '1. {{preacher}}\n5. {{leader}}',
+  });
+  assert.equal(messengerPeople, '1. @[57]\n5. @[29]');
 
   console.log('servicePlanMondayMailingService.test.ts: OK');
 }

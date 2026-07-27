@@ -108,22 +108,30 @@ const PROGRAM_PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
     items: [
       {
         token: '{{preacher}}',
-        label: 'Проповедник: @username или имя',
+        label: 'Проповедник — имя (не @member-…)',
+        example: 'Иван Иванов',
       },
       { token: '{{preacher_name}}', label: 'Проповедник — только имя' },
-      { token: '{{preacher_mention}}', label: 'Проповедник — упоминание (@…)' },
-      { token: '{{music}}', label: 'Ответственный за прославление (@ или имя)' },
+      {
+        token: '{{preacher_mention}}',
+        label: 'Проповедник — то же имя (в мессенджере уходит как упоминание)',
+      },
+      {
+        token: '{{music}}',
+        label: 'Ответственный за прославление — имя',
+        example: 'Николай',
+      },
       { token: '{{music_name}}', label: 'Прославление — только имя' },
-      { token: '{{music_mention}}', label: 'Прославление — упоминание' },
+      { token: '{{music_mention}}', label: 'Прославление — то же имя / упоминание в мессенджере' },
       {
         token: '{{poem}}',
-        label: 'Ответственный за стихи (кто заполняет блок, не чтец)',
+        label: 'Ответственный за стихи — имя (кто заполняет блок, не чтец)',
       },
       { token: '{{poem_name}}', label: 'Ответственный за стихи — имя' },
-      { token: '{{poem_mention}}', label: 'Ответственный за стихи — упоминание' },
-      { token: '{{leader}}', label: 'Ведущий (@ или имя)' },
+      { token: '{{poem_mention}}', label: 'Ответственный за стихи — то же имя / упоминание' },
+      { token: '{{leader}}', label: 'Ведущий — имя', example: 'Дмитрий' },
       { token: '{{leader_name}}', label: 'Ведущий — только имя' },
-      { token: '{{leader_mention}}', label: 'Ведущий — упоминание' },
+      { token: '{{leader_mention}}', label: 'Ведущий — то же имя / упоминание в мессенджере' },
     ],
   },
   {

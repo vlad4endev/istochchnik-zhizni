@@ -3394,11 +3394,13 @@ export async function postServicePlanMondayMailingMessengerNotification(input: {
   }
 
   const contentForDb = encryptMessageText(content);
+  const mentionIds = extractMentionMemberIdsFromContent(content);
   const payload: MessagePayload = {
     kind: 'service_plan_monday_mailing',
     service_date: input.serviceDateYmd,
     plan_id: input.planId,
     share_token: input.shareToken,
+    ...(mentionIds.length > 0 ? { mention_member_ids: mentionIds } : {}),
   };
 
   await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [convId]);

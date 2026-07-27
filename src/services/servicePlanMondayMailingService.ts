@@ -30,10 +30,12 @@ export const DEFAULT_SERVICE_PLAN_MONDAY_MAILING_TEMPLATE = [
 
 export type MondayMailingMemberRef = {
   id: number | null;
-  /** `@username` или отображаемое имя */
+  /** Читаемое имя; для мессенджера может быть `@[id]` */
   mention: string;
   displayName: string;
 };
+
+export type MondayMailingPersonStyle = 'name' | 'messenger';
 
 export type MondayMailingSermonAttachment = {
   name: string;
@@ -53,6 +55,8 @@ export type MondayMailingBuildInput = {
   choirLine: string;
   /** Кастомный шаблон из настроек; пустой → DEFAULT */
   template?: string | null;
+  /** Как показывать людей: имя или упоминание мессенджера `@[id]`. */
+  personStyle?: MondayMailingPersonStyle;
   /** Доп. поля программы (необязательны — для обратной совместимости тестов). */
   startTime?: string | null;
   status?: 'draft' | 'published' | string | null;
@@ -126,11 +130,33 @@ export function formatSundayMailingHeading(serviceDateYmd: string): string {
   return `${wd} — ${dayMonth}`;
 }
 
-function memberMention(ref: MondayMailingMemberRef): string {
-  const m = ref.mention.trim();
-  if (m) return m;
+/** Служебный слаг профиля `/profile/member-57` — не Telegram и не красивое имя. */
+export function isInternalProfileUsername(username: string | null | undefined): boolean {
+  return /^member-\d+$/i.test(String(username ?? '').trim());
+}
+
+/**
+ * Как показывать человека в тексте рассылки.
+ * - name: «Иван Иванов»
+ * - messenger: `@[57]` (в чате отобразится как @Имя и уйдёт уведомление)
+ */
+export function formatMailingPerson(
+  ref: MondayMailingMemberRef | null | undefined,
+  style: MondayMailingPersonStyle = 'name',
+): string {
+  if (!ref) return 'не назначен';
+  if (style === 'messenger' && ref.id != null && Number.isInteger(ref.id) && ref.id > 0) {
+    return `@[${ref.id}]`;
+  }
   const d = ref.displayName.trim();
-  return d || 'не назначен';
+  if (d) return d;
+  const m = ref.mention.trim();
+  if (m && !isInternalProfileUsername(m.replace(/^@/, ''))) return m;
+  return 'не назначен';
+}
+
+function memberDisplayName(ref: MondayMailingMemberRef | null | undefined): string {
+  return formatMailingPerson(ref, 'name');
 }
 
 function renderMailingTemplate(template: string, vars: Record<string, string>): string {
@@ -159,13 +185,6 @@ function statusRu(status: string | null | undefined): string {
   if (s === 'published') return 'опубликована';
   if (s === 'draft') return 'черновик';
   return s || 'неизвестно';
-}
-
-function memberDisplayName(ref: MondayMailingMemberRef | null | undefined): string {
-  if (!ref) return 'не назначен';
-  const d = ref.displayName.trim();
-  if (d) return d;
-  return memberMention(ref);
 }
 
 function stripHtmlToPlain(raw: string): string {
@@ -211,10 +230,11 @@ export function buildServicePlanMondayMailingText(input: MondayMailingBuildInput
   const editToken = (input.editToken ?? '').trim();
   const editUrl = editToken ? `${origin}/service-plan/edit/${editToken}` : '';
 
-  const preacher = memberMention(input.preacher);
-  const music = memberMention(input.music);
-  const poem = memberMention(input.poem);
-  const leader = memberMention(input.leader);
+  const personStyle: MondayMailingPersonStyle = input.personStyle === 'messenger' ? 'messenger' : 'name';
+  const preacher = formatMailingPerson(input.preacher, personStyle);
+  const music = formatMailingPerson(input.music, personStyle);
+  const poem = formatMailingPerson(input.poem, personStyle);
+  const leader = formatMailingPerson(input.leader, personStyle);
 
   const topic = (input.sermonTopic ?? '').trim();
   const scripture = (input.sermonScripture ?? '').trim();
@@ -270,7 +290,7 @@ export function buildServicePlanMondayMailingText(input: MondayMailingBuildInput
   const poemAuthor = (input.poemAuthor ?? '').trim();
   const poemTheme = (input.poemTheme ?? '').trim();
   const poemText = (input.poemText ?? '').trim();
-  const poemReader = input.poemReader ? memberMention(input.poemReader) : 'не назначен';
+  const poemReader = formatMailingPerson(input.poemReader, personStyle);
   const poemReaderName = memberDisplayName(input.poemReader);
   const poemBlockParts: string[] = [];
   if (poemReader && poemReader !== 'не назначен') poemBlockParts.push(`Чтец: ${poemReader}`);
@@ -474,11 +494,8 @@ async function loadMemberRefs(memberIds: Array<number | null>): Promise<Map<numb
   const res = await query(
     `SELECT
        m.id,
-       coalesce(nullif(trim(concat(coalesce(m.first_name, ''), ' ', coalesce(m.last_name, ''))), ''), m.name) AS display_name,
-       nullif(trim(m.first_name), '') AS first_name,
-       nullif(trim(up.username), '') AS username
+       coalesce(nullif(trim(concat(coalesce(m.first_name, ''), ' ', coalesce(m.last_name, ''))), ''), m.name) AS display_name
      FROM public.members m
-     LEFT JOIN public.user_profiles up ON up.member_id = m.id
      WHERE m.id = ANY($1::int[])`,
     [ids],
   );
@@ -486,15 +503,11 @@ async function loadMemberRefs(memberIds: Array<number | null>): Promise<Map<numb
   for (const row of res.rows as Array<{
     id: number;
     display_name: string | null;
-    first_name: string | null;
-    username: string | null;
   }>) {
     const id = Number(row.id);
     const displayName = String(row.display_name ?? '').trim() || `участник ${id}`;
-    const username = row.username ? String(row.username).trim() : '';
-    const firstName = row.first_name ? String(row.first_name).trim() : '';
-    const mention = username ? `@${username}` : firstName || displayName;
-    map.set(id, { id, mention, displayName });
+    // Не используем user_profiles.username как @mention — часто это member-57
+    map.set(id, { id, mention: displayName, displayName });
   }
   return map;
 }
@@ -734,11 +747,6 @@ export async function runServicePlanMondayMailing(options?: {
     ...plan.blocks.map((b) => b.assigned_member_id),
   ]);
 
-  const mentionById = new Map<number, string>();
-  for (const [id, ref] of memberMap) {
-    mentionById.set(id, ref.mention);
-  }
-
   // getPlanDetails не отдаёт block_type_code / song_title в mapped blocks — подгружаем отдельно
   const codesRes = await query(
     `SELECT
@@ -775,7 +783,6 @@ export async function runServicePlanMondayMailing(options?: {
 
   const sermon = pickSermonFields(blocksForMailing, plan.linked_sermon_note);
   const sermonBody = await loadLinkedSermonBody(planId);
-  const choirLine = resolveChoirLineFromBlocks(blocksForMailing, mentionById);
   const poemFields = pickPoemFields(blocksForMailing, memberMap);
   const songs = pickSongTitles(blocksForMailing);
   const mediaTeamLines = await loadMediaTeamLines(planId);
@@ -787,18 +794,25 @@ export async function runServicePlanMondayMailing(options?: {
     console.warn('[service-plan-monday-mailing] telegram settings load failed:', e);
   }
 
-  const text = buildServicePlanMondayMailingText({
+  const preacherRef =
+    (plan.preacher_member_id && memberMap.get(plan.preacher_member_id)) || emptyMemberRef();
+  const musicRef =
+    (plan.music_ministry_member_id && memberMap.get(plan.music_ministry_member_id)) || emptyMemberRef();
+  const poemRef =
+    (plan.poem_ministry_member_id && memberMap.get(plan.poem_ministry_member_id)) || emptyMemberRef();
+  const leaderRef =
+    (plan.leader_member_id && memberMap.get(plan.leader_member_id)) || emptyMemberRef();
+
+  const buildInputBase = {
     serviceDateYmd: plan.service_date,
     shareToken: plan.share_token,
     publicOrigin: resolvePublicWebOrigin(),
-    preacher: (plan.preacher_member_id && memberMap.get(plan.preacher_member_id)) || emptyMemberRef(),
-    music:
-      (plan.music_ministry_member_id && memberMap.get(plan.music_ministry_member_id)) || emptyMemberRef(),
-    poem: (plan.poem_ministry_member_id && memberMap.get(plan.poem_ministry_member_id)) || emptyMemberRef(),
-    leader: (plan.leader_member_id && memberMap.get(plan.leader_member_id)) || emptyMemberRef(),
+    preacher: preacherRef,
+    music: musicRef,
+    poem: poemRef,
+    leader: leaderRef,
     sermonTopic: sermon.topic,
     sermonScripture: sermon.scripture,
-    choirLine,
     template: tgSettings?.service_plan_template ?? null,
     startTime: plan.start_time,
     status: plan.status,
@@ -820,6 +834,25 @@ export async function runServicePlanMondayMailing(options?: {
     sermonNoteShareToken: sermon.noteShareToken,
     sermonHasNote: sermon.hasNote,
     sermonAttachments: sermon.attachments,
+  };
+
+  const choirLabelsFor = (style: MondayMailingPersonStyle): Map<number, string> => {
+    const map = new Map<number, string>();
+    for (const [id, ref] of memberMap) {
+      map.set(id, formatMailingPerson(ref, style));
+    }
+    return map;
+  };
+
+  const text = buildServicePlanMondayMailingText({
+    ...buildInputBase,
+    choirLine: resolveChoirLineFromBlocks(blocksForMailing, choirLabelsFor('name')),
+    personStyle: 'name',
+  });
+  const textMessenger = buildServicePlanMondayMailingText({
+    ...buildInputBase,
+    choirLine: resolveChoirLineFromBlocks(blocksForMailing, choirLabelsFor('messenger')),
+    personStyle: 'messenger',
   });
 
   if (dryRun) {
@@ -839,7 +872,7 @@ export async function runServicePlanMondayMailing(options?: {
   try {
     await ensureServicePlanPlanningMessengerChannel();
     await postServicePlanMondayMailingMessengerNotification({
-      content: text,
+      content: textMessenger,
       serviceDateYmd: plan.service_date,
       planId,
       shareToken: plan.share_token,
