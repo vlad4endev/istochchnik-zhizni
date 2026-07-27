@@ -2487,19 +2487,60 @@ export async function getPollVotersForMember(
 }
 
 /**
- * Soft-delete a message (only by sender).
+ * Soft-delete a message.
+ * - свои сообщения: только отправитель;
+ * - системные (sender_id IS NULL, напр. рассылка программы): любой участник чата,
+ *   кроме заявок access_request (ими управляют через кнопки принять/отклонить).
  */
 export async function deleteMessage(
   messageId: string,
-  senderId: number,
+  requesterId: number,
 ): Promise<boolean> {
-  const result = await dbQuery(
+  const mid = String(messageId || '').trim();
+  if (!/^\d+$/.test(mid)) return false;
+
+  const own = await dbQuery(
     `UPDATE messages SET is_deleted = TRUE, content = ''
      WHERE id = $1 AND sender_id = $2 AND is_deleted = FALSE
      RETURNING id`,
-    [messageId, senderId],
+    [mid, requesterId],
   );
-  return result.rows.length > 0;
+  if (own.rows.length > 0) return true;
+
+  try {
+    const system = await dbQuery(
+      `UPDATE messages m
+       SET is_deleted = TRUE, content = ''
+       FROM conversation_participants cp
+       WHERE m.id = $1::bigint
+         AND m.sender_id IS NULL
+         AND m.is_deleted = FALSE
+         AND m.payload_type::text IS DISTINCT FROM 'access_request'
+         AND cp.conversation_id = m.conversation_id
+         AND cp.member_id = $2
+         AND cp.left_at IS NULL
+       RETURNING m.id`,
+      [mid, requesterId],
+    );
+    return system.rows.length > 0;
+  } catch (e) {
+    if (!isPgUndefinedColumnError(e)) throw e;
+    // older DB without left_at
+    const legacy = await dbQuery(
+      `UPDATE messages m
+       SET is_deleted = TRUE, content = ''
+       FROM conversation_participants cp
+       WHERE m.id = $1::bigint
+         AND m.sender_id IS NULL
+         AND m.is_deleted = FALSE
+         AND m.payload_type::text IS DISTINCT FROM 'access_request'
+         AND cp.conversation_id = m.conversation_id
+         AND cp.member_id = $2
+       RETURNING m.id`,
+      [mid, requesterId],
+    );
+    return legacy.rows.length > 0;
+  }
 }
 
 // ─── Read Receipts ────────────────────────────────────────────

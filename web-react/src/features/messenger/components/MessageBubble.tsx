@@ -598,7 +598,13 @@ function MessageBubbleInner({
     payloadType !== 'poll' &&
     payloadType !== 'access_request';
 
-  const canDeleteOwnMessage = isMine && !isDeleted && !systemBotAccessMessage;
+  /** Свои + системные (рассылка и т.п. без sender_id), кроме заявок. */
+  const canDeleteMessage =
+    !isDeleted &&
+    !isOptimistic &&
+    !systemBotAccessMessage &&
+    payloadType !== 'access_request' &&
+    (isMine || message.sender_id == null);
 
   const senderName = String(
     message.sender_name ??
@@ -2210,7 +2216,7 @@ function MessageBubbleInner({
                     <span>✏️</span> Редактировать
                   </button>
                 ) : null}
-                {canDeleteOwnMessage ? (
+                {canDeleteMessage ? (
                   <button
                     type="button"
                     role="menuitem"

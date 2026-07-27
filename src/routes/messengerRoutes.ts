@@ -1762,7 +1762,7 @@ router.delete('/messages/:id', async (req: Request, res: Response) => {
     } catch { /* ignore */ }
     const ok = await svc.deleteMessage(msgId, userId);
     if (!ok) {
-      res.status(404).json({ error: 'Message not found or not yours' });
+      res.status(404).json({ error: 'Message not found or not allowed to delete' });
       return;
     }
     if (cId) {
