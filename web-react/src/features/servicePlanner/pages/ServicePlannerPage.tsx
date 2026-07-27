@@ -2652,6 +2652,7 @@ export function ServicePlannerPage() {
                   void deleteCurrentPlan();
                 }}
                 className="inline-flex min-h-9 min-w-0 items-center justify-center rounded-lg border border-rose-300 px-2 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                aria-label="Удалить программу"
               >
                 Удалить
               </button>
