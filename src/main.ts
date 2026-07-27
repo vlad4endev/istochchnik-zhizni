@@ -49,7 +49,7 @@ import {
 import { initPushCronJobs } from './cron/pushJobs';
 import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
-import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
+import { ensureAccessRequestsMessengerChannel, ensureServicePlanPlanningMessengerChannel } from './services/messengerService';
 import { ensurePushSubscriptionsSchema } from './services/pushSubscriptionsSchema';
 import { ensureFeedSchema } from './services/feedSchema';
 import { ensureSermonNotesSchema } from './services/sermonNotesService';
@@ -481,6 +481,9 @@ async function start(): Promise<void> {
       await ensurePrayerCycleAnchor(pool);
       void ensureAccessRequestsMessengerChannel().catch((e) =>
         console.warn('[messenger] ensureAccessRequestsMessengerChannel on boot:', e),
+      );
+      void ensureServicePlanPlanningMessengerChannel().catch((e) =>
+        console.warn('[messenger] ensureServicePlanPlanningMessengerChannel on boot:', e),
       );
     }
 

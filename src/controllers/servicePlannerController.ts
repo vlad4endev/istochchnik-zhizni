@@ -30,6 +30,7 @@ import {
   listPreacherSermonHistory,
   upsertSermonFeedbackComment,
 } from '../services/sermonFeedbackService';
+import { runServicePlanMondayMailing } from '../services/servicePlanMondayMailingService';
 import { normalizeAppRole, normalizeAppRoles, type AppRole } from '../types/appRole';
 import { roleHasPermission } from '../types/appPermissions';
 import { loadRolePermissionsSettings } from '../services/rolePermissionsSettingsService';
@@ -908,6 +909,24 @@ export async function runSermonFeedbackNotificationTick(_req: Request, res: Resp
   } catch (e) {
     console.error('[service-planner] runSermonFeedbackNotificationTick:', e);
     res.status(500).json({ error: 'Не удалось выполнить проверку уведомлений' });
+  }
+}
+
+/** Админ: запустить (или предпросмотреть) понедельничную рассылку программы служения. */
+export async function runServicePlanMondayMailingNow(req: Request, res: Response): Promise<void> {
+  if (String(req.authUserRole ?? '').toLowerCase() !== 'admin') {
+    res.status(403).json({ error: 'Только администратор' });
+    return;
+  }
+  const body = parseJsonObject(req.body);
+  const force = body.force === true || body.force === 'true' || body.force === 1;
+  const dryRun = body.dry_run === true || body.dry_run === 'true' || body.dry_run === 1;
+  try {
+    const result = await runServicePlanMondayMailing({ force, dryRun });
+    res.json({ ok: true, result });
+  } catch (e) {
+    console.error('[service-planner] runServicePlanMondayMailingNow:', e);
+    res.status(500).json({ error: 'Не удалось выполнить рассылку программы' });
   }
 }
 

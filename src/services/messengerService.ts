@@ -3070,6 +3070,10 @@ export async function getMemberByIdForMessenger(
 const ACCESS_REQUESTS_CHANNEL_KIND = 'access_requests';
 const ACCESS_REQUESTS_CHANNEL_TITLE = 'Заявки';
 
+/** Канал планирования воскресного богослужения (понедельничная авторассылка). */
+export const SERVICE_PLAN_PLANNING_CHANNEL_KIND = 'service_plan_planning';
+export const SERVICE_PLAN_PLANNING_CHANNEL_TITLE = 'Богослужение (планирование)';
+
 /** Личный ИИ-чат «ИИ помощник» (по одному на участника). */
 export const MESSENGER_ASSISTANT_CHANNEL_KIND = 'assistant';
 export const MESSENGER_ASSISTANT_CHANNEL_TITLE = 'ИИ помощник';
@@ -3091,6 +3095,16 @@ export function isMessengerAssistantChannelMetadata(metadata: unknown): boolean 
     typeof metadata === 'object' &&
     !Array.isArray(metadata) &&
     String((metadata as Record<string, unknown>).kind ?? '') === MESSENGER_ASSISTANT_CHANNEL_KIND
+  );
+}
+
+/** Канал «Богослужение (планирование)». */
+export function isMessengerServicePlanPlanningChannelMetadata(metadata: unknown): boolean {
+  return (
+    metadata != null &&
+    typeof metadata === 'object' &&
+    !Array.isArray(metadata) &&
+    String((metadata as Record<string, unknown>).kind ?? '') === SERVICE_PLAN_PLANNING_CHANNEL_KIND
   );
 }
 
@@ -3280,6 +3294,166 @@ export async function postRegistrationAccessRequestMessengerNotification(input: 
     }
   } catch (e) {
     console.warn('[messenger] access-request push notify failed:', e);
+  }
+}
+
+async function syncPlanningParticipantsToServicePlanChannel(conversationId: string): Promise<void> {
+  const members = await dbQuery(
+    `SELECT id FROM members
+     WHERE COALESCE(is_active, TRUE)
+       AND (
+         app_role IN ('admin', 'editor', 'minister')
+         OR coalesce(app_roles, array[]::text[]) && array['admin','editor','minister']::text[]
+       )`,
+  );
+  for (const row of members.rows) {
+    const mId = Number((row as { id: unknown }).id);
+    if (!Number.isFinite(mId)) continue;
+    await addParticipant(conversationId, mId, 'member');
+  }
+}
+
+/**
+ * Канал «Богослужение (планирование)»: ищем по metadata.kind, иначе по названию, иначе создаём.
+ * Идемпотентно.
+ */
+export async function ensureServicePlanPlanningMessengerChannel(): Promise<string | null> {
+  try {
+    const byKind = await dbQuery(
+      `SELECT id FROM conversations
+       WHERE metadata->>'kind' = $1
+       LIMIT 1`,
+      [SERVICE_PLAN_PLANNING_CHANNEL_KIND],
+    );
+    if (byKind.rows[0]?.id != null) {
+      const convId = bigint((byKind.rows[0] as { id: unknown }).id);
+      await syncPlanningParticipantsToServicePlanChannel(convId);
+      return convId;
+    }
+
+    const byTitle = await dbQuery(
+      `SELECT id, metadata FROM conversations
+       WHERE lower(trim(coalesce(title, ''))) = lower(trim($1))
+       ORDER BY id ASC
+       LIMIT 1`,
+      [SERVICE_PLAN_PLANNING_CHANNEL_TITLE],
+    );
+    if (byTitle.rows[0]?.id != null) {
+      const convId = bigint((byTitle.rows[0] as { id: unknown }).id);
+      const metaRaw = (byTitle.rows[0] as { metadata?: unknown }).metadata;
+      const meta =
+        metaRaw && typeof metaRaw === 'object' && !Array.isArray(metaRaw)
+          ? { ...(metaRaw as Record<string, unknown>) }
+          : {};
+      if (String(meta.kind ?? '') !== SERVICE_PLAN_PLANNING_CHANNEL_KIND) {
+        meta.kind = SERVICE_PLAN_PLANNING_CHANNEL_KIND;
+        await dbQuery(`UPDATE conversations SET metadata = $2::jsonb WHERE id = $1`, [
+          convId,
+          JSON.stringify(meta),
+        ]);
+      }
+      await syncPlanningParticipantsToServicePlanChannel(convId);
+      return convId;
+    }
+
+    const ins = await dbQuery(
+      `INSERT INTO conversations (type, title, metadata)
+       VALUES ('channel', $1, $2::jsonb)
+       RETURNING id`,
+      [
+        SERVICE_PLAN_PLANNING_CHANNEL_TITLE,
+        JSON.stringify({ kind: SERVICE_PLAN_PLANNING_CHANNEL_KIND }),
+      ],
+    );
+    const convId = bigint((ins.rows[0] as { id: unknown }).id);
+    await syncPlanningParticipantsToServicePlanChannel(convId);
+    return convId;
+  } catch (e) {
+    console.error('[messenger] ensureServicePlanPlanningMessengerChannel:', e);
+    return null;
+  }
+}
+
+/**
+ * Понедельничная авторассылка программы служения в канал «Богослужение (планирование)».
+ */
+export async function postServicePlanMondayMailingMessengerNotification(input: {
+  content: string;
+  serviceDateYmd: string;
+  planId: number;
+  shareToken: string;
+}): Promise<void> {
+  const convId = await ensureServicePlanPlanningMessengerChannel();
+  if (!convId) {
+    throw new Error('service_plan_planning_channel_unavailable');
+  }
+
+  const content = input.content.trim();
+  if (!content) {
+    throw new Error('service_plan_monday_mailing_empty');
+  }
+
+  const contentForDb = encryptMessageText(content);
+  const payload: MessagePayload = {
+    kind: 'service_plan_monday_mailing',
+    service_date: input.serviceDateYmd,
+    plan_id: input.planId,
+    share_token: input.shareToken,
+  };
+
+  await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [convId]);
+
+  const ins = await dbQuery(
+    `INSERT INTO messages (conversation_id, sender_id, content, payload_type, payload)
+     VALUES ($1::bigint, NULL, $2, 'text'::message_payload_type, $3::jsonb)
+     RETURNING id`,
+    [convId, contentForDb, JSON.stringify(payload)],
+  );
+  const rawId = (ins.rows[0] as { id?: unknown } | undefined)?.id;
+  if (rawId == null) {
+    throw new Error('service_plan_monday_mailing_insert_failed');
+  }
+  const messageId = bigint(rawId);
+
+  const full = await fetchMessageByIdForFanout(messageId);
+  if (!full) return;
+
+  const { sendToRoomAll } = await import('../realtime/wsHub');
+  sendToRoomAll(convId, {
+    type: 'msg:new',
+    conversationId: convId,
+    message: { ...full, is_read: false as const },
+  });
+
+  try {
+    const memberIds = await getConversationMemberIds(convId);
+    const meta = await getConversationMeta(convId);
+    const chatLabel = meta?.title?.trim() || SERVICE_PLAN_PLANNING_CHANNEL_TITLE;
+    const firstLine = content.split('\n').map((l) => l.trim()).find(Boolean) || content;
+    const previewShort =
+      firstLine.length > 160 ? `${firstLine.slice(0, 157).trim()}…` : firstLine;
+    for (const rid of memberIds) {
+      const r = Number(rid);
+      if (!Number.isFinite(r)) continue;
+      if (await isConversationMutedForMember(convId, r)) continue;
+      await sendPushNotification(r, {
+        title: chatLabel,
+        body: previewShort,
+        conversationId: convId,
+        messageId,
+        url: resolveMessengerConversationDeepLink(convId),
+        tag: `chat-${convId}`,
+        renotify: true,
+        badge: '/assets/pwa-64x64.png',
+        icon: '/assets/pwa-192x192.png',
+        actions: [
+          { action: 'reply', title: 'Ответить' },
+          { action: 'dismiss', title: 'Закрыть' },
+        ],
+      });
+    }
+  } catch (e) {
+    console.warn('[messenger] service-plan monday mailing push notify failed:', e);
   }
 }
 
