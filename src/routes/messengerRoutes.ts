@@ -1970,6 +1970,21 @@ router.get('/members/search', async (req: Request, res: Response) => {
   }
 });
 
+/** POST /api/messenger/members/labels { ids: number[] } — имя+фамилия для @[id] в ленте. */
+router.post('/members/labels', async (req: Request, res: Response) => {
+  const raw = (req.body as { ids?: unknown } | null)?.ids;
+  const ids = Array.isArray(raw)
+    ? raw.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0)
+    : [];
+  try {
+    const labels = await svc.resolveMessengerMemberLabels(ids);
+    res.json({ labels });
+  } catch (e) {
+    console.error('[messenger] resolveMemberLabels error:', e);
+    res.status(500).json({ error: 'Failed to resolve member labels' });
+  }
+});
+
 /** GET /api/messenger/members/:memberId — для deep link в черновик ЛС */
 router.get('/members/:memberId', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;

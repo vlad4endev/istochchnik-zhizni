@@ -23,14 +23,14 @@ export const DEFAULT_SERVICE_PLAN_MONDAY_MAILING_TEMPLATE = [
   '    4. Текст/тема',
   '4. {{choir_line}}',
   '5. Ведущий — {{leader}}, в четверг нужно будет приступить к формированию программы.',
-  '6. Проповедник — {{preacher}}, в четверг нужно предоставить информацию по проповеди для проектора: название, тезисы, тексты Писания (если будут изменения). Если имеется презентация, пожалуйста, загрузите файл в соответствующий блок программы.',
-  '7. Медиа-команда, с четверга по субботу готовит все материалы для трансляции.',
+  '6. Проповедник — {{preacher}}, в четверг нужно предоставить информацию по проповеди для трансляции: название, тезисы, тексты Писания (если будут изменения), если есть презентация, то загрузить в блок проповеди файл презентации к воскресенью 8:00 утра.',
+  '7. Медиа-команда, с пятницы по субботу готовит все материалы для трансляции.',
   '8. Ссылка на программу: {{share_url}}',
 ].join('\n');
 
 export type MondayMailingMemberRef = {
   id: number | null;
-  /** Читаемое имя; для мессенджера используется в `@[Имя](id)` */
+  /** Читаемое имя; для мессенджера может быть `@[id]` */
   mention: string;
   displayName: string;
   /** Публичный Telegram @ник без @ (если известен). */
@@ -57,7 +57,7 @@ export type MondayMailingBuildInput = {
   choirLine: string;
   /** Кастомный шаблон из настроек; пустой → DEFAULT */
   template?: string | null;
-  /** Как показывать людей: имя или упоминание мессенджера `@[Имя](id)`. */
+  /** Как показывать людей: имя или упоминание мессенджера `@[id]`. */
   personStyle?: MondayMailingPersonStyle;
   /** Доп. поля программы (необязательны — для обратной совместимости тестов). */
   startTime?: string | null;
@@ -93,7 +93,7 @@ export type ServicePlanMondayMailingResult = {
   telegram_ok?: boolean;
   /** Текст для Telegram (с @никами). */
   text?: string;
-  /** Текст для мессенджера приложения (с @[Имя](id)). */
+  /** Текст для мессенджера приложения (с @[id]). */
   text_messenger?: string;
 };
 
@@ -142,19 +142,10 @@ export function isInternalProfileUsername(username: string | null | undefined): 
   return /^member-\d+$/i.test(String(username ?? '').trim());
 }
 
-/** Подпись для `@[Имя](id)` — без скобок, чтобы парсер упоминаний не ломался. */
-export function sanitizeMailingMentionLabel(label: string, id: number): string {
-  const safe = String(label ?? '')
-    .replace(/[\[\]]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return safe || `участник ${id}`;
-}
-
 /**
  * Как показывать человека в тексте рассылки.
  * - name: «Иван Иванов»
- * - messenger: `@[Имя](57)` — в чате @Имя + уведомление; имя вшито, даже если участник не в канале
+ * - messenger: `@[57]` (в чате подтянется имя/фамилия и уйдёт уведомление)
  * - telegram: `@username` из Telegram, иначе обычное имя (без @member-N)
  */
 export function formatMailingPerson(
@@ -163,8 +154,7 @@ export function formatMailingPerson(
 ): string {
   if (!ref) return 'не назначен';
   if (style === 'messenger' && ref.id != null && Number.isInteger(ref.id) && ref.id > 0) {
-    const label = sanitizeMailingMentionLabel(ref.displayName || ref.mention, ref.id);
-    return `@[${label}](${ref.id})`;
+    return `@[${ref.id}]`;
   }
   if (style === 'telegram') {
     const u = String(ref.telegramUsername ?? '')
@@ -177,16 +167,6 @@ export function formatMailingPerson(
   const m = ref.mention.trim();
   if (m && !isInternalProfileUsername(m.replace(/^@/, ''))) return m;
   return 'не назначен';
-}
-
-/** Для предпросмотра / копирования: `@[Имя](id)` и `@[id]` → `@Имя`. */
-export function formatMailingMentionsForPreview(text: string): string {
-  return String(text ?? '')
-    .replace(/@\[([^\]]+)\]\((\d+)\)/g, (_full, label: string) => {
-      const name = String(label ?? '').trim();
-      return name ? `@${name}` : '@участник';
-    })
-    .replace(/@\[(\d+)\]/g, (_full, idStr: string) => `@участник ${idStr}`);
 }
 
 function memberDisplayName(ref: MondayMailingMemberRef | null | undefined): string {
@@ -1167,11 +1147,17 @@ export async function runServicePlanMondayMailing(options?: {
 
   try {
     await ensureServicePlanPlanningMessengerChannel();
+    const mentionLabels: Record<string, string> = {};
+    for (const [id, ref] of memberMap) {
+      const label = String(ref.displayName ?? '').trim();
+      if (label) mentionLabels[String(id)] = label;
+    }
     await postServicePlanMondayMailingMessengerNotification({
       content: textMessenger,
       serviceDateYmd: plan.service_date,
       planId,
       shareToken: plan.share_token,
+      mentionLabels,
     });
     messengerOk = true;
   } catch (e) {

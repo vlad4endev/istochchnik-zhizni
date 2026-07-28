@@ -3097,6 +3097,45 @@ export async function getMemberByIdForMessenger(
   return row ? mapMemberSearchRow(row) : null;
 }
 
+/**
+ * Имя + фамилия (или name) по id — для отображения `@[id]` в ленте чата,
+ * в т.ч. когда упомянутый не состоит в канале (рассылка программы и т.п.).
+ */
+export async function resolveMessengerMemberLabels(
+  memberIds: number[],
+): Promise<Record<string, string>> {
+  const ids = Array.from(
+    new Set(
+      memberIds
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  ).slice(0, 100);
+  if (ids.length === 0) return {};
+
+  const result = await dbQuery(
+    `SELECT
+       m.id,
+       coalesce(
+         nullif(trim(concat(coalesce(m.first_name, ''), ' ', coalesce(m.last_name, ''))), ''),
+         nullif(trim(coalesce(m.name, '')), ''),
+         'участник ' || m.id::text
+       ) AS display_name
+     FROM members m
+     WHERE m.id = ANY($1::int[])`,
+    [ids],
+  );
+
+  const labels: Record<string, string> = {};
+  for (const row of result.rows as Array<{ id: number; display_name: string | null }>) {
+    const id = Number(row.id);
+    if (!Number.isFinite(id) || id <= 0) continue;
+    const label = String(row.display_name ?? '').trim();
+    if (label) labels[String(id)] = label;
+  }
+  return labels;
+}
+
 // ─── Канал «Заявки» (уведомления админам о регистрации) ───────
 
 const ACCESS_REQUESTS_CHANNEL_KIND = 'access_requests';
@@ -3414,6 +3453,8 @@ export async function postServicePlanMondayMailingMessengerNotification(input: {
   serviceDateYmd: string;
   planId: number;
   shareToken: string;
+  /** Имя+фамилия по id — чтобы лента сразу показала @Имя Фамилия для @[id]. */
+  mentionLabels?: Record<string, string>;
 }): Promise<void> {
   const convId = await ensureServicePlanPlanningMessengerChannel();
   if (!convId) {
@@ -3427,12 +3468,24 @@ export async function postServicePlanMondayMailingMessengerNotification(input: {
 
   const contentForDb = encryptMessageText(content);
   const mentionIds = extractMentionMemberIdsFromContent(content);
+  const mentionLabels: Record<string, string> = {};
+  if (input.mentionLabels) {
+    for (const [k, v] of Object.entries(input.mentionLabels)) {
+      const id = Number(k);
+      const label = String(v ?? '').trim();
+      if (Number.isInteger(id) && id > 0 && label) mentionLabels[String(id)] = label;
+    }
+  }
+  if (mentionIds.length > 0 && Object.keys(mentionLabels).length === 0) {
+    Object.assign(mentionLabels, await resolveMessengerMemberLabels(mentionIds));
+  }
   const payload: MessagePayload = {
     kind: 'service_plan_monday_mailing',
     service_date: input.serviceDateYmd,
     plan_id: input.planId,
     share_token: input.shareToken,
     ...(mentionIds.length > 0 ? { mention_member_ids: mentionIds } : {}),
+    ...(Object.keys(mentionLabels).length > 0 ? { mention_labels: mentionLabels } : {}),
   };
 
   await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [convId]);
