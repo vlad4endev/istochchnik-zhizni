@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import {
   buildServicePlanMondayMailingText,
+  cleanupEmptySermonLabelLines,
   DEFAULT_SERVICE_PLAN_PUBLISHED_TEMPLATE,
   formatMailingPerson,
   formatSundayMailingHeading,
   isInternalProfileUsername,
+  normalizeSermonFieldValue,
+  parseSermonTopicFromBlockTitle,
+  pickSermonFields,
   resolveChoirLineFromBlocks,
   resolveUpcomingSundayYmd,
 } from './servicePlanMondayMailingService';
@@ -211,7 +215,7 @@ function run(): void {
   });
   assert.equal(messengerPeople, '1. @[57]\n5. @[29]');
 
-  const published = buildServicePlanMondayMailingText({
+const published = buildServicePlanMondayMailingText({
     serviceDateYmd: '2026-07-26',
     shareToken: 'bb479541-bec5-4931-b991-f65f0e8ce4cc',
     publicOrigin: 'https://app.church-tambov.ru',
@@ -253,6 +257,179 @@ function run(): void {
   assert.equal(
     publishedRich,
     'Готово: Воскресенье — 26 июля\nПроповедник @zhigunov72\nТема: «Четыре этапа»\nhttps://app.church-tambov.ru/service-plan/share/tok',
+  );
+
+  assert.equal(
+    parseSermonTopicFromBlockTitle('Андрей Жигунов - Смерть, где твоё жало?'),
+    'Смерть, где твоё жало?',
+  );
+  assert.equal(parseSermonTopicFromBlockTitle('Проповедь'), '');
+
+  // Как в карточке программы: тема/писание в content_json, заголовок «Имя - Тема»
+  const fromPlanCard = pickSermonFields(
+    [
+      {
+        title: 'Андрей Жигунов - Смерть, где твоё жало?',
+        block_type_code: 'sermon',
+        content_json: {
+          sermon_topic: 'Смерть, где твоё жало?',
+          sermon_scripture: '1Кор.15:55-58',
+        },
+      },
+    ],
+    null,
+  );
+  assert.equal(fromPlanCard.topic, 'Смерть, где твоё жало?');
+  assert.equal(fromPlanCard.scripture, '1Кор.15:55-58');
+
+  // Регресс: в программе 02.08 перед проповедью идёт разделитель
+  // «Поклонение через проповедь…» — раньше .find() брал его и тема пропадала.
+  const afterSeparator = pickSermonFields(
+    [
+      {
+        title: '📖 Поклонение через проповедь и слушание Слова',
+        block_type_code: 'custom',
+        content_json: {
+          block_mark: '📖',
+          is_separator: true,
+          separator_text: '📖 Поклонение через проповедь и слушание Слова',
+        },
+      },
+      {
+        title: 'Андрей Жигунов - Смерть, где твоё жало?',
+        block_type_code: 'sermon',
+        content_json: {
+          sermon_topic: 'Смерть, где твоё жало?',
+          sermon_scripture: '1Кор.15:55-58',
+          block_mark_icon: 'scripture',
+        },
+      },
+    ],
+    null,
+  );
+  assert.equal(afterSeparator.topic, 'Смерть, где твоё жало?');
+  assert.equal(afterSeparator.scripture, '1Кор.15:55-58');
+
+  // Без кода типа — находим блок по полям проповеди в content_json
+  const byContentOnly = pickSermonFields(
+    [
+      {
+        title: 'Андрей Жигунов - Смерть, где твоё жало?',
+        block_type_code: null,
+        content_json: {
+          sermon_topic: 'Смерть, где твоё жало?',
+          sermon_scripture: '1Кор.15:55-58',
+        },
+      },
+    ],
+    null,
+  );
+  assert.equal(byContentOnly.topic, 'Смерть, где твоё жало?');
+  assert.equal(byContentOnly.scripture, '1Кор.15:55-58');
+
+  // Тема только в заголовке карточки
+  const fromTitleOnly = pickSermonFields(
+    [
+      {
+        title: 'Андрей Жигунов - Смерть, где твоё жало?',
+        block_type_code: 'sermon',
+        content_json: { sermon_scripture: '1Кор.15:55-58' },
+      },
+    ],
+    null,
+  );
+  assert.equal(fromTitleOnly.topic, 'Смерть, где твоё жало?');
+  assert.equal(fromTitleOnly.scripture, '1Кор.15:55-58');
+
+  // content_json пришёл строкой JSON
+  const fromJsonString = pickSermonFields(
+    [
+      {
+        title: 'Проповедь',
+        block_type_code: 'sermon',
+        content_json: JSON.parse(
+          JSON.stringify({
+            sermon_topic: 'Смерть, где твоё жало?',
+            sermon_scripture: '1Кор.15:55-58',
+          }),
+        ) as Record<string, unknown>,
+      },
+    ],
+    null,
+  );
+  assert.equal(fromJsonString.topic, 'Смерть, где твоё жало?');
+
+  const mailingWithSermon = buildServicePlanMondayMailingText({
+    serviceDateYmd: '2026-08-02',
+    shareToken: 'bb479541-bec5-4931-b991-f65f0e8ce4cc',
+    publicOrigin: 'https://app.church-tambov.ru',
+    preacher: { id: 57, mention: 'Андрей', displayName: 'Андрей Жигунов' },
+    music: { id: 36, mention: 'Элина', displayName: 'Элина Плотникова' },
+    poem: { id: 52, mention: 'Чтец', displayName: 'Чтец' },
+    leader: { id: 29, mention: 'Ведущий', displayName: 'Ведущий' },
+    sermonTopic: 'Смерть, где твоё жало?',
+    sermonScripture: '1Кор.15:55-58',
+    choirLine: 'Хор петь не будет.',
+  });
+  assert.match(mailingWithSermon, /Тема: «Смерть, где твоё жало\?»/);
+  assert.match(mailingWithSermon, /Текст: 1Кор\.15:55-58/);
+
+  assert.equal(normalizeSermonFieldValue('текст не указан'), '');
+  assert.equal(normalizeSermonFieldValue('тема не указана'), '');
+  assert.equal(normalizeSermonFieldValue('  Быт. 1:1  '), 'Быт. 1:1');
+
+  // Кастомный шаблон с «Тема:» / «Текст:» — пустые поля не должны оставлять мусор
+  const emptySermonCustom = buildServicePlanMondayMailingText({
+    serviceDateYmd: '2026-08-02',
+    shareToken: 'bb479541-bec5-4931-b991-f65f0e8ce4cc',
+    publicOrigin: 'https://app.church-tambov.ru',
+    preacher: {
+      id: 1,
+      mention: 'Жигунов',
+      displayName: 'Жигунов',
+      telegramUsername: 'zhigunov72',
+    },
+    music: { id: 2, mention: 'Элина', displayName: 'Элина', telegramUsername: 'elinka1212' },
+    poem: { id: 3, mention: 'Надежда', displayName: 'Надежда Шкирская' },
+    leader: { id: 4, mention: 'Юрий', displayName: 'Юрий Малютин' },
+    sermonTopic: null,
+    sermonScripture: 'текст не указан',
+    choirLine: 'Хор петь не будет.',
+    personStyle: 'telegram',
+    template: [
+      '{{sunday_heading}}',
+      '1. Проповедник — {{preacher}}',
+      'Тема: {{sermon_topic}}',
+      'Текст: {{sermon_scripture}}',
+      '2. Группа прославления — {{music}}',
+    ].join('\n'),
+  });
+  assert.match(emptySermonCustom, /^Воскресенье — 2 августа\n/);
+  assert.match(emptySermonCustom, /1\. Проповедник — @zhigunov72\n2\. Группа прославления — @elinka1212/);
+  assert.doesNotMatch(emptySermonCustom, /Тема:/);
+  assert.doesNotMatch(emptySermonCustom, /Текст:/);
+  assert.doesNotMatch(emptySermonCustom, /текст не указан/);
+
+  // Стандартные блоки тоже скрывают пустую проповедь
+  const emptySermonBlocks = buildServicePlanMondayMailingText({
+    serviceDateYmd: '2026-08-02',
+    shareToken: 'tok',
+    publicOrigin: 'https://app.church-tambov.ru',
+    preacher: { id: 1, mention: '@zhigunov72', displayName: 'Жигунов' },
+    music: { id: 2, mention: '@music', displayName: 'Музыка' },
+    poem: { id: 3, mention: 'Надежда', displayName: 'Надежда' },
+    leader: { id: 4, mention: '@lead', displayName: 'Ведущий' },
+    sermonTopic: '',
+    sermonScripture: '',
+    choirLine: 'Хор петь не будет.',
+  });
+  assert.doesNotMatch(emptySermonBlocks, /Тема:/);
+  assert.doesNotMatch(emptySermonBlocks, /Текст:/);
+  assert.match(emptySermonBlocks, /1\. Проповедник — Жигунов\n2\. Группа прославления/);
+
+  assert.equal(
+    cleanupEmptySermonLabelLines('1. Проповедник\nТема: \nТекст: текст не указан\n2. Группа'),
+    '1. Проповедник\n2. Группа',
   );
 
   console.log('servicePlanMondayMailingService.test.ts: OK');
