@@ -67,6 +67,8 @@ export type PlannerBlock = {
   assigned_member_id: number | null;
   song_id: number | null;
   content_json: Record<string, unknown>;
+  /** Код типа блока (`sermon`, `song`, …), если подтянут JOIN-ом. */
+  block_type_code?: string | null;
 };
 
 export type LinkedSermonNoteSummary = {
@@ -639,6 +641,10 @@ function mapBlockRow(row: DbRecord): PlannerBlock {
     assigned_member_id: row.assigned_member_id == null ? null : Number(row.assigned_member_id),
     song_id: row.song_id == null ? null : Number(row.song_id),
     content_json: asObject(row.content_json),
+    block_type_code:
+      row.block_type_code == null || String(row.block_type_code).trim() === ''
+        ? null
+        : String(row.block_type_code).trim().toLowerCase(),
   };
 }
 

@@ -186,6 +186,45 @@ function renderMailingTemplate(template: string, vars: Record<string, string>): 
   return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, key: string) => vars[key] ?? '');
 }
 
+/** Пустые / заглушечные значения темы и текста Писания не считаем заполненными. */
+export function normalizeSermonFieldValue(raw: string | null | undefined): string {
+  const t = String(raw ?? '').trim();
+  if (!t) return '';
+  const lower = t.toLowerCase();
+  if (
+    lower === 'тема не указана' ||
+    lower === 'текст не указан' ||
+    lower === 'не указан' ||
+    lower === 'не указано' ||
+    lower === '—' ||
+    lower === '-'
+  ) {
+    return '';
+  }
+  return t;
+}
+
+/**
+ * Убирает из текста строки вида «Тема:» / «Текст: текст не указан»,
+ * которые остаются в кастомных шаблонах при пустых полях.
+ */
+export function cleanupEmptySermonLabelLines(text: string): string {
+  return text
+    .split('\n')
+    .filter((line) => {
+      const t = line.trim();
+      if (/^Тема:\s*«?\s*»?\s*$/i.test(t)) return false;
+      if (/^Тема:\s*тема не указана\s*$/i.test(t)) return false;
+      if (/^Текст:\s*$/i.test(t)) return false;
+      if (/^Текст:\s*текст не указан\s*$/i.test(t)) return false;
+      if (/^Писание:\s*(не указан[оа]?)?\s*$/i.test(t)) return false;
+      if (/^Название:\s*«?\s*»?\s*$/i.test(t)) return false;
+      if (/^Название:\s*название не указано\s*$/i.test(t)) return false;
+      return true;
+    })
+    .join('\n');
+}
+
 function formatDateShortRu(serviceDateYmd: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(serviceDateYmd.trim());
   if (!m) return serviceDateYmd;
@@ -262,9 +301,9 @@ export function buildServicePlanMondayMailingText(input: MondayMailingBuildInput
   const poem = formatMailingPerson(input.poem, personStyle);
   const leader = formatMailingPerson(input.leader, personStyle);
 
-  const topic = (input.sermonTopic ?? '').trim();
-  const scripture = (input.sermonScripture ?? '').trim();
-  const sermonTitle = (input.sermonTitle ?? '').trim();
+  const topic = normalizeSermonFieldValue(input.sermonTopic);
+  const scripture = normalizeSermonFieldValue(input.sermonScripture);
+  const sermonTitle = normalizeSermonFieldValue(input.sermonTitle);
   const sermonBlockNotes = (input.sermonBlockNotes ?? '').trim();
   const sermonBodyRaw = (input.sermonBody ?? '').trim();
   const sermonBody = sermonBodyRaw ? stripHtmlToPlain(sermonBodyRaw) : '';
@@ -382,11 +421,12 @@ export function buildServicePlanMondayMailingText(input: MondayMailingBuildInput
     choir_line: input.choirLine,
     choir: input.choirLine,
 
-    sermon_topic: topic || 'тема не указана',
-    sermon_scripture: scripture || 'текст не указан',
+    // Пусто, если нет данных — не подставляем «тема не указана» / «текст не указан» в сообщение.
+    sermon_topic: topic,
+    sermon_scripture: scripture,
     sermon_topic_block: sermonTopicBlock,
     sermon_scripture_block: sermonScriptureBlock,
-    sermon_title: sermonTitle || 'название не указано',
+    sermon_title: sermonTitle,
     sermon_title_block: sermonTitleBlock,
     sermon_notes: sermonBlockNotes || 'заметок нет',
     sermon_body: sermonBody || 'конспект не привязан',
@@ -422,7 +462,7 @@ export function buildServicePlanMondayMailingText(input: MondayMailingBuildInput
     edit_url: editUrl || shareUrl,
   });
 
-  return rendered.replace(/\n{3,}/g, '\n\n').trim();
+  return cleanupEmptySermonLabelLines(rendered).replace(/\n{3,}/g, '\n\n').trim();
 }
 
 export function resolveChoirLineFromBlocks(
@@ -725,7 +765,85 @@ function emptyMemberRef(): MondayMailingMemberRef {
   return { id: null, mention: 'не назначен', displayName: 'не назначен' };
 }
 
-function pickSermonFields(
+/** JSON блока: объект или строка JSON (на случай драйвера/кэша). */
+export function normalizeMailingContentJson(raw: unknown): Record<string, unknown> {
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return {};
+    }
+    return {};
+  }
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  return {};
+}
+
+/** Тема из заголовка «Имя - Тема» / «Имя — Тема», как в карточке программы. */
+export function parseSermonTopicFromBlockTitle(title: string): string {
+  const t = String(title ?? '').trim();
+  if (!t) return '';
+  const parts = t.split(/\s+[—–-]\s+/);
+  if (parts.length < 2) return '';
+  const topic = parts.slice(1).join(' - ').trim();
+  if (!topic || /^проповед/i.test(topic)) return '';
+  return topic;
+}
+
+function contentString(cj: Record<string, unknown>, key: string): string {
+  const v = cj[key];
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  return '';
+}
+
+function sermonFieldFromContent(cj: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const v = normalizeSermonFieldValue(contentString(cj, key));
+    if (v) return v;
+  }
+  return '';
+}
+
+function isSermonMailingBlock(b: {
+  content_json: Record<string, unknown>;
+  block_type_code?: string | null;
+  title: string;
+}): boolean {
+  const code = String(b.block_type_code ?? '').toLowerCase();
+  if (code === 'sermon') return true;
+  const title = String(b.title ?? '').toLowerCase();
+  if (title.includes('проповед')) return true;
+  const cj = normalizeMailingContentJson(b.content_json);
+  if (sermonFieldFromContent(cj, 'sermon_topic', 'sermon_scripture', 'topic', 'scripture')) {
+    return true;
+  }
+  if (Array.isArray(cj.sermon_attachments) && cj.sermon_attachments.length > 0) return true;
+  return false;
+}
+
+function sermonBlockScore(b: {
+  content_json: Record<string, unknown>;
+  block_type_code?: string | null;
+  title: string;
+}): number {
+  const cj = normalizeMailingContentJson(b.content_json);
+  let score = 0;
+  if (String(b.block_type_code ?? '').toLowerCase() === 'sermon') score += 10;
+  if (sermonFieldFromContent(cj, 'sermon_topic', 'topic')) score += 5;
+  if (sermonFieldFromContent(cj, 'sermon_scripture', 'scripture')) score += 5;
+  if (parseSermonTopicFromBlockTitle(b.title)) score += 2;
+  if (Array.isArray(cj.sermon_attachments) && cj.sermon_attachments.length > 0) score += 1;
+  return score;
+}
+
+export function pickSermonFields(
   blocks: Array<{ content_json: Record<string, unknown>; block_type_code?: string | null; title: string }>,
   linked: {
     title?: string | null;
@@ -745,29 +863,39 @@ function pickSermonFields(
   hasNote: boolean;
   attachments: MondayMailingSermonAttachment[];
 } {
-  const sermon = blocks.find((b) => {
-    const code = String(b.block_type_code ?? '').toLowerCase();
-    const title = String(b.title ?? '').toLowerCase();
-    return code === 'sermon' || title.includes('проповед');
-  });
+  const candidates = blocks.filter((b) => isSermonMailingBlock(b));
+  const sermon =
+    candidates.length === 0
+      ? undefined
+      : candidates.reduce((best, cur) => (sermonBlockScore(cur) > sermonBlockScore(best) ? cur : best));
+
+  const cj = sermon ? normalizeMailingContentJson(sermon.content_json) : {};
   const fromBlockTopic =
-    sermon && typeof sermon.content_json.sermon_topic === 'string'
-      ? sermon.content_json.sermon_topic.trim()
-      : '';
-  const fromBlockScripture =
-    sermon && typeof sermon.content_json.sermon_scripture === 'string'
-      ? sermon.content_json.sermon_scripture.trim()
-      : '';
+    sermonFieldFromContent(cj, 'sermon_topic', 'topic', 'sermonTopic') ||
+    (sermon ? parseSermonTopicFromBlockTitle(sermon.title) : '');
+  const fromBlockScripture = sermonFieldFromContent(
+    cj,
+    'sermon_scripture',
+    'scripture',
+    'sermonScripture',
+    'bible',
+  );
   const blockNotes = sermon
-    ? contentString(sermon.content_json, 'notes') || contentString(sermon.content_json, 'text') || null
+    ? contentString(cj, 'notes') || contentString(cj, 'text') || null
     : null;
-  const topic = fromBlockTopic || (linked?.topic ?? '').trim() || null;
-  const scripture = fromBlockScripture || (linked?.scripture ?? '').trim() || null;
-  const title = (linked?.title ?? '').trim() || null;
+  const topic =
+    fromBlockTopic || normalizeSermonFieldValue(linked?.topic) || null;
+  const scripture =
+    fromBlockScripture || normalizeSermonFieldValue(linked?.scripture) || null;
+  const title =
+    normalizeSermonFieldValue(linked?.title) ||
+    fromBlockTopic ||
+    (sermon ? parseSermonTopicFromBlockTitle(sermon.title) : '') ||
+    null;
   const noteAuthor = (linked?.author_name ?? '').trim() || null;
   const noteShareToken =
     linked?.is_public && linked.share_token ? String(linked.share_token).trim() : null;
-  const attachments = sermon ? parseSermonAttachmentsFromContent(sermon.content_json) : [];
+  const attachments = sermon ? parseSermonAttachmentsFromContent(cj) : [];
   const hasNote = Boolean(linked?.title || linked?.topic || linked?.scripture || linked?.share_token);
   return {
     topic,
@@ -839,11 +967,6 @@ function isPoemBlockMeta(b: MailingBlockMeta): boolean {
 function isSongBlockMeta(b: MailingBlockMeta): boolean {
   const code = String(b.block_type_code ?? '').toLowerCase();
   return code === 'song' || Boolean(b.song_title?.trim());
-}
-
-function contentString(cj: Record<string, unknown>, key: string): string {
-  const v = cj[key];
-  return typeof v === 'string' ? v.trim() : '';
 }
 
 export function pickPoemFields(
@@ -940,22 +1063,27 @@ async function loadMailingFieldsFromPlan(planId: number): Promise<{
   );
   const metaByBlockId = new Map<number, { block_type_code: string; song_title: string | null }>();
   for (const row of codesRes.rows as Array<{
-    id: number;
+    id: number | string;
     block_type_code: string | null;
     song_title: string | null;
   }>) {
     metaByBlockId.set(Number(row.id), {
-      block_type_code: String(row.block_type_code ?? ''),
+      block_type_code: String(row.block_type_code ?? '')
+        .trim()
+        .toLowerCase(),
       song_title: row.song_title == null ? null : String(row.song_title),
     });
   }
   const blocksForMailing: MailingBlockMeta[] = plan.blocks.map((b) => {
-    const meta = metaByBlockId.get(b.id);
+    const meta = metaByBlockId.get(Number(b.id));
+    const fromPlan = String(b.block_type_code ?? '')
+      .trim()
+      .toLowerCase();
     return {
       title: b.title,
       assigned_member_id: b.assigned_member_id,
-      content_json: b.content_json,
-      block_type_code: meta?.block_type_code ?? null,
+      content_json: normalizeMailingContentJson(b.content_json),
+      block_type_code: meta?.block_type_code || fromPlan || null,
       song_title: meta?.song_title ?? null,
     };
   });
