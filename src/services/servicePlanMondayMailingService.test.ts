@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import {
   buildServicePlanMondayMailingText,
+  cleanupEmptySermonLabelLines,
   DEFAULT_SERVICE_PLAN_PUBLISHED_TEMPLATE,
   formatMailingPerson,
   formatSundayMailingHeading,
   isInternalProfileUsername,
+  normalizeSermonFieldValue,
   parseSermonTopicFromBlockTitle,
   pickSermonFields,
   resolveChoirLineFromBlocks,
@@ -343,6 +345,64 @@ const published = buildServicePlanMondayMailingText({
   });
   assert.match(mailingWithSermon, /Тема: «Смерть, где твоё жало\?»/);
   assert.match(mailingWithSermon, /Текст: 1Кор\.15:55-58/);
+
+  assert.equal(normalizeSermonFieldValue('текст не указан'), '');
+  assert.equal(normalizeSermonFieldValue('тема не указана'), '');
+  assert.equal(normalizeSermonFieldValue('  Быт. 1:1  '), 'Быт. 1:1');
+
+  // Кастомный шаблон с «Тема:» / «Текст:» — пустые поля не должны оставлять мусор
+  const emptySermonCustom = buildServicePlanMondayMailingText({
+    serviceDateYmd: '2026-08-02',
+    shareToken: 'bb479541-bec5-4931-b991-f65f0e8ce4cc',
+    publicOrigin: 'https://app.church-tambov.ru',
+    preacher: {
+      id: 1,
+      mention: 'Жигунов',
+      displayName: 'Жигунов',
+      telegramUsername: 'zhigunov72',
+    },
+    music: { id: 2, mention: 'Элина', displayName: 'Элина', telegramUsername: 'elinka1212' },
+    poem: { id: 3, mention: 'Надежда', displayName: 'Надежда Шкирская' },
+    leader: { id: 4, mention: 'Юрий', displayName: 'Юрий Малютин' },
+    sermonTopic: null,
+    sermonScripture: 'текст не указан',
+    choirLine: 'Хор петь не будет.',
+    personStyle: 'telegram',
+    template: [
+      '{{sunday_heading}}',
+      '1. Проповедник — {{preacher}}',
+      'Тема: {{sermon_topic}}',
+      'Текст: {{sermon_scripture}}',
+      '2. Группа прославления — {{music}}',
+    ].join('\n'),
+  });
+  assert.match(emptySermonCustom, /^Воскресенье — 2 августа\n/);
+  assert.match(emptySermonCustom, /1\. Проповедник — @zhigunov72\n2\. Группа прославления — @elinka1212/);
+  assert.doesNotMatch(emptySermonCustom, /Тема:/);
+  assert.doesNotMatch(emptySermonCustom, /Текст:/);
+  assert.doesNotMatch(emptySermonCustom, /текст не указан/);
+
+  // Стандартные блоки тоже скрывают пустую проповедь
+  const emptySermonBlocks = buildServicePlanMondayMailingText({
+    serviceDateYmd: '2026-08-02',
+    shareToken: 'tok',
+    publicOrigin: 'https://app.church-tambov.ru',
+    preacher: { id: 1, mention: '@zhigunov72', displayName: 'Жигунов' },
+    music: { id: 2, mention: '@music', displayName: 'Музыка' },
+    poem: { id: 3, mention: 'Надежда', displayName: 'Надежда' },
+    leader: { id: 4, mention: '@lead', displayName: 'Ведущий' },
+    sermonTopic: '',
+    sermonScripture: '',
+    choirLine: 'Хор петь не будет.',
+  });
+  assert.doesNotMatch(emptySermonBlocks, /Тема:/);
+  assert.doesNotMatch(emptySermonBlocks, /Текст:/);
+  assert.match(emptySermonBlocks, /1\. Проповедник — Жигунов\n2\. Группа прославления/);
+
+  assert.equal(
+    cleanupEmptySermonLabelLines('1. Проповедник\nТема: \nТекст: текст не указан\n2. Группа'),
+    '1. Проповедник\n2. Группа',
+  );
 
   console.log('servicePlanMondayMailingService.test.ts: OK');
 }
