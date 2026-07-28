@@ -108,6 +108,28 @@ function todayIso(): string {
   return format(new Date(), 'yyyy-MM-dd');
 }
 
+/** Ближайшая активная (не архивная) программа: сначала ближайшее будущее, иначе самая свежая. */
+function pickDefaultActivePlan<T extends { id: number; service_date: string; is_archived: boolean }>(
+  plans: T[],
+  today: string = todayIso(),
+): T | null {
+  const active = plans.filter((p) => !p.is_archived);
+  if (active.length === 0) return null;
+  const upcoming = active
+    .filter((p) => p.service_date >= today)
+    .sort((a, b) => {
+      const byDate = a.service_date.localeCompare(b.service_date);
+      if (byDate !== 0) return byDate;
+      return b.id - a.id;
+    });
+  if (upcoming[0]) return upcoming[0];
+  return [...active].sort((a, b) => {
+    const byDate = b.service_date.localeCompare(a.service_date);
+    if (byDate !== 0) return byDate;
+    return b.id - a.id;
+  })[0] ?? null;
+}
+
 function isIsoDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
@@ -466,11 +488,21 @@ export function ServicePlannerPage() {
 
   useEffect(() => {
     if (sharedEditPlanId) return;
-    if (!activePlanId && (plansQ.data?.length ?? 0) > 0) {
-      const firstActive = plansQ.data!.find((p) => !p.is_archived) ?? plansQ.data![0];
-      setActivePlanId(firstActive.id);
+    if (!plansQ.data?.length) return;
+    if (activePlanId == null) {
+      const next = pickDefaultActivePlan(plansQ.data);
+      if (next) setActivePlanId(next.id);
+      return;
     }
-  }, [activePlanId, plansQ.data, sharedEditPlanId]);
+    // В режиме архива можно открывать архивные; иначе не держим ссылку/проповедь от прошлой недели.
+    if (showArchivedPlans) return;
+    const selected = plansQ.data.find((p) => p.id === activePlanId);
+    if (selected && selected.is_archived) {
+      const next = pickDefaultActivePlan(plansQ.data);
+      setActivePlanId(next?.id ?? null);
+      if (!next) setDraft(null);
+    }
+  }, [activePlanId, plansQ.data, sharedEditPlanId, showArchivedPlans]);
 
   useEffect(() => {
     if (planQ.data) {
@@ -581,14 +613,23 @@ export function ServicePlannerPage() {
     toArchive.forEach((p) => autoArchivingPlanIdsRef.current.add(p.id));
     void (async () => {
       try {
+        let archivedActive = false;
         for (const plan of toArchive) {
           await patchServicePlan(plan.id, { is_archived: true });
           if (activePlanId === plan.id) {
-            setDraft((prev) => (prev ? { ...prev, is_archived: true } : prev));
-            setScreen('home');
+            archivedActive = true;
           }
         }
         await qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] });
+        if (archivedActive) {
+          const remaining = (plansQ.data ?? []).filter(
+            (p) => !p.is_archived && !toArchive.some((a) => a.id === p.id),
+          );
+          const next = pickDefaultActivePlan(remaining);
+          setActivePlanId(next?.id ?? null);
+          setDraft(null);
+          setScreen('home');
+        }
       } catch {
         for (const plan of toArchive) autoArchivingPlanIdsRef.current.delete(plan.id);
       }
@@ -1444,15 +1485,23 @@ export function ServicePlannerPage() {
         : 'Вернуть эту программу из архива в активные?',
     );
     if (!ok) return;
+    const planId = draft.id;
     await updatePlanMut.mutateAsync({
-      id: draft.id,
+      id: planId,
       body: { is_archived: nextArchived },
     });
-    setDraft({ ...draft, is_archived: nextArchived });
     if (nextArchived) {
+      const remaining = (plansQ.data ?? []).filter((p) => p.id !== planId && !p.is_archived);
+      const next = pickDefaultActivePlan(remaining);
+      setActivePlanId(next?.id ?? null);
+      setDraft(null);
       setShowArchivedPlans(true);
       setScreen('home');
+      return;
     }
+    // Из архива — новый share/edit token на сервере; подтягиваем актуальный draft.
+    await qc.invalidateQueries({ queryKey: ['service-planner', 'plan', planId] });
+    setShowArchivedPlans(false);
   }
 
   async function deleteCurrentPlan(): Promise<void> {

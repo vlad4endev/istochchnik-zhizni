@@ -1587,26 +1587,63 @@ export async function createPlan(input: {
     const leaderMemberId = input.leader_member_id ?? slot?.leader_member_id ?? null;
     const preacherMemberId = input.preacher_member_id ?? slot?.preacher_member_id ?? null;
 
-    const planRes = await client.query(
-      `insert into public.service_plans
-       (template_id, service_date, start_time, status, leader_member_id, preacher_member_id, created_by_member_id)
-       values ($1, $2::date, $3::time, 'draft', $4, $5, $6)
-       on conflict (template_id, service_date) do update
-         set start_time = excluded.start_time,
-            leader_member_id = coalesce(excluded.leader_member_id, service_plans.leader_member_id),
-            preacher_member_id = coalesce(excluded.preacher_member_id, service_plans.preacher_member_id),
-             updated_at = now()
-       returning id`,
-      [
-        input.template_id,
-        input.service_date,
-        startTime,
-        leaderMemberId,
-        preacherMemberId,
-        input.created_by_member_id,
-      ],
+    // Если на эту дату уже есть программа (часто — в архиве), не оставляем старый share_token:
+    // иначе рассылка и UI отдают ссылку на прошлую/архивную программу без актуальных данных проповеди.
+    const existingRes = await client.query(
+      `select id, is_archived
+       from public.service_plans
+       where template_id = $1 and service_date = $2::date
+       limit 1
+       for update`,
+      [input.template_id, input.service_date],
     );
-    const planId = Number((planRes.rows[0] as DbRecord).id);
+    const existing = existingRes.rows[0] as { id?: unknown; is_archived?: unknown } | undefined;
+
+    let planId: number;
+    if (existing?.id != null) {
+      const wasArchived = Boolean(existing.is_archived);
+      const planRes = await client.query(
+        wasArchived
+          ? `update public.service_plans
+             set start_time = $2::time,
+                 leader_member_id = coalesce($3, leader_member_id),
+                 preacher_member_id = coalesce($4, preacher_member_id),
+                 is_archived = false,
+                 status = 'draft',
+                 share_token = gen_random_uuid(),
+                 share_token_issued_at = now(),
+                 edit_token = gen_random_uuid(),
+                 edit_token_issued_at = now(),
+                 updated_at = now()
+             where id = $1
+             returning id`
+          : `update public.service_plans
+             set start_time = $2::time,
+                 leader_member_id = coalesce($3, leader_member_id),
+                 preacher_member_id = coalesce($4, preacher_member_id),
+                 updated_at = now()
+             where id = $1
+             returning id`,
+        [Number(existing.id), startTime, leaderMemberId, preacherMemberId],
+      );
+      planId = Number((planRes.rows[0] as DbRecord).id);
+    } else {
+      const planRes = await client.query(
+        `insert into public.service_plans
+         (template_id, service_date, start_time, status, leader_member_id, preacher_member_id, created_by_member_id)
+         values ($1, $2::date, $3::time, 'draft', $4, $5, $6)
+         returning id`,
+        [
+          input.template_id,
+          input.service_date,
+          startTime,
+          leaderMemberId,
+          preacherMemberId,
+          input.created_by_member_id,
+        ],
+      );
+      planId = Number((planRes.rows[0] as DbRecord).id);
+    }
 
     const existingBlocks = await client.query(
       `select 1 from public.service_blocks where service_plan_id = $1 limit 1`,
@@ -1672,6 +1709,26 @@ export async function patchPlan(
     values.push(value);
     set.push(sql.replace('?', `$${values.length}`));
   };
+
+  let shouldRotatePublicTokens = false;
+  if (patch.service_date !== undefined || patch.is_archived === false) {
+    const curRes = await query(
+      `select service_date::text as service_date, is_archived
+       from public.service_plans
+       where id = $1
+       limit 1`,
+      [planId],
+    );
+    const cur = curRes.rows[0] as { service_date?: string; is_archived?: boolean } | undefined;
+    if (cur) {
+      const dateChanged =
+        patch.service_date !== undefined &&
+        String(patch.service_date).trim().slice(0, 10) !== String(cur.service_date ?? '').trim().slice(0, 10);
+      const unarchiving = patch.is_archived === false && Boolean(cur.is_archived);
+      shouldRotatePublicTokens = dateChanged || unarchiving;
+    }
+  }
+
   if (patch.service_date !== undefined) push('service_date = ?::date', patch.service_date);
   if (patch.start_time !== undefined) push('start_time = ?::time', patch.start_time);
   if (patch.status !== undefined) push('status = ?', patch.status);
@@ -1686,6 +1743,13 @@ export async function patchPlan(
   }
   if (patch.current_block_id !== undefined) push('current_block_id = ?', patch.current_block_id);
   if (patch.notes !== undefined) push('notes = ?', patch.notes);
+  if (shouldRotatePublicTokens) {
+    // Новая дата / возврат из архива = новая публичная ссылка (старая вела на прошлую программу).
+    set.push('share_token = gen_random_uuid()');
+    set.push('share_token_issued_at = now()');
+    set.push('edit_token = gen_random_uuid()');
+    set.push('edit_token_issued_at = now()');
+  }
   if (set.length === 0) return true;
   set.push('updated_at = now()');
   values.push(planId);

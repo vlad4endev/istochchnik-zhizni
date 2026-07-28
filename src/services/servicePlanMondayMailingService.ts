@@ -469,12 +469,18 @@ async function markMailedSunday(sundayYmd: string): Promise<void> {
 }
 
 async function findPlanIdForSunday(sundayYmd: string): Promise<number | null> {
+  // Только активные (не архивные) программы на это воскресенье.
+  // Свежий share_token_issued_at / updated_at — признак актуальной (не «переехавшей» из архива) ссылки.
   const res = await query(
     `SELECT id
      FROM public.service_plans
      WHERE service_date = $1::date
        AND COALESCE(is_archived, false) = false
-     ORDER BY CASE WHEN status = 'published' THEN 0 ELSE 1 END, id DESC
+     ORDER BY
+       CASE WHEN status = 'published' THEN 0 ELSE 1 END,
+       share_token_issued_at DESC NULLS LAST,
+       updated_at DESC NULLS LAST,
+       id DESC
      LIMIT 1`,
     [sundayYmd],
   );
@@ -482,6 +488,17 @@ async function findPlanIdForSunday(sundayYmd: string): Promise<number | null> {
   if (id == null) return null;
   const n = Number(id);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Продлевает срок действия публичной ссылки перед рассылкой (токен не меняем). */
+async function touchPlanShareTokenIssuedAt(planId: number): Promise<void> {
+  await query(
+    `UPDATE public.service_plans
+     SET share_token_issued_at = now()
+     WHERE id = $1
+       AND COALESCE(is_archived, false) = false`,
+    [planId],
+  );
 }
 
 async function loadMemberRefs(memberIds: Array<number | null>): Promise<Map<number, MondayMailingMemberRef>> {
@@ -728,12 +745,33 @@ export async function runServicePlanMondayMailing(options?: {
     };
   }
 
+  // Не отдаём в рассылку «протухшую» ссылку: продлеваем срок выдачи токена.
+  await touchPlanShareTokenIssuedAt(planId);
+
   const plan = await getPlanDetails(planId);
   if (!plan) {
     return {
       ok: false,
       skipped: true,
       reason: 'plan_not_found',
+      service_date: sundayYmd,
+      plan_id: planId,
+    };
+  }
+  if (plan.is_archived) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: 'plan_archived',
+      service_date: sundayYmd,
+      plan_id: planId,
+    };
+  }
+  if (!String(plan.share_token ?? '').trim()) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: 'missing_share_token',
       service_date: sundayYmd,
       plan_id: planId,
     };
