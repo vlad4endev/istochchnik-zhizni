@@ -1,10 +1,11 @@
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { IconType } from 'react-icons';
 import {
   LuBookOpen,
   LuCalendarClock,
+  LuChevronDown,
   LuChevronLeft,
   LuChevronRight,
   LuCalendarDays,
@@ -62,6 +63,15 @@ import {
   fetchSectionVisibilitySettingsPublic,
   type AppSectionId,
 } from '../features/settings/sectionVisibilityApi';
+import {
+  ADMIN_SIDEBAR_GROUPS,
+  ADMIN_TABS,
+  adminTabNavLabel,
+  adminTabPath,
+  parseAdminTabParam,
+  type AdminTabId,
+} from '../features/admin/adminTabs';
+import { fetchAccessRequests, fetchAdminMembers } from '../features/admin/api';
 
 type NavItem = {
   to: string;
@@ -217,19 +227,30 @@ function MobileNavOverflow({
   activityBadgeTotal,
   feedUnreadCount,
   pathname,
+  isAdminRoute,
+  activeAdminTab,
+  adminBadgeFor,
 }: {
   items: NavItem[];
   activityBadgeTotal: number;
   feedUnreadCount: number;
   pathname: string;
+  isAdminRoute: boolean;
+  activeAdminTab: AdminTabId;
+  adminBadgeFor: (id: AdminTabId) => number | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(isAdminRoute);
   const menuId = useId();
   const touchStartYRef = useRef<number | null>(null);
 
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (isAdminRoute) setAdminOpen(true);
+  }, [isAdminRoute]);
 
   useEffect(() => {
     if (!open) return;
@@ -307,6 +328,69 @@ function MobileNavOverflow({
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(0.75rem,env(safe-area-inset-bottom,12px))] pt-1 sm:px-4 [webkit-overflow-scrolling:touch]">
                 <div className="app-mobile-sections-grid mx-auto grid w-full max-w-full grid-cols-2 gap-2.5 min-[360px]:grid-cols-3 min-[440px]:grid-cols-4 sm:gap-3">
                   {items.map((item) => {
+                    if (item.to === '/admin') {
+                      return (
+                        <div key={item.to} className="col-span-full flex flex-col gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setAdminOpen((v) => !v)}
+                            className={[
+                              'relative flex min-h-[52px] w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-colors',
+                              isAdminRoute
+                                ? 'border-primary/25 bg-primary/12 text-primary shadow-sm dark:border-primary/35 dark:bg-primary/20'
+                                : 'border-stone-200/70 bg-stone-50/90 text-stone-800 dark:border-stone-700/80 dark:bg-stone-800/55 dark:text-stone-100',
+                            ].join(' ')}
+                            aria-expanded={adminOpen}
+                          >
+                            <LuShield className={navIconClass(isAdminRoute, true)} strokeWidth={2} aria-hidden />
+                            <span className="min-w-0 flex-1 text-sm font-semibold">Админ</span>
+                            <LuChevronDown
+                              className={[
+                                'h-4 w-4 shrink-0 transition-transform',
+                                adminOpen ? 'rotate-0' : '-rotate-90',
+                              ].join(' ')}
+                              strokeWidth={2.25}
+                              aria-hidden
+                            />
+                          </button>
+                          {adminOpen ? (
+                            <div className="grid grid-cols-2 gap-2 min-[360px]:grid-cols-3 min-[440px]:grid-cols-4">
+                              {ADMIN_TABS.map((tab) => {
+                                const Icon = tab.Icon;
+                                const active = isAdminRoute && activeAdminTab === tab.id;
+                                const badge = adminBadgeFor(tab.id);
+                                return (
+                                  <Link
+                                    key={tab.id}
+                                    to={adminTabPath(tab.id)}
+                                    onClick={() => setOpen(false)}
+                                    aria-current={active ? 'page' : undefined}
+                                    className={[
+                                      'relative flex min-h-[76px] flex-col items-center justify-center gap-1 rounded-2xl border px-1.5 py-2.5 text-center transition-[transform,background-color,border-color,color] duration-150 tap-highlight-transparent active:scale-[0.97]',
+                                      active
+                                        ? 'border-primary/25 bg-primary/12 text-primary shadow-sm dark:border-primary/35 dark:bg-primary/20'
+                                        : 'border-stone-200/70 bg-stone-50/90 text-stone-800 hover:border-stone-300/90 hover:bg-white dark:border-stone-700/80 dark:bg-stone-800/55 dark:text-stone-100',
+                                    ].join(' ')}
+                                  >
+                                    <span className="relative inline-flex shrink-0">
+                                      <Icon className={navIconClass(active, true)} strokeWidth={2} aria-hidden />
+                                      {badge != null ? (
+                                        <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white dark:ring-stone-900">
+                                          {formatNavBadgeCount(badge)}
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                    <span className="line-clamp-2 w-full max-w-[5.5rem] text-[11px] font-semibold leading-snug sm:max-w-none sm:text-xs">
+                                      {tab.navLabel ?? tab.label}
+                                    </span>
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    }
                     const Icon = item.Icon;
                     return (
                       <PrefetchNavLink
@@ -356,6 +440,9 @@ function MobileNavOverflow({
 }
 
 const UNREAD_DELIVERIES_QK = ['notifications', 'unread-deliveries-count'] as const;
+const ADMIN_MEMBERS_QK = ['admin', 'members'] as const;
+const ADMIN_ACCESS_QK = ['admin', 'access-requests'] as const;
+
 const NAV_PREFETCH_BY_PATH: Record<
   string,
   { queryKey: readonly unknown[]; queryFn: () => Promise<unknown>; staleTime?: number }
@@ -369,6 +456,170 @@ const NAV_PREFETCH_BY_PATH: Record<
   },
   '/events': { queryKey: keys.events, queryFn: getActiveEvents, staleTime: 2 * 60_000 },
 };
+
+function useAdminNavBadges(enabled: boolean) {
+  const membersQ = useQuery({
+    queryKey: ADMIN_MEMBERS_QK,
+    queryFn: fetchAdminMembers,
+    staleTime: 30_000,
+    enabled,
+  });
+  const accessQ = useQuery({
+    queryKey: ADMIN_ACCESS_QK,
+    queryFn: () => fetchAccessRequests('pending'),
+    staleTime: 30_000,
+    enabled,
+  });
+  const totalUsers = (membersQ.data ?? []).length;
+  const pendingCount = (accessQ.data ?? []).filter((r) => r.status === 'pending').length;
+  return {
+    badgeFor: (id: AdminTabId): number | null => {
+      if (id === 'members') return totalUsers || null;
+      if (id === 'requests') return pendingCount || null;
+      return null;
+    },
+  };
+}
+
+function AdminSidebarAccordion({
+  navCollapsed,
+  isAdminRoute,
+  activeTab,
+  badgeFor,
+}: {
+  navCollapsed: boolean;
+  isAdminRoute: boolean;
+  activeTab: AdminTabId;
+  badgeFor: (id: AdminTabId) => number | null;
+}) {
+  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const expanded = manualOpen ?? isAdminRoute;
+
+  useEffect(() => {
+    if (isAdminRoute) setManualOpen(null);
+  }, [isAdminRoute]);
+
+  if (navCollapsed) {
+    return (
+      <PrefetchNavLink
+        to="/admin"
+        className={({ isActive }) =>
+          [
+            'group flex min-h-[52px] w-full items-center justify-center rounded-2xl transition-colors',
+            isActive || isAdminRoute
+              ? 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow'
+              : 'text-stone-600 hover:bg-stone-100',
+          ].join(' ')
+        }
+        title="Админ"
+        aria-label="Админ"
+      >
+        {({ isActive }) => (
+          <LuShield
+            className={navIconClass(isActive || isAdminRoute, true)}
+            strokeWidth={2}
+            aria-hidden
+          />
+        )}
+      </PrefetchNavLink>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div
+        className={[
+          'flex min-h-[44px] items-stretch overflow-hidden rounded-xl transition-colors',
+          isAdminRoute ? 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow' : 'text-stone-600 hover:bg-stone-100',
+        ].join(' ')}
+      >
+        <PrefetchNavLink
+          to="/admin"
+          onClick={() => setManualOpen(true)}
+          className="group flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left text-sm font-semibold"
+          aria-current={isAdminRoute ? 'page' : undefined}
+        >
+          <LuShield className={navIconClass(isAdminRoute, false)} strokeWidth={2} aria-hidden />
+          <span className="truncate">Админ</span>
+        </PrefetchNavLink>
+        <button
+          type="button"
+          className={[
+            'flex w-10 shrink-0 items-center justify-center border-l transition-colors',
+            isAdminRoute ? 'border-white/20 hover:bg-white/10' : 'border-stone-200/80 hover:bg-stone-200/50',
+          ].join(' ')}
+          aria-expanded={expanded}
+          aria-label={expanded ? 'Свернуть разделы админки' : 'Развернуть разделы админки'}
+          onClick={() => setManualOpen((prev) => !(prev ?? isAdminRoute))}
+        >
+          <LuChevronDown
+            className={[
+              'h-4 w-4 transition-transform duration-200',
+              expanded ? 'rotate-0' : '-rotate-90',
+              isAdminRoute ? 'text-white' : 'text-stone-400',
+            ].join(' ')}
+            strokeWidth={2.25}
+            aria-hidden
+          />
+        </button>
+      </div>
+      {expanded ? (
+        <div className="ml-3 flex flex-col gap-2 border-l border-stone-200/90 pl-2" role="group" aria-label="Разделы админки">
+          {ADMIN_SIDEBAR_GROUPS.map((group) => (
+            <div key={group.label}>
+              <p className="mb-1 px-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-stone-400">
+                {group.label}
+              </p>
+              <div className="flex flex-col gap-0.5">
+                {group.items.map((item) => {
+                  const tabCfg = ADMIN_TABS.find((t) => t.id === item.id)!;
+                  const ItemIcon = tabCfg.Icon;
+                  const active = isAdminRoute && activeTab === item.id;
+                  const badge = item.hasBadge ? badgeFor(item.id) : null;
+                  const navText = adminTabNavLabel(item.id);
+                  return (
+                    <Link
+                      key={item.id}
+                      to={adminTabPath(item.id)}
+                      title={tabCfg.label}
+                      aria-current={active ? 'page' : undefined}
+                      className={[
+                        'group flex min-h-[36px] items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] transition-colors',
+                        active
+                          ? 'bg-[#F3EEF0] font-medium text-[#7B2D3F]'
+                          : 'font-normal text-stone-600 hover:bg-stone-100 hover:text-stone-900',
+                      ].join(' ')}
+                    >
+                      <ItemIcon
+                        className={`h-3.5 w-3.5 shrink-0 ${active ? 'opacity-100' : 'opacity-55'}`}
+                        strokeWidth={2}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1 truncate">{navText}</span>
+                      {badge != null ? (
+                        <span
+                          className={[
+                            'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none',
+                            item.badgeRed && badge > 0
+                              ? 'bg-red-500 text-white'
+                              : 'bg-stone-200 text-stone-600',
+                          ].join(' ')}
+                        >
+                          {badge}
+                        </span>
+                      ) : null}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function Layout() {
   useSyncServerRole();
   useWebPushSync();
@@ -428,6 +679,10 @@ export function Layout() {
   const sidebarLogoScalePercent = Math.min(100, logoScalePercent);
 
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
+  const [searchParams] = useSearchParams();
+  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
+  const activeAdminTab = parseAdminTabParam(searchParams.get('tab'));
+  const { badgeFor: adminBadgeFor } = useAdminNavBadges(isAdmin);
   const meQ = useMe(Boolean(token));
   const canSeeBroadcastNav = isAdmin || normalizeMinistryDirection(meQ.data?.ministry_direction) === 'медиа служения';
   const canSeeScheduleNav = canViewAnySchedule(
@@ -799,6 +1054,17 @@ export function Layout() {
 
           <nav className={navCollapsed ? 'flex flex-col gap-2' : 'flex flex-col gap-1'} data-web-nav="react-icons">
             {sidebarItems.map((item) => {
+              if (item.to === '/admin') {
+                return (
+                  <AdminSidebarAccordion
+                    key={item.to}
+                    navCollapsed={navCollapsed}
+                    isAdminRoute={isAdminRoute}
+                    activeTab={activeAdminTab}
+                    badgeFor={adminBadgeFor}
+                  />
+                );
+              }
               const Icon = item.Icon;
               return (
                 <PrefetchNavLink
@@ -1022,6 +1288,9 @@ export function Layout() {
               activityBadgeTotal={activityBadgeTotal}
               feedUnreadCount={feedUnreadCount}
               pathname={location.pathname}
+              isAdminRoute={isAdminRoute}
+              activeAdminTab={activeAdminTab}
+              adminBadgeFor={adminBadgeFor}
             />
           ) : null}
         </div>
