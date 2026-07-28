@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { LuCheck, LuCircleAlert, LuClock, LuSend } from 'react-icons/lu';
 
 import {
@@ -82,7 +82,29 @@ const TABS: { id: TgTab; label: string }[] = [
   { id: 'chats', label: 'Чаты' },
   { id: 'prayer', label: 'Молитва' },
   { id: 'program', label: 'Программа' },
-  { id: 'dispatch', label: 'Рассылка' },
+  { id: 'dispatch', label: 'Личная' },
+];
+
+type ProgramPanel = 'mailing' | 'published';
+
+const PROGRAM_PANELS: Array<{
+  id: ProgramPanel;
+  step: string;
+  title: string;
+  hint: string;
+}> = [
+  {
+    id: 'mailing',
+    step: '1',
+    title: 'Плановая рассылка',
+    hint: 'По расписанию в Telegram и чат планирования',
+  },
+  {
+    id: 'published',
+    step: '2',
+    title: 'При публикации',
+    hint: 'Короткое уведомление, когда программа готова',
+  },
 ];
 
 function fieldClass() {
@@ -188,6 +210,36 @@ function ChatField({
   );
 }
 
+function StepBlock({
+  n,
+  title,
+  hint,
+  children,
+}: {
+  n: number;
+  title: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-start gap-3">
+        <span
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#7B2D3F] text-xs font-bold text-white"
+          aria-hidden
+        >
+          {n}
+        </span>
+        <div className="min-w-0 pt-0.5">
+          <h4 className="text-sm font-semibold text-stone-900">{title}</h4>
+          {hint ? <p className="mt-0.5 text-xs leading-relaxed text-stone-500">{hint}</p> : null}
+        </div>
+      </div>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
 export function TelegramSettingsSection() {
   const qc = useQueryClient();
   const { data, isLoading, error } = useQuery({
@@ -204,6 +256,7 @@ export function TelegramSettingsSection() {
   });
 
   const [tab, setTab] = useState<TgTab>('bot');
+  const [programPanel, setProgramPanel] = useState<ProgramPanel>('mailing');
   const [form, setForm] = useState({
     enabled: false,
     bot_token: '',
@@ -493,6 +546,7 @@ export function TelegramSettingsSection() {
   const saveProgramTemplateMut = useMutation({
     mutationFn: () =>
       patchTelegramSettings({
+        service_plan_chat_id: normalizeUiString(form.service_plan_chat_id),
         service_plan_template: normalizeUiString(form.service_plan_template),
         service_plan_mailing_enabled: form.service_plan_mailing_enabled,
         service_plan_mailing_weekday: form.service_plan_mailing_weekday,
@@ -500,7 +554,7 @@ export function TelegramSettingsSection() {
         service_plan_mailing_timezone: form.service_plan_mailing_timezone,
       }),
     onSuccess: (next) => {
-      setNote({ type: 'ok', text: 'Шаблон и расписание рассылки сохранены.' });
+      setNote({ type: 'ok', text: 'Плановая рассылка сохранена.' });
       qc.setQueryData(Q_TG, next);
     },
     onError: (e) =>
@@ -559,7 +613,7 @@ export function TelegramSettingsSection() {
         service_plan_published_chat_id: normalizeUiString(form.service_plan_published_chat_id),
       }),
     onSuccess: (next) => {
-      setNote({ type: 'ok', text: 'Шаблон уведомления о готовности сохранён.' });
+      setNote({ type: 'ok', text: 'Уведомление о готовности сохранено.' });
       qc.setQueryData(Q_TG, next);
     },
     onError: (e) =>
@@ -666,7 +720,7 @@ export function TelegramSettingsSection() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className={`mx-auto space-y-5 ${tab === 'program' ? 'max-w-5xl' : 'max-w-3xl'}`}>
       {note ? (
         <div
           role="status"
@@ -690,7 +744,7 @@ export function TelegramSettingsSection() {
           </span>
           <div className="min-w-0">
             <h2 className="text-xl font-bold tracking-tight text-stone-900">Telegram</h2>
-            <p className="mt-0.5 text-sm text-stone-500">Бот, чаты и тексты авторассылок</p>
+            <p className="mt-0.5 text-sm text-stone-500">Бот, чаты и настройка авторассылок</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <span
                 className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${
@@ -916,20 +970,41 @@ export function TelegramSettingsSection() {
                 value={form.default_chat_id}
                 onChange={(default_chat_id) => setForm((s) => ({ ...s, default_chat_id }))}
               />
-              <ChatField
-                label="Программа служения"
-                hint="Чат авторассылки · день и время — во вкладке «Программа»"
-                value={form.service_plan_chat_id}
-                onChange={(service_plan_chat_id) => setForm((s) => ({ ...s, service_plan_chat_id }))}
-              />
-              <ChatField
-                label="Финальная программа"
-                hint="При нажатии «Опубликовать» · текст шаблона — во вкладке «Программа»"
-                value={form.service_plan_published_chat_id}
-                onChange={(service_plan_published_chat_id) =>
-                  setForm((s) => ({ ...s, service_plan_published_chat_id }))
-                }
-              />
+            </div>
+            <div className="border-t border-stone-100 pt-5">
+              <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-stone-900">Чаты программы служения</h3>
+                  <p className="mt-0.5 text-xs text-stone-500">
+                    Тексты и расписание — во вкладке «Программа».
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-[#7B2D3F] underline-offset-2 hover:underline"
+                  onClick={() => setTab('program')}
+                >
+                  Открыть «Программа»
+                </button>
+              </div>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <ChatField
+                  label="Плановая рассылка"
+                  hint="Авторассылка по расписанию + «Отправить сейчас»"
+                  value={form.service_plan_chat_id}
+                  onChange={(service_plan_chat_id) =>
+                    setForm((s) => ({ ...s, service_plan_chat_id }))
+                  }
+                />
+                <ChatField
+                  label="Финальная программа"
+                  hint="Сообщение при нажатии «Опубликовать»"
+                  value={form.service_plan_published_chat_id}
+                  onChange={(service_plan_published_chat_id) =>
+                    setForm((s) => ({ ...s, service_plan_published_chat_id }))
+                  }
+                />
+              </div>
             </div>
           </div>
         ) : null}
@@ -976,390 +1051,510 @@ export function TelegramSettingsSection() {
         ) : null}
 
         {tab === 'program' ? (
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div>
-              <h3 className="text-sm font-semibold text-stone-900">Рассылка программы служения</h3>
-              <p className="mt-0.5 text-xs text-stone-500">
-                Настройте день и время автоотправки, шаблон и предпросмотр. Данные берутся только из
-                ближайшей активной программы; в Telegram люди — как @ник, если он есть.
+              <h3 className="text-base font-semibold text-stone-900">Авторассылки программы</h3>
+              <p className="mt-1 text-sm text-stone-500">
+                Два разных сообщения: плановая рассылка по расписанию и короткое уведомление при
+                публикации. Настройте каждое по шагам.
               </p>
             </div>
 
-            <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-4 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-sm font-semibold text-stone-900">Расписание автоотправки</h4>
-                <span className="text-xs text-stone-500">{mailingScheduleLabel}</span>
-              </div>
-              <Toggle
-                checked={form.service_plan_mailing_enabled}
-                onChange={(service_plan_mailing_enabled) =>
-                  setForm((s) => ({ ...s, service_plan_mailing_enabled }))
-                }
-                label="Включить авторассылку"
-                hint="Если выключено — уходит только вручную кнопкой «Отправить сейчас»"
-              />
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">День недели</label>
-                  <select
-                    className={fieldClass()}
-                    value={form.service_plan_mailing_weekday}
-                    onChange={(e) =>
-                      setForm((s) => ({
-                        ...s,
-                        service_plan_mailing_weekday: Number(e.target.value),
-                      }))
-                    }
+            <div
+              className="grid gap-2 sm:grid-cols-2"
+              role="tablist"
+              aria-label="Тип сообщения программы"
+            >
+              {PROGRAM_PANELS.map((panel) => {
+                const active = programPanel === panel.id;
+                const status =
+                  panel.id === 'mailing'
+                    ? form.service_plan_mailing_enabled
+                      ? mailingScheduleLabel
+                      : 'выключена'
+                    : form.service_plan_published_chat_id.trim()
+                      ? 'чат задан'
+                      : 'чат не задан';
+                return (
+                  <button
+                    key={panel.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    className={`rounded-xl border px-4 py-3 text-left transition ${
+                      active
+                        ? 'border-[#7B2D3F]/40 bg-[#7B2D3F]/[0.04] shadow-sm'
+                        : 'border-stone-200 bg-stone-50/60 hover:border-stone-300 hover:bg-white'
+                    }`}
+                    onClick={() => setProgramPanel(panel.id)}
                   >
-                    {WEEKDAY_OPTIONS.map((d) => (
-                      <option key={d.value} value={d.value}>
-                        {d.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
-                  <input
-                    type="time"
-                    className={fieldClass()}
-                    value={form.service_plan_mailing_time}
-                    onChange={(e) =>
-                      setForm((s) => ({ ...s, service_plan_mailing_time: e.target.value || '10:00' }))
+                    <div className="flex items-start gap-3">
+                      <span
+                        className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                          active ? 'bg-[#7B2D3F] text-white' : 'bg-stone-200 text-stone-600'
+                        }`}
+                      >
+                        {panel.step}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-stone-900">
+                          {panel.title}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-stone-500">{panel.hint}</span>
+                        <span className="mt-1.5 block text-[11px] font-medium text-stone-600">
+                          {status}
+                        </span>
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {programPanel === 'mailing' ? (
+              <div className="space-y-4" role="tabpanel">
+                <StepBlock
+                  n={1}
+                  title="Куда отправлять"
+                  hint="Telegram-чат плановой рассылки. В мессенджере приложения сообщение уходит в канал планирования автоматически."
+                >
+                  <ChatField
+                    label="ID чата Telegram"
+                    hint="Отрицательный ID группы/канала (−100…)"
+                    value={form.service_plan_chat_id}
+                    onChange={(service_plan_chat_id) =>
+                      setForm((s) => ({ ...s, service_plan_chat_id }))
                     }
                   />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">Часовой пояс</label>
-                  <select
-                    className={fieldClass()}
-                    value={form.service_plan_mailing_timezone}
-                    onChange={(e) =>
-                      setForm((s) => ({ ...s, service_plan_mailing_timezone: e.target.value }))
+                </StepBlock>
+
+                <StepBlock
+                  n={2}
+                  title="Когда отправлять"
+                  hint="Автоотправка раз в неделю. Вручную можно отправить кнопкой внизу в любой момент."
+                >
+                  <Toggle
+                    checked={form.service_plan_mailing_enabled}
+                    onChange={(service_plan_mailing_enabled) =>
+                      setForm((s) => ({ ...s, service_plan_mailing_enabled }))
                     }
-                  >
-                    <option value="Europe/Moscow">Europe/Moscow</option>
-                    <option value="Europe/Samara">Europe/Samara</option>
-                    <option value="Asia/Yekaterinburg">Asia/Yekaterinburg</option>
-                    <option value="UTC">UTC</option>
-                  </select>
-                </div>
-              </div>
-              <p className="text-xs text-stone-500">
-                Сохраните расписание кнопкой «Сохранить шаблон и расписание» ниже. Повторно в тот же
-                день для той же даты программы не отправится.
-              </p>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                    Шаблон сообщения
-                  </label>
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-stone-600 underline-offset-2 hover:underline"
-                    onClick={() => {
-                      if (
-                        !window.confirm(
-                          'Сбросить шаблон к стандартному тексту? Несохранённые правки пропадут.',
-                        )
-                      ) {
-                        return;
-                      }
-                      setForm((s) => ({ ...s, service_plan_template: DEFAULT_PROGRAM_MAILING_TEMPLATE }));
-                      setProgramPreview(null);
-                    }}
-                  >
-                    Сбросить к стандартному
-                  </button>
-                </div>
-                <textarea
-                  ref={programTemplateRef}
-                  className="min-h-[320px] w-full resize-y rounded-xl border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  value={form.service_plan_template}
-                  onChange={(e) => {
-                    setForm((s) => ({ ...s, service_plan_template: e.target.value }));
-                    setProgramPreview(null);
-                  }}
-                  placeholder={DEFAULT_PROGRAM_MAILING_TEMPLATE}
-                  spellCheck={false}
-                />
-                <TemplateFieldInserter
-                  groups={PROGRAM_TEMPLATE_FIELD_GROUPS}
-                  onInsert={(token) =>
-                    insertAtCursor(
-                      programTemplateRef.current,
-                      token,
-                      form.service_plan_template,
-                      (next) => {
-                        setForm((s) => ({ ...s, service_plan_template: next }));
-                        setProgramPreview(null);
-                      },
-                    )
-                  }
-                />
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                    Предпросмотр
-                  </label>
-                  {programPreview ? (
-                    <div className="flex rounded-lg border border-stone-200 bg-stone-50 p-0.5 text-xs font-semibold">
-                      <button
-                        type="button"
-                        className={`rounded-md px-2.5 py-1 ${
-                          programPreview.channel === 'telegram'
-                            ? 'bg-white text-stone-900 shadow-sm'
-                            : 'text-stone-500'
-                        }`}
-                        onClick={() =>
-                          setProgramPreview((p) => (p ? { ...p, channel: 'telegram' } : p))
+                    label="Включить авторассылку"
+                    hint={
+                      form.service_plan_mailing_enabled
+                        ? `Сейчас: ${mailingScheduleLabel}`
+                        : 'Выключено — только ручная отправка'
+                    }
+                  />
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">
+                        День недели
+                      </label>
+                      <select
+                        className={fieldClass()}
+                        value={form.service_plan_mailing_weekday}
+                        onChange={(e) =>
+                          setForm((s) => ({
+                            ...s,
+                            service_plan_mailing_weekday: Number(e.target.value),
+                          }))
                         }
                       >
-                        Telegram
-                      </button>
-                      <button
-                        type="button"
-                        className={`rounded-md px-2.5 py-1 ${
-                          programPreview.channel === 'messenger'
-                            ? 'bg-white text-stone-900 shadow-sm'
-                            : 'text-stone-500'
-                        }`}
-                        onClick={() =>
-                          setProgramPreview((p) => (p ? { ...p, channel: 'messenger' } : p))
-                        }
-                      >
-                        Мессенджер
-                      </button>
+                        {WEEKDAY_OPTIONS.map((d) => (
+                          <option key={d.value} value={d.value}>
+                            {d.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  ) : null}
-                </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+                      <input
+                        type="time"
+                        className={fieldClass()}
+                        value={form.service_plan_mailing_time}
+                        onChange={(e) =>
+                          setForm((s) => ({
+                            ...s,
+                            service_plan_mailing_time: e.target.value || '10:00',
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">
+                        Часовой пояс
+                      </label>
+                      <select
+                        className={fieldClass()}
+                        value={form.service_plan_mailing_timezone}
+                        onChange={(e) =>
+                          setForm((s) => ({
+                            ...s,
+                            service_plan_mailing_timezone: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="Europe/Moscow">Europe/Moscow</option>
+                        <option value="Europe/Samara">Europe/Samara</option>
+                        <option value="Asia/Yekaterinburg">Asia/Yekaterinburg</option>
+                        <option value="UTC">UTC</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p className="text-xs text-stone-500">
+                    Повторно в тот же день для той же даты программы не отправится.
+                  </p>
+                </StepBlock>
 
-                <div className="min-h-[320px] rounded-xl border border-stone-200 bg-stone-50/80 p-4">
-                  {programPreview ? (
+                <StepBlock
+                  n={3}
+                  title="Текст сообщения"
+                  hint="Данные берутся из ближайшей активной программы. В Telegram люди — как @ник, если он есть."
+                >
+                  <div className="grid gap-4 lg:grid-cols-2">
                     <div className="space-y-3">
-                      <p className="text-xs text-stone-500">
-                        Программа #{programPreview.planId ?? '—'} · {programPreview.serviceDate ?? '—'} ·{' '}
-                        {programPreview.channel === 'telegram' ? 'как в Telegram' : 'как в чате приложения'}
-                      </p>
-                      <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-stone-800">
-                        {programPreview.channel === 'telegram'
-                          ? programPreview.text
-                          : programPreview.textMessenger}
-                      </pre>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                          Шаблон
+                        </label>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-stone-600 underline-offset-2 hover:underline"
+                          onClick={() => {
+                            if (
+                              !window.confirm(
+                                'Сбросить шаблон к стандартному тексту? Несохранённые правки пропадут.',
+                              )
+                            ) {
+                              return;
+                            }
+                            setForm((s) => ({
+                              ...s,
+                              service_plan_template: DEFAULT_PROGRAM_MAILING_TEMPLATE,
+                            }));
+                            setProgramPreview(null);
+                          }}
+                        >
+                          Сбросить к стандартному
+                        </button>
+                      </div>
+                      <textarea
+                        ref={programTemplateRef}
+                        className="min-h-[280px] w-full resize-y rounded-xl border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        value={form.service_plan_template}
+                        onChange={(e) => {
+                          setForm((s) => ({ ...s, service_plan_template: e.target.value }));
+                          setProgramPreview(null);
+                        }}
+                        placeholder={DEFAULT_PROGRAM_MAILING_TEMPLATE}
+                        spellCheck={false}
+                      />
+                      <TemplateFieldInserter
+                        groups={PROGRAM_TEMPLATE_FIELD_GROUPS}
+                        onInsert={(token) =>
+                          insertAtCursor(
+                            programTemplateRef.current,
+                            token,
+                            form.service_plan_template,
+                            (next) => {
+                              setForm((s) => ({ ...s, service_plan_template: next }));
+                              setProgramPreview(null);
+                            },
+                          )
+                        }
+                      />
                     </div>
-                  ) : (
-                    <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 px-4 text-center">
-                      <p className="text-sm font-medium text-stone-700">Пока нет предпросмотра</p>
-                      <p className="max-w-sm text-xs text-stone-500">
-                        Нажмите «Предпросмотр» — подставим данные ближайшей программы в текущий
-                        шаблон (сохранять не обязательно).
-                      </p>
+
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                          Предпросмотр
+                        </label>
+                        {programPreview ? (
+                          <div className="flex rounded-lg border border-stone-200 bg-stone-50 p-0.5 text-xs font-semibold">
+                            <button
+                              type="button"
+                              className={`rounded-md px-2.5 py-1 ${
+                                programPreview.channel === 'telegram'
+                                  ? 'bg-white text-stone-900 shadow-sm'
+                                  : 'text-stone-500'
+                              }`}
+                              onClick={() =>
+                                setProgramPreview((p) => (p ? { ...p, channel: 'telegram' } : p))
+                              }
+                            >
+                              Telegram
+                            </button>
+                            <button
+                              type="button"
+                              className={`rounded-md px-2.5 py-1 ${
+                                programPreview.channel === 'messenger'
+                                  ? 'bg-white text-stone-900 shadow-sm'
+                                  : 'text-stone-500'
+                              }`}
+                              onClick={() =>
+                                setProgramPreview((p) => (p ? { ...p, channel: 'messenger' } : p))
+                              }
+                            >
+                              Мессенджер
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="min-h-[280px] rounded-xl border border-stone-200 bg-stone-50/80 p-4">
+                        {programPreview ? (
+                          <div className="space-y-3">
+                            <p className="text-xs text-stone-500">
+                              Программа #{programPreview.planId ?? '—'} ·{' '}
+                              {programPreview.serviceDate ?? '—'} ·{' '}
+                              {programPreview.channel === 'telegram'
+                                ? 'как в Telegram'
+                                : 'как в чате приложения'}
+                            </p>
+                            <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-stone-800">
+                              {programPreview.channel === 'telegram'
+                                ? programPreview.text
+                                : programPreview.textMessenger}
+                            </pre>
+                          </div>
+                        ) : (
+                          <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2 px-4 text-center">
+                            <p className="text-sm font-medium text-stone-700">
+                              Пока нет предпросмотра
+                            </p>
+                            <p className="max-w-sm text-xs text-stone-500">
+                              Нажмите «Предпросмотр» внизу — подставим данные ближайшей программы.
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
-            </div>
+                  </div>
+                </StepBlock>
 
-            <div className="flex flex-wrap gap-2 border-t border-stone-100 pt-4">
-              <button
-                type="button"
-                className={btnSecondary()}
-                disabled={programPreviewMut.isPending}
-                onClick={() => {
-                  setNote(null);
-                  programPreviewMut.mutate();
-                }}
-              >
-                {programPreviewMut.isPending ? 'Собираем…' : 'Предпросмотр'}
-              </button>
-              <button
-                type="button"
-                className={btnSecondary()}
-                disabled={saveProgramTemplateMut.isPending}
-                onClick={() => {
-                  setNote(null);
-                  saveProgramTemplateMut.mutate();
-                }}
-              >
-                {saveProgramTemplateMut.isPending ? 'Сохранение…' : 'Сохранить шаблон и расписание'}
-              </button>
-              <button
-                type="button"
-                className={btnPrimary()}
-                disabled={programMailingMut.isPending}
-                onClick={() => {
-                  if (
-                    !window.confirm(
-                      'Отправить рассылку сейчас в Telegram и чат планирования?\nБудет использован текст из редактора (как в предпросмотре).',
-                    )
-                  ) {
-                    return;
-                  }
-                  setNote(null);
-                  programMailingMut.mutate();
-                }}
-              >
-                {programMailingMut.isPending ? 'Отправка…' : 'Отправить сейчас'}
-              </button>
-              <span className="self-center text-xs text-stone-400">
-                Сначала предпросмотр — потом отправка
-              </span>
-            </div>
-
-            <div className="border-t border-stone-200 pt-6 space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold text-stone-900">
-                  Уведомление о готовности (публикация)
-                </h3>
-                <p className="mt-0.5 text-xs text-stone-500">
-                  Текст в чат «Финальная программа» при нажатии «Опубликовать». Те же подстановки, что
-                  у рассылки выше. Чат задаётся во вкладке «Чаты».
-                </p>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-stone-600">
-                  Текст кнопки со ссылкой
-                </label>
-                <input
-                  className={fieldClass()}
-                  value={form.service_plan_published_button_text}
-                  onChange={(e) =>
-                    setForm((s) => ({
-                      ...s,
-                      service_plan_published_button_text: e.target.value,
-                    }))
-                  }
-                  placeholder={DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT}
-                />
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                      Шаблон уведомления
-                    </label>
+                <div className="sticky bottom-0 z-10 -mx-5 border-t border-stone-200 bg-white/95 px-5 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      className="text-xs font-semibold text-stone-600 underline-offset-2 hover:underline"
+                      className={btnSecondary()}
+                      disabled={programPreviewMut.isPending}
+                      onClick={() => {
+                        setNote(null);
+                        programPreviewMut.mutate();
+                      }}
+                    >
+                      {programPreviewMut.isPending ? 'Собираем…' : 'Предпросмотр'}
+                    </button>
+                    <button
+                      type="button"
+                      className={btnPrimary()}
+                      disabled={saveProgramTemplateMut.isPending}
+                      onClick={() => {
+                        setNote(null);
+                        saveProgramTemplateMut.mutate();
+                      }}
+                    >
+                      {saveProgramTemplateMut.isPending ? 'Сохранение…' : 'Сохранить'}
+                    </button>
+                    <button
+                      type="button"
+                      className={btnSecondary()}
+                      disabled={programMailingMut.isPending}
                       onClick={() => {
                         if (
                           !window.confirm(
-                            'Сбросить шаблон к стандартному тексту? Несохранённые правки пропадут.',
+                            'Отправить рассылку сейчас в Telegram и чат планирования?\nБудет использован текст из редактора (как в предпросмотре).',
                           )
                         ) {
                           return;
                         }
-                        setForm((s) => ({
-                          ...s,
-                          service_plan_published_template: DEFAULT_PROGRAM_PUBLISHED_TEMPLATE,
-                          service_plan_published_button_text: DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT,
-                        }));
-                        setPublishedPreview(null);
+                        setNote(null);
+                        programMailingMut.mutate();
                       }}
                     >
-                      Сбросить к стандартному
+                      {programMailingMut.isPending ? 'Отправка…' : 'Отправить сейчас'}
                     </button>
+                    <span className="text-xs text-stone-400">
+                      1 → 2 → 3 → сохранить · отправка по желанию
+                    </span>
                   </div>
-                  <textarea
-                    ref={publishedTemplateRef}
-                    className="min-h-[220px] w-full resize-y rounded-xl border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    value={form.service_plan_published_template}
-                    onChange={(e) => {
-                      setForm((s) => ({
-                        ...s,
-                        service_plan_published_template: e.target.value,
-                      }));
-                      setPublishedPreview(null);
-                    }}
-                    placeholder={DEFAULT_PROGRAM_PUBLISHED_TEMPLATE}
-                    spellCheck={false}
-                  />
-                  <PlaceholderPicker
-                    groups={PROGRAM_PLACEHOLDER_GROUPS}
-                    defaultOpen={false}
-                    onInsert={(token) =>
-                      insertAtCursor(
-                        publishedTemplateRef.current,
-                        token,
-                        form.service_plan_published_template,
-                        (next) => {
-                          setForm((s) => ({ ...s, service_plan_published_template: next }));
-                          setPublishedPreview(null);
-                        },
-                      )
+                </div>
+              </div>
+            ) : null}
+
+            {programPanel === 'published' ? (
+              <div className="space-y-4" role="tabpanel">
+                <StepBlock
+                  n={1}
+                  title="Куда отправлять"
+                  hint="Отдельный чат для короткого сообщения «программа готова» при публикации."
+                >
+                  <ChatField
+                    label="ID чата Telegram"
+                    hint="Отрицательный ID группы/канала (−100…)"
+                    value={form.service_plan_published_chat_id}
+                    onChange={(service_plan_published_chat_id) =>
+                      setForm((s) => ({ ...s, service_plan_published_chat_id }))
                     }
                   />
-                </div>
+                </StepBlock>
 
-                <div className="space-y-3">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                    Предпросмотр
-                  </label>
-                  <div className="min-h-[220px] rounded-xl border border-stone-200 bg-stone-50/80 p-4">
-                    {publishedPreview ? (
-                      <div className="space-y-3">
-                        <p className="text-xs text-stone-500">
-                          Программа #{publishedPreview.planId ?? '—'} ·{' '}
-                          {publishedPreview.serviceDate ?? '—'} · как в Telegram
-                        </p>
-                        <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-stone-800">
-                          {publishedPreview.text}
-                        </pre>
-                        <p className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-600">
-                          Кнопка:{' '}
-                          <span className="font-semibold text-stone-900">
-                            {form.service_plan_published_button_text.trim() ||
-                              DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT}
-                          </span>
-                        </p>
+                <StepBlock
+                  n={2}
+                  title="Кнопка со ссылкой"
+                  hint="Под текстом в Telegram будет кнопка, ведущая на публичную программу."
+                >
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">
+                      Текст кнопки
+                    </label>
+                    <input
+                      className={fieldClass()}
+                      value={form.service_plan_published_button_text}
+                      onChange={(e) =>
+                        setForm((s) => ({
+                          ...s,
+                          service_plan_published_button_text: e.target.value,
+                        }))
+                      }
+                      placeholder={DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT}
+                    />
+                  </div>
+                </StepBlock>
+
+                <StepBlock
+                  n={3}
+                  title="Текст уведомления"
+                  hint="Те же подстановки, что у плановой рассылки. Уходит один раз при нажатии «Опубликовать»."
+                >
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                          Шаблон
+                        </label>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-stone-600 underline-offset-2 hover:underline"
+                          onClick={() => {
+                            if (
+                              !window.confirm(
+                                'Сбросить шаблон к стандартному тексту? Несохранённые правки пропадут.',
+                              )
+                            ) {
+                              return;
+                            }
+                            setForm((s) => ({
+                              ...s,
+                              service_plan_published_template: DEFAULT_PROGRAM_PUBLISHED_TEMPLATE,
+                              service_plan_published_button_text:
+                                DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT,
+                            }));
+                            setPublishedPreview(null);
+                          }}
+                        >
+                          Сбросить к стандартному
+                        </button>
                       </div>
-                    ) : (
-                      <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-2 px-4 text-center">
-                        <p className="text-sm font-medium text-stone-700">Пока нет предпросмотра</p>
-                        <p className="max-w-sm text-xs text-stone-500">
-                          Нажмите «Предпросмотр» — подставим данные ближайшей программы в шаблон
-                          уведомления (сохранять не обязательно).
-                        </p>
+                      <textarea
+                        ref={publishedTemplateRef}
+                        className="min-h-[220px] w-full resize-y rounded-xl border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        value={form.service_plan_published_template}
+                        onChange={(e) => {
+                          setForm((s) => ({
+                            ...s,
+                            service_plan_published_template: e.target.value,
+                          }));
+                          setPublishedPreview(null);
+                        }}
+                        placeholder={DEFAULT_PROGRAM_PUBLISHED_TEMPLATE}
+                        spellCheck={false}
+                      />
+                      <TemplateFieldInserter
+                        groups={PROGRAM_TEMPLATE_FIELD_GROUPS}
+                        onInsert={(token) =>
+                          insertAtCursor(
+                            publishedTemplateRef.current,
+                            token,
+                            form.service_plan_published_template,
+                            (next) => {
+                              setForm((s) => ({ ...s, service_plan_published_template: next }));
+                              setPublishedPreview(null);
+                            },
+                          )
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                        Предпросмотр
+                      </label>
+                      <div className="min-h-[220px] rounded-xl border border-stone-200 bg-stone-50/80 p-4">
+                        {publishedPreview ? (
+                          <div className="space-y-3">
+                            <p className="text-xs text-stone-500">
+                              Программа #{publishedPreview.planId ?? '—'} ·{' '}
+                              {publishedPreview.serviceDate ?? '—'} · как в Telegram
+                            </p>
+                            <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-stone-800">
+                              {publishedPreview.text}
+                            </pre>
+                            <p className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-600">
+                              Кнопка:{' '}
+                              <span className="font-semibold text-stone-900">
+                                {form.service_plan_published_button_text.trim() ||
+                                  DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT}
+                              </span>
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-2 px-4 text-center">
+                            <p className="text-sm font-medium text-stone-700">
+                              Пока нет предпросмотра
+                            </p>
+                            <p className="max-w-sm text-xs text-stone-500">
+                              Нажмите «Предпросмотр» внизу — подставим данные ближайшей программы.
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
+                  </div>
+                </StepBlock>
+
+                <div className="sticky bottom-0 z-10 -mx-5 border-t border-stone-200 bg-white/95 px-5 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className={btnSecondary()}
+                      disabled={publishedPreviewMut.isPending}
+                      onClick={() => {
+                        setNote(null);
+                        publishedPreviewMut.mutate();
+                      }}
+                    >
+                      {publishedPreviewMut.isPending ? 'Собираем…' : 'Предпросмотр'}
+                    </button>
+                    <button
+                      type="button"
+                      className={btnPrimary()}
+                      disabled={savePublishedTemplateMut.isPending}
+                      onClick={() => {
+                        setNote(null);
+                        savePublishedTemplateMut.mutate();
+                      }}
+                    >
+                      {savePublishedTemplateMut.isPending ? 'Сохранение…' : 'Сохранить'}
+                    </button>
+                    <span className="text-xs text-stone-400">
+                      Уходит при «Опубликовать» в планировщике
+                    </span>
                   </div>
                 </div>
               </div>
-
-              <div className="flex flex-wrap gap-2 border-t border-stone-100 pt-4">
-                <button
-                  type="button"
-                  className={btnSecondary()}
-                  disabled={publishedPreviewMut.isPending}
-                  onClick={() => {
-                    setNote(null);
-                    publishedPreviewMut.mutate();
-                  }}
-                >
-                  {publishedPreviewMut.isPending ? 'Собираем…' : 'Предпросмотр'}
-                </button>
-                <button
-                  type="button"
-                  className={btnPrimary()}
-                  disabled={savePublishedTemplateMut.isPending}
-                  onClick={() => {
-                    setNote(null);
-                    savePublishedTemplateMut.mutate();
-                  }}
-                >
-                  {savePublishedTemplateMut.isPending
-                    ? 'Сохранение…'
-                    : 'Сохранить шаблон готовности'}
-                </button>
-              </div>
-            </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -1368,7 +1563,8 @@ export function TelegramSettingsSection() {
             <div>
               <h3 className="text-sm font-semibold text-stone-900">Личная авторассылка молитвы</h3>
               <p className="mt-0.5 text-xs text-stone-500">
-                Участникам с Telegram ID в карточке. Часовой пояс сервера:{' '}
+                Каждому участнику с Telegram ID в карточке — отдельно от рассылки программы.
+                Часовой пояс сервера:{' '}
                 <code className="rounded bg-stone-100 px-1 text-[11px]">{dispatchForm.server_timezone}</code>
               </p>
             </div>
