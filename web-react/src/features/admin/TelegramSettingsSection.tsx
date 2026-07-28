@@ -21,6 +21,11 @@ import {
   type TelegramDispatchSettingsResponse,
   type TelegramSettingsResponse,
 } from './api';
+import {
+  TemplateFieldInserter,
+  PRAYER_TEMPLATE_FIELD_GROUPS,
+  PROGRAM_TEMPLATE_FIELD_GROUPS,
+} from './TemplateFieldInserter';
 
 const Q_TG = ['admin', 'telegram', 'settings'] as const;
 const Q_TG_DISPATCH = ['admin', 'telegram', 'dispatch-settings'] as const;
@@ -78,217 +83,6 @@ const TABS: { id: TgTab; label: string }[] = [
   { id: 'prayer', label: 'Молитва' },
   { id: 'program', label: 'Программа' },
   { id: 'dispatch', label: 'Рассылка' },
-];
-
-type PlaceholderItem = {
-  token: string;
-  label: string;
-  example?: string;
-};
-
-type PlaceholderGroup = {
-  title: string;
-  items: PlaceholderItem[];
-};
-
-const PRAYER_PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
-  {
-    title: 'Дата и человек дня',
-    items: [
-      { token: '{{date}}', label: 'Дата молитвы (по-русски)', example: '27 июля 2026' },
-      { token: '{{member_name}}', label: 'Имя члена церкви на сегодня' },
-      { token: '{{member_prayer_request}}', label: 'Просьба о молитве целиком (текст)' },
-      {
-        token: '{{member_prayer_request_bullets}}',
-        label: 'Просьба о молитве списком (каждый пункт с «-»)',
-      },
-    ],
-  },
-  {
-    title: 'Первая тема / служение / отпавший',
-    items: [
-      { token: '{{theme_title}}', label: 'Название первой глобальной темы' },
-      { token: '{{theme_bible_verse}}', label: 'Библейский стих первой темы' },
-      { token: '{{theme_prayer_points}}', label: 'Пункты молитвы первой темы' },
-      { token: '{{ministry_title}}', label: 'Название первого служения' },
-      { token: '{{ministry_prayer_points}}', label: 'Нужды первого служения' },
-      { token: '{{backslider_name}}', label: 'Имя первого отпавшего в списке' },
-    ],
-  },
-  {
-    title: 'Все сразу (блоки)',
-    items: [
-      { token: '{{all_themes_block}}', label: 'Все глобальные темы молитвы (готовый блок)' },
-      { token: '{{all_ministries_block}}', label: 'Все служения и их нужды (готовый блок)' },
-      { token: '{{all_backsliders_inline}}', label: 'Все отпавшие через запятую' },
-    ],
-  },
-];
-
-const PROGRAM_PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
-  {
-    title: 'Дата и программа',
-    items: [
-      {
-        token: '{{sunday_heading}}',
-        label: 'Заголовок дня',
-        example: 'Воскресенье — 26 июля',
-      },
-      { token: '{{date}}', label: 'То же, что sunday_heading (алиас)' },
-      { token: '{{date_short}}', label: 'Короткая дата', example: '26.07.2026' },
-      { token: '{{date_long}}', label: 'Полная дата', example: '26 июля 2026 г.' },
-      { token: '{{service_date}}', label: 'Дата YYYY-MM-DD', example: '2026-07-26' },
-      { token: '{{start_time}}', label: 'Время начала служения', example: '10:00' },
-      { token: '{{status_ru}}', label: 'Статус по-русски', example: 'черновик / опубликована' },
-      { token: '{{status}}', label: 'Статус кода', example: 'draft / published' },
-      { token: '{{notes}}', label: 'Заметки к программе' },
-      { token: '{{template_name}}', label: 'Название шаблона программы' },
-      { token: '{{duration_minutes}}', label: 'Длительность программы (минуты)' },
-      { token: '{{plan_id}}', label: 'ID программы в базе' },
-    ],
-  },
-  {
-    title: 'Люди (роли программы)',
-    items: [
-      {
-        token: '{{preacher}}',
-        label: 'Проповедник — в Telegram @ник (если есть), иначе имя',
-        example: '@zhigunov72',
-      },
-      { token: '{{preacher_name}}', label: 'Проповедник — только имя из карточки' },
-      {
-        token: '{{preacher_mention}}',
-        label: 'Как {{preacher}}: @ник из Telegram или имя',
-      },
-      {
-        token: '{{music}}',
-        label: 'Прославление — @ник Telegram или имя',
-        example: '@N_i_k_o_l_a_sss',
-      },
-      { token: '{{music_name}}', label: 'Прославление — только имя' },
-      { token: '{{music_mention}}', label: 'Как {{music}}' },
-      {
-        token: '{{poem}}',
-        label: 'Ответственный за стихи — @ник или имя (кто заполняет блок, не чтец)',
-      },
-      { token: '{{poem_name}}', label: 'Ответственный за стихи — имя' },
-      { token: '{{poem_mention}}', label: 'Как {{poem}}' },
-      {
-        token: '{{leader}}',
-        label: 'Ведущий — @ник Telegram или имя',
-        example: '@zhigunovdm',
-      },
-      { token: '{{leader_name}}', label: 'Ведущий — только имя' },
-      { token: '{{leader_mention}}', label: 'Как {{leader}}' },
-    ],
-  },
-  {
-    title: 'Проповедь',
-    items: [
-      { token: '{{sermon_title}}', label: 'Название документа проповеди («Мои проповеди»)' },
-      {
-        token: '{{sermon_title_block}}',
-        label: 'Готовая строка «Название: «…»» (пусто, если названия нет)',
-      },
-      { token: '{{sermon_topic}}', label: 'Тема проповеди (из блока или конспекта)' },
-      { token: '{{sermon_scripture}}', label: 'Текст Писания' },
-      {
-        token: '{{sermon_topic_block}}',
-        label: 'Готовая строка «Тема: «…»» (пусто, если темы нет)',
-      },
-      {
-        token: '{{sermon_scripture_block}}',
-        label: 'Готовая строка «Текст: …» (пусто, если текста нет)',
-      },
-      { token: '{{sermon_notes}}', label: 'Заметки в блоке «Проповедь»' },
-      {
-        token: '{{sermon_body}}',
-        label: 'Полный текст/тезисы конспекта из «Мои проповеди»',
-      },
-      {
-        token: '{{sermon_body_excerpt}}',
-        label: 'Краткий фрагмент конспекта (до ~500 символов)',
-      },
-      {
-        token: '{{sermon_note_author}}',
-        label: 'Автор привязанного конспекта',
-      },
-      {
-        token: '{{sermon_note_url}}',
-        label: 'Публичная ссылка на конспект (если опубликован)',
-      },
-      {
-        token: '{{sermon_has_note}}',
-        label: 'Есть ли привязанный конспект',
-        example: 'да / нет',
-      },
-      {
-        token: '{{sermon_presentation}}',
-        label: 'Имя файла презентации (первое вложение)',
-      },
-      {
-        token: '{{sermon_presentation_url}}',
-        label: 'Ссылка на презентацию (первое вложение)',
-      },
-      {
-        token: '{{sermon_attachments_list}}',
-        label: 'Все вложения проповеди (имя + ссылка, по строкам)',
-      },
-      {
-        token: '{{sermon_attachments_inline}}',
-        label: 'Имена вложений через запятую',
-      },
-      { token: '{{sermon_attachments_count}}', label: 'Число вложений' },
-      {
-        token: '{{sermon_block}}',
-        label: 'Сводка: название, тема, Писание, автор, файлы',
-      },
-      {
-        token: '{{sermon_for_broadcast}}',
-        label: 'Готовый блок для медиа: тема, текст, презентация, конспект',
-      },
-    ],
-  },
-  {
-    title: 'Стих и хор',
-    items: [
-      { token: '{{choir_line}}', label: 'Готовая фраза про хор', example: 'Хор петь не будет.' },
-      { token: '{{choir}}', label: 'То же, что choir_line' },
-      { token: '{{poem_reader}}', label: 'Чтец стиха (@ или имя)' },
-      { token: '{{poem_reader_name}}', label: 'Чтец стиха — только имя' },
-      { token: '{{poem_author}}', label: 'Автор стиха' },
-      { token: '{{poem_theme}}', label: 'Тема стиха' },
-      { token: '{{poem_text}}', label: 'Текст / заметки блока стиха' },
-      {
-        token: '{{poem_block}}',
-        label: 'Сводка по стиху: чтец, тема, автор, текст',
-      },
-    ],
-  },
-  {
-    title: 'Песни и медиа',
-    items: [
-      { token: '{{songs_list}}', label: 'Список песен (нумерованный, по строкам)' },
-      { token: '{{songs_inline}}', label: 'Песни через запятую' },
-      { token: '{{songs_count}}', label: 'Число песен' },
-      {
-        token: '{{media_team}}',
-        label: 'Медиа-команда списком: «роль — имя»',
-      },
-      { token: '{{media_team_inline}}', label: 'Медиа-команда через запятую' },
-      {
-        token: '{{media_team_or_default}}',
-        label: 'Медиа-команда или стандартный текст про подготовку',
-      },
-    ],
-  },
-  {
-    title: 'Ссылки',
-    items: [
-      { token: '{{share_url}}', label: 'Публичная ссылка на программу' },
-      { token: '{{edit_url}}', label: 'Ссылка для редактирования программы' },
-    ],
-  },
 ];
 
 function fieldClass() {
@@ -365,59 +159,6 @@ function Toggle({
         <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
       </span>
     </label>
-  );
-}
-
-function PlaceholderPicker({
-  groups,
-  onInsert,
-  defaultOpen = true,
-}: {
-  groups: PlaceholderGroup[];
-  onInsert: (token: string) => void;
-  defaultOpen?: boolean;
-}) {
-  return (
-    <details
-      open={defaultOpen}
-      className="rounded-xl border border-stone-200 bg-stone-50/90 open:pb-3"
-    >
-      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-bold text-stone-900 marker:content-none [&::-webkit-details-marker]:hidden">
-        <span className="flex items-center justify-between gap-2">
-          <span>Подстановки — нажмите, чтобы вставить в шаблон</span>
-          <span className="text-xs font-medium text-stone-500">показать / скрыть</span>
-        </span>
-      </summary>
-      <div className="space-y-4 border-t border-stone-200/80 px-3 pt-3 sm:px-4">
-        {groups.map((group) => (
-          <div key={group.title}>
-            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">
-              {group.title}
-            </p>
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {group.items.map((item) => (
-                <li key={item.token}>
-                  <button
-                    type="button"
-                    onClick={() => onInsert(item.token)}
-                    className="flex w-full flex-col items-start gap-1 rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-left shadow-sm transition hover:border-primary/40 hover:bg-primary/[0.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                    title={`Вставить ${item.token}`}
-                  >
-                    <code className="rounded-md bg-stone-100 px-2 py-1 font-mono text-[13px] font-semibold text-[#7B2D3F]">
-                      {item.token}
-                    </code>
-                    <span className="text-sm leading-snug text-stone-800">{item.label}</span>
-                    {item.example ? (
-                      <span className="text-xs text-stone-500">напр.: {item.example}</span>
-                    ) : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-    </details>
   );
 }
 
@@ -1210,8 +951,8 @@ export function TelegramSettingsSection() {
                 'Сегодня {{date}} мы молимся за члена церкви:\n\n📌 {{member_name}}\nпросит молиться:\n{{member_prayer_request_bullets}}'
               }
             />
-            <PlaceholderPicker
-              groups={PRAYER_PLACEHOLDER_GROUPS}
+            <TemplateFieldInserter
+              groups={PRAYER_TEMPLATE_FIELD_GROUPS}
               onInsert={(token) =>
                 insertAtCursor(prayerTemplateRef.current, token, form.prayer_template, (next) =>
                   setForm((s) => ({ ...s, prayer_template: next })),
@@ -1345,9 +1086,8 @@ export function TelegramSettingsSection() {
                   placeholder={DEFAULT_PROGRAM_MAILING_TEMPLATE}
                   spellCheck={false}
                 />
-                <PlaceholderPicker
-                  groups={PROGRAM_PLACEHOLDER_GROUPS}
-                  defaultOpen={false}
+                <TemplateFieldInserter
+                  groups={PROGRAM_TEMPLATE_FIELD_GROUPS}
                   onInsert={(token) =>
                     insertAtCursor(
                       programTemplateRef.current,
