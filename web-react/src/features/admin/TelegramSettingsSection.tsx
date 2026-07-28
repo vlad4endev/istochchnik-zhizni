@@ -28,6 +28,31 @@ const Q_TG_RECIPIENTS = ['admin', 'telegram', 'recipients'] as const;
 
 type TgTab = 'bot' | 'chats' | 'prayer' | 'program' | 'dispatch';
 
+/** Совпадает с DEFAULT_SERVICE_PLAN_MONDAY_MAILING_TEMPLATE на бэкенде. */
+const DEFAULT_PROGRAM_MAILING_TEMPLATE = [
+  '{{sunday_heading}}',
+  '1. Проповедник — {{preacher}}',
+  '{{sermon_topic_block}}{{sermon_scripture_block}}2. Группа прославления — {{music}}, в среду или ранее нужно внести в программу гимны и порядок куплетов и припевов для каждой песни.',
+  '3. Стих — {{poem}}, в среду или ранее нужно сказать, будет стих или нет, если будет, то нужно прислать:',
+  '    1. Чтец',
+  '    2. Название',
+  '    3. Автор',
+  '    4. Текст/тема',
+  '4. {{choir_line}}',
+  '5. Ведущий — {{leader}}, в четверг нужно будет приступить к формированию программы.',
+  '6. Проповедник — {{preacher}}, в четверг нужно предоставить информацию по проповеди для трансляции: название, тезисы, тексты Писания (если будут изменения), если есть презентация, то загрузить в блок проповеди файл презентации к воскресенью 8:00 утра.',
+  '7. Медиа-команда, с пятницы по субботу готовит все материалы для трансляции.',
+  '8. Ссылка на программу: {{share_url}}',
+].join('\n');
+
+type ProgramPreviewState = {
+  text: string;
+  textMessenger: string;
+  serviceDate?: string;
+  planId?: number;
+  channel: 'telegram' | 'messenger';
+};
+
 const TABS: { id: TgTab; label: string }[] = [
   { id: 'bot', label: 'Бот' },
   { id: 'chats', label: 'Чаты' },
@@ -452,6 +477,7 @@ export function TelegramSettingsSection() {
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [showToken, setShowToken] = useState(false);
   const [showProxyUrl, setShowProxyUrl] = useState(false);
+  const [programPreview, setProgramPreview] = useState<ProgramPreviewState | null>(null);
   const prayerTemplateRef = useRef<HTMLTextAreaElement | null>(null);
   const programTemplateRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -465,7 +491,7 @@ export function TelegramSettingsSection() {
       default_chat_id: data.default_chat_id ?? '',
       prayer_template: data.prayer_template ?? '',
       service_plan_chat_id: data.service_plan_chat_id ?? '',
-      service_plan_template: data.service_plan_template ?? '',
+      service_plan_template: (data.service_plan_template ?? '').trim() || DEFAULT_PROGRAM_MAILING_TEMPLATE,
       service_plan_published_chat_id: data.service_plan_published_chat_id ?? '',
       proxy_enabled: data.proxy?.enabled ?? false,
       proxy_url: '',
@@ -610,13 +636,17 @@ export function TelegramSettingsSection() {
   });
 
   const programMailingMut = useMutation({
-    mutationFn: () => runServicePlanMondayMailing({ force: true }),
+    mutationFn: () =>
+      runServicePlanMondayMailing({
+        force: true,
+        template: form.service_plan_template,
+      }),
     onSuccess: (r) => {
       const res = r.result;
       if (res.skipped && res.reason === 'no_service_plan') {
         setNote({
           type: 'err',
-          text: `Нет программы на ${res.service_date ?? 'ближайшее воскресенье'}.`,
+          text: `Нет ближайшей активной программы (${res.service_date ?? '—'}).`,
         });
         return;
       }
@@ -634,6 +664,60 @@ export function TelegramSettingsSection() {
     },
     onError: (e) =>
       setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось отправить программу.') }),
+  });
+
+  const programPreviewMut = useMutation({
+    mutationFn: () =>
+      runServicePlanMondayMailing({
+        force: true,
+        dry_run: true,
+        template: form.service_plan_template,
+      }),
+    onSuccess: (r) => {
+      const res = r.result;
+      if (res.skipped && res.reason === 'no_service_plan') {
+        setProgramPreview(null);
+        setNote({
+          type: 'err',
+          text: 'Нет ближайшей активной программы — предпросмотр недоступен.',
+        });
+        return;
+      }
+      if (res.reason === 'dry_run' && (res.text || res.text_messenger)) {
+        setProgramPreview({
+          text: res.text ?? '',
+          textMessenger: res.text_messenger ?? res.text ?? '',
+          serviceDate: res.service_date,
+          planId: res.plan_id,
+          channel: 'telegram',
+        });
+        setNote({
+          type: 'ok',
+          text: `Предпросмотр: программа #${res.plan_id ?? '—'} от ${res.service_date ?? '—'}.`,
+        });
+        return;
+      }
+      setProgramPreview(null);
+      setNote({
+        type: 'err',
+        text: `Не удалось построить предпросмотр (${res.reason ?? 'ошибка'}).`,
+      });
+    },
+    onError: (e) =>
+      setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось загрузить предпросмотр.') }),
+  });
+
+  const saveProgramTemplateMut = useMutation({
+    mutationFn: () =>
+      patchTelegramSettings({
+        service_plan_template: normalizeUiString(form.service_plan_template),
+      }),
+    onSuccess: (next) => {
+      setNote({ type: 'ok', text: 'Шаблон рассылки сохранён.' });
+      qc.setQueryData(Q_TG, next);
+    },
+    onError: (e) =>
+      setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить шаблон.') }),
   });
 
   const lastDispatchLabel = useMemo(() => {
@@ -1032,40 +1116,162 @@ export function TelegramSettingsSection() {
             <div>
               <h3 className="text-sm font-semibold text-stone-900">Рассылка программы служения</h3>
               <p className="mt-0.5 text-xs text-stone-500">
-                Автоматически каждый понедельник в 10:00 (МСК) — в Telegram и чат «Богослужение
-                (планирование)». Все данные (ссылка, проповедь, люди, песни) берутся только из
-                ближайшей активной программы в «Служении» (обычно черновик). В Telegram люди
-                подставляются как @ник (Bot API getChat по telegram_chat_id), если ника нет —
-                обычное имя. Чат задаётся во вкладке «Чаты». Отдельно: при «Опубликовать» уходит
-                короткое уведомление в чат «Финальная программа».
+                Редактируйте шаблон, смотрите предпросмотр по ближайшей программе, затем сохраните
+                или отправьте. Автоотправка — каждый понедельник в 10:00 (МСК). Данные берутся только
+                из ближайшей активной программы; в Telegram люди — как @ник, если он есть.
               </p>
             </div>
-            <textarea
-              ref={programTemplateRef}
-              className="min-h-[280px] w-full resize-y rounded-xl border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              value={form.service_plan_template}
-              onChange={(e) => setForm((s) => ({ ...s, service_plan_template: e.target.value }))}
-              placeholder={
-                '{{sunday_heading}}\n1. Проповедник — {{preacher}}\n{{sermon_topic_block}}{{sermon_scripture_block}}2. Группа прославления — {{music}}…\n8. Ссылка: {{share_url}}'
-              }
-            />
-            <PlaceholderPicker
-              groups={PROGRAM_PLACEHOLDER_GROUPS}
-              onInsert={(token) =>
-                insertAtCursor(
-                  programTemplateRef.current,
-                  token,
-                  form.service_plan_template,
-                  (next) => setForm((s) => ({ ...s, service_plan_template: next })),
-                )
-              }
-            />
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                    Шаблон сообщения
+                  </label>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-stone-600 underline-offset-2 hover:underline"
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          'Сбросить шаблон к стандартному тексту? Несохранённые правки пропадут.',
+                        )
+                      ) {
+                        return;
+                      }
+                      setForm((s) => ({ ...s, service_plan_template: DEFAULT_PROGRAM_MAILING_TEMPLATE }));
+                      setProgramPreview(null);
+                    }}
+                  >
+                    Сбросить к стандартному
+                  </button>
+                </div>
+                <textarea
+                  ref={programTemplateRef}
+                  className="min-h-[320px] w-full resize-y rounded-xl border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  value={form.service_plan_template}
+                  onChange={(e) => {
+                    setForm((s) => ({ ...s, service_plan_template: e.target.value }));
+                    setProgramPreview(null);
+                  }}
+                  placeholder={DEFAULT_PROGRAM_MAILING_TEMPLATE}
+                  spellCheck={false}
+                />
+                <PlaceholderPicker
+                  groups={PROGRAM_PLACEHOLDER_GROUPS}
+                  defaultOpen={false}
+                  onInsert={(token) =>
+                    insertAtCursor(
+                      programTemplateRef.current,
+                      token,
+                      form.service_plan_template,
+                      (next) => {
+                        setForm((s) => ({ ...s, service_plan_template: next }));
+                        setProgramPreview(null);
+                      },
+                    )
+                  }
+                />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                    Предпросмотр
+                  </label>
+                  {programPreview ? (
+                    <div className="flex rounded-lg border border-stone-200 bg-stone-50 p-0.5 text-xs font-semibold">
+                      <button
+                        type="button"
+                        className={`rounded-md px-2.5 py-1 ${
+                          programPreview.channel === 'telegram'
+                            ? 'bg-white text-stone-900 shadow-sm'
+                            : 'text-stone-500'
+                        }`}
+                        onClick={() =>
+                          setProgramPreview((p) => (p ? { ...p, channel: 'telegram' } : p))
+                        }
+                      >
+                        Telegram
+                      </button>
+                      <button
+                        type="button"
+                        className={`rounded-md px-2.5 py-1 ${
+                          programPreview.channel === 'messenger'
+                            ? 'bg-white text-stone-900 shadow-sm'
+                            : 'text-stone-500'
+                        }`}
+                        onClick={() =>
+                          setProgramPreview((p) => (p ? { ...p, channel: 'messenger' } : p))
+                        }
+                      >
+                        Мессенджер
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="min-h-[320px] rounded-xl border border-stone-200 bg-stone-50/80 p-4">
+                  {programPreview ? (
+                    <div className="space-y-3">
+                      <p className="text-xs text-stone-500">
+                        Программа #{programPreview.planId ?? '—'} · {programPreview.serviceDate ?? '—'} ·{' '}
+                        {programPreview.channel === 'telegram' ? 'как в Telegram' : 'как в чате приложения'}
+                      </p>
+                      <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-stone-800">
+                        {programPreview.channel === 'telegram'
+                          ? programPreview.text
+                          : programPreview.textMessenger}
+                      </pre>
+                    </div>
+                  ) : (
+                    <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 px-4 text-center">
+                      <p className="text-sm font-medium text-stone-700">Пока нет предпросмотра</p>
+                      <p className="max-w-sm text-xs text-stone-500">
+                        Нажмите «Предпросмотр» — подставим данные ближайшей программы в текущий
+                        шаблон (сохранять не обязательно).
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-2 border-t border-stone-100 pt-4">
               <button
                 type="button"
                 className={btnSecondary()}
+                disabled={programPreviewMut.isPending}
+                onClick={() => {
+                  setNote(null);
+                  programPreviewMut.mutate();
+                }}
+              >
+                {programPreviewMut.isPending ? 'Собираем…' : 'Предпросмотр'}
+              </button>
+              <button
+                type="button"
+                className={btnSecondary()}
+                disabled={saveProgramTemplateMut.isPending}
+                onClick={() => {
+                  setNote(null);
+                  saveProgramTemplateMut.mutate();
+                }}
+              >
+                {saveProgramTemplateMut.isPending ? 'Сохранение…' : 'Сохранить шаблон'}
+              </button>
+              <button
+                type="button"
+                className={btnPrimary()}
                 disabled={programMailingMut.isPending}
                 onClick={() => {
+                  if (
+                    !window.confirm(
+                      'Отправить рассылку сейчас в Telegram и чат планирования?\nБудет использован текст из редактора (как в предпросмотре).',
+                    )
+                  ) {
+                    return;
+                  }
                   setNote(null);
                   programMailingMut.mutate();
                 }}
@@ -1073,7 +1279,7 @@ export function TelegramSettingsSection() {
                 {programMailingMut.isPending ? 'Отправка…' : 'Отправить сейчас'}
               </button>
               <span className="self-center text-xs text-stone-400">
-                Нужна программа на ближайшее воскресенье
+                Сначала предпросмотр — потом отправка
               </span>
             </div>
           </div>

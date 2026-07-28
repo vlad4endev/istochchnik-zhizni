@@ -586,6 +586,8 @@ export async function patchTelegramSettings(body: {
 export async function runServicePlanMondayMailing(body?: {
   force?: boolean;
   dry_run?: boolean;
+  /** Черновик шаблона для предпросмотра (без сохранения). */
+  template?: string | null;
 }): Promise<{
   ok: boolean;
   result: {
@@ -597,6 +599,7 @@ export async function runServicePlanMondayMailing(body?: {
     messenger_ok?: boolean;
     telegram_ok?: boolean;
     text?: string;
+    text_messenger?: string;
   };
 }> {
   const { data } = await apiClient.post<{
@@ -610,6 +613,7 @@ export async function runServicePlanMondayMailing(body?: {
       messenger_ok?: boolean;
       telegram_ok?: boolean;
       text?: string;
+      text_messenger?: string;
     };
   }>('/api/service-plans/monday-mailing/run', body ?? {});
   return data;

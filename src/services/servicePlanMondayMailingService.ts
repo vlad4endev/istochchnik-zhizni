@@ -91,7 +91,10 @@ export type ServicePlanMondayMailingResult = {
   plan_id?: number;
   messenger_ok?: boolean;
   telegram_ok?: boolean;
+  /** Текст для Telegram (с @никами). */
   text?: string;
+  /** Текст для мессенджера приложения (с @[id]). */
+  text_messenger?: string;
 };
 
 function resolvePublicWebOrigin(): string {
@@ -843,6 +846,8 @@ export async function runServicePlanMondayMailing(options?: {
   force?: boolean;
   now?: Date;
   dryRun?: boolean;
+  /** Черновик шаблона из редактора (предпросмотр без сохранения). */
+  templateOverride?: string | null;
 }): Promise<ServicePlanMondayMailingResult> {
   const force = options?.force === true;
   const dryRun = options?.dryRun === true;
@@ -911,12 +916,18 @@ export async function runServicePlanMondayMailing(options?: {
   }
 
   // Шаблон — только оформление; плейсхолдеры заполняются полями этой программы.
+  // templateOverride — черновик из редактора (предпросмотр до сохранения).
   let tgSettings: Awaited<ReturnType<typeof getTelegramSettings>> | null = null;
   try {
     tgSettings = await getTelegramSettings();
   } catch (e) {
     console.warn('[service-plan-monday-mailing] telegram settings load failed:', e);
   }
+
+  const templateForBuild =
+    options?.templateOverride !== undefined
+      ? options.templateOverride
+      : (tgSettings?.service_plan_template ?? null);
 
   const preacherRef =
     (plan.preacher_member_id && memberMap.get(plan.preacher_member_id)) || emptyMemberRef();
@@ -937,7 +948,7 @@ export async function runServicePlanMondayMailing(options?: {
     leader: leaderRef,
     sermonTopic: sermon.topic,
     sermonScripture: sermon.scripture,
-    template: tgSettings?.service_plan_template ?? null,
+    template: templateForBuild,
     startTime: plan.start_time,
     status: plan.status,
     notes: plan.notes,
@@ -988,6 +999,7 @@ export async function runServicePlanMondayMailing(options?: {
       service_date: plan.service_date,
       plan_id: planId,
       text,
+      text_messenger: textMessenger,
     };
   }
 

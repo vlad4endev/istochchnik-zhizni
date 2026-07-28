@@ -941,8 +941,20 @@ export async function runServicePlanMondayMailingNow(req: Request, res: Response
   const body = parseJsonObject(req.body);
   const force = body.force === true || body.force === 'true' || body.force === 1;
   const dryRun = body.dry_run === true || body.dry_run === 'true' || body.dry_run === 1;
+  const templateOverride =
+    body.template === undefined
+      ? undefined
+      : body.template === null
+        ? null
+        : typeof body.template === 'string'
+          ? body.template
+          : undefined;
   try {
-    const result = await runServicePlanMondayMailing({ force, dryRun });
+    const result = await runServicePlanMondayMailing({
+      force,
+      dryRun,
+      ...(templateOverride !== undefined ? { templateOverride } : {}),
+    });
     res.json({ ok: true, result });
   } catch (e) {
     console.error('[service-planner] runServicePlanMondayMailingNow:', e);
