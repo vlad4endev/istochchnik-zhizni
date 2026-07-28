@@ -40,10 +40,20 @@ const DEFAULT_PROGRAM_MAILING_TEMPLATE = [
   '    4. Текст/тема',
   '4. {{choir_line}}',
   '5. Ведущий — {{leader}}, в четверг нужно будет приступить к формированию программы.',
-  '6. Проповедник — {{preacher}}, в четверг нужно предоставить информацию по проповеди для трансляции: название, тезисы, тексты Писания (если будут изменения), если есть презентация, то загрузить в блок проповеди файл презентации к воскресенью 8:00 утра.',
-  '7. Медиа-команда, с пятницы по субботу готовит все материалы для трансляции.',
+  '6. Проповедник — {{preacher}}, в четверг нужно предоставить информацию по проповеди для проектора: название, тезисы, тексты Писания (если будут изменения). Если имеется презентация, пожалуйста, загрузите файл в соответствующий блок программы.',
+  '7. Медиа-команда, с четверга по субботу готовит все материалы для трансляции.',
   '8. Ссылка на программу: {{share_url}}',
 ].join('\n');
+
+/** Сырые `@[Имя](id)` / `@[id]` в предпросмотре мессенджера → `@Имя`. */
+function formatMessengerPreviewMentions(text: string): string {
+  return text
+    .replace(/@\[([^\]]+)\]\((\d+)\)/g, (_full, label: string) => {
+      const name = String(label ?? '').trim();
+      return name ? `@${name}` : '@участник';
+    })
+    .replace(/@\[(\d+)\]/g, (_full, idStr: string) => `@участник ${idStr}`);
+}
 
 const WEEKDAY_OPTIONS: Array<{ value: number; label: string }> = [
   { value: 1, label: 'Понедельник' },
@@ -1326,7 +1336,7 @@ export function TelegramSettingsSection() {
                       <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-stone-800">
                         {programPreview.channel === 'telegram'
                           ? programPreview.text
-                          : programPreview.textMessenger}
+                          : formatMessengerPreviewMentions(programPreview.textMessenger)}
                       </pre>
                     </div>
                   ) : (

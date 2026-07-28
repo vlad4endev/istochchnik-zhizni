@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   buildServicePlanMondayMailingText,
+  formatMailingMentionsForPreview,
   formatMailingPerson,
   formatSundayMailingHeading,
   isInternalProfileUsername,
@@ -18,7 +19,11 @@ function run(): void {
   );
   assert.equal(
     formatMailingPerson({ id: 57, mention: '@member-57', displayName: 'Иван Петров' }, 'messenger'),
-    '@[57]',
+    '@[Иван Петров](57)',
+  );
+  assert.equal(
+    formatMailingMentionsForPreview('Проповедник — @[Иван Петров](57) и @[29]'),
+    'Проповедник — @Иван Петров и @участник 29',
   );
   assert.equal(
     formatMailingPerson(
@@ -208,7 +213,7 @@ function run(): void {
     personStyle: 'messenger',
     template: '1. {{preacher}}\n5. {{leader}}',
   });
-  assert.equal(messengerPeople, '1. @[57]\n5. @[29]');
+  assert.equal(messengerPeople, '1. @[Жигунов](57)\n5. @[Дмитрий](29)');
 
   console.log('servicePlanMondayMailingService.test.ts: OK');
 }
