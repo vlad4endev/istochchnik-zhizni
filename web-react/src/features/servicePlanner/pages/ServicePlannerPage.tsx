@@ -108,24 +108,28 @@ function todayIso(): string {
   return format(new Date(), 'yyyy-MM-dd');
 }
 
-/** Ближайшая активная (не архивная) программа: сначала ближайшее будущее, иначе самая свежая. */
-function pickDefaultActivePlan<T extends { id: number; service_date: string; is_archived: boolean }>(
-  plans: T[],
-  today: string = todayIso(),
-): T | null {
+/** Ближайшая активная (не архивная) программа: сначала ближайшее будущее, на дату — черновик. */
+function pickDefaultActivePlan<
+  T extends { id: number; service_date: string; is_archived: boolean; status?: string },
+>(plans: T[], today: string = todayIso()): T | null {
   const active = plans.filter((p) => !p.is_archived);
   if (active.length === 0) return null;
+  const statusRank = (p: T) => (String(p.status ?? '') === 'draft' ? 0 : 1);
   const upcoming = active
     .filter((p) => p.service_date >= today)
     .sort((a, b) => {
       const byDate = a.service_date.localeCompare(b.service_date);
       if (byDate !== 0) return byDate;
+      const byStatus = statusRank(a) - statusRank(b);
+      if (byStatus !== 0) return byStatus;
       return b.id - a.id;
     });
   if (upcoming[0]) return upcoming[0];
   return [...active].sort((a, b) => {
     const byDate = b.service_date.localeCompare(a.service_date);
     if (byDate !== 0) return byDate;
+    const byStatus = statusRank(a) - statusRank(b);
+    if (byStatus !== 0) return byStatus;
     return b.id - a.id;
   })[0] ?? null;
 }

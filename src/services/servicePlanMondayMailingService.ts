@@ -468,21 +468,26 @@ async function markMailedSunday(sundayYmd: string): Promise<void> {
   );
 }
 
-async function findPlanIdForSunday(sundayYmd: string): Promise<number | null> {
-  // Только активные (не архивные) программы на это воскресенье.
-  // Свежий share_token_issued_at / updated_at — признак актуальной (не «переехавшей» из архива) ссылки.
+/**
+ * Ближайшая активная программа служения (не архив), начиная с `fromYmd`.
+ * На одну дату предпочитаем черновик — именно его обычно готовят к ближайшему воскресенью.
+ */
+async function findNearestUpcomingPlanId(fromYmd: string): Promise<number | null> {
   const res = await query(
     `SELECT id
      FROM public.service_plans
-     WHERE service_date = $1::date
-       AND COALESCE(is_archived, false) = false
+     WHERE COALESCE(is_archived, false) = false
+       AND service_date >= $1::date
      ORDER BY
-       CASE WHEN status = 'published' THEN 0 ELSE 1 END,
-       share_token_issued_at DESC NULLS LAST,
-       updated_at DESC NULLS LAST,
+       service_date ASC,
+       CASE
+         WHEN status = 'draft' THEN 0
+         WHEN status = 'published' THEN 1
+         ELSE 2
+       END,
        id DESC
      LIMIT 1`,
-    [sundayYmd],
+    [fromYmd],
   );
   const id = (res.rows[0] as { id?: unknown } | undefined)?.id;
   if (id == null) return null;
@@ -710,7 +715,8 @@ async function loadMediaTeamLines(planId: number): Promise<string[]> {
 
 /**
  * Собирает и отправляет понедельничную рассылку программы на ближайшее воскресенье.
- * По умолчанию идемпотентна: один раз на каждое воскресенье (ключ в global_settings).
+ * Берёт уже существующую ближайшую активную программу (часто черновик), не архив.
+ * По умолчанию идемпотентна: один раз на дату этой программы (ключ в global_settings).
  */
 export async function runServicePlanMondayMailing(options?: {
   force?: boolean;
@@ -721,27 +727,17 @@ export async function runServicePlanMondayMailing(options?: {
   const dryRun = options?.dryRun === true;
   const now = options?.now ?? new Date();
   const tz = resolveMailingTimeZone();
-  const sundayYmd = resolveUpcomingSundayYmd(now, tz);
+  const todayYmd = formatYmdInTimeZone(tz, now);
+  // Ориентир по календарю церкви; фактическая дата — у выбранной программы.
+  const upcomingSundayYmd = resolveUpcomingSundayYmd(now, tz);
 
-  if (!force) {
-    const last = await readLastMailedSunday();
-    if (last === sundayYmd) {
-      return {
-        ok: true,
-        skipped: true,
-        reason: 'already_sent_for_sunday',
-        service_date: sundayYmd,
-      };
-    }
-  }
-
-  const planId = await findPlanIdForSunday(sundayYmd);
+  const planId = await findNearestUpcomingPlanId(todayYmd);
   if (!planId) {
     return {
       ok: false,
       skipped: true,
       reason: 'no_service_plan',
-      service_date: sundayYmd,
+      service_date: upcomingSundayYmd,
     };
   }
 
@@ -754,7 +750,7 @@ export async function runServicePlanMondayMailing(options?: {
       ok: false,
       skipped: true,
       reason: 'plan_not_found',
-      service_date: sundayYmd,
+      service_date: upcomingSundayYmd,
       plan_id: planId,
     };
   }
@@ -763,7 +759,7 @@ export async function runServicePlanMondayMailing(options?: {
       ok: false,
       skipped: true,
       reason: 'plan_archived',
-      service_date: sundayYmd,
+      service_date: plan.service_date,
       plan_id: planId,
     };
   }
@@ -772,9 +768,24 @@ export async function runServicePlanMondayMailing(options?: {
       ok: false,
       skipped: true,
       reason: 'missing_share_token',
-      service_date: sundayYmd,
+      service_date: plan.service_date,
       plan_id: planId,
     };
+  }
+
+  const sundayYmd = String(plan.service_date ?? '').trim().slice(0, 10) || upcomingSundayYmd;
+
+  if (!force) {
+    const last = await readLastMailedSunday();
+    if (last === sundayYmd) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: 'already_sent_for_sunday',
+        service_date: sundayYmd,
+        plan_id: planId,
+      };
+    }
   }
 
   const memberMap = await loadMemberRefs([
