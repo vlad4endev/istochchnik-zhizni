@@ -716,7 +716,85 @@ function emptyMemberRef(): MondayMailingMemberRef {
   return { id: null, mention: 'не назначен', displayName: 'не назначен' };
 }
 
-function pickSermonFields(
+/** JSON блока: объект или строка JSON (на случай драйвера/кэша). */
+export function normalizeMailingContentJson(raw: unknown): Record<string, unknown> {
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return {};
+    }
+    return {};
+  }
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  return {};
+}
+
+/** Тема из заголовка «Имя - Тема» / «Имя — Тема», как в карточке программы. */
+export function parseSermonTopicFromBlockTitle(title: string): string {
+  const t = String(title ?? '').trim();
+  if (!t) return '';
+  const parts = t.split(/\s+[—–-]\s+/);
+  if (parts.length < 2) return '';
+  const topic = parts.slice(1).join(' - ').trim();
+  if (!topic || /^проповед/i.test(topic)) return '';
+  return topic;
+}
+
+function contentString(cj: Record<string, unknown>, key: string): string {
+  const v = cj[key];
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  return '';
+}
+
+function sermonFieldFromContent(cj: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const v = contentString(cj, key);
+    if (v) return v;
+  }
+  return '';
+}
+
+function isSermonMailingBlock(b: {
+  content_json: Record<string, unknown>;
+  block_type_code?: string | null;
+  title: string;
+}): boolean {
+  const code = String(b.block_type_code ?? '').toLowerCase();
+  if (code === 'sermon') return true;
+  const title = String(b.title ?? '').toLowerCase();
+  if (title.includes('проповед')) return true;
+  const cj = normalizeMailingContentJson(b.content_json);
+  if (sermonFieldFromContent(cj, 'sermon_topic', 'sermon_scripture', 'topic', 'scripture')) {
+    return true;
+  }
+  if (Array.isArray(cj.sermon_attachments) && cj.sermon_attachments.length > 0) return true;
+  return false;
+}
+
+function sermonBlockScore(b: {
+  content_json: Record<string, unknown>;
+  block_type_code?: string | null;
+  title: string;
+}): number {
+  const cj = normalizeMailingContentJson(b.content_json);
+  let score = 0;
+  if (String(b.block_type_code ?? '').toLowerCase() === 'sermon') score += 10;
+  if (sermonFieldFromContent(cj, 'sermon_topic', 'topic')) score += 5;
+  if (sermonFieldFromContent(cj, 'sermon_scripture', 'scripture')) score += 5;
+  if (parseSermonTopicFromBlockTitle(b.title)) score += 2;
+  if (Array.isArray(cj.sermon_attachments) && cj.sermon_attachments.length > 0) score += 1;
+  return score;
+}
+
+export function pickSermonFields(
   blocks: Array<{ content_json: Record<string, unknown>; block_type_code?: string | null; title: string }>,
   linked: {
     title?: string | null;
@@ -736,29 +814,37 @@ function pickSermonFields(
   hasNote: boolean;
   attachments: MondayMailingSermonAttachment[];
 } {
-  const sermon = blocks.find((b) => {
-    const code = String(b.block_type_code ?? '').toLowerCase();
-    const title = String(b.title ?? '').toLowerCase();
-    return code === 'sermon' || title.includes('проповед');
-  });
+  const candidates = blocks.filter((b) => isSermonMailingBlock(b));
+  const sermon =
+    candidates.length === 0
+      ? undefined
+      : candidates.reduce((best, cur) => (sermonBlockScore(cur) > sermonBlockScore(best) ? cur : best));
+
+  const cj = sermon ? normalizeMailingContentJson(sermon.content_json) : {};
   const fromBlockTopic =
-    sermon && typeof sermon.content_json.sermon_topic === 'string'
-      ? sermon.content_json.sermon_topic.trim()
-      : '';
-  const fromBlockScripture =
-    sermon && typeof sermon.content_json.sermon_scripture === 'string'
-      ? sermon.content_json.sermon_scripture.trim()
-      : '';
+    sermonFieldFromContent(cj, 'sermon_topic', 'topic', 'sermonTopic') ||
+    (sermon ? parseSermonTopicFromBlockTitle(sermon.title) : '');
+  const fromBlockScripture = sermonFieldFromContent(
+    cj,
+    'sermon_scripture',
+    'scripture',
+    'sermonScripture',
+    'bible',
+  );
   const blockNotes = sermon
-    ? contentString(sermon.content_json, 'notes') || contentString(sermon.content_json, 'text') || null
+    ? contentString(cj, 'notes') || contentString(cj, 'text') || null
     : null;
   const topic = fromBlockTopic || (linked?.topic ?? '').trim() || null;
   const scripture = fromBlockScripture || (linked?.scripture ?? '').trim() || null;
-  const title = (linked?.title ?? '').trim() || null;
+  const title =
+    (linked?.title ?? '').trim() ||
+    fromBlockTopic ||
+    (sermon ? parseSermonTopicFromBlockTitle(sermon.title) : '') ||
+    null;
   const noteAuthor = (linked?.author_name ?? '').trim() || null;
   const noteShareToken =
     linked?.is_public && linked.share_token ? String(linked.share_token).trim() : null;
-  const attachments = sermon ? parseSermonAttachmentsFromContent(sermon.content_json) : [];
+  const attachments = sermon ? parseSermonAttachmentsFromContent(cj) : [];
   const hasNote = Boolean(linked?.title || linked?.topic || linked?.scripture || linked?.share_token);
   return {
     topic,
@@ -830,11 +916,6 @@ function isPoemBlockMeta(b: MailingBlockMeta): boolean {
 function isSongBlockMeta(b: MailingBlockMeta): boolean {
   const code = String(b.block_type_code ?? '').toLowerCase();
   return code === 'song' || Boolean(b.song_title?.trim());
-}
-
-function contentString(cj: Record<string, unknown>, key: string): string {
-  const v = cj[key];
-  return typeof v === 'string' ? v.trim() : '';
 }
 
 export function pickPoemFields(
@@ -931,22 +1012,27 @@ async function loadMailingFieldsFromPlan(planId: number): Promise<{
   );
   const metaByBlockId = new Map<number, { block_type_code: string; song_title: string | null }>();
   for (const row of codesRes.rows as Array<{
-    id: number;
+    id: number | string;
     block_type_code: string | null;
     song_title: string | null;
   }>) {
     metaByBlockId.set(Number(row.id), {
-      block_type_code: String(row.block_type_code ?? ''),
+      block_type_code: String(row.block_type_code ?? '')
+        .trim()
+        .toLowerCase(),
       song_title: row.song_title == null ? null : String(row.song_title),
     });
   }
   const blocksForMailing: MailingBlockMeta[] = plan.blocks.map((b) => {
-    const meta = metaByBlockId.get(b.id);
+    const meta = metaByBlockId.get(Number(b.id));
+    const fromPlan = String(b.block_type_code ?? '')
+      .trim()
+      .toLowerCase();
     return {
       title: b.title,
       assigned_member_id: b.assigned_member_id,
-      content_json: b.content_json,
-      block_type_code: meta?.block_type_code ?? null,
+      content_json: normalizeMailingContentJson(b.content_json),
+      block_type_code: meta?.block_type_code || fromPlan || null,
       song_title: meta?.song_title ?? null,
     };
   });
