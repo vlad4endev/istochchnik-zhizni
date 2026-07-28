@@ -20,6 +20,20 @@ function run(): void {
     formatMailingPerson({ id: 57, mention: '@member-57', displayName: 'Иван Петров' }, 'messenger'),
     '@[57]',
   );
+  assert.equal(
+    formatMailingPerson(
+      { id: 57, mention: 'Иван', displayName: 'Иван Петров', telegramUsername: 'zhigunov72' },
+      'telegram',
+    ),
+    '@zhigunov72',
+  );
+  assert.equal(
+    formatMailingPerson(
+      { id: 57, mention: 'Иван', displayName: 'Иван Петров', telegramUsername: null },
+      'telegram',
+    ),
+    'Иван Петров',
+  );
   assert.equal(formatSundayMailingHeading('2026-07-26'), 'Воскресенье — 26 июля');
 
   // Понедельник 27 июля 2026 → ближайшее воскресенье 2 августа

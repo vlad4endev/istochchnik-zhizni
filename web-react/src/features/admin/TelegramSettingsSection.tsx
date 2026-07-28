@@ -108,30 +108,34 @@ const PROGRAM_PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
     items: [
       {
         token: '{{preacher}}',
-        label: 'Проповедник — имя (не @member-…)',
-        example: 'Иван Иванов',
+        label: 'Проповедник — в Telegram @ник (если есть), иначе имя',
+        example: '@zhigunov72',
       },
-      { token: '{{preacher_name}}', label: 'Проповедник — только имя' },
+      { token: '{{preacher_name}}', label: 'Проповедник — только имя из карточки' },
       {
         token: '{{preacher_mention}}',
-        label: 'Проповедник — то же имя (в мессенджере уходит как упоминание)',
+        label: 'Как {{preacher}}: @ник из Telegram или имя',
       },
       {
         token: '{{music}}',
-        label: 'Ответственный за прославление — имя',
-        example: 'Николай',
+        label: 'Прославление — @ник Telegram или имя',
+        example: '@N_i_k_o_l_a_sss',
       },
       { token: '{{music_name}}', label: 'Прославление — только имя' },
-      { token: '{{music_mention}}', label: 'Прославление — то же имя / упоминание в мессенджере' },
+      { token: '{{music_mention}}', label: 'Как {{music}}' },
       {
         token: '{{poem}}',
-        label: 'Ответственный за стихи — имя (кто заполняет блок, не чтец)',
+        label: 'Ответственный за стихи — @ник или имя (кто заполняет блок, не чтец)',
       },
       { token: '{{poem_name}}', label: 'Ответственный за стихи — имя' },
-      { token: '{{poem_mention}}', label: 'Ответственный за стихи — то же имя / упоминание' },
-      { token: '{{leader}}', label: 'Ведущий — имя', example: 'Дмитрий' },
+      { token: '{{poem_mention}}', label: 'Как {{poem}}' },
+      {
+        token: '{{leader}}',
+        label: 'Ведущий — @ник Telegram или имя',
+        example: '@zhigunovdm',
+      },
       { token: '{{leader_name}}', label: 'Ведущий — только имя' },
-      { token: '{{leader_mention}}', label: 'Ведущий — то же имя / упоминание в мессенджере' },
+      { token: '{{leader_mention}}', label: 'Как {{leader}}' },
     ],
   },
   {
@@ -1030,9 +1034,10 @@ export function TelegramSettingsSection() {
               <p className="mt-0.5 text-xs text-stone-500">
                 Автоматически каждый понедельник в 10:00 (МСК) — в Telegram и чат «Богослужение
                 (планирование)». Все данные (ссылка, проповедь, люди, песни) берутся только из
-                ближайшей активной программы в «Служении» (обычно черновик). Чат задаётся во вкладке
-                «Чаты». Отдельно: при «Опубликовать» уходит короткое уведомление в чат «Финальная
-                программа».
+                ближайшей активной программы в «Служении» (обычно черновик). В Telegram люди
+                подставляются как @ник (Bot API getChat по telegram_chat_id), если ника нет —
+                обычное имя. Чат задаётся во вкладке «Чаты». Отдельно: при «Опубликовать» уходит
+                короткое уведомление в чат «Финальная программа».
               </p>
             </div>
             <textarea

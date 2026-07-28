@@ -2,7 +2,7 @@ import { query } from '../config/db';
 import { addCalendarDaysYmd, formatYmdInTimeZone, getZonedNow } from '../utils/zonedTime';
 import { getAssignmentsForPlan } from './mediaScheduleService';
 import { getPlanDetails } from './servicePlannerService';
-import { getTelegramSettings, sendTelegramByPurpose, sendTelegramToChat } from './telegramService';
+import { getTelegramSettings, resolveTelegramUsernamesForMembers, sendTelegramByPurpose, sendTelegramToChat } from './telegramService';
 import {
   ensureServicePlanPlanningMessengerChannel,
   postServicePlanMondayMailingMessengerNotification,
@@ -33,9 +33,11 @@ export type MondayMailingMemberRef = {
   /** Читаемое имя; для мессенджера может быть `@[id]` */
   mention: string;
   displayName: string;
+  /** Публичный Telegram @ник без @ (если известен). */
+  telegramUsername?: string | null;
 };
 
-export type MondayMailingPersonStyle = 'name' | 'messenger';
+export type MondayMailingPersonStyle = 'name' | 'messenger' | 'telegram';
 
 export type MondayMailingSermonAttachment = {
   name: string;
@@ -139,6 +141,7 @@ export function isInternalProfileUsername(username: string | null | undefined): 
  * Как показывать человека в тексте рассылки.
  * - name: «Иван Иванов»
  * - messenger: `@[57]` (в чате отобразится как @Имя и уйдёт уведомление)
+ * - telegram: `@username` из Telegram, иначе обычное имя (без @member-N)
  */
 export function formatMailingPerson(
   ref: MondayMailingMemberRef | null | undefined,
@@ -147,6 +150,12 @@ export function formatMailingPerson(
   if (!ref) return 'не назначен';
   if (style === 'messenger' && ref.id != null && Number.isInteger(ref.id) && ref.id > 0) {
     return `@[${ref.id}]`;
+  }
+  if (style === 'telegram') {
+    const u = String(ref.telegramUsername ?? '')
+      .trim()
+      .replace(/^@+/, '');
+    if (u && !isInternalProfileUsername(u)) return `@${u}`;
   }
   const d = ref.displayName.trim();
   if (d) return d;
@@ -230,7 +239,10 @@ export function buildServicePlanMondayMailingText(input: MondayMailingBuildInput
   const editToken = (input.editToken ?? '').trim();
   const editUrl = editToken ? `${origin}/service-plan/edit/${editToken}` : '';
 
-  const personStyle: MondayMailingPersonStyle = input.personStyle === 'messenger' ? 'messenger' : 'name';
+  const personStyle: MondayMailingPersonStyle =
+    input.personStyle === 'messenger' || input.personStyle === 'telegram'
+      ? input.personStyle
+      : 'name';
   const preacher = formatMailingPerson(input.preacher, personStyle);
   const music = formatMailingPerson(input.music, personStyle);
   const poem = formatMailingPerson(input.poem, personStyle);
@@ -514,10 +526,13 @@ async function loadMemberRefs(memberIds: Array<number | null>): Promise<Map<numb
   const map = new Map<number, MondayMailingMemberRef>();
   if (ids.length === 0) return map;
 
+  await query('ALTER TABLE members ADD COLUMN IF NOT EXISTS telegram_username VARCHAR(64)');
+
   const res = await query(
     `SELECT
        m.id,
-       coalesce(nullif(trim(concat(coalesce(m.first_name, ''), ' ', coalesce(m.last_name, ''))), ''), m.name) AS display_name
+       coalesce(nullif(trim(concat(coalesce(m.first_name, ''), ' ', coalesce(m.last_name, ''))), ''), m.name) AS display_name,
+       NULLIF(TRIM(COALESCE(m.telegram_username, '')), '') AS telegram_username
      FROM public.members m
      WHERE m.id = ANY($1::int[])`,
     [ids],
@@ -526,13 +541,39 @@ async function loadMemberRefs(memberIds: Array<number | null>): Promise<Map<numb
   for (const row of res.rows as Array<{
     id: number;
     display_name: string | null;
+    telegram_username: string | null;
   }>) {
     const id = Number(row.id);
     const displayName = String(row.display_name ?? '').trim() || `участник ${id}`;
-    // Не используем user_profiles.username как @mention — часто это member-57
-    map.set(id, { id, mention: displayName, displayName });
+    const telegramUsername = String(row.telegram_username ?? '')
+      .trim()
+      .replace(/^@+/, '');
+    map.set(id, {
+      id,
+      mention: displayName,
+      displayName,
+      telegramUsername: telegramUsername || null,
+    });
   }
   return map;
+}
+
+/** Подтягивает @ники из Telegram (getChat) для тех, у кого ещё нет telegram_username. */
+async function enrichMemberRefsWithTelegramUsernames(
+  memberMap: Map<number, MondayMailingMemberRef>,
+): Promise<void> {
+  const ids = Array.from(memberMap.keys());
+  if (ids.length === 0) return;
+  try {
+    const usernames = await resolveTelegramUsernamesForMembers(ids);
+    for (const [id, username] of usernames) {
+      const ref = memberMap.get(id);
+      if (!ref || !username) continue;
+      memberMap.set(id, { ...ref, telegramUsername: username });
+    }
+  } catch (e) {
+    console.warn('[service-plan-monday-mailing] telegram username resolve failed:', e);
+  }
 }
 
 function emptyMemberRef(): MondayMailingMemberRef {
@@ -739,6 +780,7 @@ async function loadMailingFieldsFromPlan(planId: number): Promise<{
     plan.leader_member_id,
     ...plan.blocks.map((b) => b.assigned_member_id),
   ]);
+  await enrichMemberRefsWithTelegramUsernames(memberMap);
 
   const codesRes = await query(
     `SELECT
@@ -928,8 +970,9 @@ export async function runServicePlanMondayMailing(options?: {
 
   const text = buildServicePlanMondayMailingText({
     ...buildInputBase,
-    choirLine: resolveChoirLineFromBlocks(blocksForMailing, choirLabelsFor('name')),
-    personStyle: 'name',
+    choirLine: resolveChoirLineFromBlocks(blocksForMailing, choirLabelsFor('telegram')),
+    // В Telegram — @ник из Bot API (getChat), иначе имя из карточки участника.
+    personStyle: 'telegram',
   });
   const textMessenger = buildServicePlanMondayMailingText({
     ...buildInputBase,

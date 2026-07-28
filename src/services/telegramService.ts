@@ -467,6 +467,7 @@ async function ensureSettingsColumns(): Promise<void> {
 
 async function ensureMembersTelegramColumn(): Promise<void> {
   await query('ALTER TABLE members ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(64)');
+  await query('ALTER TABLE members ADD COLUMN IF NOT EXISTS telegram_username VARCHAR(64)');
   await query('ALTER TABLE members ADD COLUMN IF NOT EXISTS telegram_delivery_blocked BOOLEAN NOT NULL DEFAULT FALSE');
   await query('ALTER TABLE members ADD COLUMN IF NOT EXISTS telegram_delivery_block_reason TEXT');
   await query('ALTER TABLE members ADD COLUMN IF NOT EXISTS telegram_delivery_blocked_at TIMESTAMPTZ');
@@ -991,8 +992,10 @@ export interface TelegramMembersProfileSyncResult {
   processed: number;
   avatars_updated: number;
   phones_updated: number;
+  usernames_updated: number;
   skipped_without_photo: number;
   skipped_without_phone: number;
+  skipped_without_username: number;
   storage_enabled: boolean;
   errors: TelegramProfileSyncErrorItem[];
 }
@@ -1126,8 +1129,10 @@ export async function syncMembersTelegramProfiles(): Promise<TelegramMembersProf
     processed: 0,
     avatars_updated: 0,
     phones_updated: 0,
+    usernames_updated: 0,
     skipped_without_photo: 0,
     skipped_without_phone: 0,
+    skipped_without_username: 0,
     storage_enabled: storageEnabled,
     errors: [],
   };
@@ -1166,6 +1171,22 @@ export async function syncMembersTelegramProfiles(): Promise<TelegramMembersProf
         result.phones_updated += 1;
       } else {
         result.skipped_without_phone += 1;
+      }
+
+      // Публичный @ник (если пользователь его задал и бот видит чат).
+      const usernameRaw = typeof chatObj.username === 'string' ? chatObj.username.trim() : '';
+      const username = usernameRaw.replace(/^@+/, '').slice(0, 64) || null;
+      if (username) {
+        await query(
+          `UPDATE members
+           SET telegram_username = $1, updated_at = NOW()
+           WHERE id = $2
+             AND COALESCE(NULLIF(TRIM(telegram_username), ''), '') IS DISTINCT FROM $1`,
+          [username, memberId],
+        );
+        result.usernames_updated += 1;
+      } else {
+        result.skipped_without_username += 1;
       }
 
       const photo =
@@ -1238,6 +1259,93 @@ export async function syncMembersTelegramProfiles(): Promise<TelegramMembersProf
   }
 
   return result;
+}
+
+/**
+ * Для рассылок: по member id достаём публичные @ники из БД, при отсутствии
+ * один раз спрашиваем Telegram getChat (нужен telegram_chat_id и доступ бота к чату).
+ * Возвращает Map<memberId, username без @>.
+ */
+export async function resolveTelegramUsernamesForMembers(
+  memberIds: number[],
+): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  const ids = Array.from(
+    new Set(memberIds.filter((id) => Number.isInteger(id) && id > 0)),
+  );
+  if (ids.length === 0) return out;
+
+  await ensureMembersTelegramColumn();
+  const res = await query(
+    `SELECT
+       id,
+       NULLIF(TRIM(COALESCE(telegram_chat_id, '')), '') AS telegram_chat_id,
+       NULLIF(TRIM(COALESCE(telegram_username, '')), '') AS telegram_username
+     FROM members
+     WHERE id = ANY($1::int[])`,
+    [ids],
+  );
+
+  type Row = {
+    id: number;
+    telegram_chat_id: string | null;
+    telegram_username: string | null;
+  };
+  const rows = res.rows as Row[];
+  const needFetch: Array<{ id: number; chatId: string }> = [];
+
+  for (const row of rows) {
+    const id = Number(row.id);
+    const cached = String(row.telegram_username ?? '')
+      .trim()
+      .replace(/^@+/, '');
+    if (cached) {
+      out.set(id, cached);
+      continue;
+    }
+    const chatId = String(row.telegram_chat_id ?? '').trim();
+    if (chatId) needFetch.push({ id, chatId });
+  }
+
+  if (needFetch.length === 0) return out;
+
+  let token = '';
+  try {
+    const row = await readSettingsRow();
+    const raw = row.telegram_bot_token ?? normalizeOptionalString(process.env.TELEGRAM_BOT_TOKEN);
+    token = raw ? sanitizeBotTokenForHttp(raw) : '';
+  } catch {
+    token = '';
+  }
+  if (!token) return out;
+
+  for (const item of needFetch) {
+    try {
+      const chatRaw = await fetchTelegramApiJson(token, 'getChat', { chat_id: item.chatId });
+      if (!chatRaw.ok || chatRaw.body?.ok !== true) continue;
+      const chatObj =
+        chatRaw.body.result && typeof chatRaw.body.result === 'object'
+          ? (chatRaw.body.result as Record<string, unknown>)
+          : null;
+      const usernameRaw = typeof chatObj?.username === 'string' ? chatObj.username.trim() : '';
+      const username = usernameRaw.replace(/^@+/, '').slice(0, 64);
+      if (!username) continue;
+      out.set(item.id, username);
+      await query(
+        `UPDATE members
+         SET telegram_username = $1, updated_at = NOW()
+         WHERE id = $2`,
+        [username, item.id],
+      );
+    } catch (e) {
+      console.warn(
+        `[telegram] resolve username failed for member ${item.id}:`,
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+
+  return out;
 }
 
 async function fetchTelegramGetMeRaw(
