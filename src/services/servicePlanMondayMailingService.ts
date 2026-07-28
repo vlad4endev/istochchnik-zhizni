@@ -471,6 +471,7 @@ async function markMailedSunday(sundayYmd: string): Promise<void> {
 /**
  * Ближайшая активная программа служения (не архив), начиная с `fromYmd`.
  * На одну дату предпочитаем черновик — именно его обычно готовят к ближайшему воскресенью.
+ * Все данные рассылки берутся исключительно из этой программы.
  */
 async function findNearestUpcomingPlanId(fromYmd: string): Promise<number | null> {
   const res = await query(
@@ -714,79 +715,22 @@ async function loadMediaTeamLines(planId: number): Promise<string[]> {
 }
 
 /**
- * Собирает и отправляет понедельничную рассылку программы на ближайшее воскресенье.
- * Берёт уже существующую ближайшую активную программу (часто черновик), не архив.
- * По умолчанию идемпотентна: один раз на дату этой программы (ключ в global_settings).
+ * Все поля рассылки — только из указанной программы (блоки, назначения, конспект, share_token).
+ * Никаких данных из архивных / прошлых / других планов.
  */
-export async function runServicePlanMondayMailing(options?: {
-  force?: boolean;
-  now?: Date;
-  dryRun?: boolean;
-}): Promise<ServicePlanMondayMailingResult> {
-  const force = options?.force === true;
-  const dryRun = options?.dryRun === true;
-  const now = options?.now ?? new Date();
-  const tz = resolveMailingTimeZone();
-  const todayYmd = formatYmdInTimeZone(tz, now);
-  // Ориентир по календарю церкви; фактическая дата — у выбранной программы.
-  const upcomingSundayYmd = resolveUpcomingSundayYmd(now, tz);
-
-  const planId = await findNearestUpcomingPlanId(todayYmd);
-  if (!planId) {
-    return {
-      ok: false,
-      skipped: true,
-      reason: 'no_service_plan',
-      service_date: upcomingSundayYmd,
-    };
-  }
-
-  // Не отдаём в рассылку «протухшую» ссылку: продлеваем срок выдачи токена.
-  await touchPlanShareTokenIssuedAt(planId);
-
+async function loadMailingFieldsFromPlan(planId: number): Promise<{
+  plan: NonNullable<Awaited<ReturnType<typeof getPlanDetails>>>;
+  blocksForMailing: MailingBlockMeta[];
+  memberMap: Map<number, MondayMailingMemberRef>;
+  sermon: ReturnType<typeof pickSermonFields>;
+  sermonBody: string | null;
+  poemFields: ReturnType<typeof pickPoemFields>;
+  songs: string[];
+  mediaTeamLines: string[];
+} | null> {
   const plan = await getPlanDetails(planId);
-  if (!plan) {
-    return {
-      ok: false,
-      skipped: true,
-      reason: 'plan_not_found',
-      service_date: upcomingSundayYmd,
-      plan_id: planId,
-    };
-  }
-  if (plan.is_archived) {
-    return {
-      ok: false,
-      skipped: true,
-      reason: 'plan_archived',
-      service_date: plan.service_date,
-      plan_id: planId,
-    };
-  }
-  if (!String(plan.share_token ?? '').trim()) {
-    return {
-      ok: false,
-      skipped: true,
-      reason: 'missing_share_token',
-      service_date: plan.service_date,
-      plan_id: planId,
-    };
-  }
-
-  const sundayYmd = String(plan.service_date ?? '').trim().slice(0, 10) || upcomingSundayYmd;
-
-  if (!force) {
-    const last = await readLastMailedSunday();
-    if (last === sundayYmd) {
-      return {
-        ok: true,
-        skipped: true,
-        reason: 'already_sent_for_sunday',
-        service_date: sundayYmd,
-        plan_id: planId,
-      };
-    }
-  }
+  if (!plan || plan.is_archived) return null;
+  if (Number(plan.id) !== planId) return null;
 
   const memberMap = await loadMemberRefs([
     plan.preacher_member_id,
@@ -796,7 +740,6 @@ export async function runServicePlanMondayMailing(options?: {
     ...plan.blocks.map((b) => b.assigned_member_id),
   ]);
 
-  // getPlanDetails не отдаёт block_type_code / song_title в mapped blocks — подгружаем отдельно
   const codesRes = await query(
     `SELECT
        b.id,
@@ -830,12 +773,102 @@ export async function runServicePlanMondayMailing(options?: {
     };
   });
 
+  // linked_sermon_note уже отфильтрован по service_plan_id = planId в getPlanDetails
   const sermon = pickSermonFields(blocksForMailing, plan.linked_sermon_note);
   const sermonBody = await loadLinkedSermonBody(planId);
   const poemFields = pickPoemFields(blocksForMailing, memberMap);
   const songs = pickSongTitles(blocksForMailing);
   const mediaTeamLines = await loadMediaTeamLines(planId);
 
+  return {
+    plan,
+    blocksForMailing,
+    memberMap,
+    sermon,
+    sermonBody,
+    poemFields,
+    songs,
+    mediaTeamLines,
+  };
+}
+
+/**
+ * Собирает и отправляет понедельничную рассылку.
+ * Данные (ссылка, проповедь, люди, песни, стих, медиа) — исключительно из ближайшей
+ * активной программы служения; шаблон текста — только оформление из настроек Telegram.
+ */
+export async function runServicePlanMondayMailing(options?: {
+  force?: boolean;
+  now?: Date;
+  dryRun?: boolean;
+}): Promise<ServicePlanMondayMailingResult> {
+  const force = options?.force === true;
+  const dryRun = options?.dryRun === true;
+  const now = options?.now ?? new Date();
+  const tz = resolveMailingTimeZone();
+  const todayYmd = formatYmdInTimeZone(tz, now);
+
+  // Единственный источник данных — ближайшая активная программа (часто черновик).
+  const planId = await findNearestUpcomingPlanId(todayYmd);
+  if (!planId) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: 'no_service_plan',
+      service_date: resolveUpcomingSundayYmd(now, tz),
+    };
+  }
+
+  await touchPlanShareTokenIssuedAt(planId);
+
+  const loaded = await loadMailingFieldsFromPlan(planId);
+  if (!loaded) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: 'plan_not_found',
+      service_date: resolveUpcomingSundayYmd(now, tz),
+      plan_id: planId,
+    };
+  }
+
+  const { plan, blocksForMailing, memberMap, sermon, sermonBody, poemFields, songs, mediaTeamLines } =
+    loaded;
+
+  if (!String(plan.share_token ?? '').trim()) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: 'missing_share_token',
+      service_date: plan.service_date,
+      plan_id: planId,
+    };
+  }
+
+  const sundayYmd = String(plan.service_date ?? '').trim().slice(0, 10);
+  if (!sundayYmd) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: 'missing_service_date',
+      plan_id: planId,
+    };
+  }
+
+  if (!force) {
+    const last = await readLastMailedSunday();
+    if (last === sundayYmd) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: 'already_sent_for_sunday',
+        service_date: sundayYmd,
+        plan_id: planId,
+      };
+    }
+  }
+
+  // Шаблон — только оформление; плейсхолдеры заполняются полями этой программы.
   let tgSettings: Awaited<ReturnType<typeof getTelegramSettings>> | null = null;
   try {
     tgSettings = await getTelegramSettings();
