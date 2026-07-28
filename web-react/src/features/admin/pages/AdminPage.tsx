@@ -22,7 +22,13 @@ import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-p
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
-import { ADMIN_TABS, type AdminTabId } from '../adminTabs';
+import {
+  ADMIN_SIDEBAR_GROUPS,
+  ADMIN_TABS,
+  adminTabNavLabel,
+  parseAdminTabParam,
+  type AdminTabId,
+} from '../adminTabs';
 import { AccessRequestsSection } from '../AccessRequestsSection';
 import { AiSettingsSection } from '../AiSettingsSection';
 import { AppSectionsAccessSection } from '../AppSectionsAccessSection';
@@ -55,7 +61,6 @@ import {
   uploadChurchEventPoster,
   fetchRoleTemplates,
   fetchSmsSettings,
-  fetchAccessRequests,
   mergeDuplicateMembers,
   resetAdminMemberPassword,
   swapAllMembersFirstLastNames,
@@ -84,7 +89,7 @@ import {
 } from '../../../lib/memberRosterName';
 import type { AppUser } from '../types';
 import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useImpersonation } from '../hooks/useImpersonation';
 import { isAppAdministratorSession } from '../../auth/authStore';
 
@@ -192,8 +197,6 @@ const Q_DIRS = ['admin', 'templates', 'directions'] as const;
 const Q_EVENTS = ['admin', 'events'] as const;
 const Q_EVENT_CATEGORY_OPTIONS = ['admin', 'church-event-category-options'] as const;
 const Q_SMS = ['admin', 'sms', 'settings'] as const;
-const Q_ACCESS = ['admin', 'access-requests'] as const;
-
 type BulkMemberRow = {
   key: string;
   last_name: string;
@@ -371,157 +374,75 @@ function btnDangerOutline(className = '') {
   return `rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 ${className}`;
 }
 
-const SIDEBAR_GROUPS = [
-  {
-    label: 'ЛЮДИ',
-    items: [
-      { id: 'members' as AdminTabId, hasBadge: true, badgeRed: false },
-      { id: 'requests' as AdminTabId, hasBadge: true, badgeRed: true },
-    ],
-  },
-  {
-    label: 'КОНТЕНТ',
-    items: [
-      { id: 'calendar' as AdminTabId },
-      { id: 'events' as AdminTabId },
-      { id: 'templates' as AdminTabId },
-      { id: 'project' as AdminTabId },
-    ],
-  },
-  {
-    label: 'СИСТЕМА',
-    items: [
-      { id: 'sections' as AdminTabId },
-      { id: 'roles' as AdminTabId },
-      { id: 'journal' as AdminTabId },
-      { id: 'notifications' as AdminTabId },
-      { id: 'telegram' as AdminTabId },
-      { id: 'diagnostics' as AdminTabId },
-      { id: 'integrations' as AdminTabId },
-    ],
-  },
-] as const;
-
 export function AdminPage() {
-  const [tab, setTab] = useState<AdminTabId>('members');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = parseAdminTabParam(searchParams.get('tab'));
   const [showAddUser, setShowAddUser] = useState(false);
 
-  // Badge queries — deduplicated with per-section queries via React Query cache
-  const { data: allMembersData } = useQuery({
-    queryKey: Q_MEMBERS,
-    queryFn: fetchAdminMembers,
-    staleTime: 30_000,
-  });
-  const { data: accessRequestsData } = useQuery({
-    queryKey: Q_ACCESS,
-    queryFn: () => fetchAccessRequests('pending'),
-    staleTime: 30_000,
-  });
-
-  const totalUsers = (allMembersData ?? []).length;
-  const pendingCount = (accessRequestsData ?? []).filter((r) => r.status === 'pending').length;
+  const setTab = (next: AdminTabId) => {
+    if (next === 'members') {
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    setSearchParams({ tab: next }, { replace: true });
+  };
 
   const meta = ADMIN_TABS.find((t) => t.id === tab)!;
 
-  const badgeFor = (id: AdminTabId): number | null => {
-    if (id === 'members') return totalUsers || null;
-    if (id === 'requests') return pendingCount || null;
-    return null;
-  };
-
   return (
     <div className="mx-auto w-full min-w-0 max-w-6xl px-3 py-3 sm:px-4 sm:py-4 shell:px-6 shell:py-6">
-      <div className="flex items-start gap-5">
-        {/* ── Left sidebar ── */}
-        <aside className="hidden w-[196px] shrink-0 md:block">
-          <nav
-            className="sticky top-4 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-3 shadow-[var(--shadow)]"
-            aria-label="Разделы панели"
+      <div className="min-w-0">
+        {/* На узких экранах разделы в основном меню недоступны — компактный переключатель */}
+        <label className="mb-3 block lg:hidden">
+          <span className="sr-only">Раздел админки</span>
+          <select
+            value={tab}
+            onChange={(e) => setTab(parseAdminTabParam(e.target.value))}
+            className="w-full rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3 py-2.5 text-sm font-medium text-stone-800 shadow-sm"
           >
-            {SIDEBAR_GROUPS.map((group) => (
-              <div key={group.label} className="mb-4 last:mb-0">
-                <p className="mb-1.5 px-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-stone-400">
-                  {group.label}
-                </p>
-                <div className="space-y-0.5">
-                  {group.items.map((item) => {
-                    const tabCfg = ADMIN_TABS.find((t) => t.id === item.id)!;
-                    const ItemIcon = tabCfg.Icon;
-                    const active = tab === item.id;
-                    const badge = 'hasBadge' in item ? badgeFor(item.id) : null;
-                    const isRedBadge = 'badgeRed' in item ? item.badgeRed : false;
-                    const navText = tabCfg.navLabel ?? tabCfg.label;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        title={tabCfg.label}
-                        onClick={() => setTab(item.id)}
-                        className={`flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-[7px] text-left text-[13px] transition ${
-                          active
-                            ? 'bg-[#F3EEF0] font-medium text-[#7B2D3F]'
-                            : 'font-normal text-stone-700 hover:bg-stone-100'
-                        }`}
-                      >
-                        <ItemIcon
-                          className={`h-4 w-4 shrink-0 transition-opacity ${active ? 'opacity-100' : 'opacity-50'}`}
-                        />
-                        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{navText}</span>
-                        {badge != null && (
-                          <span
-                            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
-                              isRedBadge && badge > 0
-                                ? 'bg-red-500 text-white'
-                                : 'bg-stone-200 text-stone-600'
-                            }`}
-                          >
-                            {badge}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+            {ADMIN_SIDEBAR_GROUPS.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.items.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {adminTabNavLabel(item.id)}
+                  </option>
+                ))}
+              </optgroup>
             ))}
-          </nav>
-        </aside>
+          </select>
+        </label>
 
-        {/* ── Content area ── */}
-        <div className="min-w-0 flex-1">
-          {/* Section header */}
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="text-base font-medium tracking-tight text-stone-900">{meta.label}</h2>
-              <p className="mt-0.5 truncate text-xs text-stone-500">{meta.description}</p>
-            </div>
-            {tab === 'members' && (
-              <button
-                type="button"
-                className={btnPrimary('shrink-0 text-xs')}
-                onClick={() => setShowAddUser(true)}
-              >
-                + Добавить пользователя
-              </button>
-            )}
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-base font-medium tracking-tight text-stone-900">{meta.label}</h2>
+            <p className="mt-0.5 truncate text-xs text-stone-500">{meta.description}</p>
           </div>
-
           {tab === 'members' && (
-            <MembersSection showAddUser={showAddUser} onAddUserClose={() => setShowAddUser(false)} />
+            <button
+              type="button"
+              className={btnPrimary('shrink-0 text-xs')}
+              onClick={() => setShowAddUser(true)}
+            >
+              + Добавить пользователя
+            </button>
           )}
-          {tab === 'requests' && <AccessRequestsSection />}
-          {tab === 'calendar' && <CalendarSection />}
-          {tab === 'events' && <EventsSection />}
-          {tab === 'templates' && <TemplatesSection />}
-          {tab === 'project' && <ProjectSection />}
-          {tab === 'sections' && <AppSectionsAccessSection />}
-          {tab === 'roles' && <RolePermissionsManagerSection />}
-          {tab === 'journal' && <ProjectJournalSection />}
-          {tab === 'notifications' && <NotificationsSettingsSection />}
-          {tab === 'telegram' && <TelegramSettingsSection />}
-          {tab === 'diagnostics' && <DiagnosticsDashboardSection />}
-          {tab === 'integrations' && <IntegrationsSection />}
         </div>
+
+        {tab === 'members' && (
+          <MembersSection showAddUser={showAddUser} onAddUserClose={() => setShowAddUser(false)} />
+        )}
+        {tab === 'requests' && <AccessRequestsSection />}
+        {tab === 'calendar' && <CalendarSection />}
+        {tab === 'events' && <EventsSection />}
+        {tab === 'templates' && <TemplatesSection />}
+        {tab === 'project' && <ProjectSection />}
+        {tab === 'sections' && <AppSectionsAccessSection />}
+        {tab === 'roles' && <RolePermissionsManagerSection />}
+        {tab === 'journal' && <ProjectJournalSection />}
+        {tab === 'notifications' && <NotificationsSettingsSection />}
+        {tab === 'telegram' && <TelegramSettingsSection />}
+        {tab === 'diagnostics' && <DiagnosticsDashboardSection />}
+        {tab === 'integrations' && <IntegrationsSection />}
       </div>
     </div>
   );

@@ -144,3 +144,65 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
 ];
 
 export type AdminTabId = (typeof ADMIN_TABS)[number]['id'];
+
+export type AdminSidebarGroupItem = {
+  id: AdminTabId;
+  hasBadge?: boolean;
+  badgeRed?: boolean;
+};
+
+export type AdminSidebarGroup = {
+  label: string;
+  items: readonly AdminSidebarGroupItem[];
+};
+
+/** Группы разделов админки для основного сайдбара (и ранее — вторичного меню). */
+export const ADMIN_SIDEBAR_GROUPS: readonly AdminSidebarGroup[] = [
+  {
+    label: 'Люди',
+    items: [
+      { id: 'members', hasBadge: true, badgeRed: false },
+      { id: 'requests', hasBadge: true, badgeRed: true },
+    ],
+  },
+  {
+    label: 'Контент',
+    items: [
+      { id: 'calendar' },
+      { id: 'events' },
+      { id: 'templates' },
+      { id: 'project' },
+    ],
+  },
+  {
+    label: 'Система',
+    items: [
+      { id: 'sections' },
+      { id: 'roles' },
+      { id: 'journal' },
+      { id: 'notifications' },
+      { id: 'telegram' },
+      { id: 'diagnostics' },
+      { id: 'integrations' },
+    ],
+  },
+] as const;
+
+const ADMIN_TAB_IDS = new Set<string>(ADMIN_TABS.map((t) => t.id));
+
+export function isAdminTabId(value: string | null | undefined): value is AdminTabId {
+  return typeof value === 'string' && ADMIN_TAB_IDS.has(value);
+}
+
+export function adminTabPath(tabId: AdminTabId = 'members'): string {
+  return tabId === 'members' ? '/admin' : `/admin?tab=${tabId}`;
+}
+
+export function parseAdminTabParam(value: string | null | undefined): AdminTabId {
+  return isAdminTabId(value) ? value : 'members';
+}
+
+export function adminTabNavLabel(tabId: AdminTabId): string {
+  const tab = ADMIN_TABS.find((t) => t.id === tabId);
+  return tab?.navLabel ?? tab?.label ?? tabId;
+}
