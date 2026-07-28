@@ -183,6 +183,8 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
         service_plan_chat_id?: unknown;
         service_plan_template?: unknown;
         service_plan_published_chat_id?: unknown;
+        service_plan_published_template?: unknown;
+        service_plan_published_button_text?: unknown;
         proxy_enabled?: unknown;
         proxy_url?: unknown;
         service_plan_mailing_enabled?: unknown;
@@ -256,6 +258,24 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
     res.status(400).json({ error: 'Поле "service_plan_published_chat_id" должно быть строкой или null' });
     return;
   }
+  if (
+    body?.service_plan_published_template !== undefined &&
+    body.service_plan_published_template !== null &&
+    typeof body.service_plan_published_template !== 'string'
+  ) {
+    res.status(400).json({ error: 'Поле "service_plan_published_template" должно быть строкой или null' });
+    return;
+  }
+  if (
+    body?.service_plan_published_button_text !== undefined &&
+    body.service_plan_published_button_text !== null &&
+    typeof body.service_plan_published_button_text !== 'string'
+  ) {
+    res.status(400).json({
+      error: 'Поле "service_plan_published_button_text" должно быть строкой или null',
+    });
+    return;
+  }
   if (body?.proxy_enabled !== undefined && typeof body.proxy_enabled !== 'boolean') {
     res.status(400).json({ error: 'Поле "proxy_enabled" должно быть boolean' });
     return;
@@ -307,6 +327,14 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
       service_plan_chat_id: body?.service_plan_chat_id as string | null | undefined,
       service_plan_template: body?.service_plan_template as string | null | undefined,
       service_plan_published_chat_id: body?.service_plan_published_chat_id as string | null | undefined,
+      service_plan_published_template: body?.service_plan_published_template as
+        | string
+        | null
+        | undefined,
+      service_plan_published_button_text: body?.service_plan_published_button_text as
+        | string
+        | null
+        | undefined,
       proxy_enabled: body?.proxy_enabled as boolean | undefined,
       proxy_url: body?.proxy_url as string | null | undefined,
     });

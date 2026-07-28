@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   buildServicePlanMondayMailingText,
+  DEFAULT_SERVICE_PLAN_PUBLISHED_TEMPLATE,
   formatMailingPerson,
   formatSundayMailingHeading,
   isInternalProfileUsername,
@@ -209,6 +210,50 @@ function run(): void {
     template: '1. {{preacher}}\n5. {{leader}}',
   });
   assert.equal(messengerPeople, '1. @[57]\n5. @[29]');
+
+  const published = buildServicePlanMondayMailingText({
+    serviceDateYmd: '2026-07-26',
+    shareToken: 'bb479541-bec5-4931-b991-f65f0e8ce4cc',
+    publicOrigin: 'https://app.church-tambov.ru',
+    preacher: { id: 1, mention: '@zhigunov72', displayName: 'Жигунов' },
+    music: { id: 2, mention: '@music', displayName: 'Николай' },
+    poem: { id: 3, mention: 'Надежда', displayName: 'Надежда' },
+    leader: { id: 4, mention: '@leader', displayName: 'Дмитрий' },
+    sermonTopic: 'Тема',
+    sermonScripture: 'Ин. 1:1',
+    choirLine: 'Хор петь не будет.',
+    template: DEFAULT_SERVICE_PLAN_PUBLISHED_TEMPLATE,
+    personStyle: 'telegram',
+  });
+  assert.equal(
+    published,
+    'Финальная программа служения на 26 июля 2026 г. готова\n\nhttps://app.church-tambov.ru/service-plan/share/bb479541-bec5-4931-b991-f65f0e8ce4cc',
+  );
+
+  const publishedRich = buildServicePlanMondayMailingText({
+    serviceDateYmd: '2026-07-26',
+    shareToken: 'tok',
+    publicOrigin: 'https://app.church-tambov.ru',
+    preacher: {
+      id: 1,
+      mention: 'Жигунов',
+      displayName: 'Жигунов',
+      telegramUsername: 'zhigunov72',
+    },
+    music: { id: 2, mention: 'Николай', displayName: 'Николай' },
+    poem: { id: 3, mention: 'Надежда', displayName: 'Надежда' },
+    leader: { id: 4, mention: 'Дмитрий', displayName: 'Дмитрий' },
+    sermonTopic: 'Четыре этапа',
+    sermonScripture: null,
+    choirLine: 'Хор петь не будет.',
+    template:
+      'Готово: {{sunday_heading}}\nПроповедник {{preacher}}\n{{sermon_topic_block}}{{share_url}}',
+    personStyle: 'telegram',
+  });
+  assert.equal(
+    publishedRich,
+    'Готово: Воскресенье — 26 июля\nПроповедник @zhigunov72\nТема: «Четыре этапа»\nhttps://app.church-tambov.ru/service-plan/share/tok',
+  );
 
   console.log('servicePlanMondayMailingService.test.ts: OK');
 }

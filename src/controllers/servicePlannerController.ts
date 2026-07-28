@@ -704,6 +704,7 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
       if (shareToken && publishedDate) {
         try {
           const tg = await notifyServicePlanPublishedTelegram({
+            planId: id,
             serviceDateYmd: publishedDate,
             shareToken,
           });

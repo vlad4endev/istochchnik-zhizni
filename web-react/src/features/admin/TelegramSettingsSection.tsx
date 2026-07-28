@@ -45,6 +45,15 @@ const DEFAULT_PROGRAM_MAILING_TEMPLATE = [
   '8. Ссылка на программу: {{share_url}}',
 ].join('\n');
 
+/** Совпадает с DEFAULT_SERVICE_PLAN_PUBLISHED_TEMPLATE на бэкенде. */
+const DEFAULT_PROGRAM_PUBLISHED_TEMPLATE = [
+  'Финальная программа служения на {{date_long}} готова',
+  '',
+  '{{share_url}}',
+].join('\n');
+
+const DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT = 'Открыть программу';
+
 const WEEKDAY_OPTIONS: Array<{ value: number; label: string }> = [
   { value: 1, label: 'Понедельник' },
   { value: 2, label: 'Вторник' },
@@ -464,6 +473,8 @@ export function TelegramSettingsSection() {
     service_plan_chat_id: '',
     service_plan_template: '',
     service_plan_published_chat_id: '',
+    service_plan_published_template: '',
+    service_plan_published_button_text: '',
     service_plan_mailing_enabled: true,
     service_plan_mailing_weekday: 1,
     service_plan_mailing_time: '10:00',
@@ -492,8 +503,10 @@ export function TelegramSettingsSection() {
   const [showToken, setShowToken] = useState(false);
   const [showProxyUrl, setShowProxyUrl] = useState(false);
   const [programPreview, setProgramPreview] = useState<ProgramPreviewState | null>(null);
+  const [publishedPreview, setPublishedPreview] = useState<ProgramPreviewState | null>(null);
   const prayerTemplateRef = useRef<HTMLTextAreaElement | null>(null);
   const programTemplateRef = useRef<HTMLTextAreaElement | null>(null);
+  const publishedTemplateRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (!data) return;
@@ -507,6 +520,10 @@ export function TelegramSettingsSection() {
       service_plan_chat_id: data.service_plan_chat_id ?? '',
       service_plan_template: (data.service_plan_template ?? '').trim() || DEFAULT_PROGRAM_MAILING_TEMPLATE,
       service_plan_published_chat_id: data.service_plan_published_chat_id ?? '',
+      service_plan_published_template:
+        (data.service_plan_published_template ?? '').trim() || DEFAULT_PROGRAM_PUBLISHED_TEMPLATE,
+      service_plan_published_button_text:
+        (data.service_plan_published_button_text ?? '').trim() || DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT,
       service_plan_mailing_enabled: data.service_plan_mailing_enabled !== false,
       service_plan_mailing_weekday:
         typeof data.service_plan_mailing_weekday === 'number' ? data.service_plan_mailing_weekday : 1,
@@ -534,6 +551,8 @@ export function TelegramSettingsSection() {
         service_plan_chat_id: normalizeUiString(form.service_plan_chat_id),
         service_plan_template: normalizeUiString(form.service_plan_template),
         service_plan_published_chat_id: normalizeUiString(form.service_plan_published_chat_id),
+        service_plan_published_template: normalizeUiString(form.service_plan_published_template),
+        service_plan_published_button_text: normalizeUiString(form.service_plan_published_button_text),
         service_plan_mailing_enabled: form.service_plan_mailing_enabled,
         service_plan_mailing_weekday: form.service_plan_mailing_weekday,
         service_plan_mailing_time: form.service_plan_mailing_time,
@@ -747,6 +766,68 @@ export function TelegramSettingsSection() {
       setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить шаблон.') }),
   });
 
+  const publishedPreviewMut = useMutation({
+    mutationFn: () =>
+      runServicePlanMondayMailing({
+        force: true,
+        dry_run: true,
+        template: form.service_plan_published_template,
+      }),
+    onSuccess: (r) => {
+      const res = r.result;
+      if (res.skipped && res.reason === 'no_service_plan') {
+        setPublishedPreview(null);
+        setNote({
+          type: 'err',
+          text: 'Нет ближайшей активной программы — предпросмотр уведомления недоступен.',
+        });
+        return;
+      }
+      if (res.reason === 'dry_run' && (res.text || res.text_messenger)) {
+        setPublishedPreview({
+          text: res.text ?? '',
+          textMessenger: res.text_messenger ?? res.text ?? '',
+          serviceDate: res.service_date,
+          planId: res.plan_id,
+          channel: 'telegram',
+        });
+        setNote({
+          type: 'ok',
+          text: `Предпросмотр уведомления о готовности: программа #${res.plan_id ?? '—'} от ${res.service_date ?? '—'}.`,
+        });
+        return;
+      }
+      setPublishedPreview(null);
+      setNote({
+        type: 'err',
+        text: `Не удалось построить предпросмотр (${res.reason ?? 'ошибка'}).`,
+      });
+    },
+    onError: (e) =>
+      setNote({
+        type: 'err',
+        text: apiErrorMessage(e, 'Не удалось загрузить предпросмотр уведомления.'),
+      }),
+  });
+
+  const savePublishedTemplateMut = useMutation({
+    mutationFn: () =>
+      patchTelegramSettings({
+        service_plan_published_template: normalizeUiString(form.service_plan_published_template),
+        service_plan_published_button_text: normalizeUiString(form.service_plan_published_button_text),
+        service_plan_published_chat_id: normalizeUiString(form.service_plan_published_chat_id),
+      }),
+    onSuccess: (next) => {
+      setNote({ type: 'ok', text: 'Шаблон уведомления о готовности сохранён.' });
+      qc.setQueryData(Q_TG, next);
+    },
+    onError: (e) =>
+      setNote({
+        type: 'err',
+        text: apiErrorMessage(e, 'Не удалось сохранить шаблон уведомления.'),
+      }),
+  });
+
   const mailingScheduleLabel = useMemo(() => {
     const day =
       WEEKDAY_OPTIONS.find((d) => d.value === form.service_plan_mailing_weekday)?.label ??
@@ -807,6 +888,8 @@ export function TelegramSettingsSection() {
     service_plan_chat_id: null,
     service_plan_template: null,
     service_plan_published_chat_id: null,
+    service_plan_published_template: null,
+    service_plan_published_button_text: null,
     has_bot_token: false,
     proxy: {
       enabled: false,
@@ -1100,7 +1183,7 @@ export function TelegramSettingsSection() {
               />
               <ChatField
                 label="Финальная программа"
-                hint="При нажатии «Опубликовать» · ссылка + кнопка"
+                hint="При нажатии «Опубликовать» · текст шаблона — во вкладке «Программа»"
                 value={form.service_plan_published_chat_id}
                 onChange={(service_plan_published_chat_id) =>
                   setForm((s) => ({ ...s, service_plan_published_chat_id }))
@@ -1386,6 +1469,156 @@ export function TelegramSettingsSection() {
               <span className="self-center text-xs text-stone-400">
                 Сначала предпросмотр — потом отправка
               </span>
+            </div>
+
+            <div className="border-t border-stone-200 pt-6 space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-stone-900">
+                  Уведомление о готовности (публикация)
+                </h3>
+                <p className="mt-0.5 text-xs text-stone-500">
+                  Текст в чат «Финальная программа» при нажатии «Опубликовать». Те же подстановки, что
+                  у рассылки выше. Чат задаётся во вкладке «Чаты».
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">
+                  Текст кнопки со ссылкой
+                </label>
+                <input
+                  className={fieldClass()}
+                  value={form.service_plan_published_button_text}
+                  onChange={(e) =>
+                    setForm((s) => ({
+                      ...s,
+                      service_plan_published_button_text: e.target.value,
+                    }))
+                  }
+                  placeholder={DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT}
+                />
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                      Шаблон уведомления
+                    </label>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-stone-600 underline-offset-2 hover:underline"
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            'Сбросить шаблон к стандартному тексту? Несохранённые правки пропадут.',
+                          )
+                        ) {
+                          return;
+                        }
+                        setForm((s) => ({
+                          ...s,
+                          service_plan_published_template: DEFAULT_PROGRAM_PUBLISHED_TEMPLATE,
+                          service_plan_published_button_text: DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT,
+                        }));
+                        setPublishedPreview(null);
+                      }}
+                    >
+                      Сбросить к стандартному
+                    </button>
+                  </div>
+                  <textarea
+                    ref={publishedTemplateRef}
+                    className="min-h-[220px] w-full resize-y rounded-xl border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    value={form.service_plan_published_template}
+                    onChange={(e) => {
+                      setForm((s) => ({
+                        ...s,
+                        service_plan_published_template: e.target.value,
+                      }));
+                      setPublishedPreview(null);
+                    }}
+                    placeholder={DEFAULT_PROGRAM_PUBLISHED_TEMPLATE}
+                    spellCheck={false}
+                  />
+                  <PlaceholderPicker
+                    groups={PROGRAM_PLACEHOLDER_GROUPS}
+                    defaultOpen={false}
+                    onInsert={(token) =>
+                      insertAtCursor(
+                        publishedTemplateRef.current,
+                        token,
+                        form.service_plan_published_template,
+                        (next) => {
+                          setForm((s) => ({ ...s, service_plan_published_template: next }));
+                          setPublishedPreview(null);
+                        },
+                      )
+                    }
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                    Предпросмотр
+                  </label>
+                  <div className="min-h-[220px] rounded-xl border border-stone-200 bg-stone-50/80 p-4">
+                    {publishedPreview ? (
+                      <div className="space-y-3">
+                        <p className="text-xs text-stone-500">
+                          Программа #{publishedPreview.planId ?? '—'} ·{' '}
+                          {publishedPreview.serviceDate ?? '—'} · как в Telegram
+                        </p>
+                        <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-stone-800">
+                          {publishedPreview.text}
+                        </pre>
+                        <p className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-600">
+                          Кнопка:{' '}
+                          <span className="font-semibold text-stone-900">
+                            {form.service_plan_published_button_text.trim() ||
+                              DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT}
+                          </span>
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-2 px-4 text-center">
+                        <p className="text-sm font-medium text-stone-700">Пока нет предпросмотра</p>
+                        <p className="max-w-sm text-xs text-stone-500">
+                          Нажмите «Предпросмотр» — подставим данные ближайшей программы в шаблон
+                          уведомления (сохранять не обязательно).
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 border-t border-stone-100 pt-4">
+                <button
+                  type="button"
+                  className={btnSecondary()}
+                  disabled={publishedPreviewMut.isPending}
+                  onClick={() => {
+                    setNote(null);
+                    publishedPreviewMut.mutate();
+                  }}
+                >
+                  {publishedPreviewMut.isPending ? 'Собираем…' : 'Предпросмотр'}
+                </button>
+                <button
+                  type="button"
+                  className={btnPrimary()}
+                  disabled={savePublishedTemplateMut.isPending}
+                  onClick={() => {
+                    setNote(null);
+                    savePublishedTemplateMut.mutate();
+                  }}
+                >
+                  {savePublishedTemplateMut.isPending
+                    ? 'Сохранение…'
+                    : 'Сохранить шаблон готовности'}
+                </button>
+              </div>
             </div>
           </div>
         ) : null}

@@ -28,6 +28,15 @@ export const DEFAULT_SERVICE_PLAN_MONDAY_MAILING_TEMPLATE = [
   '8. Ссылка на программу: {{share_url}}',
 ].join('\n');
 
+/** Шаблон уведомления при публикации финальной программы (админка → Telegram → Программа). */
+export const DEFAULT_SERVICE_PLAN_PUBLISHED_TEMPLATE = [
+  'Финальная программа служения на {{date_long}} готова',
+  '',
+  '{{share_url}}',
+].join('\n');
+
+export const DEFAULT_SERVICE_PLAN_PUBLISHED_BUTTON_TEXT = 'Открыть программу';
+
 export type MondayMailingMemberRef = {
   id: number | null;
   /** Читаемое имя; для мессенджера может быть `@[id]` */
@@ -1199,25 +1208,24 @@ export async function runServicePlanMondayMailing(options?: {
 }
 
 function formatPublishedDateRu(serviceDateYmd: string): string {
-  const d = new Date(`${serviceDateYmd}T12:00:00.000Z`);
-  if (Number.isNaN(d.getTime())) return serviceDateYmd;
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(d);
+  return formatDateLongRu(serviceDateYmd);
 }
 
 /**
  * При публикации программы: сообщение в отдельный Telegram-чат + inline-кнопка со ссылкой.
+ * Текст и подпись кнопки — из настроек (шаблон с теми же {{плейсхолдерами}}, что у рассылки).
  */
 export async function notifyServicePlanPublishedTelegram(input: {
+  planId?: number | null;
   serviceDateYmd: string;
   shareToken: string;
-}): Promise<{ ok: boolean; skipped?: boolean; reason?: string; chat_id?: string }> {
+}): Promise<{ ok: boolean; skipped?: boolean; reason?: string; chat_id?: string; text?: string }> {
   const shareToken = String(input.shareToken ?? '').trim();
   const serviceDateYmd = String(input.serviceDateYmd ?? '').trim();
+  const planId =
+    input.planId != null && Number.isFinite(Number(input.planId)) && Number(input.planId) > 0
+      ? Math.trunc(Number(input.planId))
+      : null;
   if (!shareToken || !serviceDateYmd) {
     return { ok: false, skipped: true, reason: 'missing_plan_fields' };
   }
@@ -1237,18 +1245,109 @@ export async function notifyServicePlanPublishedTelegram(input: {
     return { ok: false, skipped: true, reason: 'missing_published_chat' };
   }
 
+  const templateRaw = (settings?.service_plan_published_template ?? '').trim();
+  const template = templateRaw || DEFAULT_SERVICE_PLAN_PUBLISHED_TEMPLATE;
+  const buttonText =
+    (settings?.service_plan_published_button_text ?? '').trim() ||
+    DEFAULT_SERVICE_PLAN_PUBLISHED_BUTTON_TEXT;
+
   const origin = resolvePublicWebOrigin();
   const shareUrl = `${origin}/service-plan/share/${shareToken}`;
-  const dateText = formatPublishedDateRu(serviceDateYmd);
-  const text = `Финальная программа служения на ${dateText} готова\n\n${shareUrl}`;
+  let text: string;
+
+  if (planId) {
+    const loaded = await loadMailingFieldsFromPlan(planId);
+    if (loaded) {
+      const { plan, blocksForMailing, memberMap, sermon, sermonBody, poemFields, songs, mediaTeamLines } =
+        loaded;
+      const preacherRef =
+        (plan.preacher_member_id && memberMap.get(plan.preacher_member_id)) || emptyMemberRef();
+      const musicRef =
+        (plan.music_ministry_member_id && memberMap.get(plan.music_ministry_member_id)) ||
+        emptyMemberRef();
+      const poemRef =
+        (plan.poem_ministry_member_id && memberMap.get(plan.poem_ministry_member_id)) ||
+        emptyMemberRef();
+      const leaderRef =
+        (plan.leader_member_id && memberMap.get(plan.leader_member_id)) || emptyMemberRef();
+      const choirLabels = new Map<number, string>();
+      for (const [id, ref] of memberMap) {
+        choirLabels.set(id, formatMailingPerson(ref, 'telegram'));
+      }
+      text = buildServicePlanMondayMailingText({
+        serviceDateYmd: plan.service_date || serviceDateYmd,
+        shareToken: String(plan.share_token ?? shareToken).trim() || shareToken,
+        publicOrigin: origin,
+        preacher: preacherRef,
+        music: musicRef,
+        poem: poemRef,
+        leader: leaderRef,
+        sermonTopic: sermon.topic,
+        sermonScripture: sermon.scripture,
+        choirLine: resolveChoirLineFromBlocks(blocksForMailing, choirLabels),
+        template,
+        personStyle: 'telegram',
+        startTime: plan.start_time,
+        status: plan.status,
+        notes: plan.notes,
+        templateName: plan.template_name,
+        durationMinutes: plan.total_duration_minutes,
+        planId,
+        editToken: plan.edit_token,
+        poemReader: poemFields.reader,
+        poemAuthor: poemFields.author,
+        poemTheme: poemFields.theme,
+        poemText: poemFields.text,
+        songs,
+        mediaTeamLines,
+        sermonTitle: sermon.title,
+        sermonBlockNotes: sermon.blockNotes,
+        sermonBody,
+        sermonNoteAuthor: sermon.noteAuthor,
+        sermonNoteShareToken: sermon.noteShareToken,
+        sermonHasNote: sermon.hasNote,
+        sermonAttachments: sermon.attachments,
+      });
+    } else {
+      text = renderMailingTemplate(template, {
+        date_long: formatPublishedDateRu(serviceDateYmd),
+        date_short: formatDateShortRu(serviceDateYmd),
+        service_date: serviceDateYmd,
+        sunday_heading: formatSundayMailingHeading(serviceDateYmd),
+        date: formatSundayMailingHeading(serviceDateYmd),
+        share_url: shareUrl,
+        edit_url: shareUrl,
+        plan_id: String(planId),
+        status: 'published',
+        status_ru: 'опубликована',
+      });
+    }
+  } else {
+    text = renderMailingTemplate(template, {
+      date_long: formatPublishedDateRu(serviceDateYmd),
+      date_short: formatDateShortRu(serviceDateYmd),
+      service_date: serviceDateYmd,
+      sunday_heading: formatSundayMailingHeading(serviceDateYmd),
+      date: formatSundayMailingHeading(serviceDateYmd),
+      share_url: shareUrl,
+      edit_url: shareUrl,
+      status: 'published',
+      status_ru: 'опубликована',
+    });
+  }
+
+  text = text.replace(/\n{3,}/g, '\n\n').trim();
+  if (!text) {
+    text = `Финальная программа служения на ${formatPublishedDateRu(serviceDateYmd)} готова\n\n${shareUrl}`;
+  }
 
   try {
     const sent = await sendTelegramToChat({
       chatId,
       text,
-      inlineUrlButton: { text: 'Открыть программу', url: shareUrl },
+      inlineUrlButton: { text: buttonText, url: shareUrl },
     });
-    return { ok: true, chat_id: sent.chat_id };
+    return { ok: true, chat_id: sent.chat_id, text };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (

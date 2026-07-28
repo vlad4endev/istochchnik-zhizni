@@ -37,6 +37,10 @@ export interface TelegramSettings {
   service_plan_template: string | null;
   /** Chat id для уведомления «финальная программа опубликована» */
   service_plan_published_chat_id: string | null;
+  /** Шаблон текста при публикации программы (те же {{плейсхолдеры}}, что у рассылки) */
+  service_plan_published_template: string | null;
+  /** Текст inline-кнопки со ссылкой на программу */
+  service_plan_published_button_text: string | null;
   has_bot_token: boolean;
   proxy: TelegramProxyStatus;
 }
@@ -87,6 +91,8 @@ export interface TelegramSettingsUpdate {
   service_plan_chat_id?: string | null;
   service_plan_template?: string | null;
   service_plan_published_chat_id?: string | null;
+  service_plan_published_template?: string | null;
+  service_plan_published_button_text?: string | null;
   /** Включить исходящий HTTPS-прокси для всех запросов к api.telegram.org */
   proxy_enabled?: boolean;
   /**
@@ -459,6 +465,10 @@ async function ensureSettingsColumns(): Promise<void> {
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_chat_id TEXT');
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_template TEXT');
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_published_chat_id TEXT');
+  await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_published_template TEXT');
+  await query(
+    'ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_published_button_text TEXT',
+  );
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_https_proxy TEXT');
   await query(
     'ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_proxy_enabled BOOLEAN NOT NULL DEFAULT FALSE',
@@ -483,6 +493,8 @@ async function readSettingsRow(): Promise<{
   telegram_service_plan_chat_id: string | null;
   telegram_service_plan_template: string | null;
   telegram_service_plan_published_chat_id: string | null;
+  telegram_service_plan_published_template: string | null;
+  telegram_service_plan_published_button_text: string | null;
   telegram_dispatch_enabled: boolean;
   telegram_dispatch_kind: 'daily' | 'once';
   telegram_dispatch_time: string | null;
@@ -510,6 +522,8 @@ async function readSettingsRow(): Promise<{
        telegram_service_plan_chat_id,
        telegram_service_plan_template,
        telegram_service_plan_published_chat_id,
+       telegram_service_plan_published_template,
+       telegram_service_plan_published_button_text,
        telegram_dispatch_enabled,
        telegram_dispatch_kind,
        telegram_dispatch_time,
@@ -533,6 +547,8 @@ async function readSettingsRow(): Promise<{
         telegram_service_plan_chat_id?: string | null;
         telegram_service_plan_template?: string | null;
         telegram_service_plan_published_chat_id?: string | null;
+        telegram_service_plan_published_template?: string | null;
+        telegram_service_plan_published_button_text?: string | null;
         telegram_dispatch_enabled?: boolean;
         telegram_dispatch_kind?: unknown;
         telegram_dispatch_time?: string | null;
@@ -559,6 +575,14 @@ async function readSettingsRow(): Promise<{
         : null,
     telegram_service_plan_published_chat_id: normalizeOptionalString(
       row?.telegram_service_plan_published_chat_id,
+    ),
+    telegram_service_plan_published_template:
+      typeof row?.telegram_service_plan_published_template === 'string' &&
+      row.telegram_service_plan_published_template.trim().length > 0
+        ? row.telegram_service_plan_published_template.replace(/\r\n/g, '\n')
+        : null,
+    telegram_service_plan_published_button_text: normalizeOptionalString(
+      row?.telegram_service_plan_published_button_text,
     ),
     telegram_dispatch_enabled: Boolean(row?.telegram_dispatch_enabled),
     telegram_dispatch_kind: row?.telegram_dispatch_kind === 'once' ? 'once' : 'daily',
@@ -606,6 +630,8 @@ export async function getTelegramSettings(): Promise<TelegramSettings> {
     service_plan_chat_id: row.telegram_service_plan_chat_id,
     service_plan_template: row.telegram_service_plan_template,
     service_plan_published_chat_id: row.telegram_service_plan_published_chat_id,
+    service_plan_published_template: row.telegram_service_plan_published_template,
+    service_plan_published_button_text: row.telegram_service_plan_published_button_text,
     has_bot_token: Boolean(botToken),
     proxy: buildProxyStatusFromRow(row),
   };
@@ -665,6 +691,14 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       input.service_plan_published_chat_id !== undefined
         ? normalizeOptionalString(input.service_plan_published_chat_id)
         : current.telegram_service_plan_published_chat_id,
+    telegram_service_plan_published_template:
+      input.service_plan_published_template !== undefined
+        ? normalizeServicePlanTemplateInput(input.service_plan_published_template)
+        : current.telegram_service_plan_published_template,
+    telegram_service_plan_published_button_text:
+      input.service_plan_published_button_text !== undefined
+        ? normalizeOptionalString(input.service_plan_published_button_text)
+        : current.telegram_service_plan_published_button_text,
     telegram_proxy_enabled:
       typeof input.proxy_enabled === 'boolean' ? input.proxy_enabled : current.telegram_proxy_enabled,
     telegram_https_proxy: nextProxyUrl,
@@ -683,10 +717,12 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_service_plan_chat_id,
        telegram_service_plan_template,
        telegram_service_plan_published_chat_id,
+       telegram_service_plan_published_template,
+       telegram_service_plan_published_button_text,
        telegram_proxy_enabled,
        telegram_https_proxy
      )
-     VALUES (1, CURRENT_DATE, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     VALUES (1, CURRENT_DATE, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      ON CONFLICT (id) DO UPDATE
      SET
        telegram_enabled = EXCLUDED.telegram_enabled,
@@ -698,6 +734,8 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_service_plan_chat_id = EXCLUDED.telegram_service_plan_chat_id,
        telegram_service_plan_template = EXCLUDED.telegram_service_plan_template,
        telegram_service_plan_published_chat_id = EXCLUDED.telegram_service_plan_published_chat_id,
+       telegram_service_plan_published_template = EXCLUDED.telegram_service_plan_published_template,
+       telegram_service_plan_published_button_text = EXCLUDED.telegram_service_plan_published_button_text,
        telegram_proxy_enabled = EXCLUDED.telegram_proxy_enabled,
        telegram_https_proxy = EXCLUDED.telegram_https_proxy`,
     [
@@ -710,6 +748,8 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       next.telegram_service_plan_chat_id,
       next.telegram_service_plan_template,
       next.telegram_service_plan_published_chat_id,
+      next.telegram_service_plan_published_template,
+      next.telegram_service_plan_published_button_text,
       next.telegram_proxy_enabled,
       next.telegram_https_proxy,
     ],
