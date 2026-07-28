@@ -20,7 +20,7 @@ import {
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuReply, LuX } from 'react-icons/lu';
-import { hasMessengerSenderId, isAssistantBotMessage, isServicePlanMondayMailingPayload } from '../messengerChannelKinds';
+import { hasMessengerSenderId, isAssistantBotMessage, isServicePlanMondayMailingPayload, isServicePlanPublishedPayload } from '../messengerChannelKinds';
 import {
   assistantMarkdownToPlainText,
   renderAssistantMessageContent,
@@ -606,7 +606,7 @@ function MessageBubbleInner({
     !isOptimistic &&
     !systemBotAccessMessage &&
     payloadType !== 'access_request' &&
-    (isMine || !hasSender || isServicePlanMondayMailingPayload(payload));
+    (isMine || !hasSender || isServicePlanMondayMailingPayload(payload) || isServicePlanPublishedPayload(payload));
 
   const senderName = String(
     message.sender_name ??
@@ -1566,6 +1566,33 @@ function MessageBubbleInner({
     if (useAssistantMarkdown) {
       return renderAssistantMessageContent(assistantText, { isMine });
     }
+
+    const publishedShareUrl = isServicePlanPublishedPayload(payload)
+      ? String(payload.share_url ?? '').trim()
+      : '';
+    const publishedButtonText =
+      String(payload.button_text ?? '').trim() || 'Открыть программу';
+    if (publishedShareUrl && /^https?:\/\//i.test(publishedShareUrl)) {
+      return (
+        <div className="space-y-2.5">
+          <MentionRichText text={message.content} namesById={participantLabelById} isMine={isMine} />
+          <a
+            href={publishedShareUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={[
+              'inline-flex items-center justify-center rounded-xl px-3.5 py-2 text-sm font-extrabold transition-colors',
+              isMine
+                ? 'bg-white/15 text-white hover:bg-white/20'
+                : 'bg-primary text-white hover:bg-primary/90',
+            ].join(' ')}
+          >
+            {publishedButtonText}
+          </a>
+        </div>
+      );
+    }
+
     return (
       <MentionRichText text={message.content} namesById={participantLabelById} isMine={isMine} />
     );

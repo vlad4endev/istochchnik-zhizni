@@ -509,6 +509,8 @@ export interface TelegramSettingsResponse {
   service_plan_chat_id: string | null;
   service_plan_template: string | null;
   service_plan_published_chat_id: string | null;
+  /** Telegram-чат «Медийка» */
+  media_chat_id: string | null;
   /** Авторассылка программы: включена ли */
   service_plan_mailing_enabled?: boolean;
   /** День недели 0=вс … 6=сб */
@@ -584,6 +586,7 @@ export async function patchTelegramSettings(body: {
   service_plan_chat_id?: string | null;
   service_plan_template?: string | null;
   service_plan_published_chat_id?: string | null;
+  media_chat_id?: string | null;
   service_plan_mailing_enabled?: boolean;
   service_plan_mailing_weekday?: number;
   service_plan_mailing_time?: string;

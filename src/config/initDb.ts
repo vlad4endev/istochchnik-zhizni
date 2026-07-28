@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS global_settings (
   telegram_service_plan_chat_id TEXT,
   telegram_service_plan_template TEXT,
   telegram_service_plan_published_chat_id TEXT,
+  telegram_media_chat_id TEXT,
   telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   telegram_dispatch_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   telegram_dispatch_kind VARCHAR(16) NOT NULL DEFAULT 'daily',
@@ -380,6 +381,7 @@ ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_prayer_template TE
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_chat_id TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_template TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_published_chat_id TEXT;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_media_chat_id TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_kind VARCHAR(16) NOT NULL DEFAULT 'daily';

@@ -30,7 +30,7 @@ import {
   listPreacherSermonHistory,
   upsertSermonFeedbackComment,
 } from '../services/sermonFeedbackService';
-import { runServicePlanMondayMailing, notifyServicePlanPublishedTelegram } from '../services/servicePlanMondayMailingService';
+import { runServicePlanMondayMailing, notifyServicePlanPublished } from '../services/servicePlanMondayMailingService';
 import { normalizeAppRole, normalizeAppRoles, type AppRole } from '../types/appRole';
 import { roleHasPermission } from '../types/appPermissions';
 import { loadRolePermissionsSettings } from '../services/rolePermissionsSettingsService';
@@ -703,19 +703,21 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
       const publishedDate = nextServiceDate || String(beforeRow?.service_date ?? '');
       if (shareToken && publishedDate) {
         try {
-          const tg = await notifyServicePlanPublishedTelegram({
+          const pub = await notifyServicePlanPublished({
             serviceDateYmd: publishedDate,
             shareToken,
           });
-          if (tg.ok) {
-            console.log(`[service-planner] published telegram notify → ${tg.chat_id}`);
-          } else if (tg.skipped) {
-            console.log(`[service-planner] published telegram skipped: ${tg.reason ?? 'unknown'}`);
+          if (pub.ok) {
+            console.log(
+              `[service-planner] published notify → telegram=[${(pub.telegram_chats ?? []).join(',')}] messenger=[${(pub.messenger_channels ?? []).join(',')}]`,
+            );
+          } else if (pub.skipped) {
+            console.log(`[service-planner] published notify skipped: ${pub.reason ?? 'unknown'}`);
           } else {
-            console.warn(`[service-planner] published telegram failed: ${tg.reason ?? 'unknown'}`);
+            console.warn(`[service-planner] published notify failed: ${pub.reason ?? 'unknown'}`);
           }
-        } catch (tgErr) {
-          console.warn('[service-planner] published telegram notify failed:', tgErr);
+        } catch (pubErr) {
+          console.warn('[service-planner] published notify failed:', pubErr);
         }
       }
     }

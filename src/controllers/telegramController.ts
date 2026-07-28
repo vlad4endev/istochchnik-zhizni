@@ -183,6 +183,7 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
         service_plan_chat_id?: unknown;
         service_plan_template?: unknown;
         service_plan_published_chat_id?: unknown;
+        media_chat_id?: unknown;
         proxy_enabled?: unknown;
         proxy_url?: unknown;
         service_plan_mailing_enabled?: unknown;
@@ -256,6 +257,14 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
     res.status(400).json({ error: 'Поле "service_plan_published_chat_id" должно быть строкой или null' });
     return;
   }
+  if (
+    body?.media_chat_id !== undefined &&
+    body.media_chat_id !== null &&
+    typeof body.media_chat_id !== 'string'
+  ) {
+    res.status(400).json({ error: 'Поле "media_chat_id" должно быть строкой или null' });
+    return;
+  }
   if (body?.proxy_enabled !== undefined && typeof body.proxy_enabled !== 'boolean') {
     res.status(400).json({ error: 'Поле "proxy_enabled" должно быть boolean' });
     return;
@@ -307,6 +316,7 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
       service_plan_chat_id: body?.service_plan_chat_id as string | null | undefined,
       service_plan_template: body?.service_plan_template as string | null | undefined,
       service_plan_published_chat_id: body?.service_plan_published_chat_id as string | null | undefined,
+      media_chat_id: body?.media_chat_id as string | null | undefined,
       proxy_enabled: body?.proxy_enabled as boolean | undefined,
       proxy_url: body?.proxy_url as string | null | undefined,
     });

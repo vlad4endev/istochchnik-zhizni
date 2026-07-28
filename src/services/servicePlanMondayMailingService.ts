@@ -4,8 +4,12 @@ import { getAssignmentsForPlan } from './mediaScheduleService';
 import { getPlanDetails } from './servicePlannerService';
 import { getTelegramSettings, resolveTelegramUsernamesForMembers, sendTelegramByPurpose, sendTelegramToChat } from './telegramService';
 import {
+  ensureMediykaMessengerChannel,
   ensureServicePlanPlanningMessengerChannel,
+  MEDIA_TEAM_CHANNEL_TITLE,
   postServicePlanMondayMailingMessengerNotification,
+  postServicePlanPublishedMessengerNotification,
+  SERVICE_PLAN_PLANNING_CHANNEL_TITLE,
 } from './messengerService';
 
 const DEFAULT_TZ = 'Europe/Moscow';
@@ -1210,12 +1214,20 @@ function formatPublishedDateRu(serviceDateYmd: string): string {
 }
 
 /**
- * При публикации программы: сообщение в отдельный Telegram-чат + inline-кнопка со ссылкой.
+ * При публикации программы: ссылка + кнопка в Telegram-чаты
+ * (финальная / программа служения / медичка) и в чаты приложения
+ * «Богослужение (планирование)» и «Медийка».
  */
-export async function notifyServicePlanPublishedTelegram(input: {
+export async function notifyServicePlanPublished(input: {
   serviceDateYmd: string;
   shareToken: string;
-}): Promise<{ ok: boolean; skipped?: boolean; reason?: string; chat_id?: string }> {
+}): Promise<{
+  ok: boolean;
+  skipped?: boolean;
+  reason?: string;
+  telegram_chats?: string[];
+  messenger_channels?: string[];
+}> {
   const shareToken = String(input.shareToken ?? '').trim();
   const serviceDateYmd = String(input.serviceDateYmd ?? '').trim();
   if (!shareToken || !serviceDateYmd) {
@@ -1229,37 +1241,115 @@ export async function notifyServicePlanPublishedTelegram(input: {
     console.warn('[service-plan-published] telegram settings load failed:', e);
   }
 
-  const chatId =
-    settings?.service_plan_published_chat_id?.trim() ||
-    process.env.TELEGRAM_SERVICE_PLAN_PUBLISHED_CHAT_ID?.trim() ||
-    null;
-  if (!chatId) {
-    return { ok: false, skipped: true, reason: 'missing_published_chat' };
-  }
-
   const origin = resolvePublicWebOrigin();
   const shareUrl = `${origin}/service-plan/share/${shareToken}`;
   const dateText = formatPublishedDateRu(serviceDateYmd);
   const text = `Финальная программа служения на ${dateText} готова\n\n${shareUrl}`;
 
-  try {
-    const sent = await sendTelegramToChat({
-      chatId,
-      text,
-      inlineUrlButton: { text: 'Открыть программу', url: shareUrl },
-    });
-    return { ok: true, chat_id: sent.chat_id };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (
-      msg === 'telegram_disabled' ||
-      msg === 'telegram_missing_token' ||
-      msg === 'telegram_missing_chat'
-    ) {
-      console.warn(`[service-plan-published] telegram skipped: ${msg}`);
-      return { ok: false, skipped: true, reason: msg };
+  const telegramChatIds = Array.from(
+    new Set(
+      [
+        settings?.service_plan_published_chat_id?.trim() ||
+          process.env.TELEGRAM_SERVICE_PLAN_PUBLISHED_CHAT_ID?.trim() ||
+          '',
+        settings?.service_plan_chat_id?.trim() ||
+          process.env.TELEGRAM_SERVICE_PLAN_CHAT_ID?.trim() ||
+          '',
+        settings?.media_chat_id?.trim() || process.env.TELEGRAM_MEDIA_CHAT_ID?.trim() || '',
+      ]
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  );
+
+  const telegramOkChats: string[] = [];
+  for (const chatId of telegramChatIds) {
+    try {
+      const sent = await sendTelegramToChat({
+        chatId,
+        text,
+        inlineUrlButton: { text: 'Открыть программу', url: shareUrl },
+      });
+      telegramOkChats.push(sent.chat_id);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (
+        msg === 'telegram_disabled' ||
+        msg === 'telegram_missing_token' ||
+        msg === 'telegram_missing_chat'
+      ) {
+        console.warn(`[service-plan-published] telegram skipped (${chatId}): ${msg}`);
+      } else {
+        console.error(`[service-plan-published] telegram send failed (${chatId}):`, e);
+      }
     }
-    console.error('[service-plan-published] telegram send failed:', e);
-    return { ok: false, reason: msg };
   }
+
+  const messengerOkChannels: string[] = [];
+  const messengerTargets: Array<{ id: string | null; label: string }> = [];
+  try {
+    messengerTargets.push({
+      id: await ensureServicePlanPlanningMessengerChannel(),
+      label: SERVICE_PLAN_PLANNING_CHANNEL_TITLE,
+    });
+  } catch (e) {
+    console.warn('[service-plan-published] ensure planning channel failed:', e);
+  }
+  try {
+    messengerTargets.push({
+      id: await ensureMediykaMessengerChannel(),
+      label: MEDIA_TEAM_CHANNEL_TITLE,
+    });
+  } catch (e) {
+    console.warn('[service-plan-published] ensure mediyka channel failed:', e);
+  }
+
+  for (const target of messengerTargets) {
+    if (!target.id) continue;
+    try {
+      await postServicePlanPublishedMessengerNotification({
+        conversationId: target.id,
+        content: text,
+        serviceDateYmd,
+        shareToken,
+        shareUrl,
+        channelLabel: target.label,
+      });
+      messengerOkChannels.push(target.label);
+    } catch (e) {
+      console.error(`[service-plan-published] messenger send failed (${target.label}):`, e);
+    }
+  }
+
+  const ok = telegramOkChats.length > 0 || messengerOkChannels.length > 0;
+  if (!ok && telegramChatIds.length === 0 && messengerOkChannels.length === 0) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: 'no_destinations',
+      telegram_chats: [],
+      messenger_channels: [],
+    };
+  }
+
+  return {
+    ok,
+    telegram_chats: telegramOkChats,
+    messenger_channels: messengerOkChannels,
+    ...(ok ? {} : { reason: 'delivery_failed' }),
+  };
+}
+
+/** @deprecated use notifyServicePlanPublished */
+export async function notifyServicePlanPublishedTelegram(input: {
+  serviceDateYmd: string;
+  shareToken: string;
+}): Promise<{ ok: boolean; skipped?: boolean; reason?: string; chat_id?: string }> {
+  const result = await notifyServicePlanPublished(input);
+  return {
+    ok: result.ok,
+    skipped: result.skipped,
+    reason: result.reason,
+    chat_id: result.telegram_chats?.[0],
+  };
 }

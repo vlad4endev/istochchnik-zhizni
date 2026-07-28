@@ -2517,6 +2517,7 @@ export async function deleteMessage(
        AND (
          m.sender_id IS NULL
          OR coalesce(m.payload->>'kind', '') = 'service_plan_monday_mailing'
+         OR coalesce(m.payload->>'kind', '') = 'service_plan_published'
        )
        AND cp.conversation_id = m.conversation_id
        AND cp.member_id = $2
@@ -3106,6 +3107,10 @@ const ACCESS_REQUESTS_CHANNEL_TITLE = 'Заявки';
 export const SERVICE_PLAN_PLANNING_CHANNEL_KIND = 'service_plan_planning';
 export const SERVICE_PLAN_PLANNING_CHANNEL_TITLE = 'Богослужение (планирование)';
 
+/** Канал медиа-команды в приложении. */
+export const MEDIA_TEAM_CHANNEL_KIND = 'media_team';
+export const MEDIA_TEAM_CHANNEL_TITLE = 'Медийка';
+
 /** Личный ИИ-чат «ИИ помощник» (по одному на участника). */
 export const MESSENGER_ASSISTANT_CHANNEL_KIND = 'assistant';
 export const MESSENGER_ASSISTANT_CHANNEL_TITLE = 'ИИ помощник';
@@ -3342,6 +3347,169 @@ async function syncPlanningParticipantsToServicePlanChannel(conversationId: stri
     const mId = Number((row as { id: unknown }).id);
     if (!Number.isFinite(mId)) continue;
     await addParticipant(conversationId, mId, 'member');
+  }
+}
+
+async function syncMediaParticipantsToMediykaChannel(conversationId: string): Promise<void> {
+  const members = await dbQuery(
+    `SELECT id FROM members
+     WHERE COALESCE(is_active, TRUE)
+       AND (
+         app_role IN ('admin', 'editor')
+         OR coalesce(app_roles, array[]::text[]) && array['admin','editor']::text[]
+         OR lower(coalesce(ministry_direction, '')) LIKE '%медиа%'
+         OR lower(coalesce(ministry_role, '')) LIKE '%медиа%'
+       )`,
+  );
+  for (const row of members.rows) {
+    const mId = Number((row as { id: unknown }).id);
+    if (!Number.isFinite(mId)) continue;
+    await addParticipant(conversationId, mId, 'member');
+  }
+}
+
+/**
+ * Канал «Медийка»: ищем по metadata.kind, иначе по названию, иначе создаём.
+ */
+export async function ensureMediykaMessengerChannel(): Promise<string | null> {
+  try {
+    const byKind = await dbQuery(
+      `SELECT id FROM conversations
+       WHERE metadata->>'kind' = $1
+       LIMIT 1`,
+      [MEDIA_TEAM_CHANNEL_KIND],
+    );
+    if (byKind.rows[0]?.id != null) {
+      const convId = bigint((byKind.rows[0] as { id: unknown }).id);
+      await syncMediaParticipantsToMediykaChannel(convId);
+      return convId;
+    }
+
+    const byTitle = await dbQuery(
+      `SELECT id, metadata FROM conversations
+       WHERE lower(trim(coalesce(title, ''))) = lower(trim($1))
+       ORDER BY id ASC
+       LIMIT 1`,
+      [MEDIA_TEAM_CHANNEL_TITLE],
+    );
+    if (byTitle.rows[0]?.id != null) {
+      const convId = bigint((byTitle.rows[0] as { id: unknown }).id);
+      const metaRaw = (byTitle.rows[0] as { metadata?: unknown }).metadata;
+      const meta =
+        metaRaw && typeof metaRaw === 'object' && !Array.isArray(metaRaw)
+          ? { ...(metaRaw as Record<string, unknown>) }
+          : {};
+      if (String(meta.kind ?? '') !== MEDIA_TEAM_CHANNEL_KIND) {
+        meta.kind = MEDIA_TEAM_CHANNEL_KIND;
+        await dbQuery(`UPDATE conversations SET metadata = $2::jsonb WHERE id = $1`, [
+          convId,
+          JSON.stringify(meta),
+        ]);
+      }
+      await syncMediaParticipantsToMediykaChannel(convId);
+      return convId;
+    }
+
+    const ins = await dbQuery(
+      `INSERT INTO conversations (type, title, metadata)
+       VALUES ('channel', $1, $2::jsonb)
+       RETURNING id`,
+      [MEDIA_TEAM_CHANNEL_TITLE, JSON.stringify({ kind: MEDIA_TEAM_CHANNEL_KIND })],
+    );
+    const convId = bigint((ins.rows[0] as { id: unknown }).id);
+    await syncMediaParticipantsToMediykaChannel(convId);
+    return convId;
+  } catch (e) {
+    console.error('[messenger] ensureMediykaMessengerChannel:', e);
+    return null;
+  }
+}
+
+/**
+ * Уведомление «финальная программа опубликована» в указанный канал приложения.
+ */
+export async function postServicePlanPublishedMessengerNotification(input: {
+  conversationId: string;
+  content: string;
+  serviceDateYmd: string;
+  shareToken: string;
+  shareUrl: string;
+  channelLabel?: string;
+}): Promise<void> {
+  const convId = String(input.conversationId ?? '').trim();
+  if (!convId) {
+    throw new Error('service_plan_published_channel_unavailable');
+  }
+
+  const content = input.content.trim();
+  if (!content) {
+    throw new Error('service_plan_published_empty');
+  }
+
+  const shareUrl = String(input.shareUrl ?? '').trim();
+  const contentForDb = encryptMessageText(content);
+  const payload: MessagePayload = {
+    kind: 'service_plan_published',
+    service_date: input.serviceDateYmd,
+    share_token: input.shareToken,
+    share_url: shareUrl,
+    button_text: 'Открыть программу',
+  };
+
+  await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [convId]);
+
+  const ins = await dbQuery(
+    `INSERT INTO messages (conversation_id, sender_id, content, payload_type, payload)
+     VALUES ($1::bigint, NULL, $2, 'text'::message_payload_type, $3::jsonb)
+     RETURNING id`,
+    [convId, contentForDb, JSON.stringify(payload)],
+  );
+  const rawId = (ins.rows[0] as { id?: unknown } | undefined)?.id;
+  if (rawId == null) {
+    throw new Error('service_plan_published_insert_failed');
+  }
+  const messageId = bigint(rawId);
+
+  const full = await fetchMessageByIdForFanout(messageId);
+  if (!full) return;
+
+  const { sendToRoomAll } = await import('../realtime/wsHub');
+  sendToRoomAll(convId, {
+    type: 'msg:new',
+    conversationId: convId,
+    message: { ...full, is_read: false as const },
+  });
+
+  try {
+    const memberIds = await getConversationMemberIds(convId);
+    const meta = await getConversationMeta(convId);
+    const chatLabel =
+      input.channelLabel?.trim() || meta?.title?.trim() || 'Программа служения';
+    const firstLine = content.split('\n').map((l) => l.trim()).find(Boolean) || content;
+    const previewShort =
+      firstLine.length > 160 ? `${firstLine.slice(0, 157).trim()}…` : firstLine;
+    for (const rid of memberIds) {
+      const r = Number(rid);
+      if (!Number.isFinite(r)) continue;
+      if (await isConversationMutedForMember(convId, r)) continue;
+      await sendPushNotification(r, {
+        title: chatLabel,
+        body: previewShort,
+        conversationId: convId,
+        messageId,
+        url: resolveMessengerConversationDeepLink(convId),
+        tag: `chat-${convId}`,
+        renotify: true,
+        badge: '/assets/pwa-64x64.png',
+        icon: '/assets/pwa-192x192.png',
+        actions: [
+          { action: 'reply', title: 'Ответить' },
+          { action: 'dismiss', title: 'Закрыть' },
+        ],
+      });
+    }
+  } catch (e) {
+    console.warn('[messenger] service-plan published push notify failed:', e);
   }
 }
 

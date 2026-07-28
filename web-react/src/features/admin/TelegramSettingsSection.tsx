@@ -464,6 +464,7 @@ export function TelegramSettingsSection() {
     service_plan_chat_id: '',
     service_plan_template: '',
     service_plan_published_chat_id: '',
+    media_chat_id: '',
     service_plan_mailing_enabled: true,
     service_plan_mailing_weekday: 1,
     service_plan_mailing_time: '10:00',
@@ -507,6 +508,7 @@ export function TelegramSettingsSection() {
       service_plan_chat_id: data.service_plan_chat_id ?? '',
       service_plan_template: (data.service_plan_template ?? '').trim() || DEFAULT_PROGRAM_MAILING_TEMPLATE,
       service_plan_published_chat_id: data.service_plan_published_chat_id ?? '',
+      media_chat_id: data.media_chat_id ?? '',
       service_plan_mailing_enabled: data.service_plan_mailing_enabled !== false,
       service_plan_mailing_weekday:
         typeof data.service_plan_mailing_weekday === 'number' ? data.service_plan_mailing_weekday : 1,
@@ -534,6 +536,7 @@ export function TelegramSettingsSection() {
         service_plan_chat_id: normalizeUiString(form.service_plan_chat_id),
         service_plan_template: normalizeUiString(form.service_plan_template),
         service_plan_published_chat_id: normalizeUiString(form.service_plan_published_chat_id),
+        media_chat_id: normalizeUiString(form.media_chat_id),
         service_plan_mailing_enabled: form.service_plan_mailing_enabled,
         service_plan_mailing_weekday: form.service_plan_mailing_weekday,
         service_plan_mailing_time: form.service_plan_mailing_time,
@@ -807,6 +810,7 @@ export function TelegramSettingsSection() {
     service_plan_chat_id: null,
     service_plan_template: null,
     service_plan_published_chat_id: null,
+    media_chat_id: null,
     has_bot_token: false,
     proxy: {
       enabled: false,
@@ -1094,17 +1098,23 @@ export function TelegramSettingsSection() {
               />
               <ChatField
                 label="Программа служения"
-                hint="Чат авторассылки · день и время — во вкладке «Программа»"
+                hint="Telegram «Богослужение (планирование)» · авторассылка и «Опубликовать»"
                 value={form.service_plan_chat_id}
                 onChange={(service_plan_chat_id) => setForm((s) => ({ ...s, service_plan_chat_id }))}
               />
               <ChatField
                 label="Финальная программа"
-                hint="При нажатии «Опубликовать» · ссылка + кнопка"
+                hint="При «Опубликовать» · также уходит в приложение (Медийка + планирование) и в чаты ниже"
                 value={form.service_plan_published_chat_id}
                 onChange={(service_plan_published_chat_id) =>
                   setForm((s) => ({ ...s, service_plan_published_chat_id }))
                 }
+              />
+              <ChatField
+                label="Медийка"
+                hint="Telegram-чат медиа-команды · получает «Финальная программа» при публикации"
+                value={form.media_chat_id}
+                onChange={(media_chat_id) => setForm((s) => ({ ...s, media_chat_id }))}
               />
             </div>
           </div>
