@@ -14,6 +14,10 @@ import {
   updateTelegramDispatchSettings,
   updateTelegramSettings,
 } from '../services/telegramService';
+import {
+  getServicePlanMailingSchedule,
+  updateServicePlanMailingSchedule,
+} from '../services/servicePlanMondayMailingService';
 import { notifyRealtime } from '../realtime/notify';
 
 type AuthRequest = Request & { authUserId?: number; authUserRole?: string };
@@ -149,8 +153,17 @@ function errorToStatus(error: unknown): { status: number; message: string } {
 export async function getTelegramSettingsHandler(req: Request, res: Response): Promise<void> {
   if (!ensureAdmin(req, res)) return;
   try {
-    const settings = await getTelegramSettings();
-    res.json(settings);
+    const [settings, mailingSchedule] = await Promise.all([
+      getTelegramSettings(),
+      getServicePlanMailingSchedule(),
+    ]);
+    res.json({
+      ...settings,
+      service_plan_mailing_enabled: mailingSchedule.enabled,
+      service_plan_mailing_weekday: mailingSchedule.weekday,
+      service_plan_mailing_time: mailingSchedule.time_hhmm,
+      service_plan_mailing_timezone: mailingSchedule.timezone,
+    });
   } catch (error) {
     console.error('[telegram] get settings failed:', error);
     res.status(500).json({ error: 'Не удалось загрузить Telegram настройки' });
@@ -172,6 +185,10 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
         service_plan_published_chat_id?: unknown;
         proxy_enabled?: unknown;
         proxy_url?: unknown;
+        service_plan_mailing_enabled?: unknown;
+        service_plan_mailing_weekday?: unknown;
+        service_plan_mailing_time?: unknown;
+        service_plan_mailing_timezone?: unknown;
       }
     | undefined;
 
@@ -247,6 +264,37 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
     res.status(400).json({ error: 'Поле "proxy_url" должно быть строкой или null' });
     return;
   }
+  if (
+    body?.service_plan_mailing_enabled !== undefined &&
+    typeof body.service_plan_mailing_enabled !== 'boolean'
+  ) {
+    res.status(400).json({ error: 'Поле "service_plan_mailing_enabled" должно быть boolean' });
+    return;
+  }
+  if (body?.service_plan_mailing_weekday !== undefined) {
+    const wd = Number(body.service_plan_mailing_weekday);
+    if (!Number.isInteger(wd) || wd < 0 || wd > 6) {
+      res.status(400).json({ error: 'Поле "service_plan_mailing_weekday" должно быть 0–6' });
+      return;
+    }
+  }
+  if (
+    body?.service_plan_mailing_time !== undefined &&
+    body.service_plan_mailing_time !== null &&
+    (typeof body.service_plan_mailing_time !== 'string' ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(body.service_plan_mailing_time.trim()))
+  ) {
+    res.status(400).json({ error: 'Поле "service_plan_mailing_time" должно быть HH:MM' });
+    return;
+  }
+  if (
+    body?.service_plan_mailing_timezone !== undefined &&
+    body.service_plan_mailing_timezone !== null &&
+    typeof body.service_plan_mailing_timezone !== 'string'
+  ) {
+    res.status(400).json({ error: 'Поле "service_plan_mailing_timezone" должно быть строкой' });
+    return;
+  }
 
   try {
     const settings = await updateTelegramSettings({
@@ -262,8 +310,38 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
       proxy_enabled: body?.proxy_enabled as boolean | undefined,
       proxy_url: body?.proxy_url as string | null | undefined,
     });
+
+    const schedulePatch: {
+      enabled?: boolean;
+      weekday?: number;
+      time_hhmm?: string;
+      timezone?: string;
+    } = {};
+    if (typeof body?.service_plan_mailing_enabled === 'boolean') {
+      schedulePatch.enabled = body.service_plan_mailing_enabled;
+    }
+    if (body?.service_plan_mailing_weekday !== undefined) {
+      schedulePatch.weekday = Number(body.service_plan_mailing_weekday);
+    }
+    if (typeof body?.service_plan_mailing_time === 'string') {
+      schedulePatch.time_hhmm = body.service_plan_mailing_time.trim();
+    }
+    if (typeof body?.service_plan_mailing_timezone === 'string') {
+      schedulePatch.timezone = body.service_plan_mailing_timezone.trim();
+    }
+    const mailingSchedule =
+      Object.keys(schedulePatch).length > 0
+        ? await updateServicePlanMailingSchedule(schedulePatch)
+        : await getServicePlanMailingSchedule();
+
     notifyRealtime(['admin']);
-    res.json(settings);
+    res.json({
+      ...settings,
+      service_plan_mailing_enabled: mailingSchedule.enabled,
+      service_plan_mailing_weekday: mailingSchedule.weekday,
+      service_plan_mailing_time: mailingSchedule.time_hhmm,
+      service_plan_mailing_timezone: mailingSchedule.timezone,
+    });
   } catch (error) {
     console.error('[telegram] patch settings failed:', error);
     const mapped = errorToStatus(error);

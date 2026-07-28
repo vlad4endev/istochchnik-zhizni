@@ -45,6 +45,16 @@ const DEFAULT_PROGRAM_MAILING_TEMPLATE = [
   '8. Ссылка на программу: {{share_url}}',
 ].join('\n');
 
+const WEEKDAY_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 1, label: 'Понедельник' },
+  { value: 2, label: 'Вторник' },
+  { value: 3, label: 'Среда' },
+  { value: 4, label: 'Четверг' },
+  { value: 5, label: 'Пятница' },
+  { value: 6, label: 'Суббота' },
+  { value: 0, label: 'Воскресенье' },
+];
+
 type ProgramPreviewState = {
   text: string;
   textMessenger: string;
@@ -454,6 +464,10 @@ export function TelegramSettingsSection() {
     service_plan_chat_id: '',
     service_plan_template: '',
     service_plan_published_chat_id: '',
+    service_plan_mailing_enabled: true,
+    service_plan_mailing_weekday: 1,
+    service_plan_mailing_time: '10:00',
+    service_plan_mailing_timezone: 'Europe/Moscow',
     proxy_enabled: false,
     proxy_url: '',
   });
@@ -493,6 +507,11 @@ export function TelegramSettingsSection() {
       service_plan_chat_id: data.service_plan_chat_id ?? '',
       service_plan_template: (data.service_plan_template ?? '').trim() || DEFAULT_PROGRAM_MAILING_TEMPLATE,
       service_plan_published_chat_id: data.service_plan_published_chat_id ?? '',
+      service_plan_mailing_enabled: data.service_plan_mailing_enabled !== false,
+      service_plan_mailing_weekday:
+        typeof data.service_plan_mailing_weekday === 'number' ? data.service_plan_mailing_weekday : 1,
+      service_plan_mailing_time: data.service_plan_mailing_time?.trim() || '10:00',
+      service_plan_mailing_timezone: data.service_plan_mailing_timezone?.trim() || 'Europe/Moscow',
       proxy_enabled: data.proxy?.enabled ?? false,
       proxy_url: '',
     });
@@ -515,6 +534,10 @@ export function TelegramSettingsSection() {
         service_plan_chat_id: normalizeUiString(form.service_plan_chat_id),
         service_plan_template: normalizeUiString(form.service_plan_template),
         service_plan_published_chat_id: normalizeUiString(form.service_plan_published_chat_id),
+        service_plan_mailing_enabled: form.service_plan_mailing_enabled,
+        service_plan_mailing_weekday: form.service_plan_mailing_weekday,
+        service_plan_mailing_time: form.service_plan_mailing_time,
+        service_plan_mailing_timezone: form.service_plan_mailing_timezone,
         proxy_enabled: form.proxy_enabled,
         proxy_url: normalizeUiOptionalUpdateString(form.proxy_url),
       }),
@@ -711,14 +734,31 @@ export function TelegramSettingsSection() {
     mutationFn: () =>
       patchTelegramSettings({
         service_plan_template: normalizeUiString(form.service_plan_template),
+        service_plan_mailing_enabled: form.service_plan_mailing_enabled,
+        service_plan_mailing_weekday: form.service_plan_mailing_weekday,
+        service_plan_mailing_time: form.service_plan_mailing_time,
+        service_plan_mailing_timezone: form.service_plan_mailing_timezone,
       }),
     onSuccess: (next) => {
-      setNote({ type: 'ok', text: 'Шаблон рассылки сохранён.' });
+      setNote({ type: 'ok', text: 'Шаблон и расписание рассылки сохранены.' });
       qc.setQueryData(Q_TG, next);
     },
     onError: (e) =>
       setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить шаблон.') }),
   });
+
+  const mailingScheduleLabel = useMemo(() => {
+    const day =
+      WEEKDAY_OPTIONS.find((d) => d.value === form.service_plan_mailing_weekday)?.label ??
+      `день ${form.service_plan_mailing_weekday}`;
+    if (!form.service_plan_mailing_enabled) return `выключена · было: ${day} ${form.service_plan_mailing_time}`;
+    return `${day} в ${form.service_plan_mailing_time} (${form.service_plan_mailing_timezone})`;
+  }, [
+    form.service_plan_mailing_enabled,
+    form.service_plan_mailing_weekday,
+    form.service_plan_mailing_time,
+    form.service_plan_mailing_timezone,
+  ]);
 
   const lastDispatchLabel = useMemo(() => {
     if (dispatchForm.last_sent_label) return dispatchForm.last_sent_label;
@@ -1054,7 +1094,7 @@ export function TelegramSettingsSection() {
               />
               <ChatField
                 label="Программа служения"
-                hint="Понедельник 10:00 · если пусто — запасной"
+                hint="Чат авторассылки · день и время — во вкладке «Программа»"
                 value={form.service_plan_chat_id}
                 onChange={(service_plan_chat_id) => setForm((s) => ({ ...s, service_plan_chat_id }))}
               />
@@ -1116,9 +1156,74 @@ export function TelegramSettingsSection() {
             <div>
               <h3 className="text-sm font-semibold text-stone-900">Рассылка программы служения</h3>
               <p className="mt-0.5 text-xs text-stone-500">
-                Редактируйте шаблон, смотрите предпросмотр по ближайшей программе, затем сохраните
-                или отправьте. Автоотправка — каждый понедельник в 10:00 (МСК). Данные берутся только
-                из ближайшей активной программы; в Telegram люди — как @ник, если он есть.
+                Настройте день и время автоотправки, шаблон и предпросмотр. Данные берутся только из
+                ближайшей активной программы; в Telegram люди — как @ник, если он есть.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold text-stone-900">Расписание автоотправки</h4>
+                <span className="text-xs text-stone-500">{mailingScheduleLabel}</span>
+              </div>
+              <Toggle
+                checked={form.service_plan_mailing_enabled}
+                onChange={(service_plan_mailing_enabled) =>
+                  setForm((s) => ({ ...s, service_plan_mailing_enabled }))
+                }
+                label="Включить авторассылку"
+                hint="Если выключено — уходит только вручную кнопкой «Отправить сейчас»"
+              />
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">День недели</label>
+                  <select
+                    className={fieldClass()}
+                    value={form.service_plan_mailing_weekday}
+                    onChange={(e) =>
+                      setForm((s) => ({
+                        ...s,
+                        service_plan_mailing_weekday: Number(e.target.value),
+                      }))
+                    }
+                  >
+                    {WEEKDAY_OPTIONS.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+                  <input
+                    type="time"
+                    className={fieldClass()}
+                    value={form.service_plan_mailing_time}
+                    onChange={(e) =>
+                      setForm((s) => ({ ...s, service_plan_mailing_time: e.target.value || '10:00' }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Часовой пояс</label>
+                  <select
+                    className={fieldClass()}
+                    value={form.service_plan_mailing_timezone}
+                    onChange={(e) =>
+                      setForm((s) => ({ ...s, service_plan_mailing_timezone: e.target.value }))
+                    }
+                  >
+                    <option value="Europe/Moscow">Europe/Moscow</option>
+                    <option value="Europe/Samara">Europe/Samara</option>
+                    <option value="Asia/Yekaterinburg">Asia/Yekaterinburg</option>
+                    <option value="UTC">UTC</option>
+                  </select>
+                </div>
+              </div>
+              <p className="text-xs text-stone-500">
+                Сохраните расписание кнопкой «Сохранить шаблон и расписание» ниже. Повторно в тот же
+                день для той же даты программы не отправится.
               </p>
             </div>
 
@@ -1258,7 +1363,7 @@ export function TelegramSettingsSection() {
                   saveProgramTemplateMut.mutate();
                 }}
               >
-                {saveProgramTemplateMut.isPending ? 'Сохранение…' : 'Сохранить шаблон'}
+                {saveProgramTemplateMut.isPending ? 'Сохранение…' : 'Сохранить шаблон и расписание'}
               </button>
               <button
                 type="button"

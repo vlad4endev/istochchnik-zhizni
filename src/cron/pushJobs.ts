@@ -7,7 +7,7 @@ import { sendPush } from '../services/pushService';
 import { dispatchDueSermonFeedbackNotifications } from '../services/sermonFeedbackService';
 import { sendMediaScheduleReminders } from '../services/mediaScheduleService';
 import { sendMusicScheduleReminders } from '../services/musicScheduleService';
-import { runServicePlanMondayMailing } from '../services/servicePlanMondayMailingService';
+import { processServicePlanMailingDue } from '../services/servicePlanMondayMailingService';
 
 type CuratorWeekKind = 'current' | 'next';
 
@@ -57,6 +57,23 @@ export function initPushCronJobs() {
         await runNotificationRulesTick();
       } catch (e) {
         console.error('[CRON] notification rules tick', e);
+      }
+      try {
+        const mailing = await processServicePlanMailingDue();
+        if (mailing.triggered && mailing.result) {
+          const result = mailing.result;
+          if (result.skipped) {
+            console.log(
+              `[CRON] service plan mailing skipped: ${result.reason ?? 'unknown'} (sunday ${result.service_date ?? '—'})`,
+            );
+          } else {
+            console.log(
+              `[CRON] service plan mailing: ok=${result.ok} messenger=${result.messenger_ok} telegram=${result.telegram_ok} plan=${result.plan_id ?? '—'} sunday=${result.service_date ?? '—'}`,
+            );
+          }
+        }
+      } catch (e) {
+        console.error('[CRON] service plan mailing tick', e);
       }
     },
     { timezone: 'UTC' },
@@ -189,30 +206,5 @@ export function initPushCronJobs() {
       }
     },
     { timezone: 'UTC' },
-  );
-
-  /** Понедельник 10:00 МСК: авторассылка программы служения в чат и Telegram. */
-  cron.schedule(
-    process.env.SERVICE_PLAN_MONDAY_MAILING_CRON ?? '0 10 * * 1',
-    async () => {
-      if (process.env.DISABLE_SERVICE_PLAN_MONDAY_MAILING_CRON === 'true') {
-        return;
-      }
-      try {
-        const result = await runServicePlanMondayMailing();
-        if (result.skipped) {
-          console.log(
-            `[CRON] service plan monday mailing skipped: ${result.reason ?? 'unknown'} (sunday ${result.service_date ?? '—'})`,
-          );
-          return;
-        }
-        console.log(
-          `[CRON] service plan monday mailing: ok=${result.ok} messenger=${result.messenger_ok} telegram=${result.telegram_ok} plan=${result.plan_id ?? '—'} sunday=${result.service_date ?? '—'}`,
-        );
-      } catch (e) {
-        console.error('[CRON] service plan monday mailing', e);
-      }
-    },
-    { timezone: process.env.SERVICE_PLAN_MONDAY_MAILING_TZ?.trim() || 'Europe/Moscow' },
   );
 }

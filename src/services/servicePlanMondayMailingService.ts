@@ -106,7 +106,9 @@ function resolvePublicWebOrigin(): string {
   return fromEnv.replace(/\/+$/, '');
 }
 
-function resolveMailingTimeZone(): string {
+function resolveMailingTimeZone(scheduleTz?: string | null): string {
+  const fromSchedule = typeof scheduleTz === 'string' ? scheduleTz.trim() : '';
+  if (fromSchedule) return fromSchedule;
   return process.env.SERVICE_PLAN_MONDAY_MAILING_TZ?.trim() || DEFAULT_TZ;
 }
 
@@ -453,6 +455,137 @@ async function ensureMailingSettingsColumns(): Promise<void> {
   await query(
     'ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS service_plan_monday_mailing_last_sunday DATE',
   );
+  await query(
+    'ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS service_plan_mailing_enabled BOOLEAN NOT NULL DEFAULT TRUE',
+  );
+  // 0=вс … 6=сб (как getZonedNow.weekDay); по умолчанию понедельник
+  await query(
+    'ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS service_plan_mailing_weekday SMALLINT NOT NULL DEFAULT 1',
+  );
+  await query(
+    "ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS service_plan_mailing_time VARCHAR(5) NOT NULL DEFAULT '10:00'",
+  );
+  await query(
+    "ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS service_plan_mailing_timezone VARCHAR(64) NOT NULL DEFAULT 'Europe/Moscow'",
+  );
+}
+
+export type ServicePlanMailingSchedule = {
+  enabled: boolean;
+  /** 0=воскресенье … 6=суббота */
+  weekday: number;
+  /** HH:MM */
+  time_hhmm: string;
+  timezone: string;
+};
+
+function normalizeWeekday(value: unknown, fallback = 1): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(n) || n < 0 || n > 6) return fallback;
+  return n;
+}
+
+function normalizeTimeHhmm(value: unknown, fallback = '10:00'): string {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) return raw;
+  return fallback;
+}
+
+function normalizeTimezone(value: unknown, fallback = DEFAULT_TZ): string {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) return fallback;
+  try {
+    // Validate IANA zone
+    Intl.DateTimeFormat('en-US', { timeZone: raw }).format(new Date());
+    return raw;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function getServicePlanMailingSchedule(): Promise<ServicePlanMailingSchedule> {
+  await ensureMailingSettingsColumns();
+  await query(
+    `INSERT INTO global_settings (id, start_date)
+     VALUES (1, CURRENT_DATE)
+     ON CONFLICT (id) DO NOTHING`,
+  );
+  const res = await query(
+    `SELECT
+       service_plan_mailing_enabled,
+       service_plan_mailing_weekday,
+       service_plan_mailing_time,
+       service_plan_mailing_timezone
+     FROM global_settings
+     WHERE id = 1
+     LIMIT 1`,
+  );
+  const row = res.rows[0] as
+    | {
+        service_plan_mailing_enabled?: boolean;
+        service_plan_mailing_weekday?: number;
+        service_plan_mailing_time?: string;
+        service_plan_mailing_timezone?: string;
+      }
+    | undefined;
+  const envTz = process.env.SERVICE_PLAN_MONDAY_MAILING_TZ?.trim();
+  return {
+    enabled: row?.service_plan_mailing_enabled !== false,
+    weekday: normalizeWeekday(row?.service_plan_mailing_weekday, 1),
+    time_hhmm: normalizeTimeHhmm(row?.service_plan_mailing_time, '10:00'),
+    timezone: normalizeTimezone(row?.service_plan_mailing_timezone || envTz, DEFAULT_TZ),
+  };
+}
+
+export async function updateServicePlanMailingSchedule(
+  input: Partial<ServicePlanMailingSchedule>,
+): Promise<ServicePlanMailingSchedule> {
+  await ensureMailingSettingsColumns();
+  const current = await getServicePlanMailingSchedule();
+  const next: ServicePlanMailingSchedule = {
+    enabled: typeof input.enabled === 'boolean' ? input.enabled : current.enabled,
+    weekday: input.weekday !== undefined ? normalizeWeekday(input.weekday, current.weekday) : current.weekday,
+    time_hhmm:
+      input.time_hhmm !== undefined ? normalizeTimeHhmm(input.time_hhmm, current.time_hhmm) : current.time_hhmm,
+    timezone:
+      input.timezone !== undefined ? normalizeTimezone(input.timezone, current.timezone) : current.timezone,
+  };
+  await query(
+    `INSERT INTO global_settings (
+       id, start_date,
+       service_plan_mailing_enabled, service_plan_mailing_weekday,
+       service_plan_mailing_time, service_plan_mailing_timezone
+     ) VALUES (1, CURRENT_DATE, $1, $2, $3, $4)
+     ON CONFLICT (id) DO UPDATE SET
+       service_plan_mailing_enabled = EXCLUDED.service_plan_mailing_enabled,
+       service_plan_mailing_weekday = EXCLUDED.service_plan_mailing_weekday,
+       service_plan_mailing_time = EXCLUDED.service_plan_mailing_time,
+       service_plan_mailing_timezone = EXCLUDED.service_plan_mailing_timezone`,
+    [next.enabled, next.weekday, next.time_hhmm, next.timezone],
+  );
+  return next;
+}
+
+/**
+ * Минутный тик: если сейчас совпадают день недели и время из настроек — запускаем рассылку.
+ */
+export async function processServicePlanMailingDue(
+  now: Date = new Date(),
+): Promise<{ triggered: boolean; result?: ServicePlanMondayMailingResult }> {
+  if (process.env.DISABLE_SERVICE_PLAN_MONDAY_MAILING_CRON === 'true') {
+    return { triggered: false };
+  }
+  const schedule = await getServicePlanMailingSchedule();
+  if (!schedule.enabled) return { triggered: false };
+
+  const z = getZonedNow(schedule.timezone, now);
+  const curHhmm = `${String(z.hour).padStart(2, '0')}:${String(z.minute).padStart(2, '0')}`;
+  if (z.weekDay !== schedule.weekday || curHhmm !== schedule.time_hhmm) {
+    return { triggered: false };
+  }
+
+  const result = await runServicePlanMondayMailing({ now });
+  return { triggered: true, result };
 }
 
 async function readLastMailedSunday(): Promise<string | null> {
@@ -852,7 +985,13 @@ export async function runServicePlanMondayMailing(options?: {
   const force = options?.force === true;
   const dryRun = options?.dryRun === true;
   const now = options?.now ?? new Date();
-  const tz = resolveMailingTimeZone();
+  let scheduleTz: string | null = null;
+  try {
+    scheduleTz = (await getServicePlanMailingSchedule()).timezone;
+  } catch {
+    scheduleTz = null;
+  }
+  const tz = resolveMailingTimeZone(scheduleTz);
   const todayYmd = formatYmdInTimeZone(tz, now);
 
   // Единственный источник данных — ближайшая активная программа (часто черновик).
