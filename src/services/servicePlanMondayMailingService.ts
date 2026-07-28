@@ -816,15 +816,27 @@ function isSermonMailingBlock(b: {
   block_type_code?: string | null;
   title: string;
 }): boolean {
+  const cj = normalizeMailingContentJson(b.content_json);
+  // Разделители вроде «Поклонение через проповедь…» не считаем проповедью.
+  if (cj.is_separator === true) return false;
+
   const code = String(b.block_type_code ?? '').toLowerCase();
   if (code === 'sermon') return true;
-  const title = String(b.title ?? '').toLowerCase();
-  if (title.includes('проповед')) return true;
-  const cj = normalizeMailingContentJson(b.content_json);
+
+  // Реальные поля проповеди важнее совпадения слова «проповедь» в заголовке.
   if (sermonFieldFromContent(cj, 'sermon_topic', 'sermon_scripture', 'topic', 'scripture')) {
     return true;
   }
   if (Array.isArray(cj.sermon_attachments) && cj.sermon_attachments.length > 0) return true;
+
+  const title = String(b.title ?? '').toLowerCase();
+  if (title.includes('проповед') && parseSermonTopicFromBlockTitle(b.title)) {
+    return true;
+  }
+  // Заголовок «Проповедь» / «… проповедь …» без полей — только если код не custom-раздел.
+  if (title.includes('проповед') && (code === 'sermon' || code === 'speaker' || code === '')) {
+    return true;
+  }
   return false;
 }
 

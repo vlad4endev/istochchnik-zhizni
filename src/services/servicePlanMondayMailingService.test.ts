@@ -282,6 +282,34 @@ const published = buildServicePlanMondayMailingText({
   assert.equal(fromPlanCard.topic, 'Смерть, где твоё жало?');
   assert.equal(fromPlanCard.scripture, '1Кор.15:55-58');
 
+  // Регресс: в программе 02.08 перед проповедью идёт разделитель
+  // «Поклонение через проповедь…» — раньше .find() брал его и тема пропадала.
+  const afterSeparator = pickSermonFields(
+    [
+      {
+        title: '📖 Поклонение через проповедь и слушание Слова',
+        block_type_code: 'custom',
+        content_json: {
+          block_mark: '📖',
+          is_separator: true,
+          separator_text: '📖 Поклонение через проповедь и слушание Слова',
+        },
+      },
+      {
+        title: 'Андрей Жигунов - Смерть, где твоё жало?',
+        block_type_code: 'sermon',
+        content_json: {
+          sermon_topic: 'Смерть, где твоё жало?',
+          sermon_scripture: '1Кор.15:55-58',
+          block_mark_icon: 'scripture',
+        },
+      },
+    ],
+    null,
+  );
+  assert.equal(afterSeparator.topic, 'Смерть, где твоё жало?');
+  assert.equal(afterSeparator.scripture, '1Кор.15:55-58');
+
   // Без кода типа — находим блок по полям проповеди в content_json
   const byContentOnly = pickSermonFields(
     [
