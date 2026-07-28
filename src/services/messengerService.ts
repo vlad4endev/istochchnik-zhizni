@@ -2489,7 +2489,7 @@ export async function getPollVotersForMember(
 /**
  * Soft-delete a message.
  * - свои сообщения: только отправитель;
- * - системные (sender_id IS NULL или kind=service_plan_monday_mailing): любой участник чата,
+ * - системные (sender_id IS NULL или kind=service_plan_monday_mailing / service_plan_published): любой участник чата,
  *   кроме заявок access_request (ими управляют через кнопки принять/отклонить).
  */
 export async function deleteMessage(
