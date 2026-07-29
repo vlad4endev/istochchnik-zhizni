@@ -29,11 +29,19 @@ export type CoordinatorTelegramScenarioId =
   | 'assignment'
   | 'missing_need_tomorrow'
   | 'missing_need_today'
+  | 'missing_cycle_need'
   | 'week_list';
 
 export type CoordinatorTelegramTarget = 'dm' | 'chat' | 'dm_and_chat';
 
 export type CoordinatorTelegramRepeat = 'event' | 'daily' | 'weekly';
+
+export type CoordinatorClaimsWeek = 'current' | 'next';
+
+export type CoordinatorTelegramCondition =
+  | 'none'
+  | 'missing_on_cycle_day'
+  | 'missing_in_cycle';
 
 export interface CoordinatorTelegramScenario {
   id: CoordinatorTelegramScenarioId;
@@ -41,10 +49,13 @@ export interface CoordinatorTelegramScenario {
   enabled: boolean;
   target: CoordinatorTelegramTarget;
   repeat: CoordinatorTelegramRepeat;
+  condition: CoordinatorTelegramCondition;
   time: string;
   weekDay: number;
   /** 0 = сегодня, 1 = завтра, … — день цикла относительно «сегодня» */
   dayOffset: number;
+  /** Неделя назначений для missing_in_cycle / week_list */
+  claimsWeek: CoordinatorClaimsWeek;
   customBody?: string;
 }
 
@@ -87,31 +98,73 @@ export const COORDINATOR_DAY_OFFSET_OPTIONS: Array<{ value: number; label: strin
   { value: 3, label: 'Через 3 дня' },
 ];
 
+export const COORDINATOR_CLAIMS_WEEK_OPTIONS: Array<{
+  value: CoordinatorClaimsWeek;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: 'next',
+    label: 'Следующая неделя',
+    hint: 'Назначения сбора на следующую календарную неделю',
+  },
+  {
+    value: 'current',
+    label: 'Текущая неделя',
+    hint: 'Назначения сбора на текущую календарную неделю',
+  },
+];
+
 export const COORDINATOR_SCENARIO_HINTS: Record<
   CoordinatorTelegramScenarioId,
-  { schedule: boolean; missingNeed: boolean; description: string }
+  {
+    schedule: boolean;
+    /** Условие: пустая нужда у участника дня цикла (dayOffset). */
+    missingNeedDay: boolean;
+    /** Условие: нет актуальной нужды в member_prayer_by_cycle для цикла. */
+    missingNeedCycle: boolean;
+    /** Выбор недели назначений (claimsWeek). */
+    claimsWeek: boolean;
+    description: string;
+  }
 > = {
   assignment: {
     schedule: false,
-    missingNeed: false,
+    missingNeedDay: false,
+    missingNeedCycle: false,
+    claimsWeek: false,
     description:
       'Когда координатору назначили участника (вручную, автораспределение или напоминание в понедельник).',
   },
   missing_need_tomorrow: {
     schedule: true,
-    missingNeed: true,
+    missingNeedDay: true,
+    missingNeedCycle: false,
+    claimsWeek: false,
     description:
       'Проверяет день цикла у участника (по умолчанию завтра). Ответственному координатору — если нужда пустая. Каждый день в выбранное время, чтобы покрыть разные дни у разных координаторов.',
   },
   missing_need_today: {
     schedule: true,
-    missingNeed: true,
+    missingNeedDay: true,
+    missingNeedCycle: false,
+    claimsWeek: false,
     description:
       'Эскалация: в день цикла нужда всё ещё пустая. Каждый день в выбранное время — сработает для того координатора, чей участник сегодня в цикле.',
   },
+  missing_cycle_need: {
+    schedule: true,
+    missingNeedDay: false,
+    missingNeedCycle: true,
+    claimsWeek: true,
+    description:
+      'У назначенных участников нет актуальной молитвенной нужды в этом цикле (пустая или отсутствующая запись в нужде цикла). Координатору — список его участников без нужды.',
+  },
   week_list: {
     schedule: true,
-    missingNeed: false,
+    missingNeedDay: false,
+    missingNeedCycle: false,
+    claimsWeek: true,
     description:
       'Список назначений по координаторам в чат (и/или персональные дайджесты в личку).',
   },

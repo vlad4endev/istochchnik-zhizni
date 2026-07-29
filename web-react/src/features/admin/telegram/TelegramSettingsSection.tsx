@@ -63,6 +63,7 @@ import {
   COORDINATOR_TARGET_OPTIONS,
   COORDINATOR_REPEAT_OPTIONS,
   COORDINATOR_DAY_OFFSET_OPTIONS,
+  COORDINATOR_CLAIMS_WEEK_OPTIONS,
   COORDINATOR_SCENARIO_HINTS,
   DEFAULT_PROGRAM_MAILING_TEMPLATE,
   DEFAULT_PROGRAM_PUBLISHED_TEMPLATE,
@@ -75,6 +76,7 @@ import {
   type ProgramPanel,
   type CoordinatorTelegramTarget,
   type CoordinatorTelegramRepeat,
+  type CoordinatorClaimsWeek,
 } from './constants';
 import {
   fieldClass,
@@ -264,7 +266,23 @@ export function TelegramSettingsSection() {
             : s.id === 'missing_need_tomorrow'
               ? 1
               : 0;
-        return { ...s, repeat, dayOffset };
+        const claimsWeek: CoordinatorClaimsWeek =
+          s.claimsWeek === 'current' || s.claimsWeek === 'next'
+            ? s.claimsWeek
+            : s.id === 'missing_need_today'
+              ? 'current'
+              : 'next';
+        const condition =
+          s.condition === 'none' ||
+          s.condition === 'missing_on_cycle_day' ||
+          s.condition === 'missing_in_cycle'
+            ? s.condition
+            : s.id === 'missing_cycle_need'
+              ? 'missing_in_cycle'
+              : s.id === 'missing_need_tomorrow' || s.id === 'missing_need_today'
+                ? 'missing_on_cycle_day'
+                : 'none';
+        return { ...s, repeat, dayOffset, claimsWeek, condition };
       }),
     );
   }, [coordScenariosQ.data]);
@@ -1897,7 +1915,7 @@ export function TelegramSettingsSection() {
 
                     {hint.schedule ? (
                       <div className="grid gap-3 sm:grid-cols-2">
-                        {hint.missingNeed ? (
+                        {hint.missingNeedDay ? (
                           <label className="block space-y-1.5">
                             <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
                               Условие: день в цикле
@@ -1920,6 +1938,19 @@ export function TelegramSettingsSection() {
                             <span className="block text-xs text-stone-500">
                               Проверяется участник этого дня цикла. Сообщение уйдёт его
                               ответственному координатору — у каждого координатора свои дни.
+                            </span>
+                          </label>
+                        ) : hint.missingNeedCycle ? (
+                          <label className="block space-y-1.5">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                              Условие
+                            </span>
+                            <div className="rounded-xl border border-stone-200 bg-white/80 px-3 py-2 text-sm text-stone-700">
+                              Нет актуальной нужды в этом цикле
+                            </div>
+                            <span className="block text-xs text-stone-500">
+                              Участник закреплён за координатором, но для текущего молитвенного
+                              цикла у него нет заполненной нужды.
                             </span>
                           </label>
                         ) : scenario.repeat === 'weekly' ? (
@@ -1961,14 +1992,67 @@ export function TelegramSettingsSection() {
                               updateCoordScenario(scenario.id, { time: e.target.value })
                             }
                           />
-                          {hint.missingNeed && scenario.repeat === 'weekly' ? (
+                          {hint.missingNeedDay && scenario.repeat === 'weekly' ? (
                             <span className="block text-xs text-amber-800">
                               Для разных дней цикла у координаторов лучше «Каждый день».
                             </span>
                           ) : null}
                         </label>
 
-                        {hint.missingNeed && scenario.repeat === 'weekly' ? (
+                        {hint.claimsWeek ? (
+                          <label className="block space-y-1.5 sm:col-span-2">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                              Неделя назначений
+                            </span>
+                            <select
+                              className={fieldClass()}
+                              value={scenario.claimsWeek}
+                              onChange={(e) =>
+                                updateCoordScenario(scenario.id, {
+                                  claimsWeek: e.target.value as CoordinatorClaimsWeek,
+                                })
+                              }
+                            >
+                              {COORDINATOR_CLAIMS_WEEK_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                            <span className="block text-xs text-stone-500">
+                              {
+                                COORDINATOR_CLAIMS_WEEK_OPTIONS.find(
+                                  (o) => o.value === scenario.claimsWeek,
+                                )?.hint
+                              }
+                            </span>
+                          </label>
+                        ) : null}
+
+                        {hint.missingNeedDay && scenario.repeat === 'weekly' ? (
+                          <label className="block space-y-1.5 sm:col-span-2">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                              День недели (только при «Раз в неделю»)
+                            </span>
+                            <select
+                              className={fieldClass()}
+                              value={scenario.weekDay}
+                              onChange={(e) =>
+                                updateCoordScenario(scenario.id, {
+                                  weekDay: Number(e.target.value),
+                                })
+                              }
+                            >
+                              {WEEKDAY_OPTIONS.map((d) => (
+                                <option key={d.value} value={d.value}>
+                                  {d.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
+
+                        {hint.missingNeedCycle && scenario.repeat === 'weekly' ? (
                           <label className="block space-y-1.5 sm:col-span-2">
                             <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
                               День недели (только при «Раз в неделю»)
@@ -2012,7 +2096,9 @@ export function TelegramSettingsSection() {
                               ? 'Список на {{week_range}}\n\n{{assignments_block}}'
                               : scenario.id === 'assignment'
                                 ? '{{actor}} назначил(а) вам {{member_name}} на {{week_label}} неделю ({{week_range}}).\nДень в цикле: {{member_cycle_weekday}}, {{member_cycle_date}}.'
-                                : '{{member_name}}: нужда на {{date_long}} не заполнена.\nОтветственный: {{coordinator_name}}.'
+                                : scenario.id === 'missing_cycle_need'
+                                  ? 'Нет актуальной нужды в цикле {{cycle_index}} ({{week_range}}).\nБез нужды ({{missing_count}}):\n{{missing_participants_list}}'
+                                  : '{{member_name}}: нужда на {{date_long}} не заполнена.\nОтветственный: {{coordinator_name}}.'
                           }
                         />
                         <span className="block text-xs text-stone-500">

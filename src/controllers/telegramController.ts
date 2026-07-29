@@ -869,7 +869,7 @@ export async function postCoordinatorTelegramScenarioRunNowHandler(
   if (!COORDINATOR_SCENARIO_IDS.has(scenarioId as CoordinatorTelegramScenarioId)) {
     res.status(400).json({
       error:
-        'Укажите scenario_id: assignment | missing_need_tomorrow | missing_need_today | week_list',
+        'Укажите scenario_id: assignment | missing_need_tomorrow | missing_need_today | missing_cycle_need | week_list',
     });
     return;
   }

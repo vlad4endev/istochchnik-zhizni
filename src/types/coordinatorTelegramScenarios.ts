@@ -7,6 +7,7 @@ export type CoordinatorTelegramScenarioId =
   | 'assignment'
   | 'missing_need_tomorrow'
   | 'missing_need_today'
+  | 'missing_cycle_need'
   | 'week_list';
 
 /** Куда слать: личка координатору, чат координаторов, или оба. */
@@ -20,6 +21,20 @@ export type CoordinatorTelegramTarget = 'dm' | 'chat' | 'dm_and_chat';
  */
 export type CoordinatorTelegramRepeat = 'event' | 'daily' | 'weekly';
 
+/** Какая неделя назначений координаторов (сбор нужд). */
+export type CoordinatorClaimsWeek = 'current' | 'next';
+
+/**
+ * Условие срабатывания напоминания.
+ * - none — без проверки нужды (назначение / список)
+ * - missing_on_cycle_day — нет нужды у участника дня цикла (сегодня/завтра/…)
+ * - missing_in_cycle — нет актуальной нужды в текущем цикле у назначенных участников
+ */
+export type CoordinatorTelegramCondition =
+  | 'none'
+  | 'missing_on_cycle_day'
+  | 'missing_in_cycle';
+
 export interface CoordinatorTelegramScenario {
   id: CoordinatorTelegramScenarioId;
   /** Показываемое название (можно править в админке). */
@@ -27,6 +42,7 @@ export interface CoordinatorTelegramScenario {
   enabled: boolean;
   target: CoordinatorTelegramTarget;
   repeat: CoordinatorTelegramRepeat;
+  condition: CoordinatorTelegramCondition;
   /**
    * Локальное время в timezone документа, HH:mm.
    * Для event-сценария `assignment` не используется.
@@ -35,10 +51,12 @@ export interface CoordinatorTelegramScenario {
   /** Для repeat=weekly: 0=вс … 6=сб. */
   weekDay: number;
   /**
-   * Для сценариев пустой нужды: сколько дней вперёд от «сегодня» проверять день цикла.
+   * Для condition=missing_on_cycle_day: сколько дней вперёд от «сегодня» проверять день цикла.
    * 0 = сегодня, 1 = завтра, 2 = послезавтра…
    */
   dayOffset: number;
+  /** Для missing_in_cycle / week_list: текущая или следующая неделя назначений. */
+  claimsWeek: CoordinatorClaimsWeek;
   /** Кастомный текст; плейсхолдеры зависят от сценария. */
   customBody?: string;
 }
@@ -60,20 +78,23 @@ export const DEFAULT_COORDINATOR_TG_SCENARIOS: readonly CoordinatorTelegramScena
     enabled: true,
     target: 'dm',
     repeat: 'event',
+    condition: 'none',
     time: '08:00',
     weekDay: 1,
     dayOffset: 0,
+    claimsWeek: 'next',
   },
   {
     id: 'missing_need_tomorrow',
     title: 'Напоминание: на завтра нет нужды',
     enabled: true,
     target: 'dm',
-    /** Каждый день: у каждого координатора свой день участника в цикле. */
     repeat: 'daily',
+    condition: 'missing_on_cycle_day',
     time: '18:00',
     weekDay: 0,
     dayOffset: 1,
+    claimsWeek: 'next',
   },
   {
     id: 'missing_need_today',
@@ -81,9 +102,24 @@ export const DEFAULT_COORDINATOR_TG_SCENARIOS: readonly CoordinatorTelegramScena
     enabled: true,
     target: 'dm',
     repeat: 'daily',
+    condition: 'missing_on_cycle_day',
     time: '08:00',
     weekDay: 1,
     dayOffset: 0,
+    claimsWeek: 'current',
+  },
+  {
+    id: 'missing_cycle_need',
+    title: 'Нет актуальной нужды в этом цикле',
+    enabled: true,
+    target: 'dm',
+    /** Назначенные участники без текста нужды в member_prayer_by_cycle для текущего цикла. */
+    repeat: 'daily',
+    condition: 'missing_in_cycle',
+    time: '10:00',
+    weekDay: 1,
+    dayOffset: 0,
+    claimsWeek: 'next',
   },
   {
     id: 'week_list',
@@ -91,9 +127,11 @@ export const DEFAULT_COORDINATOR_TG_SCENARIOS: readonly CoordinatorTelegramScena
     enabled: true,
     target: 'chat',
     repeat: 'weekly',
+    condition: 'none',
     time: '09:00',
     weekDay: 1,
     dayOffset: 0,
+    claimsWeek: 'next',
   },
 ] as const;
 
@@ -109,14 +147,20 @@ function normalizeTarget(raw: unknown, fallback: CoordinatorTelegramTarget): Coo
   return fallback;
 }
 
+function defaultConditionForId(id: CoordinatorTelegramScenarioId): CoordinatorTelegramCondition {
+  return DEFAULT_COORDINATOR_TG_SCENARIOS.find((s) => s.id === id)?.condition ?? 'none';
+}
+
 function defaultRepeatForId(id: CoordinatorTelegramScenarioId): CoordinatorTelegramRepeat {
-  return (
-    DEFAULT_COORDINATOR_TG_SCENARIOS.find((s) => s.id === id)?.repeat ?? 'weekly'
-  );
+  return DEFAULT_COORDINATOR_TG_SCENARIOS.find((s) => s.id === id)?.repeat ?? 'weekly';
 }
 
 function defaultDayOffsetForId(id: CoordinatorTelegramScenarioId): number {
   return DEFAULT_COORDINATOR_TG_SCENARIOS.find((s) => s.id === id)?.dayOffset ?? 0;
+}
+
+function defaultClaimsWeekForId(id: CoordinatorTelegramScenarioId): CoordinatorClaimsWeek {
+  return DEFAULT_COORDINATOR_TG_SCENARIOS.find((s) => s.id === id)?.claimsWeek ?? 'next';
 }
 
 function normalizeRepeat(
@@ -125,11 +169,34 @@ function normalizeRepeat(
   fallback: CoordinatorTelegramRepeat,
 ): CoordinatorTelegramRepeat {
   if (raw === 'event' || raw === 'daily' || raw === 'weekly') return raw;
-  // Старые сохранённые сценарии без repeat: для нужд — daily (иначе не покроем все дни цикла).
   if (id === 'assignment') return 'event';
-  if (id === 'missing_need_tomorrow' || id === 'missing_need_today') return 'daily';
+  if (
+    id === 'missing_need_tomorrow' ||
+    id === 'missing_need_today' ||
+    id === 'missing_cycle_need'
+  ) {
+    return 'daily';
+  }
   if (id === 'week_list') return 'weekly';
   return fallback;
+}
+
+function normalizeCondition(
+  raw: unknown,
+  id: CoordinatorTelegramScenarioId,
+  fallback: CoordinatorTelegramCondition,
+): CoordinatorTelegramCondition {
+  if (raw === 'none' || raw === 'missing_on_cycle_day' || raw === 'missing_in_cycle') return raw;
+  return defaultConditionForId(id) || fallback;
+}
+
+function normalizeClaimsWeek(
+  raw: unknown,
+  id: CoordinatorTelegramScenarioId,
+  fallback: CoordinatorClaimsWeek,
+): CoordinatorClaimsWeek {
+  if (raw === 'current' || raw === 'next') return raw;
+  return defaultClaimsWeekForId(id) || fallback;
 }
 
 function normalizeScenario(
@@ -144,6 +211,7 @@ function normalizeScenario(
       : fallback.id;
   const base = DEFAULT_COORDINATOR_TG_SCENARIOS.find((s) => s.id === id) ?? fallback;
   const repeat = normalizeRepeat(o.repeat, id, base.repeat);
+  const condition = normalizeCondition(o.condition, id, base.condition);
   const dayOffsetRaw =
     o.dayOffset !== undefined
       ? Number(o.dayOffset)
@@ -158,9 +226,11 @@ function normalizeScenario(
     enabled: typeof o.enabled === 'boolean' ? o.enabled : base.enabled,
     target: normalizeTarget(o.target, base.target),
     repeat,
+    condition,
     time: typeof o.time === 'string' && /^\d{1,2}:\d{2}$/.test(o.time.trim()) ? o.time.trim() : base.time,
     weekDay: clampInt(Number(o.weekDay), 0, 6, base.weekDay),
     dayOffset: clampInt(dayOffsetRaw, 0, 14, defaultDayOffsetForId(id)),
+    claimsWeek: normalizeClaimsWeek(o.claimsWeek, id, base.claimsWeek),
     customBody:
       typeof o.customBody === 'string' && o.customBody.trim().length > 0
         ? o.customBody.trim().slice(0, 4000)
@@ -235,7 +305,19 @@ export function scenarioWantsChat(target: CoordinatorTelegramTarget): boolean {
 }
 
 export function isMissingNeedScenarioId(id: CoordinatorTelegramScenarioId): boolean {
-  return id === 'missing_need_tomorrow' || id === 'missing_need_today';
+  return (
+    id === 'missing_need_tomorrow' ||
+    id === 'missing_need_today' ||
+    id === 'missing_cycle_need'
+  );
+}
+
+export function usesCycleDayOffset(scenario: CoordinatorTelegramScenario): boolean {
+  return scenario.condition === 'missing_on_cycle_day';
+}
+
+export function usesMissingInCycle(scenario: CoordinatorTelegramScenario): boolean {
+  return scenario.condition === 'missing_in_cycle' || scenario.id === 'missing_cycle_need';
 }
 
 /** Подпись условия относительно дня в молитвенном цикле. */
@@ -263,4 +345,4 @@ export function applyCoordinatorBodyTemplate(
   });
 }
 
-export { defaultRepeatForId, defaultDayOffsetForId };
+export { defaultRepeatForId, defaultDayOffsetForId, defaultConditionForId, defaultClaimsWeekForId };

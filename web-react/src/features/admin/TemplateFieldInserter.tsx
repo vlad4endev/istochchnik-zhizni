@@ -214,6 +214,21 @@ export const COORDINATOR_TEMPLATE_FIELD_GROUPS: TemplateFieldGroup[] = [
         label: 'Смещение дня (0=сегодня)',
         example: '1',
       },
+      {
+        token: '{{missing_participants}}',
+        label: 'Участники без нужды в цикле',
+        example: 'Иван, Мария',
+      },
+      {
+        token: '{{missing_participants_list}}',
+        label: 'Без нужды списком',
+        example: '• Иван\n• Мария',
+      },
+      {
+        token: '{{missing_count}}',
+        label: 'Число без нужды',
+        example: '2',
+      },
     ],
   },
   {

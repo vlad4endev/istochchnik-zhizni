@@ -742,11 +742,19 @@ export type CoordinatorTelegramScenarioId =
   | 'assignment'
   | 'missing_need_tomorrow'
   | 'missing_need_today'
+  | 'missing_cycle_need'
   | 'week_list';
 
 export type CoordinatorTelegramTarget = 'dm' | 'chat' | 'dm_and_chat';
 
 export type CoordinatorTelegramRepeat = 'event' | 'daily' | 'weekly';
+
+export type CoordinatorClaimsWeek = 'current' | 'next';
+
+export type CoordinatorTelegramCondition =
+  | 'none'
+  | 'missing_on_cycle_day'
+  | 'missing_in_cycle';
 
 export interface CoordinatorTelegramScenario {
   id: CoordinatorTelegramScenarioId;
@@ -754,9 +762,11 @@ export interface CoordinatorTelegramScenario {
   enabled: boolean;
   target: CoordinatorTelegramTarget;
   repeat: CoordinatorTelegramRepeat;
+  condition: CoordinatorTelegramCondition;
   time: string;
   weekDay: number;
   dayOffset: number;
+  claimsWeek: CoordinatorClaimsWeek;
   customBody?: string;
 }
 

@@ -11,15 +11,21 @@ function run(): void {
   const empty = normalizeCoordinatorTelegramScenariosDocument(null);
   assert.equal(empty.version, 1);
   assert.equal(empty.timezone, 'Europe/Moscow');
-  assert.equal(empty.scenarios.length, 4);
+  assert.equal(empty.scenarios.length, 5);
   const tomorrow = empty.scenarios.find((s) => s.id === 'missing_need_tomorrow')!;
   assert.equal(tomorrow.repeat, 'daily');
   assert.equal(tomorrow.dayOffset, 1);
+  assert.equal(tomorrow.condition, 'missing_on_cycle_day');
   const today = empty.scenarios.find((s) => s.id === 'missing_need_today')!;
   assert.equal(today.repeat, 'daily');
   assert.equal(today.dayOffset, 0);
+  const cycleNeed = empty.scenarios.find((s) => s.id === 'missing_cycle_need')!;
+  assert.equal(cycleNeed.condition, 'missing_in_cycle');
+  assert.equal(cycleNeed.claimsWeek, 'next');
+  assert.equal(cycleNeed.repeat, 'daily');
   const week = empty.scenarios.find((s) => s.id === 'week_list')!;
   assert.equal(week.repeat, 'weekly');
+  assert.equal(week.claimsWeek, 'next');
 
   // Legacy saved JSON without repeat/dayOffset → daily for missing need
   const legacy = normalizeCoordinatorTelegramScenariosDocument({
@@ -38,6 +44,10 @@ function run(): void {
     1,
   );
   assert.equal(legacy.scenarios.find((s) => s.id === 'week_list')!.repeat, 'weekly');
+  assert.equal(
+    legacy.scenarios.find((s) => s.id === 'missing_cycle_need')!.condition,
+    'missing_in_cycle',
+  );
 
   const custom = normalizeCoordinatorTelegramScenariosDocument({
     scenarios: [
