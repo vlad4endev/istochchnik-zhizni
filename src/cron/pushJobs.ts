@@ -8,6 +8,10 @@ import { dispatchDueSermonFeedbackNotifications } from '../services/sermonFeedba
 import { sendMediaScheduleReminders } from '../services/mediaScheduleService';
 import { sendMusicScheduleReminders } from '../services/musicScheduleService';
 import { processServicePlanMailingDue } from '../services/servicePlanMondayMailingService';
+import {
+  notifyCoordinatorTelegramAssignment,
+  processCoordinatorTelegramScenariosDue,
+} from '../services/coordinatorTelegramScenariosService';
 
 type CuratorWeekKind = 'current' | 'next';
 
@@ -25,9 +29,10 @@ async function pushCuratorAssignmentsForWeek(
     const top = row.members.slice(0, 5).map((m) => m.memberName).join(', ');
     const suffix = row.members.length > 5 ? ` и еще ${row.members.length - 5}` : '';
     const weekLabel = weekKind === 'current' ? 'эту' : 'следующую';
+    const title = 'Сбор молитвенных нужд: назначения на неделю';
     const body = `На ${weekLabel} неделю вам назначено ${row.members.length} участник(ов): ${top}${suffix}.`;
     try {
-      await sendPush(row.coordinatorId, 'Сбор молитвенных нужд: назначения на неделю', body, {
+      await sendPush(row.coordinatorId, title, body, {
         url: '/dashboard',
         type: pushType,
         week_kind: weekKind,
@@ -39,6 +44,18 @@ async function pushCuratorAssignmentsForWeek(
       console.warn(
         `[CRON] curator assignments push failed for coordinator ${row.coordinatorId}:`,
         pushErr,
+      );
+    }
+    try {
+      await notifyCoordinatorTelegramAssignment({
+        coordinatorId: row.coordinatorId,
+        title,
+        body,
+      });
+    } catch (tgErr) {
+      console.warn(
+        `[CRON] curator assignments telegram failed for coordinator ${row.coordinatorId}:`,
+        tgErr,
       );
     }
   }
@@ -74,6 +91,16 @@ export function initPushCronJobs() {
         }
       } catch (e) {
         console.error('[CRON] service plan mailing tick', e);
+      }
+      try {
+        const coordTg = await processCoordinatorTelegramScenariosDue();
+        if (coordTg.triggered.length > 0) {
+          console.log(
+            `[CRON] coordinator telegram scenarios: ${coordTg.triggered.join(', ')}`,
+          );
+        }
+      } catch (e) {
+        console.error('[CRON] coordinator telegram scenarios tick', e);
       }
     },
     { timezone: 'UTC' },

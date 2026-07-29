@@ -5,9 +5,10 @@ export const Q_TG_DISPATCH = ['admin', 'telegram', 'dispatch-settings'] as const
 export const Q_TG_RECIPIENTS = ['admin', 'telegram', 'recipients'] as const;
 export const Q_TG_MAILING_CHATS = ['admin', 'telegram', 'mailing-messenger-chats'] as const;
 export const Q_TG_CHATS = ['admin', 'telegram', 'chats'] as const;
+export const Q_TG_COORD_SCENARIOS = ['admin', 'telegram', 'coordinator-scenarios'] as const;
 
 /** Sub-section within `/admin?tab=telegram`. */
-export type TgSection = 'overview' | 'bot' | 'chats' | 'prayer' | 'program';
+export type TgSection = 'overview' | 'bot' | 'chats' | 'prayer' | 'coordinators' | 'program';
 
 export type ProgramPanel = 'mailing' | 'published';
 
@@ -20,8 +21,66 @@ export const TG_SECTIONS: Array<{
   { id: 'bot', label: 'Бот', hint: 'Токен и прокси' },
   { id: 'chats', label: 'Чаты', hint: 'Реестр и роли' },
   { id: 'prayer', label: 'Молитва', hint: 'Текст и личная рассылка' },
+  { id: 'coordinators', label: 'Координаторы', hint: 'Сценарии сбора нужд' },
   { id: 'program', label: 'Программа', hint: 'Авторассылки служения' },
 ];
+
+export type CoordinatorTelegramScenarioId =
+  | 'assignment'
+  | 'missing_need_tomorrow'
+  | 'missing_need_today'
+  | 'week_list';
+
+export type CoordinatorTelegramTarget = 'dm' | 'chat' | 'dm_and_chat';
+
+export interface CoordinatorTelegramScenario {
+  id: CoordinatorTelegramScenarioId;
+  title: string;
+  enabled: boolean;
+  target: CoordinatorTelegramTarget;
+  time: string;
+  weekDay: number;
+  customBody?: string;
+}
+
+export const COORDINATOR_TARGET_OPTIONS: Array<{
+  value: CoordinatorTelegramTarget;
+  label: string;
+  hint: string;
+}> = [
+  { value: 'dm', label: 'Личка', hint: 'Личное сообщение координатору (telegram_chat_id)' },
+  { value: 'chat', label: 'Чат', hint: 'Группа с ролью «Координаторы»' },
+  { value: 'dm_and_chat', label: 'Личка и чат', hint: 'И туда, и туда' },
+];
+
+export const COORDINATOR_SCENARIO_HINTS: Record<
+  CoordinatorTelegramScenarioId,
+  { schedule: boolean; placeholders: string; description: string }
+> = {
+  assignment: {
+    schedule: false,
+    placeholders: '{title}, {body}',
+    description:
+      'Когда координатору назначили участника (вручную, автораспределение или напоминание в понедельник).',
+  },
+  missing_need_tomorrow: {
+    schedule: true,
+    placeholders: '{memberName}, {date}, {title}',
+    description:
+      'Если у участника завтрашнего дня цикла пустая нужда — напоминание ответственному координатору и админам.',
+  },
+  missing_need_today: {
+    schedule: true,
+    placeholders: '{memberName}, {date}, {title}',
+    description: 'Эскалация: на сегодня нужда всё ещё не заполнена.',
+  },
+  week_list: {
+    schedule: true,
+    placeholders: '{participants}, {week_kind}, {coordinatorName}, {count}',
+    description:
+      'Раз в неделю список назначений по координаторам в чат (и/или персональные дайджесты в личку).',
+  },
+};
 
 export const PROGRAM_PANELS: Array<{
   id: ProgramPanel;
@@ -103,6 +162,7 @@ export function parseTgSection(value: string | null | undefined): TgSection {
     value === 'bot' ||
     value === 'chats' ||
     value === 'prayer' ||
+    value === 'coordinators' ||
     value === 'program'
   ) {
     return value;

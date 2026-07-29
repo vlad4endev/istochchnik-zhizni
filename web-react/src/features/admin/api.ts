@@ -738,6 +738,66 @@ export async function runTelegramDispatchNow(body?: {
   return data;
 }
 
+export type CoordinatorTelegramScenarioId =
+  | 'assignment'
+  | 'missing_need_tomorrow'
+  | 'missing_need_today'
+  | 'week_list';
+
+export type CoordinatorTelegramTarget = 'dm' | 'chat' | 'dm_and_chat';
+
+export interface CoordinatorTelegramScenario {
+  id: CoordinatorTelegramScenarioId;
+  title: string;
+  enabled: boolean;
+  target: CoordinatorTelegramTarget;
+  time: string;
+  weekDay: number;
+  customBody?: string;
+}
+
+export interface CoordinatorTelegramScenariosResponse {
+  timezone: string;
+  scenarios: CoordinatorTelegramScenario[];
+}
+
+export async function fetchCoordinatorTelegramScenarios(): Promise<CoordinatorTelegramScenariosResponse> {
+  const { data } = await apiClient.get<CoordinatorTelegramScenariosResponse>(
+    '/api/telegram/coordinator-scenarios',
+  );
+  return data;
+}
+
+export async function patchCoordinatorTelegramScenarios(body: {
+  timezone?: string;
+  scenarios?: CoordinatorTelegramScenario[];
+}): Promise<CoordinatorTelegramScenariosResponse> {
+  const { data } = await apiClient.patch<CoordinatorTelegramScenariosResponse>(
+    '/api/telegram/coordinator-scenarios',
+    body,
+  );
+  return data;
+}
+
+export async function runCoordinatorTelegramScenarioNow(body: {
+  scenario_id: CoordinatorTelegramScenarioId;
+}): Promise<{
+  ok: boolean;
+  scenario_id: CoordinatorTelegramScenarioId;
+  sent?: number;
+  sent_dm?: number;
+  sent_chat?: boolean;
+  text?: string;
+  reason?: string;
+  error?: string;
+}> {
+  const { data } = await apiClient.post(
+    '/api/telegram/coordinator-scenarios/run-now',
+    body,
+  );
+  return data;
+}
+
 export async function fetchTelegramDispatchPreviewPrayer(dateYmd?: string): Promise<{ text: string; date: string }> {
   const { data } = await apiClient.get<{ text: string; date: string }>('/api/telegram/dispatch/preview-prayer', {
     params: dateYmd ? { date: dateYmd } : {},

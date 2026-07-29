@@ -22,6 +22,7 @@ import {
 } from '../services/cycleCollectionClaimsService';
 import { notifyRealtime } from '../realtime/notify';
 import { sendPush } from '../services/pushService';
+import { notifyCoordinatorTelegramAssignment } from '../services/coordinatorTelegramScenariosService';
 import { DistributionService, getNextIsoWeekRef } from '../services/DistributionService';
 
 function isValidDateInput(value: unknown): value is string {
@@ -616,10 +617,12 @@ export async function patchCycleCollectionClaims(req: Request, res: Response): P
             ? 'Администратор'
             : 'Координатор сбора';
         const weekLabel = week === 'current' ? 'эту' : 'следующую';
+        const assignTitle = 'Сбор молитвенных нужд: новое назначение';
+        const assignBody = `${actorLabel} назначил(а) вам участника ${memberName} на ${weekLabel} неделю.`;
         void sendPush(
           assignedCoordinatorId,
-          'Сбор молитвенных нужд: новое назначение',
-          `${actorLabel} назначил(а) вам участника ${memberName} на ${weekLabel} неделю.`,
+          assignTitle,
+          assignBody,
           {
             url: '/dashboard',
             type: 'curator_assignment_by_pastor',
@@ -627,6 +630,13 @@ export async function patchCycleCollectionClaims(req: Request, res: Response): P
           },
         ).catch((pushErr) => {
           console.warn('[calendar] curator assignment push failed:', pushErr);
+        });
+        void notifyCoordinatorTelegramAssignment({
+          coordinatorId: assignedCoordinatorId,
+          title: assignTitle,
+          body: assignBody,
+        }).catch((tgErr) => {
+          console.warn('[calendar] curator assignment telegram failed:', tgErr);
         });
       }
     }
@@ -688,9 +698,10 @@ export async function postCuratorDistribution(req: Request, res: Response): Prom
         }
         const namesPreview = row.members.slice(0, 5).map((m) => m.memberName).join(', ');
         const suffix = row.members.length > 5 ? ` и еще ${row.members.length - 5}` : '';
+        const title = 'Сбор молитвенных нужд: новые назначения';
         const body = `На ${weekKind === 'current' ? 'эту' : 'следующую'} неделю вам назначено ${row.members.length} участник(ов): ${namesPreview}${suffix}.`;
         try {
-          await sendPush(row.coordinatorId, 'Сбор молитвенных нужд: новые назначения', body, {
+          await sendPush(row.coordinatorId, title, body, {
             url: '/dashboard',
             type: 'curator_week_assignments_manual',
             week_kind: weekKind,
@@ -700,6 +711,15 @@ export async function postCuratorDistribution(req: Request, res: Response): Prom
           pushedCoordinators += 1;
         } catch (pushErr) {
           console.warn('[calendar] curator distribution push failed:', pushErr);
+        }
+        try {
+          await notifyCoordinatorTelegramAssignment({
+            coordinatorId: row.coordinatorId,
+            title,
+            body,
+          });
+        } catch (tgErr) {
+          console.warn('[calendar] curator distribution telegram failed:', tgErr);
         }
       }
     }

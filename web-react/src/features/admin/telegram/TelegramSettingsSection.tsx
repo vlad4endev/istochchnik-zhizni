@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   LuBot,
   LuCalendarDays,
+  LuClipboardList,
   LuClock,
   LuHeart,
   LuMessagesSquare,
@@ -18,21 +19,26 @@ import {
   apiErrorMessage,
   addTelegramChat,
   deleteTelegramChat,
+  fetchCoordinatorTelegramScenarios,
   fetchTelegramChats,
   fetchTelegramDispatchRecipients,
   fetchTelegramDispatchSettings,
   fetchTelegramMailingMessengerChats,
   fetchTelegramSettings,
   humanizeTelegramError,
+  patchCoordinatorTelegramScenarios,
   patchTelegramDispatchSettings,
   patchTelegramSettings,
   refreshTelegramChat,
+  runCoordinatorTelegramScenarioNow,
   runServicePlanMondayMailing,
   runTelegramDispatchNow,
   sendTelegramMessage,
   syncMembersFromTelegramProfiles,
   testTelegramConnection,
   testTelegramProxy,
+  type CoordinatorTelegramScenario,
+  type CoordinatorTelegramScenarioId,
   type TelegramDispatchRecipient,
   type TelegramDispatchSettingsResponse,
   type TelegramSettingsResponse,
@@ -49,9 +55,12 @@ import {
   Q_TG_RECIPIENTS,
   Q_TG_MAILING_CHATS,
   Q_TG_CHATS,
+  Q_TG_COORD_SCENARIOS,
   TG_SECTIONS,
   PROGRAM_PANELS,
   WEEKDAY_OPTIONS,
+  COORDINATOR_TARGET_OPTIONS,
+  COORDINATOR_SCENARIO_HINTS,
   DEFAULT_PROGRAM_MAILING_TEMPLATE,
   DEFAULT_PROGRAM_PUBLISHED_TEMPLATE,
   DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT,
@@ -61,6 +70,7 @@ import {
   parseProgramPanel,
   type TgSection,
   type ProgramPanel,
+  type CoordinatorTelegramTarget,
 } from './constants';
 import {
   fieldClass,
@@ -98,6 +108,7 @@ const SECTION_ICONS: Record<TgSection, typeof LuZap> = {
   bot: LuBot,
   chats: LuMessagesSquare,
   prayer: LuHeart,
+  coordinators: LuClipboardList,
   program: LuCalendarDays,
 };
 
@@ -136,8 +147,14 @@ export function TelegramSettingsSection() {
     queryKey: Q_TG_CHATS,
     queryFn: fetchTelegramChats,
   });
+  const coordScenariosQ = useQuery({
+    queryKey: Q_TG_COORD_SCENARIOS,
+    queryFn: fetchCoordinatorTelegramScenarios,
+  });
 
   const [newChatId, setNewChatId] = useState('');
+  const [coordTimezone, setCoordTimezone] = useState('Europe/Moscow');
+  const [coordScenarios, setCoordScenarios] = useState<CoordinatorTelegramScenario[]>([]);
   const [prayerPanel, setPrayerPanel] = useState<PrayerPanel>('template');
   const [form, setForm] = useState({
     enabled: false,
@@ -220,6 +237,12 @@ export function TelegramSettingsSection() {
     if (!dispatchQ.data) return;
     setDispatchForm(dispatchQ.data);
   }, [dispatchQ.data]);
+
+  useEffect(() => {
+    if (!coordScenariosQ.data) return;
+    setCoordTimezone(coordScenariosQ.data.timezone || 'Europe/Moscow');
+    setCoordScenarios(coordScenariosQ.data.scenarios.map((s) => ({ ...s })));
+  }, [coordScenariosQ.data]);
 
   function goToSection(next: TgSection) {
     setNote(null);
@@ -348,6 +371,55 @@ export function TelegramSettingsSection() {
     onError: (e) =>
       setNote({ type: 'err', text: humanizeTelegramError(e, 'Не удалось сохранить планировщик.') }),
   });
+
+  const saveCoordScenariosMut = useMutation({
+    mutationFn: () =>
+      patchCoordinatorTelegramScenarios({
+        timezone: coordTimezone.trim() || 'Europe/Moscow',
+        scenarios: coordScenarios,
+      }),
+    onSuccess: (next) => {
+      setCoordTimezone(next.timezone);
+      setCoordScenarios(next.scenarios.map((s) => ({ ...s })));
+      qc.setQueryData(Q_TG_COORD_SCENARIOS, next);
+      setNote({ type: 'ok', text: 'Сценарии координаторов сохранены.' });
+    },
+    onError: (e) =>
+      setNote({
+        type: 'err',
+        text: apiErrorMessage(e, 'Не удалось сохранить сценарии координаторов.'),
+      }),
+  });
+
+  const runCoordScenarioMut = useMutation({
+    mutationFn: (scenarioId: CoordinatorTelegramScenarioId) =>
+      runCoordinatorTelegramScenarioNow({ scenario_id: scenarioId }),
+    onSuccess: (r) => {
+      if (r.scenario_id === 'week_list') {
+        setNote({
+          type: 'ok',
+          text: `Список отправлен: личек ${r.sent_dm ?? 0}, чат ${r.sent_chat ? 'да' : 'нет'}.`,
+        });
+        return;
+      }
+      setNote({
+        type: 'ok',
+        text: `Сценарий выполнен. Отправлено сообщений: ${r.sent ?? 0}.`,
+      });
+    },
+    onError: (e) =>
+      setNote({
+        type: 'err',
+        text: humanizeTelegramError(e, 'Не удалось запустить сценарий.'),
+      }),
+  });
+
+  function updateCoordScenario(
+    id: CoordinatorTelegramScenarioId,
+    patch: Partial<CoordinatorTelegramScenario>,
+  ) {
+    setCoordScenarios((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  }
 
   const runDispatchNowMut = useMutation({
     mutationFn: () => runTelegramDispatchNow(),
@@ -737,6 +809,8 @@ export function TelegramSettingsSection() {
     Boolean(form.default_chat_id.trim());
   const prayerConfigured =
     form.prayer_template.trim().length > 0 || dispatchForm.enabled;
+  const coordinatorsConfigured =
+    coordScenarios.some((s) => s.enabled) && Boolean(form.coordinator_chat_id.trim());
   const programConfigured =
     form.service_plan_mailing_enabled &&
     (form.service_plan_mailing_destinations.telegram_chat_ids.length > 0 ||
@@ -747,6 +821,7 @@ export function TelegramSettingsSection() {
     registryChats.length > 0,
     rolesAssigned,
     prayerConfigured,
+    coordinatorsConfigured,
     programConfigured,
   ];
   const setupDoneCount = setupSteps.filter(Boolean).length;
@@ -767,7 +842,7 @@ export function TelegramSettingsSection() {
           <div className="min-w-0">
             <h2 className="text-xl font-bold tracking-tight text-stone-900">Telegram</h2>
             <p className="mt-0.5 text-sm text-stone-500">
-              Бот, чаты, молитва и авторассылки программы служения
+              Бот, чаты, молитва, координаторы и авторассылки программы
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <StatusChip ok={form.enabled} okLabel="Включён" badLabel="Выключен" />
@@ -896,6 +971,14 @@ export function TelegramSettingsSection() {
                 />
                 <SetupStepRow
                   step={5}
+                  done={coordinatorsConfigured}
+                  title="Сценарии координаторов"
+                  hint="Назначения, напоминания о нуждах, недельный список"
+                  actionLabel="Настроить сценарии"
+                  onAction={() => goToSection('coordinators')}
+                />
+                <SetupStepRow
+                  step={6}
                   done={programConfigured}
                   title="Авторассылка программы"
                   hint="Плановая рассылка по расписанию"
@@ -1632,6 +1715,208 @@ export function TelegramSettingsSection() {
                 </div>
               </div>
             ) : null}
+          </div>
+        ) : null}
+
+        {section === 'coordinators' ? (
+          <div className="space-y-5">
+            <PanelIntro
+              title="Сценарии для координаторов"
+              action={
+                <button
+                  type="button"
+                  className={btnPrimary()}
+                  disabled={saveCoordScenariosMut.isPending}
+                  onClick={() => {
+                    setNote(null);
+                    saveCoordScenariosMut.mutate();
+                  }}
+                >
+                  {saveCoordScenariosMut.isPending ? 'Сохранение…' : 'Сохранить'}
+                </button>
+              }
+            >
+              <p>
+                Дублируют push-уведомления о сборе молитвенных нужд: назначения, напоминания о
+                пустой нужде и еженедельный список по координаторам — в личку или в чат с ролью
+                «Координаторы».
+              </p>
+            </PanelIntro>
+
+            {!form.coordinator_chat_id.trim() ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
+                Не назначен чат с ролью «Координаторы». Сценарии с целью «Чат» не смогут отправить
+                сообщение.{' '}
+                <button
+                  type="button"
+                  className="font-semibold underline underline-offset-2"
+                  onClick={() => goToSection('chats')}
+                >
+                  Назначить в разделе «Чаты»
+                </button>
+              </div>
+            ) : null}
+
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <label className="block space-y-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                  Часовой пояс
+                </span>
+                <input
+                  className={fieldClass()}
+                  value={coordTimezone}
+                  onChange={(e) => setCoordTimezone(e.target.value)}
+                  placeholder="Europe/Moscow"
+                />
+              </label>
+              <p className="text-xs text-stone-500 sm:pb-2.5">
+                Для плановых сценариев (напоминания и недельный список).
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {(coordScenarios.length > 0
+                ? coordScenarios
+                : (coordScenariosQ.data?.scenarios ?? [])
+              ).map((scenario) => {
+                const hint = COORDINATOR_SCENARIO_HINTS[scenario.id];
+                return (
+                  <article
+                    key={scenario.id}
+                    className="space-y-3 rounded-2xl border border-stone-200/90 bg-stone-50/40 p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <input
+                          className={`${fieldClass()} max-w-md font-semibold`}
+                          value={scenario.title}
+                          onChange={(e) =>
+                            updateCoordScenario(scenario.id, { title: e.target.value })
+                          }
+                        />
+                        <p className="text-xs text-stone-500">{hint.description}</p>
+                      </div>
+                      <Toggle
+                        checked={scenario.enabled}
+                        onChange={(enabled) => updateCoordScenario(scenario.id, { enabled })}
+                        label={scenario.enabled ? 'Вкл.' : 'Выкл.'}
+                      />
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block space-y-1.5">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                          Куда отправлять
+                        </span>
+                        <select
+                          className={fieldClass()}
+                          value={scenario.target}
+                          onChange={(e) =>
+                            updateCoordScenario(scenario.id, {
+                              target: e.target.value as CoordinatorTelegramTarget,
+                            })
+                          }
+                        >
+                          {COORDINATOR_TARGET_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="block text-xs text-stone-500">
+                          {
+                            COORDINATOR_TARGET_OPTIONS.find((o) => o.value === scenario.target)
+                              ?.hint
+                          }
+                        </span>
+                      </label>
+
+                      {hint.schedule ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="block space-y-1.5">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                              День
+                            </span>
+                            <select
+                              className={fieldClass()}
+                              value={scenario.weekDay}
+                              onChange={(e) =>
+                                updateCoordScenario(scenario.id, {
+                                  weekDay: Number(e.target.value),
+                                })
+                              }
+                            >
+                              {WEEKDAY_OPTIONS.map((d) => (
+                                <option key={d.value} value={d.value}>
+                                  {d.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="block space-y-1.5">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                              Время
+                            </span>
+                            <input
+                              type="time"
+                              className={fieldClass()}
+                              value={scenario.time}
+                              onChange={(e) =>
+                                updateCoordScenario(scenario.id, { time: e.target.value })
+                              }
+                            />
+                          </label>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-stone-200 bg-white/70 px-3 py-2 text-xs text-stone-500">
+                          Срабатывает сразу при назначении — расписание не нужно.
+                        </div>
+                      )}
+                    </div>
+
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                        Свой текст (необязательно)
+                      </span>
+                      <textarea
+                        className={`${fieldClass()} min-h-[72px]`}
+                        value={scenario.customBody ?? ''}
+                        onChange={(e) =>
+                          updateCoordScenario(scenario.id, { customBody: e.target.value })
+                        }
+                        placeholder="Оставьте пустым — будет стандартный текст как в push"
+                      />
+                      <span className="block text-xs text-stone-500">
+                        Плейсхолдеры: {hint.placeholders}
+                      </span>
+                    </label>
+
+                    {scenario.id !== 'assignment' ? (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={btnSecondary()}
+                          disabled={
+                            runCoordScenarioMut.isPending ||
+                            !scenario.enabled ||
+                            !tokenReady
+                          }
+                          onClick={() => {
+                            setNote(null);
+                            runCoordScenarioMut.mutate(scenario.id);
+                          }}
+                        >
+                          {runCoordScenarioMut.isPending &&
+                          runCoordScenarioMut.variables === scenario.id
+                            ? 'Отправка…'
+                            : 'Запустить сейчас'}
+                        </button>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
           </div>
         ) : null}
 
