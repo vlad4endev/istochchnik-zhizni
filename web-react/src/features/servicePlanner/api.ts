@@ -88,6 +88,8 @@ export type ServicePlanDetails = ServicePlanListItem & {
   last_edited_by_member_id: number | null;
   last_edited_at: string | null;
   last_edited_by_name: string | null;
+  /** ISO-время последней авторассылки «программа готова»; null — ещё не слали. */
+  published_notify_sent_at: string | null;
   blocks: ServicePlanBlock[];
   linked_sermon_note: LinkedSermonNoteSummary | null;
 };
@@ -288,9 +290,18 @@ export async function patchServicePlan(
     poem_ministry_member_id: number | null;
     current_block_id: number | null;
     notes: string | null;
+    /**
+     * При переводе в published: слать ли уведомление о готовности.
+     * Если уведомление уже уходило — без true повторно не уйдёт.
+     */
+    send_published_notify?: boolean;
   }>,
-): Promise<void> {
-  await apiClient.patch(`/api/service-plans/${id}`, body);
+): Promise<{ ok: boolean; published_notify?: 'sent' | 'skipped' | 'failed' }> {
+  const { data } = await apiClient.patch<{
+    ok: boolean;
+    published_notify?: 'sent' | 'skipped' | 'failed';
+  }>(`/api/service-plans/${id}`, body);
+  return data;
 }
 
 export async function reorderServiceBlocks(body: {
