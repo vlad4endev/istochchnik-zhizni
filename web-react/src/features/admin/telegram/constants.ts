@@ -55,28 +55,24 @@ export const COORDINATOR_TARGET_OPTIONS: Array<{
 
 export const COORDINATOR_SCENARIO_HINTS: Record<
   CoordinatorTelegramScenarioId,
-  { schedule: boolean; placeholders: string; description: string }
+  { schedule: boolean; description: string }
 > = {
   assignment: {
     schedule: false,
-    placeholders: '{title}, {body}',
     description:
       'Когда координатору назначили участника (вручную, автораспределение или напоминание в понедельник).',
   },
   missing_need_tomorrow: {
     schedule: true,
-    placeholders: '{memberName}, {date}, {title}',
     description:
       'Если у участника завтрашнего дня цикла пустая нужда — напоминание ответственному координатору и админам.',
   },
   missing_need_today: {
     schedule: true,
-    placeholders: '{memberName}, {date}, {title}',
     description: 'Эскалация: на сегодня нужда всё ещё не заполнена.',
   },
   week_list: {
     schedule: true,
-    placeholders: '{participants}, {week_kind}, {coordinatorName}, {count}',
     description:
       'Раз в неделю список назначений по координаторам в чат (и/или персональные дайджесты в личку).',
   },

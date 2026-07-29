@@ -635,6 +635,14 @@ export async function patchCycleCollectionClaims(req: Request, res: Response): P
           coordinatorId: assignedCoordinatorId,
           title: assignTitle,
           body: assignBody,
+          weekKind: week === 'current' ? 'current' : 'next',
+          coordinatorName:
+            `${target.first_name ?? ''} ${target.last_name ?? ''}`.trim() ||
+            target.name?.trim() ||
+            undefined,
+          memberId,
+          memberName,
+          actorLabel,
         }).catch((tgErr) => {
           console.warn('[calendar] curator assignment telegram failed:', tgErr);
         });
@@ -717,6 +725,8 @@ export async function postCuratorDistribution(req: Request, res: Response): Prom
             coordinatorId: row.coordinatorId,
             title,
             body,
+            weekKind,
+            coordinatorName: row.coordinatorName,
           });
         } catch (tgErr) {
           console.warn('[calendar] curator distribution telegram failed:', tgErr);

@@ -47,6 +47,7 @@ import {
   TemplateFieldInserter,
   PRAYER_TEMPLATE_FIELD_GROUPS,
   PROGRAM_TEMPLATE_FIELD_GROUPS,
+  COORDINATOR_TEMPLATE_FIELD_GROUPS,
 } from '../TemplateFieldInserter';
 import { chatTypeBadge, chatLabel, ChatSelect, MailingDestinationsEditor } from './chatControls';
 import {
@@ -203,6 +204,9 @@ export function TelegramSettingsSection() {
   const prayerTemplateRef = useRef<HTMLTextAreaElement | null>(null);
   const programTemplateRef = useRef<HTMLTextAreaElement | null>(null);
   const publishedTemplateRef = useRef<HTMLTextAreaElement | null>(null);
+  const coordBodyRefs = useRef<Partial<Record<CoordinatorTelegramScenarioId, HTMLTextAreaElement | null>>>(
+    {},
+  );
 
   useEffect(() => {
     if (!data) return;
@@ -1874,22 +1878,45 @@ export function TelegramSettingsSection() {
                       )}
                     </div>
 
-                    <label className="block space-y-1.5">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                        Свой текст (необязательно)
-                      </span>
-                      <textarea
-                        className={`${fieldClass()} min-h-[72px]`}
-                        value={scenario.customBody ?? ''}
-                        onChange={(e) =>
-                          updateCoordScenario(scenario.id, { customBody: e.target.value })
+                    <div className="space-y-2">
+                      <label className="block space-y-1.5">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                          Шаблон сообщения
+                        </span>
+                        <textarea
+                          ref={(el) => {
+                            coordBodyRefs.current[scenario.id] = el;
+                          }}
+                          className={`${fieldClass()} min-h-[120px] font-mono text-[13px] leading-relaxed`}
+                          value={scenario.customBody ?? ''}
+                          onChange={(e) =>
+                            updateCoordScenario(scenario.id, { customBody: e.target.value })
+                          }
+                          placeholder={
+                            scenario.id === 'week_list'
+                              ? 'Список на {{week_range}}\n\n{{assignments_block}}'
+                              : scenario.id === 'assignment'
+                                ? '{{actor}} назначил(а) вам {{member_name}} на {{week_label}} неделю ({{week_range}}).\nДень в цикле: {{member_cycle_weekday}}, {{member_cycle_date}}.'
+                                : '{{member_name}}: нужда на {{date_long}} не заполнена.\nОтветственный: {{coordinator_name}}.'
+                          }
+                        />
+                        <span className="block text-xs text-stone-500">
+                          Пустое поле — стандартный текст как в push. Вставьте поля ниже.
+                        </span>
+                      </label>
+                      <TemplateFieldInserter
+                        groups={COORDINATOR_TEMPLATE_FIELD_GROUPS}
+                        searchPlaceholder="Найти: неделя, участник, координатор…"
+                        onInsert={(token) =>
+                          insertAtCursor(
+                            coordBodyRefs.current[scenario.id] ?? null,
+                            token,
+                            scenario.customBody ?? '',
+                            (next) => updateCoordScenario(scenario.id, { customBody: next }),
+                          )
                         }
-                        placeholder="Оставьте пустым — будет стандартный текст как в push"
                       />
-                      <span className="block text-xs text-stone-500">
-                        Плейсхолдеры: {hint.placeholders}
-                      </span>
-                    </label>
+                    </div>
 
                     {scenario.id !== 'assignment' ? (
                       <div className="flex flex-wrap gap-2">

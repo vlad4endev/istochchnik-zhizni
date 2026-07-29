@@ -21,7 +21,7 @@ function run(): void {
     scenarios: [
       { id: 'assignment', enabled: false, target: 'dm_and_chat', title: '  Назначение  ' },
       { id: 'unknown_x', enabled: true },
-      { id: 'week_list', time: '11:30', weekDay: 2, customBody: 'Список: {participants}' },
+      { id: 'week_list', time: '11:30', weekDay: 2, customBody: 'Список: {{participants}}' },
     ],
   });
   assert.equal(merged.timezone, 'Europe/Samara');
@@ -32,7 +32,7 @@ function run(): void {
   const week = merged.scenarios.find((s) => s.id === 'week_list')!;
   assert.equal(week.time, '11:30');
   assert.equal(week.weekDay, 2);
-  assert.equal(week.customBody, 'Список: {participants}');
+  assert.equal(week.customBody, 'Список: {{participants}}');
   assert.equal(
     merged.scenarios.some((s) => (s.id as string) === 'unknown_x'),
     false,
@@ -46,11 +46,23 @@ function run(): void {
   assert.equal(scenarioWantsChat('dm_and_chat'), true);
 
   assert.equal(
-    applyCoordinatorBodyTemplate('{memberName} — {date}', {
-      memberName: 'Иван',
-      date: '2026-07-30',
+    applyCoordinatorBodyTemplate('{{member_name}} — {{date_long}}', {
+      member_name: 'Иван',
+      date_long: 'Понедельник, 28 июля',
     }),
-    'Иван — 2026-07-30',
+    'Иван — Понедельник, 28 июля',
+  );
+  assert.equal(
+    applyCoordinatorBodyTemplate('Неделя {week_range}', {
+      week_range: '28 июля — 3 августа',
+    }),
+    'Неделя 28 июля — 3 августа',
+  );
+  assert.equal(
+    applyCoordinatorBodyTemplate('{{unknown}} и {{member_name}}', {
+      member_name: 'Мария',
+    }),
+    ' и Мария',
   );
 
   console.log('coordinatorTelegramScenarios.test.ts: OK');

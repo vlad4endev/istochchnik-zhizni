@@ -51,6 +51,8 @@ async function pushCuratorAssignmentsForWeek(
         coordinatorId: row.coordinatorId,
         title,
         body,
+        weekKind,
+        coordinatorName: row.coordinatorName,
       });
     } catch (tgErr) {
       console.warn(

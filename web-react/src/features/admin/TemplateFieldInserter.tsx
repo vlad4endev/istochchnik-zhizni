@@ -149,6 +149,115 @@ export const PROGRAM_TEMPLATE_FIELD_GROUPS: TemplateFieldGroup[] = [
   },
 ];
 
+/** Поля для сценариев Telegram-рассылки координаторам сбора нужд. */
+export const COORDINATOR_TEMPLATE_FIELD_GROUPS: TemplateFieldGroup[] = [
+  {
+    id: 'week',
+    title: 'Неделя',
+    items: [
+      {
+        token: '{{week_range}}',
+        label: 'Неделя с — по',
+        example: '28 июля — 3 августа',
+      },
+      { token: '{{week_from}}', label: 'Начало недели', example: '28 июля' },
+      { token: '{{week_to}}', label: 'Конец недели', example: '3 августа' },
+      { token: '{{week_label}}', label: '«эту / следующую»', example: 'следующую' },
+      { token: '{{cycle_index}}', label: 'Номер молитвенного цикла', example: '12' },
+    ],
+  },
+  {
+    id: 'people',
+    title: 'Координатор и участники',
+    items: [
+      { token: '{{coordinator_name}}', label: 'Имя координатора' },
+      {
+        token: '{{participants}}',
+        label: 'Назначенные участники',
+        example: 'Иван, Мария',
+      },
+      {
+        token: '{{participants_list}}',
+        label: 'Участники списком',
+        example: '• Иван\n• Мария',
+      },
+      { token: '{{participants_count}}', label: 'Число участников', example: '3' },
+      {
+        token: '{{participants_with_dates}}',
+        label: 'Участники с датами в цикле',
+        example: '• Иван — Понедельник, 28 июля',
+      },
+      {
+        token: '{{cycle_schedule}}',
+        label: 'Дни цикла координатора',
+        example: 'Понедельник, 28 июля: Иван',
+      },
+    ],
+  },
+  {
+    id: 'reminder',
+    title: 'Напоминание о нужде',
+    items: [
+      { token: '{{member_name}}', label: 'Участник дня' },
+      { token: '{{date_long}}', label: 'Дата полностью', example: 'Понедельник, 28 июля' },
+      { token: '{{date_short}}', label: 'Дата коротко', example: '28 июля' },
+      { token: '{{weekday_cap}}', label: 'День недели', example: 'Понедельник' },
+      { token: '{{date}}', label: 'Дата YYYY-MM-DD', example: '2026-07-28' },
+      {
+        token: '{{coordinator_name}}',
+        label: 'Ответственный координатор',
+      },
+      { token: '{{title}}', label: 'Заголовок сценария' },
+      { token: '{{cycle_index}}', label: 'Номер цикла' },
+    ],
+  },
+  {
+    id: 'assignment',
+    title: 'Одно назначение',
+    items: [
+      { token: '{{member_name}}', label: 'Назначенный участник' },
+      {
+        token: '{{member_cycle_weekday}}',
+        label: 'День участника в цикле',
+        example: 'Понедельник',
+      },
+      {
+        token: '{{member_cycle_date}}',
+        label: 'Дата участника в цикле',
+        example: '28 июля',
+      },
+      {
+        token: '{{member_cycle_date_long}}',
+        label: 'Дата участника полностью',
+        example: 'Понедельник, 28 июля',
+      },
+      { token: '{{actor}}', label: 'Кто назначил', example: 'Пастор' },
+      { token: '{{coordinator_name}}', label: 'Имя координатора' },
+      { token: '{{week_range}}', label: 'Неделя с — по' },
+      { token: '{{title}}', label: 'Заголовок' },
+      { token: '{{body}}', label: 'Стандартный текст (как в push)' },
+    ],
+  },
+  {
+    id: 'list',
+    title: 'Общий список',
+    items: [
+      {
+        token: '{{assignments_block}}',
+        label: 'Полный список по координаторам',
+        example: 'Иван:\n  • Мария — …',
+      },
+      {
+        token: '{{cycle_week_schedule}}',
+        label: 'Все дни недели цикла',
+        example: 'Понедельник, 28 июля: …',
+      },
+      { token: '{{all_participants}}', label: 'Все участники недели' },
+      { token: '{{all_coordinators}}', label: 'Все координаторы' },
+    ],
+  },
+];
+
 /**
  * Выбор поля для вставки в шаблон: русские названия, вкладки, поиск.
  * Технические {{токены}} не показываем в списке — только смысл.
@@ -156,9 +265,11 @@ export const PROGRAM_TEMPLATE_FIELD_GROUPS: TemplateFieldGroup[] = [
 export function TemplateFieldInserter({
   groups,
   onInsert,
+  searchPlaceholder = 'Найти: проповедник, тема, ссылка…',
 }: {
   groups: TemplateFieldGroup[];
   onInsert: (token: string) => void;
+  searchPlaceholder?: string;
 }) {
   const [activeId, setActiveId] = useState(groups[0]?.id ?? '');
   const [query, setQuery] = useState('');
@@ -216,7 +327,7 @@ export function TemplateFieldInserter({
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Найти: проповедник, тема, ссылка…"
+            placeholder={searchPlaceholder}
             className="min-w-0 flex-1 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20"
           />
           <button

@@ -10,8 +10,14 @@ import {
   type CoordinatorTelegramScenariosDocument,
 } from '../types/coordinatorTelegramScenarios';
 import { getZonedNow, isoWeekKeyFromYmd, parseHm, type ZonedNow } from '../utils/zonedTime';
-import { getPrayerDataByDate } from './calendarService';
-import { DistributionService } from './DistributionService';
+import { getPrayerDataByDate, type WeekPlanKind } from './calendarService';
+import {
+  baseWeekVars,
+  coordinatorPersonalVars,
+  loadCoordinatorWeekTemplateContext,
+  missingNeedVars,
+  singleAssignmentVars,
+} from './coordinatorTelegramTemplateVars';
 import {
   sendTelegramByPurpose,
   sendTelegramToChat,
@@ -142,18 +148,29 @@ async function getAdminMemberIdsWithTelegram(): Promise<number[]> {
 async function getCollectionClaimOwnerForMemberInCycle(
   cycleIndex: number,
   memberId: number,
-): Promise<number | null> {
+): Promise<{ id: number; name: string } | null> {
   const result = await query(
-    `SELECT claimed_by_member_id
-     FROM cycle_collection_claims
-     WHERE cycle_index = $1 AND member_id = $2
+    `SELECT
+       c.claimed_by_member_id AS id,
+       COALESCE(
+         NULLIF(TRIM(COALESCE(cm.first_name, '') || ' ' || COALESCE(cm.last_name, '')), ''),
+         cm.name,
+         'Куратор'
+       ) AS display_name
+     FROM cycle_collection_claims c
+     JOIN members cm ON cm.id = c.claimed_by_member_id
+     WHERE c.cycle_index = $1 AND c.member_id = $2
      LIMIT 1`,
     [cycleIndex, memberId],
   );
-  const raw = result.rows[0]?.claimed_by_member_id;
-  if (raw == null) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
+  const row = result.rows[0] as { id?: unknown; display_name?: unknown } | undefined;
+  if (!row) return null;
+  const id = Number(row.id);
+  if (!Number.isFinite(id)) return null;
+  return {
+    id,
+    name: typeof row.display_name === 'string' ? row.display_name.trim() : 'Куратор',
+  };
 }
 
 async function sendDmSafe(memberId: number, text: string): Promise<boolean> {
@@ -185,6 +202,17 @@ function findScenario(
   return doc.scenarios.find((s) => s.id === id);
 }
 
+function renderScenarioText(
+  scenario: CoordinatorTelegramScenario,
+  vars: Record<string, string>,
+  fallback: string,
+): string {
+  const custom = (scenario.customBody ?? '').trim();
+  if (!custom) return fallback;
+  const rendered = applyCoordinatorBodyTemplate(custom, vars).trim();
+  return rendered || fallback;
+}
+
 /**
  * Event-driven: новое назначение координатору (зеркало push curator_assignment_*).
  */
@@ -192,6 +220,11 @@ export async function notifyCoordinatorTelegramAssignment(args: {
   coordinatorId: number;
   title: string;
   body: string;
+  weekKind?: WeekPlanKind;
+  coordinatorName?: string;
+  memberId?: number;
+  memberName?: string;
+  actorLabel?: string;
 }): Promise<{ sent_dm: boolean; sent_chat: boolean }> {
   const doc = await loadCoordinatorTelegramScenarios();
   const scenario = findScenario(doc, 'assignment');
@@ -199,13 +232,50 @@ export async function notifyCoordinatorTelegramAssignment(args: {
     return { sent_dm: false, sent_chat: false };
   }
 
-  const custom = (scenario.customBody ?? '').trim();
-  const text = custom
-    ? applyCoordinatorBodyTemplate(custom, {
-        title: args.title,
-        body: args.body,
-      }).trim() || `${args.title}\n\n${args.body}`
-    : `${args.title}\n\n${args.body}`;
+  const weekKind: WeekPlanKind = args.weekKind === 'current' ? 'current' : 'next';
+  const ctx = await loadCoordinatorWeekTemplateContext(weekKind);
+  const row = ctx.assignments.find((a) => a.coordinatorId === args.coordinatorId);
+  const coordinatorName =
+    args.coordinatorName?.trim() ||
+    row?.coordinatorName ||
+    'Координатор';
+
+  let vars: Record<string, string>;
+  if (args.memberName || args.memberId) {
+    vars = singleAssignmentVars({
+      title: args.title,
+      body: args.body,
+      actor: args.actorLabel?.trim() || '',
+      coordinatorName,
+      memberName: args.memberName?.trim() || `Участник ${args.memberId ?? ''}`.trim(),
+      memberId: args.memberId ?? null,
+      ctx,
+    });
+  } else if (row) {
+    vars = coordinatorPersonalVars(ctx, row, {
+      title: args.title,
+      body: args.body,
+      actor: args.actorLabel?.trim() || '',
+      member_name: '',
+    });
+  } else {
+    vars = {
+      ...baseWeekVars(ctx),
+      coordinator_name: coordinatorName,
+      title: args.title,
+      body: args.body,
+      actor: args.actorLabel?.trim() || '',
+      member_name: '',
+      participants: '',
+      participants_list: '',
+      participants_count: '0',
+      participants_with_dates: '',
+      cycle_schedule: '',
+    };
+  }
+
+  const fallback = `${args.title}\n\n${args.body}`;
+  const text = renderScenarioText(scenario, vars, fallback);
 
   let sentDm = false;
   let sentChat = false;
@@ -222,7 +292,13 @@ export async function notifyCoordinatorTelegramAssignment(args: {
  * Batch helper for distribution / Monday reminder — one message per coordinator.
  */
 export async function notifyCoordinatorTelegramAssignmentsBatch(
-  rows: Array<{ coordinatorId: number; title: string; body: string }>,
+  rows: Array<{
+    coordinatorId: number;
+    title: string;
+    body: string;
+    weekKind?: WeekPlanKind;
+    coordinatorName?: string;
+  }>,
 ): Promise<{ sent: number; total: number }> {
   let sent = 0;
   for (const row of rows) {
@@ -244,26 +320,33 @@ async function notifyMissingNeedTelegram(
   if (!assigned || need.length > 0) return { sent: 0 };
 
   const memberName = assigned.name?.trim() || `Участник ${assigned.id}`;
+  const cycleIndex =
+    typeof dayData.prayer_cycle?.index === 'number' ? dayData.prayer_cycle.index : null;
+  const owner =
+    cycleIndex != null
+      ? await getCollectionClaimOwnerForMemberInCycle(cycleIndex, assigned.id)
+      : null;
+
+  const vars = missingNeedVars({
+    title,
+    memberName,
+    dateYmd,
+    coordinatorName: owner?.name ?? '',
+    cycleIndex,
+    weekKind: 'current',
+  });
+
   const fallbackBody =
     bodyType === 'tomorrow'
       ? `${memberName}: поле нужды на ${dateYmd} не заполнено.`
       : `${memberName}: поле нужды на сегодня (${dateYmd}) всё ещё пустое.`;
-  const custom = (scenario.customBody ?? '').trim();
-  const body = custom
-    ? applyCoordinatorBodyTemplate(custom, { memberName, date: dateYmd, title }).trim() ||
-      fallbackBody
-    : fallbackBody;
-  const text = `${title}\n\n${body}`;
+  const text = renderScenarioText(scenario, vars, `${title}\n\n${fallbackBody}`);
 
   const recipients = new Set<number>();
   if (scenarioWantsDm(scenario.target)) {
     const admins = await getAdminMemberIdsWithTelegram();
     for (const id of admins) recipients.add(id);
-    const cycleIndex = dayData.prayer_cycle?.index;
-    if (typeof cycleIndex === 'number') {
-      const ownerId = await getCollectionClaimOwnerForMemberInCycle(cycleIndex, assigned.id);
-      if (ownerId != null) recipients.add(ownerId);
-    }
+    if (owner) recipients.add(owner.id);
   }
 
   let sent = 0;
@@ -278,54 +361,30 @@ async function notifyMissingNeedTelegram(
 
 /** Текст недельного списка: назначения сгруппированы по координаторам. */
 export async function buildCoordinatorWeekListTelegramText(
-  weekKind: 'current' | 'next' = 'next',
+  weekKind: WeekPlanKind = 'next',
 ): Promise<string> {
-  const service = new DistributionService();
-  const assignments = await service.getCoordinatorAssignmentsForQueueWeek(weekKind);
-  const weekLabel = weekKind === 'current' ? 'эту' : 'следующую';
-
-  if (assignments.length === 0) {
-    return [
-      `Список по координаторам на ${weekLabel} неделю`,
-      '',
-      'Назначений пока нет.',
-    ].join('\n');
+  const ctx = await loadCoordinatorWeekTemplateContext(weekKind);
+  const header = `Список по координаторам на ${ctx.weekLabel} неделю (${ctx.weekRange})`;
+  if (ctx.assignments.length === 0) {
+    return [header, '', 'Назначений пока нет.'].join('\n');
   }
-
-  const lines = [`Список по координаторам на ${weekLabel} неделю`, ''];
-  for (const row of assignments) {
-    lines.push(`${row.coordinatorName}:`);
-    if (row.members.length === 0) {
-      lines.push('  — нет участников');
-    } else {
-      for (const m of row.members) {
-        lines.push(`  • ${m.memberName}`);
-      }
-    }
-    lines.push('');
-  }
-  return lines.join('\n').trim();
+  return [header, '', baseWeekVars(ctx).assignments_block].join('\n');
 }
 
 async function runWeekListScenario(
   scenario: CoordinatorTelegramScenario,
-  weekKind: 'current' | 'next' = 'next',
+  weekKind: WeekPlanKind = 'next',
 ): Promise<{ sent_dm: number; sent_chat: boolean; text: string }> {
-  const service = new DistributionService();
-  const assignments = await service.getCoordinatorAssignmentsForQueueWeek(weekKind);
-  const custom = (scenario.customBody ?? '').trim();
-
-  let chatText = await buildCoordinatorWeekListTelegramText(weekKind);
-  if (custom) {
-    const participants = assignments
-      .flatMap((a) => a.members.map((m) => m.memberName))
-      .join(', ');
-    const rendered = applyCoordinatorBodyTemplate(custom, {
-      participants,
-      week_kind: weekKind,
-    }).trim();
-    if (rendered) chatText = rendered;
-  }
+  const ctx = await loadCoordinatorWeekTemplateContext(weekKind);
+  const defaultChatText = await buildCoordinatorWeekListTelegramText(weekKind);
+  const chatVars = {
+    ...baseWeekVars(ctx),
+    title: scenario.title,
+    participants: baseWeekVars(ctx).all_participants,
+    coordinator_name: baseWeekVars(ctx).all_coordinators,
+    participants_count: String(ctx.assignments.reduce((n, a) => n + a.members.length, 0)),
+  };
+  const chatText = renderScenarioText(scenario, chatVars, defaultChatText);
 
   let sentChat = false;
   let sentDm = 0;
@@ -335,23 +394,16 @@ async function runWeekListScenario(
   }
 
   if (scenarioWantsDm(scenario.target)) {
-    const weekLabel = weekKind === 'current' ? 'эту' : 'следующую';
-    for (const row of assignments) {
+    for (const row of ctx.assignments) {
       if (row.members.length === 0) continue;
-      const names = row.members.map((m) => m.memberName).join(', ');
+      const personalVars = coordinatorPersonalVars(ctx, row, { title: scenario.title });
       const personalFallback = [
-        `Сбор нужд на ${weekLabel} неделю`,
+        `Сбор нужд на ${ctx.weekLabel} неделю (${ctx.weekRange})`,
         '',
-        `Вам назначено ${row.members.length} участник(ов): ${names}.`,
+        `Вам назначено ${row.members.length} участник(ов):`,
+        personalVars.participants_with_dates,
       ].join('\n');
-      const personal = custom
-        ? applyCoordinatorBodyTemplate(custom, {
-            participants: names,
-            coordinatorName: row.coordinatorName,
-            week_kind: weekKind,
-            count: String(row.members.length),
-          }).trim() || personalFallback
-        : personalFallback;
+      const personal = renderScenarioText(scenario, personalVars, personalFallback);
       if (await sendDmSafe(row.coordinatorId, personal)) sentDm += 1;
     }
   }

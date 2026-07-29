@@ -177,9 +177,22 @@ export function scenarioWantsChat(target: CoordinatorTelegramTarget): boolean {
   return target === 'chat' || target === 'dm_and_chat';
 }
 
+/**
+ * Подстановка полей в шаблон.
+ * Основной формат как у программы/молитвы: {{token}}.
+ * Старый формат {token} тоже поддерживается.
+ */
 export function applyCoordinatorBodyTemplate(
   template: string,
   vars: Record<string, string>,
 ): string {
-  return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_all, key: string) => vars[key] ?? '');
+  const withDouble = template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_all, key: string) => {
+    return Object.prototype.hasOwnProperty.call(vars, key) ? vars[key]! : '';
+  });
+  return withDouble.replace(/\{([a-zA-Z0-9_]+)\}/g, (all, key: string) => {
+    // Уже обработанные {{…}} не трогаем — после первого прохода их нет.
+    // Одиночные {token} — legacy.
+    if (Object.prototype.hasOwnProperty.call(vars, key)) return vars[key]!;
+    return all;
+  });
 }
