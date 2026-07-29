@@ -19,6 +19,7 @@ import {
   listPlans,
   listTemplates,
   markServicePlanLastEdited,
+  markServicePlanPublishedNotifySent,
   patchBlock,
   patchPlan,
   patchTemplate,
@@ -606,7 +607,9 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
   const hadPatch = Object.keys(patch).length > 0;
   try {
     const beforeRes = await query(
-      `select status, leader_member_id, preacher_member_id, share_token::text as share_token, service_date::text as service_date
+      `select status, leader_member_id, preacher_member_id, share_token::text as share_token,
+              service_date::text as service_date,
+              published_notify_sent_at::text as published_notify_sent_at
        from public.service_plans
        where id = $1
        limit 1`,
@@ -619,6 +622,7 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
           preacher_member_id?: number | null;
           share_token?: string | null;
           service_date?: string | null;
+          published_notify_sent_at?: string | null;
         }
       | undefined;
     const previousStatus = String(beforeRow?.status ?? 'draft');
@@ -628,6 +632,11 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
       beforeRow?.preacher_member_id == null ? null : Number(beforeRow.preacher_member_id);
     const shareToken = String(beforeRow?.share_token ?? '').trim();
     const shareUrl = shareToken ? `/service-plan/share/${shareToken}` : '/service-planner';
+    const alreadyNotified =
+      beforeRow?.published_notify_sent_at != null &&
+      String(beforeRow.published_notify_sent_at).trim() !== '';
+    const sendPublishedNotifyFlag =
+      typeof body.send_published_notify === 'boolean' ? body.send_published_notify : undefined;
     const ok = await patchPlan(id, patch);
     if (!ok) {
       res.status(404).json({ error: 'План не найден' });
@@ -699,31 +708,58 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
     if (patch.status === 'published' || previousStatus === 'published') {
       await syncPlannerSetlistIfPublished(id, { notifyOnPublish: justPublished });
     }
+    let publishedNotify: 'sent' | 'skipped' | 'failed' | null = null;
     if (justPublished) {
-      const publishedDate = nextServiceDate || String(beforeRow?.service_date ?? '');
-      if (shareToken && publishedDate) {
-        try {
-          const pub = await notifyServicePlanPublished({
-            planId: id,
-            serviceDateYmd: publishedDate,
-            shareToken,
-          });
-          if (pub.ok) {
-            console.log(
-              `[service-planner] published notify → telegram=[${(pub.telegram_chats ?? []).join(',')}] messenger=[${(pub.messenger_channels ?? []).join(',')}]`,
-            );
-          } else if (pub.skipped) {
-            console.log(`[service-planner] published notify skipped: ${pub.reason ?? 'unknown'}`);
-          } else {
-            console.warn(`[service-planner] published notify failed: ${pub.reason ?? 'unknown'}`);
+      // Первая публикация — шлём по умолчанию.
+      // Повторная (уже было уведомление) — только если явно send_published_notify=true.
+      const shouldNotify = alreadyNotified
+        ? sendPublishedNotifyFlag === true
+        : sendPublishedNotifyFlag !== false;
+      if (!shouldNotify) {
+        publishedNotify = 'skipped';
+        console.log(
+          `[service-planner] published notify skipped (already_sent=${alreadyNotified}, flag=${String(sendPublishedNotifyFlag)})`,
+        );
+      } else {
+        const publishedDate = nextServiceDate || String(beforeRow?.service_date ?? '');
+        if (shareToken && publishedDate) {
+          try {
+            const pub = await notifyServicePlanPublished({
+              planId: id,
+              serviceDateYmd: publishedDate,
+              shareToken,
+            });
+            if (pub.ok) {
+              publishedNotify = 'sent';
+              try {
+                await markServicePlanPublishedNotifySent(id);
+              } catch (markErr) {
+                console.warn('[service-planner] mark published notify sent failed:', markErr);
+              }
+              console.log(
+                `[service-planner] published notify → telegram=[${(pub.telegram_chats ?? []).join(',')}] messenger=[${(pub.messenger_channels ?? []).join(',')}]`,
+              );
+            } else if (pub.skipped) {
+              publishedNotify = 'skipped';
+              console.log(`[service-planner] published notify skipped: ${pub.reason ?? 'unknown'}`);
+            } else {
+              publishedNotify = 'failed';
+              console.warn(`[service-planner] published notify failed: ${pub.reason ?? 'unknown'}`);
+            }
+          } catch (pubErr) {
+            publishedNotify = 'failed';
+            console.warn('[service-planner] published notify failed:', pubErr);
           }
-        } catch (pubErr) {
-          console.warn('[service-planner] published notify failed:', pubErr);
+        } else {
+          publishedNotify = 'skipped';
         }
       }
     }
     notifyServicePlannerRealtime();
-    res.json({ ok: true });
+    res.json({
+      ok: true,
+      ...(publishedNotify != null ? { published_notify: publishedNotify } : {}),
+    });
   } catch (e) {
     console.error('[service-planner] patchServicePlanById:', e);
     res.status(500).json({ error: 'Не удалось обновить план' });

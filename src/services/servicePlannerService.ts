@@ -90,6 +90,11 @@ export type PlannerPlanDetails = PlannerPlanListItem & {
   last_edited_by_member_id: number | null;
   last_edited_at: string | null;
   last_edited_by_name: string | null;
+  /**
+   * Когда уходило уведомление «программа готова» (Telegram + чаты приложения).
+   * null — ещё не отправляли; при повторной публикации спрашиваем.
+   */
+  published_notify_sent_at: string | null;
   blocks: PlannerBlock[];
   linked_sermon_note: LinkedSermonNoteSummary | null;
 };
@@ -298,6 +303,17 @@ async function ensurePlannerSchema(): Promise<void> {
       );
       await query(
         `alter table public.service_plans add column if not exists poem_ministry_member_id integer references public.members (id) on delete set null`,
+      );
+      await query(
+        `alter table public.service_plans add column if not exists published_notify_sent_at timestamptz`,
+      );
+      // Уже опубликованные планы считаем «уведомление уже уходило», чтобы повторная
+      // публикация после деплоя не слала дубль без подтверждения.
+      await query(
+        `update public.service_plans
+         set published_notify_sent_at = coalesce(updated_at, now())
+         where status = 'published'
+           and published_notify_sent_at is null`,
       );
 
       await query(
@@ -848,6 +864,7 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
        p.notes, p.created_at::text as created_at, p.updated_at::text as updated_at,
        p.last_edited_by_member_id,
        p.last_edited_at::text as last_edited_at,
+       p.published_notify_sent_at::text as published_notify_sent_at,
        coalesce(
          nullif(trim(concat(coalesce(ed.first_name, ''), ' ', coalesce(ed.last_name, ''))), ''),
          ed.name
@@ -904,6 +921,10 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
       row.last_edited_by_name == null || String(row.last_edited_by_name).trim() === ''
         ? null
         : String(row.last_edited_by_name).trim(),
+    published_notify_sent_at:
+      row.published_notify_sent_at == null || String(row.published_notify_sent_at).trim() === ''
+        ? null
+        : String(row.published_notify_sent_at),
     linked_sermon_note,
     blocks: blocksRes.rows.map((r) => {
       const record = r as DbRecord;
@@ -1691,6 +1712,16 @@ export async function createPlan(input: {
   } finally {
     client.release();
   }
+}
+
+export async function markServicePlanPublishedNotifySent(planId: number): Promise<void> {
+  await ensurePlannerSchema();
+  await query(
+    `update public.service_plans
+     set published_notify_sent_at = now(), updated_at = now()
+     where id = $1`,
+    [planId],
+  );
 }
 
 export async function patchPlan(

@@ -929,6 +929,16 @@ export function ServicePlannerPage() {
     const nextStatus = draft.status === 'draft' ? 'published' : 'draft';
     const nextDraft: ServicePlanDetails = { ...draft, status: nextStatus };
 
+    let sendPublishedNotify: boolean | undefined;
+    if (nextStatus === 'published' && draft.published_notify_sent_at) {
+      const sendAgain = window.confirm(
+        'Уведомление о готовности программы уже отправлялось.\n\n' +
+          'Отправить снова в Telegram и чаты приложения?\n\n' +
+          '«ОК» — отправить, «Отмена» — опубликовать без авторассылки.',
+      );
+      sendPublishedNotify = sendAgain;
+    }
+
     suppressNextAutosaveRef.current = true;
     if (autosaveTimerRef.current != null) {
       window.clearTimeout(autosaveTimerRef.current);
@@ -943,8 +953,14 @@ export function ServicePlannerPage() {
         await persistPlanBlocksFromDraft(nextDraft);
       }
 
+      const publishPatch =
+        nextStatus === 'published' && sendPublishedNotify !== undefined
+          ? ({ status: nextStatus, send_published_notify: sendPublishedNotify } as const)
+          : ({ status: nextStatus } as const);
+
+      let publishResult: { published_notify?: 'sent' | 'skipped' | 'failed' } | null = null;
       if (canManagePlanSettings) {
-        await patchServicePlan(nextDraft.id, {
+        publishResult = await patchServicePlan(nextDraft.id, {
           service_date: nextDraft.service_date,
           start_time: nextDraft.start_time,
           leader_member_id: nextDraft.leader_member_id,
@@ -952,17 +968,23 @@ export function ServicePlannerPage() {
           music_ministry_member_id: nextDraft.music_ministry_member_id,
           poem_ministry_member_id: nextDraft.poem_ministry_member_id,
           current_block_id: nextDraft.current_block_id,
-          status: nextStatus,
+          ...publishPatch,
         });
       } else {
-        await patchServicePlan(nextDraft.id, { status: nextStatus });
+        publishResult = await patchServicePlan(nextDraft.id, { ...publishPatch });
       }
 
       if (nextStatus === 'draft') {
         await persistPlanBlocksFromDraft(nextDraft);
       }
 
-      setDraft(nextDraft);
+      const notifiedNow = publishResult?.published_notify === 'sent';
+      setDraft({
+        ...nextDraft,
+        published_notify_sent_at: notifiedNow
+          ? new Date().toISOString()
+          : nextDraft.published_notify_sent_at,
+      });
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] }),
         qc.invalidateQueries({ queryKey: ['service-planner', 'plan', activePlanId] }),
