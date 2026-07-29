@@ -4,8 +4,12 @@ import { getAssignmentsForPlan } from './mediaScheduleService';
 import { getPlanDetails } from './servicePlannerService';
 import { getTelegramSettings, resolveTelegramUsernamesForMembers, sendTelegramByPurpose, sendTelegramToChat } from './telegramService';
 import {
+  ensureMediykaMessengerChannel,
   ensureServicePlanPlanningMessengerChannel,
+  MEDIA_TEAM_CHANNEL_TITLE,
   postServicePlanMondayMailingMessengerNotification,
+  postServicePlanPublishedMessengerNotification,
+  SERVICE_PLAN_PLANNING_CHANNEL_TITLE,
 } from './messengerService';
 
 const DEFAULT_TZ = 'Europe/Moscow';
@@ -1351,15 +1355,110 @@ function formatPublishedDateRu(serviceDateYmd: string): string {
   return formatDateLongRu(serviceDateYmd);
 }
 
+function buildPublishedNotifyText(input: {
+  planId: number | null;
+  serviceDateYmd: string;
+  shareToken: string;
+  shareUrl: string;
+  origin: string;
+  template: string;
+  personStyle: MondayMailingPersonStyle;
+  loaded: Awaited<ReturnType<typeof loadMailingFieldsFromPlan>>;
+}): string {
+  const { planId, serviceDateYmd, shareToken, shareUrl, origin, template, personStyle, loaded } =
+    input;
+
+  let text: string;
+  if (planId && loaded) {
+    const { plan, blocksForMailing, memberMap, sermon, sermonBody, poemFields, songs, mediaTeamLines } =
+      loaded;
+    const preacherRef =
+      (plan.preacher_member_id && memberMap.get(plan.preacher_member_id)) || emptyMemberRef();
+    const musicRef =
+      (plan.music_ministry_member_id && memberMap.get(plan.music_ministry_member_id)) ||
+      emptyMemberRef();
+    const poemRef =
+      (plan.poem_ministry_member_id && memberMap.get(plan.poem_ministry_member_id)) ||
+      emptyMemberRef();
+    const leaderRef =
+      (plan.leader_member_id && memberMap.get(plan.leader_member_id)) || emptyMemberRef();
+    const choirLabels = new Map<number, string>();
+    for (const [id, ref] of memberMap) {
+      choirLabels.set(id, formatMailingPerson(ref, personStyle));
+    }
+    text = buildServicePlanMondayMailingText({
+      serviceDateYmd: plan.service_date || serviceDateYmd,
+      shareToken: String(plan.share_token ?? shareToken).trim() || shareToken,
+      publicOrigin: origin,
+      preacher: preacherRef,
+      music: musicRef,
+      poem: poemRef,
+      leader: leaderRef,
+      sermonTopic: sermon.topic,
+      sermonScripture: sermon.scripture,
+      choirLine: resolveChoirLineFromBlocks(blocksForMailing, choirLabels),
+      template,
+      personStyle,
+      startTime: plan.start_time,
+      status: plan.status,
+      notes: plan.notes,
+      templateName: plan.template_name,
+      durationMinutes: plan.total_duration_minutes,
+      planId,
+      editToken: plan.edit_token,
+      poemReader: poemFields.reader,
+      poemAuthor: poemFields.author,
+      poemTheme: poemFields.theme,
+      poemText: poemFields.text,
+      songs,
+      mediaTeamLines,
+      sermonTitle: sermon.title,
+      sermonBlockNotes: sermon.blockNotes,
+      sermonBody,
+      sermonNoteAuthor: sermon.noteAuthor,
+      sermonNoteShareToken: sermon.noteShareToken,
+      sermonHasNote: sermon.hasNote,
+      sermonAttachments: sermon.attachments,
+    });
+  } else {
+    text = renderMailingTemplate(template, {
+      date_long: formatPublishedDateRu(serviceDateYmd),
+      date_short: formatDateShortRu(serviceDateYmd),
+      service_date: serviceDateYmd,
+      sunday_heading: formatSundayMailingHeading(serviceDateYmd),
+      date: formatSundayMailingHeading(serviceDateYmd),
+      share_url: shareUrl,
+      edit_url: shareUrl,
+      ...(planId != null ? { plan_id: String(planId) } : {}),
+      status: 'published',
+      status_ru: 'опубликована',
+    });
+  }
+
+  text = text.replace(/\n{3,}/g, '\n\n').trim();
+  if (!text) {
+    text = `Финальная программа служения на ${formatPublishedDateRu(serviceDateYmd)} готова\n\n${shareUrl}`;
+  }
+  return text;
+}
+
 /**
- * При публикации программы: сообщение в отдельный Telegram-чат + inline-кнопка со ссылкой.
- * Текст и подпись кнопки — из настроек (шаблон с теми же {{плейсхолдерами}}, что у рассылки).
+ * При публикации программы: ссылка + кнопка в Telegram-чаты
+ * (финальная / плановая рассылка / медичка) и в чаты приложения
+ * «Богослужение (планирование)» и «Медийка».
  */
-export async function notifyServicePlanPublishedTelegram(input: {
+export async function notifyServicePlanPublished(input: {
   planId?: number | null;
   serviceDateYmd: string;
   shareToken: string;
-}): Promise<{ ok: boolean; skipped?: boolean; reason?: string; chat_id?: string; text?: string }> {
+}): Promise<{
+  ok: boolean;
+  skipped?: boolean;
+  reason?: string;
+  telegram_chats?: string[];
+  messenger_channels?: string[];
+  text?: string;
+}> {
   const shareToken = String(input.shareToken ?? '').trim();
   const serviceDateYmd = String(input.serviceDateYmd ?? '').trim();
   const planId =
@@ -1377,14 +1476,6 @@ export async function notifyServicePlanPublishedTelegram(input: {
     console.warn('[service-plan-published] telegram settings load failed:', e);
   }
 
-  const chatId =
-    settings?.service_plan_published_chat_id?.trim() ||
-    process.env.TELEGRAM_SERVICE_PLAN_PUBLISHED_CHAT_ID?.trim() ||
-    null;
-  if (!chatId) {
-    return { ok: false, skipped: true, reason: 'missing_published_chat' };
-  }
-
   const templateRaw = (settings?.service_plan_published_template ?? '').trim();
   const template = templateRaw || DEFAULT_SERVICE_PLAN_PUBLISHED_TEMPLATE;
   const buttonText =
@@ -1393,112 +1484,146 @@ export async function notifyServicePlanPublishedTelegram(input: {
 
   const origin = resolvePublicWebOrigin();
   const shareUrl = `${origin}/service-plan/share/${shareToken}`;
-  let text: string;
 
+  let loaded: Awaited<ReturnType<typeof loadMailingFieldsFromPlan>> = null;
   if (planId) {
-    const loaded = await loadMailingFieldsFromPlan(planId);
-    if (loaded) {
-      const { plan, blocksForMailing, memberMap, sermon, sermonBody, poemFields, songs, mediaTeamLines } =
-        loaded;
-      const preacherRef =
-        (plan.preacher_member_id && memberMap.get(plan.preacher_member_id)) || emptyMemberRef();
-      const musicRef =
-        (plan.music_ministry_member_id && memberMap.get(plan.music_ministry_member_id)) ||
-        emptyMemberRef();
-      const poemRef =
-        (plan.poem_ministry_member_id && memberMap.get(plan.poem_ministry_member_id)) ||
-        emptyMemberRef();
-      const leaderRef =
-        (plan.leader_member_id && memberMap.get(plan.leader_member_id)) || emptyMemberRef();
-      const choirLabels = new Map<number, string>();
-      for (const [id, ref] of memberMap) {
-        choirLabels.set(id, formatMailingPerson(ref, 'telegram'));
+    try {
+      loaded = await loadMailingFieldsFromPlan(planId);
+    } catch (e) {
+      console.warn('[service-plan-published] load mailing fields failed:', e);
+    }
+  }
+
+  const textTelegram = buildPublishedNotifyText({
+    planId,
+    serviceDateYmd,
+    shareToken,
+    shareUrl,
+    origin,
+    template,
+    personStyle: 'telegram',
+    loaded,
+  });
+  const textMessenger = buildPublishedNotifyText({
+    planId,
+    serviceDateYmd,
+    shareToken,
+    shareUrl,
+    origin,
+    template,
+    personStyle: 'messenger',
+    loaded,
+  });
+
+  const telegramChatIds = Array.from(
+    new Set(
+      [
+        settings?.service_plan_published_chat_id?.trim() ||
+          process.env.TELEGRAM_SERVICE_PLAN_PUBLISHED_CHAT_ID?.trim() ||
+          '',
+        settings?.service_plan_chat_id?.trim() ||
+          process.env.TELEGRAM_SERVICE_PLAN_CHAT_ID?.trim() ||
+          '',
+        settings?.media_chat_id?.trim() || process.env.TELEGRAM_MEDIA_CHAT_ID?.trim() || '',
+      ]
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  );
+
+  const telegramOkChats: string[] = [];
+  for (const chatId of telegramChatIds) {
+    try {
+      const sent = await sendTelegramToChat({
+        chatId,
+        text: textTelegram,
+        inlineUrlButton: { text: buttonText, url: shareUrl },
+      });
+      telegramOkChats.push(sent.chat_id);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (
+        msg === 'telegram_disabled' ||
+        msg === 'telegram_missing_token' ||
+        msg === 'telegram_missing_chat'
+      ) {
+        console.warn(`[service-plan-published] telegram skipped (${chatId}): ${msg}`);
+      } else {
+        console.error(`[service-plan-published] telegram send failed (${chatId}):`, e);
       }
-      text = buildServicePlanMondayMailingText({
-        serviceDateYmd: plan.service_date || serviceDateYmd,
-        shareToken: String(plan.share_token ?? shareToken).trim() || shareToken,
-        publicOrigin: origin,
-        preacher: preacherRef,
-        music: musicRef,
-        poem: poemRef,
-        leader: leaderRef,
-        sermonTopic: sermon.topic,
-        sermonScripture: sermon.scripture,
-        choirLine: resolveChoirLineFromBlocks(blocksForMailing, choirLabels),
-        template,
-        personStyle: 'telegram',
-        startTime: plan.start_time,
-        status: plan.status,
-        notes: plan.notes,
-        templateName: plan.template_name,
-        durationMinutes: plan.total_duration_minutes,
-        planId,
-        editToken: plan.edit_token,
-        poemReader: poemFields.reader,
-        poemAuthor: poemFields.author,
-        poemTheme: poemFields.theme,
-        poemText: poemFields.text,
-        songs,
-        mediaTeamLines,
-        sermonTitle: sermon.title,
-        sermonBlockNotes: sermon.blockNotes,
-        sermonBody,
-        sermonNoteAuthor: sermon.noteAuthor,
-        sermonNoteShareToken: sermon.noteShareToken,
-        sermonHasNote: sermon.hasNote,
-        sermonAttachments: sermon.attachments,
-      });
-    } else {
-      text = renderMailingTemplate(template, {
-        date_long: formatPublishedDateRu(serviceDateYmd),
-        date_short: formatDateShortRu(serviceDateYmd),
-        service_date: serviceDateYmd,
-        sunday_heading: formatSundayMailingHeading(serviceDateYmd),
-        date: formatSundayMailingHeading(serviceDateYmd),
-        share_url: shareUrl,
-        edit_url: shareUrl,
-        plan_id: String(planId),
-        status: 'published',
-        status_ru: 'опубликована',
-      });
     }
-  } else {
-    text = renderMailingTemplate(template, {
-      date_long: formatPublishedDateRu(serviceDateYmd),
-      date_short: formatDateShortRu(serviceDateYmd),
-      service_date: serviceDateYmd,
-      sunday_heading: formatSundayMailingHeading(serviceDateYmd),
-      date: formatSundayMailingHeading(serviceDateYmd),
-      share_url: shareUrl,
-      edit_url: shareUrl,
-      status: 'published',
-      status_ru: 'опубликована',
-    });
   }
 
-  text = text.replace(/\n{3,}/g, '\n\n').trim();
-  if (!text) {
-    text = `Финальная программа служения на ${formatPublishedDateRu(serviceDateYmd)} готова\n\n${shareUrl}`;
-  }
-
+  const messengerOkChannels: string[] = [];
+  const messengerTargets: Array<{ id: string | null; label: string }> = [];
   try {
-    const sent = await sendTelegramToChat({
-      chatId,
-      text,
-      inlineUrlButton: { text: buttonText, url: shareUrl },
+    messengerTargets.push({
+      id: await ensureServicePlanPlanningMessengerChannel(),
+      label: SERVICE_PLAN_PLANNING_CHANNEL_TITLE,
     });
-    return { ok: true, chat_id: sent.chat_id, text };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (
-      msg === 'telegram_disabled' ||
-      msg === 'telegram_missing_token' ||
-      msg === 'telegram_missing_chat'
-    ) {
-      console.warn(`[service-plan-published] telegram skipped: ${msg}`);
-      return { ok: false, skipped: true, reason: msg };
-    }
-    console.error('[service-plan-published] telegram send failed:', e);
-    return { ok: false, reason: msg };
+    console.warn('[service-plan-published] ensure planning channel failed:', e);
   }
+  try {
+    messengerTargets.push({
+      id: await ensureMediykaMessengerChannel(),
+      label: MEDIA_TEAM_CHANNEL_TITLE,
+    });
+  } catch (e) {
+    console.warn('[service-plan-published] ensure mediyka channel failed:', e);
+  }
+
+  for (const target of messengerTargets) {
+    if (!target.id) continue;
+    try {
+      await postServicePlanPublishedMessengerNotification({
+        conversationId: target.id,
+        content: textMessenger,
+        serviceDateYmd,
+        shareToken,
+        shareUrl,
+        channelLabel: target.label,
+        planId,
+      });
+      messengerOkChannels.push(target.label);
+    } catch (e) {
+      console.error(`[service-plan-published] messenger send failed (${target.label}):`, e);
+    }
+  }
+
+  const ok = telegramOkChats.length > 0 || messengerOkChannels.length > 0;
+  if (!ok && telegramChatIds.length === 0) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: 'no_destinations',
+      telegram_chats: [],
+      messenger_channels: messengerOkChannels,
+      text: textTelegram,
+    };
+  }
+
+  return {
+    ok,
+    telegram_chats: telegramOkChats,
+    messenger_channels: messengerOkChannels,
+    text: textTelegram,
+    ...(ok ? {} : { reason: 'delivery_failed' }),
+  };
+}
+
+/** @deprecated use notifyServicePlanPublished */
+export async function notifyServicePlanPublishedTelegram(input: {
+  planId?: number | null;
+  serviceDateYmd: string;
+  shareToken: string;
+}): Promise<{ ok: boolean; skipped?: boolean; reason?: string; chat_id?: string; text?: string }> {
+  const result = await notifyServicePlanPublished(input);
+  return {
+    ok: result.ok,
+    skipped: result.skipped,
+    reason: result.reason,
+    chat_id: result.telegram_chats?.[0],
+    text: result.text,
+  };
 }

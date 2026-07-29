@@ -61,3 +61,10 @@ export function isServicePlanMondayMailingPayload(payload: unknown): boolean {
   if (!p) return false;
   return String(p.kind ?? '') === 'service_plan_monday_mailing';
 }
+
+/** Уведомление «финальная программа опубликована». */
+export function isServicePlanPublishedPayload(payload: unknown): boolean {
+  const p = asPayloadRecord(payload);
+  if (!p) return false;
+  return String(p.kind ?? '') === 'service_plan_published';
+}

@@ -267,6 +267,7 @@ export function TelegramSettingsSection() {
     service_plan_chat_id: '',
     service_plan_template: '',
     service_plan_published_chat_id: '',
+    media_chat_id: '',
     service_plan_published_template: '',
     service_plan_published_button_text: '',
     service_plan_mailing_enabled: true,
@@ -314,6 +315,7 @@ export function TelegramSettingsSection() {
       service_plan_chat_id: data.service_plan_chat_id ?? '',
       service_plan_template: (data.service_plan_template ?? '').trim() || DEFAULT_PROGRAM_MAILING_TEMPLATE,
       service_plan_published_chat_id: data.service_plan_published_chat_id ?? '',
+      media_chat_id: data.media_chat_id ?? '',
       service_plan_published_template:
         (data.service_plan_published_template ?? '').trim() || DEFAULT_PROGRAM_PUBLISHED_TEMPLATE,
       service_plan_published_button_text:
@@ -345,6 +347,7 @@ export function TelegramSettingsSection() {
         service_plan_chat_id: normalizeUiString(form.service_plan_chat_id),
         service_plan_template: normalizeUiString(form.service_plan_template),
         service_plan_published_chat_id: normalizeUiString(form.service_plan_published_chat_id),
+        media_chat_id: normalizeUiString(form.media_chat_id),
         service_plan_published_template: normalizeUiString(form.service_plan_published_template),
         service_plan_published_button_text: normalizeUiString(form.service_plan_published_button_text),
         service_plan_mailing_enabled: form.service_plan_mailing_enabled,
@@ -611,6 +614,7 @@ export function TelegramSettingsSection() {
         service_plan_published_template: normalizeUiString(form.service_plan_published_template),
         service_plan_published_button_text: normalizeUiString(form.service_plan_published_button_text),
         service_plan_published_chat_id: normalizeUiString(form.service_plan_published_chat_id),
+        media_chat_id: normalizeUiString(form.media_chat_id),
       }),
     onSuccess: (next) => {
       setNote({ type: 'ok', text: 'Уведомление о готовности сохранено.' });
@@ -683,6 +687,7 @@ export function TelegramSettingsSection() {
     service_plan_chat_id: null,
     service_plan_template: null,
     service_plan_published_chat_id: null,
+    media_chat_id: null,
     service_plan_published_template: null,
     service_plan_published_button_text: null,
     has_bot_token: false,
@@ -990,7 +995,7 @@ export function TelegramSettingsSection() {
               <div className="grid gap-5 sm:grid-cols-2">
                 <ChatField
                   label="Плановая рассылка"
-                  hint="Авторассылка по расписанию + «Отправить сейчас»"
+                  hint="Авторассылка по расписанию + «Отправить сейчас» · также получает «Опубликовать»"
                   value={form.service_plan_chat_id}
                   onChange={(service_plan_chat_id) =>
                     setForm((s) => ({ ...s, service_plan_chat_id }))
@@ -998,11 +1003,17 @@ export function TelegramSettingsSection() {
                 />
                 <ChatField
                   label="Финальная программа"
-                  hint="Сообщение при нажатии «Опубликовать»"
+                  hint="Основной чат при «Опубликовать»"
                   value={form.service_plan_published_chat_id}
                   onChange={(service_plan_published_chat_id) =>
                     setForm((s) => ({ ...s, service_plan_published_chat_id }))
                   }
+                />
+                <ChatField
+                  label="Медийка"
+                  hint="Telegram медиа-команды · тоже получает «Опубликовать»"
+                  value={form.media_chat_id}
+                  onChange={(media_chat_id) => setForm((s) => ({ ...s, media_chat_id }))}
                 />
               </div>
             </div>
@@ -1388,16 +1399,36 @@ export function TelegramSettingsSection() {
                 <StepBlock
                   n={1}
                   title="Куда отправлять"
-                  hint="Отдельный чат для короткого сообщения «программа готова» при публикации."
+                  hint="При «Опубликовать» уходит в эти Telegram-чаты и в приложение: «Богослужение (планирование)» + «Медийка»."
                 >
-                  <ChatField
-                    label="ID чата Telegram"
-                    hint="Отрицательный ID группы/канала (−100…)"
-                    value={form.service_plan_published_chat_id}
-                    onChange={(service_plan_published_chat_id) =>
-                      setForm((s) => ({ ...s, service_plan_published_chat_id }))
-                    }
-                  />
+                  <div className="space-y-4">
+                    <ChatField
+                      label="Финальная программа (Telegram)"
+                      hint="Отрицательный ID группы/канала (−100…)"
+                      value={form.service_plan_published_chat_id}
+                      onChange={(service_plan_published_chat_id) =>
+                        setForm((s) => ({ ...s, service_plan_published_chat_id }))
+                      }
+                    />
+                    <ChatField
+                      label="Плановая рассылка (Telegram)"
+                      hint="Тот же чат, куда ходит понедельничная рассылка"
+                      value={form.service_plan_chat_id}
+                      onChange={(service_plan_chat_id) =>
+                        setForm((s) => ({ ...s, service_plan_chat_id }))
+                      }
+                    />
+                    <ChatField
+                      label="Медийка (Telegram)"
+                      hint="Чат медиа-команды"
+                      value={form.media_chat_id}
+                      onChange={(media_chat_id) => setForm((s) => ({ ...s, media_chat_id }))}
+                    />
+                    <p className="text-xs text-stone-500">
+                      В приложении сообщение появится автоматически в каналах «Богослужение
+                      (планирование)» и «Медийка».
+                    </p>
+                  </div>
                 </StepBlock>
 
                 <StepBlock

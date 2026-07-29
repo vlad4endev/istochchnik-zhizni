@@ -509,6 +509,8 @@ export interface TelegramSettingsResponse {
   service_plan_chat_id: string | null;
   service_plan_template: string | null;
   service_plan_published_chat_id: string | null;
+  /** Telegram-чат «Медийка» */
+  media_chat_id: string | null;
   /** Шаблон текста при публикации финальной программы */
   service_plan_published_template: string | null;
   /** Текст кнопки со ссылкой в уведомлении о публикации */
@@ -588,6 +590,7 @@ export async function patchTelegramSettings(body: {
   service_plan_chat_id?: string | null;
   service_plan_template?: string | null;
   service_plan_published_chat_id?: string | null;
+  media_chat_id?: string | null;
   service_plan_published_template?: string | null;
   service_plan_published_button_text?: string | null;
   service_plan_mailing_enabled?: boolean;

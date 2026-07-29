@@ -183,6 +183,7 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
         service_plan_chat_id?: unknown;
         service_plan_template?: unknown;
         service_plan_published_chat_id?: unknown;
+        media_chat_id?: unknown;
         service_plan_published_template?: unknown;
         service_plan_published_button_text?: unknown;
         proxy_enabled?: unknown;
@@ -259,6 +260,14 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
     return;
   }
   if (
+    body?.media_chat_id !== undefined &&
+    body.media_chat_id !== null &&
+    typeof body.media_chat_id !== 'string'
+  ) {
+    res.status(400).json({ error: 'Поле "media_chat_id" должно быть строкой или null' });
+    return;
+  }
+  if (
     body?.service_plan_published_template !== undefined &&
     body.service_plan_published_template !== null &&
     typeof body.service_plan_published_template !== 'string'
@@ -327,6 +336,7 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
       service_plan_chat_id: body?.service_plan_chat_id as string | null | undefined,
       service_plan_template: body?.service_plan_template as string | null | undefined,
       service_plan_published_chat_id: body?.service_plan_published_chat_id as string | null | undefined,
+      media_chat_id: body?.media_chat_id as string | null | undefined,
       service_plan_published_template: body?.service_plan_published_template as
         | string
         | null

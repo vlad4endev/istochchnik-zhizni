@@ -37,6 +37,8 @@ export interface TelegramSettings {
   service_plan_template: string | null;
   /** Chat id для уведомления «финальная программа опубликована» */
   service_plan_published_chat_id: string | null;
+  /** Chat id Telegram-чата «Медийка» (при публикации программы) */
+  media_chat_id: string | null;
   /** Шаблон текста при публикации программы (те же {{плейсхолдеры}}, что у рассылки) */
   service_plan_published_template: string | null;
   /** Текст inline-кнопки со ссылкой на программу */
@@ -91,6 +93,8 @@ export interface TelegramSettingsUpdate {
   service_plan_chat_id?: string | null;
   service_plan_template?: string | null;
   service_plan_published_chat_id?: string | null;
+  /** Chat id Telegram-чата «Медийка» */
+  media_chat_id?: string | null;
   service_plan_published_template?: string | null;
   service_plan_published_button_text?: string | null;
   /** Включить исходящий HTTPS-прокси для всех запросов к api.telegram.org */
@@ -465,6 +469,7 @@ async function ensureSettingsColumns(): Promise<void> {
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_chat_id TEXT');
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_template TEXT');
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_published_chat_id TEXT');
+  await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_media_chat_id TEXT');
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_published_template TEXT');
   await query(
     'ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_published_button_text TEXT',
@@ -493,6 +498,7 @@ async function readSettingsRow(): Promise<{
   telegram_service_plan_chat_id: string | null;
   telegram_service_plan_template: string | null;
   telegram_service_plan_published_chat_id: string | null;
+  telegram_media_chat_id: string | null;
   telegram_service_plan_published_template: string | null;
   telegram_service_plan_published_button_text: string | null;
   telegram_dispatch_enabled: boolean;
@@ -522,6 +528,7 @@ async function readSettingsRow(): Promise<{
        telegram_service_plan_chat_id,
        telegram_service_plan_template,
        telegram_service_plan_published_chat_id,
+       telegram_media_chat_id,
        telegram_service_plan_published_template,
        telegram_service_plan_published_button_text,
        telegram_dispatch_enabled,
@@ -547,6 +554,7 @@ async function readSettingsRow(): Promise<{
         telegram_service_plan_chat_id?: string | null;
         telegram_service_plan_template?: string | null;
         telegram_service_plan_published_chat_id?: string | null;
+        telegram_media_chat_id?: string | null;
         telegram_service_plan_published_template?: string | null;
         telegram_service_plan_published_button_text?: string | null;
         telegram_dispatch_enabled?: boolean;
@@ -576,6 +584,7 @@ async function readSettingsRow(): Promise<{
     telegram_service_plan_published_chat_id: normalizeOptionalString(
       row?.telegram_service_plan_published_chat_id,
     ),
+    telegram_media_chat_id: normalizeOptionalString(row?.telegram_media_chat_id),
     telegram_service_plan_published_template:
       typeof row?.telegram_service_plan_published_template === 'string' &&
       row.telegram_service_plan_published_template.trim().length > 0
@@ -630,6 +639,7 @@ export async function getTelegramSettings(): Promise<TelegramSettings> {
     service_plan_chat_id: row.telegram_service_plan_chat_id,
     service_plan_template: row.telegram_service_plan_template,
     service_plan_published_chat_id: row.telegram_service_plan_published_chat_id,
+    media_chat_id: row.telegram_media_chat_id,
     service_plan_published_template: row.telegram_service_plan_published_template,
     service_plan_published_button_text: row.telegram_service_plan_published_button_text,
     has_bot_token: Boolean(botToken),
@@ -691,6 +701,10 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       input.service_plan_published_chat_id !== undefined
         ? normalizeOptionalString(input.service_plan_published_chat_id)
         : current.telegram_service_plan_published_chat_id,
+    telegram_media_chat_id:
+      input.media_chat_id !== undefined
+        ? normalizeOptionalString(input.media_chat_id)
+        : current.telegram_media_chat_id,
     telegram_service_plan_published_template:
       input.service_plan_published_template !== undefined
         ? normalizeServicePlanTemplateInput(input.service_plan_published_template)
@@ -717,12 +731,13 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_service_plan_chat_id,
        telegram_service_plan_template,
        telegram_service_plan_published_chat_id,
+       telegram_media_chat_id,
        telegram_service_plan_published_template,
        telegram_service_plan_published_button_text,
        telegram_proxy_enabled,
        telegram_https_proxy
      )
-     VALUES (1, CURRENT_DATE, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     VALUES (1, CURRENT_DATE, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      ON CONFLICT (id) DO UPDATE
      SET
        telegram_enabled = EXCLUDED.telegram_enabled,
@@ -734,6 +749,7 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_service_plan_chat_id = EXCLUDED.telegram_service_plan_chat_id,
        telegram_service_plan_template = EXCLUDED.telegram_service_plan_template,
        telegram_service_plan_published_chat_id = EXCLUDED.telegram_service_plan_published_chat_id,
+       telegram_media_chat_id = EXCLUDED.telegram_media_chat_id,
        telegram_service_plan_published_template = EXCLUDED.telegram_service_plan_published_template,
        telegram_service_plan_published_button_text = EXCLUDED.telegram_service_plan_published_button_text,
        telegram_proxy_enabled = EXCLUDED.telegram_proxy_enabled,
@@ -748,6 +764,7 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       next.telegram_service_plan_chat_id,
       next.telegram_service_plan_template,
       next.telegram_service_plan_published_chat_id,
+      next.telegram_media_chat_id,
       next.telegram_service_plan_published_template,
       next.telegram_service_plan_published_button_text,
       next.telegram_proxy_enabled,
