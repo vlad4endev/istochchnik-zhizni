@@ -41,7 +41,7 @@ const Q_TG_RECIPIENTS = ['admin', 'telegram', 'recipients'] as const;
 const Q_TG_MAILING_CHATS = ['admin', 'telegram', 'mailing-messenger-chats'] as const;
 const Q_TG_CHATS = ['admin', 'telegram', 'chats'] as const;
 
-type TgTab = 'bot' | 'chats' | 'prayer' | 'program' | 'dispatch';
+type TgTab = 'bot' | 'registry' | 'chats' | 'prayer' | 'program' | 'dispatch';
 
 /** Совпадает с DEFAULT_SERVICE_PLAN_MONDAY_MAILING_TEMPLATE на бэкенде. */
 const DEFAULT_PROGRAM_MAILING_TEMPLATE = [
@@ -89,11 +89,37 @@ type ProgramPreviewState = {
 
 const TABS: { id: TgTab; label: string }[] = [
   { id: 'bot', label: 'Бот' },
+  { id: 'registry', label: 'Реестр' },
   { id: 'chats', label: 'Чаты' },
   { id: 'prayer', label: 'Молитва' },
   { id: 'program', label: 'Программа' },
   { id: 'dispatch', label: 'Личная' },
 ];
+
+function chatTypeBadge(type: string | null): { label: string; className: string } {
+  if (type === 'channel') {
+    return { label: 'Канал', className: 'bg-sky-50 text-sky-800 border-sky-200' };
+  }
+  if (type === 'supergroup') {
+    return { label: 'Супергруппа', className: 'bg-violet-50 text-violet-800 border-violet-200' };
+  }
+  if (type === 'group') {
+    return { label: 'Группа', className: 'bg-amber-50 text-amber-900 border-amber-200' };
+  }
+  if (type === 'private') {
+    return { label: 'Личный', className: 'bg-stone-100 text-stone-700 border-stone-200' };
+  }
+  return { label: type || 'Чат', className: 'bg-stone-100 text-stone-600 border-stone-200' };
+}
+
+function formatSyncedAt(iso: string | null): string | null {
+  if (!iso) return null;
+  try {
+    return format(new Date(iso), "d MMM yyyy, HH:mm", { locale: ru });
+  } catch {
+    return null;
+  }
+}
 
 type ProgramPanel = 'mailing' | 'published';
 
@@ -259,7 +285,7 @@ function ChatSelect({
       <p className="mb-1.5 text-xs text-stone-500">{hint}</p>
       {chats.length === 0 && !orphan ? (
         <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50/80 px-3 py-3 text-xs text-stone-500">
-          {emptyHint ?? 'Сначала добавьте чаты в реестр на вкладке «Чаты».'}
+          {emptyHint ?? 'Сначала добавьте чаты в реестр на вкладке «Реестр».'}
         </p>
       ) : (
         <select className={fieldClass()} value={value} onChange={(e) => onChange(e.target.value)}>
@@ -303,7 +329,7 @@ function ChatMultiSelect({
       </p>
       {chats.length === 0 && orphans.length === 0 ? (
         <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50/80 px-3 py-3 text-xs text-stone-500">
-          {emptyHint ?? 'Сначала добавьте чаты во вкладке «Чаты».'}
+          {emptyHint ?? 'Сначала добавьте чаты во вкладке «Реестр».'}
         </p>
       ) : (
         <select
@@ -363,7 +389,7 @@ function MailingDestinationsEditor({
         chats={telegramChats}
         selectedIds={value.telegram_chat_ids}
         onChange={(telegram_chat_ids) => onChange({ ...value, telegram_chat_ids })}
-        emptyHint="Реестр пуст — добавьте чаты во вкладке «Чаты»."
+        emptyHint="Реестр пуст — добавьте чаты во вкладке «Реестр»."
       />
 
       <div>
@@ -1256,41 +1282,50 @@ export function TelegramSettingsSection() {
           </div>
         ) : null}
 
-        {tab === 'chats' ? (
+        {tab === 'registry' ? (
           <div className="space-y-5">
-            <div className="space-y-3">
-              <div>
-                <h3 className="text-sm font-semibold text-stone-900">Реестр Telegram-чатов</h3>
-                <p className="mt-0.5 text-xs text-stone-500">
-                  Введите ID или @username — бот запросит getChat и сохранит чат в базе. Дальше
-                  выбирайте чаты из выпадающих списков в ролях и авторассылках.
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-stone-900">Реестр Telegram-чатов</h3>
+                <p className="mt-1 max-w-2xl text-sm text-stone-500">
+                  База чатов для авторассылок. Добавьте ID группы или канала — бот запросит данные
+                  через Telegram API и сохранит название. Дальше выбирайте чаты из списков во вкладках
+                  «Чаты» и «Программа».
                 </p>
               </div>
-              <div className="flex flex-wrap items-end gap-2">
-                <div className="min-w-[220px] flex-1">
-                  <label className="mb-1 block text-xs font-semibold text-stone-700">
-                    ID или @username
-                  </label>
-                  <input
-                    className={fieldClass()}
-                    value={newChatId}
-                    onChange={(e) => setNewChatId(e.target.value)}
-                    placeholder="-100… или @channel"
-                    autoComplete="off"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const id = newChatId.trim();
-                        if (!id || addChatMut.isPending) return;
-                        setNote(null);
-                        addChatMut.mutate(id);
-                      }
-                    }}
-                  />
-                </div>
+              <span className="inline-flex items-center rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-semibold text-stone-700">
+                {registryChats.length}{' '}
+                {registryChats.length === 1 ? 'чат' : registryChats.length < 5 ? 'чата' : 'чатов'}
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-stone-200 bg-stone-50/60 p-4">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Добавить чат
+              </label>
+              <p className="mb-3 text-xs text-stone-500">
+                Числовой ID (−100…) или @username. Бот должен быть участником чата.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  className={fieldClass()}
+                  value={newChatId}
+                  onChange={(e) => setNewChatId(e.target.value)}
+                  placeholder="-1001234567890 или @channel"
+                  autoComplete="off"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const id = newChatId.trim();
+                      if (!id || addChatMut.isPending) return;
+                      setNote(null);
+                      addChatMut.mutate(id);
+                    }
+                  }}
+                />
                 <button
                   type="button"
-                  className={btnPrimary()}
+                  className={btnPrimary('shrink-0 sm:min-w-[9.5rem]')}
                   disabled={!newChatId.trim() || addChatMut.isPending}
                   onClick={() => {
                     const id = newChatId.trim();
@@ -1299,122 +1334,197 @@ export function TelegramSettingsSection() {
                     addChatMut.mutate(id);
                   }}
                 >
-                  {addChatMut.isPending ? 'Загрузка…' : 'Добавить чат'}
+                  {addChatMut.isPending ? 'Загрузка…' : 'Добавить'}
                 </button>
               </div>
-              {chatsQ.isLoading ? (
-                <p className="text-sm text-stone-500">Загрузка списка…</p>
-              ) : chatsQ.isError ? (
-                <p className="text-sm text-red-600">Не удалось загрузить реестр чатов.</p>
-              ) : registryChats.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50/80 px-3 py-4 text-sm text-stone-500">
-                  Пока нет сохранённых чатов. Добавьте ID группы или канала — бот должен быть участником.
-                </p>
-              ) : (
-                <ul className="divide-y divide-stone-100 overflow-hidden rounded-xl border border-stone-200">
-                  {registryChats.map((chat) => (
-                    <li
-                      key={chat.id}
-                      className="flex flex-wrap items-center justify-between gap-3 px-3 py-3"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-stone-900">{chatLabel(chat)}</div>
-                        <div className="mt-0.5 font-mono text-xs text-stone-500">{chat.chat_id}</div>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className={btnSecondary('!px-2.5 !py-1.5 text-xs')}
-                          disabled={refreshChatMut.isPending}
-                          onClick={() => {
-                            setNote(null);
-                            refreshChatMut.mutate(chat.id);
-                          }}
-                        >
-                          Обновить
-                        </button>
-                        <button
-                          type="button"
-                          className={btnSecondary('!px-2.5 !py-1.5 text-xs text-red-700')}
-                          disabled={deleteChatMut.isPending}
-                          onClick={() => {
-                            if (!window.confirm(`Удалить чат «${chatLabel(chat)}» из реестра?`)) return;
-                            setNote(null);
-                            deleteChatMut.mutate(chat.id);
-                          }}
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
 
-            <div className="border-t border-stone-100 pt-5">
-              <p className="mb-3 text-sm text-stone-500">
-                Назначение ролей — выберите чат из реестра.
+            {chatsQ.isLoading ? (
+              <p className="text-sm text-stone-500">Загрузка реестра…</p>
+            ) : chatsQ.isError ? (
+              <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                Не удалось загрузить реестр чатов.
               </p>
-              <div className="grid gap-5 sm:grid-cols-2">
-                <ChatSelect
-                  label="Молитва"
-                  hint="«Молитва на сегодня» и ручная отправка в канал"
-                  chats={registryChats}
-                  value={form.prayer_chat_id}
-                  onChange={(prayer_chat_id) => setForm((s) => ({ ...s, prayer_chat_id }))}
-                />
-                <ChatSelect
-                  label="Координаторы"
-                  hint="План на неделю и ответственные"
-                  chats={registryChats}
-                  value={form.coordinator_chat_id}
-                  onChange={(coordinator_chat_id) => setForm((s) => ({ ...s, coordinator_chat_id }))}
-                />
-                <ChatSelect
-                  label="Запасной"
-                  hint="Если для типа сообщения чат не задан"
-                  chats={registryChats}
-                  value={form.default_chat_id}
-                  onChange={(default_chat_id) => setForm((s) => ({ ...s, default_chat_id }))}
-                />
-                <ChatSelect
-                  label="Медийка"
-                  hint="Telegram-чат медиа-команды"
-                  chats={registryChats}
-                  value={form.media_chat_id}
-                  onChange={(media_chat_id) => setForm((s) => ({ ...s, media_chat_id }))}
-                />
+            ) : registryChats.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-stone-300 bg-white px-5 py-10 text-center">
+                <p className="text-sm font-semibold text-stone-800">Реестр пуст</p>
+                <p className="mx-auto mt-1.5 max-w-md text-sm text-stone-500">
+                  Добавьте хотя бы один чат выше. Без реестра в авторассылках не из чего выбирать.
+                </p>
               </div>
-              <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50/70 px-4 py-3 text-xs text-stone-600">
-                <p>
-                  Плановая рассылка:{' '}
-                  <span className="font-medium text-stone-800">
-                    {form.service_plan_mailing_destinations.telegram_chat_ids.length} Telegram
-                  </span>
-                  {' · '}
-                  <span className="font-medium text-stone-800">
-                    {form.service_plan_mailing_destinations.messenger_conversation_ids.length} в
-                    приложении
-                  </span>
-                </p>
-                <p className="mt-1.5">
-                  При публикации:{' '}
-                  <span className="font-medium text-stone-800">
-                    {form.service_plan_published_destinations.telegram_chat_ids.length} Telegram
-                  </span>
-                  {' · '}
-                  <span className="font-medium text-stone-800">
-                    {form.service_plan_published_destinations.messenger_conversation_ids.length} в
-                    приложении
-                  </span>
-                </p>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-stone-200">
+                <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] gap-3 border-b border-stone-100 bg-stone-50/90 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-stone-500 sm:grid">
+                  <span>Название</span>
+                  <span>ID</span>
+                  <span className="text-right">Действия</span>
+                </div>
+                <ul className="divide-y divide-stone-100">
+                  {registryChats.map((chat) => {
+                    const badge = chatTypeBadge(chat.type);
+                    const synced = formatSyncedAt(chat.last_synced_at);
+                    return (
+                      <li
+                        key={chat.id}
+                        className="grid gap-3 px-4 py-3.5 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate text-sm font-semibold text-stone-900">
+                              {chat.title?.trim() ||
+                                (chat.username ? `@${chat.username}` : null) ||
+                                'Без названия'}
+                            </span>
+                            <span
+                              className={`inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}
+                            >
+                              {badge.label}
+                            </span>
+                          </div>
+                          {synced ? (
+                            <p className="mt-1 text-[11px] text-stone-400">Обновлён {synced}</p>
+                          ) : null}
+                          {chat.description ? (
+                            <p className="mt-1 line-clamp-1 text-xs text-stone-500">
+                              {chat.description}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="min-w-0">
+                          <code className="block truncate rounded-lg bg-stone-50 px-2 py-1 font-mono text-xs text-stone-700">
+                            {chat.chat_id}
+                          </code>
+                          {chat.username ? (
+                            <p className="mt-1 truncate text-[11px] text-stone-400">
+                              @{chat.username}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+                          <button
+                            type="button"
+                            className={btnSecondary('!px-2.5 !py-1.5 text-xs')}
+                            disabled={refreshChatMut.isPending}
+                            onClick={() => {
+                              setNote(null);
+                              refreshChatMut.mutate(chat.id);
+                            }}
+                          >
+                            Обновить
+                          </button>
+                          <button
+                            type="button"
+                            className={btnSecondary('!px-2.5 !py-1.5 text-xs text-red-700')}
+                            disabled={deleteChatMut.isPending}
+                            onClick={() => {
+                              if (
+                                !window.confirm(
+                                  `Удалить «${chatLabel(chat)}» из реестра?\nВ авторассылках этот чат нужно будет выбрать заново.`,
+                                )
+                              ) {
+                                return;
+                              }
+                              setNote(null);
+                              deleteChatMut.mutate(chat.id);
+                            }}
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {tab === 'chats' ? (
+          <div className="space-y-5">
+            <div>
+              <h3 className="text-base font-semibold text-stone-900">Назначение чатов</h3>
+              <p className="mt-1 text-sm text-stone-500">
+                Выберите из реестра, куда уходят сообщения по ролям. Сам список чатов ведётся во
+                вкладке «Реестр».
+              </p>
+              {registryChats.length === 0 ? (
                 <button
                   type="button"
-                  className="mt-2 text-xs font-semibold text-[#7B2D3F] underline-offset-2 hover:underline"
+                  className="mt-2 text-sm font-semibold text-[#7B2D3F] underline-offset-2 hover:underline"
+                  onClick={() => setTab('registry')}
+                >
+                  Открыть реестр и добавить чаты
+                </button>
+              ) : null}
+            </div>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <ChatSelect
+                label="Молитва"
+                hint="«Молитва на сегодня» и ручная отправка в канал"
+                chats={registryChats}
+                value={form.prayer_chat_id}
+                onChange={(prayer_chat_id) => setForm((s) => ({ ...s, prayer_chat_id }))}
+              />
+              <ChatSelect
+                label="Координаторы"
+                hint="План на неделю и ответственные"
+                chats={registryChats}
+                value={form.coordinator_chat_id}
+                onChange={(coordinator_chat_id) => setForm((s) => ({ ...s, coordinator_chat_id }))}
+              />
+              <ChatSelect
+                label="Запасной"
+                hint="Если для типа сообщения чат не задан"
+                chats={registryChats}
+                value={form.default_chat_id}
+                onChange={(default_chat_id) => setForm((s) => ({ ...s, default_chat_id }))}
+              />
+              <ChatSelect
+                label="Медийка"
+                hint="Telegram-чат медиа-команды"
+                chats={registryChats}
+                value={form.media_chat_id}
+                onChange={(media_chat_id) => setForm((s) => ({ ...s, media_chat_id }))}
+              />
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-stone-50/70 px-4 py-3 text-xs text-stone-600">
+              <p>
+                Плановая рассылка:{' '}
+                <span className="font-medium text-stone-800">
+                  {form.service_plan_mailing_destinations.telegram_chat_ids.length} Telegram
+                </span>
+                {' · '}
+                <span className="font-medium text-stone-800">
+                  {form.service_plan_mailing_destinations.messenger_conversation_ids.length} в
+                  приложении
+                </span>
+              </p>
+              <p className="mt-1.5">
+                При публикации:{' '}
+                <span className="font-medium text-stone-800">
+                  {form.service_plan_published_destinations.telegram_chat_ids.length} Telegram
+                </span>
+                {' · '}
+                <span className="font-medium text-stone-800">
+                  {form.service_plan_published_destinations.messenger_conversation_ids.length} в
+                  приложении
+                </span>
+              </p>
+              <div className="mt-2 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-[#7B2D3F] underline-offset-2 hover:underline"
+                  onClick={() => setTab('registry')}
+                >
+                  Реестр чатов
+                </button>
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-[#7B2D3F] underline-offset-2 hover:underline"
                   onClick={() => setTab('program')}
                 >
-                  Настроить во вкладке «Программа»
+                  Настроить авторассылки
                 </button>
               </div>
             </div>
@@ -2184,7 +2294,7 @@ export function TelegramSettingsSection() {
                     value={customChatId}
                     onChange={setCustomChatId}
                     emptyLabel="По умолчанию (запасной / роль)"
-                    emptyHint="Добавьте чаты во вкладке «Чаты», либо оставьте «по умолчанию»."
+                    emptyHint="Добавьте чаты во вкладке «Реестр», либо оставьте «по умолчанию»."
                   />
                 </div>
                 <button
