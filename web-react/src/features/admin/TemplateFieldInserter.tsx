@@ -209,6 +209,11 @@ export const COORDINATOR_TEMPLATE_FIELD_GROUPS: TemplateFieldGroup[] = [
       },
       { token: '{{title}}', label: 'Заголовок сценария' },
       { token: '{{cycle_index}}', label: 'Номер цикла' },
+      {
+        token: '{{day_offset}}',
+        label: 'Смещение дня (0=сегодня)',
+        example: '1',
+      },
     ],
   },
   {

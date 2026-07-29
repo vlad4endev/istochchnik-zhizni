@@ -61,6 +61,8 @@ import {
   PROGRAM_PANELS,
   WEEKDAY_OPTIONS,
   COORDINATOR_TARGET_OPTIONS,
+  COORDINATOR_REPEAT_OPTIONS,
+  COORDINATOR_DAY_OFFSET_OPTIONS,
   COORDINATOR_SCENARIO_HINTS,
   DEFAULT_PROGRAM_MAILING_TEMPLATE,
   DEFAULT_PROGRAM_PUBLISHED_TEMPLATE,
@@ -72,6 +74,7 @@ import {
   type TgSection,
   type ProgramPanel,
   type CoordinatorTelegramTarget,
+  type CoordinatorTelegramRepeat,
 } from './constants';
 import {
   fieldClass,
@@ -245,7 +248,25 @@ export function TelegramSettingsSection() {
   useEffect(() => {
     if (!coordScenariosQ.data) return;
     setCoordTimezone(coordScenariosQ.data.timezone || 'Europe/Moscow');
-    setCoordScenarios(coordScenariosQ.data.scenarios.map((s) => ({ ...s })));
+    setCoordScenarios(
+      coordScenariosQ.data.scenarios.map((s) => {
+        const repeat =
+          s.repeat === 'event' || s.repeat === 'daily' || s.repeat === 'weekly'
+            ? s.repeat
+            : s.id === 'assignment'
+              ? 'event'
+              : s.id === 'week_list'
+                ? 'weekly'
+                : 'daily';
+        const dayOffset =
+          typeof s.dayOffset === 'number' && Number.isFinite(s.dayOffset)
+            ? s.dayOffset
+            : s.id === 'missing_need_tomorrow'
+              ? 1
+              : 0;
+        return { ...s, repeat, dayOffset };
+      }),
+    );
   }, [coordScenariosQ.data]);
 
   function goToSection(next: TgSection) {
@@ -1836,10 +1857,75 @@ export function TelegramSettingsSection() {
                       </label>
 
                       {hint.schedule ? (
-                        <div className="grid grid-cols-2 gap-3">
+                        <label className="block space-y-1.5">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                            Как часто
+                          </span>
+                          <select
+                            className={fieldClass()}
+                            value={scenario.repeat === 'event' ? 'daily' : scenario.repeat}
+                            onChange={(e) =>
+                              updateCoordScenario(scenario.id, {
+                                repeat: e.target.value as CoordinatorTelegramRepeat,
+                              })
+                            }
+                          >
+                            {COORDINATOR_REPEAT_OPTIONS.filter((o) => o.value !== 'event').map(
+                              (opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                          <span className="block text-xs text-stone-500">
+                            {
+                              COORDINATOR_REPEAT_OPTIONS.find(
+                                (o) =>
+                                  o.value ===
+                                  (scenario.repeat === 'event' ? 'daily' : scenario.repeat),
+                              )?.hint
+                            }
+                          </span>
+                        </label>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-stone-200 bg-white/70 px-3 py-2 text-xs text-stone-500">
+                          Срабатывает сразу при назначении — расписание не нужно.
+                        </div>
+                      )}
+                    </div>
+
+                    {hint.schedule ? (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {hint.missingNeed ? (
                           <label className="block space-y-1.5">
                             <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                              День
+                              Условие: день в цикле
+                            </span>
+                            <select
+                              className={fieldClass()}
+                              value={scenario.dayOffset}
+                              onChange={(e) =>
+                                updateCoordScenario(scenario.id, {
+                                  dayOffset: Number(e.target.value),
+                                })
+                              }
+                            >
+                              {COORDINATOR_DAY_OFFSET_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                            <span className="block text-xs text-stone-500">
+                              Проверяется участник этого дня цикла. Сообщение уйдёт его
+                              ответственному координатору — у каждого координатора свои дни.
+                            </span>
+                          </label>
+                        ) : scenario.repeat === 'weekly' ? (
+                          <label className="block space-y-1.5">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                              День недели
                             </span>
                             <select
                               className={fieldClass()}
@@ -1857,26 +1943,55 @@ export function TelegramSettingsSection() {
                               ))}
                             </select>
                           </label>
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                              Время
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-stone-200 bg-white/70 px-3 py-2 text-xs text-stone-500">
+                            Каждый день — день недели не нужен.
+                          </div>
+                        )}
+
+                        <label className="block space-y-1.5">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                            Время
+                          </span>
+                          <input
+                            type="time"
+                            className={fieldClass()}
+                            value={scenario.time}
+                            onChange={(e) =>
+                              updateCoordScenario(scenario.id, { time: e.target.value })
+                            }
+                          />
+                          {hint.missingNeed && scenario.repeat === 'weekly' ? (
+                            <span className="block text-xs text-amber-800">
+                              Для разных дней цикла у координаторов лучше «Каждый день».
                             </span>
-                            <input
-                              type="time"
+                          ) : null}
+                        </label>
+
+                        {hint.missingNeed && scenario.repeat === 'weekly' ? (
+                          <label className="block space-y-1.5 sm:col-span-2">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                              День недели (только при «Раз в неделю»)
+                            </span>
+                            <select
                               className={fieldClass()}
-                              value={scenario.time}
+                              value={scenario.weekDay}
                               onChange={(e) =>
-                                updateCoordScenario(scenario.id, { time: e.target.value })
+                                updateCoordScenario(scenario.id, {
+                                  weekDay: Number(e.target.value),
+                                })
                               }
-                            />
+                            >
+                              {WEEKDAY_OPTIONS.map((d) => (
+                                <option key={d.value} value={d.value}>
+                                  {d.label}
+                                </option>
+                              ))}
+                            </select>
                           </label>
-                        </div>
-                      ) : (
-                        <div className="rounded-xl border border-dashed border-stone-200 bg-white/70 px-3 py-2 text-xs text-stone-500">
-                          Срабатывает сразу при назначении — расписание не нужно.
-                        </div>
-                      )}
-                    </div>
+                        ) : null}
+                      </div>
+                    ) : null}
 
                     <div className="space-y-2">
                       <label className="block space-y-1.5">

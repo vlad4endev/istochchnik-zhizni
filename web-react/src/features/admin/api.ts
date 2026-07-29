@@ -746,13 +746,17 @@ export type CoordinatorTelegramScenarioId =
 
 export type CoordinatorTelegramTarget = 'dm' | 'chat' | 'dm_and_chat';
 
+export type CoordinatorTelegramRepeat = 'event' | 'daily' | 'weekly';
+
 export interface CoordinatorTelegramScenario {
   id: CoordinatorTelegramScenarioId;
   title: string;
   enabled: boolean;
   target: CoordinatorTelegramTarget;
+  repeat: CoordinatorTelegramRepeat;
   time: string;
   weekDay: number;
+  dayOffset: number;
   customBody?: string;
 }
 

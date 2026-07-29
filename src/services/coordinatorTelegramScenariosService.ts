@@ -311,7 +311,7 @@ export async function notifyCoordinatorTelegramAssignmentsBatch(
 async function notifyMissingNeedTelegram(
   dateYmd: string,
   title: string,
-  bodyType: 'tomorrow' | 'today',
+  dayOffset: number,
   scenario: CoordinatorTelegramScenario,
 ): Promise<{ sent: number }> {
   const dayData = await getPrayerDataByDate(dateYmd);
@@ -327,19 +327,24 @@ async function notifyMissingNeedTelegram(
       ? await getCollectionClaimOwnerForMemberInCycle(cycleIndex, assigned.id)
       : null;
 
-  const vars = missingNeedVars({
-    title,
-    memberName,
-    dateYmd,
-    coordinatorName: owner?.name ?? '',
-    cycleIndex,
-    weekKind: 'current',
-  });
+  const vars = {
+    ...missingNeedVars({
+      title,
+      memberName,
+      dateYmd,
+      coordinatorName: owner?.name ?? '',
+      cycleIndex,
+      weekKind: 'current',
+    }),
+    day_offset: String(dayOffset),
+  };
 
   const fallbackBody =
-    bodyType === 'tomorrow'
-      ? `${memberName}: поле нужды на ${dateYmd} не заполнено.`
-      : `${memberName}: поле нужды на сегодня (${dateYmd}) всё ещё пустое.`;
+    dayOffset <= 0
+      ? `${memberName}: поле нужды на сегодня (${dateYmd}) всё ещё пустое.`
+      : dayOffset === 1
+        ? `${memberName}: поле нужды на завтра (${dateYmd}) не заполнено.`
+        : `${memberName}: поле нужды на ${dateYmd} (через ${dayOffset} дн.) не заполнено.`;
   const text = renderScenarioText(scenario, vars, `${title}\n\n${fallbackBody}`);
 
   const recipients = new Set<number>();
@@ -444,29 +449,21 @@ export async function runCoordinatorTelegramScenarioNow(
     };
   }
 
-  if (scenarioId === 'missing_need_tomorrow') {
-    const tomorrowYmd = addDaysYmd(ymdFromZoned(z), 1);
+  if (scenarioId === 'missing_need_tomorrow' || scenarioId === 'missing_need_today') {
+    const offset = scenario.dayOffset;
+    const targetYmd = addDaysYmd(ymdFromZoned(z), offset);
     const result = await notifyMissingNeedTelegram(
-      tomorrowYmd,
-      scenario.title || 'Нет молитвенной нужды на завтра',
-      'tomorrow',
+      targetYmd,
+      scenario.title ||
+        (offset <= 0
+          ? 'Эскалация: нет молитвенной нужды на сегодня'
+          : 'Нет молитвенной нужды на день цикла'),
+      offset,
       scenario,
     );
     return { ok: true, scenario_id: scenarioId, sent: result.sent };
   }
 
-  if (scenarioId === 'missing_need_today') {
-    const todayYmd = ymdFromZoned(z);
-    const result = await notifyMissingNeedTelegram(
-      todayYmd,
-      scenario.title || 'Эскалация: нет молитвенной нужды на сегодня',
-      'today',
-      scenario,
-    );
-    return { ok: true, scenario_id: scenarioId, sent: result.sent };
-  }
-
-  // assignment — event-only; preview sends week list personal digests as smoke test is wrong.
   return {
     ok: false,
     scenario_id: scenarioId,
@@ -474,8 +471,27 @@ export async function runCoordinatorTelegramScenarioNow(
   };
 }
 
+function scenarioPeriodKey(
+  scenario: CoordinatorTelegramScenario,
+  z: ZonedNow,
+): string {
+  if (scenario.repeat === 'daily') {
+    return `${scenario.id}:${ymdFromZoned(z)}`;
+  }
+  return `${scenario.id}:${weekPeriodKey(z)}`;
+}
+
+function scheduleMatches(scenario: CoordinatorTelegramScenario, z: ZonedNow): boolean {
+  if (scenario.repeat === 'event') return false;
+  const hm = parseHm(scenario.time);
+  if (!hm || z.hour !== hm.hour || z.minute !== hm.minute) return false;
+  if (scenario.repeat === 'weekly' && z.weekDay !== scenario.weekDay) return false;
+  return true;
+}
+
 /**
  * Минутный тик: плановые сценарии (missing need + week list).
+ * Напоминания о пустой нужде по умолчанию daily — так покрываются разные дни цикла у разных координаторов.
  */
 export async function processCoordinatorTelegramScenariosDue(
   now = new Date(),
@@ -488,33 +504,28 @@ export async function processCoordinatorTelegramScenariosDue(
 
   for (const scenario of doc.scenarios) {
     if (!scenario.enabled) continue;
-    if (scenario.id === 'assignment') continue; // event-driven only
+    if (!scheduleMatches(scenario, z)) continue;
 
-    const hm = parseHm(scenario.time);
-    if (!hm || z.hour !== hm.hour || z.minute !== hm.minute) continue;
-    if (z.weekDay !== scenario.weekDay) continue;
-
-    const pk = `${scenario.id}:${weekPeriodKey(z)}`;
+    const pk = scenarioPeriodKey(scenario, z);
     if (runtime[scenario.id] === pk) continue;
 
     try {
-      if (scenario.id === 'missing_need_tomorrow') {
-        const tomorrowYmd = addDaysYmd(ymdFromZoned(z), 1);
+      if (scenario.id === 'missing_need_tomorrow' || scenario.id === 'missing_need_today') {
+        const offset = scenario.dayOffset;
+        const targetYmd = addDaysYmd(ymdFromZoned(z), offset);
         await notifyMissingNeedTelegram(
-          tomorrowYmd,
-          scenario.title || 'Нет молитвенной нужды на завтра',
-          'tomorrow',
-          scenario,
-        );
-      } else if (scenario.id === 'missing_need_today') {
-        await notifyMissingNeedTelegram(
-          ymdFromZoned(z),
-          scenario.title || 'Эскалация: нет молитвенной нужды на сегодня',
-          'today',
+          targetYmd,
+          scenario.title ||
+            (offset <= 0
+              ? 'Эскалация: нет молитвенной нужды на сегодня'
+              : 'Нет молитвенной нужды на день цикла'),
+          offset,
           scenario,
         );
       } else if (scenario.id === 'week_list') {
         await runWeekListScenario(scenario, 'next');
+      } else {
+        continue;
       }
       runtime[scenario.id] = pk;
       triggered.push(scenario.id);

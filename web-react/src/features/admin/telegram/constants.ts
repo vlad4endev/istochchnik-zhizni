@@ -33,13 +33,18 @@ export type CoordinatorTelegramScenarioId =
 
 export type CoordinatorTelegramTarget = 'dm' | 'chat' | 'dm_and_chat';
 
+export type CoordinatorTelegramRepeat = 'event' | 'daily' | 'weekly';
+
 export interface CoordinatorTelegramScenario {
   id: CoordinatorTelegramScenarioId;
   title: string;
   enabled: boolean;
   target: CoordinatorTelegramTarget;
+  repeat: CoordinatorTelegramRepeat;
   time: string;
   weekDay: number;
+  /** 0 = сегодня, 1 = завтра, … — день цикла относительно «сегодня» */
+  dayOffset: number;
   customBody?: string;
 }
 
@@ -53,28 +58,62 @@ export const COORDINATOR_TARGET_OPTIONS: Array<{
   { value: 'dm_and_chat', label: 'Личка и чат', hint: 'И туда, и туда' },
 ];
 
+export const COORDINATOR_REPEAT_OPTIONS: Array<{
+  value: CoordinatorTelegramRepeat;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: 'daily',
+    label: 'Каждый день',
+    hint: 'В указанное время каждый день — подходит, когда у координаторов разные дни в цикле',
+  },
+  {
+    value: 'weekly',
+    label: 'Раз в неделю',
+    hint: 'Только в выбранный день недели',
+  },
+  {
+    value: 'event',
+    label: 'По событию',
+    hint: 'Срабатывает при назначении, без расписания',
+  },
+];
+
+export const COORDINATOR_DAY_OFFSET_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 0, label: 'Сегодня (день цикла)' },
+  { value: 1, label: 'Завтра (за 1 день)' },
+  { value: 2, label: 'Через 2 дня' },
+  { value: 3, label: 'Через 3 дня' },
+];
+
 export const COORDINATOR_SCENARIO_HINTS: Record<
   CoordinatorTelegramScenarioId,
-  { schedule: boolean; description: string }
+  { schedule: boolean; missingNeed: boolean; description: string }
 > = {
   assignment: {
     schedule: false,
+    missingNeed: false,
     description:
       'Когда координатору назначили участника (вручную, автораспределение или напоминание в понедельник).',
   },
   missing_need_tomorrow: {
     schedule: true,
+    missingNeed: true,
     description:
-      'Если у участника завтрашнего дня цикла пустая нужда — напоминание ответственному координатору и админам.',
+      'Проверяет день цикла у участника (по умолчанию завтра). Ответственному координатору — если нужда пустая. Каждый день в выбранное время, чтобы покрыть разные дни у разных координаторов.',
   },
   missing_need_today: {
     schedule: true,
-    description: 'Эскалация: на сегодня нужда всё ещё не заполнена.',
+    missingNeed: true,
+    description:
+      'Эскалация: в день цикла нужда всё ещё пустая. Каждый день в выбранное время — сработает для того координатора, чей участник сегодня в цикле.',
   },
   week_list: {
     schedule: true,
+    missingNeed: false,
     description:
-      'Раз в неделю список назначений по координаторам в чат (и/или персональные дайджесты в личку).',
+      'Список назначений по координаторам в чат (и/или персональные дайджесты в личку).',
   },
 };
 

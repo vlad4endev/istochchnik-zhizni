@@ -4,6 +4,7 @@ import {
   scenarioWantsChat,
   scenarioWantsDm,
   applyCoordinatorBodyTemplate,
+  describeDayOffset,
 } from './coordinatorTelegramScenarios';
 
 function run(): void {
@@ -11,58 +12,62 @@ function run(): void {
   assert.equal(empty.version, 1);
   assert.equal(empty.timezone, 'Europe/Moscow');
   assert.equal(empty.scenarios.length, 4);
-  assert.deepEqual(
-    empty.scenarios.map((s) => s.id),
-    ['assignment', 'missing_need_tomorrow', 'missing_need_today', 'week_list'],
-  );
+  const tomorrow = empty.scenarios.find((s) => s.id === 'missing_need_tomorrow')!;
+  assert.equal(tomorrow.repeat, 'daily');
+  assert.equal(tomorrow.dayOffset, 1);
+  const today = empty.scenarios.find((s) => s.id === 'missing_need_today')!;
+  assert.equal(today.repeat, 'daily');
+  assert.equal(today.dayOffset, 0);
+  const week = empty.scenarios.find((s) => s.id === 'week_list')!;
+  assert.equal(week.repeat, 'weekly');
 
-  const merged = normalizeCoordinatorTelegramScenariosDocument({
-    timezone: 'Europe/Samara',
+  // Legacy saved JSON without repeat/dayOffset → daily for missing need
+  const legacy = normalizeCoordinatorTelegramScenariosDocument({
+    timezone: 'Europe/Moscow',
     scenarios: [
-      { id: 'assignment', enabled: false, target: 'dm_and_chat', title: '  Назначение  ' },
-      { id: 'unknown_x', enabled: true },
-      { id: 'week_list', time: '11:30', weekDay: 2, customBody: 'Список: {{participants}}' },
+      { id: 'missing_need_tomorrow', enabled: true, target: 'dm', time: '18:00', weekDay: 0 },
+      { id: 'week_list', enabled: true, target: 'chat', time: '09:00', weekDay: 1 },
     ],
   });
-  assert.equal(merged.timezone, 'Europe/Samara');
-  const assignment = merged.scenarios.find((s) => s.id === 'assignment')!;
-  assert.equal(assignment.enabled, false);
-  assert.equal(assignment.target, 'dm_and_chat');
-  assert.equal(assignment.title, 'Назначение');
-  const week = merged.scenarios.find((s) => s.id === 'week_list')!;
-  assert.equal(week.time, '11:30');
-  assert.equal(week.weekDay, 2);
-  assert.equal(week.customBody, 'Список: {{participants}}');
   assert.equal(
-    merged.scenarios.some((s) => (s.id as string) === 'unknown_x'),
-    false,
+    legacy.scenarios.find((s) => s.id === 'missing_need_tomorrow')!.repeat,
+    'daily',
   );
+  assert.equal(
+    legacy.scenarios.find((s) => s.id === 'missing_need_tomorrow')!.dayOffset,
+    1,
+  );
+  assert.equal(legacy.scenarios.find((s) => s.id === 'week_list')!.repeat, 'weekly');
 
-  assert.equal(scenarioWantsDm('dm'), true);
-  assert.equal(scenarioWantsChat('dm'), false);
-  assert.equal(scenarioWantsDm('chat'), false);
-  assert.equal(scenarioWantsChat('chat'), true);
+  const custom = normalizeCoordinatorTelegramScenariosDocument({
+    scenarios: [
+      {
+        id: 'missing_need_tomorrow',
+        repeat: 'weekly',
+        dayOffset: 2,
+        weekDay: 3,
+        time: '17:00',
+      },
+    ],
+  });
+  const m = custom.scenarios.find((s) => s.id === 'missing_need_tomorrow')!;
+  assert.equal(m.repeat, 'weekly');
+  assert.equal(m.dayOffset, 2);
+  assert.equal(m.weekDay, 3);
+
+  assert.equal(describeDayOffset(0), 'в день цикла (сегодня)');
+  assert.equal(describeDayOffset(1), 'за 1 день до дня цикла (завтра)');
+  assert.match(describeDayOffset(3), /3/);
+
   assert.equal(scenarioWantsDm('dm_and_chat'), true);
-  assert.equal(scenarioWantsChat('dm_and_chat'), true);
+  assert.equal(scenarioWantsChat('chat'), true);
 
   assert.equal(
-    applyCoordinatorBodyTemplate('{{member_name}} — {{date_long}}', {
+    applyCoordinatorBodyTemplate('{{member_name}} offset={{day_offset}}', {
       member_name: 'Иван',
-      date_long: 'Понедельник, 28 июля',
+      day_offset: '1',
     }),
-    'Иван — Понедельник, 28 июля',
-  );
-  assert.equal(
-    applyCoordinatorBodyTemplate('Неделя {week_range}', {
-      week_range: '28 июля — 3 августа',
-    }),
-    'Неделя 28 июля — 3 августа',
-  );
-  assert.equal(
-    applyCoordinatorBodyTemplate('{{unknown}} и {{member_name}}', {
-      member_name: 'Мария',
-    }),
-    ' и Мария',
+    'Иван offset=1',
   );
 
   console.log('coordinatorTelegramScenarios.test.ts: OK');

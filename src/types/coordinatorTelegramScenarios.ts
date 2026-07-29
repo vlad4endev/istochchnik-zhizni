@@ -12,19 +12,33 @@ export type CoordinatorTelegramScenarioId =
 /** Куда слать: личка координатору, чат координаторов, или оба. */
 export type CoordinatorTelegramTarget = 'dm' | 'chat' | 'dm_and_chat';
 
+/**
+ * Как часто срабатывает плановый сценарий.
+ * - event — только по событию (назначение)
+ * - daily — каждый день в `time` (нужно для «пустой нужды»: у координаторов разные дни цикла)
+ * - weekly — в выбранный `weekDay` + `time`
+ */
+export type CoordinatorTelegramRepeat = 'event' | 'daily' | 'weekly';
+
 export interface CoordinatorTelegramScenario {
   id: CoordinatorTelegramScenarioId;
   /** Показываемое название (можно править в админке). */
   title: string;
   enabled: boolean;
   target: CoordinatorTelegramTarget;
+  repeat: CoordinatorTelegramRepeat;
   /**
    * Локальное время в timezone документа, HH:mm.
    * Для event-сценария `assignment` не используется.
    */
   time: string;
-  /** Для плановых сценариев: 0=вс … 6=сб. */
+  /** Для repeat=weekly: 0=вс … 6=сб. */
   weekDay: number;
+  /**
+   * Для сценариев пустой нужды: сколько дней вперёд от «сегодня» проверять день цикла.
+   * 0 = сегодня, 1 = завтра, 2 = послезавтра…
+   */
+  dayOffset: number;
   /** Кастомный текст; плейсхолдеры зависят от сценария. */
   customBody?: string;
 }
@@ -45,32 +59,41 @@ export const DEFAULT_COORDINATOR_TG_SCENARIOS: readonly CoordinatorTelegramScena
     title: 'Назначение координатору',
     enabled: true,
     target: 'dm',
+    repeat: 'event',
     time: '08:00',
     weekDay: 1,
+    dayOffset: 0,
   },
   {
     id: 'missing_need_tomorrow',
     title: 'Напоминание: на завтра нет нужды',
     enabled: true,
     target: 'dm',
+    /** Каждый день: у каждого координатора свой день участника в цикле. */
+    repeat: 'daily',
     time: '18:00',
     weekDay: 0,
+    dayOffset: 1,
   },
   {
     id: 'missing_need_today',
     title: 'Эскалация: сегодня всё ещё нет нужды',
     enabled: true,
     target: 'dm',
+    repeat: 'daily',
     time: '08:00',
     weekDay: 1,
+    dayOffset: 0,
   },
   {
     id: 'week_list',
     title: 'Еженедельный список по координаторам',
     enabled: true,
     target: 'chat',
+    repeat: 'weekly',
     time: '09:00',
     weekDay: 1,
+    dayOffset: 0,
   },
 ] as const;
 
@@ -86,6 +109,29 @@ function normalizeTarget(raw: unknown, fallback: CoordinatorTelegramTarget): Coo
   return fallback;
 }
 
+function defaultRepeatForId(id: CoordinatorTelegramScenarioId): CoordinatorTelegramRepeat {
+  return (
+    DEFAULT_COORDINATOR_TG_SCENARIOS.find((s) => s.id === id)?.repeat ?? 'weekly'
+  );
+}
+
+function defaultDayOffsetForId(id: CoordinatorTelegramScenarioId): number {
+  return DEFAULT_COORDINATOR_TG_SCENARIOS.find((s) => s.id === id)?.dayOffset ?? 0;
+}
+
+function normalizeRepeat(
+  raw: unknown,
+  id: CoordinatorTelegramScenarioId,
+  fallback: CoordinatorTelegramRepeat,
+): CoordinatorTelegramRepeat {
+  if (raw === 'event' || raw === 'daily' || raw === 'weekly') return raw;
+  // Старые сохранённые сценарии без repeat: для нужд — daily (иначе не покроем все дни цикла).
+  if (id === 'assignment') return 'event';
+  if (id === 'missing_need_tomorrow' || id === 'missing_need_today') return 'daily';
+  if (id === 'week_list') return 'weekly';
+  return fallback;
+}
+
 function normalizeScenario(
   raw: unknown,
   fallback: CoordinatorTelegramScenario,
@@ -97,13 +143,24 @@ function normalizeScenario(
       ? (o.id as CoordinatorTelegramScenarioId)
       : fallback.id;
   const base = DEFAULT_COORDINATOR_TG_SCENARIOS.find((s) => s.id === id) ?? fallback;
+  const repeat = normalizeRepeat(o.repeat, id, base.repeat);
+  const dayOffsetRaw =
+    o.dayOffset !== undefined
+      ? Number(o.dayOffset)
+      : id === 'missing_need_tomorrow'
+        ? 1
+        : id === 'missing_need_today'
+          ? 0
+          : base.dayOffset;
   return {
     id,
     title: typeof o.title === 'string' && o.title.trim() ? o.title.trim().slice(0, 200) : base.title,
     enabled: typeof o.enabled === 'boolean' ? o.enabled : base.enabled,
     target: normalizeTarget(o.target, base.target),
+    repeat,
     time: typeof o.time === 'string' && /^\d{1,2}:\d{2}$/.test(o.time.trim()) ? o.time.trim() : base.time,
     weekDay: clampInt(Number(o.weekDay), 0, 6, base.weekDay),
+    dayOffset: clampInt(dayOffsetRaw, 0, 14, defaultDayOffsetForId(id)),
     customBody:
       typeof o.customBody === 'string' && o.customBody.trim().length > 0
         ? o.customBody.trim().slice(0, 4000)
@@ -177,6 +234,17 @@ export function scenarioWantsChat(target: CoordinatorTelegramTarget): boolean {
   return target === 'chat' || target === 'dm_and_chat';
 }
 
+export function isMissingNeedScenarioId(id: CoordinatorTelegramScenarioId): boolean {
+  return id === 'missing_need_tomorrow' || id === 'missing_need_today';
+}
+
+/** Подпись условия относительно дня в молитвенном цикле. */
+export function describeDayOffset(dayOffset: number): string {
+  if (dayOffset <= 0) return 'в день цикла (сегодня)';
+  if (dayOffset === 1) return 'за 1 день до дня цикла (завтра)';
+  return `за ${dayOffset} дн. до дня цикла`;
+}
+
 /**
  * Подстановка полей в шаблон.
  * Основной формат как у программы/молитвы: {{token}}.
@@ -190,9 +258,9 @@ export function applyCoordinatorBodyTemplate(
     return Object.prototype.hasOwnProperty.call(vars, key) ? vars[key]! : '';
   });
   return withDouble.replace(/\{([a-zA-Z0-9_]+)\}/g, (all, key: string) => {
-    // Уже обработанные {{…}} не трогаем — после первого прохода их нет.
-    // Одиночные {token} — legacy.
     if (Object.prototype.hasOwnProperty.call(vars, key)) return vars[key]!;
     return all;
   });
 }
+
+export { defaultRepeatForId, defaultDayOffsetForId };
