@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import {
   buildNextWeekPlanTelegramText,
   buildTodayPrayerTelegramText,
+  getServicePlanMailingDestinationsRaw,
   getTelegramDispatchSettings,
   getTelegramSettings,
   listTelegramDispatchRecipients,
@@ -18,6 +19,12 @@ import {
   getServicePlanMailingSchedule,
   updateServicePlanMailingSchedule,
 } from '../services/servicePlanMondayMailingService';
+import {
+  listServicePlanMailingMessengerChats,
+  MEDIA_TEAM_CHANNEL_KIND,
+  SERVICE_PLAN_PLANNING_CHANNEL_KIND,
+} from '../services/messengerService';
+import { parseDestinationsPatchInput } from '../services/servicePlanMailingDestinations';
 import { notifyRealtime } from '../realtime/notify';
 
 type AuthRequest = Request & { authUserId?: number; authUserRole?: string };
@@ -153,12 +160,40 @@ function errorToStatus(error: unknown): { status: number; message: string } {
 export async function getTelegramSettingsHandler(req: Request, res: Response): Promise<void> {
   if (!ensureAdmin(req, res)) return;
   try {
-    const [settings, mailingSchedule] = await Promise.all([
+    const [settings, mailingSchedule, destRaw, messengerChats] = await Promise.all([
       getTelegramSettings(),
       getServicePlanMailingSchedule(),
+      getServicePlanMailingDestinationsRaw(),
+      listServicePlanMailingMessengerChats().catch(() => []),
     ]);
+
+    const planningId =
+      messengerChats.find((c) => c.kind === SERVICE_PLAN_PLANNING_CHANNEL_KIND)?.id ?? null;
+    const mediykaId =
+      messengerChats.find((c) => c.kind === MEDIA_TEAM_CHANNEL_KIND)?.id ?? null;
+
+    // Пока destinations не сохранены — подставляем рекомендуемые чаты приложения в ответ API.
+    const mailingDestinations =
+      destRaw.mailing != null
+        ? settings.service_plan_mailing_destinations
+        : {
+            telegram_chat_ids: settings.service_plan_mailing_destinations.telegram_chat_ids,
+            messenger_conversation_ids: planningId ? [planningId] : [],
+          };
+    const publishedDestinations =
+      destRaw.published != null
+        ? settings.service_plan_published_destinations
+        : {
+            telegram_chat_ids: settings.service_plan_published_destinations.telegram_chat_ids,
+            messenger_conversation_ids: [planningId, mediykaId].filter(
+              (id): id is string => Boolean(id),
+            ),
+          };
+
     res.json({
       ...settings,
+      service_plan_mailing_destinations: mailingDestinations,
+      service_plan_published_destinations: publishedDestinations,
       service_plan_mailing_enabled: mailingSchedule.enabled,
       service_plan_mailing_weekday: mailingSchedule.weekday,
       service_plan_mailing_time: mailingSchedule.time_hhmm,
@@ -167,6 +202,20 @@ export async function getTelegramSettingsHandler(req: Request, res: Response): P
   } catch (error) {
     console.error('[telegram] get settings failed:', error);
     res.status(500).json({ error: 'Не удалось загрузить Telegram настройки' });
+  }
+}
+
+export async function getTelegramMailingMessengerChatsHandler(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    const chats = await listServicePlanMailingMessengerChats();
+    res.json({ chats });
+  } catch (error) {
+    console.error('[telegram] list mailing messenger chats failed:', error);
+    res.status(500).json({ error: 'Не удалось загрузить список чатов приложения' });
   }
 }
 
@@ -184,6 +233,8 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
         service_plan_template?: unknown;
         service_plan_published_chat_id?: unknown;
         media_chat_id?: unknown;
+        service_plan_mailing_destinations?: unknown;
+        service_plan_published_destinations?: unknown;
         service_plan_published_template?: unknown;
         service_plan_published_button_text?: unknown;
         proxy_enabled?: unknown;
@@ -267,6 +318,26 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
     res.status(400).json({ error: 'Поле "media_chat_id" должно быть строкой или null' });
     return;
   }
+  if (body?.service_plan_mailing_destinations !== undefined) {
+    const parsed = parseDestinationsPatchInput(body.service_plan_mailing_destinations);
+    if (parsed === undefined) {
+      res.status(400).json({
+        error:
+          'Поле "service_plan_mailing_destinations" должно быть объектом { telegram_chat_ids, messenger_conversation_ids } или null',
+      });
+      return;
+    }
+  }
+  if (body?.service_plan_published_destinations !== undefined) {
+    const parsed = parseDestinationsPatchInput(body.service_plan_published_destinations);
+    if (parsed === undefined) {
+      res.status(400).json({
+        error:
+          'Поле "service_plan_published_destinations" должно быть объектом { telegram_chat_ids, messenger_conversation_ids } или null',
+      });
+      return;
+    }
+  }
   if (
     body?.service_plan_published_template !== undefined &&
     body.service_plan_published_template !== null &&
@@ -337,6 +408,12 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
       service_plan_template: body?.service_plan_template as string | null | undefined,
       service_plan_published_chat_id: body?.service_plan_published_chat_id as string | null | undefined,
       media_chat_id: body?.media_chat_id as string | null | undefined,
+      service_plan_mailing_destinations: parseDestinationsPatchInput(
+        body?.service_plan_mailing_destinations,
+      ),
+      service_plan_published_destinations: parseDestinationsPatchInput(
+        body?.service_plan_published_destinations,
+      ),
       service_plan_published_template: body?.service_plan_published_template as
         | string
         | null

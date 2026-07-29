@@ -3515,6 +3515,85 @@ export async function postServicePlanPublishedMessengerNotification(input: {
   }
 }
 
+export type ServicePlanMailingMessengerChat = {
+  id: string;
+  title: string;
+  type: 'channel' | 'group';
+  kind: string | null;
+  /** Рекомендуется для плановой рассылки / публикации */
+  recommended_for: Array<'mailing' | 'published'>;
+};
+
+/**
+ * Каналы и группы приложения для выбора в настройках авторассылки.
+ * Исключаем системные «Заявки» и личные «ИИ помощник».
+ */
+export async function listServicePlanMailingMessengerChats(): Promise<
+  ServicePlanMailingMessengerChat[]
+> {
+  // Гарантируем наличие стандартных каналов, чтобы их можно было отметить галкой.
+  await Promise.all([
+    ensureServicePlanPlanningMessengerChannel().catch(() => null),
+    ensureMediykaMessengerChannel().catch(() => null),
+  ]);
+
+  const result = await dbQuery(
+    `SELECT
+       c.id,
+       c.type::text AS type,
+       c.title,
+       c.metadata->>'kind' AS kind,
+       (
+         SELECT COUNT(*)::int
+         FROM conversation_participants cp
+         WHERE cp.conversation_id = c.id AND cp.left_at IS NULL
+       ) AS member_count
+     FROM conversations c
+     WHERE c.type IN ('channel', 'group')
+       AND COALESCE(c.metadata->>'kind', '') NOT IN ($1, $2)
+     ORDER BY
+       CASE c.metadata->>'kind'
+         WHEN $3 THEN 0
+         WHEN $4 THEN 1
+         ELSE 2
+       END,
+       lower(coalesce(c.title, '')),
+       c.id ASC
+     LIMIT 200`,
+    [
+      ACCESS_REQUESTS_CHANNEL_KIND,
+      MESSENGER_ASSISTANT_CHANNEL_KIND,
+      SERVICE_PLAN_PLANNING_CHANNEL_KIND,
+      MEDIA_TEAM_CHANNEL_KIND,
+    ],
+  );
+
+  return result.rows.map((row) => {
+    const r = row as {
+      id: unknown;
+      type: unknown;
+      title: unknown;
+      kind: unknown;
+    };
+    const kind = r.kind != null && String(r.kind).trim() ? String(r.kind).trim() : null;
+    const typeRaw = String(r.type ?? '');
+    const type: 'channel' | 'group' = typeRaw === 'group' ? 'group' : 'channel';
+    const recommended_for: Array<'mailing' | 'published'> = [];
+    if (kind === SERVICE_PLAN_PLANNING_CHANNEL_KIND) {
+      recommended_for.push('mailing', 'published');
+    } else if (kind === MEDIA_TEAM_CHANNEL_KIND) {
+      recommended_for.push('published');
+    }
+    return {
+      id: bigint(r.id),
+      title: String(r.title ?? '').trim() || (type === 'group' ? 'Группа' : 'Канал'),
+      type,
+      kind,
+      recommended_for,
+    };
+  });
+}
+
 /**
  * Канал «Богослужение (планирование)»: ищем по metadata.kind, иначе по названию, иначе создаём.
  * Идемпотентно.
@@ -3577,15 +3656,20 @@ export async function ensureServicePlanPlanningMessengerChannel(): Promise<strin
 }
 
 /**
- * Понедельничная авторассылка программы служения в канал «Богослужение (планирование)».
+ * Понедельничная авторассылка программы служения в выбранный чат приложения.
  */
 export async function postServicePlanMondayMailingMessengerNotification(input: {
   content: string;
   serviceDateYmd: string;
   planId: number;
   shareToken: string;
+  /** Если не задан — канал «Богослужение (планирование)». */
+  conversationId?: string | null;
 }): Promise<void> {
-  const convId = await ensureServicePlanPlanningMessengerChannel();
+  const convId =
+    String(input.conversationId ?? '').trim() ||
+    (await ensureServicePlanPlanningMessengerChannel()) ||
+    '';
   if (!convId) {
     throw new Error('service_plan_planning_channel_unavailable');
   }

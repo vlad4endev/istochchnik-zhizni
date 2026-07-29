@@ -10,6 +10,14 @@ import {
 import { loadNotificationSettings } from './notificationSettingsService';
 import { formatYmdInTimeZone, getZonedNow } from '../utils/zonedTime';
 import { getMemberAssignmentsForWeek, getPrayerDataByDate, type PrayerPlanSections } from './calendarService';
+import {
+  destinationsJson,
+  firstTelegramChatId,
+  normalizeServicePlanMailingDestinations,
+  parseDestinationsPatchInput,
+  telegramIdsFromLegacyScalars,
+  type ServicePlanMailingDestinations,
+} from './servicePlanMailingDestinations';
 
 export interface TelegramProxyStatus {
   /** Включено ли использование прокси из настроек проекта (БД) */
@@ -39,6 +47,13 @@ export interface TelegramSettings {
   service_plan_published_chat_id: string | null;
   /** Chat id Telegram-чата «Медийка» (при публикации программы) */
   media_chat_id: string | null;
+  /**
+   * Куда слать плановую рассылку (Telegram + чаты приложения).
+   * null в БД → эффективные значения собраны из legacy-скаляров.
+   */
+  service_plan_mailing_destinations: ServicePlanMailingDestinations;
+  /** Куда слать уведомление при публикации (Telegram + чаты приложения). */
+  service_plan_published_destinations: ServicePlanMailingDestinations;
   /** Шаблон текста при публикации программы (те же {{плейсхолдеры}}, что у рассылки) */
   service_plan_published_template: string | null;
   /** Текст inline-кнопки со ссылкой на программу */
@@ -95,6 +110,8 @@ export interface TelegramSettingsUpdate {
   service_plan_published_chat_id?: string | null;
   /** Chat id Telegram-чата «Медийка» */
   media_chat_id?: string | null;
+  service_plan_mailing_destinations?: ServicePlanMailingDestinations | null;
+  service_plan_published_destinations?: ServicePlanMailingDestinations | null;
   service_plan_published_template?: string | null;
   service_plan_published_button_text?: string | null;
   /** Включить исходящий HTTPS-прокси для всех запросов к api.telegram.org */
@@ -474,6 +491,12 @@ async function ensureSettingsColumns(): Promise<void> {
   await query(
     'ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_published_button_text TEXT',
   );
+  await query(
+    'ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_mailing_destinations JSONB',
+  );
+  await query(
+    'ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_published_destinations JSONB',
+  );
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_https_proxy TEXT');
   await query(
     'ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_proxy_enabled BOOLEAN NOT NULL DEFAULT FALSE',
@@ -499,6 +522,8 @@ async function readSettingsRow(): Promise<{
   telegram_service_plan_template: string | null;
   telegram_service_plan_published_chat_id: string | null;
   telegram_media_chat_id: string | null;
+  telegram_service_plan_mailing_destinations: ServicePlanMailingDestinations | null;
+  telegram_service_plan_published_destinations: ServicePlanMailingDestinations | null;
   telegram_service_plan_published_template: string | null;
   telegram_service_plan_published_button_text: string | null;
   telegram_dispatch_enabled: boolean;
@@ -529,6 +554,8 @@ async function readSettingsRow(): Promise<{
        telegram_service_plan_template,
        telegram_service_plan_published_chat_id,
        telegram_media_chat_id,
+       telegram_service_plan_mailing_destinations,
+       telegram_service_plan_published_destinations,
        telegram_service_plan_published_template,
        telegram_service_plan_published_button_text,
        telegram_dispatch_enabled,
@@ -555,6 +582,8 @@ async function readSettingsRow(): Promise<{
         telegram_service_plan_template?: string | null;
         telegram_service_plan_published_chat_id?: string | null;
         telegram_media_chat_id?: string | null;
+        telegram_service_plan_mailing_destinations?: unknown;
+        telegram_service_plan_published_destinations?: unknown;
         telegram_service_plan_published_template?: string | null;
         telegram_service_plan_published_button_text?: string | null;
         telegram_dispatch_enabled?: boolean;
@@ -585,6 +614,12 @@ async function readSettingsRow(): Promise<{
       row?.telegram_service_plan_published_chat_id,
     ),
     telegram_media_chat_id: normalizeOptionalString(row?.telegram_media_chat_id),
+    telegram_service_plan_mailing_destinations: normalizeServicePlanMailingDestinations(
+      row?.telegram_service_plan_mailing_destinations,
+    ),
+    telegram_service_plan_published_destinations: normalizeServicePlanMailingDestinations(
+      row?.telegram_service_plan_published_destinations,
+    ),
     telegram_service_plan_published_template:
       typeof row?.telegram_service_plan_published_template === 'string' &&
       row.telegram_service_plan_published_template.trim().length > 0
@@ -629,6 +664,34 @@ export async function getTelegramSettings(): Promise<TelegramSettings> {
   const row = await readSettingsRow();
   const envToken = normalizeOptionalString(process.env.TELEGRAM_BOT_TOKEN);
   const botToken = row.telegram_bot_token ?? envToken;
+
+  const mailingConfigured = row.telegram_service_plan_mailing_destinations != null;
+  const publishedConfigured = row.telegram_service_plan_published_destinations != null;
+
+  const mailingDestinations: ServicePlanMailingDestinations = mailingConfigured
+    ? row.telegram_service_plan_mailing_destinations!
+    : {
+        telegram_chat_ids: telegramIdsFromLegacyScalars([
+          row.telegram_service_plan_chat_id,
+          process.env.TELEGRAM_SERVICE_PLAN_CHAT_ID,
+        ]),
+        messenger_conversation_ids: [],
+      };
+
+  const publishedDestinations: ServicePlanMailingDestinations = publishedConfigured
+    ? row.telegram_service_plan_published_destinations!
+    : {
+        telegram_chat_ids: telegramIdsFromLegacyScalars([
+          row.telegram_service_plan_published_chat_id,
+          process.env.TELEGRAM_SERVICE_PLAN_PUBLISHED_CHAT_ID,
+          row.telegram_service_plan_chat_id,
+          process.env.TELEGRAM_SERVICE_PLAN_CHAT_ID,
+          row.telegram_media_chat_id,
+          process.env.TELEGRAM_MEDIA_CHAT_ID,
+        ]),
+        messenger_conversation_ids: [],
+      };
+
   return {
     enabled: row.telegram_enabled,
     bot_token_masked: maskBotToken(botToken),
@@ -636,14 +699,40 @@ export async function getTelegramSettings(): Promise<TelegramSettings> {
     coordinator_chat_id: row.telegram_coordinator_chat_id,
     default_chat_id: row.telegram_default_chat_id,
     prayer_template: row.telegram_prayer_template,
-    service_plan_chat_id: row.telegram_service_plan_chat_id,
+    service_plan_chat_id:
+      row.telegram_service_plan_chat_id ?? firstTelegramChatId(mailingDestinations),
     service_plan_template: row.telegram_service_plan_template,
-    service_plan_published_chat_id: row.telegram_service_plan_published_chat_id,
+    service_plan_published_chat_id:
+      row.telegram_service_plan_published_chat_id ?? firstTelegramChatId(publishedDestinations),
     media_chat_id: row.telegram_media_chat_id,
+    service_plan_mailing_destinations: mailingDestinations,
+    service_plan_published_destinations: publishedDestinations,
     service_plan_published_template: row.telegram_service_plan_published_template,
     service_plan_published_button_text: row.telegram_service_plan_published_button_text,
     has_bot_token: Boolean(botToken),
     proxy: buildProxyStatusFromRow(row),
+  };
+}
+
+/** Сырые направления из БД (null = ещё не настраивали, действует legacy). */
+export async function getServicePlanMailingDestinationsRaw(): Promise<{
+  mailing: ServicePlanMailingDestinations | null;
+  published: ServicePlanMailingDestinations | null;
+  legacy: {
+    service_plan_chat_id: string | null;
+    service_plan_published_chat_id: string | null;
+    media_chat_id: string | null;
+  };
+}> {
+  const row = await readSettingsRow();
+  return {
+    mailing: row.telegram_service_plan_mailing_destinations,
+    published: row.telegram_service_plan_published_destinations,
+    legacy: {
+      service_plan_chat_id: row.telegram_service_plan_chat_id,
+      service_plan_published_chat_id: row.telegram_service_plan_published_chat_id,
+      media_chat_id: row.telegram_media_chat_id,
+    },
   };
 }
 
@@ -665,6 +754,67 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       nextProxyUrl = normalizeAndValidateProxyUrl(String(input.proxy_url));
     }
   }
+
+  const mailingDestPatch = parseDestinationsPatchInput(input.service_plan_mailing_destinations);
+  const publishedDestPatch = parseDestinationsPatchInput(input.service_plan_published_destinations);
+
+  let nextMailingDest = current.telegram_service_plan_mailing_destinations;
+  if (mailingDestPatch !== undefined) {
+    nextMailingDest = mailingDestPatch;
+  }
+
+  let nextPublishedDest = current.telegram_service_plan_published_destinations;
+  if (publishedDestPatch !== undefined) {
+    nextPublishedDest = publishedDestPatch;
+  }
+
+  let nextServicePlanChatId =
+    input.service_plan_chat_id !== undefined
+      ? normalizeOptionalString(input.service_plan_chat_id)
+      : current.telegram_service_plan_chat_id;
+  let nextPublishedChatId =
+    input.service_plan_published_chat_id !== undefined
+      ? normalizeOptionalString(input.service_plan_published_chat_id)
+      : current.telegram_service_plan_published_chat_id;
+  let nextMediaChatId =
+    input.media_chat_id !== undefined
+      ? normalizeOptionalString(input.media_chat_id)
+      : current.telegram_media_chat_id;
+
+  // Синхронизируем legacy-скаляры с первым TG id из направлений (обратная совместимость).
+  if (mailingDestPatch !== undefined && mailingDestPatch != null) {
+    nextServicePlanChatId = firstTelegramChatId(mailingDestPatch);
+  } else if (
+    input.service_plan_chat_id !== undefined &&
+    current.telegram_service_plan_mailing_destinations == null &&
+    mailingDestPatch === undefined
+  ) {
+    // Старый клиент шлёт только скаляр — поднимаем в destinations.
+    nextMailingDest = {
+      telegram_chat_ids: telegramIdsFromLegacyScalars([nextServicePlanChatId]),
+      messenger_conversation_ids: [],
+    };
+  }
+
+  if (publishedDestPatch !== undefined && publishedDestPatch != null) {
+    nextPublishedChatId = firstTelegramChatId(publishedDestPatch);
+    // media_chat_id: второй TG id, если есть (удобный legacy-mirror).
+    nextMediaChatId = publishedDestPatch.telegram_chat_ids[1] ?? null;
+  } else if (
+    (input.service_plan_published_chat_id !== undefined || input.media_chat_id !== undefined) &&
+    current.telegram_service_plan_published_destinations == null &&
+    publishedDestPatch === undefined
+  ) {
+    nextPublishedDest = {
+      telegram_chat_ids: telegramIdsFromLegacyScalars([
+        nextPublishedChatId,
+        nextServicePlanChatId,
+        nextMediaChatId,
+      ]),
+      messenger_conversation_ids: [],
+    };
+  }
+
   const next = {
     telegram_enabled: typeof input.enabled === 'boolean' ? input.enabled : current.telegram_enabled,
     telegram_bot_token:
@@ -689,22 +839,15 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       input.prayer_template !== undefined
         ? normalizeOptionalString(input.prayer_template)
         : current.telegram_prayer_template,
-    telegram_service_plan_chat_id:
-      input.service_plan_chat_id !== undefined
-        ? normalizeOptionalString(input.service_plan_chat_id)
-        : current.telegram_service_plan_chat_id,
+    telegram_service_plan_chat_id: nextServicePlanChatId,
     telegram_service_plan_template:
       input.service_plan_template !== undefined
         ? normalizeServicePlanTemplateInput(input.service_plan_template)
         : current.telegram_service_plan_template,
-    telegram_service_plan_published_chat_id:
-      input.service_plan_published_chat_id !== undefined
-        ? normalizeOptionalString(input.service_plan_published_chat_id)
-        : current.telegram_service_plan_published_chat_id,
-    telegram_media_chat_id:
-      input.media_chat_id !== undefined
-        ? normalizeOptionalString(input.media_chat_id)
-        : current.telegram_media_chat_id,
+    telegram_service_plan_published_chat_id: nextPublishedChatId,
+    telegram_media_chat_id: nextMediaChatId,
+    telegram_service_plan_mailing_destinations: nextMailingDest,
+    telegram_service_plan_published_destinations: nextPublishedDest,
     telegram_service_plan_published_template:
       input.service_plan_published_template !== undefined
         ? normalizeServicePlanTemplateInput(input.service_plan_published_template)
@@ -732,12 +875,17 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_service_plan_template,
        telegram_service_plan_published_chat_id,
        telegram_media_chat_id,
+       telegram_service_plan_mailing_destinations,
+       telegram_service_plan_published_destinations,
        telegram_service_plan_published_template,
        telegram_service_plan_published_button_text,
        telegram_proxy_enabled,
        telegram_https_proxy
      )
-     VALUES (1, CURRENT_DATE, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+     VALUES (
+       1, CURRENT_DATE, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+       $11::jsonb, $12::jsonb, $13, $14, $15, $16
+     )
      ON CONFLICT (id) DO UPDATE
      SET
        telegram_enabled = EXCLUDED.telegram_enabled,
@@ -750,6 +898,8 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_service_plan_template = EXCLUDED.telegram_service_plan_template,
        telegram_service_plan_published_chat_id = EXCLUDED.telegram_service_plan_published_chat_id,
        telegram_media_chat_id = EXCLUDED.telegram_media_chat_id,
+       telegram_service_plan_mailing_destinations = EXCLUDED.telegram_service_plan_mailing_destinations,
+       telegram_service_plan_published_destinations = EXCLUDED.telegram_service_plan_published_destinations,
        telegram_service_plan_published_template = EXCLUDED.telegram_service_plan_published_template,
        telegram_service_plan_published_button_text = EXCLUDED.telegram_service_plan_published_button_text,
        telegram_proxy_enabled = EXCLUDED.telegram_proxy_enabled,
@@ -765,6 +915,12 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       next.telegram_service_plan_template,
       next.telegram_service_plan_published_chat_id,
       next.telegram_media_chat_id,
+      next.telegram_service_plan_mailing_destinations == null
+        ? null
+        : destinationsJson(next.telegram_service_plan_mailing_destinations),
+      next.telegram_service_plan_published_destinations == null
+        ? null
+        : destinationsJson(next.telegram_service_plan_published_destinations),
       next.telegram_service_plan_published_template,
       next.telegram_service_plan_published_button_text,
       next.telegram_proxy_enabled,
