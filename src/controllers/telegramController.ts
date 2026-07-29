@@ -16,6 +16,17 @@ import {
   updateTelegramSettings,
 } from '../services/telegramService';
 import {
+  getCoordinatorTelegramScenariosPublic,
+  loadCoordinatorTelegramScenarios,
+  patchCoordinatorTelegramScenarios,
+  runCoordinatorTelegramScenarioNow,
+} from '../services/coordinatorTelegramScenariosService';
+import type {
+  CoordinatorTelegramScenario,
+  CoordinatorTelegramScenarioId,
+} from '../types/coordinatorTelegramScenarios';
+import { DEFAULT_COORDINATOR_TG_SCENARIOS } from '../types/coordinatorTelegramScenarios';
+import {
   getServicePlanMailingSchedule,
   updateServicePlanMailingSchedule,
 } from '../services/servicePlanMondayMailingService';
@@ -785,6 +796,102 @@ export async function deleteTelegramChatHandler(req: Request, res: Response): Pr
     res.status(204).send();
   } catch (error) {
     console.error('[telegram] delete chat failed:', error);
+    const mapped = errorToStatus(error);
+    res.status(mapped.status).json({ error: mapped.message });
+  }
+}
+
+const COORDINATOR_SCENARIO_IDS = new Set(
+  DEFAULT_COORDINATOR_TG_SCENARIOS.map((s) => s.id),
+);
+
+export async function getCoordinatorTelegramScenariosHandler(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    const doc = await loadCoordinatorTelegramScenarios();
+    res.json(getCoordinatorTelegramScenariosPublic(doc));
+  } catch (error) {
+    console.error('[telegram] get coordinator scenarios failed:', error);
+    res.status(500).json({ error: 'Не удалось загрузить сценарии координаторов' });
+  }
+}
+
+export async function patchCoordinatorTelegramScenariosHandler(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const body = req.body as
+    | {
+        timezone?: unknown;
+        scenarios?: unknown;
+      }
+    | undefined;
+
+  if (body?.timezone !== undefined && typeof body.timezone !== 'string') {
+    res.status(400).json({ error: 'Поле "timezone" должно быть строкой' });
+    return;
+  }
+  if (body?.scenarios !== undefined && !Array.isArray(body.scenarios)) {
+    res.status(400).json({ error: 'Поле "scenarios" должно быть массивом' });
+    return;
+  }
+
+  let scenariosPatch: CoordinatorTelegramScenario[] | undefined;
+  if (Array.isArray(body?.scenarios)) {
+    scenariosPatch = body.scenarios as CoordinatorTelegramScenario[];
+  }
+
+  try {
+    const doc = await patchCoordinatorTelegramScenarios({
+      timezone: typeof body?.timezone === 'string' ? body.timezone : undefined,
+      scenarios: scenariosPatch,
+    });
+    notifyRealtime(['admin']);
+    res.json(getCoordinatorTelegramScenariosPublic(doc));
+  } catch (error) {
+    console.error('[telegram] patch coordinator scenarios failed:', error);
+    res.status(500).json({ error: 'Не удалось сохранить сценарии координаторов' });
+  }
+}
+
+export async function postCoordinatorTelegramScenarioRunNowHandler(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const body = req.body as { scenario_id?: unknown } | undefined;
+  const scenarioId =
+    typeof body?.scenario_id === 'string' ? body.scenario_id.trim() : '';
+  if (!COORDINATOR_SCENARIO_IDS.has(scenarioId as CoordinatorTelegramScenarioId)) {
+    res.status(400).json({
+      error:
+        'Укажите scenario_id: assignment | missing_need_tomorrow | missing_need_today | week_list',
+    });
+    return;
+  }
+  try {
+    const result = await runCoordinatorTelegramScenarioNow(
+      scenarioId as CoordinatorTelegramScenarioId,
+    );
+    if (!result.ok && result.reason === 'assignment_is_event_driven') {
+      res.status(409).json({
+        error:
+          'Сценарий «Назначение» срабатывает при назначении координатора, а не по кнопке «Запустить сейчас».',
+        ...result,
+      });
+      return;
+    }
+    if (!result.ok && result.reason === 'scenario_disabled') {
+      res.status(409).json({ error: 'Сценарий выключен. Включите его и сохраните.', ...result });
+      return;
+    }
+    res.json(result);
+  } catch (error) {
+    console.error('[telegram] run coordinator scenario failed:', error);
     const mapped = errorToStatus(error);
     res.status(mapped.status).json({ error: mapped.message });
   }

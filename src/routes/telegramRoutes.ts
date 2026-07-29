@@ -1,14 +1,17 @@
 import { Router } from 'express';
 import {
   deleteTelegramChatHandler,
+  getCoordinatorTelegramScenariosHandler,
   getTelegramChatsHandler,
   getTelegramDispatchPreviewPrayerHandler,
   getTelegramDispatchRecipientsHandler,
   getTelegramDispatchSettingsHandler,
   getTelegramMailingMessengerChatsHandler,
   getTelegramSettingsHandler,
+  patchCoordinatorTelegramScenariosHandler,
   patchTelegramDispatchSettingsHandler,
   patchTelegramSettingsHandler,
+  postCoordinatorTelegramScenarioRunNowHandler,
   postTelegramChatHandler,
   postTelegramChatRefreshHandler,
   postTelegramDispatchRunNowHandler,
@@ -31,6 +34,9 @@ router.patch('/dispatch/settings', patchTelegramDispatchSettingsHandler);
 router.get('/dispatch/recipients', getTelegramDispatchRecipientsHandler);
 router.get('/dispatch/preview-prayer', getTelegramDispatchPreviewPrayerHandler);
 router.post('/dispatch/run-now', postTelegramDispatchRunNowHandler);
+router.get('/coordinator-scenarios', getCoordinatorTelegramScenariosHandler);
+router.patch('/coordinator-scenarios', patchCoordinatorTelegramScenariosHandler);
+router.post('/coordinator-scenarios/run-now', postCoordinatorTelegramScenarioRunNowHandler);
 router.post('/test-connection', postTelegramTestConnectionHandler);
 router.post('/test-proxy', postTelegramTestProxyHandler);
 router.post('/send', postTelegramSendHandler);
