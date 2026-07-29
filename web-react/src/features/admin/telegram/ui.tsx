@@ -174,12 +174,14 @@ export function StatusChip({
 
 export function SetupStepRow({
   done,
+  step,
   title,
   hint,
   actionLabel,
   onAction,
 }: {
   done: boolean;
+  step?: number;
   title: string;
   hint: string;
   actionLabel?: string;
@@ -198,7 +200,7 @@ export function SetupStepRow({
           }`}
           aria-hidden
         >
-          {done ? <LuCheck className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+          {done ? <LuCheck className="h-3.5 w-3.5" strokeWidth={3} /> : (step ?? null)}
         </span>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-stone-900">{title}</p>
@@ -213,6 +215,8 @@ export function SetupStepRow({
         >
           {actionLabel}
         </button>
+      ) : done ? (
+        <span className="shrink-0 text-xs font-medium text-emerald-700">Готово</span>
       ) : null}
     </div>
   );

@@ -222,6 +222,7 @@ export function TelegramSettingsSection() {
   }, [dispatchQ.data]);
 
   function goToSection(next: TgSection) {
+    setNote(null);
     setSearchParams(
       (prev) => {
         const params = new URLSearchParams(prev);
@@ -236,6 +237,7 @@ export function TelegramSettingsSection() {
   }
 
   function goToProgramPanel(next: ProgramPanel) {
+    setNote(null);
     setSearchParams(
       (prev) => {
         const params = new URLSearchParams(prev);
@@ -740,6 +742,16 @@ export function TelegramSettingsSection() {
     (form.service_plan_mailing_destinations.telegram_chat_ids.length > 0 ||
       form.service_plan_mailing_destinations.messenger_conversation_ids.length > 0);
 
+  const setupSteps = [
+    tokenReady,
+    registryChats.length > 0,
+    rolesAssigned,
+    prayerConfigured,
+    programConfigured,
+  ];
+  const setupDoneCount = setupSteps.filter(Boolean).length;
+  const setupTotal = setupSteps.length;
+
   return (
     <div className={`mx-auto space-y-5 ${section === 'program' ? 'max-w-5xl' : 'max-w-4xl'}`}>
       <StatusNote note={note} />
@@ -780,8 +792,8 @@ export function TelegramSettingsSection() {
               />
               <StatusChip
                 ok={recipientsCount > 0}
-                okLabel={`${recipientsCount} получат.`}
-                badLabel="Нет получателей"
+                okLabel={`${recipientsCount} с Telegram ID`}
+                badLabel="Нет Telegram ID"
                 warn={recipientsCount === 0}
               />
             </div>
@@ -826,11 +838,32 @@ export function TelegramSettingsSection() {
         {section === 'overview' ? (
           <div className="grid gap-5 lg:grid-cols-2">
             <div className="space-y-3 rounded-2xl border border-stone-200/90 bg-stone-50/40 p-4">
-              <PanelIntro title="Настройка">
+              <PanelIntro
+                title="Настройка"
+                action={
+                  <span className="text-xs font-semibold tabular-nums text-stone-600">
+                    {setupDoneCount}/{setupTotal}
+                  </span>
+                }
+              >
                 <p>Пройдите шаги по порядку — так быстрее запустить рассылки.</p>
               </PanelIntro>
+              <div
+                className="h-1.5 overflow-hidden rounded-full bg-stone-200/90"
+                role="progressbar"
+                aria-valuenow={setupDoneCount}
+                aria-valuemin={0}
+                aria-valuemax={setupTotal}
+                aria-label="Прогресс настройки Telegram"
+              >
+                <div
+                  className="h-full rounded-full bg-[#7B2D3F] transition-[width] duration-300"
+                  style={{ width: `${(setupDoneCount / setupTotal) * 100}%` }}
+                />
+              </div>
               <div className="space-y-2">
                 <SetupStepRow
+                  step={1}
                   done={tokenReady}
                   title="Бот подключён"
                   hint="Токен от @BotFather и проверка подключения"
@@ -838,6 +871,7 @@ export function TelegramSettingsSection() {
                   onAction={() => goToSection('bot')}
                 />
                 <SetupStepRow
+                  step={2}
                   done={registryChats.length > 0}
                   title="Чаты в реестре"
                   hint="Группы и каналы, куда бот может писать"
@@ -845,6 +879,7 @@ export function TelegramSettingsSection() {
                   onAction={() => goToSection('chats')}
                 />
                 <SetupStepRow
+                  step={3}
                   done={rolesAssigned}
                   title="Роли назначены"
                   hint="Молитва, координаторы, запасной чат"
@@ -852,6 +887,7 @@ export function TelegramSettingsSection() {
                   onAction={() => goToSection('chats')}
                 />
                 <SetupStepRow
+                  step={4}
                   done={prayerConfigured}
                   title="Молитва и личная рассылка"
                   hint="Шаблон текста или планировщик личных сообщений"
@@ -859,6 +895,7 @@ export function TelegramSettingsSection() {
                   onAction={() => goToSection('prayer')}
                 />
                 <SetupStepRow
+                  step={5}
                   done={programConfigured}
                   title="Авторассылка программы"
                   hint="Плановая рассылка по расписанию"
@@ -895,7 +932,7 @@ export function TelegramSettingsSection() {
                   }}
                 >
                   <LuUsers className="h-4 w-4 shrink-0" aria-hidden />
-                  {syncProfilesMut.isPending ? 'Синхронизация…' : 'Синхронизировать @ники'}
+                  {syncProfilesMut.isPending ? 'Синхронизация…' : 'Синхронизировать профили'}
                 </button>
                 <button
                   type="button"
