@@ -74,9 +74,10 @@ export async function saveCoordinatorTelegramScenarios(
   ) {
     next.runtimeState = current.runtimeState ?? {};
   }
+  // start_date обязателен (NOT NULL): Postgres проверяет INSERT до ON CONFLICT.
   await query(
-    `INSERT INTO global_settings (id, telegram_coordinator_scenarios_json)
-     VALUES (1, $1::jsonb)
+    `INSERT INTO global_settings (id, start_date, telegram_coordinator_scenarios_json)
+     VALUES (1, CURRENT_DATE, $1::jsonb)
      ON CONFLICT (id) DO UPDATE SET
        telegram_coordinator_scenarios_json = EXCLUDED.telegram_coordinator_scenarios_json`,
     [JSON.stringify(next)],
@@ -110,9 +111,10 @@ async function patchRuntimeState(
   const current = await loadCoordinatorTelegramScenarios();
   const next = mutator(current);
   await query(
-    `UPDATE global_settings
-     SET telegram_coordinator_scenarios_json = $1::jsonb
-     WHERE id = 1`,
+    `INSERT INTO global_settings (id, start_date, telegram_coordinator_scenarios_json)
+     VALUES (1, CURRENT_DATE, $1::jsonb)
+     ON CONFLICT (id) DO UPDATE SET
+       telegram_coordinator_scenarios_json = EXCLUDED.telegram_coordinator_scenarios_json`,
     [JSON.stringify(next)],
   );
 }
