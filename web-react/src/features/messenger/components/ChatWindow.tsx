@@ -19,6 +19,7 @@ import {
   isAssistantBotMessage,
   isAssistantMessengerChannel,
 } from '../messengerChannelKinds';
+import { extractMentionMemberIdsFromText } from '../mentionUtils';
 import { isAppAdministratorRole } from '../manage/messengerManageAccess';
 import { useCallStore } from '../../calls/callStore';
 import { requestCallNotificationsFromUserGesture } from '../../calls/incomingCallBackground';
@@ -79,6 +80,10 @@ export function ChatWindow({
   const [chatMeta, setChatMeta] = useState<api.ConversationMeta | null>(null);
   const [pinnedMessages, setPinnedMessages] = useState<api.MessageWithSender[]>([]);
   const [mentionList, setMentionList] = useState<{ id: number; label: string }[]>([]);
+  /** Подписи участников чата (включая себя) — для отображения `@[id]`. */
+  const [participantLabels, setParticipantLabels] = useState<Record<number, string>>({});
+  /** Подписи упомянутых вне списка участников (рассылка и т.п.). */
+  const [extraMentionLabels, setExtraMentionLabels] = useState<Record<number, string>>({});
   /** Все member_id в группе/канале — для подзаголовка «N в сети» (как в Telegram). */
   const [groupParticipantIds, setGroupParticipantIds] = useState<number[]>([]);
   /** Готовность "пакета" данных шапки/инпута для предотвращения визуального дёргания на мобиле. */
@@ -204,6 +209,8 @@ export function ChatWindow({
       setChatMeta(null);
       setPinnedMessages([]);
       setMentionList([]);
+      setParticipantLabels({});
+      setExtraMentionLabels({});
       setGroupParticipantIds([]);
       setChatHeadReady(true);
       return;
@@ -220,13 +227,18 @@ export function ChatWindow({
       ]);
       const me = useChatStore.getState().currentMemberId;
       const nextParticipantIds = participantsRes.map((p) => p.member_id);
+      const nextParticipantLabels: Record<number, string> = {};
+      for (const p of participantsRes) {
+        const label =
+          (p.first_name ? `${p.first_name} ${p.last_name ?? ''}`.trim() : p.name) ||
+          `Участник ${p.member_id}`;
+        nextParticipantLabels[p.member_id] = label;
+      }
       const nextMentionList = participantsRes
         .filter((p) => me == null || p.member_id !== me)
         .map((p) => ({
           id: p.member_id,
-          label:
-            (p.first_name ? `${p.first_name} ${p.last_name ?? ''}`.trim() : p.name) ||
-            `Участник ${p.member_id}`,
+          label: nextParticipantLabels[p.member_id] || `Участник ${p.member_id}`,
         }));
 
       if (!alive) return;
@@ -234,6 +246,8 @@ export function ChatWindow({
       setChatMeta(metaRes);
       setPinnedMessages(pinsRes);
       setGroupParticipantIds(nextParticipantIds);
+      setParticipantLabels(nextParticipantLabels);
+      setExtraMentionLabels({});
       setMentionList(nextMentionList);
       setChatHeadReady(true);
     };
@@ -243,6 +257,8 @@ export function ChatWindow({
       setChatMeta(null);
       setPinnedMessages([]);
       setMentionList([]);
+      setParticipantLabels({});
+      setExtraMentionLabels({});
       setGroupParticipantIds([]);
       setChatHeadReady(true);
     });
@@ -253,12 +269,102 @@ export function ChatWindow({
   }, [conversationId, isDraft, conv?.type, pinnedBump]);
 
   const participantLabelById = useMemo(() => {
-    const m: Record<number, string> = {};
-    for (const p of mentionList) {
-      m[p.id] = p.label;
+    return { ...participantLabels, ...extraMentionLabels };
+  }, [participantLabels, extraMentionLabels]);
+
+  /** Подтянуть имя+фамилию для `@[id]`, которых нет среди участников канала. */
+  useEffect(() => {
+    if (isDraft) return;
+    const known = new Set(Object.keys(participantLabelById).map((k) => Number(k)));
+    const missing = new Set<number>();
+
+    const collectFromMessage = (msg: api.MessageWithSender | undefined) => {
+      if (!msg) return;
+      for (const id of extractMentionMemberIdsFromText(String(msg.content ?? ''))) {
+        if (!known.has(id)) missing.add(id);
+      }
+      const payload = (msg.payload ?? {}) as Record<string, unknown>;
+      const fromPayload = payload.mention_member_ids;
+      if (Array.isArray(fromPayload)) {
+        for (const raw of fromPayload) {
+          const id = Number(raw);
+          if (Number.isInteger(id) && id > 0 && !known.has(id)) missing.add(id);
+        }
+      }
+      const labels = payload.mention_labels;
+      if (labels && typeof labels === 'object' && !Array.isArray(labels)) {
+        for (const [k, v] of Object.entries(labels as Record<string, unknown>)) {
+          const id = Number(k);
+          const label = String(v ?? '').trim();
+          if (Number.isInteger(id) && id > 0 && label && !known.has(id)) {
+            // уже есть подпись в payload — применим без запроса
+            missing.delete(id);
+          }
+        }
+      }
+    };
+
+    for (const msg of messages) collectFromMessage(msg);
+    for (const msg of pinnedMessages) collectFromMessage(msg);
+
+    // Подписи из payload сообщений — сразу в extraMentionLabels
+    const fromPayloadLabels: Record<number, string> = {};
+    const absorbPayloadLabels = (msg: api.MessageWithSender | undefined) => {
+      if (!msg) return;
+      const labels = (msg.payload as Record<string, unknown> | undefined)?.mention_labels;
+      if (!labels || typeof labels !== 'object' || Array.isArray(labels)) return;
+      for (const [k, v] of Object.entries(labels as Record<string, unknown>)) {
+        const id = Number(k);
+        const label = String(v ?? '').trim();
+        if (Number.isInteger(id) && id > 0 && label && !known.has(id)) {
+          fromPayloadLabels[id] = label;
+        }
+      }
+    };
+    for (const msg of messages) absorbPayloadLabels(msg);
+    for (const msg of pinnedMessages) absorbPayloadLabels(msg);
+
+    const payloadIds = Object.keys(fromPayloadLabels).map(Number);
+    if (payloadIds.length > 0) {
+      setExtraMentionLabels((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const id of payloadIds) {
+          if (!next[id] && fromPayloadLabels[id]) {
+            next[id] = fromPayloadLabels[id];
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
     }
-    return m;
-  }, [mentionList]);
+
+    const toFetch = [...missing].filter((id) => !fromPayloadLabels[id]);
+    if (toFetch.length === 0) return;
+
+    let alive = true;
+    void api.fetchMessengerMemberLabels(toFetch).then((labels) => {
+      if (!alive) return;
+      const entries = Object.entries(labels);
+      if (entries.length === 0) return;
+      setExtraMentionLabels((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const [idStr, label] of entries) {
+          const id = Number(idStr);
+          if (!next[id] && label) {
+            next[id] = label;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    });
+
+    return () => {
+      alive = false;
+    };
+  }, [isDraft, messages, pinnedMessages, participantLabelById]);
 
   /** Сброс announcer-состояния при переключении чата. */
   useEffect(() => {

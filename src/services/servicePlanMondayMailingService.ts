@@ -154,7 +154,7 @@ export function isInternalProfileUsername(username: string | null | undefined): 
 /**
  * Как показывать человека в тексте рассылки.
  * - name: «Иван Иванов»
- * - messenger: `@[57]` (в чате отобразится как @Имя и уйдёт уведомление)
+ * - messenger: `@[57]` (в чате подтянется имя/фамилия и уйдёт уведомление)
  * - telegram: `@username` из Telegram, иначе обычное имя (без @member-N)
  */
 export function formatMailingPerson(
@@ -1296,11 +1296,17 @@ export async function runServicePlanMondayMailing(options?: {
 
   try {
     await ensureServicePlanPlanningMessengerChannel();
+    const mentionLabels: Record<string, string> = {};
+    for (const [id, ref] of memberMap) {
+      const label = String(ref.displayName ?? '').trim();
+      if (label) mentionLabels[String(id)] = label;
+    }
     await postServicePlanMondayMailingMessengerNotification({
       content: textMessenger,
       serviceDateYmd: plan.service_date,
       planId,
       shareToken: plan.share_token,
+      mentionLabels,
     });
     messengerOk = true;
   } catch (e) {

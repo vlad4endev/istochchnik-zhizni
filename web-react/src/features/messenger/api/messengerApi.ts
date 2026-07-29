@@ -641,6 +641,32 @@ export async function fetchMessengerMember(memberId: number): Promise<SearchMemb
   }
 }
 
+/** Имя+фамилия по id для отображения `@[id]` (в т.ч. вне списка участников чата). */
+export async function fetchMessengerMemberLabels(
+  memberIds: number[],
+): Promise<Record<number, string>> {
+  const ids = Array.from(
+    new Set(memberIds.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0)),
+  ).slice(0, 100);
+  if (ids.length === 0) return {};
+  try {
+    const { data } = await apiClient.post<{ labels?: Record<string, string> }>(
+      `${BASE}/members/labels`,
+      { ids },
+    );
+    const raw = data?.labels ?? {};
+    const out: Record<number, string> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      const id = Number(k);
+      const label = String(v ?? '').trim();
+      if (Number.isInteger(id) && id > 0 && label) out[id] = label;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 export async function searchMessages(conversationId: string, q: string, limit = 50): Promise<MessageWithSender[]> {
   const { data } = await apiClient.get<MessageWithSender[]>(
     `${BASE}/conversations/${conversationId}/search`,

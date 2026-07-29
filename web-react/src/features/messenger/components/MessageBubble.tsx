@@ -463,6 +463,20 @@ function MessageBubbleInner({
   const pointerMovedRef = useRef(false);
   const suppressMenuUntilRef = useRef(0);
 
+  /** Подписи из payload (рассылка) + участники чата → @Имя Фамилия для @[id]. */
+  const mentionNamesById = useMemo(() => {
+    const out: Record<number, string> = { ...(participantLabelById ?? {}) };
+    const raw = (message.payload as Record<string, unknown> | undefined)?.mention_labels;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+        const id = Number(k);
+        const label = String(v ?? '').trim();
+        if (Number.isInteger(id) && id > 0 && label) out[id] = label;
+      }
+    }
+    return out;
+  }, [participantLabelById, message.payload]);
+
   const isOptimistic = message.id.startsWith('temp-');
   /** Number() — WS/API иногда отдают sender_id строкой; иначе «свои» пункты меню пропадают.
    *  sender_id 0/null — системные (рассылка): Number(null)===0 ломало isMine/canDelete. */
@@ -1155,7 +1169,7 @@ function MessageBubbleInner({
             </div>
             {caption ? (
               <div className={['px-3 py-2 text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
-                <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
+                <MentionRichText text={caption} namesById={mentionNamesById} isMine={isMine} />
               </div>
             ) : null}
           </div>
@@ -1321,7 +1335,7 @@ function MessageBubbleInner({
           )}
           {caption ? (
             <div className={['px-3 py-2 text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
-              <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
+              <MentionRichText text={caption} namesById={mentionNamesById} isMine={isMine} />
             </div>
           ) : null}
         </div>
@@ -1348,7 +1362,7 @@ function MessageBubbleInner({
           />
           {caption ? (
             <div className={['text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
-              <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
+              <MentionRichText text={caption} namesById={mentionNamesById} isMine={isMine} />
             </div>
           ) : null}
         </div>
@@ -1444,7 +1458,7 @@ function MessageBubbleInner({
             )}
             {caption ? (
               <div className={['px-3 py-2 text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
-                <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
+                <MentionRichText text={caption} namesById={mentionNamesById} isMine={isMine} />
               </div>
             ) : null}
           </div>
@@ -1548,7 +1562,7 @@ function MessageBubbleInner({
                 isMine ? 'border-white/10 text-white/95' : 'border-stone-100 text-[var(--text)]',
               ].join(' ')}
             >
-              <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
+              <MentionRichText text={caption} namesById={mentionNamesById} isMine={isMine} />
             </div>
           ) : null}
         </div>
@@ -1567,7 +1581,7 @@ function MessageBubbleInner({
       return renderAssistantMessageContent(assistantText, { isMine });
     }
     return (
-      <MentionRichText text={message.content} namesById={participantLabelById} isMine={isMine} />
+      <MentionRichText text={message.content} namesById={mentionNamesById} isMine={isMine} />
     );
   };
 
@@ -2107,7 +2121,7 @@ function MessageBubbleInner({
                   'text-[var(--text)]',
                 ].join(' ')}
               >
-                <MentionRichText text={videoNoteCaption} namesById={participantLabelById} isMine={isMine} />
+                <MentionRichText text={videoNoteCaption} namesById={mentionNamesById} isMine={isMine} />
               </div>
             ) : null}
             {message.is_pinned ? (
