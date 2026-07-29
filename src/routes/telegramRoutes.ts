@@ -3,6 +3,7 @@ import {
   getTelegramDispatchPreviewPrayerHandler,
   getTelegramDispatchRecipientsHandler,
   getTelegramDispatchSettingsHandler,
+  getTelegramMailingMessengerChatsHandler,
   getTelegramSettingsHandler,
   patchTelegramDispatchSettingsHandler,
   patchTelegramSettingsHandler,
@@ -16,6 +17,7 @@ const router = Router();
 
 router.get('/settings', getTelegramSettingsHandler);
 router.patch('/settings', patchTelegramSettingsHandler);
+router.get('/mailing-messenger-chats', getTelegramMailingMessengerChatsHandler);
 router.get('/dispatch/settings', getTelegramDispatchSettingsHandler);
 router.patch('/dispatch/settings', patchTelegramDispatchSettingsHandler);
 router.get('/dispatch/recipients', getTelegramDispatchRecipientsHandler);

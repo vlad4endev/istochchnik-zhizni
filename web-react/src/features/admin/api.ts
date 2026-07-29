@@ -499,6 +499,19 @@ export interface TelegramProxyStatus {
   env_configured: boolean;
 }
 
+export interface ServicePlanMailingDestinations {
+  telegram_chat_ids: string[];
+  messenger_conversation_ids: string[];
+}
+
+export interface ServicePlanMailingMessengerChat {
+  id: string;
+  title: string;
+  type: 'channel' | 'group';
+  kind: string | null;
+  recommended_for: Array<'mailing' | 'published'>;
+}
+
 export interface TelegramSettingsResponse {
   enabled: boolean;
   bot_token_masked: string | null;
@@ -509,6 +522,12 @@ export interface TelegramSettingsResponse {
   service_plan_chat_id: string | null;
   service_plan_template: string | null;
   service_plan_published_chat_id: string | null;
+  /** Telegram-чат «Медийка» */
+  media_chat_id: string | null;
+  /** Куда слать плановую рассылку */
+  service_plan_mailing_destinations?: ServicePlanMailingDestinations;
+  /** Куда слать уведомление при публикации */
+  service_plan_published_destinations?: ServicePlanMailingDestinations;
   /** Шаблон текста при публикации финальной программы */
   service_plan_published_template: string | null;
   /** Текст кнопки со ссылкой в уведомлении о публикации */
@@ -588,6 +607,9 @@ export async function patchTelegramSettings(body: {
   service_plan_chat_id?: string | null;
   service_plan_template?: string | null;
   service_plan_published_chat_id?: string | null;
+  media_chat_id?: string | null;
+  service_plan_mailing_destinations?: ServicePlanMailingDestinations | null;
+  service_plan_published_destinations?: ServicePlanMailingDestinations | null;
   service_plan_published_template?: string | null;
   service_plan_published_button_text?: string | null;
   service_plan_mailing_enabled?: boolean;
@@ -599,6 +621,15 @@ export async function patchTelegramSettings(body: {
 }): Promise<TelegramSettingsResponse> {
   const { data } = await apiClient.patch<TelegramSettingsResponse>('/api/telegram/settings', body);
   return data;
+}
+
+export async function fetchTelegramMailingMessengerChats(): Promise<
+  ServicePlanMailingMessengerChat[]
+> {
+  const { data } = await apiClient.get<{ chats: ServicePlanMailingMessengerChat[] }>(
+    '/api/telegram/mailing-messenger-chats',
+  );
+  return data.chats ?? [];
 }
 
 export async function runServicePlanMondayMailing(body?: {
