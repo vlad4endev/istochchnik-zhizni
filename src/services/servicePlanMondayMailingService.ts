@@ -1308,16 +1308,47 @@ export async function runServicePlanMondayMailing(options?: {
   }
 
   try {
-    const chatOverride =
-      tgSettings?.service_plan_chat_id?.trim() ||
-      process.env.TELEGRAM_SERVICE_PLAN_CHAT_ID?.trim() ||
-      null;
-    await sendTelegramByPurpose({
-      purpose: 'default',
-      text,
-      chatIdOverride: chatOverride,
-    });
-    telegramOk = true;
+    const chatIds =
+      (tgSettings?.service_plan_chat_ids?.length
+        ? tgSettings.service_plan_chat_ids
+        : null) ??
+      (tgSettings?.service_plan_chat_id?.trim()
+        ? [tgSettings.service_plan_chat_id.trim()]
+        : null) ??
+      (process.env.TELEGRAM_SERVICE_PLAN_CHAT_ID?.trim()
+        ? [process.env.TELEGRAM_SERVICE_PLAN_CHAT_ID.trim()]
+        : []);
+
+    if (chatIds.length === 0) {
+      await sendTelegramByPurpose({
+        purpose: 'default',
+        text,
+      });
+      telegramOk = true;
+    } else {
+      let anyOk = false;
+      let lastError: unknown = null;
+      for (const chatId of chatIds) {
+        try {
+          await sendTelegramByPurpose({
+            purpose: 'default',
+            text,
+            chatIdOverride: chatId,
+          });
+          anyOk = true;
+        } catch (e) {
+          lastError = e;
+          console.error(`[service-plan-monday-mailing] telegram send to ${chatId} failed:`, e);
+        }
+      }
+      if (anyOk) {
+        telegramOk = true;
+      } else if (lastError) {
+        throw lastError;
+      } else {
+        throw new Error('telegram_missing_chat');
+      }
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     // Telegram optional if disabled / missing chat — не валим всю рассылку
@@ -1377,11 +1408,17 @@ export async function notifyServicePlanPublishedTelegram(input: {
     console.warn('[service-plan-published] telegram settings load failed:', e);
   }
 
-  const chatId =
-    settings?.service_plan_published_chat_id?.trim() ||
-    process.env.TELEGRAM_SERVICE_PLAN_PUBLISHED_CHAT_ID?.trim() ||
-    null;
-  if (!chatId) {
+  const chatIds =
+    (settings?.service_plan_published_chat_ids?.length
+      ? settings.service_plan_published_chat_ids
+      : null) ??
+    (settings?.service_plan_published_chat_id?.trim()
+      ? [settings.service_plan_published_chat_id.trim()]
+      : null) ??
+    (process.env.TELEGRAM_SERVICE_PLAN_PUBLISHED_CHAT_ID?.trim()
+      ? [process.env.TELEGRAM_SERVICE_PLAN_PUBLISHED_CHAT_ID.trim()]
+      : []);
+  if (chatIds.length === 0) {
     return { ok: false, skipped: true, reason: 'missing_published_chat' };
   }
 
@@ -1482,12 +1519,37 @@ export async function notifyServicePlanPublishedTelegram(input: {
   }
 
   try {
-    const sent = await sendTelegramToChat({
-      chatId,
-      text,
-      inlineUrlButton: { text: buttonText, url: shareUrl },
-    });
-    return { ok: true, chat_id: sent.chat_id, text };
+    let anyOk = false;
+    let lastChatId: string | undefined;
+    let lastError: unknown = null;
+    for (const chatId of chatIds) {
+      try {
+        const sent = await sendTelegramToChat({
+          chatId,
+          text,
+          inlineUrlButton: { text: buttonText, url: shareUrl },
+        });
+        anyOk = true;
+        lastChatId = sent.chat_id;
+      } catch (e) {
+        lastError = e;
+        console.error(`[service-plan-published] telegram send to ${chatId} failed:`, e);
+      }
+    }
+    if (anyOk) {
+      return { ok: true, chat_id: lastChatId, text };
+    }
+    const msg = lastError instanceof Error ? lastError.message : String(lastError ?? 'delivery_failed');
+    if (
+      msg === 'telegram_disabled' ||
+      msg === 'telegram_missing_token' ||
+      msg === 'telegram_missing_chat'
+    ) {
+      console.warn(`[service-plan-published] telegram skipped: ${msg}`);
+      return { ok: false, skipped: true, reason: msg };
+    }
+    console.error('[service-plan-published] telegram send failed:', lastError);
+    return { ok: false, reason: msg };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (

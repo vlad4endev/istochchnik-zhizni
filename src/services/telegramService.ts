@@ -31,18 +31,30 @@ export interface TelegramSettings {
   coordinator_chat_id: string | null;
   default_chat_id: string | null;
   prayer_template: string | null;
-  /** Chat id для понедельничной рассылки программы служения */
+  /** Chat id для понедельничной рассылки программы служения (первый из списка / legacy) */
   service_plan_chat_id: string | null;
+  /** Несколько чатов для плановой рассылки программы */
+  service_plan_chat_ids: string[];
   /** Шаблон текста рассылки программы ({{sunday_heading}}, {{preacher}}, …) */
   service_plan_template: string | null;
-  /** Chat id для уведомления «финальная программа опубликована» */
+  /** Chat id для уведомления «финальная программа опубликована» (первый / legacy) */
   service_plan_published_chat_id: string | null;
+  /** Несколько чатов для уведомления о публикации */
+  service_plan_published_chat_ids: string[];
   /** Шаблон текста при публикации программы (те же {{плейсхолдеры}}, что у рассылки) */
   service_plan_published_template: string | null;
   /** Текст inline-кнопки со ссылкой на программу */
   service_plan_published_button_text: string | null;
   has_bot_token: boolean;
   proxy: TelegramProxyStatus;
+}
+
+export interface TelegramChatSnapshot {
+  chat_id: string;
+  title: string | null;
+  type: string | null;
+  username: string | null;
+  description: string | null;
 }
 
 export interface TelegramDispatchRecipient {
@@ -89,8 +101,10 @@ export interface TelegramSettingsUpdate {
   default_chat_id?: string | null;
   prayer_template?: string | null;
   service_plan_chat_id?: string | null;
+  service_plan_chat_ids?: string[] | null;
   service_plan_template?: string | null;
   service_plan_published_chat_id?: string | null;
+  service_plan_published_chat_ids?: string[] | null;
   service_plan_published_template?: string | null;
   service_plan_published_button_text?: string | null;
   /** Включить исходящий HTTPS-прокси для всех запросов к api.telegram.org */
@@ -110,6 +124,27 @@ function normalizeOptionalString(value: unknown): string | null {
   }
   const t = value.trim();
   return t.length > 0 ? t : null;
+}
+
+function normalizeChatIdsArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of value) {
+    const id =
+      typeof item === 'number' && Number.isFinite(item)
+        ? String(Math.trunc(item))
+        : normalizeOptionalString(item);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function coalesceChatIds(ids: string[] | null | undefined, legacy: string | null): string[] {
+  if (ids && ids.length > 0) return ids;
+  return legacy ? [legacy] : [];
 }
 
 function maskBotToken(raw: string | null): string | null {
@@ -473,6 +508,12 @@ async function ensureSettingsColumns(): Promise<void> {
   await query(
     'ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_proxy_enabled BOOLEAN NOT NULL DEFAULT FALSE',
   );
+  await query(
+    `ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_chat_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
+  );
+  await query(
+    `ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_published_chat_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
+  );
 }
 
 async function ensureMembersTelegramColumn(): Promise<void> {
@@ -491,8 +532,10 @@ async function readSettingsRow(): Promise<{
   telegram_default_chat_id: string | null;
   telegram_prayer_template: string | null;
   telegram_service_plan_chat_id: string | null;
+  telegram_service_plan_chat_ids: string[];
   telegram_service_plan_template: string | null;
   telegram_service_plan_published_chat_id: string | null;
+  telegram_service_plan_published_chat_ids: string[];
   telegram_service_plan_published_template: string | null;
   telegram_service_plan_published_button_text: string | null;
   telegram_dispatch_enabled: boolean;
@@ -520,8 +563,10 @@ async function readSettingsRow(): Promise<{
        telegram_default_chat_id,
        telegram_prayer_template,
        telegram_service_plan_chat_id,
+       telegram_service_plan_chat_ids,
        telegram_service_plan_template,
        telegram_service_plan_published_chat_id,
+       telegram_service_plan_published_chat_ids,
        telegram_service_plan_published_template,
        telegram_service_plan_published_button_text,
        telegram_dispatch_enabled,
@@ -545,8 +590,10 @@ async function readSettingsRow(): Promise<{
         telegram_default_chat_id?: string | null;
         telegram_prayer_template?: string | null;
         telegram_service_plan_chat_id?: string | null;
+        telegram_service_plan_chat_ids?: unknown;
         telegram_service_plan_template?: string | null;
         telegram_service_plan_published_chat_id?: string | null;
+        telegram_service_plan_published_chat_ids?: unknown;
         telegram_service_plan_published_template?: string | null;
         telegram_service_plan_published_button_text?: string | null;
         telegram_dispatch_enabled?: boolean;
@@ -560,6 +607,8 @@ async function readSettingsRow(): Promise<{
         telegram_proxy_enabled?: boolean;
       }
     | undefined;
+  const legacyServicePlan = normalizeOptionalString(row?.telegram_service_plan_chat_id);
+  const legacyPublished = normalizeOptionalString(row?.telegram_service_plan_published_chat_id);
   return {
     telegram_enabled: Boolean(row?.telegram_enabled),
     telegram_bot_token: normalizeOptionalString(row?.telegram_bot_token),
@@ -567,14 +616,20 @@ async function readSettingsRow(): Promise<{
     telegram_coordinator_chat_id: normalizeOptionalString(row?.telegram_coordinator_chat_id),
     telegram_default_chat_id: normalizeOptionalString(row?.telegram_default_chat_id),
     telegram_prayer_template: normalizeOptionalString(row?.telegram_prayer_template),
-    telegram_service_plan_chat_id: normalizeOptionalString(row?.telegram_service_plan_chat_id),
+    telegram_service_plan_chat_id: legacyServicePlan,
+    telegram_service_plan_chat_ids: coalesceChatIds(
+      normalizeChatIdsArray(row?.telegram_service_plan_chat_ids),
+      legacyServicePlan,
+    ),
     telegram_service_plan_template:
       typeof row?.telegram_service_plan_template === 'string' &&
       row.telegram_service_plan_template.trim().length > 0
         ? row.telegram_service_plan_template.replace(/\r\n/g, '\n')
         : null,
-    telegram_service_plan_published_chat_id: normalizeOptionalString(
-      row?.telegram_service_plan_published_chat_id,
+    telegram_service_plan_published_chat_id: legacyPublished,
+    telegram_service_plan_published_chat_ids: coalesceChatIds(
+      normalizeChatIdsArray(row?.telegram_service_plan_published_chat_ids),
+      legacyPublished,
     ),
     telegram_service_plan_published_template:
       typeof row?.telegram_service_plan_published_template === 'string' &&
@@ -627,9 +682,12 @@ export async function getTelegramSettings(): Promise<TelegramSettings> {
     coordinator_chat_id: row.telegram_coordinator_chat_id,
     default_chat_id: row.telegram_default_chat_id,
     prayer_template: row.telegram_prayer_template,
-    service_plan_chat_id: row.telegram_service_plan_chat_id,
+    service_plan_chat_id: row.telegram_service_plan_chat_ids[0] ?? row.telegram_service_plan_chat_id,
+    service_plan_chat_ids: row.telegram_service_plan_chat_ids,
     service_plan_template: row.telegram_service_plan_template,
-    service_plan_published_chat_id: row.telegram_service_plan_published_chat_id,
+    service_plan_published_chat_id:
+      row.telegram_service_plan_published_chat_ids[0] ?? row.telegram_service_plan_published_chat_id,
+    service_plan_published_chat_ids: row.telegram_service_plan_published_chat_ids,
     service_plan_published_template: row.telegram_service_plan_published_template,
     service_plan_published_button_text: row.telegram_service_plan_published_button_text,
     has_bot_token: Boolean(botToken),
@@ -655,6 +713,27 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       nextProxyUrl = normalizeAndValidateProxyUrl(String(input.proxy_url));
     }
   }
+
+  let nextServicePlanIds = current.telegram_service_plan_chat_ids;
+  let nextServicePlanLegacy = current.telegram_service_plan_chat_id;
+  if (input.service_plan_chat_ids !== undefined) {
+    nextServicePlanIds = normalizeChatIdsArray(input.service_plan_chat_ids);
+    nextServicePlanLegacy = nextServicePlanIds[0] ?? null;
+  } else if (input.service_plan_chat_id !== undefined) {
+    nextServicePlanLegacy = normalizeOptionalString(input.service_plan_chat_id);
+    nextServicePlanIds = nextServicePlanLegacy ? [nextServicePlanLegacy] : [];
+  }
+
+  let nextPublishedIds = current.telegram_service_plan_published_chat_ids;
+  let nextPublishedLegacy = current.telegram_service_plan_published_chat_id;
+  if (input.service_plan_published_chat_ids !== undefined) {
+    nextPublishedIds = normalizeChatIdsArray(input.service_plan_published_chat_ids);
+    nextPublishedLegacy = nextPublishedIds[0] ?? null;
+  } else if (input.service_plan_published_chat_id !== undefined) {
+    nextPublishedLegacy = normalizeOptionalString(input.service_plan_published_chat_id);
+    nextPublishedIds = nextPublishedLegacy ? [nextPublishedLegacy] : [];
+  }
+
   const next = {
     telegram_enabled: typeof input.enabled === 'boolean' ? input.enabled : current.telegram_enabled,
     telegram_bot_token:
@@ -679,18 +758,14 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       input.prayer_template !== undefined
         ? normalizeOptionalString(input.prayer_template)
         : current.telegram_prayer_template,
-    telegram_service_plan_chat_id:
-      input.service_plan_chat_id !== undefined
-        ? normalizeOptionalString(input.service_plan_chat_id)
-        : current.telegram_service_plan_chat_id,
+    telegram_service_plan_chat_id: nextServicePlanLegacy,
+    telegram_service_plan_chat_ids: nextServicePlanIds,
     telegram_service_plan_template:
       input.service_plan_template !== undefined
         ? normalizeServicePlanTemplateInput(input.service_plan_template)
         : current.telegram_service_plan_template,
-    telegram_service_plan_published_chat_id:
-      input.service_plan_published_chat_id !== undefined
-        ? normalizeOptionalString(input.service_plan_published_chat_id)
-        : current.telegram_service_plan_published_chat_id,
+    telegram_service_plan_published_chat_id: nextPublishedLegacy,
+    telegram_service_plan_published_chat_ids: nextPublishedIds,
     telegram_service_plan_published_template:
       input.service_plan_published_template !== undefined
         ? normalizeServicePlanTemplateInput(input.service_plan_published_template)
@@ -715,14 +790,16 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_default_chat_id,
        telegram_prayer_template,
        telegram_service_plan_chat_id,
+       telegram_service_plan_chat_ids,
        telegram_service_plan_template,
        telegram_service_plan_published_chat_id,
+       telegram_service_plan_published_chat_ids,
        telegram_service_plan_published_template,
        telegram_service_plan_published_button_text,
        telegram_proxy_enabled,
        telegram_https_proxy
      )
-     VALUES (1, CURRENT_DATE, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     VALUES (1, CURRENT_DATE, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
      ON CONFLICT (id) DO UPDATE
      SET
        telegram_enabled = EXCLUDED.telegram_enabled,
@@ -732,8 +809,10 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
        telegram_default_chat_id = EXCLUDED.telegram_default_chat_id,
        telegram_prayer_template = EXCLUDED.telegram_prayer_template,
        telegram_service_plan_chat_id = EXCLUDED.telegram_service_plan_chat_id,
+       telegram_service_plan_chat_ids = EXCLUDED.telegram_service_plan_chat_ids,
        telegram_service_plan_template = EXCLUDED.telegram_service_plan_template,
        telegram_service_plan_published_chat_id = EXCLUDED.telegram_service_plan_published_chat_id,
+       telegram_service_plan_published_chat_ids = EXCLUDED.telegram_service_plan_published_chat_ids,
        telegram_service_plan_published_template = EXCLUDED.telegram_service_plan_published_template,
        telegram_service_plan_published_button_text = EXCLUDED.telegram_service_plan_published_button_text,
        telegram_proxy_enabled = EXCLUDED.telegram_proxy_enabled,
@@ -746,8 +825,10 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
       next.telegram_default_chat_id,
       next.telegram_prayer_template,
       next.telegram_service_plan_chat_id,
+      next.telegram_service_plan_chat_ids,
       next.telegram_service_plan_template,
       next.telegram_service_plan_published_chat_id,
+      next.telegram_service_plan_published_chat_ids,
       next.telegram_service_plan_published_template,
       next.telegram_service_plan_published_button_text,
       next.telegram_proxy_enabled,
@@ -1105,6 +1186,56 @@ async function fetchTelegramApiJson(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/**
+ * Запрашивает getChat у Telegram Bot API и нормализует поля для реестра чатов.
+ */
+export async function fetchTelegramChatSnapshot(chatIdRaw: string): Promise<TelegramChatSnapshot> {
+  const cfg = await resolveTelegramConfig();
+  if (!cfg.botToken) {
+    throw new Error('telegram_missing_token');
+  }
+  const chatId = normalizeOptionalString(chatIdRaw);
+  if (!chatId) {
+    throw new Error('telegram_chat_id_invalid');
+  }
+
+  const chatRaw = await fetchTelegramApiJson(cfg.botToken, 'getChat', { chat_id: chatId });
+  if (!chatRaw.ok || chatRaw.body?.ok !== true) {
+    const desc =
+      typeof chatRaw.body?.description === 'string' ? chatRaw.body.description : `http_${chatRaw.status}`;
+    throw new Error(`telegram_getchat_failed:${desc}`);
+  }
+
+  const chatObj =
+    chatRaw.body.result && typeof chatRaw.body.result === 'object'
+      ? (chatRaw.body.result as Record<string, unknown>)
+      : null;
+  if (!chatObj) {
+    throw new Error('telegram_getchat_failed:empty_result');
+  }
+
+  const resolvedId =
+    typeof chatObj.id === 'number' || typeof chatObj.id === 'string'
+      ? String(chatObj.id)
+      : chatId;
+  const type = normalizeOptionalString(chatObj.type);
+  const username = normalizeOptionalString(chatObj.username);
+  const description = normalizeOptionalString(chatObj.description);
+  const titleFromApi = normalizeOptionalString(chatObj.title);
+  const firstName = normalizeOptionalString(chatObj.first_name);
+  const lastName = normalizeOptionalString(chatObj.last_name);
+  const privateName = [firstName, lastName].filter(Boolean).join(' ').trim() || null;
+  const title = titleFromApi ?? privateName ?? (username ? `@${username}` : resolvedId);
+
+  return {
+    chat_id: resolvedId,
+    title,
+    type,
+    username,
+    description,
+  };
 }
 
 async function downloadTelegramFileByPath(

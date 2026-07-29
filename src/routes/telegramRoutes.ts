@@ -1,11 +1,15 @@
 import { Router } from 'express';
 import {
+  deleteTelegramChatHandler,
+  getTelegramChatsHandler,
   getTelegramDispatchPreviewPrayerHandler,
   getTelegramDispatchRecipientsHandler,
   getTelegramDispatchSettingsHandler,
   getTelegramSettingsHandler,
   patchTelegramDispatchSettingsHandler,
   patchTelegramSettingsHandler,
+  postTelegramChatHandler,
+  postTelegramChatRefreshHandler,
   postTelegramDispatchRunNowHandler,
   postTelegramSendHandler,
   postTelegramTestConnectionHandler,
@@ -16,6 +20,10 @@ const router = Router();
 
 router.get('/settings', getTelegramSettingsHandler);
 router.patch('/settings', patchTelegramSettingsHandler);
+router.get('/chats', getTelegramChatsHandler);
+router.post('/chats', postTelegramChatHandler);
+router.post('/chats/:id/refresh', postTelegramChatRefreshHandler);
+router.delete('/chats/:id', deleteTelegramChatHandler);
 router.get('/dispatch/settings', getTelegramDispatchSettingsHandler);
 router.patch('/dispatch/settings', patchTelegramDispatchSettingsHandler);
 router.get('/dispatch/recipients', getTelegramDispatchRecipientsHandler);

@@ -392,7 +392,22 @@ ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_once_at T
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_target VARCHAR(16) NOT NULL DEFAULT 'all';
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_member_ids INTEGER[] NOT NULL DEFAULT ARRAY[]::INTEGER[];
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_last_sent_at TIMESTAMPTZ;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_chat_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_published_chat_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS notification_settings_json TEXT;
+
+CREATE TABLE IF NOT EXISTS telegram_chats (
+  id SERIAL PRIMARY KEY,
+  chat_id TEXT NOT NULL UNIQUE,
+  title TEXT,
+  type TEXT,
+  username TEXT,
+  description TEXT,
+  last_synced_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS telegram_chats_title_idx ON telegram_chats (title);
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS title VARCHAR(255);
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS starts_at TIMESTAMP;

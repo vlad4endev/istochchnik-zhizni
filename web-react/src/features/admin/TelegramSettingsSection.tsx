@@ -6,17 +6,22 @@ import { LuCheck, LuCircleAlert, LuClock, LuSend } from 'react-icons/lu';
 
 import {
   apiErrorMessage,
+  addTelegramChat,
+  deleteTelegramChat,
+  fetchTelegramChats,
   fetchTelegramDispatchRecipients,
   fetchTelegramDispatchSettings,
   fetchTelegramSettings,
   humanizeTelegramError,
   patchTelegramDispatchSettings,
   patchTelegramSettings,
+  refreshTelegramChat,
   runServicePlanMondayMailing,
   runTelegramDispatchNow,
   sendTelegramMessage,
   testTelegramConnection,
   testTelegramProxy,
+  type TelegramChatRecord,
   type TelegramDispatchRecipient,
   type TelegramDispatchSettingsResponse,
   type TelegramSettingsResponse,
@@ -30,6 +35,7 @@ import {
 const Q_TG = ['admin', 'telegram', 'settings'] as const;
 const Q_TG_DISPATCH = ['admin', 'telegram', 'dispatch-settings'] as const;
 const Q_TG_RECIPIENTS = ['admin', 'telegram', 'recipients'] as const;
+const Q_TG_CHATS = ['admin', 'telegram', 'chats'] as const;
 
 type TgTab = 'bot' | 'chats' | 'prayer' | 'program' | 'dispatch';
 
@@ -210,6 +216,82 @@ function ChatField({
   );
 }
 
+function chatLabel(chat: TelegramChatRecord): string {
+  const title = chat.title?.trim() || (chat.username ? `@${chat.username}` : null) || chat.chat_id;
+  const typeRu =
+    chat.type === 'channel'
+      ? 'канал'
+      : chat.type === 'supergroup'
+        ? 'супергруппа'
+        : chat.type === 'group'
+          ? 'группа'
+          : chat.type === 'private'
+            ? 'личный'
+            : chat.type;
+  return typeRu ? `${title} · ${typeRu}` : title;
+}
+
+function ChatMultiSelect({
+  label,
+  hint,
+  chats,
+  selectedIds,
+  onChange,
+  emptyHint,
+}: {
+  label: string;
+  hint: string;
+  chats: TelegramChatRecord[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  emptyHint?: string;
+}) {
+  const selected = new Set(selectedIds);
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-semibold text-stone-700">{label}</label>
+      <p className="mb-1.5 text-xs text-stone-500">{hint}</p>
+      {chats.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50/80 px-3 py-3 text-xs text-stone-500">
+          {emptyHint ?? 'Сначала добавьте чаты во вкладке «Чаты».'}
+        </p>
+      ) : (
+        <div className="max-h-52 space-y-1 overflow-y-auto rounded-xl border border-stone-200 p-3">
+          {chats.map((chat) => {
+            const checked = selected.has(chat.chat_id);
+            return (
+              <label
+                key={chat.id}
+                className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-stone-50"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={checked}
+                  onChange={() => {
+                    if (checked) {
+                      onChange(selectedIds.filter((id) => id !== chat.chat_id));
+                    } else {
+                      onChange([...selectedIds, chat.chat_id]);
+                    }
+                  }}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-stone-800">{chatLabel(chat)}</span>
+                  <span className="block font-mono text-[11px] text-stone-400">{chat.chat_id}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+      {selectedIds.length > 0 ? (
+        <p className="mt-1.5 text-[11px] text-stone-500">Выбрано: {selectedIds.length}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function StepBlock({
   n,
   title,
@@ -254,9 +336,14 @@ export function TelegramSettingsSection() {
     queryKey: Q_TG_RECIPIENTS,
     queryFn: fetchTelegramDispatchRecipients,
   });
+  const chatsQ = useQuery({
+    queryKey: Q_TG_CHATS,
+    queryFn: fetchTelegramChats,
+  });
 
   const [tab, setTab] = useState<TgTab>('bot');
   const [programPanel, setProgramPanel] = useState<ProgramPanel>('mailing');
+  const [newChatId, setNewChatId] = useState('');
   const [form, setForm] = useState({
     enabled: false,
     bot_token: '',
@@ -265,8 +352,10 @@ export function TelegramSettingsSection() {
     default_chat_id: '',
     prayer_template: '',
     service_plan_chat_id: '',
+    service_plan_chat_ids: [] as string[],
     service_plan_template: '',
     service_plan_published_chat_id: '',
+    service_plan_published_chat_ids: [] as string[],
     service_plan_published_template: '',
     service_plan_published_button_text: '',
     service_plan_mailing_enabled: true,
@@ -304,6 +393,18 @@ export function TelegramSettingsSection() {
 
   useEffect(() => {
     if (!data) return;
+    const mailingIds =
+      data.service_plan_chat_ids && data.service_plan_chat_ids.length > 0
+        ? data.service_plan_chat_ids
+        : data.service_plan_chat_id
+          ? [data.service_plan_chat_id]
+          : [];
+    const publishedIds =
+      data.service_plan_published_chat_ids && data.service_plan_published_chat_ids.length > 0
+        ? data.service_plan_published_chat_ids
+        : data.service_plan_published_chat_id
+          ? [data.service_plan_published_chat_id]
+          : [];
     setForm({
       enabled: data.enabled,
       bot_token: '',
@@ -311,9 +412,11 @@ export function TelegramSettingsSection() {
       coordinator_chat_id: data.coordinator_chat_id ?? '',
       default_chat_id: data.default_chat_id ?? '',
       prayer_template: data.prayer_template ?? '',
-      service_plan_chat_id: data.service_plan_chat_id ?? '',
+      service_plan_chat_id: mailingIds[0] ?? '',
+      service_plan_chat_ids: mailingIds,
       service_plan_template: (data.service_plan_template ?? '').trim() || DEFAULT_PROGRAM_MAILING_TEMPLATE,
-      service_plan_published_chat_id: data.service_plan_published_chat_id ?? '',
+      service_plan_published_chat_id: publishedIds[0] ?? '',
+      service_plan_published_chat_ids: publishedIds,
       service_plan_published_template:
         (data.service_plan_published_template ?? '').trim() || DEFAULT_PROGRAM_PUBLISHED_TEMPLATE,
       service_plan_published_button_text:
@@ -342,9 +445,9 @@ export function TelegramSettingsSection() {
         coordinator_chat_id: normalizeUiString(form.coordinator_chat_id),
         default_chat_id: normalizeUiString(form.default_chat_id),
         prayer_template: normalizeUiString(form.prayer_template),
-        service_plan_chat_id: normalizeUiString(form.service_plan_chat_id),
+        service_plan_chat_ids: form.service_plan_chat_ids,
         service_plan_template: normalizeUiString(form.service_plan_template),
-        service_plan_published_chat_id: normalizeUiString(form.service_plan_published_chat_id),
+        service_plan_published_chat_ids: form.service_plan_published_chat_ids,
         service_plan_published_template: normalizeUiString(form.service_plan_published_template),
         service_plan_published_button_text: normalizeUiString(form.service_plan_published_button_text),
         service_plan_mailing_enabled: form.service_plan_mailing_enabled,
@@ -546,7 +649,7 @@ export function TelegramSettingsSection() {
   const saveProgramTemplateMut = useMutation({
     mutationFn: () =>
       patchTelegramSettings({
-        service_plan_chat_id: normalizeUiString(form.service_plan_chat_id),
+        service_plan_chat_ids: form.service_plan_chat_ids,
         service_plan_template: normalizeUiString(form.service_plan_template),
         service_plan_mailing_enabled: form.service_plan_mailing_enabled,
         service_plan_mailing_weekday: form.service_plan_mailing_weekday,
@@ -610,7 +713,7 @@ export function TelegramSettingsSection() {
       patchTelegramSettings({
         service_plan_published_template: normalizeUiString(form.service_plan_published_template),
         service_plan_published_button_text: normalizeUiString(form.service_plan_published_button_text),
-        service_plan_published_chat_id: normalizeUiString(form.service_plan_published_chat_id),
+        service_plan_published_chat_ids: form.service_plan_published_chat_ids,
       }),
     onSuccess: (next) => {
       setNote({ type: 'ok', text: 'Уведомление о готовности сохранено.' });
@@ -622,6 +725,60 @@ export function TelegramSettingsSection() {
         text: apiErrorMessage(e, 'Не удалось сохранить шаблон уведомления.'),
       }),
   });
+
+  const addChatMut = useMutation({
+    mutationFn: (chatId: string) => addTelegramChat(chatId),
+    onSuccess: () => {
+      setNewChatId('');
+      setNote({ type: 'ok', text: 'Чат добавлен: данные получены из Telegram и сохранены.' });
+      void qc.invalidateQueries({ queryKey: Q_TG_CHATS });
+    },
+    onError: (e) =>
+      setNote({
+        type: 'err',
+        text: humanizeTelegramError(e, 'Не удалось добавить чат. Проверьте ID и что бот в чате.'),
+      }),
+  });
+
+  const refreshChatMut = useMutation({
+    mutationFn: (id: number) => refreshTelegramChat(id),
+    onSuccess: () => {
+      setNote({ type: 'ok', text: 'Данные чата обновлены из Telegram.' });
+      void qc.invalidateQueries({ queryKey: Q_TG_CHATS });
+    },
+    onError: (e) =>
+      setNote({ type: 'err', text: humanizeTelegramError(e, 'Не удалось обновить чат.') }),
+  });
+
+  const deleteChatMut = useMutation({
+    mutationFn: (id: number) => deleteTelegramChat(id),
+    onSuccess: (_void, id) => {
+      const removed = (chatsQ.data ?? []).find((c) => c.id === id)?.chat_id;
+      if (removed) {
+        setForm((s) => ({
+          ...s,
+          service_plan_chat_ids: s.service_plan_chat_ids.filter((x) => x !== removed),
+          service_plan_published_chat_ids: s.service_plan_published_chat_ids.filter(
+            (x) => x !== removed,
+          ),
+          service_plan_chat_id:
+            s.service_plan_chat_id === removed
+              ? s.service_plan_chat_ids.filter((x) => x !== removed)[0] ?? ''
+              : s.service_plan_chat_id,
+          service_plan_published_chat_id:
+            s.service_plan_published_chat_id === removed
+              ? s.service_plan_published_chat_ids.filter((x) => x !== removed)[0] ?? ''
+              : s.service_plan_published_chat_id,
+        }));
+      }
+      setNote({ type: 'ok', text: 'Чат удалён из реестра.' });
+      void qc.invalidateQueries({ queryKey: Q_TG_CHATS });
+    },
+    onError: (e) =>
+      setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось удалить чат.') }),
+  });
+
+  const registryChats = chatsQ.data ?? [];
 
   const mailingScheduleLabel = useMemo(() => {
     const day =
@@ -948,61 +1105,130 @@ export function TelegramSettingsSection() {
 
         {tab === 'chats' ? (
           <div className="space-y-5">
-            <p className="text-sm text-stone-500">
-              ID группы или канала обычно отрицательный (−100…). Узнать можно через @userinfobot.
-            </p>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <ChatField
-                label="Молитва"
-                hint="«Молитва на сегодня» и ручная отправка"
-                value={form.prayer_chat_id}
-                onChange={(prayer_chat_id) => setForm((s) => ({ ...s, prayer_chat_id }))}
-              />
-              <ChatField
-                label="Координаторы"
-                hint="План на неделю и ответственные"
-                value={form.coordinator_chat_id}
-                onChange={(coordinator_chat_id) => setForm((s) => ({ ...s, coordinator_chat_id }))}
-              />
-              <ChatField
-                label="Запасной"
-                hint="Если для типа сообщения чат не задан"
-                value={form.default_chat_id}
-                onChange={(default_chat_id) => setForm((s) => ({ ...s, default_chat_id }))}
-              />
-            </div>
-            <div className="border-t border-stone-100 pt-5">
-              <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-                <div>
-                  <h3 className="text-sm font-semibold text-stone-900">Чаты программы служения</h3>
-                  <p className="mt-0.5 text-xs text-stone-500">
-                    Тексты и расписание — во вкладке «Программа».
-                  </p>
+            <div className="space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-stone-900">Реестр Telegram-чатов</h3>
+                <p className="mt-0.5 text-xs text-stone-500">
+                  Введите ID чата или @username — бот запросит getChat и сохранит название в базе.
+                  Эти чаты можно выбирать в авторассылках программы.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[220px] flex-1">
+                  <label className="mb-1 block text-xs font-semibold text-stone-700">
+                    ID или @username
+                  </label>
+                  <input
+                    className={fieldClass()}
+                    value={newChatId}
+                    onChange={(e) => setNewChatId(e.target.value)}
+                    placeholder="-100… или @channel"
+                    autoComplete="off"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const id = newChatId.trim();
+                        if (!id || addChatMut.isPending) return;
+                        setNote(null);
+                        addChatMut.mutate(id);
+                      }
+                    }}
+                  />
                 </div>
                 <button
                   type="button"
-                  className="text-xs font-semibold text-[#7B2D3F] underline-offset-2 hover:underline"
-                  onClick={() => setTab('program')}
+                  className={btnPrimary()}
+                  disabled={!newChatId.trim() || addChatMut.isPending}
+                  onClick={() => {
+                    const id = newChatId.trim();
+                    if (!id) return;
+                    setNote(null);
+                    addChatMut.mutate(id);
+                  }}
                 >
-                  Открыть «Программа»
+                  {addChatMut.isPending ? 'Загрузка…' : 'Добавить чат'}
                 </button>
               </div>
+              {chatsQ.isLoading ? (
+                <p className="text-sm text-stone-500">Загрузка списка…</p>
+              ) : chatsQ.isError ? (
+                <p className="text-sm text-red-600">Не удалось загрузить реестр чатов.</p>
+              ) : registryChats.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50/80 px-3 py-4 text-sm text-stone-500">
+                  Пока нет сохранённых чатов. Добавьте ID группы или канала — бот должен быть участником.
+                </p>
+              ) : (
+                <ul className="divide-y divide-stone-100 overflow-hidden rounded-xl border border-stone-200">
+                  {registryChats.map((chat) => (
+                    <li
+                      key={chat.id}
+                      className="flex flex-wrap items-center justify-between gap-3 px-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-stone-900">{chatLabel(chat)}</div>
+                        <div className="mt-0.5 font-mono text-xs text-stone-500">{chat.chat_id}</div>
+                        {chat.description ? (
+                          <div className="mt-1 line-clamp-2 text-xs text-stone-400">
+                            {chat.description}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={btnSecondary('!px-2.5 !py-1.5 text-xs')}
+                          disabled={refreshChatMut.isPending}
+                          onClick={() => {
+                            setNote(null);
+                            refreshChatMut.mutate(chat.id);
+                          }}
+                        >
+                          Обновить
+                        </button>
+                        <button
+                          type="button"
+                          className={btnSecondary('!px-2.5 !py-1.5 text-xs text-red-700')}
+                          disabled={deleteChatMut.isPending}
+                          onClick={() => {
+                            if (!window.confirm(`Удалить чат «${chatLabel(chat)}» из реестра?`)) {
+                              return;
+                            }
+                            setNote(null);
+                            deleteChatMut.mutate(chat.id);
+                          }}
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="border-t border-stone-100 pt-5">
+              <p className="mb-3 text-sm text-stone-500">
+                Назначение ролей (молитва, координаторы, запасной) — по-прежнему можно задать вручную.
+                Для авторассылок программы используйте выбор из реестра во вкладке «Программа».
+              </p>
               <div className="grid gap-5 sm:grid-cols-2">
                 <ChatField
-                  label="Плановая рассылка"
-                  hint="Авторассылка по расписанию + «Отправить сейчас»"
-                  value={form.service_plan_chat_id}
-                  onChange={(service_plan_chat_id) =>
-                    setForm((s) => ({ ...s, service_plan_chat_id }))
-                  }
+                  label="Молитва"
+                  hint="«Молитва на сегодня» и ручная отправка"
+                  value={form.prayer_chat_id}
+                  onChange={(prayer_chat_id) => setForm((s) => ({ ...s, prayer_chat_id }))}
                 />
                 <ChatField
-                  label="Финальная программа"
-                  hint="Сообщение при нажатии «Опубликовать»"
-                  value={form.service_plan_published_chat_id}
-                  onChange={(service_plan_published_chat_id) =>
-                    setForm((s) => ({ ...s, service_plan_published_chat_id }))
-                  }
+                  label="Координаторы"
+                  hint="План на неделю и ответственные"
+                  value={form.coordinator_chat_id}
+                  onChange={(coordinator_chat_id) => setForm((s) => ({ ...s, coordinator_chat_id }))}
+                />
+                <ChatField
+                  label="Запасной"
+                  hint="Если для типа сообщения чат не задан"
+                  value={form.default_chat_id}
+                  onChange={(default_chat_id) => setForm((s) => ({ ...s, default_chat_id }))}
                 />
               </div>
             </div>
@@ -1072,8 +1298,8 @@ export function TelegramSettingsSection() {
                     ? form.service_plan_mailing_enabled
                       ? mailingScheduleLabel
                       : 'выключена'
-                    : form.service_plan_published_chat_id.trim()
-                      ? 'чат задан'
+                    : form.service_plan_published_chat_ids.length > 0
+                      ? `${form.service_plan_published_chat_ids.length} чат(ов)`
                       : 'чат не задан';
                 return (
                   <button
@@ -1116,16 +1342,29 @@ export function TelegramSettingsSection() {
                 <StepBlock
                   n={1}
                   title="Куда отправлять"
-                  hint="Telegram-чат плановой рассылки. В мессенджере приложения сообщение уходит в канал планирования автоматически."
+                  hint="Выберите один или несколько чатов из реестра. В мессенджере приложения сообщение уходит в канал планирования автоматически."
                 >
-                  <ChatField
-                    label="ID чата Telegram"
-                    hint="Отрицательный ID группы/канала (−100…)"
-                    value={form.service_plan_chat_id}
-                    onChange={(service_plan_chat_id) =>
-                      setForm((s) => ({ ...s, service_plan_chat_id }))
+                  <ChatMultiSelect
+                    label="Telegram-чаты плановой рассылки"
+                    hint="Список из вкладки «Чаты». Можно выбрать несколько."
+                    chats={registryChats}
+                    selectedIds={form.service_plan_chat_ids}
+                    onChange={(service_plan_chat_ids) =>
+                      setForm((s) => ({
+                        ...s,
+                        service_plan_chat_ids,
+                        service_plan_chat_id: service_plan_chat_ids[0] ?? '',
+                      }))
                     }
+                    emptyHint="Реестр пуст — добавьте чаты во вкладке «Чаты», затем выберите их здесь."
                   />
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-[#7B2D3F] underline-offset-2 hover:underline"
+                    onClick={() => setTab('chats')}
+                  >
+                    Открыть реестр чатов
+                  </button>
                 </StepBlock>
 
                 <StepBlock
@@ -1388,16 +1627,29 @@ export function TelegramSettingsSection() {
                 <StepBlock
                   n={1}
                   title="Куда отправлять"
-                  hint="Отдельный чат для короткого сообщения «программа готова» при публикации."
+                  hint="Один или несколько чатов для короткого сообщения «программа готова» при публикации."
                 >
-                  <ChatField
-                    label="ID чата Telegram"
-                    hint="Отрицательный ID группы/канала (−100…)"
-                    value={form.service_plan_published_chat_id}
-                    onChange={(service_plan_published_chat_id) =>
-                      setForm((s) => ({ ...s, service_plan_published_chat_id }))
+                  <ChatMultiSelect
+                    label="Telegram-чаты уведомления о публикации"
+                    hint="Список из вкладки «Чаты». Можно выбрать несколько."
+                    chats={registryChats}
+                    selectedIds={form.service_plan_published_chat_ids}
+                    onChange={(service_plan_published_chat_ids) =>
+                      setForm((s) => ({
+                        ...s,
+                        service_plan_published_chat_ids,
+                        service_plan_published_chat_id: service_plan_published_chat_ids[0] ?? '',
+                      }))
                     }
+                    emptyHint="Реестр пуст — добавьте чаты во вкладке «Чаты», затем выберите их здесь."
                   />
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-[#7B2D3F] underline-offset-2 hover:underline"
+                    onClick={() => setTab('chats')}
+                  >
+                    Открыть реестр чатов
+                  </button>
                 </StepBlock>
 
                 <StepBlock

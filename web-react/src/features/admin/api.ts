@@ -507,8 +507,12 @@ export interface TelegramSettingsResponse {
   default_chat_id: string | null;
   prayer_template: string | null;
   service_plan_chat_id: string | null;
+  /** Чаты плановой рассылки (мультивыбор из реестра) */
+  service_plan_chat_ids?: string[];
   service_plan_template: string | null;
   service_plan_published_chat_id: string | null;
+  /** Чаты уведомления о публикации */
+  service_plan_published_chat_ids?: string[];
   /** Шаблон текста при публикации финальной программы */
   service_plan_published_template: string | null;
   /** Текст кнопки со ссылкой в уведомлении о публикации */
@@ -523,6 +527,18 @@ export interface TelegramSettingsResponse {
   service_plan_mailing_timezone?: string;
   has_bot_token: boolean;
   proxy: TelegramProxyStatus;
+}
+
+export interface TelegramChatRecord {
+  id: number;
+  chat_id: string;
+  title: string | null;
+  type: string | null;
+  username: string | null;
+  description: string | null;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TelegramDispatchSettingsResponse {
@@ -586,8 +602,10 @@ export async function patchTelegramSettings(body: {
   default_chat_id?: string | null;
   prayer_template?: string | null;
   service_plan_chat_id?: string | null;
+  service_plan_chat_ids?: string[] | null;
   service_plan_template?: string | null;
   service_plan_published_chat_id?: string | null;
+  service_plan_published_chat_ids?: string[] | null;
   service_plan_published_template?: string | null;
   service_plan_published_button_text?: string | null;
   service_plan_mailing_enabled?: boolean;
@@ -599,6 +617,25 @@ export async function patchTelegramSettings(body: {
 }): Promise<TelegramSettingsResponse> {
   const { data } = await apiClient.patch<TelegramSettingsResponse>('/api/telegram/settings', body);
   return data;
+}
+
+export async function fetchTelegramChats(): Promise<TelegramChatRecord[]> {
+  const { data } = await apiClient.get<TelegramChatRecord[]>('/api/telegram/chats');
+  return data;
+}
+
+export async function addTelegramChat(chatId: string): Promise<TelegramChatRecord> {
+  const { data } = await apiClient.post<TelegramChatRecord>('/api/telegram/chats', { chat_id: chatId });
+  return data;
+}
+
+export async function refreshTelegramChat(id: number): Promise<TelegramChatRecord> {
+  const { data } = await apiClient.post<TelegramChatRecord>(`/api/telegram/chats/${id}/refresh`);
+  return data;
+}
+
+export async function deleteTelegramChat(id: number): Promise<void> {
+  await apiClient.delete(`/api/telegram/chats/${id}`);
 }
 
 export async function runServicePlanMondayMailing(body?: {

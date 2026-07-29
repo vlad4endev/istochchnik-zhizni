@@ -15,6 +15,12 @@ import {
   updateTelegramSettings,
 } from '../services/telegramService';
 import {
+  deleteTelegramChat,
+  listTelegramChats,
+  refreshTelegramChat,
+  upsertTelegramChatById,
+} from '../services/telegramChatsService';
+import {
   getServicePlanMailingSchedule,
   updateServicePlanMailingSchedule,
 } from '../services/servicePlanMondayMailingService';
@@ -147,6 +153,24 @@ function errorToStatus(error: unknown): { status: number; message: string } {
         'Прокси не настроен. Укажите URL в настройках Telegram или во временном поле проверки.',
     };
   }
+  if (msg === 'telegram_chat_id_invalid') {
+    return {
+      status: 400,
+      message: 'Некорректный ID чата. Укажите числовой ID (−100…) или @username.',
+    };
+  }
+  if (msg === 'telegram_chat_not_found') {
+    return { status: 404, message: 'Чат не найден в базе' };
+  }
+  if (msg.startsWith('telegram_getchat_failed:')) {
+    const detail = msg.slice('telegram_getchat_failed:'.length).trim();
+    return {
+      status: 502,
+      message: detail
+        ? `Не удалось получить данные чата из Telegram: ${detail}. Бот должен быть добавлен в чат.`
+        : 'Не удалось получить данные чата из Telegram. Бот должен быть добавлен в чат.',
+    };
+  }
   return { status: 500, message: 'Внутренняя ошибка Telegram модуля' };
 }
 
@@ -181,8 +205,10 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
         default_chat_id?: unknown;
         prayer_template?: unknown;
         service_plan_chat_id?: unknown;
+        service_plan_chat_ids?: unknown;
         service_plan_template?: unknown;
         service_plan_published_chat_id?: unknown;
+        service_plan_published_chat_ids?: unknown;
         service_plan_published_template?: unknown;
         service_plan_published_button_text?: unknown;
         proxy_enabled?: unknown;
@@ -242,6 +268,15 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
     res.status(400).json({ error: 'Поле "service_plan_chat_id" должно быть строкой или null' });
     return;
   }
+  if (body?.service_plan_chat_ids !== undefined && body.service_plan_chat_ids !== null) {
+    if (
+      !Array.isArray(body.service_plan_chat_ids) ||
+      body.service_plan_chat_ids.some((x) => typeof x !== 'string' && typeof x !== 'number')
+    ) {
+      res.status(400).json({ error: 'Поле "service_plan_chat_ids" должно быть массивом строк' });
+      return;
+    }
+  }
   if (
     body?.service_plan_template !== undefined &&
     body.service_plan_template !== null &&
@@ -257,6 +292,20 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
   ) {
     res.status(400).json({ error: 'Поле "service_plan_published_chat_id" должно быть строкой или null' });
     return;
+  }
+  if (
+    body?.service_plan_published_chat_ids !== undefined &&
+    body.service_plan_published_chat_ids !== null
+  ) {
+    if (
+      !Array.isArray(body.service_plan_published_chat_ids) ||
+      body.service_plan_published_chat_ids.some((x) => typeof x !== 'string' && typeof x !== 'number')
+    ) {
+      res
+        .status(400)
+        .json({ error: 'Поле "service_plan_published_chat_ids" должно быть массивом строк' });
+      return;
+    }
   }
   if (
     body?.service_plan_published_template !== undefined &&
@@ -325,8 +374,13 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
       default_chat_id: body?.default_chat_id as string | null | undefined,
       prayer_template: body?.prayer_template as string | null | undefined,
       service_plan_chat_id: body?.service_plan_chat_id as string | null | undefined,
+      service_plan_chat_ids: body?.service_plan_chat_ids as string[] | null | undefined,
       service_plan_template: body?.service_plan_template as string | null | undefined,
       service_plan_published_chat_id: body?.service_plan_published_chat_id as string | null | undefined,
+      service_plan_published_chat_ids: body?.service_plan_published_chat_ids as
+        | string[]
+        | null
+        | undefined,
       service_plan_published_template: body?.service_plan_published_template as
         | string
         | null
@@ -614,6 +668,67 @@ export async function postTelegramTestProxyHandler(req: Request, res: Response):
     if (mapped.status === 500 && error instanceof Error && error.message && !error.message.startsWith('telegram_')) {
       mapped = { status: 502, message: `Проверка прокси: ${error.message}` };
     }
+    res.status(mapped.status).json({ error: mapped.message });
+  }
+}
+
+export async function getTelegramChatsHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    const chats = await listTelegramChats();
+    res.json(chats);
+  } catch (error) {
+    console.error('[telegram] list chats failed:', error);
+    res.status(500).json({ error: 'Не удалось загрузить список Telegram-чатов' });
+  }
+}
+
+export async function postTelegramChatHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const body = req.body as { chat_id?: unknown } | undefined;
+  try {
+    const chat = await upsertTelegramChatById(body?.chat_id);
+    notifyRealtime(['admin']);
+    res.status(201).json(chat);
+  } catch (error) {
+    console.error('[telegram] add chat failed:', error);
+    const mapped = errorToStatus(error);
+    res.status(mapped.status).json({ error: mapped.message });
+  }
+}
+
+export async function postTelegramChatRefreshHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: 'Некорректный id чата' });
+    return;
+  }
+  try {
+    const chat = await refreshTelegramChat(id);
+    notifyRealtime(['admin']);
+    res.json(chat);
+  } catch (error) {
+    console.error('[telegram] refresh chat failed:', error);
+    const mapped = errorToStatus(error);
+    res.status(mapped.status).json({ error: mapped.message });
+  }
+}
+
+export async function deleteTelegramChatHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: 'Некорректный id чата' });
+    return;
+  }
+  try {
+    await deleteTelegramChat(id);
+    notifyRealtime(['admin']);
+    res.status(204).send();
+  } catch (error) {
+    console.error('[telegram] delete chat failed:', error);
+    const mapped = errorToStatus(error);
     res.status(mapped.status).json({ error: mapped.message });
   }
 }
