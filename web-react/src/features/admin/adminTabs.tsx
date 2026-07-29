@@ -122,7 +122,7 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     label: 'Telegram',
     Icon: LuSend,
     short: 'Бот',
-    description: 'Бот, реестр чатов, тексты молитвы и программы служения, авторассылки.',
+    description: 'Бот, реестр чатов, роли, тексты молитвы и программы, авторассылки.',
   },
   {
     id: 'diagnostics',
