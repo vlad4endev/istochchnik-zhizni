@@ -499,6 +499,19 @@ export interface TelegramProxyStatus {
   env_configured: boolean;
 }
 
+export interface ServicePlanMailingDestinations {
+  telegram_chat_ids: string[];
+  messenger_conversation_ids: string[];
+}
+
+export interface ServicePlanMailingMessengerChat {
+  id: string;
+  title: string;
+  type: 'channel' | 'group';
+  kind: string | null;
+  recommended_for: Array<'mailing' | 'published'>;
+}
+
 export interface TelegramSettingsResponse {
   enabled: boolean;
   bot_token_masked: string | null;
@@ -507,12 +520,14 @@ export interface TelegramSettingsResponse {
   default_chat_id: string | null;
   prayer_template: string | null;
   service_plan_chat_id: string | null;
-  /** Чаты плановой рассылки (мультивыбор из реестра) */
-  service_plan_chat_ids?: string[];
   service_plan_template: string | null;
   service_plan_published_chat_id: string | null;
-  /** Чаты уведомления о публикации */
-  service_plan_published_chat_ids?: string[];
+  /** Telegram-чат «Медийка» */
+  media_chat_id: string | null;
+  /** Куда слать плановую рассылку */
+  service_plan_mailing_destinations?: ServicePlanMailingDestinations;
+  /** Куда слать уведомление при публикации */
+  service_plan_published_destinations?: ServicePlanMailingDestinations;
   /** Шаблон текста при публикации финальной программы */
   service_plan_published_template: string | null;
   /** Текст кнопки со ссылкой в уведомлении о публикации */
@@ -527,18 +542,6 @@ export interface TelegramSettingsResponse {
   service_plan_mailing_timezone?: string;
   has_bot_token: boolean;
   proxy: TelegramProxyStatus;
-}
-
-export interface TelegramChatRecord {
-  id: number;
-  chat_id: string;
-  title: string | null;
-  type: string | null;
-  username: string | null;
-  description: string | null;
-  last_synced_at: string | null;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface TelegramDispatchSettingsResponse {
@@ -602,10 +605,11 @@ export async function patchTelegramSettings(body: {
   default_chat_id?: string | null;
   prayer_template?: string | null;
   service_plan_chat_id?: string | null;
-  service_plan_chat_ids?: string[] | null;
   service_plan_template?: string | null;
   service_plan_published_chat_id?: string | null;
-  service_plan_published_chat_ids?: string[] | null;
+  media_chat_id?: string | null;
+  service_plan_mailing_destinations?: ServicePlanMailingDestinations | null;
+  service_plan_published_destinations?: ServicePlanMailingDestinations | null;
   service_plan_published_template?: string | null;
   service_plan_published_button_text?: string | null;
   service_plan_mailing_enabled?: boolean;
@@ -619,13 +623,36 @@ export async function patchTelegramSettings(body: {
   return data;
 }
 
+export interface TelegramChatRecord {
+  id: number;
+  chat_id: string;
+  title: string | null;
+  type: string | null;
+  username: string | null;
+  description: string | null;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchTelegramMailingMessengerChats(): Promise<
+  ServicePlanMailingMessengerChat[]
+> {
+  const { data } = await apiClient.get<{ chats: ServicePlanMailingMessengerChat[] }>(
+    '/api/telegram/mailing-messenger-chats',
+  );
+  return data.chats ?? [];
+}
+
 export async function fetchTelegramChats(): Promise<TelegramChatRecord[]> {
   const { data } = await apiClient.get<TelegramChatRecord[]>('/api/telegram/chats');
   return data;
 }
 
 export async function addTelegramChat(chatId: string): Promise<TelegramChatRecord> {
-  const { data } = await apiClient.post<TelegramChatRecord>('/api/telegram/chats', { chat_id: chatId });
+  const { data } = await apiClient.post<TelegramChatRecord>('/api/telegram/chats', {
+    chat_id: chatId,
+  });
   return data;
 }
 

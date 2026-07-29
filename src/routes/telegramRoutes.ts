@@ -5,6 +5,7 @@ import {
   getTelegramDispatchPreviewPrayerHandler,
   getTelegramDispatchRecipientsHandler,
   getTelegramDispatchSettingsHandler,
+  getTelegramMailingMessengerChatsHandler,
   getTelegramSettingsHandler,
   patchTelegramDispatchSettingsHandler,
   patchTelegramSettingsHandler,
@@ -20,6 +21,7 @@ const router = Router();
 
 router.get('/settings', getTelegramSettingsHandler);
 router.patch('/settings', patchTelegramSettingsHandler);
+router.get('/mailing-messenger-chats', getTelegramMailingMessengerChatsHandler);
 router.get('/chats', getTelegramChatsHandler);
 router.post('/chats', postTelegramChatHandler);
 router.post('/chats/:id/refresh', postTelegramChatRefreshHandler);
