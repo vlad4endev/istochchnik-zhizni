@@ -190,33 +190,7 @@ function Toggle({
   );
 }
 
-function ChatField({
-  label,
-  hint,
-  value,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div>
-      <label className="mb-1 block text-xs font-semibold text-stone-700">{label}</label>
-      <p className="mb-1.5 text-xs text-stone-500">{hint}</p>
-      <input
-        className={fieldClass()}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="-100…"
-        inputMode="numeric"
-      />
-    </div>
-  );
-}
-
-function chatLabel(chat: TelegramChatRecord): string {
+function chatLabel(chat: Pick<TelegramChatRecord, 'chat_id' | 'title' | 'type' | 'username'>): string {
   const title = chat.title?.trim() || (chat.username ? `@${chat.username}` : null) || chat.chat_id;
   const typeRu =
     chat.type === 'channel'
@@ -231,6 +205,64 @@ function chatLabel(chat: TelegramChatRecord): string {
   return typeRu ? `${title} · ${typeRu}` : title;
 }
 
+function chatOptionLabel(chat: Pick<TelegramChatRecord, 'chat_id' | 'title' | 'type' | 'username'>): string {
+  return `${chatLabel(chat)} (${chat.chat_id})`;
+}
+
+/** Одиночный выбор чата из реестра (выпадающий список). */
+function ChatSelect({
+  label,
+  hint,
+  chats,
+  value,
+  onChange,
+  allowEmpty = true,
+  emptyLabel = 'Не выбран',
+  emptyHint,
+}: {
+  label: string;
+  hint: string;
+  chats: TelegramChatRecord[];
+  value: string;
+  onChange: (v: string) => void;
+  allowEmpty?: boolean;
+  emptyLabel?: string;
+  emptyHint?: string;
+}) {
+  const known = new Set(chats.map((c) => c.chat_id));
+  const orphan = value && !known.has(value) ? value : null;
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-semibold text-stone-700">{label}</label>
+      <p className="mb-1.5 text-xs text-stone-500">{hint}</p>
+      {chats.length === 0 && !orphan ? (
+        <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50/80 px-3 py-3 text-xs text-stone-500">
+          {emptyHint ?? 'Сначала добавьте чаты в реестр выше.'}
+        </p>
+      ) : (
+        <select
+          className={fieldClass()}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {allowEmpty ? <option value="">{emptyLabel}</option> : null}
+          {orphan ? (
+            <option value={orphan}>
+              {orphan} (нет в реестре)
+            </option>
+          ) : null}
+          {chats.map((chat) => (
+            <option key={chat.id} value={chat.chat_id}>
+              {chatOptionLabel(chat)}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+}
+
+/** Мультивыбор чатов из реестра (выпадающий список multiple). */
 function ChatMultiSelect({
   label,
   hint,
@@ -246,44 +278,41 @@ function ChatMultiSelect({
   onChange: (ids: string[]) => void;
   emptyHint?: string;
 }) {
-  const selected = new Set(selectedIds);
+  const known = new Set(chats.map((c) => c.chat_id));
+  const orphans = selectedIds.filter((id) => !known.has(id));
+  const size = Math.min(8, Math.max(3, chats.length + orphans.length + 1));
   return (
     <div>
       <label className="mb-1 block text-xs font-semibold text-stone-700">{label}</label>
-      <p className="mb-1.5 text-xs text-stone-500">{hint}</p>
-      {chats.length === 0 ? (
+      <p className="mb-1.5 text-xs text-stone-500">
+        {hint} Удерживайте Ctrl/⌘ для выбора нескольких.
+      </p>
+      {chats.length === 0 && orphans.length === 0 ? (
         <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50/80 px-3 py-3 text-xs text-stone-500">
           {emptyHint ?? 'Сначала добавьте чаты во вкладке «Чаты».'}
         </p>
       ) : (
-        <div className="max-h-52 space-y-1 overflow-y-auto rounded-xl border border-stone-200 p-3">
-          {chats.map((chat) => {
-            const checked = selected.has(chat.chat_id);
-            return (
-              <label
-                key={chat.id}
-                className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-stone-50"
-              >
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={checked}
-                  onChange={() => {
-                    if (checked) {
-                      onChange(selectedIds.filter((id) => id !== chat.chat_id));
-                    } else {
-                      onChange([...selectedIds, chat.chat_id]);
-                    }
-                  }}
-                />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-stone-800">{chatLabel(chat)}</span>
-                  <span className="block font-mono text-[11px] text-stone-400">{chat.chat_id}</span>
-                </span>
-              </label>
-            );
-          })}
-        </div>
+        <select
+          className={`${fieldClass()} min-h-[7.5rem]`}
+          multiple
+          size={size}
+          value={selectedIds}
+          onChange={(e) => {
+            const next = Array.from(e.target.selectedOptions).map((o) => o.value);
+            onChange(next);
+          }}
+        >
+          {orphans.map((id) => (
+            <option key={`orphan-${id}`} value={id}>
+              {id} (нет в реестре)
+            </option>
+          ))}
+          {chats.map((chat) => (
+            <option key={chat.id} value={chat.chat_id}>
+              {chatOptionLabel(chat)}
+            </option>
+          ))}
+        </select>
       )}
       {selectedIds.length > 0 ? (
         <p className="mt-1.5 text-[11px] text-stone-500">Выбрано: {selectedIds.length}</p>
@@ -757,6 +786,9 @@ export function TelegramSettingsSection() {
       if (removed) {
         setForm((s) => ({
           ...s,
+          prayer_chat_id: s.prayer_chat_id === removed ? '' : s.prayer_chat_id,
+          coordinator_chat_id: s.coordinator_chat_id === removed ? '' : s.coordinator_chat_id,
+          default_chat_id: s.default_chat_id === removed ? '' : s.default_chat_id,
           service_plan_chat_ids: s.service_plan_chat_ids.filter((x) => x !== removed),
           service_plan_published_chat_ids: s.service_plan_published_chat_ids.filter(
             (x) => x !== removed,
@@ -770,6 +802,7 @@ export function TelegramSettingsSection() {
               ? s.service_plan_published_chat_ids.filter((x) => x !== removed)[0] ?? ''
               : s.service_plan_published_chat_id,
         }));
+        setCustomChatId((prev) => (prev === removed ? '' : prev));
       }
       setNote({ type: 'ok', text: 'Чат удалён из реестра.' });
       void qc.invalidateQueries({ queryKey: Q_TG_CHATS });
@@ -1110,7 +1143,7 @@ export function TelegramSettingsSection() {
                 <h3 className="text-sm font-semibold text-stone-900">Реестр Telegram-чатов</h3>
                 <p className="mt-0.5 text-xs text-stone-500">
                   Введите ID чата или @username — бот запросит getChat и сохранит название в базе.
-                  Эти чаты можно выбирать в авторассылках программы.
+                  Дальше чаты выбираются из выпадающего списка в ролях и авторассылках.
                 </p>
               </div>
               <div className="flex flex-wrap items-end gap-2">
@@ -1208,25 +1241,28 @@ export function TelegramSettingsSection() {
 
             <div className="border-t border-stone-100 pt-5">
               <p className="mb-3 text-sm text-stone-500">
-                Назначение ролей (молитва, координаторы, запасной) — по-прежнему можно задать вручную.
-                Для авторассылок программы используйте выбор из реестра во вкладке «Программа».
+                Назначение ролей — выберите чат из реестра. Для авторассылок программы выбор чатов
+                также во вкладке «Программа».
               </p>
               <div className="grid gap-5 sm:grid-cols-2">
-                <ChatField
+                <ChatSelect
                   label="Молитва"
-                  hint="«Молитва на сегодня» и ручная отправка"
+                  hint="«Молитва на сегодня» и ручная отправка в канал"
+                  chats={registryChats}
                   value={form.prayer_chat_id}
                   onChange={(prayer_chat_id) => setForm((s) => ({ ...s, prayer_chat_id }))}
                 />
-                <ChatField
+                <ChatSelect
                   label="Координаторы"
                   hint="План на неделю и ответственные"
+                  chats={registryChats}
                   value={form.coordinator_chat_id}
                   onChange={(coordinator_chat_id) => setForm((s) => ({ ...s, coordinator_chat_id }))}
                 />
-                <ChatField
+                <ChatSelect
                   label="Запасной"
                   hint="Если для типа сообщения чат не задан"
+                  chats={registryChats}
                   value={form.default_chat_id}
                   onChange={(default_chat_id) => setForm((s) => ({ ...s, default_chat_id }))}
                 />
@@ -2008,13 +2044,18 @@ export function TelegramSettingsSection() {
                 value={customText}
                 onChange={(e) => setCustomText(e.target.value)}
               />
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input
-                  className={fieldClass()}
-                  placeholder="chat_id (необязательно)"
-                  value={customChatId}
-                  onChange={(e) => setCustomChatId(e.target.value)}
-                />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1">
+                  <ChatSelect
+                    label="Чат"
+                    hint="Куда отправить свой текст (из реестра)"
+                    chats={registryChats}
+                    value={customChatId}
+                    onChange={setCustomChatId}
+                    emptyLabel="По умолчанию (запасной / роль)"
+                    emptyHint="Добавьте чаты во вкладке «Чаты», либо оставьте «по умолчанию»."
+                  />
+                </div>
                 <button
                   type="button"
                   className={btnPrimary('shrink-0')}
