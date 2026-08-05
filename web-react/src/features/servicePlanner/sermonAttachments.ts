@@ -80,3 +80,25 @@ export function sermonAttachmentExtLabel(name: string): string {
   const m = /\.([a-z0-9]+)$/i.exec(name.trim());
   return m ? m[1].toUpperCase() : 'FILE';
 }
+
+/** Имена вида «_ _ _.pptx» после старого бага latin1 — показываем понятную подпись. */
+export function displaySermonAttachmentName(name: string): string {
+  const raw = String(name || '').trim();
+  if (!raw) return 'Файл';
+  const extMatch = /\.([a-z0-9]{1,12})$/i.exec(raw);
+  const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : '';
+  const stem = ext ? raw.slice(0, -ext.length) : raw;
+  const meaningful = stem.replace(/[_\s.\-]+/g, '');
+  if (meaningful.length > 0) return raw;
+  const byExt: Record<string, string> = {
+    '.ppt': 'Презентация',
+    '.pptx': 'Презентация',
+    '.pdf': 'Документ',
+    '.doc': 'Документ',
+    '.docx': 'Документ',
+    '.odp': 'Презентация',
+    '.key': 'Презентация',
+  };
+  const label = byExt[ext] ?? 'Файл';
+  return ext ? `${label}${ext}` : label;
+}
