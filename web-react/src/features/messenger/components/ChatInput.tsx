@@ -11,6 +11,7 @@ import {
   LuFileText,
   LuChartColumn,
   LuMic,
+  LuMusic,
 } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 import Picker from '@emoji-mart/react';
@@ -27,6 +28,12 @@ import { compressImageForMessengerUpload } from '../compressImageForUpload';
 import { MessengerPlainText } from '../messengerPlainText';
 import axios from 'axios';
 import { emitAppToast } from '../../../lib/uiFeedback';
+import {
+  audioDisplayTitle,
+  CHAT_AUDIO_ACCEPT,
+  isChatAudioFile,
+  readAudioFileDurationSec,
+} from '../chatAudio';
 import {
   voiceBlobFileName,
   voiceRecorderOptions,
@@ -65,8 +72,10 @@ function toastMessengerUploadError(e: unknown): void {
 type PendingAttachment = {
   file: File;
   isImage: boolean;
+  isAudio?: boolean;
   previewUrl: string | null;
   uploaded?: api.UploadedFile | null;
+  durationSec?: number;
 };
 
 type UploadingState = {
@@ -311,7 +320,7 @@ export function ChatInput({
   /** ≤768px: панель эмодзи на всю ширину, крупные ячейки (как Telegram на телефоне). */
   const narrowEmojiSheet = useMatchMedia('(max-width: 768px)');
   const uploadAbortRef = useRef<AbortController | null>(null);
-  const filePickerModeRef = useRef<'image' | 'file'>('image');
+  const filePickerModeRef = useRef<'image' | 'file' | 'audio'>('image');
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingStartDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -775,7 +784,11 @@ export function ChatInput({
       try {
         let uploaded = pending.uploaded ?? null;
         if (!uploaded) {
-          setUploadingState({ name: pending.file.name, size: pending.file.size, kind: 'file' });
+          setUploadingState({
+            name: pending.file.name,
+            size: pending.file.size,
+            kind: pending.isAudio ? 'audio' : 'file',
+          });
           const ctrl = new AbortController();
           uploadAbortRef.current = ctrl;
           const fileToUpload = pending.isImage
@@ -788,14 +801,30 @@ export function ChatInput({
           });
           setPending((prev) => (prev ? { ...prev, uploaded } : prev));
         }
-        const payloadType: api.MessagePayloadType = pending.isImage ? 'image' : 'file';
-        const payload = {
+        const payloadType: api.MessagePayloadType = pending.isImage
+          ? 'image'
+          : pending.isAudio
+            ? 'audio'
+            : 'file';
+        const fileName = uploaded.name || pending.file.name;
+        const payload: Record<string, unknown> = {
           url: uploaded.url,
-          name: uploaded.name || pending.file.name,
+          name: fileName,
           objectPath: uploaded.objectPath,
           mimeType: uploaded.mimeType || pending.file.type || '',
           size: uploaded.size || pending.file.size || 0,
         };
+        if (pending.isAudio) {
+          payload.kind = 'file';
+          payload.title = audioDisplayTitle(fileName);
+          let durationSec = pending.durationSec;
+          if (!(typeof durationSec === 'number' && durationSec > 0)) {
+            durationSec = await readAudioFileDurationSec(pending.file);
+          }
+          if (typeof durationSec === 'number' && durationSec > 0) {
+            payload.durationSec = durationSec;
+          }
+        }
         const sent = await sendMessage(conversationId, text, numericReplyId, payloadType, payload);
         if (!sent) return;
         setReplyingTo(null);
@@ -861,7 +890,7 @@ export function ChatInput({
     }
   };
 
-  const pickFile = (kind: 'image' | 'file') => {
+  const pickFile = (kind: 'image' | 'file' | 'audio') => {
     if (!canSendAttachments) {
       setUploadErr('В этом чате для вас отключена отправка фото и файлов.');
       return;
@@ -876,7 +905,9 @@ export function ChatInput({
     input.accept =
       kind === 'image'
         ? 'image/*,video/*'
-        : 'application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt';
+        : kind === 'audio'
+          ? CHAT_AUDIO_ACCEPT
+          : 'application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt';
     try {
       input.disabled = false;
       input.click();
@@ -933,6 +964,38 @@ export function ChatInput({
       return;
     }
 
+    if (pickerMode === 'audio') {
+      const file = selected[0];
+      if (!isChatAudioFile(file)) {
+        setUploadErr('Выберите аудиофайл (mp3, m4a, ogg, wav…)');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+      const maxBytes = 20 * 1024 * 1024;
+      if (file.size > maxBytes) {
+        setUploadErr('Аудиофайл слишком большой (максимум 20MB)');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+      if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl);
+      for (const item of pendingImages) {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      }
+      setPendingImages([]);
+      const previewUrl = URL.createObjectURL(file);
+      setPending({ file, isImage: false, isAudio: true, previewUrl, uploaded: null });
+      void readAudioFileDurationSec(file).then((durationSec) => {
+        if (typeof durationSec === 'number' && durationSec > 0) {
+          setPending((prev) =>
+            prev && prev.file === file ? { ...prev, durationSec } : prev,
+          );
+        }
+      });
+      focusMessengerField(textareaRef.current);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     const file = selected[0];
     // Validate before preview/upload
     const maxBytes = 20 * 1024 * 1024;
@@ -941,8 +1004,10 @@ export function ChatInput({
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
-    // Allow common images and office/docs (same as accept), plus any type that browser provides.
+    const asAudio = isChatAudioFile(file);
+    // Allow common images, audio and office/docs (same as accept), plus any type that browser provides.
     const allowedByAccept =
+      asAudio ||
       file.type.startsWith('image/') ||
       file.type === 'application/pdf' ||
       file.name.toLowerCase().endsWith('.doc') ||
@@ -964,10 +1029,20 @@ export function ChatInput({
     }
     setPendingImages([]);
     const isImage =
-      (file.type || '').startsWith('image/') ||
-      IMAGE_NAME_EXT_RE.test(String(file.name || '').trim());
-    const previewUrl = isImage ? URL.createObjectURL(file) : null;
-    setPending({ file, isImage, previewUrl, uploaded: null });
+      !asAudio &&
+      ((file.type || '').startsWith('image/') ||
+        IMAGE_NAME_EXT_RE.test(String(file.name || '').trim()));
+    const previewUrl = isImage || asAudio ? URL.createObjectURL(file) : null;
+    setPending({ file, isImage, isAudio: asAudio, previewUrl, uploaded: null });
+    if (asAudio) {
+      void readAudioFileDurationSec(file).then((durationSec) => {
+        if (typeof durationSec === 'number' && durationSec > 0) {
+          setPending((prev) =>
+            prev && prev.file === file ? { ...prev, durationSec } : prev,
+          );
+        }
+      });
+    }
     focusMessengerField(textareaRef.current);
   };
 
@@ -975,7 +1050,8 @@ export function ChatInput({
   const ingestExternalFiles = (files: File[]) => {
     if (!canSendAttachments || files.length === 0) return;
     const allMedia = files.every((f) => isChatPhotoOrVideoFile(f));
-    filePickerModeRef.current = allMedia ? 'image' : 'file';
+    const allAudio = files.every((f) => isChatAudioFile(f));
+    filePickerModeRef.current = allMedia ? 'image' : allAudio ? 'audio' : 'file';
     const dt = new DataTransfer();
     for (const f of files) {
       dt.items.add(f);
@@ -1436,6 +1512,7 @@ export function ChatInput({
         mimeType: uploaded.mimeType || mimeMain,
         size: uploaded.size || file.size || 0,
         durationSec,
+        ...(payloadType === 'audio' ? { kind: 'voice' } : {}),
       });
       if (sent) {
         setReplyingTo(null);
@@ -1781,6 +1858,10 @@ export function ChatInput({
                   <img src={pending.previewUrl} alt="" className="h-full w-full object-cover" />
                 </button>
               </div>
+            ) : pending.isAudio ? (
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+                <LuMusic size={22} aria-hidden />
+              </div>
             ) : (
               <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-black/5 text-[var(--text-secondary)] dark:bg-white/10">
                 <LuPaperclip />
@@ -1788,10 +1869,25 @@ export function ChatInput({
             )}
 
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-[var(--text)]">{pending.file.name}</p>
-              <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-                {pending.isImage ? 'Фото' : 'Файл'} · {formatBytes(pending.file.size)}
+              <p className="truncate text-sm font-semibold text-[var(--text)]">
+                {pending.isAudio ? audioDisplayTitle(pending.file.name) : pending.file.name}
               </p>
+              <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+                {pending.isImage
+                  ? 'Фото'
+                  : pending.isAudio
+                    ? 'Аудио'
+                    : 'Файл'}{' '}
+                · {formatBytes(pending.file.size)}
+                {pending.isAudio && pending.durationSec
+                  ? ` · ${Math.floor(pending.durationSec / 60)}:${String(pending.durationSec % 60).padStart(2, '0')}`
+                  : ''}
+              </p>
+              {pending.isAudio ? (
+                <p className="mt-1 text-[11px] leading-snug text-[var(--text-secondary)]">
+                  Добавьте описание в поле ниже — оно отправится вместе с аудио.
+                </p>
+              ) : null}
             </div>
 
             <button
@@ -1888,7 +1984,9 @@ export function ChatInput({
                 {uploading.kind === 'video_note'
                   ? 'Отправка видеосообщения…'
                   : uploading.kind === 'audio'
-                    ? 'Отправка голосового…'
+                    ? pending?.isAudio
+                      ? 'Отправка аудио…'
+                      : 'Отправка голосового…'
                     : 'Загрузка файла…'}
               </p>
               <p className="mt-0.5 truncate text-xs text-[var(--text-secondary)]">
@@ -2125,7 +2223,13 @@ export function ChatInput({
                 '!max-h-[min(40dvh,200px)] py-2.5 pl-3 text-[16px] !leading-[1.45] text-[var(--text)] placeholder:text-stone-400/90',
                 '!pb-2.5 outline-none transition-[height] duration-200 ease-out dark:placeholder:text-stone-500',
               ].join(' ')}
-              placeholder={placeholder}
+              placeholder={
+                pending?.isAudio
+                  ? 'Добавить описание…'
+                  : pendingImages.length > 0 || pending
+                    ? 'Добавить подпись…'
+                    : placeholder
+              }
               enterKeyHint="send"
               inputMode="text"
               autoComplete="off"
@@ -2354,6 +2458,17 @@ export function ChatInput({
                   <LuChartColumn size={18} />
                 </span>
                 <span className="min-w-0 flex-1">Опрос</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => pickFile('audio')}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-[var(--text)] transition-colors duration-200 hover:bg-[var(--surface)] active:bg-stone-100"
+              >
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+                  <LuMusic size={18} />
+                </span>
+                <span className="min-w-0 flex-1">Аудио</span>
               </button>
               <button
                 type="button"

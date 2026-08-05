@@ -149,8 +149,22 @@ function listPreviewFromMessage(
   const pt = tail.payload_type ?? inferMessengerPayloadType(tail);
   let preview = String(tail.content ?? '').trim();
   if (!preview) {
-    if (pt === 'audio') preview = '🎤 Голосовое сообщение';
-    else if (pt === 'video_note') preview = '🎥 Видеосообщение';
+    if (pt === 'audio') {
+      const pl =
+        tail.payload && typeof tail.payload === 'object' && !Array.isArray(tail.payload)
+          ? (tail.payload as Record<string, unknown>)
+          : null;
+      const kind = String(pl?.kind ?? pl?.audioKind ?? '')
+        .trim()
+        .toLowerCase();
+      const name = String(pl?.name ?? pl?.filename ?? '').trim();
+      const isFile =
+        kind === 'file' ||
+        kind === 'music' ||
+        kind === 'audio_file' ||
+        (Boolean(name) && !/^voice-\d+\./i.test(name) && kind !== 'voice');
+      preview = isFile ? (name ? `🎵 ${name}` : '🎵 Аудиофайл') : '🎤 Голосовое сообщение';
+    } else if (pt === 'video_note') preview = '🎥 Видеосообщение';
     else if (pt === 'image') preview = '📷 Фото';
     else if (pt === 'file') preview = '📎 Файл';
     else if (pt === 'poll') preview = '📊 Опрос';

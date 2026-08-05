@@ -1339,12 +1339,30 @@ function MessageBubbleInner({
       const caption = String(message.content ?? '').trim();
       const durRaw = payload.durationSec ?? payload.duration_sec;
       const durationHint = typeof durRaw === 'number' && Number.isFinite(durRaw) ? durRaw : Number(durRaw);
+      const audioKind = String(payload.kind ?? payload.audioKind ?? '').trim().toLowerCase();
+      const fileName = String(payload.name ?? payload.filename ?? '').trim();
+      const isAudioFile =
+        audioKind === 'file' ||
+        audioKind === 'music' ||
+        audioKind === 'audio_file' ||
+        (Boolean(fileName) && !/^voice-\d+\./i.test(fileName) && audioKind !== 'voice');
+      const titleFromPayload = String(payload.title ?? '').trim();
+      const displayTitle =
+        titleFromPayload ||
+        (isAudioFile && fileName ? fileName.replace(/\.[^.]+$/, '') || fileName : '');
       return (
-        <div className="w-full max-w-[min(85vw,280px)] space-y-2">
+        <div
+          className={[
+            'w-full space-y-2',
+            isAudioFile ? 'max-w-[min(88vw,300px)]' : 'max-w-[min(85vw,280px)]',
+          ].join(' ')}
+        >
           <VoiceMessageAttachment
             audioSrc={href || null}
             isMine={isMine}
             durationHintSec={Number.isFinite(durationHint) && durationHint > 0 ? durationHint : undefined}
+            variant={isAudioFile ? 'file' : 'voice'}
+            title={displayTitle || undefined}
           />
           {caption ? (
             <div className={['text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>

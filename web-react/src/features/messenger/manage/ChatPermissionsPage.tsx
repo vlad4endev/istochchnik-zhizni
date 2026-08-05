@@ -115,7 +115,7 @@ export function ChatPermissionsPage() {
         <ToggleRow
           Icon={LuImage}
           title="Медиа"
-          description="Фото, файлы, голосовые (в будущем)"
+          description="Фото, файлы, голосовые и аудио"
           value={!!perms.can_send_media}
           disabled={!canEdit}
           onChange={(v) => setPerm('can_send_media', v)}

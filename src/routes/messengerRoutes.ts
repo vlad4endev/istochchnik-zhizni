@@ -1317,12 +1317,30 @@ router.post(
         const recipients = memberIds.filter((id) => Number(id) !== Number(userId));
         const senderName = message.sender_name ?? 'Новое сообщение';
         const ptype = String(message.payload_type ?? 'text');
+        const mpl =
+          message.payload && typeof message.payload === 'object' && !Array.isArray(message.payload)
+            ? (message.payload as Record<string, unknown>)
+            : undefined;
+        const audioKind = String(mpl?.kind ?? mpl?.audioKind ?? '')
+          .trim()
+          .toLowerCase();
+        const audioName = String(mpl?.name ?? mpl?.filename ?? '').trim();
+        const isAudioFile =
+          ptype === 'audio' &&
+          (audioKind === 'file' ||
+            audioKind === 'music' ||
+            audioKind === 'audio_file' ||
+            (Boolean(audioName) && !/^voice-\d+\./i.test(audioName) && audioKind !== 'voice'));
         const bodyText =
           String(message.content ?? '').trim() ||
           (ptype === 'poll'
             ? '📊 Опрос'
             : ptype === 'audio'
-              ? '🎤 Голосовое сообщение'
+              ? isAudioFile
+                ? audioName
+                  ? `🎵 ${audioName}`
+                  : '🎵 Аудиофайл'
+                : '🎤 Голосовое сообщение'
               : ptype === 'video_note'
                 ? '🎥 Видеосообщение'
                 : ptype === 'story_reply'
@@ -1330,10 +1348,6 @@ router.post(
                   : ptype !== 'text'
                     ? 'Вложение'
                     : 'Новое сообщение');
-        const mpl =
-          message.payload && typeof message.payload === 'object' && !Array.isArray(message.payload)
-            ? (message.payload as Record<string, unknown>)
-            : undefined;
         const mentionIds = Array.isArray(mpl?.mention_member_ids)
           ? (mpl.mention_member_ids as unknown[])
               .map((x) => Number(x))

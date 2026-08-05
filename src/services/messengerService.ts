@@ -179,13 +179,40 @@ function mapParticipantUiExtras(r: {
   };
 }
 
-function lastMessageListPreviewContent(rawContent: unknown, payloadType: unknown): string {
+function isMessengerAudioFilePayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  const p = payload as Record<string, unknown>;
+  const kind = String(p.kind ?? p.audioKind ?? '')
+    .trim()
+    .toLowerCase();
+  if (kind === 'file' || kind === 'music' || kind === 'audio_file') return true;
+  if (kind === 'voice' || kind === 'recording') return false;
+  const name = String(p.name ?? p.filename ?? '').trim();
+  if (!name) return false;
+  return !/^voice-\d+\./i.test(name);
+}
+
+function lastMessageListPreviewContent(
+  rawContent: unknown,
+  payloadType: unknown,
+  payload?: unknown,
+): string {
   const resolvedContent =
     typeof rawContent === 'string' ? decryptMessageText(rawContent) : '';
   const s = resolvedContent.trim();
   if (s) return resolvedContent;
   const pt = String(payloadType ?? '').trim();
-  if (pt === 'audio') return '🎤 Голосовое сообщение';
+  if (pt === 'audio') {
+    if (isMessengerAudioFilePayload(payload)) {
+      const name = String(
+        (payload as Record<string, unknown>).name ??
+          (payload as Record<string, unknown>).filename ??
+          '',
+      ).trim();
+      return name ? `🎵 ${name}` : '🎵 Аудиофайл';
+    }
+    return '🎤 Голосовое сообщение';
+  }
   if (pt === 'video_note') return '🎥 Видеосообщение';
   if (pt === 'image') return '📷 Фото';
   if (pt === 'file') return '📎 Файл';
@@ -235,6 +262,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
       lm.created_at    AS lm_created_at,
       lm.is_deleted    AS lm_is_deleted,
       lm.payload_type  AS lm_payload_type,
+      lm.payload       AS lm_payload,
       COALESCE(
         NULLIF(TRIM(COALESCE(lm_sender.first_name, '') || ' ' || COALESCE(lm_sender.last_name, '')), ''),
         CASE
@@ -351,7 +379,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
       last_message: r.lm_id
         ? {
             id: bigint(r.lm_id),
-            content: lastMessageListPreviewContent(r.lm_content, r.lm_payload_type),
+            content: lastMessageListPreviewContent(r.lm_content, r.lm_payload_type, r.lm_payload),
             sender_id: r.lm_sender_id,
             sender_name: r.lm_sender_name?.trim() || null,
             created_at: r.lm_created_at,
@@ -767,6 +795,7 @@ export async function getConversationListItem(
       lm.created_at    AS lm_created_at,
       lm.is_deleted    AS lm_is_deleted,
       lm.payload_type  AS lm_payload_type,
+      lm.payload       AS lm_payload,
       COALESCE(
         NULLIF(TRIM(COALESCE(lm_sender.first_name, '') || ' ' || COALESCE(lm_sender.last_name, '')), ''),
         CASE
@@ -872,7 +901,7 @@ export async function getConversationListItem(
     last_message: r.lm_id
       ? {
           id: bigint(r.lm_id),
-          content: lastMessageListPreviewContent(r.lm_content, r.lm_payload_type),
+          content: lastMessageListPreviewContent(r.lm_content, r.lm_payload_type, r.lm_payload),
           sender_id: r.lm_sender_id,
           sender_name: r.lm_sender_name?.trim() || null,
           created_at: r.lm_created_at,
