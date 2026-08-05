@@ -8,6 +8,7 @@ import { dispatchDueSermonFeedbackNotifications } from '../services/sermonFeedba
 import { sendMediaScheduleReminders } from '../services/mediaScheduleService';
 import { sendMusicScheduleReminders } from '../services/musicScheduleService';
 import { processServicePlanMailingDue } from '../services/servicePlanMondayMailingService';
+import { sendPreacherSermonDataReminders } from '../services/preacherSermonDataReminderService';
 import {
   notifyCoordinatorTelegramAssignment,
   processCoordinatorTelegramScenariosDue,
@@ -178,6 +179,30 @@ export function initPushCronJobs() {
       }
     },
     { timezone: process.env.CURATOR_DISTRIBUTION_TZ?.trim() || 'Europe/Moscow' },
+  );
+
+  /**
+   * Раз в сутки в 10:00 МСК: Telegram-напоминание проповеднику за ~1.5 недели
+   * внести тему/Писание/презентацию в программу служения.
+   */
+  cron.schedule(
+    process.env.PREACHER_SERMON_DATA_REMINDER_CRON ?? '0 10 * * *',
+    async () => {
+      if (process.env.DISABLE_PREACHER_SERMON_DATA_REMINDER_CRON === 'true') {
+        return;
+      }
+      try {
+        const result = await sendPreacherSermonDataReminders();
+        if (result.sent > 0 || result.skipped > 0) {
+          console.log(
+            `[CRON] preacher sermon data reminders: sent=${result.sent} skipped=${result.skipped} window=${result.from_date}..${result.target_date}`,
+          );
+        }
+      } catch (e) {
+        console.error('[CRON] preacher sermon data reminders', e);
+      }
+    },
+    { timezone: process.env.PREACHER_SERMON_DATA_REMINDER_TZ?.trim() || 'Europe/Moscow' },
   );
 
   /** Раз в сутки в 18:00 МСК: напоминания медиа-команде о службе завтра. */
