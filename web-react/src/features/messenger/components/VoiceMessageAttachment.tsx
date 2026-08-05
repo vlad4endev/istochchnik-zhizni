@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { LuPause, LuPlay } from 'react-icons/lu';
 
-import { useAuthenticatedApiBlobSrc } from '../../../lib/useAuthenticatedApiBlobSrc';
+import {
+  getMessengerAudioSnapshot,
+  seekMessengerAudio,
+  setMessengerAudioRate,
+  subscribeMessengerAudio,
+  toggleMessengerAudio,
+  type MessengerAudioSnapshot,
+} from '../messengerAudioHost';
 
-const MESSENGER_AUDIO_PLAY_EVENT = 'messenger-audio-play';
 const VOICE_RATE_KEY = 'messenger-voice-playback-rate';
 const PLAYBACK_RATES = [1, 1.5, 2] as const;
 type PlaybackRate = (typeof PLAYBACK_RATES)[number];
@@ -74,116 +80,97 @@ export function VoiceMessageAttachment({
   waveSeed?: string;
 }) {
   const instanceId = useId();
-  const needsAuthBlob =
-    typeof audioSrc === 'string' && audioSrc.includes('/attachment-file');
-  const authBlobSrc = useAuthenticatedApiBlobSrc(needsAuthBlob ? audioSrc : null);
-  const streamSrc = needsAuthBlob ? authBlobSrc : audioSrc;
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const seekingRef = useRef(false);
-  const [playing, setPlaying] = useState(false);
   const [rate, setRate] = useState<PlaybackRate>(() => readStoredRate());
   const [duration, setDuration] = useState(() =>
     typeof durationHintSec === 'number' && durationHintSec > 0 ? durationHintSec : 0,
   );
   const [current, setCurrent] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const bars = useMemo(
     () => buildVoiceWaveBars(waveSeed || title || audioSrc || instanceId, variant === 'file' ? 38 : 44),
     [waveSeed, title, audioSrc, instanceId, variant],
   );
 
-  useEffect(() => {
-    const el = audioRef.current;
-    if (!el) return;
-    el.playbackRate = rate;
-  }, [rate, streamSrc]);
+  const applySnap = useCallback(
+    (snap: MessengerAudioSnapshot) => {
+      if (snap.ownerId !== instanceId) {
+        setPlaying(false);
+        setLoading(false);
+        return;
+      }
+      setPlaying(snap.playing);
+      setLoading(snap.loading);
+      if (!seekingRef.current) {
+        setCurrent(snap.current);
+        setProgress(snap.progress);
+      }
+      if (snap.duration > 0) setDuration(snap.duration);
+    },
+    [instanceId],
+  );
+
+  useEffect(() => subscribeMessengerAudio(applySnap), [applySnap]);
 
   useEffect(() => {
-    const el = audioRef.current;
-    if (!el) return;
-    const onMeta = () => {
-      if (el.duration && Number.isFinite(el.duration) && el.duration > 0) {
-        setDuration(el.duration);
-      }
-    };
-    const onTime = () => {
-      if (seekingRef.current) return;
-      setCurrent(el.currentTime);
-      if (el.duration && Number.isFinite(el.duration) && el.duration > 0) {
-        setProgress(el.currentTime / el.duration);
-      }
-    };
-    const onPlay = () => {
-      setPlaying(true);
-      window.dispatchEvent(
-        new CustomEvent(MESSENGER_AUDIO_PLAY_EVENT, { detail: { id: instanceId } }),
-      );
-    };
-    const onPause = () => setPlaying(false);
-    const onEnded = () => {
-      setPlaying(false);
-      setCurrent(0);
-      setProgress(0);
-    };
-    el.addEventListener('loadedmetadata', onMeta);
-    el.addEventListener('durationchange', onMeta);
-    el.addEventListener('timeupdate', onTime);
-    el.addEventListener('play', onPlay);
-    el.addEventListener('pause', onPause);
-    el.addEventListener('ended', onEnded);
-    return () => {
-      el.removeEventListener('loadedmetadata', onMeta);
-      el.removeEventListener('durationchange', onMeta);
-      el.removeEventListener('timeupdate', onTime);
-      el.removeEventListener('play', onPlay);
-      el.removeEventListener('pause', onPause);
-      el.removeEventListener('ended', onEnded);
-    };
-  }, [streamSrc, instanceId]);
-
-  useEffect(() => {
-    const onOtherPlay = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ id?: string }>).detail;
-      if (!detail?.id || detail.id === instanceId) return;
-      const el = audioRef.current;
-      if (el && !el.paused) el.pause();
-    };
-    window.addEventListener(MESSENGER_AUDIO_PLAY_EVENT, onOtherPlay);
-    return () => window.removeEventListener(MESSENGER_AUDIO_PLAY_EVENT, onOtherPlay);
-  }, [instanceId]);
+    if (typeof durationHintSec === 'number' && durationHintSec > 0) {
+      setDuration((prev) => (prev > 0 ? prev : durationHintSec));
+    }
+  }, [durationHintSec]);
 
   const toggle = useCallback(() => {
-    const el = audioRef.current;
-    if (!el || !streamSrc) return;
-    if (el.paused) void el.play().catch(() => {});
-    else el.pause();
-  }, [streamSrc]);
-
-  const cycleRate = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setRate((prev) => {
-      const idx = PLAYBACK_RATES.indexOf(prev);
-      const next = PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length] ?? 1;
-      try {
-        sessionStorage.setItem(VOICE_RATE_KEY, String(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
+    if (!audioSrc) return;
+    const snap = getMessengerAudioSnapshot();
+    const resumeFrom =
+      snap.ownerId === instanceId && snap.current > 0
+        ? snap.current
+        : current > 0
+          ? current
+          : undefined;
+    toggleMessengerAudio({
+      ownerId: instanceId,
+      src: audioSrc,
+      title: title?.trim() || (variant === 'file' ? 'Аудиофайл' : 'Голосовое сообщение'),
+      artist: 'Источник жизни',
+      durationHintSec,
+      rate,
+      startAtSec: resumeFrom,
     });
-  }, []);
+  }, [audioSrc, current, durationHintSec, instanceId, rate, title, variant]);
+
+  const cycleRate = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setRate((prev) => {
+        const idx = PLAYBACK_RATES.indexOf(prev);
+        const next = PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length] ?? 1;
+        try {
+          sessionStorage.setItem(VOICE_RATE_KEY, String(next));
+        } catch {
+          /* ignore */
+        }
+        const snap = getMessengerAudioSnapshot();
+        if (snap.ownerId === instanceId) {
+          setMessengerAudioRate(instanceId, next);
+        }
+        return next;
+      });
+    },
+    [instanceId],
+  );
 
   const seekFromClientX = useCallback(
     (clientX: number) => {
-      const el = audioRef.current;
       const track = trackRef.current;
-      if (!el || !track) return;
+      if (!track || !audioSrc) return;
       const total =
-        el.duration && Number.isFinite(el.duration) && el.duration > 0
-          ? el.duration
+        duration > 0
+          ? duration
           : typeof durationHintSec === 'number' && durationHintSec > 0
             ? durationHintSec
             : 0;
@@ -191,22 +178,18 @@ export function VoiceMessageAttachment({
       const rect = track.getBoundingClientRect();
       const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / Math.max(1, rect.width)));
       const next = ratio * total;
-      try {
-        el.currentTime = next;
-      } catch {
-        /* ignore seek errors before metadata */
-      }
       setCurrent(next);
       setProgress(ratio);
+      seekMessengerAudio(instanceId, next);
     },
-    [durationHintSec],
+    [audioSrc, duration, durationHintSec, instanceId],
   );
 
   const onTrackPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!streamSrc) return;
+      if (!audioSrc) return;
       seekingRef.current = true;
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
@@ -232,44 +215,14 @@ export function VoiceMessageAttachment({
       target.addEventListener('pointerup', onUp);
       target.addEventListener('pointercancel', onUp);
     },
-    [seekFromClientX, streamSrc],
+    [seekFromClientX, audioSrc],
   );
-
-  const awaitingAttachmentBlob = needsAuthBlob && streamSrc == null;
 
   if (!audioSrc) {
     return (
       <span className={['tg-voice-fallback', isMine ? 'tg-voice-fallback--mine' : ''].join(' ')}>
         {variant === 'file' ? 'Аудио недоступно' : 'Голосовое недоступно'}
       </span>
-    );
-  }
-
-  if (awaitingAttachmentBlob) {
-    return (
-      <div
-        data-no-msg-menu
-        className={[
-          'tg-voice-player',
-          isMine ? 'tg-voice-player--mine' : 'tg-voice-player--theirs',
-          'tg-voice-player--loading',
-        ].join(' ')}
-        onPointerDown={stopMsgMenu}
-        onPointerUp={stopMsgMenu}
-        onContextMenu={stopMsgMenu}
-      >
-        <span className="tg-voice-play tg-voice-play--ghost" aria-hidden />
-        <div className="tg-voice-body">
-          <div className="tg-voice-wave tg-voice-wave--skeleton" aria-hidden>
-            {bars.map((h, i) => (
-              <span key={i} className="tg-voice-bar" style={{ height: `${Math.round(h * 100)}%` }} />
-            ))}
-          </div>
-          <div className="tg-voice-meta">
-            <span className="tg-voice-time">Загрузка…</span>
-          </div>
-        </div>
-      </div>
     );
   }
 
@@ -286,6 +239,7 @@ export function VoiceMessageAttachment({
         isMine ? 'tg-voice-player--mine' : 'tg-voice-player--theirs',
         variant === 'file' ? 'tg-voice-player--file' : 'tg-voice-player--voice',
         playing ? 'tg-voice-player--playing' : '',
+        loading ? 'tg-voice-player--loading' : '',
       ].join(' ')}
       onPointerDown={stopMsgMenu}
       onContextMenu={(e) => {
@@ -293,7 +247,6 @@ export function VoiceMessageAttachment({
         e.stopPropagation();
       }}
     >
-      <audio ref={audioRef} src={streamSrc ?? undefined} preload="metadata" className="hidden" />
       <button
         type="button"
         data-no-msg-menu
@@ -306,6 +259,7 @@ export function VoiceMessageAttachment({
         }}
         className="tg-voice-play"
         aria-label={playing ? 'Пауза' : 'Воспроизвести'}
+        disabled={loading && !playing}
       >
         {playing ? (
           <LuPause size={20} strokeWidth={2.5} aria-hidden />
@@ -332,21 +286,20 @@ export function VoiceMessageAttachment({
           aria-valuenow={Math.round(current)}
           onPointerDown={onTrackPointerDown}
           onKeyDown={(e) => {
-            const el = audioRef.current;
-            if (!el || !(total > 0)) return;
+            if (!(total > 0)) return;
             const step = Math.max(1, total * 0.05);
             if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
               e.preventDefault();
-              el.currentTime = Math.min(total, el.currentTime + step);
+              seekMessengerAudio(instanceId, Math.min(total, current + step));
             } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
               e.preventDefault();
-              el.currentTime = Math.max(0, el.currentTime - step);
+              seekMessengerAudio(instanceId, Math.max(0, current - step));
             } else if (e.key === 'Home') {
               e.preventDefault();
-              el.currentTime = 0;
+              seekMessengerAudio(instanceId, 0);
             } else if (e.key === 'End') {
               e.preventDefault();
-              el.currentTime = total;
+              seekMessengerAudio(instanceId, total);
             } else if (e.key === ' ' || e.key === 'Enter') {
               e.preventDefault();
               toggle();
@@ -365,8 +318,8 @@ export function VoiceMessageAttachment({
 
         <div className="tg-voice-meta">
           <span className="tg-voice-time">
-            {timeLeft}
-            {total > 0 && (playing || current > 0) ? (
+            {loading && !playing ? 'Загрузка…' : timeLeft}
+            {!loading && total > 0 && (playing || current > 0) ? (
               <span className="tg-voice-time--total"> / {formatVoiceTime(total)}</span>
             ) : null}
           </span>

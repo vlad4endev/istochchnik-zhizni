@@ -1,4 +1,5 @@
 import UIKit
+import AVFoundation
 import Capacitor
 import UserNotifications
 import FirebaseCore
@@ -14,6 +15,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     private var firebaseConfigured = false
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        configureAudioSessionForBackgroundPlayback()
         configureFirebaseIfPossible()
         configureNotificationCategories()
         UNUserNotificationCenter.current().delegate = self
@@ -22,6 +24,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             pendingPushPayload = extractPushPayload(from: remote)
         }
         return true
+    }
+
+    /// Нужно, чтобы голосовые/аудио из WebView продолжали играть после сворачивания приложения.
+    private func configureAudioSessionForBackgroundPlayback() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playback, mode: .default, options: [.allowAirPlay, .allowBluetoothA2DP])
+            try session.setActive(true)
+        } catch {
+            print("[audio] AVAudioSession playback setup failed: \(error)")
+        }
     }
 
     func applicationWillResignActive(_ application: UIApplication) {
