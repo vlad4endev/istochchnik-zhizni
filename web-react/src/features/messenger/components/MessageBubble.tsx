@@ -25,6 +25,7 @@ import {
   assistantMarkdownToPlainText,
   renderAssistantMessageContent,
 } from '../assistantMessageFormat';
+import { audioDisplayTitle, isMessengerAudioFilePayload } from '../chatAudio';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { ChatVideoAttachmentPreview } from './ChatVideoAttachmentPreview';
@@ -1339,17 +1340,11 @@ function MessageBubbleInner({
       const caption = String(message.content ?? '').trim();
       const durRaw = payload.durationSec ?? payload.duration_sec;
       const durationHint = typeof durRaw === 'number' && Number.isFinite(durRaw) ? durRaw : Number(durRaw);
-      const audioKind = String(payload.kind ?? payload.audioKind ?? '').trim().toLowerCase();
-      const fileName = String(payload.name ?? payload.filename ?? '').trim();
-      const isAudioFile =
-        audioKind === 'file' ||
-        audioKind === 'music' ||
-        audioKind === 'audio_file' ||
-        (Boolean(fileName) && !/^voice-\d+\./i.test(fileName) && audioKind !== 'voice');
+      const isAudioFile = isMessengerAudioFilePayload(payload as Record<string, unknown>);
       const titleFromPayload = String(payload.title ?? '').trim();
+      const fileName = String(payload.name ?? payload.filename ?? '').trim();
       const displayTitle =
-        titleFromPayload ||
-        (isAudioFile && fileName ? fileName.replace(/\.[^.]+$/, '') || fileName : '');
+        titleFromPayload || (isAudioFile && fileName ? audioDisplayTitle(fileName) : '');
       return (
         <div
           className={[
