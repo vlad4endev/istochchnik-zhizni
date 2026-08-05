@@ -1660,6 +1660,7 @@ function MessageBubbleInner({
           '[data-no-msg-menu]',
           '.msg-reaction-chip',
           '.tg-voice-player',
+          '.tg-voice-msg',
           '.tg-audio-draft',
         ].join(', '),
       ),
