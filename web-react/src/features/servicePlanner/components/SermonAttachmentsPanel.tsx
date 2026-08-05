@@ -6,6 +6,7 @@ import { resolvePublicUrl } from '@/lib/resolvePublicUrl';
 import { emitAppToast } from '@/lib/uiFeedback';
 
 import {
+  displaySermonAttachmentName,
   formatAttachmentSize,
   parseSermonAttachments,
   SERMON_ATTACHMENT_ACCEPT,
@@ -102,6 +103,7 @@ export function SermonAttachmentsPanel({
           {attachments.map((a) => {
             const href = resolvePublicUrl(a.url) ?? a.url;
             const sizeLabel = formatAttachmentSize(a.size);
+            const label = displaySermonAttachmentName(a.name);
             return (
               <li
                 key={a.id}
@@ -111,14 +113,14 @@ export function SermonAttachmentsPanel({
                   {sermonAttachmentExtLabel(a.name)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-stone-900" title={a.name}>
-                    {a.name}
+                  <p className="truncate text-sm font-semibold text-stone-900" title={label}>
+                    {label}
                   </p>
                   {sizeLabel ? <p className="text-[11px] text-stone-500">{sizeLabel}</p> : null}
                 </div>
                 <a
                   href={href}
-                  download={a.name}
+                  download={label}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-md border border-stone-300 px-2 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
@@ -133,7 +135,7 @@ export function SermonAttachmentsPanel({
                     onClick={() => removeAttachment(a.id)}
                     className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-stone-300 text-stone-500 hover:border-rose-300 hover:text-rose-700"
                     title="Убрать файл"
-                    aria-label={`Убрать ${a.name}`}
+                    aria-label={`Убрать ${label}`}
                   >
                     <LuTrash2 className="h-4 w-4" />
                   </button>
@@ -195,18 +197,19 @@ export function SermonAttachmentsLinks({
     <div className={['space-y-1', className].filter(Boolean).join(' ')}>
       {attachments.map((a) => {
         const href = resolvePublicUrl(a.url) ?? a.url;
+        const label = displaySermonAttachmentName(a.name);
         return (
           <a
             key={a.id}
             href={href}
-            download={a.name}
+            download={label}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex max-w-full items-center gap-1.5 text-[11px] font-semibold text-rose-700 hover:underline sm:text-xs"
-            title={`Скачать ${a.name}`}
+            title={`Скачать ${label}`}
           >
             <LuPaperclip className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{a.name}</span>
+            <span className="truncate">{label}</span>
             <LuDownload className="h-3.5 w-3.5 shrink-0 opacity-70" />
           </a>
         );
