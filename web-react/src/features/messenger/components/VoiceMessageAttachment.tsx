@@ -30,6 +30,10 @@ function readStoredRate(): PlaybackRate {
   return 1;
 }
 
+function stopMsgMenu(e: { stopPropagation: () => void; preventDefault?: () => void }) {
+  e.stopPropagation();
+}
+
 /** Детерминированная «волна» без декодирования аудио — стабильна для одного сообщения. */
 export function buildVoiceWaveBars(seed: string, count = 40): number[] {
   let h = 2166136261;
@@ -43,9 +47,9 @@ export function buildVoiceWaveBars(seed: string, count = 40): number[] {
     h = Math.imul(h ^ (h >>> 13), 1274126177);
     const n = ((h >>> 0) % 1000) / 1000;
     const t = count <= 1 ? 0.5 : i / (count - 1);
-    const envelope = 0.28 + 0.72 * Math.sin(Math.PI * t);
-    const wobble = 0.12 * Math.sin(t * Math.PI * 5 + (h % 7));
-    bars.push(Math.min(1, Math.max(0.14, (0.2 + n * 0.8) * envelope + wobble)));
+    const envelope = 0.32 + 0.68 * Math.sin(Math.PI * t);
+    const wobble = 0.1 * Math.sin(t * Math.PI * 4.2 + (h % 7));
+    bars.push(Math.min(1, Math.max(0.16, (0.22 + n * 0.78) * envelope + wobble)));
   }
   return bars;
 }
@@ -86,7 +90,7 @@ export function VoiceMessageAttachment({
   const [progress, setProgress] = useState(0);
 
   const bars = useMemo(
-    () => buildVoiceWaveBars(waveSeed || title || audioSrc || instanceId, variant === 'file' ? 36 : 42),
+    () => buildVoiceWaveBars(waveSeed || title || audioSrc || instanceId, variant === 'file' ? 38 : 44),
     [waveSeed, title, audioSrc, instanceId, variant],
   );
 
@@ -150,35 +154,27 @@ export function VoiceMessageAttachment({
     return () => window.removeEventListener(MESSENGER_AUDIO_PLAY_EVENT, onOtherPlay);
   }, [instanceId]);
 
-  const toggle = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const el = audioRef.current;
-      if (!el || !streamSrc) return;
-      if (playing) el.pause();
-      else void el.play().catch(() => {});
-    },
-    [streamSrc, playing],
-  );
+  const toggle = useCallback(() => {
+    const el = audioRef.current;
+    if (!el || !streamSrc) return;
+    if (el.paused) void el.play().catch(() => {});
+    else el.pause();
+  }, [streamSrc]);
 
-  const cycleRate = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setRate((prev) => {
-        const idx = PLAYBACK_RATES.indexOf(prev);
-        const next = PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length] ?? 1;
-        try {
-          sessionStorage.setItem(VOICE_RATE_KEY, String(next));
-        } catch {
-          /* ignore */
-        }
-        return next;
-      });
-    },
-    [],
-  );
+  const cycleRate = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setRate((prev) => {
+      const idx = PLAYBACK_RATES.indexOf(prev);
+      const next = PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length] ?? 1;
+      try {
+        sessionStorage.setItem(VOICE_RATE_KEY, String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
 
   const seekFromClientX = useCallback(
     (clientX: number) => {
@@ -215,8 +211,12 @@ export function VoiceMessageAttachment({
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
       seekFromClientX(e.clientX);
-      const onMove = (ev: PointerEvent) => seekFromClientX(ev.clientX);
+      const onMove = (ev: PointerEvent) => {
+        ev.stopPropagation();
+        seekFromClientX(ev.clientX);
+      };
       const onUp = (ev: PointerEvent) => {
+        ev.stopPropagation();
         seekingRef.current = false;
         seekFromClientX(ev.clientX);
         try {
@@ -247,7 +247,17 @@ export function VoiceMessageAttachment({
 
   if (awaitingAttachmentBlob) {
     return (
-      <div className={['tg-voice-player', isMine ? 'tg-voice-player--mine' : 'tg-voice-player--theirs', 'tg-voice-player--loading'].join(' ')}>
+      <div
+        data-no-msg-menu
+        className={[
+          'tg-voice-player',
+          isMine ? 'tg-voice-player--mine' : 'tg-voice-player--theirs',
+          'tg-voice-player--loading',
+        ].join(' ')}
+        onPointerDown={stopMsgMenu}
+        onPointerUp={stopMsgMenu}
+        onContextMenu={stopMsgMenu}
+      >
         <span className="tg-voice-play tg-voice-play--ghost" aria-hidden />
         <div className="tg-voice-body">
           <div className="tg-voice-wave tg-voice-wave--skeleton" aria-hidden>
@@ -256,7 +266,7 @@ export function VoiceMessageAttachment({
             ))}
           </div>
           <div className="tg-voice-meta">
-            <span>Загрузка…</span>
+            <span className="tg-voice-time">Загрузка…</span>
           </div>
         </div>
       </div>
@@ -270,24 +280,37 @@ export function VoiceMessageAttachment({
 
   return (
     <div
+      data-no-msg-menu
       className={[
         'tg-voice-player',
         isMine ? 'tg-voice-player--mine' : 'tg-voice-player--theirs',
         variant === 'file' ? 'tg-voice-player--file' : 'tg-voice-player--voice',
         playing ? 'tg-voice-player--playing' : '',
       ].join(' ')}
+      onPointerDown={stopMsgMenu}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
     >
       <audio ref={audioRef} src={streamSrc ?? undefined} preload="metadata" className="hidden" />
       <button
         type="button"
-        onClick={toggle}
+        data-no-msg-menu
+        onPointerDown={stopMsgMenu}
+        onPointerUp={stopMsgMenu}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggle();
+        }}
         className="tg-voice-play"
         aria-label={playing ? 'Пауза' : 'Воспроизвести'}
       >
         {playing ? (
-          <LuPause size={22} strokeWidth={2.4} aria-hidden />
+          <LuPause size={20} strokeWidth={2.5} aria-hidden />
         ) : (
-          <LuPlay size={22} strokeWidth={2.4} className="tg-voice-play__icon" aria-hidden />
+          <LuPlay size={20} strokeWidth={2.5} className="tg-voice-play__icon" aria-hidden />
         )}
       </button>
 
@@ -302,6 +325,7 @@ export function VoiceMessageAttachment({
           ref={trackRef}
           role="slider"
           tabIndex={0}
+          data-no-msg-menu
           aria-label="Прогресс воспроизведения"
           aria-valuemin={0}
           aria-valuemax={Math.max(1, Math.round(total))}
@@ -323,6 +347,9 @@ export function VoiceMessageAttachment({
             } else if (e.key === 'End') {
               e.preventDefault();
               el.currentTime = total;
+            } else if (e.key === ' ' || e.key === 'Enter') {
+              e.preventDefault();
+              toggle();
             }
           }}
           className="tg-voice-wave"
@@ -337,16 +364,20 @@ export function VoiceMessageAttachment({
         </div>
 
         <div className="tg-voice-meta">
-          <span className="tg-voice-time">{timeLeft}</span>
-          {total > 0 && (playing || current > 0) ? (
-            <span className="tg-voice-time tg-voice-time--total">/ {formatVoiceTime(total)}</span>
-          ) : null}
+          <span className="tg-voice-time">
+            {timeLeft}
+            {total > 0 && (playing || current > 0) ? (
+              <span className="tg-voice-time--total"> / {formatVoiceTime(total)}</span>
+            ) : null}
+          </span>
           <button
             type="button"
+            data-no-msg-menu
             className={['tg-voice-speed', rate !== 1 ? 'tg-voice-speed--active' : ''].join(' ')}
+            onPointerDown={stopMsgMenu}
             onClick={cycleRate}
             aria-label={`Скорость ${formatRate(rate)}. Нажмите, чтобы изменить`}
-            title="Скорость воспроизведения"
+            title="Скорость"
           >
             {formatRate(rate)}
           </button>

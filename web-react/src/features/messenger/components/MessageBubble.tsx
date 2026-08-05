@@ -1347,10 +1347,13 @@ function MessageBubbleInner({
         titleFromPayload || (isAudioFile && fileName ? audioDisplayTitle(fileName) : '');
       return (
         <div
+          data-no-msg-menu
           className={[
+            'tg-voice-msg',
             'w-full space-y-2',
             isAudioFile ? 'max-w-[min(88vw,300px)]' : 'max-w-[min(85vw,280px)]',
           ].join(' ')}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           <VoiceMessageAttachment
             audioSrc={href || null}
@@ -1626,6 +1629,7 @@ function MessageBubbleInner({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+    if (isInteractiveMsgTarget(e.target)) return;
     if (!isDeleted && !isOptimistic) {
       setShowReactionBar(false);
       setShowActions(true);
@@ -1641,10 +1645,23 @@ function MessageBubbleInner({
   };
 
   const isInteractiveMsgTarget = (target: EventTarget | null): boolean => {
-    if (!(target instanceof HTMLElement)) return false;
+    // SVG внутри кнопки (иконка Play) — Element, но не HTMLElement; иначе меню перехватывает play.
+    if (!(target instanceof Element)) return false;
     return Boolean(
       target.closest(
-        'button, a, input, textarea, select, [role="button"], [data-no-msg-menu], .msg-reaction-chip',
+        [
+          'button',
+          'a',
+          'input',
+          'textarea',
+          'select',
+          '[role="button"]',
+          '[role="slider"]',
+          '[data-no-msg-menu]',
+          '.msg-reaction-chip',
+          '.tg-voice-player',
+          '.tg-audio-draft',
+        ].join(', '),
       ),
     );
   };
