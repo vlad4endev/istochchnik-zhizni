@@ -2486,12 +2486,7 @@ export function ChatInput({
                 <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/25">
                   <LuMusic size={18} />
                 </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block">Аудиофайл</span>
-                  <span className="mt-0.5 block text-[11px] font-medium text-[var(--text-secondary)]">
-                    mp3, m4a, ogg — с описанием
-                  </span>
-                </span>
+                <span className="min-w-0 flex-1">Аудиофайл</span>
               </button>
               <button
                 type="button"
