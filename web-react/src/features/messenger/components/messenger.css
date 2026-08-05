@@ -323,7 +323,9 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
       .msg-actions button,
       .msg-quick-reaction,
       .msg-reaction-floating__emoji,
-      .tg-input-banner-close
+      .tg-input-banner-close,
+      .tg-voice-play,
+      .tg-voice-speed
     ):active {
     opacity: 1 !important;
   }
@@ -3951,12 +3953,17 @@ html.dark .msg-videonote-circle--placeholder {
   height: 42px;
   border: 0;
   border-radius: 999px;
-  color: var(--voice-play-fg);
-  background: var(--voice-play-bg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  color: var(--voice-play-fg) !important;
+  background: var(--voice-play-bg) !important;
+  background-color: var(--voice-play-bg) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+  opacity: 1 !important;
+  visibility: visible !important;
   cursor: pointer;
   transition: transform 140ms ease, filter 140ms ease;
   -webkit-tap-highlight-color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .tg-voice-player--file .tg-voice-play {
@@ -3964,12 +3971,33 @@ html.dark .msg-videonote-circle--placeholder {
   height: 44px;
 }
 
+.tg-voice-play:hover,
+.tg-voice-play:focus,
+.tg-voice-play:focus-visible,
+.tg-voice-play:active,
+.tg-voice-player--playing .tg-voice-play {
+  color: var(--voice-play-fg) !important;
+  background: var(--voice-play-bg) !important;
+  background-color: var(--voice-play-bg) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+}
+
 .tg-voice-play:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.04);
 }
 
 .tg-voice-play:active {
   transform: scale(0.94);
+}
+
+.tg-voice-play svg {
+  display: block;
+  color: inherit;
+  stroke: currentColor;
+  fill: none;
+  pointer-events: none;
 }
 
 .tg-voice-play__icon {
