@@ -382,6 +382,49 @@ export async function createSignedUrlForBucketObject(opts: {
   return { signedUrl: rewriteSupabaseStorageUrlForClient(data.signedUrl) };
 }
 
+/** Удаление объекта из бакета (service role). Ошибки «не найдено» не бросаем. */
+export async function deleteBucketObject(opts: {
+  bucket: string;
+  objectPath: string;
+}): Promise<void> {
+  const client = getClient();
+  if (!client) {
+    throw new Error('Supabase Storage is not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+  }
+  const objectPath = String(opts.objectPath || '')
+    .trim()
+    .replace(/^\/+/, '');
+  if (!objectPath || objectPath.includes('..')) {
+    throw new Error('Invalid storage objectPath for delete');
+  }
+  const { error } = await client.storage.from(opts.bucket).remove([objectPath]);
+  if (error) {
+    const msg = String(error.message || '').toLowerCase();
+    if (msg.includes('not found') || msg.includes('404') || msg.includes('does not exist')) {
+      return;
+    }
+    throw new Error(`Storage delete failed [bucket=${opts.bucket}]: ${error.message}`);
+  }
+}
+
+/** Достаёт objectPath из публичного URL Storage `/storage/v1/object/public/<bucket>/…`. */
+export function objectPathFromPublicStorageUrl(url: string, bucket: string): string | undefined {
+  const raw = String(url || '').trim();
+  const b = String(bucket || '').trim();
+  if (!raw || !b) return undefined;
+  try {
+    const u = new URL(raw.includes('://') ? raw : `https://placeholder.local${raw.startsWith('/') ? raw : `/${raw}`}`);
+    const marker = `/storage/v1/object/public/${b}/`;
+    const idx = u.pathname.indexOf(marker);
+    if (idx < 0) return undefined;
+    const rest = decodeURIComponent(u.pathname.slice(idx + marker.length)).replace(/^\/+/, '');
+    if (!rest || rest.includes('..') || rest.length > 512) return undefined;
+    return rest;
+  } catch {
+    return undefined;
+  }
+}
+
 function messengerUploadExtension(extension: string): string {
   const ext = String(extension || '').trim();
   const safeExt = ext && ext.length <= 12 ? ext.toLowerCase() : '';

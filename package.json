@@ -64,6 +64,7 @@
     "db:seed-members:docker": "bash scripts/seed-members-db-container.sh",
     "db:seed-members:docker:prod": "env -u COMPOSE_FILE bash scripts/seed-members-db-container.sh",
     "messenger:migrate-legacy-uploads": "npx ts-node scripts/migrateMessengerLegacyUploads.ts",
+    "messenger:compress-media": "npx ts-node scripts/runChatMediaCompress.ts",
     "push:vapid": "node scripts/generate-vapid-keys.mjs",
     "quickstart": "bash scripts/quickstart.sh",
     "start-all": "bash ./start-all",

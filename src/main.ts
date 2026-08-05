@@ -48,6 +48,7 @@ import {
 } from './realtime/wsHub';
 import { initPushCronJobs } from './cron/pushJobs';
 import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
+import { initChatMediaCompressJob } from './cron/chatMediaCompressJob';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel, ensureMediykaMessengerChannel, ensureServicePlanPlanningMessengerChannel } from './services/messengerService';
 import { ensurePushSubscriptionsSchema } from './services/pushSubscriptionsSchema';
@@ -556,6 +557,7 @@ async function start(): Promise<void> {
   
   initPushCronJobs();
   initTelegramDispatchJob();
+  initChatMediaCompressJob();
   startAnalyticsMaintenance();
 
   const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
