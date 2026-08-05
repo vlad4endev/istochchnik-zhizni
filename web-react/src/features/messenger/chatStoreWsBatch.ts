@@ -13,6 +13,7 @@ import { playAudio } from '../../utils/audio';
 import { sendRealtimeJson } from '../../lib/realtimeWsClient';
 import { isMessengerChatReadSurfaceOpen } from './messengerReadSurface';
 import { getAvatarInitial } from './avatarUtils';
+import { messengerAudioListPreview } from './chatAudio';
 import { inferMessengerPayloadType } from './payloadMedia';
 import { hasMessengerSenderId, isAssistantBotMessage, isAssistantMessengerChannel } from './messengerChannelKinds';
 import type { ChatState } from './chatStore';
@@ -154,16 +155,7 @@ function listPreviewFromMessage(
         tail.payload && typeof tail.payload === 'object' && !Array.isArray(tail.payload)
           ? (tail.payload as Record<string, unknown>)
           : null;
-      const kind = String(pl?.kind ?? pl?.audioKind ?? '')
-        .trim()
-        .toLowerCase();
-      const name = String(pl?.name ?? pl?.filename ?? '').trim();
-      const isFile =
-        kind === 'file' ||
-        kind === 'music' ||
-        kind === 'audio_file' ||
-        (Boolean(name) && !/^voice-\d+\./i.test(name) && kind !== 'voice');
-      preview = isFile ? (name ? `🎵 ${name}` : '🎵 Аудиофайл') : '🎤 Голосовое сообщение';
+      preview = messengerAudioListPreview('', pl);
     } else if (pt === 'video_note') preview = '🎥 Видеосообщение';
     else if (pt === 'image') preview = '📷 Фото';
     else if (pt === 'file') preview = '📎 Файл';
