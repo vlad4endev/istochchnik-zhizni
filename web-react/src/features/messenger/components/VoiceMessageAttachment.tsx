@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { LuPause, LuPlay } from 'react-icons/lu';
 
 import { useAuthenticatedApiBlobSrc } from '../../../lib/useAuthenticatedApiBlobSrc';
 
 const MESSENGER_AUDIO_PLAY_EVENT = 'messenger-audio-play';
+const VOICE_RATE_KEY = 'messenger-voice-playback-rate';
+const PLAYBACK_RATES = [1, 1.5, 2] as const;
+type PlaybackRate = (typeof PLAYBACK_RATES)[number];
 
 function formatVoiceTime(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return '0:00';
@@ -13,12 +16,47 @@ function formatVoiceTime(sec: number): string {
   return `${m}:${r.toString().padStart(2, '0')}`;
 }
 
+function formatRate(rate: number): string {
+  return Number.isInteger(rate) ? `${rate}×` : `${rate}×`;
+}
+
+function readStoredRate(): PlaybackRate {
+  try {
+    const raw = Number(sessionStorage.getItem(VOICE_RATE_KEY));
+    if (PLAYBACK_RATES.includes(raw as PlaybackRate)) return raw as PlaybackRate;
+  } catch {
+    /* ignore */
+  }
+  return 1;
+}
+
+/** Детерминированная «волна» без декодирования аудио — стабильна для одного сообщения. */
+export function buildVoiceWaveBars(seed: string, count = 40): number[] {
+  let h = 2166136261;
+  const src = String(seed || 'voice');
+  for (let i = 0; i < src.length; i += 1) {
+    h ^= src.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const bars: number[] = [];
+  for (let i = 0; i < count; i += 1) {
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    const n = ((h >>> 0) % 1000) / 1000;
+    const t = count <= 1 ? 0.5 : i / (count - 1);
+    const envelope = 0.28 + 0.72 * Math.sin(Math.PI * t);
+    const wobble = 0.12 * Math.sin(t * Math.PI * 5 + (h % 7));
+    bars.push(Math.min(1, Math.max(0.14, (0.2 + n * 0.8) * envelope + wobble)));
+  }
+  return bars;
+}
+
 export function VoiceMessageAttachment({
   audioSrc,
   isMine,
   durationHintSec,
   title,
   variant = 'voice',
+  waveSeed,
 }: {
   audioSrc: string | null;
   isMine: boolean;
@@ -28,18 +66,35 @@ export function VoiceMessageAttachment({
   title?: string;
   /** Голосовое с микрофона или загруженный аудиофайл. */
   variant?: 'voice' | 'file';
+  /** Семя для стабильной волны (обычно id сообщения). */
+  waveSeed?: string;
 }) {
   const instanceId = useId();
-  const streamSrc = useAuthenticatedApiBlobSrc(audioSrc);
+  const needsAuthBlob =
+    typeof audioSrc === 'string' && audioSrc.includes('/attachment-file');
+  const authBlobSrc = useAuthenticatedApiBlobSrc(needsAuthBlob ? audioSrc : null);
+  const streamSrc = needsAuthBlob ? authBlobSrc : audioSrc;
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const seekingRef = useRef(false);
   const [playing, setPlaying] = useState(false);
+  const [rate, setRate] = useState<PlaybackRate>(() => readStoredRate());
   const [duration, setDuration] = useState(() =>
     typeof durationHintSec === 'number' && durationHintSec > 0 ? durationHintSec : 0,
   );
   const [current, setCurrent] = useState(0);
   const [progress, setProgress] = useState(0);
+
+  const bars = useMemo(
+    () => buildVoiceWaveBars(waveSeed || title || audioSrc || instanceId, variant === 'file' ? 36 : 42),
+    [waveSeed, title, audioSrc, instanceId, variant],
+  );
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    el.playbackRate = rate;
+  }, [rate, streamSrc]);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -107,24 +162,49 @@ export function VoiceMessageAttachment({
     [streamSrc, playing],
   );
 
-  const seekFromClientX = useCallback((clientX: number) => {
-    const el = audioRef.current;
-    const track = trackRef.current;
-    if (!el || !track) return;
-    const total =
-      el.duration && Number.isFinite(el.duration) && el.duration > 0
-        ? el.duration
-        : typeof durationHintSec === 'number' && durationHintSec > 0
-          ? durationHintSec
-          : 0;
-    if (!(total > 0)) return;
-    const rect = track.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / Math.max(1, rect.width)));
-    const next = ratio * total;
-    el.currentTime = next;
-    setCurrent(next);
-    setProgress(ratio);
-  }, [durationHintSec]);
+  const cycleRate = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setRate((prev) => {
+        const idx = PLAYBACK_RATES.indexOf(prev);
+        const next = PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length] ?? 1;
+        try {
+          sessionStorage.setItem(VOICE_RATE_KEY, String(next));
+        } catch {
+          /* ignore */
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const seekFromClientX = useCallback(
+    (clientX: number) => {
+      const el = audioRef.current;
+      const track = trackRef.current;
+      if (!el || !track) return;
+      const total =
+        el.duration && Number.isFinite(el.duration) && el.duration > 0
+          ? el.duration
+          : typeof durationHintSec === 'number' && durationHintSec > 0
+            ? durationHintSec
+            : 0;
+      if (!(total > 0)) return;
+      const rect = track.getBoundingClientRect();
+      const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / Math.max(1, rect.width)));
+      const next = ratio * total;
+      try {
+        el.currentTime = next;
+      } catch {
+        /* ignore seek errors before metadata */
+      }
+      setCurrent(next);
+      setProgress(ratio);
+    },
+    [durationHintSec],
+  );
 
   const onTrackPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -139,7 +219,11 @@ export function VoiceMessageAttachment({
       const onUp = (ev: PointerEvent) => {
         seekingRef.current = false;
         seekFromClientX(ev.clientX);
-        target.releasePointerCapture(ev.pointerId);
+        try {
+          target.releasePointerCapture(ev.pointerId);
+        } catch {
+          /* ignore */
+        }
         target.removeEventListener('pointermove', onMove);
         target.removeEventListener('pointerup', onUp);
         target.removeEventListener('pointercancel', onUp);
@@ -151,14 +235,11 @@ export function VoiceMessageAttachment({
     [seekFromClientX, streamSrc],
   );
 
-  const awaitingAttachmentBlob =
-    typeof audioSrc === 'string' &&
-    audioSrc.includes('/attachment-file') &&
-    streamSrc == null;
+  const awaitingAttachmentBlob = needsAuthBlob && streamSrc == null;
 
   if (!audioSrc) {
     return (
-      <span className={['text-sm font-medium', isMine ? 'text-white/75' : 'text-[var(--text-secondary)]'].join(' ')}>
+      <span className={['tg-voice-fallback', isMine ? 'tg-voice-fallback--mine' : ''].join(' ')}>
         {variant === 'file' ? 'Аудио недоступно' : 'Голосовое недоступно'}
       </span>
     );
@@ -166,59 +247,57 @@ export function VoiceMessageAttachment({
 
   if (awaitingAttachmentBlob) {
     return (
-      <span className={['text-sm font-medium', isMine ? 'text-white/75' : 'text-[var(--text-secondary)]'].join(' ')}>
-        Загрузка…
-      </span>
+      <div className={['tg-voice-player', isMine ? 'tg-voice-player--mine' : 'tg-voice-player--theirs', 'tg-voice-player--loading'].join(' ')}>
+        <span className="tg-voice-play tg-voice-play--ghost" aria-hidden />
+        <div className="tg-voice-body">
+          <div className="tg-voice-wave tg-voice-wave--skeleton" aria-hidden>
+            {bars.map((h, i) => (
+              <span key={i} className="tg-voice-bar" style={{ height: `${Math.round(h * 100)}%` }} />
+            ))}
+          </div>
+          <div className="tg-voice-meta">
+            <span>Загрузка…</span>
+          </div>
+        </div>
+      </div>
     );
   }
 
   const total = duration > 0 ? duration : typeof durationHintSec === 'number' ? durationHintSec : 0;
-  const timeLabel =
-    playing || current > 0
-      ? `${formatVoiceTime(current)}${total > 0 ? ` / ${formatVoiceTime(total)}` : ''}`
-      : formatVoiceTime(total > 0 ? total : 0);
+  const timeLeft = playing || current > 0 ? formatVoiceTime(current) : formatVoiceTime(total > 0 ? total : 0);
   const showTitle = variant === 'file' && Boolean(title?.trim());
-
-  const barBg = isMine ? 'bg-white/25' : 'bg-[var(--surface)]';
-  const barFill = isMine ? 'bg-white' : 'bg-primary';
-  const knob = isMine ? 'bg-white' : 'bg-primary';
+  const activeBars = Math.round(progress * bars.length);
 
   return (
     <div
       className={[
-        'flex items-center gap-2.5',
-        variant === 'file' ? 'min-w-[220px] max-w-[min(88vw,300px)]' : 'min-w-[200px] max-w-[min(85vw,280px)]',
+        'tg-voice-player',
+        isMine ? 'tg-voice-player--mine' : 'tg-voice-player--theirs',
+        variant === 'file' ? 'tg-voice-player--file' : 'tg-voice-player--voice',
+        playing ? 'tg-voice-player--playing' : '',
       ].join(' ')}
     >
       <audio ref={audioRef} src={streamSrc ?? undefined} preload="metadata" className="hidden" />
       <button
         type="button"
         onClick={toggle}
-        className={[
-          'grid shrink-0 place-items-center rounded-full transition-transform active:scale-[0.97]',
-          variant === 'file' ? 'h-11 w-11' : 'h-10 w-10',
-          isMine ? 'bg-white/20 text-white ring-1 ring-white/30' : 'bg-primary/12 text-primary ring-1 ring-primary/20',
-        ].join(' ')}
+        className="tg-voice-play"
         aria-label={playing ? 'Пауза' : 'Воспроизвести'}
       >
         {playing ? (
-          <LuPause size={20} strokeWidth={2.25} aria-hidden />
+          <LuPause size={22} strokeWidth={2.4} aria-hidden />
         ) : (
-          <LuPlay size={20} strokeWidth={2.25} className="ml-0.5" aria-hidden />
+          <LuPlay size={22} strokeWidth={2.4} className="tg-voice-play__icon" aria-hidden />
         )}
       </button>
-      <div className="min-w-0 flex-1">
+
+      <div className="tg-voice-body">
         {showTitle ? (
-          <p
-            className={[
-              'mb-1 truncate text-sm font-semibold leading-tight',
-              isMine ? 'text-white' : 'text-[var(--text)]',
-            ].join(' ')}
-            title={title}
-          >
+          <p className="tg-voice-title" title={title}>
             {title}
           </p>
         ) : null}
+
         <div
           ref={trackRef}
           role="slider"
@@ -246,34 +325,31 @@ export function VoiceMessageAttachment({
               el.currentTime = total;
             }
           }}
-          className={[
-            'relative cursor-pointer touch-none overflow-visible rounded-full',
-            variant === 'file' ? 'h-2' : 'h-1.5',
-            barBg,
-          ].join(' ')}
+          className="tg-voice-wave"
         >
-          <div
-            className={['absolute inset-y-0 left-0 rounded-full transition-[width]', barFill].join(' ')}
-            style={{ width: `${Math.round(progress * 100)}%` }}
-            aria-hidden
-          />
-          <span
-            className={[
-              'absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full shadow-sm transition-opacity',
-              knob,
-              playing || progress > 0 ? 'opacity-100' : 'opacity-0',
-            ].join(' ')}
-            style={{ left: `calc(${Math.round(progress * 100)}% - 6px)` }}
-            aria-hidden
-          />
+          {bars.map((h, i) => (
+            <span
+              key={i}
+              className={['tg-voice-bar', i < activeBars ? 'tg-voice-bar--played' : ''].join(' ')}
+              style={{ height: `${Math.round(h * 100)}%` }}
+            />
+          ))}
         </div>
-        <div
-          className={[
-            'mt-1 tabular-nums text-xs font-semibold',
-            isMine ? 'text-white/80' : 'text-[var(--text-muted)]',
-          ].join(' ')}
-        >
-          {timeLabel}
+
+        <div className="tg-voice-meta">
+          <span className="tg-voice-time">{timeLeft}</span>
+          {total > 0 && (playing || current > 0) ? (
+            <span className="tg-voice-time tg-voice-time--total">/ {formatVoiceTime(total)}</span>
+          ) : null}
+          <button
+            type="button"
+            className={['tg-voice-speed', rate !== 1 ? 'tg-voice-speed--active' : ''].join(' ')}
+            onClick={cycleRate}
+            aria-label={`Скорость ${formatRate(rate)}. Нажмите, чтобы изменить`}
+            title="Скорость воспроизведения"
+          >
+            {formatRate(rate)}
+          </button>
         </div>
       </div>
     </div>

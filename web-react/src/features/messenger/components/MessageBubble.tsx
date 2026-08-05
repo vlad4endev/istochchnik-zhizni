@@ -1358,6 +1358,7 @@ function MessageBubbleInner({
             durationHintSec={Number.isFinite(durationHint) && durationHint > 0 ? durationHint : undefined}
             variant={isAudioFile ? 'file' : 'voice'}
             title={displayTitle || undefined}
+            waveSeed={String(message.id)}
           />
           {caption ? (
             <div className={['text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>

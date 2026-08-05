@@ -40,6 +40,7 @@ import {
   videoNoteBlobFileName,
   videoNoteRecorderOptions,
 } from '../voiceRecording';
+import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 
 function toastMessengerUploadError(e: unknown): void {
   const err = e as Error & { code?: string };
@@ -1841,6 +1842,42 @@ export function ChatInput({
             Выбрано: {pendingImages.length}. Подпись и отправка — ниже.
           </p>
         </div>
+      ) : pending?.isAudio ? (
+        <div className="tg-audio-draft">
+          <div className="tg-audio-draft__player">
+            <VoiceMessageAttachment
+              audioSrc={pending.previewUrl}
+              isMine={false}
+              variant="file"
+              title={audioDisplayTitle(pending.file.name)}
+              durationHintSec={pending.durationSec}
+              waveSeed={`draft-${pending.file.name}-${pending.file.size}`}
+            />
+            <p className="tg-audio-draft__hint">
+              {formatBytes(pending.file.size)}
+              {pending.durationSec
+                ? ` · ${Math.floor(pending.durationSec / 60)}:${String(pending.durationSec % 60).padStart(2, '0')}`
+                : ''}
+              {' · '}
+              Добавьте описание ниже и нажмите отправить
+            </p>
+          </div>
+          <button
+            type="button"
+            className="tg-audio-draft__close"
+            onClick={() => {
+              if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
+              setPending(null);
+              setPreviewSrc(null);
+              setPreviewMediaKind('image');
+              if (fileInputRef.current) fileInputRef.current.value = '';
+            }}
+            aria-label="Убрать аудио"
+            title="Убрать аудио"
+          >
+            <LuX />
+          </button>
+        </div>
       ) : pending ? (
         <div className="mb-1.5 border-b border-stone-200/45 pb-2 dark:border-white/12">
           <div className="flex items-start gap-2">
@@ -1858,10 +1895,6 @@ export function ChatInput({
                   <img src={pending.previewUrl} alt="" className="h-full w-full object-cover" />
                 </button>
               </div>
-            ) : pending.isAudio ? (
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
-                <LuMusic size={22} aria-hidden />
-              </div>
             ) : (
               <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-black/5 text-[var(--text-secondary)] dark:bg-white/10">
                 <LuPaperclip />
@@ -1869,25 +1902,10 @@ export function ChatInput({
             )}
 
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-[var(--text)]">
-                {pending.isAudio ? audioDisplayTitle(pending.file.name) : pending.file.name}
-              </p>
+              <p className="truncate text-sm font-semibold text-[var(--text)]">{pending.file.name}</p>
               <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-                {pending.isImage
-                  ? 'Фото'
-                  : pending.isAudio
-                    ? 'Аудио'
-                    : 'Файл'}{' '}
-                · {formatBytes(pending.file.size)}
-                {pending.isAudio && pending.durationSec
-                  ? ` · ${Math.floor(pending.durationSec / 60)}:${String(pending.durationSec % 60).padStart(2, '0')}`
-                  : ''}
+                {pending.isImage ? 'Фото' : 'Файл'} · {formatBytes(pending.file.size)}
               </p>
-              {pending.isAudio ? (
-                <p className="mt-1 text-[11px] leading-snug text-[var(--text-secondary)]">
-                  Добавьте описание в поле ниже — оно отправится вместе с аудио.
-                </p>
-              ) : null}
             </div>
 
             <button
@@ -2465,10 +2483,15 @@ export function ChatInput({
                 onClick={() => pickFile('audio')}
                 className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-[var(--text)] transition-colors duration-200 hover:bg-[var(--surface)] active:bg-stone-100"
               >
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/25">
                   <LuMusic size={18} />
                 </span>
-                <span className="min-w-0 flex-1">Аудио</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block">Аудиофайл</span>
+                  <span className="mt-0.5 block text-[11px] font-medium text-[var(--text-secondary)]">
+                    mp3, m4a, ogg — с описанием
+                  </span>
+                </span>
               </button>
               <button
                 type="button"
