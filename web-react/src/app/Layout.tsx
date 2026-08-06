@@ -140,7 +140,7 @@ function ConnectivityBanner() {
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-[9998] flex items-center justify-center gap-2.5 border-t border-white/[0.07] bg-zinc-950/88 px-3 py-2.5 text-center backdrop-blur-xl supports-[backdrop-filter]:bg-zinc-950/72 sm:gap-3 sm:px-4 [padding-bottom:max(0.625rem,env(safe-area-inset-bottom,0px))]"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-[9998] flex items-center justify-center gap-2.5 border-t border-white/[0.07] bg-zinc-950/88 px-3 py-2.5 text-center backdrop-blur-xl supports-[backdrop-filter]:bg-zinc-950/72 sm:gap-3 sm:px-4 max-lg:bottom-[var(--app-bottom-nav-total-height)] lg:bottom-0 [padding-bottom:0.625rem]"
     >
       <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
         <span className="absolute inline-flex h-full w-full motion-reduce:hidden animate-ping rounded-full bg-rose-400/45" />
@@ -1217,7 +1217,9 @@ export function Layout() {
         className={[
           'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip max-lg:overflow-y-auto lg:overflow-y-visible outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
           'page-content',
-          'max-lg:pb-[var(--app-bottom-nav-total-height)] lg:pb-0',
+          mainChromeVisible
+            ? 'max-lg:pb-[var(--app-bottom-nav-total-height)] lg:pb-0'
+            : 'pb-0',
         ].join(' ')}
       >
         <div key={location.pathname} className="page-enter flex min-h-0 w-full max-w-full flex-1 flex-col">

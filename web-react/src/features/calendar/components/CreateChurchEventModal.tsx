@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { LuCalendarPlus, LuLoaderCircle, LuX } from 'react-icons/lu';
 
+import { useMobileBottomNavLock } from '@/app/useMobileBottomNavLock';
 import {
   apiErrorMessage,
   createAdminEvent,
@@ -36,6 +37,7 @@ type Props = {
 };
 
 export function CreateChurchEventModal({ open, onClose, onCreated }: Props) {
+  useMobileBottomNavLock(open);
   const categoryOptsQ = useQuery({
     queryKey: ['calendar', 'event-category-options', 'create-modal'],
     queryFn: fetchChurchEventCategoryOptions,

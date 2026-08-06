@@ -67,7 +67,7 @@ export function MySchedulePage() {
   ).length;
 
   return (
-    <div className="min-h-full bg-[var(--surface)] px-3 pb-28 pt-3 sm:px-4 sm:pb-12 sm:pt-4 shell:px-6 md:px-8">
+    <div className="min-h-full bg-[var(--surface)] px-3 pb-6 pt-3 sm:px-4 sm:pb-12 sm:pt-4 shell:px-6 md:px-8">
       <div className="mx-auto w-full max-w-2xl space-y-4">
         <div className="flex items-center gap-3">
           <Link

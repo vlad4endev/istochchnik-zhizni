@@ -1246,7 +1246,10 @@ function MembersSection({
               </button>
             </div>
           </div>
-          <div className="mt-4 overflow-x-auto rounded-xl border border-stone-200/80 bg-white/90">
+          <p className="mt-3 text-center text-[11px] font-semibold text-stone-400 lg:hidden">
+            Листайте таблицу вбок, чтобы увидеть все поля
+          </p>
+          <div data-scroll-hint className="mt-2 overflow-x-auto rounded-xl border border-stone-200/80 bg-white/90">
             <table className="min-w-[920px] w-full border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-stone-200 bg-stone-50/95 font-extrabold uppercase tracking-wide text-stone-500">
@@ -1612,7 +1615,10 @@ function MembersSection({
 
       {/* Table — shown at shell+ breakpoint */}
       <div className="hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)] shell:block">
-        <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-smooth">
+        <div
+          data-scroll-hint
+          className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-smooth"
+        >
           <table className="w-full min-w-[640px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50/90 text-xs font-extrabold uppercase tracking-wider text-stone-500">

@@ -2551,7 +2551,12 @@ export function ServicePlannerPage() {
           </button>
         </div>
       ) : null}
-      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-3 pb-6 sm:px-4 sm:py-4 md:px-6">
+      <section
+        className={[
+          'mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-3 pb-6 sm:px-4 sm:py-4 md:px-6',
+          planStickyBackVisible ? 'max-lg:pt-14' : '',
+        ].join(' ')}
+      >
       <header className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
           <div className="flex min-w-0 items-center gap-2">
@@ -2914,21 +2919,21 @@ export function ServicePlannerPage() {
             {timedBlocks.length} блоков · {totalDuration} мин
           </span>
         </div>
-        <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="mb-3 flex flex-wrap gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={addPlanBlock}
             disabled={createBlockMut.isPending || blockTypes.length === 0}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-[36px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-stone-300 px-2.5 py-1.5 text-xs font-semibold text-stone-700 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[44px] sm:flex-none sm:gap-2 sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm"
           >
             <LuPlus className="h-4 w-4 shrink-0" />
-            Добавить блок
+            Блок
           </button>
           <button
             type="button"
             onClick={addSeparatorBlock}
             disabled={createBlockMut.isPending || blockTypes.length === 0}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-[36px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-stone-300 px-2.5 py-1.5 text-xs font-semibold text-stone-700 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[44px] sm:flex-none sm:gap-2 sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm"
           >
             <LuPlus className="h-4 w-4 shrink-0" />
             Разделитель
@@ -2940,13 +2945,13 @@ export function ServicePlannerPage() {
             }}
             disabled={autosaveStatus === 'saving'}
             className={[
-              'col-span-2 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold md:col-span-1',
+              'inline-flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold sm:min-h-[44px] sm:w-auto sm:gap-2 sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm',
               draft.status === 'draft'
                 ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
                 : 'border-amber-300 text-amber-700 hover:bg-amber-50',
             ].join(' ')}
           >
-            {draft.status === 'draft' ? 'Опубликовать' : 'Вернуть в черновик'}
+            {draft.status === 'draft' ? 'Опубликовать' : 'В черновик'}
           </button>
         </div>
         <div className="mb-3 hidden md:block">

@@ -22,7 +22,7 @@ export function MinistryScheduleSwitcher({ role, ministryDirection, ministryRole
 
   return (
     <div
-      className="flex flex-wrap gap-2 rounded-2xl border border-stone-200 bg-white p-1.5 shadow-sm"
+      className="flex gap-1.5 overflow-x-auto rounded-2xl border border-stone-200 bg-white p-1.5 shadow-sm [scrollbar-width:none] sm:flex-wrap sm:overflow-visible"
       role="tablist"
       aria-label="Направление расписания"
     >
@@ -37,7 +37,7 @@ export function MinistryScheduleSwitcher({ role, ministryDirection, ministryRole
             role="tab"
             aria-selected={isActive}
             className={[
-              'min-h-[40px] flex-1 rounded-xl px-3 py-2 text-center text-sm font-bold transition sm:flex-none sm:px-4',
+              'min-h-[44px] shrink-0 flex-1 rounded-xl px-3 py-2 text-center text-xs font-bold transition sm:flex-none sm:px-4 sm:text-sm',
               isActive
                 ? 'bg-primary text-white shadow-sm'
                 : 'text-stone-700 hover:bg-stone-50 active:bg-stone-100',

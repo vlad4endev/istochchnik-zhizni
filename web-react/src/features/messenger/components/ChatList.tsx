@@ -670,7 +670,7 @@ function ChatRowContextMenu({
       <div
         role="menu"
         aria-label="Действия с чатом"
-        className="absolute z-[6001] w-[min(240px,calc(100vw-16px))] overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] py-1 shadow-xl"
+        className="absolute z-[6001] w-[min(240px,calc(100%-16px))] overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] py-1 shadow-xl"
         style={{ left: x, top: y }}
         onClick={(e) => e.stopPropagation()}
       >

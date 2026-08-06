@@ -231,7 +231,7 @@ export function EventModal({
                               <button
                                 type="button"
                                 onClick={() => void handleRemoveAssignment(assignment.id)}
-                                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"
+                                className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"
                               >
                                 <LuX className="h-4 w-4" />
                               </button>
@@ -244,7 +244,7 @@ export function EventModal({
                               setPickerRoleId(role.id);
                               setPickerOpen(true);
                             }}
-                            className="ml-auto flex items-center gap-1 rounded-xl bg-primary/10 px-2.5 py-1.5 text-xs font-extrabold text-primary hover:bg-primary/15"
+                            className="ml-auto inline-flex min-h-11 items-center gap-1 rounded-xl bg-primary/10 px-3 py-2 text-xs font-extrabold text-primary hover:bg-primary/15"
                           >
                             <LuPlus className="h-4 w-4" /> Назначить
                           </button>
@@ -275,7 +275,7 @@ export function EventModal({
                           type="button"
                           disabled={busy}
                           onClick={() => void handleStatus(a.id, 'confirmed')}
-                          className="rounded-lg bg-[var(--btn-success-bg,#16a34a)] px-2 py-1 text-xs font-semibold text-white"
+                          className="inline-flex min-h-11 items-center rounded-lg bg-[var(--btn-success-bg,#16a34a)] px-4 py-2 text-sm font-semibold text-white"
                         >
                           Подтвердить
                         </button>
@@ -283,7 +283,7 @@ export function EventModal({
                           type="button"
                           disabled={busy}
                           onClick={() => void handleStatus(a.id, 'declined')}
-                          className="rounded-lg bg-rose-600 px-2 py-1 text-xs font-semibold text-white"
+                          className="inline-flex min-h-11 items-center rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white"
                         >
                           Отказать
                         </button>

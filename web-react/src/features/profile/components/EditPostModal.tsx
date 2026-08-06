@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { useMobileBottomNavLock } from '../../../app/useMobileBottomNavLock';
 import { patchProfilePostCaption, type ProfileFeedPost } from '../publicProfileApi';
 
 import styles from './EditPostModal.module.css';
@@ -16,6 +17,7 @@ export function EditPostModal({ open, post, onClose, onSaved }: Props) {
   const [caption, setCaption] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useMobileBottomNavLock(open && post != null);
 
   useEffect(() => {
     if (open && post) {

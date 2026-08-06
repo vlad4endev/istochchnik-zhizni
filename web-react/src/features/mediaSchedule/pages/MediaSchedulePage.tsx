@@ -27,6 +27,7 @@ import {
 } from 'react-icons/lu';
 
 import { AppAvatar } from '../../../components/AppAvatar';
+import { useMobileBottomNavLock } from '../../../app/useMobileBottomNavLock';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { useAuthStore } from '../../auth/authStore';
 import { useMe } from '../../../hooks/useMe';
@@ -155,6 +156,7 @@ export function MediaSchedulePage() {
     assignmentId: number;
     eventId: number;
   } | null>(null);
+  useMobileBottomNavLock(Boolean(mobileDayPanel) || Boolean(contextMenu));
 
   const monthStart = startOfMonth(cursor);
   const monthEnd = endOfMonth(cursor);
@@ -336,7 +338,7 @@ export function MediaSchedulePage() {
   }
 
   return (
-    <div className="min-h-full bg-[var(--surface)] px-3 pb-28 pt-3 sm:px-4 sm:pb-12 sm:pt-4 shell:px-6 md:px-8">
+    <div className="min-h-full bg-[var(--surface)] px-3 pb-[calc(var(--app-bottom-nav-total-height)+5.5rem)] pt-3 sm:px-4 sm:pb-12 sm:pt-4 shell:px-6 md:px-8">
       <div className="mx-auto w-full max-w-6xl space-y-3 sm:space-y-4">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
@@ -368,7 +370,7 @@ export function MediaSchedulePage() {
                   type="button"
                   onClick={openPlannerPicker}
                   disabled={profileLoading}
-                  className="tap-highlight-transparent col-span-2 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-white shadow-sm hover:brightness-110 active:brightness-95 disabled:cursor-wait disabled:opacity-60 sm:col-span-1 sm:w-auto"
+                  className="tap-highlight-transparent hidden min-h-[48px] items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-white shadow-sm hover:brightness-110 active:brightness-95 disabled:cursor-wait disabled:opacity-60 lg:inline-flex"
                 >
                   {profileLoading ? (
                     <LuLoaderCircle className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
@@ -430,7 +432,7 @@ export function MediaSchedulePage() {
                   }
                 }}
                 className={[
-                  'tap-highlight-transparent min-h-[44px] flex-1 rounded-[10px] px-2 text-[13px] font-extrabold transition-colors sm:min-h-[40px] sm:px-3 sm:text-sm',
+                  'tap-highlight-transparent min-h-[44px] flex-1 rounded-[10px] px-2 text-[13px] font-extrabold transition-colors sm:px-3 sm:text-sm',
                   viewMode === id
                     ? 'bg-white text-stone-900 shadow-sm ring-1 ring-stone-200/90'
                     : 'text-stone-600 hover:text-stone-900',
@@ -501,7 +503,7 @@ export function MediaSchedulePage() {
               </div>
 
               {/* Мобильный компактный календарь — без горизонтального скролла */}
-              <div className="grid grid-cols-7 gap-px bg-stone-100 lg:hidden">
+              <div className="grid grid-cols-7 gap-px bg-stone-100 md:hidden">
                 {monthDays.map((day) => {
                   const key = ymd(day);
                   const dayEvents = eventsByDate.get(key) ?? [];
@@ -548,7 +550,7 @@ export function MediaSchedulePage() {
               </div>
 
               {/* Десктоп: полная сетка с карточками событий */}
-              <div className="hidden grid-cols-7 gap-px bg-stone-100 lg:grid">
+              <div className="hidden grid-cols-7 gap-px bg-stone-100 md:grid">
                 {monthDays.map((day) => {
                   const key = ymd(day);
                   const dayEvents = eventsByDate.get(key) ?? [];
@@ -669,7 +671,7 @@ export function MediaSchedulePage() {
             </section>
 
             {/* Мобильный список служений за месяц */}
-            <section className="space-y-2 lg:hidden">
+            <section className="space-y-2 md:hidden">
               <h2 className="px-1 text-sm font-extrabold text-stone-800">
                 Служения — {capitalizeRuMonthTitle(format(cursor, 'LLLL', { locale: ru }))}
               </h2>
@@ -776,7 +778,7 @@ export function MediaSchedulePage() {
                 />
 
                 <div className="hidden overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)] lg:block">
-                  <div className="overflow-x-auto">
+                  <div data-scroll-hint className="overflow-x-auto">
                     <table className="min-w-[720px] w-full border-collapse text-sm">
                     <thead>
                       <tr className="bg-stone-50/90">
@@ -952,7 +954,7 @@ export function MediaSchedulePage() {
             />
             <div
               className="absolute bottom-0 left-0 right-0 flex max-h-[min(82dvh,640px)] flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl"
-              style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
+              style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
             >
               <div className="shrink-0 px-4 pt-3">
                 <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-stone-200" />
@@ -1058,7 +1060,7 @@ export function MediaSchedulePage() {
               />
               <div
                 className="absolute bottom-0 left-0 right-0 overflow-hidden rounded-t-3xl bg-white shadow-2xl"
-                style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
+                style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-stone-200" />
@@ -1101,7 +1103,7 @@ export function MediaSchedulePage() {
                 <div className="p-2">
                   <button
                     type="button"
-                    className="block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-stone-800 hover:bg-stone-50"
+                    className="block w-full min-h-11 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-stone-800 hover:bg-stone-50"
                     onClick={() => {
                       const ev = events.find((e) => e.id === contextMenu.eventId);
                       if (ev) openAssignmentModal(ev.id);
@@ -1112,7 +1114,7 @@ export function MediaSchedulePage() {
                   </button>
                   <button
                     type="button"
-                    className="block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-rose-600 hover:bg-rose-50"
+                    className="block w-full min-h-11 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-rose-600 hover:bg-rose-50"
                     onClick={() => {
                       void removeMut.mutateAsync(contextMenu.assignmentId);
                       setContextMenu(null);

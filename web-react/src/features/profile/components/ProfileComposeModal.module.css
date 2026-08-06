@@ -23,7 +23,7 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: min(935px, calc(100vw - 1.5rem));
+  max-width: min(935px, calc(100% - 1.5rem));
   max-height: min(92dvh, 880px);
   display: flex;
   flex-direction: column;
@@ -37,14 +37,20 @@
 @media (max-width: 767px) {
   .overlay {
     align-items: stretch;
-    padding: 0;
+    padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0)
+      env(safe-area-inset-left, 0);
   }
 
   .panel {
     max-width: 100%;
     max-height: 100%;
-    min-height: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
     border-radius: 0;
+  }
+
+  .head {
+    padding-top: 0.25rem;
   }
 }
 

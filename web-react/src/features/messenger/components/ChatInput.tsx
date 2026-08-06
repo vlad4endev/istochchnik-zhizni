@@ -318,8 +318,8 @@ export function ChatInput({
   const emojiOutsideGraceRef = useRef(false);
   const [attachPos, setAttachPos] = useState<PopoverPos>(null);
   const [emojiPos, setEmojiPos] = useState<PopoverPos>(null);
-  /** ≤768px: панель эмодзи на всю ширину, крупные ячейки (как Telegram на телефоне). */
-  const narrowEmojiSheet = useMatchMedia('(max-width: 768px)');
+  /** ≤1023px: панель эмодзи на всю ширину, крупные ячейки (как Telegram на телефоне). */
+  const narrowEmojiSheet = useMatchMedia('(max-width: 1023px)');
   const uploadAbortRef = useRef<AbortController | null>(null);
   const filePickerModeRef = useRef<'image' | 'file' | 'audio'>('image');
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

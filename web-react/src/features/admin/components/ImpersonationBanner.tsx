@@ -18,17 +18,22 @@ export function ImpersonationBanner() {
         zIndex: 9999,
         background: '#7d3640',
         color: '#fff',
-        padding: '8px 16px',
+        paddingTop: 'max(8px, env(safe-area-inset-top, 0px))',
+        paddingBottom: '8px',
+        paddingLeft: 'max(12px, env(safe-area-inset-left, 0px))',
+        paddingRight: 'max(12px, env(safe-area-inset-right, 0px))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        gap: '8px',
+        flexWrap: 'wrap',
         fontSize: '14px',
         fontWeight: 500,
       }}
     >
-      <span>
-        👁 Вы просматриваете аккаунт: <strong>{targetMember.name}</strong>
-        &nbsp;·&nbsp; Чаты недоступны
+      <span style={{ minWidth: 0, flex: '1 1 12rem' }}>
+        Вы просматриваете аккаунт: <strong>{targetMember.name}</strong>
+        <span style={{ opacity: 0.85 }}> · Чаты недоступны</span>
       </span>
       <button
         type="button"
@@ -38,12 +43,14 @@ export function ImpersonationBanner() {
           border: '1px solid rgba(255,255,255,0.4)',
           color: '#fff',
           borderRadius: '6px',
-          padding: '4px 12px',
+          padding: '6px 12px',
           cursor: 'pointer',
           fontWeight: 600,
+          flexShrink: 0,
+          minHeight: '36px',
         }}
       >
-        ✕ Выйти из аккаунта
+        Выйти из аккаунта
       </button>
     </div>
   );

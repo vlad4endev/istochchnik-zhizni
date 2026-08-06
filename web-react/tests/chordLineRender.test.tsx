@@ -12,8 +12,9 @@ describe('ChordLine render regression', () => {
       <ChordLine line={line} chordsVisible layoutMode="measured" chordTone="light" />,
     );
 
-    expect(html).toContain('chord-line');
+    expect(html).toContain('data-layout-mode="measured"');
     expect(html).toContain('lyric-line');
+    expect(html).toContain('left:0%');
     expect(html).not.toContain('lyric-chord-line');
     expect(html).not.toContain('chord-slot');
     expect(html).toContain('Am');

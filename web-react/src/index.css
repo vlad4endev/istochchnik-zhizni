@@ -1490,8 +1490,7 @@ nav[aria-label='Основная навигация'] svg {
 }
 
 @media (max-width: 1023px) {
-  .dashboard-grid,
-  [class*='grid-cols-2'] {
+  .dashboard-grid {
     grid-template-columns: 1fr !important;
   }
 
@@ -1506,12 +1505,28 @@ nav[aria-label='Основная навигация'] svg {
     display: inline-flex;
   }
 
-  * {
+  /* Hide scrollbars by default; keep visible hint in [data-scroll-hint] regions. */
+  *:not([data-scroll-hint]):not([data-scroll-hint] *) {
     scrollbar-width: none;
   }
 
-  ::-webkit-scrollbar {
+  *:not([data-scroll-hint]):not([data-scroll-hint] *)::-webkit-scrollbar {
     display: none;
+  }
+
+  [data-scroll-hint] {
+    scrollbar-width: thin;
+  }
+
+  [data-scroll-hint]::-webkit-scrollbar {
+    display: block;
+    height: 6px;
+    width: 6px;
+  }
+
+  [data-scroll-hint]::-webkit-scrollbar-thumb {
+    background: rgba(28, 25, 23, 0.28);
+    border-radius: 999px;
   }
 }
 
@@ -1572,13 +1587,7 @@ table {
   max-width: 100%;
 }
 
-@media (max-width: 767px) {
-  table {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-}
+/* Tables stay as tables; scroll via explicit overflow-x-auto wrappers. */
 
 button {
   font: inherit;

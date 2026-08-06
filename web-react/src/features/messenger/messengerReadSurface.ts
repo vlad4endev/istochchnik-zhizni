@@ -6,6 +6,6 @@
 export function isMessengerChatReadSurfaceOpen(): boolean {
   if (typeof window === 'undefined' || typeof document === 'undefined') return true;
   if (document.visibilityState !== 'visible') return false;
-  if (!window.matchMedia('(max-width: 768px)').matches) return true;
+  if (!window.matchMedia('(max-width: 1023px)').matches) return true;
   return document.documentElement.dataset.chatOpen === '1';
 }

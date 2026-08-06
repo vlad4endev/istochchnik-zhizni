@@ -2,6 +2,8 @@ import { useEffect, useMemo } from 'react';
 import DocViewer, { DocViewerRenderers } from 'react-doc-viewer';
 import { LuX } from 'react-icons/lu';
 
+import { useMobileBottomNavLock } from '../app/useMobileBottomNavLock';
+
 const PREVIEWABLE_EXTENSIONS = new Set([
   'pdf',
   'doc',
@@ -62,6 +64,7 @@ export function DocumentViewerModal({
   fileMime = '',
   onClose,
 }: DocumentViewerModalProps) {
+  useMobileBottomNavLock(open);
   const docs = useMemo(() => {
     if (!fileUrl) return [];
     return [

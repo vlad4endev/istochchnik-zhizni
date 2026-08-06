@@ -119,15 +119,13 @@
     display: none !important;
   }
 
+  /* Только legacy dashboard/widgets — не трогаем Tailwind grid-cols-* в формах и галереях. */
   .dashboard-grid,
-  [class*='widgets-grid'],
-  .grid-cols-3,
-  .grid-cols-2 {
+  [class*='widgets-grid'] {
     grid-template-columns: 1fr !important;
     gap: 12px !important;
   }
 
-  /* Нижний лист «Все разделы»: возвращаем многоколоночную сетку поверх общего grid-cols-* fallback. */
   .app-mobile-sections-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 10px !important;
@@ -322,13 +320,15 @@
   .song-view-content {
     padding: 0 4px !important;
   }
+  /* Keep chord/lyric sizes aligned so mono chord rows don't drift on Android. */
   .chord-line {
-    font-size: 13px !important;
+    font-size: 15px !important;
     letter-spacing: 0 !important;
+    line-height: 1.45 !important;
   }
   .lyric-line {
-    font-size: 17px !important;
-    line-height: 1.6 !important;
+    font-size: 15px !important;
+    line-height: 1.65 !important;
   }
   .song-header-toolbar {
     flex-wrap: wrap !important;
@@ -421,32 +421,37 @@
     display: inline !important;
   }
 
-  input,
-  textarea,
-  select {
-    width: 100% !important;
-    min-height: 44px !important;
-    font-size: 16px !important;
-    padding: 10px 12px !important;
-    box-sizing: border-box !important;
+  /* iOS zoom: текстовые поля ≥16px. Не форсим width/min-height на все controls. */
+  .page-content form input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='range']):not([type='file']):not([type='color']):not([type='button']):not([type='submit']):not([type='reset']),
+  .page-content form textarea,
+  .page-content form select {
+    width: 100%;
+    min-height: 44px;
+    font-size: 16px;
+    padding: 10px 12px;
+    box-sizing: border-box;
   }
-  textarea {
-    min-height: 100px !important;
+  .page-content form textarea {
+    min-height: 100px;
   }
   input[type='text'],
   input[type='email'],
   input[type='tel'],
   input[type='password'],
+  input[type='search'],
+  input[type='url'],
   input[type='date'],
   input[type='time'],
   input[type='number'],
+  textarea,
   select {
-    font-size: 16px !important;
+    font-size: 16px;
   }
-  button,
-  .btn {
-    min-height: 44px !important;
-    min-width: 44px !important;
+  .btn,
+  .tap-target,
+  .studio-touch-target {
+    min-height: 44px;
+    min-width: 44px;
   }
   .card,
   [class*='section-card'],
@@ -663,5 +668,54 @@
   .broadcast-thumb {
     width: 44px !important;
     height: 30px !important;
+  }
+}
+
+/* ─── Android WebView / installed PWA (Capacitor + Chrome standalone) ─── */
+html[data-android-messenger='1'],
+html[data-android-pwa='1'],
+html.app-native-shell {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+html[data-android-messenger='1'] body,
+html[data-android-pwa='1'] body,
+html.app-native-shell body {
+  overscroll-behavior-y: none;
+}
+
+/* Android Chrome/WebView: keep text fields ≥16px even outside standalone PWA. */
+html[data-android-messenger='1']
+  :where(
+    input:not([type='checkbox']):not([type='radio']):not([type='button']):not([type='submit']):not([type='reset']):not(
+        [type='range']
+      ):not([type='color']):not([type='file']),
+    textarea,
+    select
+  ) {
+  font-size: max(16px, 1rem);
+}
+
+@media (max-width: 1023px) {
+  html[data-android-messenger='1'] .page-content,
+  html[data-android-pwa='1'] .page-content,
+  html.app-native-shell .page-content {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Dense admin/schedule tables: keep horizontal scroll usable on Android. */
+  html[data-android-messenger='1'] [data-scroll-hint],
+  html[data-android-pwa='1'] [data-scroll-hint] {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y;
+  }
+
+  html[data-android-messenger='1'] .songbook-reader,
+  html[data-android-pwa='1'] .songbook-reader {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }

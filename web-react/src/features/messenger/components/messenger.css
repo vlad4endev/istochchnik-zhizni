@@ -105,7 +105,7 @@ html[data-color-theme='dark'] {
 
 /**
  * Родитель в Layout: flex-1 + `padding-bottom` под таб-бар у `<main>`.
- * Абсолютные слои `.tg-main` / `.tg-sidebar` (≤768px) тянутся `inset:0` внутри `.tg-messenger` — без второго inset.
+ * Абсолютные слои `.tg-main` / `.tg-sidebar` (≤1023px) тянутся `inset:0` внутри `.tg-messenger` — без второго inset.
  * `--app-bottom-nav-h` остаётся для iOS `position:fixed` у сайдбара и нулевого значения в режиме открытого чата.
  */
 .tg-messenger-page {
@@ -377,7 +377,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   flex: 1;
 }
 
-@media (min-width: 769px) {
+@media (min-width: 1024px) {
   .messenger-layout {
     display: flex;
     height: var(--viewport-height, 100dvh);
@@ -768,8 +768,8 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   font-weight: 700;
 }
 
-/* ─── ПК (≥769px): split-view; мобильные правила — max-width 768px, без пересечения на ровно 768. ─── */
-@media (min-width: 769px) {
+/* ─── ПК (≥1024px): split-view; мобильные правила — max-width 1023px (как app shell lg). ─── */
+@media (min-width: 1024px) {
   :root {
     --tg-sidebar-width: clamp(300px, 32vw, 420px);
   }
@@ -943,7 +943,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   }
 }
 
-@media (min-width: 769px) {
+@media (min-width: 1024px) {
   .tg-messenger.tg-density--compact .tg-chat-window .tg-chat-window__body > div[role='log'] {
     padding-left: 0.75rem !important;
     padding-right: 0.75rem !important;
@@ -1013,7 +1013,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   margin-right: -4px;
 }
 
-@media (min-width: 769px) {
+@media (min-width: 1024px) {
   .tg-header-back {
     display: none;
   }
@@ -1826,8 +1826,8 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
 /* Emoji picker: 100vw на iOS PWA часто шире видимой области → горизонтальный «разъезд» */
 .tg-emoji-picker-popover {
   box-sizing: border-box;
-  width: min(360px, calc(100vw - 1.5rem));
-  max-width: calc(100vw - 1.5rem);
+  width: min(360px, calc(100% - 1.5rem));
+  max-width: calc(100% - 1.5rem);
 }
 
 .tg-emoji-picker-popover {
@@ -1916,7 +1916,7 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
   overflow: hidden;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
   .tg-search-overlay {
     align-items: stretch;
     padding: 0;
@@ -2412,7 +2412,7 @@ html.dark .msg-reaction-chip--active .msg-reaction-count {
     0 2px 10px rgba(28, 25, 23, 0.08),
     0 0 0 1px rgba(255, 255, 255, 0.5) inset;
   animation: tg-scale-up 0.14s ease-out;
-  max-width: min(100vw - 16px, 340px);
+  max-width: min(100% - 16px, 340px);
   flex-wrap: nowrap;
 }
 
@@ -2611,7 +2611,7 @@ html.dark .msg-quick-reaction:hover {
 }
 
 /* Mobile: hide bottom nav & go full-screen when chat is open */
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
   /* Только список чатов: лишний overflow-y на html ломает iOS при фокусе в textarea (скролл document + «дыра»).
      Когда открыт диалог — только блок ниже с data-chat-open (overflow-y: hidden). */
   html[data-messenger-open="1"]:not([data-chat-open="1"]),
@@ -2681,8 +2681,8 @@ html.dark .msg-quick-reaction:hover {
   }
 }
 
-/* Mobile Adjustments — max-width 768px, чтобы совпадало с html[data-chat-open] (grid) и не было «дыры» на 768px. */
-@media (max-width: 768px) {
+/* Mobile Adjustments — max-width 1023px, чтобы совпадало с html[data-chat-open] (grid) и не было «дыры» на 1023px. */
+@media (max-width: 1023px) {
   /* Родители max-lg:flex-none давали height:auto → 100% у .tg-messenger схлопывались в 0 (чат невидим). См. Layout.tsx flex-1 + max-lg:overflow-y-auto на <main>. */
   .messenger-layout {
     flex: 1 1 0%;
@@ -2845,7 +2845,7 @@ html.dark .msg-quick-reaction:hover {
 /* Android Chrome/WebView stabilization:
    mirrors iOS fixed-layout behavior without iOS-specific hacks */
 @supports not (-webkit-touch-callout: none) {
-  @media (max-width: 768px) {
+  @media (max-width: 1023px) {
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window {
       position: fixed !important;
       left: 0;
@@ -2918,7 +2918,7 @@ html.dark .msg-quick-reaction:hover {
 /* iOS Safari / PWA stabilization:
    fixed chat viewport + safe-areas + keyboard-friendly height fallback */
 @supports (-webkit-touch-callout: none) {
-  @media (max-width: 768px) {
+  @media (max-width: 1023px) {
     /* Chat list stabilization on iOS */
     html[data-messenger-open="1"] .tg-sidebar {
       position: fixed !important;
@@ -3284,7 +3284,7 @@ html.dark .msg-quick-reaction:hover {
 }
 
 /* Accessibility & Mobile UX Polish */
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
   .chatlist-item,
   .tg-icon-btn,
   .tg-send-btn,
@@ -3325,7 +3325,7 @@ html.dark .msg-quick-reaction:hover {
 }
 
 /* PWA / нативная оболочка: при открытой клавиатуре в чате не дублировать нижний отступ main и не раздувать композер safe-area. */
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
   /**
    * Таббар скрыт (opacity), но для позиций fixed-слоёв мессенджера он всё ещё «зарезервирован»
    * через --app-bottom-nav-h → полоска фона / неверная высота сайдбара при клавиатуре.

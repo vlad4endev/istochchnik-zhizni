@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 
+import { useMobileBottomNavLock } from '../../../app/useMobileBottomNavLock';
 import { createProfilePost } from '../publicProfileApi';
 import { PostEditor } from './PostEditor';
 
@@ -16,6 +17,7 @@ export function ProfileComposeModal({ open, onClose, onPublished }: Props) {
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useMobileBottomNavLock(open);
 
   const reset = useCallback(() => {
     setCaption('');

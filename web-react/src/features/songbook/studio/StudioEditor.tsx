@@ -1666,14 +1666,17 @@ export function StudioEditor() {
         </>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2 gap-y-3 max-lg:sticky max-lg:top-0 max-lg:z-[calc(var(--z-sticky)-1)] max-lg:-mx-2 max-lg:border-b max-lg:border-[var(--studio-editor-border)] max-lg:bg-[var(--studio-toolbar-bg)] max-lg:px-2 max-lg:py-2 max-lg:backdrop-blur-sm" style={{ paddingTop: 'max(0px, env(safe-area-inset-top, 0px))' }}>
+      <div
+        className="flex flex-wrap items-center gap-1.5 gap-y-2 max-lg:sticky max-lg:top-0 max-lg:z-[calc(var(--z-sticky)-1)] max-lg:-mx-2 max-lg:border-b max-lg:border-[var(--studio-editor-border)] max-lg:bg-[var(--studio-toolbar-bg)] max-lg:px-2 max-lg:py-2 max-lg:backdrop-blur-sm lg:gap-2 lg:gap-y-3"
+        style={{ paddingTop: 'max(0px, env(safe-area-inset-top, 0px))' }}
+      >
         <Link
           to={backTo}
           onClick={(e) => {
             if (confirmLeaveIfDirty()) return;
             e.preventDefault();
           }}
-          className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl ${shell.iconBtn}`}
+          className={`inline-flex h-10 w-10 items-center justify-center rounded-xl lg:min-h-[44px] lg:min-w-[44px] ${shell.iconBtn}`}
           aria-label="Назад к списку"
         >
           <LuArrowLeft className="h-5 w-5" />
@@ -1685,7 +1688,7 @@ export function StudioEditor() {
             setImportInitialTab('text');
             setImportOpen(true);
           }}
-          className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center ${shell.iconBtn}`}
+          className={`inline-flex h-10 w-10 items-center justify-center rounded-xl lg:min-h-[44px] lg:min-w-[44px] ${shell.iconBtn}`}
           aria-label="Умный импорт"
         >
           <LuUpload className="h-5 w-5" />
@@ -1693,7 +1696,7 @@ export function StudioEditor() {
         <button
           type="button"
           onClick={() => setToolsOpen(true)}
-          className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center ${shell.iconBtn}`}
+          className={`inline-flex h-10 w-10 items-center justify-center rounded-xl lg:min-h-[44px] lg:min-w-[44px] ${shell.iconBtn}`}
           aria-label="Параметры и аккорды"
         >
           <LuSlidersHorizontal className="h-5 w-5" />
@@ -1702,11 +1705,11 @@ export function StudioEditor() {
           type="button"
           onClick={runAiSongCleanup}
           disabled={aiSongCleanupMut.isPending}
-          className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold disabled:opacity-60 ${shell.violetBtn}`}
+          className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border disabled:opacity-60 lg:min-h-[44px] lg:w-auto lg:gap-1.5 lg:px-3 lg:text-sm lg:font-semibold ${shell.violetBtn}`}
           aria-label="Привести текст в порядок с помощью ИИ"
         >
           <LuSparkles className="h-4 w-4" />
-          <span className="hidden sm:inline">{aiSongCleanupMut.isPending ? 'ИИ…' : 'Привести в порядок'}</span>
+          <span className="hidden lg:inline">{aiSongCleanupMut.isPending ? 'ИИ…' : 'Привести в порядок'}</span>
         </button>
         {canDeleteCatalog ? (
           <button
@@ -1721,30 +1724,30 @@ export function StudioEditor() {
               }
             }}
             disabled={deleteCatalogMut.isPending}
-            className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold disabled:opacity-50 ${shell.redBtn}`}
+            className={`inline-flex h-10 items-center gap-1 rounded-xl border px-2.5 text-xs font-semibold disabled:opacity-50 lg:min-h-[44px] lg:gap-1.5 lg:px-3 lg:text-sm ${shell.redBtn}`}
           >
             <LuTrash2 className="h-4 w-4 shrink-0" aria-hidden />
-            <span className="hidden sm:inline">Удалить из каталога</span>
-            <span className="sm:hidden">Удалить</span>
+            <span className="hidden sm:inline lg:inline">Удалить</span>
           </button>
         ) : null}
         {s.is_published ? (
           <span
-            className="studio-btn-success inline-flex min-h-[44px] cursor-default items-center gap-1.5 rounded-xl px-3 text-sm font-semibold opacity-90"
+            className="studio-btn-success hidden min-h-[36px] cursor-default items-center gap-1 rounded-lg px-2.5 text-xs font-semibold opacity-90 sm:inline-flex lg:min-h-[44px] lg:rounded-xl lg:px-3 lg:text-sm"
             aria-disabled
           >
             <span aria-hidden>✓</span> В каталоге
           </span>
         ) : (
-          <span className={`inline-flex min-h-[44px] items-center rounded-xl border px-3 text-xs font-medium ${shell.muted} border-[var(--studio-editor-border)]`}>
-            Пока только у вас
+          <span className={`hidden min-h-[36px] items-center rounded-lg border px-2.5 text-[11px] font-medium sm:inline-flex lg:min-h-[44px] lg:rounded-xl lg:px-3 lg:text-xs ${shell.muted} border-[var(--studio-editor-border)]`}>
+            Только у вас
           </span>
         )}
+        {/* Draft/catalog actions live in the mobile dock — keep labeled buttons on desktop only. */}
         <button
           type="button"
           onClick={() => void saveAll('draft')}
           disabled={isSaving || publishMut.isPending}
-          className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold disabled:opacity-50 ${shell.iconBtn}`}
+          className={`hidden min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold disabled:opacity-50 lg:inline-flex ${shell.iconBtn}`}
         >
           <LuSave className="h-4 w-4 shrink-0" aria-hidden />
           В черновик
@@ -1753,7 +1756,7 @@ export function StudioEditor() {
           type="button"
           onClick={() => void saveAll('catalog')}
           disabled={isSaving || publishMut.isPending}
-          className="studio-btn-primary inline-flex min-h-[44px] items-center gap-1.5 rounded-xl px-4 text-sm font-semibold shadow-sm transition disabled:opacity-50"
+          className="studio-btn-primary hidden min-h-[44px] items-center gap-1.5 rounded-xl px-4 text-sm font-semibold shadow-sm transition disabled:opacity-50 lg:inline-flex"
         >
           <LuRocket className="h-4 w-4 shrink-0" aria-hidden />
           {isSaving || publishMut.isPending ? 'Сохраняем…' : 'В каталог'}
@@ -1800,7 +1803,7 @@ export function StudioEditor() {
         ) : null}
       </div>
 
-      <p className={`text-xs ${shell.muted}`}>
+      <p className={`hidden text-xs lg:block ${shell.muted}`}>
         «В черновик» — личная версия, видна только вам. «В каталог» — общий песенник для всех участников.
       </p>
 
@@ -1922,24 +1925,24 @@ export function StudioEditor() {
         </section>
       ) : null}
 
-      <section className={`rounded-2xl border px-4 py-4 sm:px-6 ${shell.panel}`}>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <p className={`text-sm font-semibold uppercase tracking-[0.05em] ${shell.muted}`}>+ Добавить блок</p>
-          <div className="flex flex-wrap items-center gap-2">
+      <section className={`rounded-2xl border px-3 py-3 sm:px-6 sm:py-4 ${shell.panel}`}>
+        <div className="mb-2 flex flex-col gap-2 sm:mb-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <p className={`text-xs font-semibold uppercase tracking-[0.05em] sm:text-sm ${shell.muted}`}>+ Добавить блок</p>
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             {editorPane === 'lyrics' ? (
               <>
                 <button
                   type="button"
                   onClick={runAutoChordPlacementForAll}
-                  className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${shell.amberAction}`}
+                  className={`inline-flex min-h-[36px] items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold sm:min-h-[40px] sm:px-3 sm:text-sm ${shell.amberAction}`}
                 >
-                  <LuSparkles className="h-4 w-4" />
-                  🎸 Автоподстановка
+                  <LuSparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  Автоподстановка
                 </button>
                 <button
                   type="button"
                   onClick={openAutoChordModal}
-                  className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${shell.ghostOutline}`}
+                  className={`inline-flex min-h-[36px] items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold sm:min-h-[40px] sm:px-3 sm:text-sm ${shell.ghostOutline}`}
                 >
                   Точный выбор
                 </button>
@@ -1948,7 +1951,7 @@ export function StudioEditor() {
             <button
               type="button"
               onClick={() => setChordPickerOpen((v) => !v)}
-              className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${shell.ghostOutline}`}
+              className={`inline-flex min-h-[36px] items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold sm:min-h-[40px] sm:px-3 sm:text-sm ${shell.ghostOutline}`}
             >
               + Аккорд
               <LuCircleHelp className="h-3.5 w-3.5 opacity-70" title="Вставляет [Am] в позицию курсора" />
@@ -1957,7 +1960,7 @@ export function StudioEditor() {
             <button
               type="button"
               onClick={() => setSheetRecognizerOpen(true)}
-              className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${shell.violetBtn}`}
+              className={`inline-flex min-h-[36px] items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold sm:min-h-[40px] sm:px-3 sm:text-sm ${shell.violetBtn}`}
               aria-label="Распознать ноты с фото"
             >
               <LuCamera className="h-4 w-4" />
@@ -1968,24 +1971,24 @@ export function StudioEditor() {
         </div>
         {editorPane === 'lyrics' || !hasRenderedSheet ? (
         <>
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="flex flex-wrap gap-1.5 sm:gap-2">
           {STUDIO_BLOCK_PRESETS.map(({ type, label, icon }) => (
             <button
               key={`toolbar-block-${type}`}
               type="button"
               onClick={() => addQuickBlock(type)}
-              className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-transform duration-200 hover:-translate-y-[1px] ${studioTypeTone(type, darkUi)} ${presentTypes.has(type) ? 'opacity-70' : ''}`}
+              className={`inline-flex min-h-[34px] items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-transform duration-200 hover:-translate-y-[1px] sm:min-h-[40px] sm:gap-1.5 sm:rounded-xl sm:px-3 sm:text-sm ${studioTypeTone(type, darkUi)} ${presentTypes.has(type) ? 'opacity-70' : ''}`}
             >
-              <span aria-hidden>{icon}</span>
+              <span className="hidden min-[380px]:inline" aria-hidden>{icon}</span>
               <span>{label}</span>
             </button>
           ))}
           <button
             type="button"
             onClick={addCustomBlock}
-            className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition-transform duration-200 hover:-translate-y-[1px] ${shell.dashedBtn}`}
+            className={`inline-flex min-h-[34px] items-center gap-1 rounded-lg border border-dashed px-2.5 py-1.5 text-xs font-semibold transition-transform duration-200 hover:-translate-y-[1px] sm:min-h-[40px] sm:gap-1.5 sm:rounded-xl sm:px-3 sm:text-sm ${shell.dashedBtn}`}
           >
-            <span aria-hidden>➕</span>
+            <span aria-hidden>+</span>
             <span>Свой</span>
           </button>
         </div>

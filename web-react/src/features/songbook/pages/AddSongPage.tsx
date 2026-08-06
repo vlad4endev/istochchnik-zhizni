@@ -573,17 +573,17 @@ export function AddSongPage() {
               Превью
             </button>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => {
                 setImportInitialTab('text');
                 setImportOpen(true);
               }}
-              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${theme.btnOutline}`}
+              className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium sm:min-h-[40px] sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm ${theme.btnOutline}`}
             >
               <LuUpload className="h-4 w-4" />
-              Импорт (текст, ссылка)
+              Импорт
             </button>
             <button
               type="button"
@@ -591,7 +591,7 @@ export function AddSongPage() {
                 setImportInitialTab('pdf');
                 setImportOpen(true);
               }}
-              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${theme.btnOutline}`}
+              className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium sm:min-h-[40px] sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm ${theme.btnOutline}`}
             >
               <LuUpload className="h-4 w-4" />
               PDF
@@ -599,23 +599,23 @@ export function AddSongPage() {
             <button
               type="button"
               onClick={onDetectKey}
-              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${theme.btnOutline}`}
+              className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium sm:min-h-[40px] sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm ${theme.btnOutline}`}
             >
               <LuSparkles className="h-4 w-4 text-amber-500" />
-              Определить тональность
+              Тональность
             </button>
-            {keyHint && <span className={`text-xs ${theme.muted}`}>{keyHint}</span>}
+            {keyHint && <span className={`w-full text-xs sm:w-auto ${theme.muted}`}>{keyHint}</span>}
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
+          <div className="grid gap-3 lg:grid-cols-2 lg:gap-6">
             <div
               className={[
-                'rounded-2xl border p-4 md:p-5',
+                'rounded-2xl border p-3 sm:p-4 md:p-5',
                 theme.card,
                 mobileEditorPane === 'preview' ? 'hidden md:block' : '',
               ].join(' ')}
             >
-              <p className={`mb-3 text-xs font-bold uppercase tracking-wide ${theme.muted}`}>Редактор</p>
+              <p className={`mb-2 text-xs font-bold uppercase tracking-wide sm:mb-3 ${theme.muted}`}>Редактор</p>
               <SectionInsertToolbar dark={isStudio} onInsert={insertSectionMarkerLine} className="mb-3" />
               <textarea
                 ref={editorRef}
@@ -624,20 +624,20 @@ export function AddSongPage() {
                 onSelect={syncEditorSelection}
                 onKeyUp={syncEditorSelection}
                 onMouseUp={syncEditorSelection}
-                rows={18}
-                className={`w-full resize-y rounded-xl border p-4 font-mono text-sm leading-relaxed outline-none ${theme.input}`}
+                rows={14}
+                className={`w-full resize-y rounded-xl border px-3 py-3 font-mono text-[16px] leading-[2] outline-none sm:p-4 sm:text-sm sm:leading-relaxed ${theme.input}`}
                 placeholder={'# Куплет 1\n[Am]Когда качаются [C]фонарики [G]ночные\n\n# Припев\n[F]...'}
               />
             </div>
             <div
               className={[
-                'rounded-2xl border p-4 md:p-5',
+                'rounded-2xl border p-3 sm:p-4 md:p-5',
                 theme.card,
                 mobileEditorPane === 'editor' ? 'hidden md:block' : '',
               ].join(' ')}
             >
-              <p className={`mb-3 text-xs font-bold uppercase tracking-wide ${theme.muted}`}>Превью</p>
-              <div className={`min-h-[12rem] rounded-xl border p-4 ${theme.preview}`}>
+              <p className={`mb-2 text-xs font-bold uppercase tracking-wide sm:mb-3 ${theme.muted}`}>Превью</p>
+              <div className={`min-h-[12rem] overflow-x-auto rounded-xl border p-3 sm:p-4 ${theme.preview}`}>
                 <LyricsWithChords
                   text={content}
                   transposeSemitones={0}
