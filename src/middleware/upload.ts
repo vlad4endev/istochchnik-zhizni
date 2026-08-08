@@ -117,7 +117,7 @@ export function isMessengerMediaUploadAllowed(file: Express.Multer.File): boolea
   return false;
 }
 
-/** Загрузки в чат: диск + лимит 1GB (видео); дальше в хендлере для не-видео действует 20MB. */
+/** Загрузки в чат: диск + лимит 1GB (multer); в хендлере: видео 1GB, аудио 100MB, остальное 20MB. */
 export const messengerUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, os.tmpdir()),

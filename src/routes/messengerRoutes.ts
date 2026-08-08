@@ -245,6 +245,7 @@ const MIME_TO_EXT: Record<string, string> = {
 };
 
 const MESSENGER_MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
+const MESSENGER_MAX_AUDIO_BYTES = 100 * 1024 * 1024;
 const MESSENGER_MAX_NON_VIDEO_BYTES = 20 * 1024 * 1024;
 
 function inferMimeFromHeader(buf: Buffer): string | null {
@@ -557,10 +558,23 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
     const contentType =
       String(mimeType || '').trim() || String(file.mimetype || '').trim() || 'application/octet-stream';
     const isVideo = contentType.startsWith('video/');
-    const maxAllowed = isVideo ? MESSENGER_MAX_VIDEO_BYTES : MESSENGER_MAX_NON_VIDEO_BYTES;
+    const audioExts = new Set(['.mp3', '.m4a', '.aac', '.ogg', '.oga', '.opus', '.wav', '.caf', '.webm']);
+    // .webm бывает и видео — только audio/* считаем аудио, иначе по расширению без video/*
+    const isAudio =
+      contentType.startsWith('audio/') ||
+      (!isVideo && audioExts.has(extension) && extension !== '.webm');
+    const maxAllowed = isVideo
+      ? MESSENGER_MAX_VIDEO_BYTES
+      : isAudio
+        ? MESSENGER_MAX_AUDIO_BYTES
+        : MESSENGER_MAX_NON_VIDEO_BYTES;
     if (file.size > maxAllowed) {
       res.status(413).json({
-        error: isVideo ? 'Видео не больше 1GB' : 'Файл слишком большой (максимум 20MB)',
+        error: isVideo
+          ? 'Видео не больше 1GB'
+          : isAudio
+            ? 'Аудиофайл слишком большой (максимум 100MB)'
+            : 'Файл слишком большой (максимум 20MB)',
         maxBytes: maxAllowed,
       });
       return;

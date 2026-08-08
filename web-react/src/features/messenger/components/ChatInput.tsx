@@ -89,6 +89,7 @@ type UploadingState = {
 const IMAGE_NAME_EXT_RE = /\.(jpe?g|png|webp|gif|heic|heif)$/i;
 const VIDEO_NAME_EXT_RE = /\.(mp4|m4v|mov|webm|mkv|avi|mpeg|mpg|3gp|ogv)$/i;
 const MAX_CHAT_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_CHAT_AUDIO_BYTES = 100 * 1024 * 1024;
 const MAX_CHAT_VIDEO_BYTES = 1024 * 1024 * 1024;
 
 function isChatVideoFile(f: File): boolean {
@@ -972,9 +973,8 @@ export function ChatInput({
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
-      const maxBytes = 20 * 1024 * 1024;
-      if (file.size > maxBytes) {
-        setUploadErr('Аудиофайл слишком большой (максимум 20MB)');
+      if (file.size > MAX_CHAT_AUDIO_BYTES) {
+        setUploadErr('Аудиофайл слишком большой (максимум 100MB)');
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
@@ -999,13 +999,17 @@ export function ChatInput({
 
     const file = selected[0];
     // Validate before preview/upload
-    const maxBytes = 20 * 1024 * 1024;
+    const asAudio = isChatAudioFile(file);
+    const maxBytes = asAudio ? MAX_CHAT_AUDIO_BYTES : MAX_CHAT_IMAGE_BYTES;
     if (file.size > maxBytes) {
-      setUploadErr('Файл слишком большой (максимум 20MB)');
+      setUploadErr(
+        asAudio
+          ? 'Аудиофайл слишком большой (максимум 100MB)'
+          : 'Файл слишком большой (максимум 20MB)',
+      );
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
-    const asAudio = isChatAudioFile(file);
     // Allow common images, audio and office/docs (same as accept), plus any type that browser provides.
     const allowedByAccept =
       asAudio ||
