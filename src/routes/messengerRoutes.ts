@@ -245,7 +245,7 @@ const MIME_TO_EXT: Record<string, string> = {
 };
 
 const MESSENGER_MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
-const MESSENGER_MAX_AUDIO_BYTES = 100 * 1024 * 1024;
+const MESSENGER_MAX_AUDIO_BYTES = 1024 * 1024 * 1024;
 const MESSENGER_MAX_NON_VIDEO_BYTES = 20 * 1024 * 1024;
 
 function inferMimeFromHeader(buf: Buffer): string | null {
@@ -573,7 +573,7 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
         error: isVideo
           ? 'Видео не больше 1GB'
           : isAudio
-            ? 'Аудиофайл слишком большой (максимум 100MB)'
+            ? 'Аудиофайл слишком большой (максимум 1GB)'
             : 'Файл слишком большой (максимум 20MB)',
         maxBytes: maxAllowed,
       });
