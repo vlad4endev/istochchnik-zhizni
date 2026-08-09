@@ -3759,7 +3759,7 @@ html.dark .msg-videonote-circle--placeholder {
   transition:
     background-color var(--send-btn-bg-dur, 200ms) ease,
     transform var(--send-btn-transform-dur, 150ms) ease;
-  background-color: var(--tg-primary, #2AABEE);
+  background-color: var(--tg-primary, #7d3640);
   -webkit-tap-highlight-color: transparent;
   touch-action: none;
   /* PWA iOS/Android: prevent button going transparent on keyboard open / :disabled */
