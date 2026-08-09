@@ -677,7 +677,7 @@ export async function syncSongBlockAssigneesFromPlanMusicMinistry(planId: number
   await syncSongBlocksMusicMinistryMember(planId, musicId);
 }
 
-/** После смены ответственного за музыку в настройках плана — выставить всем блокам с типом kind=song. */
+/** После смены ответственного за музыку в настройках плана — выставить всем блокам «Песня». */
 async function syncSongBlocksMusicMinistryMember(planId: number, memberId: number | null): Promise<void> {
   await ensurePlannerSchema();
   await query(
@@ -686,7 +686,7 @@ async function syncSongBlocksMusicMinistryMember(planId: number, memberId: numbe
      from public.block_types bt
      where b.service_plan_id = $1
        and bt.id = b.block_type_id
-       and bt.kind = 'song'`,
+       and (bt.kind = 'song' or lower(coalesce(bt.code, '')) = 'song')`,
     [planId, memberId],
   );
 }

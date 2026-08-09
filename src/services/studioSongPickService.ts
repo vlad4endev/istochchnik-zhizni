@@ -1,5 +1,6 @@
 import { AiAgentError, chatCompletion } from '../ai';
 import { query } from '../config/db';
+import { syncAndNotifySetlistFromPublishedPlan } from './plannerSetlistService';
 import { getPlanDetails, markServicePlanLastEdited, patchBlock } from './servicePlannerService';
 
 type CatalogSong = {
@@ -416,17 +417,34 @@ export async function applyServicePlanSongPicks(
     if (!allowedBlockIds.has(block_id)) continue;
     if (!Number.isInteger(song_id) || song_id <= 0) continue;
 
-    const songRes = await query(`SELECT id, title FROM public.songs WHERE id = $1 AND is_published = TRUE LIMIT 1`, [
-      song_id,
-    ]);
-    if (!songRes.rows[0]) continue;
+    const songRes = await query(
+      `SELECT id, title, default_key FROM public.songs WHERE id = $1 AND is_published = TRUE LIMIT 1`,
+      [song_id],
+    );
+    const songRow = songRes.rows[0] as
+      | { id?: unknown; title?: unknown; default_key?: unknown }
+      | undefined;
+    if (!songRow) continue;
 
-    const ok = await patchBlock(block_id, { song_id });
+    const songTitle = String(songRow.title ?? '').trim() || `Песня #${song_id}`;
+    const key = String(songRow.default_key ?? '').trim();
+    const title = key ? `${songTitle} [${key}]` : songTitle;
+
+    const ok = await patchBlock(block_id, { song_id, title });
     if (ok) applied += 1;
   }
 
   if (applied > 0) {
     await markServicePlanLastEdited(planId, editorMemberId);
+    // Если программа уже опубликована — сразу обновляем сетлисты (раньше синка не было).
+    try {
+      await syncAndNotifySetlistFromPublishedPlan(planId, {
+        notifyOnPublish: false,
+        fallbackMemberId: editorMemberId,
+      });
+    } catch (e) {
+      console.error('[studio-song-pick] setlist sync after apply failed:', e);
+    }
   }
 
   return { applied };

@@ -277,6 +277,18 @@ export async function createServicePlan(body: {
   return data;
 }
 
+export type ServicePlanSetlistSyncPayload = {
+  skipped_reason: 'not_published' | 'no_songs' | 'no_musician' | null;
+  song_block_count: number;
+  items: Array<{
+    setlist_id: number;
+    member_id: number;
+    song_count: number;
+    created: boolean;
+    songs_changed: boolean;
+  }>;
+};
+
 export async function patchServicePlan(
   id: number,
   body: Partial<{
@@ -296,10 +308,15 @@ export async function patchServicePlan(
      */
     send_published_notify?: boolean;
   }>,
-): Promise<{ ok: boolean; published_notify?: 'sent' | 'skipped' | 'failed' }> {
+): Promise<{
+  ok: boolean;
+  published_notify?: 'sent' | 'skipped' | 'failed';
+  setlists?: ServicePlanSetlistSyncPayload;
+}> {
   const { data } = await apiClient.patch<{
     ok: boolean;
     published_notify?: 'sent' | 'skipped' | 'failed';
+    setlists?: ServicePlanSetlistSyncPayload;
   }>(`/api/service-plans/${id}`, body);
   return data;
 }

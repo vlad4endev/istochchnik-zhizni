@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 
 import {
+  rolesOfSession,
   sessionCanAccessStudio,
   sessionCanModerateCatalog,
   type AppRole,
@@ -48,6 +49,12 @@ import {
 } from '../services/studioSongPickService';
 
 type AuthReq = Request & SessionRoleSource & { authUserId?: number; authUserRole?: AppRole };
+
+function studioIncludeAllPlanner(req: AuthReq): boolean {
+  return rolesOfSession(req).some(
+    (role) => role === 'admin' || role === 'editor' || role === 'pastor' || role === 'minister',
+  );
+}
 
 function normalizeMinistryDirection(value: unknown): string {
   return String(value ?? '').trim().toLowerCase().replace(/ё/g, 'е');
@@ -516,7 +523,7 @@ export async function setlistsList(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
     if (!(await ensureStudio(r, res))) return;
-    res.json(await listSetlists(r.authUserId!));
+    res.json(await listSetlists(r.authUserId!, { includeAllPlanner: studioIncludeAllPlanner(r) }));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Ошибка' });
@@ -556,8 +563,9 @@ export async function setlistsCreate(req: Request, res: Response): Promise<void>
     }
     res.status(201).json(await createSetlist(r.authUserId!, title, eventDate));
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Ошибка' });
+    console.error('[studio] setlistsCreate:', e);
+    const detail = e instanceof Error ? e.message : 'Ошибка';
+    res.status(500).json({ error: `Не удалось создать сетлист: ${detail}` });
   }
 }
 
@@ -635,7 +643,11 @@ export async function setlistItemsList(req: Request, res: Response): Promise<voi
       res.status(400).json({ error: 'Invalid id' });
       return;
     }
-    res.json(await listSetlistItems(r.authUserId!, setlistId));
+    res.json(
+      await listSetlistItems(r.authUserId!, setlistId, {
+        includeAllPlanner: studioIncludeAllPlanner(r),
+      }),
+    );
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Ошибка' });
@@ -747,7 +759,9 @@ export async function performanceGet(req: Request, res: Response): Promise<void>
       res.status(400).json({ error: 'Invalid id' });
       return;
     }
-    const payload = await getPerformancePayload(r.authUserId!, setlistId);
+    const payload = await getPerformancePayload(r.authUserId!, setlistId, {
+      includeAllPlanner: studioIncludeAllPlanner(r),
+    });
     if (!payload) {
       res.status(404).json({ error: 'Не найдено' });
       return;

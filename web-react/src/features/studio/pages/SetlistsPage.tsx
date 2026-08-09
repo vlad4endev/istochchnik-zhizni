@@ -48,7 +48,8 @@ export function SetlistsPage() {
       <header className={`space-y-2 border-b pb-5 ${inStudioShell ? 'border-[var(--studio-editor-border)]' : 'border-[var(--border)]'}`}>
         <h1 className={`studio-page-heading text-xl font-bold md:text-2xl ${inStudioShell ? 'text-[var(--studio-editor-text)]' : 'text-[var(--text)]'}`}>Сетлисты</h1>
         <p className={`text-sm leading-relaxed ${inStudioShell ? 'text-[var(--studio-editor-mute)]' : 'text-[var(--text-secondary)]'}`}>
-          Создайте программу, добавьте песни, затем откройте выступление или PDF.
+          Создайте программу вручную или опубликуйте служение в планировщике — сетлист соберётся
+          автоматически из блоков «Песня».
         </p>
         <Link
           to={studioSongUsagePath(surface)}
