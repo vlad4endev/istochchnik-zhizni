@@ -17,10 +17,11 @@ CREATE INDEX IF NOT EXISTS idx_studio_song_tags_name
 
 -- Seed from existing song tags (exclude system / sandbox markers).
 INSERT INTO public.studio_song_tags (name)
-SELECT DISTINCT TRIM(t.tag)
+SELECT DISTINCT LEFT(TRIM(t.tag), 80)
 FROM public.songs s
 CROSS JOIN LATERAL unnest(COALESCE(s.tags, '{}'::text[])) AS t(tag)
 WHERE TRIM(t.tag) <> ''
+  AND char_length(TRIM(t.tag)) <= 80
   AND TRIM(t.tag) NOT LIKE '\_\_%' ESCAPE '\'
   AND LOWER(TRIM(t.tag)) NOT IN ('импортированная', 'импортировано', 'нет_текста')
-ON CONFLICT DO NOTHING;
+ON CONFLICT ((LOWER(TRIM(name)))) DO NOTHING;
