@@ -553,7 +553,11 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
       return;
     }
     const memberId = (req as AuthReq).authUserId!;
-    const displayName = decodeMultipartFilename(file.originalname).slice(0, 255) || 'file';
+    const bodyOriginal = decodeMultipartFilename(
+      String((req.body as { originalFileName?: unknown })?.originalFileName ?? ''),
+    ).slice(0, 255);
+    const fromMulter = decodeMultipartFilename(file.originalname).slice(0, 255);
+    const displayName = bodyOriginal || fromMulter || 'file';
     const { mimeType, extension } = await resolveMessengerUploadMetadata(file);
     const contentType =
       String(mimeType || '').trim() || String(file.mimetype || '').trim() || 'application/octet-stream';

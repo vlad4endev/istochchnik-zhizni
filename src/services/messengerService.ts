@@ -204,12 +204,20 @@ function lastMessageListPreviewContent(
   const pt = String(payloadType ?? '').trim();
   if (pt === 'audio') {
     if (isMessengerAudioFilePayload(payload)) {
-      const name = String(
-        (payload as Record<string, unknown>).name ??
-          (payload as Record<string, unknown>).filename ??
-          '',
-      ).trim();
-      return name ? `🎵 ${name}` : '🎵 Аудиофайл';
+      const p = payload as Record<string, unknown>;
+      const candidates = [p.title, p.name, p.filename, p.originalName, p.original_name];
+      let label = '';
+      for (const raw of candidates) {
+        const value = String(raw ?? '').trim();
+        if (!value) continue;
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(\.[a-z0-9]+)?$/i.test(value)) {
+          continue;
+        }
+        if (/^voice-\d+\./i.test(value)) continue;
+        label = value.replace(/\.[^.]+$/, '') || value;
+        break;
+      }
+      return label ? `🎵 ${label}` : '🎵 Аудиофайл';
     }
     return '🎤 Голосовое сообщение';
   }

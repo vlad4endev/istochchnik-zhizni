@@ -25,7 +25,7 @@ import {
   assistantMarkdownToPlainText,
   renderAssistantMessageContent,
 } from '../assistantMessageFormat';
-import { audioDisplayTitle, isMessengerAudioFilePayload } from '../chatAudio';
+import { isMessengerAudioFilePayload, resolveMessengerAudioFileTitle } from '../chatAudio';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { ChatVideoAttachmentPreview } from './ChatVideoAttachmentPreview';
@@ -1341,10 +1341,9 @@ function MessageBubbleInner({
       const durRaw = payload.durationSec ?? payload.duration_sec;
       const durationHint = typeof durRaw === 'number' && Number.isFinite(durRaw) ? durRaw : Number(durRaw);
       const isAudioFile = isMessengerAudioFilePayload(payload as Record<string, unknown>);
-      const titleFromPayload = String(payload.title ?? '').trim();
-      const fileName = String(payload.name ?? payload.filename ?? '').trim();
-      const displayTitle =
-        titleFromPayload || (isAudioFile && fileName ? audioDisplayTitle(fileName) : '');
+      const displayTitle = isAudioFile
+        ? resolveMessengerAudioFileTitle(payload as Record<string, unknown>)
+        : '';
       return (
         <div
           data-no-msg-menu

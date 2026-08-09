@@ -294,7 +294,9 @@ export async function uploadFile(
   opts?: { onProgress?: (pct: number) => void; signal?: AbortSignal; conversationId?: string | null },
 ): Promise<UploadedFile> {
   const form = new FormData();
-  form.append('file', file);
+  const originalName = String(file.name || '').trim();
+  form.append('file', file, originalName || file.name || 'file');
+  if (originalName) form.append('originalFileName', originalName);
   const conv = typeof opts?.conversationId === 'string' ? opts.conversationId.trim() : '';
   if (conv) form.append('conversationId', conv);
   const maxAttempts = 3;

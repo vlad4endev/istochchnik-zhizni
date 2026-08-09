@@ -32,6 +32,7 @@ import {
   audioDisplayTitle,
   CHAT_AUDIO_ACCEPT,
   isChatAudioFile,
+  readAudioFileDisplayName,
   readAudioFileDurationSec,
 } from '../chatAudio';
 import {
@@ -77,6 +78,8 @@ type PendingAttachment = {
   previewUrl: string | null;
   uploaded?: api.UploadedFile | null;
   durationSec?: number;
+  /** Название из ID3 или нормальное имя файла (не uuid/номер хранилища). */
+  displayTitle?: string;
 };
 
 type UploadingState = {
@@ -808,7 +811,9 @@ export function ChatInput({
           : pending.isAudio
             ? 'audio'
             : 'file';
-        const fileName = uploaded.name || pending.file.name;
+        // Имя с устройства важнее ответа upload (там часто uuid/номер MediaStore).
+        const clientName = String(pending.file.name || '').trim();
+        const fileName = clientName || String(uploaded.name || '').trim() || 'audio';
         const payload: Record<string, unknown> = {
           url: uploaded.url,
           name: fileName,
@@ -818,7 +823,12 @@ export function ChatInput({
         };
         if (pending.isAudio) {
           payload.kind = 'file';
-          payload.title = audioDisplayTitle(fileName);
+          const displayName =
+            String(pending.displayTitle || '').trim() ||
+            (await readAudioFileDisplayName(pending.file));
+          payload.originalName = clientName || displayName;
+          payload.title = audioDisplayTitle(displayName || fileName);
+          payload.name = clientName || displayName || fileName;
           let durationSec = pending.durationSec;
           if (!(typeof durationSec === 'number' && durationSec > 0)) {
             durationSec = await readAudioFileDurationSec(pending.file);
@@ -984,13 +994,27 @@ export function ChatInput({
       }
       setPendingImages([]);
       const previewUrl = URL.createObjectURL(file);
-      setPending({ file, isImage: false, isAudio: true, previewUrl, uploaded: null });
+      setPending({
+        file,
+        isImage: false,
+        isAudio: true,
+        previewUrl,
+        uploaded: null,
+        displayTitle: audioDisplayTitle(file.name),
+      });
       void readAudioFileDurationSec(file).then((durationSec) => {
         if (typeof durationSec === 'number' && durationSec > 0) {
           setPending((prev) =>
             prev && prev.file === file ? { ...prev, durationSec } : prev,
           );
         }
+      });
+      void readAudioFileDisplayName(file).then((displayName) => {
+        const title = audioDisplayTitle(displayName);
+        if (!title) return;
+        setPending((prev) =>
+          prev && prev.file === file ? { ...prev, displayTitle: title } : prev,
+        );
       });
       focusMessengerField(textareaRef.current);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -1038,7 +1062,14 @@ export function ChatInput({
       ((file.type || '').startsWith('image/') ||
         IMAGE_NAME_EXT_RE.test(String(file.name || '').trim()));
     const previewUrl = isImage || asAudio ? URL.createObjectURL(file) : null;
-    setPending({ file, isImage, isAudio: asAudio, previewUrl, uploaded: null });
+    setPending({
+      file,
+      isImage,
+      isAudio: asAudio,
+      previewUrl,
+      uploaded: null,
+      displayTitle: asAudio ? audioDisplayTitle(file.name) : undefined,
+    });
     if (asAudio) {
       void readAudioFileDurationSec(file).then((durationSec) => {
         if (typeof durationSec === 'number' && durationSec > 0) {
@@ -1046,6 +1077,13 @@ export function ChatInput({
             prev && prev.file === file ? { ...prev, durationSec } : prev,
           );
         }
+      });
+      void readAudioFileDisplayName(file).then((displayName) => {
+        const title = audioDisplayTitle(displayName);
+        if (!title) return;
+        setPending((prev) =>
+          prev && prev.file === file ? { ...prev, displayTitle: title } : prev,
+        );
       });
     }
     focusMessengerField(textareaRef.current);
@@ -1853,7 +1891,7 @@ export function ChatInput({
               audioSrc={pending.previewUrl}
               isMine={false}
               variant="file"
-              title={audioDisplayTitle(pending.file.name)}
+              title={pending.displayTitle || audioDisplayTitle(pending.file.name)}
               durationHintSec={pending.durationSec}
               waveSeed={`draft-${pending.file.name}-${pending.file.size}`}
             />
