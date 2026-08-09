@@ -1726,7 +1726,9 @@ export function StudioEditor() {
           aria-busy={aiSongCleanupMut.isPending}
         >
           <LuSparkles className={`h-4 w-4 ${aiSongCleanupMut.isPending ? 'animate-pulse' : ''}`} />
-          <span>{aiSongCleanupMut.isPending ? 'ИИ…' : <span className="hidden sm:inline">Привести в порядок</span>}</span>
+          <span className={aiSongCleanupMut.isPending ? undefined : 'hidden sm:inline'}>
+            {aiSongCleanupMut.isPending ? 'ИИ…' : 'Привести в порядок'}
+          </span>
         </button>
         {canDeleteCatalog ? (
           <button
