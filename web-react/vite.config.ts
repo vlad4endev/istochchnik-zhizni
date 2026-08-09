@@ -260,6 +260,14 @@ export default defineConfig(({ mode }) => {
               handler: 'NetworkOnly',
             },
             {
+              /**
+               * Долгие LLM-запросы (очистка песни, vision и т.п.): не гонять через NetworkFirst
+               * с networkTimeoutSeconds=15 — иначе SW раньше клиента сдаётся и ломает POST.
+               */
+              urlPattern: /\/api\/(?:studio|songs)\/ai\//,
+              handler: 'NetworkOnly',
+            },
+            {
               urlPattern: /\/api\//,
               handler: 'NetworkFirst',
               options: {

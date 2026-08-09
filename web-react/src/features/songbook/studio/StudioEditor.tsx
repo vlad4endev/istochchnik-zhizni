@@ -667,7 +667,7 @@ export function StudioEditor() {
       const nextChordPro = blocksToChordPro(parsed);
       const prevChordPro = blocksToChordPro(blocks);
       if (nextChordPro === prevChordPro) {
-        emitAppToast('ИИ не нашёл изменений для этого текста');
+        emitAppToast({ kind: 'info', message: 'ИИ не нашёл изменений для этого текста' });
         return;
       }
       setBlocks(parsed);
@@ -677,9 +677,17 @@ export function StudioEditor() {
       });
     },
     onError: (err: unknown) => {
-      const apiMsg = axios.isAxiosError(err) ? (err.response?.data as { error?: string } | undefined)?.error : undefined;
-      const msg = apiMsg || (err instanceof Error && err.message ? err.message : 'ИИ не смог привести текст в порядок');
-      emitAppToast({ kind: 'error', message: msg });
+      const apiMsg = axios.isAxiosError(err)
+        ? (err.response?.data as { error?: string } | undefined)?.error
+        : undefined;
+      const timedOut =
+        axios.isAxiosError(err) &&
+        (err.code === 'ECONNABORTED' || /timeout/i.test(String(err.message ?? '')));
+      const msg = timedOut
+        ? 'ИИ обрабатывает текст дольше обычного. Подождите и нажмите ещё раз — или сократите песню.'
+        : apiMsg ||
+          (err instanceof Error && err.message ? err.message : 'ИИ не смог привести текст в порядок');
+      emitAppToast({ kind: 'error', message: msg, durationMs: timedOut ? 7000 : undefined });
     },
   });
 
@@ -1715,9 +1723,12 @@ export function StudioEditor() {
           disabled={aiSongCleanupMut.isPending}
           className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold disabled:opacity-60 ${shell.violetBtn}`}
           aria-label="Привести текст в порядок с помощью ИИ"
+          aria-busy={aiSongCleanupMut.isPending}
         >
-          <LuSparkles className="h-4 w-4" />
-          <span className="hidden sm:inline">{aiSongCleanupMut.isPending ? 'ИИ…' : 'Привести в порядок'}</span>
+          <LuSparkles className={`h-4 w-4 ${aiSongCleanupMut.isPending ? 'animate-pulse' : ''}`} />
+          <span className={aiSongCleanupMut.isPending ? undefined : 'hidden sm:inline'}>
+            {aiSongCleanupMut.isPending ? 'ИИ…' : 'Привести в порядок'}
+          </span>
         </button>
         {canDeleteCatalog ? (
           <button
