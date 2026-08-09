@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { query } from '../config/db';
 import { notifyRealtime } from '../realtime/notify';
 import { syncAndNotifySetlistFromPublishedPlan } from '../services/plannerSetlistService';
+import type { PlannerSetlistSyncOutcome } from '../services/plannerSetlistService';
 import { sendPush } from '../services/pushService';
 import { storeSermonAttachmentFile } from '../services/sermonAttachmentUploadService';
 import { listUsers } from '../services/userService';
@@ -297,13 +298,29 @@ async function isPlanPublished(planId: number): Promise<boolean> {
 
 async function syncPlannerSetlistIfPublished(
   planId: number,
-  opts?: { notifyOnPublish?: boolean },
-): Promise<void> {
+  opts?: { notifyOnPublish?: boolean; fallbackMemberId?: number | null },
+): Promise<PlannerSetlistSyncOutcome | null> {
   try {
-    await syncAndNotifySetlistFromPublishedPlan(planId, opts);
+    return await syncAndNotifySetlistFromPublishedPlan(planId, opts);
   } catch (e) {
     console.error('[service-planner] syncPlannerSetlist:', e);
+    return null;
   }
+}
+
+function serializeSetlistSync(outcome: PlannerSetlistSyncOutcome | null | undefined) {
+  if (!outcome) return undefined;
+  return {
+    skipped_reason: outcome.skippedReason,
+    song_block_count: outcome.songBlockCount,
+    items: outcome.results.map((r) => ({
+      setlist_id: r.setlistId,
+      member_id: r.memberId,
+      song_count: r.songCount,
+      created: r.created,
+      songs_changed: r.songsChanged,
+    })),
+  };
 }
 
 export async function getServiceBlockTypes(_req: Request, res: Response): Promise<void> {
@@ -705,8 +722,14 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
       }
     }
     const justPublished = patch.status === 'published' && previousStatus !== 'published';
+    let setlistSync: PlannerSetlistSyncOutcome | null = null;
+    let setlistSyncFailed = false;
     if (patch.status === 'published' || previousStatus === 'published') {
-      await syncPlannerSetlistIfPublished(id, { notifyOnPublish: justPublished });
+      setlistSync = await syncPlannerSetlistIfPublished(id, {
+        notifyOnPublish: justPublished,
+        fallbackMemberId: req.authUserId ?? null,
+      });
+      if (setlistSync == null) setlistSyncFailed = true;
     }
     let publishedNotify: 'sent' | 'skipped' | 'failed' | null = null;
     if (justPublished) {
@@ -756,9 +779,15 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
       }
     }
     notifyServicePlannerRealtime();
+    const setlistsPayload = serializeSetlistSync(setlistSync);
     res.json({
       ok: true,
       ...(publishedNotify != null ? { published_notify: publishedNotify } : {}),
+      ...(setlistsPayload != null
+        ? { setlists: setlistsPayload }
+        : setlistSyncFailed
+          ? { setlists: { skipped_reason: null, song_block_count: 0, items: [], error: true } }
+          : {}),
     });
   } catch (e) {
     console.error('[service-planner] patchServicePlanById:', e);
@@ -791,7 +820,9 @@ export async function patchServiceBlocksReorder(req: Request, res: Response): Pr
       } catch (syncErr) {
         console.error('[service-planner] syncBroadcastFromPublishedPlan (reorder):', syncErr);
       }
-      await syncPlannerSetlistIfPublished(servicePlanId);
+      await syncPlannerSetlistIfPublished(servicePlanId, {
+        fallbackMemberId: req.authUserId ?? null,
+      });
     }
     notifyServicePlannerRealtime();
     res.json({ ok: true });
@@ -858,7 +889,9 @@ export async function patchServiceBlockById(req: Request, res: Response): Promis
       } catch (syncErr) {
         console.error('[service-planner] syncBroadcastFromPublishedPlan (patch block):', syncErr);
       }
-      await syncPlannerSetlistIfPublished(planId);
+      await syncPlannerSetlistIfPublished(planId, {
+        fallbackMemberId: req.authUserId ?? null,
+      });
     }
     notifyServicePlannerRealtime();
     res.json({ ok: true });
@@ -1038,7 +1071,9 @@ export async function postServiceBlock(req: Request, res: Response): Promise<voi
       } catch (syncErr) {
         console.error('[service-planner] syncBroadcastFromPublishedPlan (create block):', syncErr);
       }
-      await syncPlannerSetlistIfPublished(servicePlanId);
+      await syncPlannerSetlistIfPublished(servicePlanId, {
+        fallbackMemberId: req.authUserId ?? null,
+      });
     }
     notifyServicePlannerRealtime();
     res.status(201).json({ id });
@@ -1075,7 +1110,9 @@ export async function deleteServiceBlockById(req: Request, res: Response): Promi
       } catch (syncErr) {
         console.error('[service-planner] syncBroadcastFromPublishedPlan (delete block):', syncErr);
       }
-      await syncPlannerSetlistIfPublished(planId);
+      await syncPlannerSetlistIfPublished(planId, {
+        fallbackMemberId: req.authUserId ?? null,
+      });
     }
     notifyServicePlannerRealtime();
     res.status(204).send();

@@ -10,6 +10,14 @@ export interface PlannerSetlistSyncResult {
   songsChanged: boolean;
 }
 
+export type PlannerSetlistSkipReason = 'not_published' | 'no_songs' | 'no_musician';
+
+export interface PlannerSetlistSyncOutcome {
+  results: PlannerSetlistSyncResult[];
+  skippedReason: PlannerSetlistSkipReason | null;
+  songBlockCount: number;
+}
+
 interface PlanSongBlock {
   song_id: number;
   assigned_member_id: number | null;
@@ -31,6 +39,13 @@ function pluralSongs(n: number): string {
   if (mod10 === 1 && mod100 !== 11) return 'песня';
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'песни';
   return 'песен';
+}
+
+function positiveIntOrNull(raw: unknown): number | null {
+  if (raw == null) return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return n;
 }
 
 async function findStudioVersionId(memberId: number, songId: number): Promise<number | null> {
@@ -62,14 +77,10 @@ async function fetchPlanSongBlocks(planId: number): Promise<PlanSongBlock[]> {
   for (const row of blocksRes.rows) {
     const songId = Number((row as { song_id?: unknown }).song_id);
     if (!Number.isInteger(songId) || songId <= 0) continue;
-    const assigned =
-      (row as { assigned_member_id?: unknown }).assigned_member_id == null
-        ? null
-        : Number((row as { assigned_member_id?: unknown }).assigned_member_id);
+    const assigned = positiveIntOrNull((row as { assigned_member_id?: unknown }).assigned_member_id);
     blocks.push({
       song_id: songId,
-      assigned_member_id:
-        assigned != null && Number.isInteger(assigned) && assigned > 0 ? assigned : null,
+      assigned_member_id: assigned,
     });
   }
   return blocks;
@@ -77,9 +88,9 @@ async function fetchPlanSongBlocks(planId: number): Promise<PlanSongBlock[]> {
 
 /**
  * Группирует песни по ответственному музыканту (assigned_member_id на блоке).
- * Если на блоке не указан — подставляется music_ministry_member_id плана.
+ * Если на блоке не указан — подставляется music_ministry_member_id плана (или fallback).
  */
-function groupSongsByResponsibleMusician(
+export function groupSongsByResponsibleMusician(
   blocks: PlanSongBlock[],
   planMusicMinistryId: number | null,
 ): Map<number, number[]> {
@@ -199,17 +210,21 @@ async function removeOrphanPlannerSetlists(planId: number, activeMemberIds: numb
 
 /**
  * Создаёт или обновляет сетлисты для ответственных музыкантов из опубликованной программы.
- * Музыкант определяется по assigned_member_id на блоках «Песня» (не по полю плана в целом).
+ * Музыкант: assigned_member_id на блоках «Песня», иначе music_ministry_member_id плана,
+ * иначе создатель / последний редактор / actorMemberId (кто публикует).
  */
 export async function syncSetlistFromPublishedPlan(
   planId: number,
-): Promise<PlannerSetlistSyncResult[]> {
+  opts?: { fallbackMemberId?: number | null },
+): Promise<PlannerSetlistSyncOutcome> {
   const planRes = await query(
     `SELECT
        p.id,
        p.status,
        p.service_date::text AS service_date,
        p.music_ministry_member_id,
+       p.created_by_member_id,
+       p.last_edited_by_member_id,
        coalesce(nullif(trim(t.name), ''), 'Служение') AS template_name
      FROM public.service_plans p
      LEFT JOIN public.service_templates t ON t.id = p.template_id
@@ -222,25 +237,50 @@ export async function syncSetlistFromPublishedPlan(
         status?: string;
         service_date?: string;
         music_ministry_member_id?: number | null;
+        created_by_member_id?: number | null;
+        last_edited_by_member_id?: number | null;
         template_name?: string;
       }
     | undefined;
-  if (!plan || plan.status !== 'published') return [];
+  if (!plan || plan.status !== 'published') {
+    return { results: [], skippedReason: 'not_published', songBlockCount: 0 };
+  }
 
   await syncSongBlockAssigneesFromPlanMusicMinistry(planId);
 
-  const planMusicMinistryId =
-    plan.music_ministry_member_id == null ? null : Number(plan.music_ministry_member_id);
-
+  const planMusicMinistryId = positiveIntOrNull(plan.music_ministry_member_id);
   const songBlocks = await fetchPlanSongBlocks(planId);
-  const groups = groupSongsByResponsibleMusician(songBlocks, planMusicMinistryId);
+  if (songBlocks.length === 0) {
+    console.warn('[planner-setlist] skip: no songs with song_id on plan', { planId });
+    return { results: [], skippedReason: 'no_songs', songBlockCount: 0 };
+  }
+
+  let groups = groupSongsByResponsibleMusician(songBlocks, planMusicMinistryId);
+
+  // Песни есть, но никто не назначен — берём владельца плана / того, кто публикует.
   if (groups.size === 0) {
-    console.warn('[planner-setlist] skip: no responsible musician or songs', {
+    const fallbackMusicianId =
+      planMusicMinistryId ??
+      positiveIntOrNull(plan.last_edited_by_member_id) ??
+      positiveIntOrNull(plan.created_by_member_id) ??
+      positiveIntOrNull(opts?.fallbackMemberId);
+    if (fallbackMusicianId != null) {
+      console.warn('[planner-setlist] using fallback musician for setlist', {
+        planId,
+        fallbackMusicianId,
+        musicMinistryMemberId: planMusicMinistryId,
+      });
+      groups = groupSongsByResponsibleMusician(songBlocks, fallbackMusicianId);
+    }
+  }
+
+  if (groups.size === 0) {
+    console.warn('[planner-setlist] skip: no responsible musician', {
       planId,
       songBlockCount: songBlocks.length,
       musicMinistryMemberId: planMusicMinistryId,
     });
-    return [];
+    return { results: [], skippedReason: 'no_musician', songBlockCount: songBlocks.length };
   }
 
   const serviceDate = String(plan.service_date ?? '').trim();
@@ -265,7 +305,7 @@ export async function syncSetlistFromPublishedPlan(
   }
 
   await removeOrphanPlannerSetlists(planId, activeMemberIds);
-  return results;
+  return { results, skippedReason: null, songBlockCount: songBlocks.length };
 }
 
 export async function notifyMusicianSetlistReady(input: {
@@ -297,11 +337,13 @@ export async function notifyMusicianSetlistReady(input: {
  */
 export async function syncAndNotifySetlistFromPublishedPlan(
   planId: number,
-  opts?: { notifyOnPublish?: boolean },
-): Promise<void> {
+  opts?: { notifyOnPublish?: boolean; fallbackMemberId?: number | null },
+): Promise<PlannerSetlistSyncOutcome> {
   try {
-    const results = await syncSetlistFromPublishedPlan(planId);
-    if (results.length === 0) return;
+    const outcome = await syncSetlistFromPublishedPlan(planId, {
+      fallbackMemberId: opts?.fallbackMemberId,
+    });
+    if (outcome.results.length === 0) return outcome;
 
     const planRes = await query(
       `SELECT service_date::text AS service_date FROM public.service_plans WHERE id = $1 LIMIT 1`,
@@ -309,7 +351,7 @@ export async function syncAndNotifySetlistFromPublishedPlan(
     );
     const serviceDate = String(planRes.rows[0]?.service_date ?? '');
 
-    for (const result of results) {
+    for (const result of outcome.results) {
       const shouldNotify =
         Boolean(opts?.notifyOnPublish) && (result.created || result.songsChanged);
       if (!shouldNotify) continue;
@@ -322,7 +364,9 @@ export async function syncAndNotifySetlistFromPublishedPlan(
         planId,
       });
     }
+    return outcome;
   } catch (e) {
     console.error('[planner-setlist] syncAndNotify failed:', e);
+    throw e;
   }
 }

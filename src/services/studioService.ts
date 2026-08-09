@@ -346,12 +346,42 @@ function mapSetlistRow(row: Record<string, unknown>): SetlistRow {
   };
 }
 
-export async function listSetlists(memberId: number): Promise<SetlistRow[]> {
+/**
+ * Сетлисты пользователя + автосозданные из программ, где он ответственный /
+ * создатель / последний редактор (чтобы админ видел результат публикации).
+ * При includeAllPlanner — все сетлисты из планировщика (admin/editor).
+ */
+export async function listSetlists(
+  memberId: number,
+  opts?: { includeAllPlanner?: boolean }
+): Promise<SetlistRow[]> {
+  const includeAllPlanner = Boolean(opts?.includeAllPlanner);
   const result = await query(
-    `SELECT * FROM setlists WHERE member_id = $1 ORDER BY COALESCE(event_date, created_at::date) DESC, title ASC`,
-    [memberId]
+    `SELECT DISTINCT ON (sl.id) sl.*
+     FROM setlists sl
+     LEFT JOIN public.service_plans p ON p.id = sl.source_service_plan_id
+     WHERE sl.member_id = $1
+        OR (
+          sl.source_service_plan_id IS NOT NULL
+          AND (
+            $2::boolean
+            OR p.music_ministry_member_id = $1
+            OR p.created_by_member_id = $1
+            OR p.last_edited_by_member_id = $1
+          )
+        )
+     ORDER BY sl.id, COALESCE(sl.event_date, sl.created_at::date) DESC, sl.title ASC`,
+    [memberId, includeAllPlanner]
   );
-  return result.rows.map((row) => mapSetlistRow(row as Record<string, unknown>));
+  // DISTINCT ON (id) требует ORDER BY id first — пересортируем для UI.
+  const rows = result.rows.map((row) => mapSetlistRow(row as Record<string, unknown>));
+  rows.sort((a, b) => {
+    const da = a.event_date ?? a.created_at.slice(0, 10);
+    const db = b.event_date ?? b.created_at.slice(0, 10);
+    if (da !== db) return db.localeCompare(da);
+    return a.title.localeCompare(b.title, 'ru');
+  });
+  return rows;
 }
 
 export async function createSetlist(
@@ -359,9 +389,10 @@ export async function createSetlist(
   title: string,
   eventDate: string | null
 ): Promise<SetlistRow> {
+  // Явно задаём is_public / share_token_issued_at — на старых БД без DEFAULT INSERT иначе падает.
   const result = await query(
-    `INSERT INTO setlists (member_id, title, event_date, updated_at)
-     VALUES ($1, $2, $3::date, NOW())
+    `INSERT INTO setlists (member_id, title, event_date, is_public, share_token_issued_at, updated_at)
+     VALUES ($1, $2, $3::date, FALSE, NOW(), NOW())
      RETURNING *`,
     [memberId, title.trim(), eventDate]
   );
@@ -415,6 +446,36 @@ export async function deleteSetlist(memberId: number, setlistId: number): Promis
     memberId,
   ]);
   return (result.rowCount ?? 0) > 0;
+}
+
+/** Чтение сетлиста: владелец или участник связанной программы / менеджер студии. */
+export async function canAccessSetlist(
+  memberId: number,
+  setlistId: number,
+  opts?: { includeAllPlanner?: boolean }
+): Promise<boolean> {
+  const includeAllPlanner = Boolean(opts?.includeAllPlanner);
+  const r = await query(
+    `SELECT 1
+     FROM setlists sl
+     LEFT JOIN public.service_plans p ON p.id = sl.source_service_plan_id
+     WHERE sl.id = $1
+       AND (
+         sl.member_id = $2
+         OR (
+           sl.source_service_plan_id IS NOT NULL
+           AND (
+             $3::boolean
+             OR p.music_ministry_member_id = $2
+             OR p.created_by_member_id = $2
+             OR p.last_edited_by_member_id = $2
+           )
+         )
+       )
+     LIMIT 1`,
+    [setlistId, memberId, includeAllPlanner]
+  );
+  return (r.rowCount ?? 0) > 0;
 }
 
 /** v1: lineComments — ключ «индекс строки текста» (0-based), blockComments — диапазон строк. */
@@ -551,12 +612,13 @@ async function fetchSetlistItemRows(setlistId: number): Promise<SetlistItemRow[]
   });
 }
 
-export async function listSetlistItems(memberId: number, setlistId: number): Promise<SetlistItemRow[]> {
-  const owner = await query(`SELECT 1 FROM setlists WHERE id = $1 AND member_id = $2`, [
-    setlistId,
-    memberId,
-  ]);
-  if (owner.rows.length === 0) return [];
+export async function listSetlistItems(
+  memberId: number,
+  setlistId: number,
+  opts?: { includeAllPlanner?: boolean }
+): Promise<SetlistItemRow[]> {
+  const ok = await canAccessSetlist(memberId, setlistId, opts);
+  if (!ok) return [];
   return fetchSetlistItemRows(setlistId);
 }
 
@@ -666,16 +728,16 @@ export async function reorderSetlistItems(
 
 export async function getPerformancePayload(
   memberId: number,
-  setlistId: number
+  setlistId: number,
+  opts?: { includeAllPlanner?: boolean }
 ): Promise<{ setlist: SetlistRow; items: SetlistItemRow[] } | null> {
-  const sl = await query(`SELECT * FROM setlists WHERE id = $1 AND member_id = $2`, [
-    setlistId,
-    memberId,
-  ]);
+  const ok = await canAccessSetlist(memberId, setlistId, opts);
+  if (!ok) return null;
+  const sl = await query(`SELECT * FROM setlists WHERE id = $1`, [setlistId]);
   const row = sl.rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
   const setlist = mapSetlistRow(row);
-  const items = await listSetlistItems(memberId, setlistId);
+  const items = await listSetlistItems(memberId, setlistId, opts);
   return { setlist, items };
 }
 

@@ -958,7 +958,14 @@ export function ServicePlannerPage() {
           ? ({ status: nextStatus, send_published_notify: sendPublishedNotify } as const)
           : ({ status: nextStatus } as const);
 
-      let publishResult: { published_notify?: 'sent' | 'skipped' | 'failed' } | null = null;
+      let publishResult: {
+        published_notify?: 'sent' | 'skipped' | 'failed';
+        setlists?: {
+          skipped_reason: 'not_published' | 'no_songs' | 'no_musician' | null;
+          song_block_count: number;
+          items: Array<{ setlist_id: number; song_count: number; created: boolean }>;
+        };
+      } | null = null;
       if (canManagePlanSettings) {
         publishResult = await patchServicePlan(nextDraft.id, {
           service_date: nextDraft.service_date,
@@ -988,9 +995,38 @@ export function ServicePlannerPage() {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] }),
         qc.invalidateQueries({ queryKey: ['service-planner', 'plan', activePlanId] }),
+        qc.invalidateQueries({ queryKey: ['studio', 'setlists'] }),
       ]);
       setAutosaveSavedAt(Date.now());
       setAutosaveStatus('saved');
+
+      if (nextStatus === 'published') {
+        const sl = publishResult?.setlists;
+        const first = sl?.items?.[0];
+        if (first) {
+          emitAppToast({
+            kind: 'success',
+            message: first.created
+              ? `Сетлист создан (${first.song_count} песен) — откройте в Студии → Сетлисты`
+              : `Сетлист обновлён (${first.song_count} песен)`,
+          });
+        } else if (sl?.skipped_reason === 'no_songs') {
+          emitAppToast({
+            kind: 'error',
+            message: 'Сетлист не создан: выберите песни в блоках «Песня»',
+          });
+        } else if (sl?.skipped_reason === 'no_musician') {
+          emitAppToast({
+            kind: 'error',
+            message: 'Сетлист не создан: назначьте ответственного за музыку',
+          });
+        } else if (sl && 'error' in sl && (sl as { error?: boolean }).error) {
+          emitAppToast({
+            kind: 'error',
+            message: 'Не удалось создать сетлист — проверьте логи сервера',
+          });
+        }
+      }
     } catch {
       setAutosaveStatus('error');
     }
