@@ -1020,6 +1020,11 @@ export function ServicePlannerPage() {
             kind: 'error',
             message: 'Сетлист не создан: назначьте ответственного за музыку',
           });
+        } else if (sl && 'error' in sl && (sl as { error?: boolean }).error) {
+          emitAppToast({
+            kind: 'error',
+            message: 'Не удалось создать сетлист — проверьте логи сервера',
+          });
         }
       }
     } catch {

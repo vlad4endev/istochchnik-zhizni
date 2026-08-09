@@ -723,11 +723,13 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
     }
     const justPublished = patch.status === 'published' && previousStatus !== 'published';
     let setlistSync: PlannerSetlistSyncOutcome | null = null;
+    let setlistSyncFailed = false;
     if (patch.status === 'published' || previousStatus === 'published') {
       setlistSync = await syncPlannerSetlistIfPublished(id, {
         notifyOnPublish: justPublished,
         fallbackMemberId: req.authUserId ?? null,
       });
+      if (setlistSync == null) setlistSyncFailed = true;
     }
     let publishedNotify: 'sent' | 'skipped' | 'failed' | null = null;
     if (justPublished) {
@@ -781,7 +783,11 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
     res.json({
       ok: true,
       ...(publishedNotify != null ? { published_notify: publishedNotify } : {}),
-      ...(setlistsPayload != null ? { setlists: setlistsPayload } : {}),
+      ...(setlistsPayload != null
+        ? { setlists: setlistsPayload }
+        : setlistSyncFailed
+          ? { setlists: { skipped_reason: null, song_block_count: 0, items: [], error: true } }
+          : {}),
     });
   } catch (e) {
     console.error('[service-planner] patchServicePlanById:', e);
