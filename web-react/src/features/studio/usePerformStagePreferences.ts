@@ -11,7 +11,7 @@ export type PerformStagePrefs = {
 };
 
 const DEFAULTS: PerformStagePrefs = {
-  fontSize: 22,
+  fontSize: 26,
   stageDark: true,
   chordsVisible: true,
   musicianNotesVisible: true,
@@ -26,7 +26,7 @@ function loadPrefs(): PerformStagePrefs {
     const parsed = JSON.parse(raw) as Partial<PerformStagePrefs>;
     return {
       fontSize:
-        typeof parsed.fontSize === 'number' && parsed.fontSize >= 14 && parsed.fontSize <= 44
+        typeof parsed.fontSize === 'number' && parsed.fontSize >= 14 && parsed.fontSize <= 48
           ? parsed.fontSize
           : DEFAULTS.fontSize,
       stageDark: typeof parsed.stageDark === 'boolean' ? parsed.stageDark : DEFAULTS.stageDark,

@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { LyricsWithChords } from '../../songbook/components/LyricsWithChords';
 import type { MusicianNotesV1 } from '../performNotes';
@@ -16,8 +16,14 @@ type Props = {
   stageDark?: boolean;
 };
 
+type NoteEntry =
+  | { kind: 'line'; line: number; text: string }
+  | { kind: 'block'; from: number; to: number; text: string };
+
 /**
- * Текст песни по строкам с аккордами + заметки для музыкантов (только в закрытом режиме выступления).
+ * Текст песни с аккордами + заметки для музыкантов.
+ * Песня рендерится целиком (чтобы пары «строка аккордов + текст» не ломались);
+ * заметки — отдельным блоком над текстом.
  */
 export function LyricsWithMusicianNotes({
   content,
@@ -30,68 +36,74 @@ export function LyricsWithMusicianNotes({
   notesVisible = true,
   stageDark = false,
 }: Props) {
-  const lines = useMemo(() => content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n'), [content]);
+  const noteEntries = useMemo((): NoteEntry[] => {
+    if (!notesVisible || !notes) return [];
+    const entries: NoteEntry[] = [];
+    for (const block of notes.blockComments ?? []) {
+      const text = block.text?.trim();
+      if (!text) continue;
+      entries.push({ kind: 'block', from: block.from, to: block.to, text });
+    }
+    const lineMap = notes.lineComments ?? {};
+    for (const [key, raw] of Object.entries(lineMap)) {
+      const text = raw?.trim();
+      if (!text) continue;
+      const line = Number(key);
+      if (!Number.isInteger(line) || line < 0) continue;
+      entries.push({ kind: 'line', line, text });
+    }
+    entries.sort((a, b) => {
+      const aPos = a.kind === 'block' ? a.from : a.line;
+      const bPos = b.kind === 'block' ? b.from : b.line;
+      return aPos - bPos;
+    });
+    return entries;
+  }, [notes, notesVisible]);
 
-  const lineMap = notes?.lineComments ?? {};
-  const blocks = notes?.blockComments ?? [];
-
-  const blockAtStart = (i: number) => blocks.find((b) => b.from === i);
-  const inBlock = (i: number) => blocks.some((b) => b.from <= i && i <= b.to);
-
-  const blockNoteClass = stageDark
-    ? 'mb-2 mt-1 rounded-lg border border-violet-500/40 bg-violet-950/50 px-3 py-2 text-violet-100'
-    : 'mb-2 mt-1 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-violet-950 shadow-sm';
-  const blockNoteLabelClass = stageDark
-    ? 'text-[10px] font-semibold uppercase tracking-wide text-violet-300'
+  const panelClass = stageDark
+    ? 'mb-5 rounded-xl border border-violet-500/35 bg-violet-950/45 px-3 py-3 text-violet-50'
+    : 'mb-5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-3 text-violet-950 shadow-sm';
+  const panelTitleClass = stageDark
+    ? 'mb-2 text-[11px] font-semibold uppercase tracking-wide text-violet-300'
+    : 'mb-2 text-[11px] font-semibold uppercase tracking-wide text-violet-700';
+  const itemClass = stageDark
+    ? 'border-t border-violet-500/25 py-2 first:border-t-0 first:pt-0'
+    : 'border-t border-violet-200/80 py-2 first:border-t-0 first:pt-0';
+  const itemMetaClass = stageDark
+    ? 'text-[10px] font-semibold uppercase tracking-wide text-violet-300/90'
     : 'text-[10px] font-semibold uppercase tracking-wide text-violet-600';
-  const blockNoteTextClass = stageDark
-    ? 'mt-1 whitespace-pre-wrap text-sm leading-snug text-violet-50'
-    : 'mt-1 whitespace-pre-wrap text-sm leading-snug text-violet-900';
-  const lineBlockBg = stageDark
-    ? 'border-l-2 border-violet-500/50 bg-violet-950/30 pl-2'
-    : 'border-l-2 border-violet-200/90 bg-violet-50/35 pl-2';
-  const lineNoteClass = stageDark
-    ? 'mb-2 ml-1 border-l-2 border-amber-500/60 bg-amber-950/40 pl-2 py-1.5 text-xs leading-snug text-amber-50'
-    : 'mb-2 ml-1 border-l-2 border-amber-300 bg-amber-50/90 pl-2 py-1.5 text-xs leading-snug text-amber-950';
-  const lineNoteLabelClass = stageDark ? 'font-semibold text-amber-300' : 'font-semibold text-amber-800';
+  const itemTextClass = stageDark
+    ? 'mt-0.5 whitespace-pre-wrap text-sm leading-snug text-violet-50'
+    : 'mt-0.5 whitespace-pre-wrap text-sm leading-snug text-violet-950';
 
   return (
-    <div className={['space-y-0', className].filter(Boolean).join(' ')}>
-      {lines.map((line, i) => {
-        const bStart = notesVisible ? blockAtStart(i) : undefined;
-        const lineNote = notesVisible ? lineMap[String(i)]?.trim() : '';
-
-        return (
-          <Fragment key={i}>
-            {bStart ? (
-              <div className={blockNoteClass}>
-                <p className={blockNoteLabelClass}>
-                  Блок · строки {bStart.from + 1}–{bStart.to + 1}
+    <div className={['min-w-0', className].filter(Boolean).join(' ')}>
+      {noteEntries.length > 0 ? (
+        <aside className={panelClass} aria-label="Заметки для музыкантов">
+          <p className={panelTitleClass}>Заметки к песне</p>
+          <ul className="m-0 list-none p-0">
+            {noteEntries.map((entry, idx) => (
+              <li key={`${entry.kind}-${idx}`} className={itemClass}>
+                <p className={itemMetaClass}>
+                  {entry.kind === 'block'
+                    ? `Блок · строки ${entry.from + 1}–${entry.to + 1}`
+                    : `Строка ${entry.line + 1}`}
                 </p>
-                <p className={blockNoteTextClass}>{bStart.text}</p>
-              </div>
-            ) : null}
-            <div
-              className={['py-0.5', notesVisible && inBlock(i) ? lineBlockBg : ''].filter(Boolean).join(' ')}
-            >
-              <LyricsWithChords
-                text={line}
-                transposeSemitones={transposeSemitones}
-                chordTone={stageDark ? 'dark' : chordTone}
-                className="text-[inherit] leading-relaxed"
-                fontSizePx={fontSizePx}
-                chordsVisible={chordsVisible}
-              />
-            </div>
-            {lineNote ? (
-              <p className={lineNoteClass}>
-                <span className={lineNoteLabelClass}>Заметка (стр. {i + 1}): </span>
-                {lineNote}
-              </p>
-            ) : null}
-          </Fragment>
-        );
-      })}
+                <p className={itemTextClass}>{entry.text}</p>
+              </li>
+            ))}
+          </ul>
+        </aside>
+      ) : null}
+
+      <LyricsWithChords
+        text={content}
+        transposeSemitones={transposeSemitones}
+        chordTone={stageDark ? 'dark' : chordTone}
+        className="songbook-reader--perform min-w-0 text-[inherit] leading-relaxed"
+        fontSizePx={fontSizePx}
+        chordsVisible={chordsVisible}
+      />
     </div>
   );
 }

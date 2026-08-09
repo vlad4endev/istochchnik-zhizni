@@ -62,7 +62,7 @@ export function SongLine({ line, chordsVisible, chordTone, layoutMode, className
   const text = typeof line.text === 'string' ? line.text : '';
   const graphemes = splitGraphemeClusters(text);
   const normalizedChords = resolveOverlaps(line.chords ?? []);
-  const chordToneClass = chordTone === 'dark' ? 'text-amber-300' : 'text-[#2563EB]';
+  const chordToneClass = chordTone === 'dark' ? 'text-emerald-300' : 'text-[#2563EB]';
   const rootClassName = ['line-pair w-full min-w-0', className].filter(Boolean).join(' ');
 
   const hasText = graphemes.length > 0;
@@ -74,16 +74,16 @@ export function SongLine({ line, chordsVisible, chordTone, layoutMode, className
 
   if (!chordsVisible) {
     return (
-      <div className={rootClassName} data-layout-mode={layoutMode}>
-        <p className="lyric-line m-0 overflow-visible p-0 whitespace-pre-wrap">{text}</p>
+      <div className={rootClassName} data-layout-mode={layoutMode} data-chord-tone={chordTone}>
+        <p className="lyric-line m-0 overflow-visible p-0 whitespace-pre-wrap break-words">{text}</p>
       </div>
     );
   }
 
   if (!hasText && hasChords) {
     return (
-      <div className={rootClassName} data-layout-mode={layoutMode}>
-        <div className={`chord-line-only m-0 flex flex-wrap gap-x-4 gap-y-1 p-0 ${chordToneClass}`}>
+      <div className={rootClassName} data-layout-mode={layoutMode} data-chord-tone={chordTone}>
+        <div className={`chord-line-only m-0 flex flex-wrap gap-x-3 gap-y-1 p-0 ${chordToneClass}`}>
           {normalizedChords.map((chord, index) => (
             <span key={`${chord.position}-${index}`} className="chord-token whitespace-nowrap font-semibold">
               {chord.chord}
@@ -98,27 +98,31 @@ export function SongLine({ line, chordsVisible, chordTone, layoutMode, className
 
   if (layoutMode === 'mono') {
     return (
-      <div className={rootClassName} data-layout-mode={layoutMode}>
+      <div className={rootClassName} data-layout-mode={layoutMode} data-chord-tone={chordTone}>
         {chordLine.trim() !== '' && (
           <pre
-            className={['chord-line m-0 overflow-visible p-0 whitespace-pre', chordToneClass].join(' ')}
+            className={['chord-line m-0 max-w-full overflow-x-auto overflow-y-visible p-0 whitespace-pre', chordToneClass].join(' ')}
           >
             {chordLine}
           </pre>
         )}
-        <pre className="lyric-line lyric-line--mono m-0 overflow-visible p-0 whitespace-pre-wrap">{text}</pre>
+        <pre className="lyric-line lyric-line--mono m-0 max-w-full overflow-x-auto overflow-y-visible p-0 whitespace-pre-wrap break-words">
+          {text}
+        </pre>
       </div>
     );
   }
 
   return (
-    <div className={rootClassName} data-layout-mode={layoutMode}>
+    <div className={rootClassName} data-layout-mode={layoutMode} data-chord-tone={chordTone}>
       {chordLine.trim() !== '' && (
-        <pre className={['chord-line m-0 overflow-visible p-0 whitespace-pre', chordToneClass].join(' ')}>
+        <pre
+          className={['chord-line m-0 max-w-full overflow-x-auto overflow-y-visible p-0 whitespace-pre', chordToneClass].join(' ')}
+        >
           {chordLine}
         </pre>
       )}
-      <p className="lyric-line m-0 overflow-visible p-0 whitespace-pre-wrap">{text}</p>
+      <p className="lyric-line m-0 overflow-visible p-0 whitespace-pre-wrap break-words">{text}</p>
     </div>
   );
 }

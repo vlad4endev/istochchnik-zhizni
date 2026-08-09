@@ -94,9 +94,9 @@ export function SongRenderer({
   preprocessText,
   transposeChordSymbol = identityTranspose,
 }: SongRendererProps) {
-  const normalizedFontSize = Math.max(12, Math.min(32, fontSizePx));
+  const normalizedFontSize = Math.max(14, Math.min(48, fontSizePx));
   const normalizedFontSizeRem = normalizedFontSize / 16;
-  const lineHeight = Math.max(1.45, Math.min(1.75, 1.62 + (normalizedFontSize - 16) * 0.012));
+  const lineHeight = Math.max(1.5, Math.min(1.85, 1.58 + (normalizedFontSize - 16) * 0.01));
 
   const preparedText = useMemo(() => {
     const source = typeof text === 'string' ? text : '';
