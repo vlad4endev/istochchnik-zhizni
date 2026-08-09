@@ -6,6 +6,7 @@ import {
   LuEye,
   LuEyeOff,
   LuMaximize2,
+  LuMinimize2,
   LuMinus,
   LuMoon,
   LuNotebookPen,
@@ -120,10 +121,13 @@ export function PerformPage() {
       if (e.key === 'ArrowLeft') go(-1);
       if (e.key === 'Escape') navigate(studioSetlistDetailPath(surface, setlistId));
       if (e.key === 'f' || e.key === 'F') update({ focusMode: !prefs.focusMode });
+      if (e.key === 'c' || e.key === 'C') update({ chordsVisible: !prefs.chordsVisible });
+      if (e.key === '+' || e.key === '=') update({ fontSize: Math.min(48, prefs.fontSize + 2) });
+      if (e.key === '-' || e.key === '_') update({ fontSize: Math.max(14, prefs.fontSize - 2) });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [go, navigate, prefs.focusMode, setlistId, surface, update]);
+  }, [go, navigate, prefs.chordsVisible, prefs.focusMode, prefs.fontSize, setlistId, surface, update]);
 
   const pxPerSec = useBpmSpeed && bpm ? Math.max(12, Math.min(80, (bpm / 60) * 14)) : speedPxPerSec;
 
@@ -166,7 +170,7 @@ export function PerformPage() {
     if (startX == null || endX == null || startY == null || endY == null) return;
     const dx = endX - startX;
     const dy = endY - startY;
-    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy)) return;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
     if (dx > 0) go(-1);
     if (dx < 0) go(1);
   };
@@ -206,10 +210,13 @@ export function PerformPage() {
     : 'bg-[var(--surface)] text-[var(--text)]';
   const barClass = stageDark
     ? 'perform-stage-surface border-[var(--perform-border)]'
-    : 'border-[var(--border)] bg-[var(--surface-elevated)]/90';
+    : 'border-[var(--border)] bg-[var(--surface-elevated)]/95';
   const mutedClass = stageDark ? 'perform-stage-muted' : 'text-[var(--text-muted)]';
   const textClass = stageDark ? 'text-[var(--perform-text)]' : 'text-[var(--text)]';
   const lyricsBg = stageDark ? 'bg-[var(--perform-bg)]' : 'bg-[var(--bg-elevated)]';
+  const keyBadgeClass = stageDark
+    ? 'bg-emerald-900/55 text-emerald-200'
+    : 'bg-emerald-100 text-emerald-900';
 
   return (
     <div
@@ -218,30 +225,32 @@ export function PerformPage() {
       onTouchEnd={handleTouchSwipe}
     >
       <header
-        className={`flex shrink-0 items-center gap-2 border-b px-2 py-2 backdrop-blur-sm ${barClass}`}
+        className={`flex shrink-0 items-center gap-1.5 border-b px-1.5 py-1.5 backdrop-blur-sm sm:gap-2 sm:px-2 sm:py-2 ${barClass}`}
       >
         <button
           type="button"
           onClick={() => navigate(studioSetlistDetailPath(surface, setlistId))}
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${mutedClass} hover:opacity-80`}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:h-11 sm:w-11 ${mutedClass} hover:opacity-80`}
           aria-label="Закрыть"
         >
-          <LuX className="h-6 w-6" />
+          <LuX className="h-5 w-5 sm:h-6 sm:w-6" />
         </button>
 
         <div className="min-w-0 flex-1 text-center">
           {!focusMode ? (
-            <p className={`truncate text-xs ${mutedClass}`}>{title}</p>
+            <p className={`truncate text-[10px] sm:text-xs ${mutedClass}`}>{title}</p>
           ) : null}
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center justify-center gap-1.5 sm:gap-2">
             <p
-              className={`truncate font-bold ${textClass} ${focusMode ? 'text-lg md:text-xl' : 'text-base'}`}
+              className={`truncate font-bold leading-tight ${textClass} ${
+                focusMode ? 'text-base sm:text-xl' : 'text-sm sm:text-base'
+              }`}
             >
               {current?.song.title}
             </p>
             {bpm ? (
               <span
-                className="bpm-pulse inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400"
+                className="bpm-pulse inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-400 sm:h-2.5 sm:w-2.5"
                 style={{ '--bpm-duration': `${60 / bpm}s` } as CSSProperties}
                 title={`${bpm} BPM`}
               />
@@ -249,66 +258,64 @@ export function PerformPage() {
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
           {displayKey ? (
             <span
-              className={`hidden rounded-lg px-2 py-1 font-mono text-sm font-bold sm:inline ${
-                stageDark ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-800'
-              }`}
+              className={`rounded-lg px-1.5 py-1 font-mono text-xs font-bold sm:px-2 sm:text-sm ${keyBadgeClass}`}
               title="Тональность"
             >
               {displayKey}
               {transpose !== 0 ? (
-                <span className={`ml-1 text-xs font-normal ${mutedClass}`}>
-                  ({transpose > 0 ? '+' : ''}
-                  {transpose})
+                <span className={`ml-0.5 text-[10px] font-normal ${mutedClass}`}>
+                  {transpose > 0 ? '+' : ''}
+                  {transpose}
                 </span>
               ) : null}
             </span>
           ) : null}
-          <span className={`w-10 text-right text-xs font-semibold ${mutedClass}`}>
+          <button
+            type="button"
+            onClick={() => update({ chordsVisible: !prefs.chordsVisible })}
+            className={`flex h-10 w-10 items-center justify-center rounded-xl sm:h-11 sm:w-11 ${
+              prefs.chordsVisible
+                ? stageDark
+                  ? 'text-emerald-300'
+                  : 'text-emerald-700'
+                : mutedClass
+            } hover:opacity-80`}
+            aria-label={prefs.chordsVisible ? 'Скрыть аккорды' : 'Показать аккорды'}
+            title="Аккорды (C)"
+          >
+            {prefs.chordsVisible ? <LuEye className="h-5 w-5" /> : <LuEyeOff className="h-5 w-5" />}
+          </button>
+          <span className={`hidden w-9 text-right text-xs font-semibold sm:inline ${mutedClass}`}>
             {index + 1}/{items.length}
           </span>
           <button
             type="button"
             onClick={() => update({ focusMode: !focusMode })}
-            className={`flex h-11 w-11 items-center justify-center rounded-xl ${mutedClass} hover:opacity-80`}
+            className={`flex h-10 w-10 items-center justify-center rounded-xl sm:h-11 sm:w-11 ${mutedClass} hover:opacity-80`}
             aria-label={focusMode ? 'Показать панель' : 'Режим сцены'}
-            title={focusMode ? 'Показать панель (F)' : 'Режим сцены — только текст (F)'}
+            title={focusMode ? 'Показать панель (F)' : 'Только текст (F)'}
           >
-            <LuMaximize2 className="h-5 w-5" />
+            {focusMode ? <LuMinimize2 className="h-5 w-5" /> : <LuMaximize2 className="h-5 w-5" />}
           </button>
         </div>
       </header>
-
-      {!focusMode && displayKey ? (
-        <div
-          className={`flex shrink-0 items-center justify-center gap-3 border-b px-3 py-2 sm:hidden ${barClass}`}
-        >
-          <span
-            className={`rounded-xl px-4 py-1.5 font-mono text-lg font-bold ${
-              stageDark ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-800'
-            }`}
-          >
-            {displayKey}
-          </span>
-          {bpm ? <span className={`text-sm font-medium ${mutedClass}`}>{bpm} BPM</span> : null}
-        </div>
-      ) : null}
 
       {!focusMode ? (
         <div className={`shrink-0 border-b ${barClass}`}>
           <button
             type="button"
             onClick={() => setControlsOpen((o) => !o)}
-            className={`flex w-full items-center justify-center gap-2 px-3 py-2 text-xs font-semibold ${mutedClass}`}
+            className={`flex w-full items-center justify-center gap-2 px-3 py-1.5 text-xs font-semibold sm:py-2 ${mutedClass}`}
           >
             <LuSettings2 className="h-4 w-4" />
-            {controlsOpen ? 'Скрыть настройки' : 'Транспонирование и автоскролл'}
+            {controlsOpen ? 'Скрыть настройки' : 'Транспонирование · размер · автоскролл'}
           </button>
           {controlsOpen ? (
             <div
-              className={`flex flex-wrap items-center gap-2 border-t px-3 py-2 text-xs ${stageDark ? 'border-[var(--perform-border)]' : 'border-[var(--border)]'}`}
+              className={`flex flex-wrap items-center gap-2 border-t px-2 py-2 text-xs sm:px-3 ${stageDark ? 'border-[var(--perform-border)]' : 'border-[var(--border)]'}`}
             >
               <span className={mutedClass}>Трансп.</span>
               <button
@@ -333,9 +340,7 @@ export function PerformPage() {
                 type="button"
                 onClick={() => setAutoScroll((a) => !a)}
                 className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 font-semibold ${
-                  autoScroll
-                    ? 'bg-emerald-600 text-white'
-                    : `border ${barClass}`
+                  autoScroll ? 'bg-emerald-600 text-white' : `border ${barClass}`
                 }`}
               >
                 {autoScroll ? <LuPause className="h-4 w-4" /> : <LuPlay className="h-4 w-4" />}
@@ -373,24 +378,20 @@ export function PerformPage() {
               <button
                 type="button"
                 className={`rounded-lg border px-2.5 py-1.5 ${barClass}`}
-                onClick={() => update({ fontSize: Math.min(44, prefs.fontSize + 2) })}
+                onClick={() => update({ fontSize: Math.min(48, prefs.fontSize + 2) })}
                 aria-label="Крупнее"
               >
                 <LuPlus className="h-4 w-4" />
               </button>
               <button
                 type="button"
-                onClick={() => update({ chordsVisible: !prefs.chordsVisible })}
-                className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 ${barClass}`}
-                title={prefs.chordsVisible ? 'Скрыть аккорды' : 'Показать аккорды'}
-              >
-                {prefs.chordsVisible ? <LuEye className="h-4 w-4" /> : <LuEyeOff className="h-4 w-4" />}
-              </button>
-              <button
-                type="button"
                 onClick={() => update({ musicianNotesVisible: !prefs.musicianNotesVisible })}
                 className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 ${
-                  prefs.musicianNotesVisible ? `${barClass} text-violet-600` : barClass
+                  prefs.musicianNotesVisible
+                    ? stageDark
+                      ? `${barClass} text-violet-300`
+                      : `${barClass} text-violet-700`
+                    : barClass
                 }`}
                 title={prefs.musicianNotesVisible ? 'Скрыть заметки' : 'Показать заметки'}
               >
@@ -407,7 +408,33 @@ export function PerformPage() {
             </div>
           ) : null}
         </div>
-      ) : null}
+      ) : (
+        <div
+          className={`flex shrink-0 items-center justify-center gap-2 border-b px-2 py-1 ${barClass}`}
+        >
+          <button
+            type="button"
+            className={`rounded-lg border px-2 py-1 ${barClass}`}
+            onClick={() => update({ fontSize: Math.max(14, prefs.fontSize - 2) })}
+            aria-label="Мельче"
+          >
+            <LuMinus className="h-3.5 w-3.5" />
+          </button>
+          <span className={`font-mono text-xs ${mutedClass}`}>{prefs.fontSize}px</span>
+          <button
+            type="button"
+            className={`rounded-lg border px-2 py-1 ${barClass}`}
+            onClick={() => update({ fontSize: Math.min(48, prefs.fontSize + 2) })}
+            aria-label="Крупнее"
+          >
+            <LuPlus className="h-3.5 w-3.5" />
+          </button>
+          {bpm ? <span className={`text-xs ${mutedClass}`}>{bpm} BPM</span> : null}
+          <span className={`text-xs font-semibold ${mutedClass}`}>
+            {index + 1}/{items.length}
+          </span>
+        </div>
+      )}
 
       <div className="relative min-h-0 flex-1">
         <button
@@ -427,67 +454,71 @@ export function PerformPage() {
 
         <div
           ref={scrollRef}
-          className={`h-full overflow-auto px-4 py-5 md:px-8 md:py-6 ${lyricsBg}`}
+          className={`perform-lyrics-scroll h-full overflow-auto py-4 sm:px-6 sm:py-6 md:px-10 ${lyricsBg}`}
         >
-          <LyricsWithMusicianNotes
-            content={body}
-            notes={notesFromItem(current?.musician_notes)}
-            transposeSemitones={transpose}
-            chordTone={stageDark ? 'dark' : 'light'}
-            stageDark={stageDark}
-            fontSizePx={prefs.fontSize}
-            chordsVisible={prefs.chordsVisible}
-            notesVisible={prefs.musicianNotesVisible}
-            className="mx-auto max-w-3xl font-sans leading-relaxed"
-          />
+          <div className="perform-lyrics-inner px-3 sm:px-0">
+            <LyricsWithMusicianNotes
+              content={body}
+              notes={notesFromItem(current?.musician_notes)}
+              transposeSemitones={transpose}
+              chordTone={stageDark ? 'dark' : 'light'}
+              stageDark={stageDark}
+              fontSizePx={prefs.fontSize}
+              chordsVisible={prefs.chordsVisible}
+              notesVisible={prefs.musicianNotesVisible && !focusMode}
+              className="font-sans"
+            />
+          </div>
         </div>
       </div>
 
-      <div
-        className={`shrink-0 overflow-x-auto border-t px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] ${barClass}`}
-        role="tablist"
-        aria-label="Песни сетлиста"
-      >
-        <div className="flex min-w-min gap-1.5">
-          {items.map((it, i) => {
-            const active = i === index;
-            return (
-              <button
-                key={it.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => jumpTo(i)}
-                className={[
-                  'max-w-[9rem] shrink-0 truncate rounded-lg border px-2.5 py-2 text-left text-xs font-semibold transition',
-                  active
-                    ? stageDark
-                      ? 'perform-song-strip-btn--active'
-                      : 'border-emerald-500 bg-emerald-600 text-white'
-                    : stageDark
-                      ? 'perform-stage-surface border-[var(--perform-border)] text-[var(--perform-muted)] hover:text-[var(--perform-text)]'
-                      : 'border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]',
-                ].join(' ')}
-              >
-                <span className="mr-1 opacity-70">{i + 1}.</span>
-                {it.song.title}
-              </button>
-            );
-          })}
+      {!focusMode ? (
+        <div
+          className={`shrink-0 overflow-x-auto border-t px-2 pt-1.5 pb-1 sm:pt-2 ${barClass}`}
+          role="tablist"
+          aria-label="Песни сетлиста"
+        >
+          <div className="flex min-w-min gap-1.5">
+            {items.map((it, i) => {
+              const active = i === index;
+              return (
+                <button
+                  key={it.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => jumpTo(i)}
+                  className={[
+                    'max-w-[8.5rem] shrink-0 truncate rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold transition sm:max-w-[9rem] sm:px-2.5 sm:py-2 sm:text-xs',
+                    active
+                      ? stageDark
+                        ? 'perform-song-strip-btn--active'
+                        : 'border-emerald-500 bg-emerald-600 text-white'
+                      : stageDark
+                        ? 'perform-stage-surface border-[var(--perform-border)] text-[var(--perform-muted)] hover:text-[var(--perform-text)]'
+                        : 'border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]',
+                  ].join(' ')}
+                >
+                  <span className="mr-1 opacity-70">{i + 1}.</span>
+                  {it.song.title}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <footer
-        className={`flex shrink-0 items-stretch gap-2 border-t p-3 backdrop-blur-sm ${barClass}`}
+        className={`perform-compact-footer flex shrink-0 items-stretch gap-2 border-t px-2 py-2 backdrop-blur-sm sm:gap-2 sm:p-3 ${barClass}`}
       >
         <button
           type="button"
           onClick={() => go(-1)}
           disabled={index <= 0}
-          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border disabled:opacity-30 ${barClass}`}
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border disabled:opacity-30 sm:h-14 sm:w-14 ${barClass}`}
           aria-label="Предыдущая"
         >
-          <LuChevronLeft className="h-8 w-8" />
+          <LuChevronLeft className="h-7 w-7 sm:h-8 sm:w-8" />
         </button>
 
         <div className="flex min-w-0 flex-1 flex-col justify-center px-1 text-center">
@@ -507,14 +538,14 @@ export function PerformPage() {
           type="button"
           onClick={() => go(1)}
           disabled={index >= items.length - 1}
-          className={`flex h-14 min-w-[3.5rem] flex-1 items-center justify-center gap-1 rounded-xl border font-semibold disabled:opacity-30 ${
+          className={`flex h-12 min-w-[3rem] flex-1 items-center justify-center gap-1 rounded-xl border font-semibold disabled:opacity-30 sm:h-14 sm:min-w-[3.5rem] ${
             stageDark
               ? 'border-emerald-700/50 bg-emerald-900/40 text-emerald-100'
               : 'border-emerald-300 bg-emerald-50 text-emerald-900'
           }`}
         >
           <span className="hidden sm:inline">Следующая</span>
-          <LuChevronRight className="h-8 w-8" />
+          <LuChevronRight className="h-7 w-7 sm:h-8 sm:w-8" />
         </button>
       </footer>
     </div>

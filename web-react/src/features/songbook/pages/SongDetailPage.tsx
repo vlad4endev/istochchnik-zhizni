@@ -201,12 +201,11 @@ export function SongDetailPage() {
                   <div className="min-w-0 flex-1 pt-0.5">
                     <p className="text-sm font-medium text-[var(--sd-text)]">Аккорды</p>
                     <p className="mt-0.5 text-xs leading-snug text-[var(--sd-text-muted)]">
-                      {stageMode ? 'В режиме сцены аккорды всегда скрыты.' : 'Показывать строку с аккордами над текстом.'}
+                      Показывать строку с аккордами над текстом.
                     </p>
                   </div>
                   <SheetSwitch
-                    checked={stageMode ? false : showChords}
-                    disabled={stageMode}
+                    checked={showChords}
                     ariaLabel="Показать аккорды"
                     onCheckedChange={setShowChords}
                   />
@@ -262,7 +261,7 @@ export function SongDetailPage() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => setFontSize((v) => Math.min(28, v + 1))}
+                      onClick={() => setFontSize((v) => Math.min(40, v + 1))}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sd-border)] bg-[var(--sd-bg-elevated)] text-[var(--sd-text-secondary)] hover:bg-[var(--sd-bg-hover)] active:scale-[0.98]"
                       aria-label="Увеличить шрифт"
                     >
@@ -275,7 +274,7 @@ export function SongDetailPage() {
                   <div className="min-w-0 flex-1 pt-0.5">
                     <p className="text-sm font-medium text-[var(--sd-text)]">Режим сцены</p>
                     <p className="mt-0.5 text-xs leading-snug text-[var(--sd-text-muted)]">
-                      Тёмный фон и крупный текст — удобно держать телефон на стойке.
+                      Тёмный фон, крупный текст и яркие аккорды — удобно на стойке.
                     </p>
                   </div>
                   <SheetSwitch
@@ -316,11 +315,11 @@ export function SongDetailPage() {
         <LyricsWithChords
           text={effectiveContent}
           transposeSemitones={currentShift}
-          chordsVisible={stageMode ? false : showChords}
-          fontSizePx={stageMode ? 22 : fontSize}
+          chordsVisible={showChords}
+          fontSizePx={stageMode ? Math.max(fontSize, 24) : fontSize}
           chordTone={stageMode ? 'dark' : 'light'}
           className={[
-            'songbook-reader rounded-2xl border border-[var(--sd-border)] bg-[var(--sd-surface-elevated)] p-5',
+            'songbook-reader rounded-2xl border border-[var(--sd-border)] bg-[var(--sd-surface-elevated)] p-4 sm:p-5',
             'font-sans leading-relaxed text-[var(--sd-text)]',
             stageMode ? 'songbook-reader--stage' : '',
           ].join(' ')}

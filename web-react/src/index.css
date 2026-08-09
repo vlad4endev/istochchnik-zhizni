@@ -1290,8 +1290,8 @@ nav.app-bottom-nav .app-bottom-nav__label {
 .perform-stage {
   --perform-bg: #0c0c0e;
   --perform-surface: #16161a;
-  --perform-border: rgba(255, 255, 255, 0.1);
-  --perform-text: #f4f4f5;
+  --perform-border: rgba(255, 255, 255, 0.12);
+  --perform-text: #fafafa;
   --perform-muted: #a1a1aa;
   --perform-accent: #34d399;
   --perform-chord: #6ee7b7;
@@ -1319,12 +1319,31 @@ nav.app-bottom-nav .app-bottom-nav__label {
   color: var(--perform-text);
 }
 
+.perform-lyrics-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+}
+
+.perform-lyrics-inner {
+  max-width: 52rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (max-width: 640px) {
+  .perform-lyrics-inner {
+    max-width: none;
+  }
+}
+
 .perform-edge-nav {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 18%;
-  max-width: 5rem;
+  width: 12%;
+  max-width: 3.25rem;
   z-index: 2;
   border: none;
   background: transparent;
@@ -1349,9 +1368,27 @@ nav.app-bottom-nav .app-bottom-nav__label {
   pointer-events: none;
 }
 
+@media (min-width: 768px) {
+  .perform-edge-nav {
+    width: 16%;
+    max-width: 4.5rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .perform-edge-nav:active:not(:disabled) {
     background: transparent;
+  }
+}
+
+@media (max-width: 640px) {
+  .perform-stage .perform-compact-footer {
+    padding-top: 0.5rem;
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  .perform-stage .perform-compact-footer button {
+    min-height: 2.75rem;
   }
 }
 
@@ -1627,12 +1664,15 @@ button {
 }
 
 .songbook-reader .chord-line {
-  font-family: 'Courier New', monospace;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: color-mix(in srgb, var(--primary) 75%, #2563eb);
-  line-height: 1.3;
-  min-height: 1rem;
+  font-family: ui-monospace, 'Cascadia Code', 'Courier New', monospace;
+  /* em — относительно fontSize родителя (режим сцены / слайдер) */
+  font-size: 0.82em;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  min-height: 1.1em;
+  /* цвет задаёт chordTone (Tailwind) / perform-stage — не перебиваем здесь */
+  color: #2563eb;
 }
 
 .songbook-reader .lyric-line {
@@ -1641,22 +1681,22 @@ button {
     -apple-system,
     'Segoe UI',
     sans-serif;
-  font-size: 0.9375rem;
-  font-weight: 400;
-  letter-spacing: 0;
-  line-height: 1.55;
-  color: var(--text);
+  font-size: 1em;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: inherit;
+  color: inherit;
 }
 
 .songbook-reader .lyric-line--mono {
-  font-family: 'Courier New', monospace;
-  font-size: 0.75rem;
-  line-height: 1.3;
+  font-family: ui-monospace, 'Cascadia Code', 'Courier New', monospace;
+  font-size: 0.95em;
+  line-height: inherit;
 }
 
 .songbook-reader .lyric-chord-line {
-  line-height: 1.55;
-  color: var(--text);
+  line-height: inherit;
+  color: inherit;
   overflow: visible;
 }
 
@@ -1674,64 +1714,116 @@ button {
     -apple-system,
     'Segoe UI',
     sans-serif;
-  font-size: 0.9375rem;
-  font-weight: 400;
-  line-height: 1.55;
+  font-size: 1em;
+  font-weight: 500;
+  line-height: inherit;
 }
 
 .songbook-reader .chord-slot {
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.82em;
+  font-weight: 700;
   line-height: 1.2;
 }
 
 .songbook-reader .chord-line-only .chord-token {
-  font-family: 'Courier New', monospace;
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1.3;
+  font-family: ui-monospace, 'Cascadia Code', 'Courier New', monospace;
+  font-size: 0.9em;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .songbook-reader .line-pair {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.55em;
 }
 
 .songbook-reader .section-label {
   display: inline-block;
-  font-size: 0.625rem;
-  font-weight: 500;
+  font-size: 0.65em;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   background: color-mix(in srgb, var(--surface-elevated) 70%, var(--primary) 30%);
   color: color-mix(in srgb, var(--primary-dark) 70%, var(--text) 30%);
-  padding: 0.1875rem 0.5rem;
-  border-radius: 0.25rem;
-  margin-bottom: 0.75rem;
+  padding: 0.25em 0.6em;
+  border-radius: 0.35em;
+  margin-bottom: 0.65em;
 }
 
 .songbook-reader .chorus-block {
-  padding-left: 0.875rem;
+  padding-left: 0.75em;
   border-left: 3px solid color-mix(in srgb, var(--primary) 70%, var(--text) 30%);
 }
 
 .songbook-reader .section-label:not(:first-child) {
-  margin-top: 1.75rem;
+  margin-top: 1.5em;
 }
 
+/* Режим сцены в карточке песни: крупный текст + видимые аккорды */
 .songbook-reader--stage {
   background: #0d0d0f;
   color: #f5f5f5;
+  padding: 1.25rem 1rem;
 }
 
-.songbook-reader--stage .chord-line {
-  display: none;
+.songbook-reader--stage .chord-line,
+.songbook-reader--stage .chord-line-only .chord-token,
+.songbook-reader--stage .chord-slot {
+  display: block;
+  color: #6ee7b7;
+}
+
+.songbook-reader--stage .chord-line-only {
+  display: flex;
 }
 
 .songbook-reader--stage .lyric-line {
-  font-size: 1.375rem;
-  line-height: 1.8;
-  text-align: center;
+  font-weight: 600;
+  line-height: 1.7;
   color: #f5f5f5;
+}
+
+.songbook-reader--stage .section-label {
+  background: rgba(52, 211, 153, 0.15);
+  color: #a7f3d0;
+}
+
+.songbook-reader--stage .chorus-block {
+  border-left-color: #34d399;
+}
+
+/* Режим выступления (сетлист) */
+.songbook-reader--perform .line-pair {
+  margin-bottom: 0.7em;
+}
+
+.songbook-reader--perform .lyric-line {
+  font-weight: 600;
+  letter-spacing: 0.015em;
+}
+
+.songbook-reader--perform .chord-line,
+.songbook-reader--perform .chord-line-only .chord-token {
+  font-weight: 800;
+}
+
+.perform-stage .songbook-reader,
+.perform-stage .songbook-reader .lyric-line {
+  color: var(--perform-text);
+}
+
+.perform-stage .songbook-reader .chord-line,
+.perform-stage .songbook-reader .chord-slot,
+.perform-stage .songbook-reader .chord-line-only .chord-token {
+  color: var(--perform-chord);
+}
+
+.perform-stage .songbook-reader .section-label {
+  background: rgba(52, 211, 153, 0.14);
+  color: #a7f3d0;
+}
+
+.perform-stage .songbook-reader .chorus-block {
+  border-left-color: var(--perform-accent);
 }
 
 html.dark .songbook-reader .chord-line {
