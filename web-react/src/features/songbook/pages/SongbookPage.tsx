@@ -106,7 +106,7 @@ export function SongbookPage() {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Поиск по названию или тексту…"
+                placeholder="Поиск по названию, тексту или тегу…"
                 autoComplete="off"
                 className="w-full min-h-[40px] rounded-xl border border-[var(--sb-border)] bg-[var(--sb-surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--sb-text)] outline-none placeholder:text-[var(--sb-text-muted)] focus:border-[var(--sb-border-hover)]"
               />
@@ -168,7 +168,7 @@ export function SongbookPage() {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Поиск по названию или тексту…"
+                placeholder="Поиск по названию, тексту или тегу…"
                 autoComplete="off"
                 className="w-full min-h-[40px] rounded-xl border border-[var(--sb-border)] bg-[var(--sb-surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--sb-text)] outline-none placeholder:text-[var(--sb-text-muted)] focus:border-[var(--sb-border-hover)]"
               />
@@ -228,7 +228,7 @@ export function SongbookPage() {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск по названию или тексту…"
+              placeholder="Поиск по названию, тексту или тегу…"
               autoComplete="off"
               className="w-full min-h-[40px] rounded-xl border border-[var(--sb-border)] bg-[var(--sb-surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--sb-text)] outline-none placeholder:text-[var(--sb-text-muted)] focus:border-[var(--sb-border-hover)]"
             />

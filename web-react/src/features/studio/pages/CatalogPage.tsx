@@ -123,7 +123,7 @@ export function CatalogPage() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Поиск по названию или тексту…"
+          placeholder="Поиск по названию, тексту или тегу…"
           autoComplete="off"
           className="studio-input pl-9 pr-9"
         />

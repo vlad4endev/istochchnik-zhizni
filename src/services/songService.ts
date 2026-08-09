@@ -110,8 +110,19 @@ async function listSongsInternal(
 
   if (search.length > 0) {
     params.push(search);
+    const searchParam = `$${params.length}`;
     conditions.push(
-      `to_tsvector('simple', coalesce(s.title, '') || ' ' || coalesce(s.content, '')) @@ plainto_tsquery('simple', $${params.length})`
+      `(
+        to_tsvector('simple', coalesce(s.title, '') || ' ' || coalesce(s.content, ''))
+          @@ plainto_tsquery('simple', ${searchParam})
+        OR EXISTS (
+          SELECT 1
+          FROM unnest(COALESCE(s.tags, '{}'::text[])) AS _search_tag(tag)
+          WHERE position(lower(${searchParam}) in lower(_search_tag.tag)) > 0
+            AND _search_tag.tag NOT LIKE '\\_\\_%' ESCAPE '\\'
+            AND lower(_search_tag.tag) NOT IN ('импортированная', 'импортировано', 'нет_текста')
+        )
+      )`,
     );
   }
   if (keyFilter.length > 0) {
