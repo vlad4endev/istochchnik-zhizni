@@ -83,6 +83,25 @@ export function TagsPage() {
 
   if (q.isLoading) return <SongListSkeleton variant="studio" />;
 
+  if (q.isError) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-4">
+        <h1 className="studio-page-heading text-xl font-bold text-[var(--studio-editor-text)]">Теги</h1>
+        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          Не удалось загрузить теги. Обновите страницу — если ошибка повторится, перезапустите API
+          (нужна таблица studio_song_tags).
+        </p>
+        <button
+          type="button"
+          onClick={() => void q.refetch()}
+          className="studio-btn-primary min-h-[44px] rounded-xl px-4"
+        >
+          Повторить
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6 md:space-y-8">
       <header className="space-y-2 border-b border-[var(--studio-editor-border)] pb-5">

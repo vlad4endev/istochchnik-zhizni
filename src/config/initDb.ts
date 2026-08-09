@@ -2010,13 +2010,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS studio_song_tags_name_lower_uidx
   ON studio_song_tags (LOWER(TRIM(name)));
 CREATE INDEX IF NOT EXISTS idx_studio_song_tags_name ON studio_song_tags (name);
 INSERT INTO studio_song_tags (name)
-SELECT DISTINCT TRIM(t.tag)
+SELECT DISTINCT LEFT(TRIM(t.tag), 80)
 FROM songs s
 CROSS JOIN LATERAL unnest(COALESCE(s.tags, '{}'::text[])) AS t(tag)
 WHERE TRIM(t.tag) <> ''
+  AND char_length(TRIM(t.tag)) <= 80
   AND TRIM(t.tag) NOT LIKE '\\_\\_%' ESCAPE '\\'
   AND LOWER(TRIM(t.tag)) NOT IN ('импортированная', 'импортировано', 'нет_текста')
-ON CONFLICT DO NOTHING;
+ON CONFLICT ((LOWER(TRIM(name)))) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS dashboard_coordinator_notes (
   kind VARCHAR(32) PRIMARY KEY CHECK (kind IN ('urgent_prayer', 'announcement')),

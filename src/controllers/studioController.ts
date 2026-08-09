@@ -849,7 +849,7 @@ export async function songTagsList(req: Request, res: Response): Promise<void> {
     if (!(await ensureStudio(r, res))) return;
     res.json(await listStudioSongTags());
   } catch (e) {
-    console.error(e);
+    console.error('[studio] songTagsList failed:', e);
     res.status(500).json({ error: 'Не удалось загрузить теги' });
   }
 }

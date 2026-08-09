@@ -1,6 +1,4 @@
--- Managed song tags catalog for Studio (shared across the project).
--- Song associations remain in songs.tags TEXT[] for existing filters.
-
+-- Ensure studio_song_tags exists and seed safely (idempotent repair).
 CREATE TABLE IF NOT EXISTS public.studio_song_tags (
   id BIGSERIAL PRIMARY KEY,
   name VARCHAR(80) NOT NULL,
@@ -15,7 +13,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS studio_song_tags_name_lower_uidx
 CREATE INDEX IF NOT EXISTS idx_studio_song_tags_name
   ON public.studio_song_tags (name);
 
--- Seed from existing song tags (exclude system / sandbox markers).
 INSERT INTO public.studio_song_tags (name)
 SELECT DISTINCT LEFT(TRIM(t.tag), 80)
 FROM public.songs s

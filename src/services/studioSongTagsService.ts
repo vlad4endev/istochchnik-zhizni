@@ -11,9 +11,36 @@ export interface StudioSongTag {
 /** System / sandbox tags that must not appear in the managed catalog. */
 const SYSTEM_TAG_LOWER = new Set(['импортированная', 'импортировано', 'нет_текста', '__archived']);
 
+const TAG_NAME_MAX = 80;
+
+let schemaReady = false;
+
+/** Self-heal: create catalog table if deploy skipped migration / old initDb. */
+export async function ensureStudioSongTagsSchema(): Promise<void> {
+  if (schemaReady) return;
+  await query(`
+    CREATE TABLE IF NOT EXISTS studio_song_tags (
+      id BIGSERIAL PRIMARY KEY,
+      name VARCHAR(${TAG_NAME_MAX}) NOT NULL,
+      created_by_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS studio_song_tags_name_lower_uidx
+      ON studio_song_tags (LOWER(TRIM(name)))
+  `);
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_studio_song_tags_name ON studio_song_tags (name)
+  `);
+  schemaReady = true;
+}
+
 export function isManagedSongTagName(raw: string): boolean {
   const name = raw.trim();
   if (!name) return false;
+  if (name.length > TAG_NAME_MAX) return false;
   if (name.startsWith('__')) return false;
   if (SYSTEM_TAG_LOWER.has(name.toLowerCase())) return false;
   return true;
@@ -21,7 +48,7 @@ export function isManagedSongTagName(raw: string): boolean {
 
 export function normalizeTagName(raw: string): string | null {
   const name = raw.trim().replace(/\s+/g, ' ');
-  if (!name || name.length > 80) return null;
+  if (!name || name.length > TAG_NAME_MAX) return null;
   if (!isManagedSongTagName(name)) return null;
   return name;
 }
@@ -52,21 +79,29 @@ const LIST_SQL = `
 
 /** Pull distinct user tags from songs into the catalog (idempotent). */
 export async function syncSongTagsFromSongs(): Promise<number> {
+  await ensureStudioSongTagsSchema();
   const r = await query(
     `INSERT INTO studio_song_tags (name)
-     SELECT DISTINCT TRIM(x.tag)
+     SELECT DISTINCT LEFT(TRIM(x.tag), ${TAG_NAME_MAX})
      FROM songs s
      CROSS JOIN LATERAL unnest(COALESCE(s.tags, '{}'::text[])) AS x(tag)
      WHERE TRIM(x.tag) <> ''
+       AND char_length(TRIM(x.tag)) <= ${TAG_NAME_MAX}
        AND TRIM(x.tag) NOT LIKE '\\_\\_%' ESCAPE '\\'
        AND LOWER(TRIM(x.tag)) NOT IN ('импортированная', 'импортировано', 'нет_текста')
-     ON CONFLICT DO NOTHING`,
+     ON CONFLICT ((LOWER(TRIM(name)))) DO NOTHING`,
   );
   return r.rowCount ?? 0;
 }
 
 export async function listStudioSongTags(): Promise<StudioSongTag[]> {
-  await syncSongTagsFromSongs();
+  await ensureStudioSongTagsSchema();
+  try {
+    await syncSongTagsFromSongs();
+  } catch (e) {
+    // Listing must still work even if seed/sync fails (bad legacy tags, etc.).
+    console.error('[studio-song-tags] sync from songs failed:', e);
+  }
   const r = await query(`${LIST_SQL} ORDER BY LOWER(t.name) ASC`);
   return r.rows.map((row) => mapRow(row as Record<string, unknown>));
 }
@@ -75,6 +110,7 @@ export async function createStudioSongTag(
   rawName: string,
   memberId: number | null,
 ): Promise<StudioSongTag> {
+  await ensureStudioSongTagsSchema();
   const name = normalizeTagName(rawName);
   if (!name) {
     throw Object.assign(new Error('invalid_name'), { code: 'invalid_name' });
@@ -103,6 +139,7 @@ export async function renameStudioSongTag(
   id: number,
   rawName: string,
 ): Promise<StudioSongTag | null> {
+  await ensureStudioSongTagsSchema();
   const name = normalizeTagName(rawName);
   if (!name) {
     throw Object.assign(new Error('invalid_name'), { code: 'invalid_name' });
@@ -153,6 +190,7 @@ export async function deleteStudioSongTag(
   id: number,
   removeFromSongs: boolean,
 ): Promise<{ deleted: true; name: string; songsUpdated: number } | null> {
+  await ensureStudioSongTagsSchema();
   const existing = await query(`SELECT id, name FROM studio_song_tags WHERE id = $1`, [id]);
   const row = existing.rows[0] as { id: string; name: string } | undefined;
   if (!row) return null;
@@ -180,6 +218,7 @@ export async function ensureStudioSongTags(
   names: string[],
   memberId: number | null,
 ): Promise<string[]> {
+  await ensureStudioSongTagsSchema();
   const normalized: string[] = [];
   const seen = new Set<string>();
   for (const raw of names) {
@@ -195,7 +234,7 @@ export async function ensureStudioSongTags(
     await query(
       `INSERT INTO studio_song_tags (name, created_by_member_id)
        VALUES ($1, $2)
-       ON CONFLICT DO NOTHING`,
+       ON CONFLICT ((LOWER(TRIM(name)))) DO NOTHING`,
       [name, memberId],
     );
   }

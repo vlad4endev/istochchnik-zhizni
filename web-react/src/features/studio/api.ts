@@ -375,7 +375,9 @@ export interface StudioSongTag {
 }
 
 export async function fetchStudioSongTags(): Promise<StudioSongTag[]> {
-  const { data } = await apiClient.get<StudioSongTag[]>(`${STUDIO}/tags`);
+  const { data } = await apiClient.get<StudioSongTag[]>(`${STUDIO}/tags`, {
+    silentErrorToast: true,
+  });
   return data;
 }
 
