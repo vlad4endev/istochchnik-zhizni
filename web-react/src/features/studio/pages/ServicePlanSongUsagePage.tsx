@@ -17,7 +17,6 @@ import {
   type ServicePlanSongUsageItem,
   type ServicePlanSongUsagePeriod,
 } from '../api';
-import { ServicePlanSongPickButton } from '../components/ServicePlanSongPickButton';
 import { studioEditSongLink, useStudioEditorBackTo, useStudioModuleSurface } from '../studioPaths';
 
 const PERIOD_OPTIONS: { value: ServicePlanSongUsagePeriod; label: string }[] = [
@@ -160,10 +159,6 @@ export function ServicePlanSongUsagePage() {
     staleTime: 2 * 60_000,
   });
 
-  const invalidateUsage = () => {
-    void q.refetch();
-  };
-
   const maxTopCount = useMemo(() => {
     const top = q.data?.top_songs ?? [];
     return top.length > 0 ? Math.max(...top.map((s) => s.usage_count)) : 0;
@@ -212,21 +207,18 @@ export function ServicePlanSongUsagePage() {
   return (
     <div className={['mx-auto max-w-4xl space-y-8 pb-8', pageCard].filter(Boolean).join(' ')}>
       <header className="space-y-4 border-b border-[var(--studio-editor-border)] pb-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-3 py-1 text-xs font-semibold text-[var(--studio-editor-accent)]">
-              <LuChartColumnIncreasing className="h-3.5 w-3.5" aria-hidden />
-              Планировщик служений
-            </div>
-            <h1 className="studio-page-heading text-2xl font-bold tracking-tight text-[var(--studio-editor-text)] md:text-3xl">
-              Аналитика песен
-            </h1>
-            <p className="max-w-2xl text-sm leading-relaxed text-[var(--studio-editor-mute)]">
-              Какие песни чаще всего входят в программы собраний, когда их пели в последний раз и что давно не
-              звучало на служении.
-            </p>
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-3 py-1 text-xs font-semibold text-[var(--studio-editor-accent)]">
+            <LuChartColumnIncreasing className="h-3.5 w-3.5" aria-hidden />
+            Планировщик служений
           </div>
-          <ServicePlanSongPickButton onApplied={invalidateUsage} />
+          <h1 className="studio-page-heading text-2xl font-bold tracking-tight text-[var(--studio-editor-text)] md:text-3xl">
+            Аналитика песен
+          </h1>
+          <p className="max-w-2xl text-sm leading-relaxed text-[var(--studio-editor-mute)]">
+            Какие песни чаще всего входят в программы собраний, когда их пели в последний раз и что давно не
+            звучало на служении.
+          </p>
         </div>
 
         <div

@@ -6,7 +6,6 @@ import { LuChartColumnIncreasing, LuMic } from 'react-icons/lu';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { createSetlist, deleteSetlist, fetchSetlists } from '../api';
-import { ServicePlanSongPickButton } from '../components/ServicePlanSongPickButton';
 import { studioSetlistDetailPath, studioSetlistPerformPath, studioSongUsagePath, useStudioModuleSurface } from '../studioPaths';
 
 export function SetlistsPage() {
@@ -57,7 +56,6 @@ export function SetlistsPage() {
           <LuChartColumnIncreasing className="h-4 w-4" aria-hidden />
           Аналитика песен в служениях
         </Link>
-        <ServicePlanSongPickButton />
       </header>
 
       <section className="space-y-3" aria-labelledby="setlists-new-heading">

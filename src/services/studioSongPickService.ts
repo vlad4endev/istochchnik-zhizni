@@ -1,22 +1,37 @@
 import { AiAgentError, chatCompletion } from '../ai';
 import { query } from '../config/db';
 import { getPlanDetails, markServicePlanLastEdited, patchBlock } from './servicePlannerService';
-
-type CatalogSong = {
-  id: number;
-  title: string;
-  song_number: number | null;
-  default_key: string | null;
-  tags: string[];
-  excerpt: string;
-};
+import {
+  buildVariationSeed,
+  inferSlotRole,
+  modePolicy,
+  normalizeExcludeSongIds,
+  pickAlternativesForSong,
+  rankCatalogForPick,
+  resolvePickMode,
+  roleHintRu,
+  type CatalogSongBase,
+  type RankedCatalogSong,
+  type SongPickMode,
+  type SongUsageStats,
+} from './studioSongPickHelpers';
 
 type SongBlockSlot = {
   block_id: number;
   order_index: number;
   title: string;
+  role: ReturnType<typeof inferSlotRole>;
+  role_hint: string;
   current_song_id: number | null;
   current_song_title: string | null;
+};
+
+export type ServicePlanSongPickAlternative = {
+  song_id: number;
+  song_title: string;
+  song_number: number | null;
+  default_key: string | null;
+  days_since_last_use: number | null;
 };
 
 export type ServicePlanSongPickResult = {
@@ -40,9 +55,28 @@ export type ServicePlanSongPickResult = {
     song_title: string;
     song_number: number | null;
     default_key: string | null;
+    tempo: number | null;
     reason: string;
+    days_since_last_use: number | null;
+    usage_count_6m: number;
+    alternatives: ServicePlanSongPickAlternative[];
   }>;
   ai_summary: string;
+  meta: {
+    mode: SongPickMode;
+    mode_label: string;
+    variation_seed: string;
+    hard_cooldown_days: number;
+    catalog_size: number;
+    avoided_recent_count: number;
+  };
+};
+
+export type ServicePlanSongPickOptions = {
+  planId?: number;
+  mode?: unknown;
+  excludeSongIds?: unknown;
+  variationSeed?: unknown;
 };
 
 function todayYmd(): string {
@@ -57,7 +91,7 @@ function stripChordPro(text: string): string {
     .trim();
 }
 
-function excerptFromContent(content: string, maxLen = 320): string {
+function excerptFromContent(content: string, maxLen = 280): string {
   const plain = stripChordPro(content);
   if (plain.length <= maxLen) return plain;
   return `${plain.slice(0, maxLen).trim()}…`;
@@ -144,10 +178,14 @@ async function loadPlanContext(planId: number): Promise<{
     }
 
     if (isSongBlockCode(code)) {
+      const title = String(r.title ?? 'Песня');
+      const role = inferSlotRole(title);
       songBlocks.push({
         block_id: Number(r.id),
         order_index: Number(r.order_index ?? 0),
-        title: String(r.title ?? 'Песня'),
+        title,
+        role,
+        role_hint: roleHintRu(role),
         current_song_id: r.song_id == null ? null : Number(r.song_id),
         current_song_title: r.song_title == null ? null : String(r.song_title),
       });
@@ -171,7 +209,26 @@ async function loadPlanContext(planId: number): Promise<{
   };
 }
 
-async function loadPublishedCatalogForAi(sermonTopic: string, sermonScripture: string): Promise<CatalogSong[]> {
+function mapCatalogRow(row: Record<string, unknown>, relevance: number): CatalogSongBase {
+  const tagsRaw = row.tags;
+  const tags = Array.isArray(tagsRaw) ? tagsRaw.map((t) => String(t)) : [];
+  return {
+    id: Number(row.id),
+    title: String(row.title ?? ''),
+    song_number: row.song_number == null ? null : Number(row.song_number),
+    default_key: row.default_key == null ? null : String(row.default_key),
+    tempo: row.tempo == null || !Number.isFinite(Number(row.tempo)) ? null : Number(row.tempo),
+    tags,
+    excerpt: excerptFromContent(String(row.content ?? '')),
+    relevance,
+  };
+}
+
+/**
+ * Каталог: сначала тематический FTS с ts_rank, затем fill из остальных.
+ * Не сортируем по song_number — это делало подбор «деревянным».
+ */
+async function loadPublishedCatalogForAi(sermonTopic: string, sermonScripture: string): Promise<CatalogSongBase[]> {
   const searchText = `${sermonTopic} ${sermonScripture}`.trim();
 
   const baseSelect = `
@@ -180,76 +237,147 @@ async function loadPublishedCatalogForAi(sermonTopic: string, sermonScripture: s
       s.title,
       s.song_number,
       s.default_key,
+      s.tempo,
       s.tags,
       s.content
     FROM public.songs s
     WHERE s.is_published = TRUE
+      AND NOT (coalesce(s.tags, '{}'::text[]) @> ARRAY['__archived']::text[])
+      AND NOT (coalesce(s.tags, '{}'::text[]) @> ARRAY['нет_текста']::text[])
   `;
 
-  let rows: Record<string, unknown>[] = [];
+  const byId = new Map<number, CatalogSongBase>();
 
   if (searchText.length >= 2) {
     const filtered = await query(
       `${baseSelect}
        AND to_tsvector('simple', coalesce(s.title, '') || ' ' || coalesce(s.content, '') || ' ' || coalesce(array_to_string(s.tags, ' '), ''))
            @@ plainto_tsquery('simple', $1)
-       ORDER BY COALESCE(s.song_number, 2147483647) ASC, s.title ASC
-       LIMIT 220`,
+       ORDER BY ts_rank(
+         to_tsvector('simple', coalesce(s.title, '') || ' ' || coalesce(s.content, '') || ' ' || coalesce(array_to_string(s.tags, ' '), '')),
+         plainto_tsquery('simple', $1)
+       ) DESC,
+       s.title ASC
+       LIMIT 200`,
       [searchText],
     );
-    rows = filtered.rows as Record<string, unknown>[];
-  }
-
-  if (rows.length < 40) {
-    const all = await query(
-      `${baseSelect}
-       ORDER BY COALESCE(s.song_number, 2147483647) ASC, s.title ASC
-       LIMIT 280`,
-    );
-    const seen = new Set(rows.map((r) => Number(r.id)));
-    for (const row of all.rows as Record<string, unknown>[]) {
-      const id = Number(row.id);
-      if (!seen.has(id)) {
-        rows.push(row);
-        seen.add(id);
-      }
-      if (rows.length >= 280) break;
+    let rankPos = 0;
+    for (const row of filtered.rows as Record<string, unknown>[]) {
+      rankPos += 1;
+      // Нормализуем позицию в 0.35..1.0 — даже нижние FTS-хиты лучше fill
+      const relevance = Math.max(0.35, 1 - (rankPos - 1) / 200);
+      const song = mapCatalogRow(row, relevance);
+      byId.set(song.id, song);
     }
   }
 
-  return rows.map((row) => {
-    const tagsRaw = row.tags;
-    const tags = Array.isArray(tagsRaw) ? tagsRaw.map((t) => String(t)) : [];
-    return {
-      id: Number(row.id),
-      title: String(row.title ?? ''),
-      song_number: row.song_number == null ? null : Number(row.song_number),
-      default_key: row.default_key == null ? null : String(row.default_key),
-      tags,
-      excerpt: excerptFromContent(String(row.content ?? '')),
-    };
-  });
+  if (byId.size < 50) {
+    const all = await query(
+      `${baseSelect}
+       ORDER BY s.updated_at DESC NULLS LAST, s.id DESC
+       LIMIT 320`,
+    );
+    for (const row of all.rows as Record<string, unknown>[]) {
+      const id = Number((row as { id?: unknown }).id);
+      if (byId.has(id)) continue;
+      // Fill: слабая «релевантность», чтобы ranking опирался на свежесть
+      byId.set(id, mapCatalogRow(row, 0.12));
+      if (byId.size >= 280) break;
+    }
+  }
+
+  return [...byId.values()];
 }
 
-async function loadRecentUsageHints(limit = 12): Promise<string[]> {
+async function loadUsageStats(songIds: number[]): Promise<Map<number, SongUsageStats>> {
+  const map = new Map<number, SongUsageStats>();
+  if (!songIds.length) return map;
+
+  for (const id of songIds) {
+    map.set(id, {
+      song_id: id,
+      usage_count_6m: 0,
+      last_used_date: null,
+      days_since_last_use: null,
+    });
+  }
+
   const res = await query(
-    `SELECT s.title, count(*)::int AS cnt
+    `SELECT
+       b.song_id,
+       count(*) FILTER (WHERE sp.service_date >= (CURRENT_DATE - interval '6 months'))::int AS usage_count_6m,
+       max(sp.service_date)::text AS last_used_date,
+       CASE
+         WHEN max(sp.service_date) IS NULL THEN NULL
+         ELSE (CURRENT_DATE - max(sp.service_date))::int
+       END AS days_since_last_use
      FROM public.service_blocks b
      INNER JOIN public.block_types bt ON bt.id = b.block_type_id
      INNER JOIN public.service_plans sp ON sp.id = b.service_plan_id
-     INNER JOIN public.songs s ON s.id = b.song_id
+     WHERE lower(coalesce(bt.code, '')) = 'song'
+       AND b.song_id = ANY($1::int[])
+     GROUP BY b.song_id`,
+    [songIds],
+  );
+
+  for (const row of res.rows as Record<string, unknown>[]) {
+    const song_id = Number(row.song_id);
+    map.set(song_id, {
+      song_id,
+      usage_count_6m: Number(row.usage_count_6m ?? 0),
+      last_used_date: row.last_used_date == null ? null : String(row.last_used_date),
+      days_since_last_use:
+        row.days_since_last_use == null || !Number.isFinite(Number(row.days_since_last_use))
+          ? null
+          : Number(row.days_since_last_use),
+    });
+  }
+  return map;
+}
+
+/** Песни, которые пели недавно — жёсткий cooldown для primary. */
+async function loadRecentSongIds(cooldownDays: number): Promise<Set<number>> {
+  if (cooldownDays <= 0) return new Set();
+  const res = await query(
+    `SELECT DISTINCT b.song_id
+     FROM public.service_blocks b
+     INNER JOIN public.block_types bt ON bt.id = b.block_type_id
+     INNER JOIN public.service_plans sp ON sp.id = b.service_plan_id
      WHERE lower(coalesce(bt.code, '')) = 'song'
        AND b.song_id IS NOT NULL
-       AND sp.service_date >= (CURRENT_DATE - interval '6 months')
-     GROUP BY s.id, s.title
-     ORDER BY cnt DESC, max(sp.service_date) DESC
-     LIMIT $1`,
-    [limit],
+       AND sp.service_date >= (CURRENT_DATE - $1::int)
+       AND sp.service_date <= (CURRENT_DATE + 14)`,
+    [cooldownDays],
   );
-  return res.rows.map((row) => {
-    const r = row as { title?: string; cnt?: number };
-    return `${String(r.title ?? '')} (${Number(r.cnt ?? 0)}×)`;
-  });
+  return new Set(
+    res.rows.map((row) => Number((row as { song_id?: unknown }).song_id)).filter((id) => Number.isInteger(id) && id > 0),
+  );
+}
+
+/** Короткие подсказки для промпта: кого избегать и кого стоит «достать с полки». */
+function buildUsagePromptHints(ranked: RankedCatalogSong[]): {
+  avoid_recent: string[];
+  underused_gems: string[];
+} {
+  const avoid_recent = ranked
+    .filter((s) => s.on_cooldown || (s.days_since_last_use != null && s.days_since_last_use < 21))
+    .slice(0, 18)
+    .map((s) => {
+      const days = s.days_since_last_use != null ? `${s.days_since_last_use}д назад` : 'недавно';
+      return `${s.title} (${days}, ${s.usage_count_6m}×/6м)`;
+    });
+
+  const underused_gems = ranked
+    .filter((s) => !s.on_cooldown && (s.days_since_last_use == null || s.days_since_last_use >= 45))
+    .filter((s) => s.relevance >= 0.2 || s.usage_count_6m <= 1)
+    .slice(0, 16)
+    .map((s) => {
+      const days =
+        s.days_since_last_use == null ? 'давно/никогда' : `${s.days_since_last_use}д назад`;
+      return `${s.title} [${s.id}] (${days})`;
+    });
+
+  return { avoid_recent, underused_gems };
 }
 
 const PICK_SYSTEM_PROMPT = [
@@ -257,23 +385,56 @@ const PICK_SYSTEM_PROMPT = [
   '',
   'Ответ — ТОЛЬКО JSON без Markdown:',
   '{',
-  '  "summary": "краткое объяснение подбора (1-3 предложения)",',
+  '  "summary": "краткое объяснение подбора и литургической дуги (1-3 предложения)",',
   '  "picks": [',
-  '    { "block_id": number, "song_id": number, "reason": "почему эта песня подходит (1 предложение)" }',
+  '    { "block_id": number, "song_id": number, "reason": "почему эта песня подходит именно этому слоту (1 предложение)" }',
   '  ]',
   '}',
   '',
   'Правила:',
   '— В picks ровно столько элементов, сколько слотов song_blocks (по одному на каждый block_id).',
-  '— Используй только song_id из переданного каталога.',
-  '— Не повторяй одну и ту же песню в разных слотах, если в каталоге достаточно вариантов.',
-  '— Учитывай тему проповеди и место Писания; песни должны дополнять проповедь (поклонение, отклик, надежда).',
-  '— Распредели разнообразие: если слотов несколько, чередуй динамику (тихая/радостная) по смыслу программы.',
-  '— Слегка учитывай «недавно часто пели», но тема проповеди важнее.',
+  '— Используй только song_id из переданного catalog (поле id).',
+  '— Не повторяй одну и ту же песню в разных слотах.',
+  '— Учитывай тему проповеди и Писание; песни дополняют проповедь (поклонение, отклик, надежда).',
+  '— Соблюдай литургическую дугу по role_hint слотов: opening → worship → response → closing.',
+  '— Сильно избегай песен из avoid_recent (недавно пели) — бери их только если тема уникально требует и нет альтернатив.',
+  '— Активно бери достойные песни из underused_gems, если они подходят по смыслу.',
+  '— Не выбирай одни и те же «хиты» только потому что они популярны.',
+  '— Чередуй динамику: не ставь подряд несколько тихих или несколько быстрых, если есть выбор.',
+  '— Если в payload есть exclude_song_ids — не используй их вообще (пользователь просит другой вариант).',
+  '— Каталог уже отсортирован по полезности для этого режима: чаще смотри на начало списка, но не игнорируй хвост при хорошем смысловом совпадении.',
 ].join('\n');
 
-export async function pickSongsForNearestServicePlan(planId?: number): Promise<ServicePlanSongPickResult> {
-  const targetPlanId = planId ?? (await findNearestUpcomingPlanId());
+function catalogForPrompt(ranked: RankedCatalogSong[], limit = 160) {
+  // В промпт — топ по score, без cooldown в приоритете (они уже внизу)
+  return ranked.slice(0, limit).map((s) => ({
+    id: s.id,
+    title: s.title,
+    song_number: s.song_number,
+    default_key: s.default_key,
+    tempo: s.tempo,
+    tags: s.tags.slice(0, 8),
+    days_since_last_use: s.days_since_last_use,
+    on_cooldown: s.on_cooldown,
+    excerpt: s.excerpt,
+  }));
+}
+
+export async function pickSongsForNearestServicePlan(
+  planIdOrOptions?: number | ServicePlanSongPickOptions,
+): Promise<ServicePlanSongPickResult> {
+  const options: ServicePlanSongPickOptions =
+    typeof planIdOrOptions === 'number' || planIdOrOptions == null
+      ? { planId: planIdOrOptions ?? undefined }
+      : planIdOrOptions;
+
+  const mode = resolvePickMode(options.mode);
+  const policy = modePolicy(mode);
+  const variationSeed = buildVariationSeed(options.variationSeed);
+  const excludeSongIds = normalizeExcludeSongIds(options.excludeSongIds);
+  const excludeSet = new Set(excludeSongIds);
+
+  const targetPlanId = options.planId ?? (await findNearestUpcomingPlanId());
   if (!targetPlanId) {
     throw new Error(
       `Нет предстоящей программы служения (начиная с ${todayYmd()}). Создайте план в планировщике.`,
@@ -297,21 +458,44 @@ export async function pickSongsForNearestServicePlan(planId?: number): Promise<S
     throw new Error('В каталоге нет опубликованных песен для подбора.');
   }
 
-  const recentHints = await loadRecentUsageHints();
+  const usageBySongId = await loadUsageStats(catalog.map((s) => s.id));
+  const recentIds = await loadRecentSongIds(policy.hardCooldownDays);
+  const hardAvoidIds = new Set<number>([...recentIds, ...excludeSet]);
+
+  // Текущие песни в слотах — не «избегаем» жёстко при первом подборе,
+  // но при regenerate (exclude) пользователь сам исключает предыдущий вариант.
+  const ranked = rankCatalogForPick({
+    catalog,
+    usageBySongId,
+    policy,
+    seed: `${variationSeed}:${targetPlanId}:${mode}`,
+    todayYmd: todayYmd(),
+    hardAvoidIds,
+  });
+
+  const hints = buildUsagePromptHints(ranked);
+  const primaryPool = ranked.filter((s) => !s.on_cooldown && !excludeSet.has(s.id));
+  const fallbackPool = ranked.filter((s) => !excludeSet.has(s.id));
 
   const userPayload = {
+    mode: policy.mode,
+    mode_label: policy.labelRu,
+    hard_cooldown_days: policy.hardCooldownDays,
     service_date: ctx.plan.service_date,
     sermon: ctx.sermon,
-    song_blocks: ctx.songBlocks,
-    recently_often_used: recentHints,
-    catalog: catalog.map((s) => ({
-      id: s.id,
-      title: s.title,
-      song_number: s.song_number,
-      default_key: s.default_key,
-      tags: s.tags,
-      excerpt: s.excerpt,
+    song_blocks: ctx.songBlocks.map((b) => ({
+      block_id: b.block_id,
+      order_index: b.order_index,
+      title: b.title,
+      role: b.role,
+      role_hint: b.role_hint,
+      current_song_id: b.current_song_id,
+      current_song_title: b.current_song_title,
     })),
+    avoid_recent: hints.avoid_recent,
+    underused_gems: hints.underused_gems,
+    exclude_song_ids: excludeSongIds,
+    catalog: catalogForPrompt(ranked),
   };
 
   const reply = await chatCompletion(
@@ -319,12 +503,12 @@ export async function pickSongsForNearestServicePlan(planId?: number): Promise<S
       { role: 'system', content: PICK_SYSTEM_PROMPT },
       {
         role: 'user',
-        content: `Подбери песни для программы:\n${JSON.stringify(userPayload, null, 2)}`,
+        content: `Подбери песни для программы. Приоритет: соответствие теме проповеди + не повторять недавно певшиеся.\n${JSON.stringify(userPayload, null, 2)}`,
       },
     ],
     {
       section: 'studio',
-      temperature: 0.35,
+      temperature: policy.temperature,
       max_tokens: 4000,
       response_format: { type: 'json_object' },
       skipSystemPrompt: true,
@@ -341,7 +525,7 @@ export async function pickSongsForNearestServicePlan(planId?: number): Promise<S
     throw new Error('ИИ вернул некорректный JSON. Попробуйте ещё раз.');
   }
 
-  const catalogById = new Map(catalog.map((s) => [s.id, s]));
+  const catalogById = new Map(ranked.map((s) => [s.id, s]));
   const blockById = new Map(ctx.songBlocks.map((b) => [b.block_id, b]));
   const expectedBlockIds = ctx.songBlocks.map((b) => b.block_id);
 
@@ -349,35 +533,39 @@ export async function pickSongsForNearestServicePlan(planId?: number): Promise<S
   const usedSongIds = new Set<number>();
   const validated: ServicePlanSongPickResult['picks'] = [];
 
+  const takeFallback = (preferFresh: boolean): RankedCatalogSong | undefined => {
+    const pool = preferFresh && primaryPool.length ? primaryPool : fallbackPool;
+    return pool.find((s) => !usedSongIds.has(s.id));
+  };
+
   for (const blockId of expectedBlockIds) {
     const slot = blockById.get(blockId);
     if (!slot) continue;
 
-    const match =
-      rawPicks.find((p) => Number(p.block_id) === blockId) ??
-      rawPicks.find((p) => {
-        const sid = Number(p.song_id);
-        return Number.isInteger(sid) && catalogById.has(sid) && !usedSongIds.has(sid);
-      });
+    const match = rawPicks.find((p) => Number(p.block_id) === blockId);
+    const candidateId = Number(match?.song_id);
+    const candidate = catalogById.get(candidateId);
+    let reason = String(match?.reason ?? '').trim();
 
-    const songId = Number(match?.song_id);
-    const song = catalogById.get(songId);
-    if (!song) {
-      const fallback = catalog.find((s) => !usedSongIds.has(s.id));
+    const invalid =
+      !candidate ||
+      usedSongIds.has(candidate.id) ||
+      excludeSet.has(candidate.id) ||
+      // Если есть выбор вне cooldown — не принимаем cooldown-хит от модели
+      (candidate.on_cooldown && primaryPool.some((s) => !usedSongIds.has(s.id)));
+
+    let song: RankedCatalogSong;
+    if (invalid) {
+      const fallback = takeFallback(true) ?? takeFallback(false);
       if (!fallback) {
         throw new Error('ИИ не смог подобрать уникальные песни для всех блоков.');
       }
-      usedSongIds.add(fallback.id);
-      validated.push({
-        block_id: blockId,
-        order_index: slot.order_index,
-        song_id: fallback.id,
-        song_title: fallback.title,
-        song_number: fallback.song_number,
-        default_key: fallback.default_key,
-        reason: 'Запасной вариант из каталога (ИИ не указал подходящую песню для слота).',
-      });
-      continue;
+      song = fallback;
+      reason = reason
+        ? `${reason} (заменён запасным вариантом из каталога).`
+        : 'Запасной вариант из каталога с учётом ротации и темы.';
+    } else {
+      song = candidate;
     }
 
     usedSongIds.add(song.id);
@@ -388,8 +576,31 @@ export async function pickSongsForNearestServicePlan(planId?: number): Promise<S
       song_title: song.title,
       song_number: song.song_number,
       default_key: song.default_key,
-      reason: String(match?.reason ?? '').trim() || 'Подобрано по теме проповеди.',
+      tempo: song.tempo,
+      reason: reason || 'Подобрано по теме проповеди и литургической дуге.',
+      days_since_last_use: song.days_since_last_use,
+      usage_count_6m: song.usage_count_6m,
+      alternatives: [],
     });
+  }
+
+  // Альтернативы после фиксации primary — чтобы не пересекаться с выбранным сетом
+  const primaryIds = new Set(validated.map((p) => p.song_id));
+  for (const pick of validated) {
+    const alts = pickAlternativesForSong({
+      primaryId: pick.song_id,
+      ranked,
+      usedIds: primaryIds,
+      limit: 2,
+    });
+    for (const alt of alts) primaryIds.add(alt.id);
+    pick.alternatives = alts.map((s) => ({
+      song_id: s.id,
+      song_title: s.title,
+      song_number: s.song_number,
+      default_key: s.default_key,
+      days_since_last_use: s.days_since_last_use,
+    }));
   }
 
   return {
@@ -397,7 +608,17 @@ export async function pickSongsForNearestServicePlan(planId?: number): Promise<S
     sermon: ctx.sermon,
     song_blocks: ctx.songBlocks,
     picks: validated,
-    ai_summary: String(parsed.summary ?? '').trim() || 'Подбор выполнен по теме проповеди и каталогу песен.',
+    ai_summary:
+      String(parsed.summary ?? '').trim() ||
+      'Подбор по теме проповеди с ротацией недавно певшихся песен.',
+    meta: {
+      mode: policy.mode,
+      mode_label: policy.labelRu,
+      variation_seed: variationSeed,
+      hard_cooldown_days: policy.hardCooldownDays,
+      catalog_size: ranked.length,
+      avoided_recent_count: recentIds.size,
+    },
   };
 }
 
@@ -433,3 +654,4 @@ export async function applyServicePlanSongPicks(
 }
 
 export { AiAgentError };
+export type { SongPickMode };

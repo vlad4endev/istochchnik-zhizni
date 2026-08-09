@@ -282,6 +282,16 @@ export async function fetchServicePlanSongUsage(
   return data;
 }
 
+export type SongPickMode = 'auto' | 'fresh' | 'balanced' | 'classic';
+
+export type ServicePlanSongPickAlternative = {
+  song_id: number;
+  song_title: string;
+  song_number: number | null;
+  default_key: string | null;
+  days_since_last_use: number | null;
+};
+
 export type ServicePlanSongPickResult = {
   plan: {
     id: number;
@@ -299,6 +309,8 @@ export type ServicePlanSongPickResult = {
     block_id: number;
     order_index: number;
     title: string;
+    role?: string;
+    role_hint?: string;
     current_song_id: number | null;
     current_song_title: string | null;
   }>;
@@ -309,15 +321,46 @@ export type ServicePlanSongPickResult = {
     song_title: string;
     song_number: number | null;
     default_key: string | null;
+    tempo?: number | null;
     reason: string;
+    days_since_last_use?: number | null;
+    usage_count_6m?: number;
+    alternatives?: ServicePlanSongPickAlternative[];
   }>;
   ai_summary: string;
+  meta?: {
+    mode: SongPickMode;
+    mode_label: string;
+    variation_seed: string;
+    hard_cooldown_days: number;
+    catalog_size: number;
+    avoided_recent_count: number;
+  };
 };
 
-export async function pickServicePlanSongs(planId?: number): Promise<ServicePlanSongPickResult> {
+export type PickServicePlanSongsParams = {
+  planId?: number;
+  mode?: SongPickMode;
+  excludeSongIds?: number[];
+  variationSeed?: string;
+};
+
+export async function pickServicePlanSongs(
+  planIdOrParams?: number | PickServicePlanSongsParams,
+): Promise<ServicePlanSongPickResult> {
+  const params: PickServicePlanSongsParams =
+    typeof planIdOrParams === 'number' || planIdOrParams == null
+      ? { planId: planIdOrParams ?? undefined }
+      : planIdOrParams;
+
   const { data } = await apiClient.post<ServicePlanSongPickResult>(
     `${STUDIO}/service-plan-song-pick`,
-    { plan_id: planId ?? undefined },
+    {
+      plan_id: params.planId ?? undefined,
+      mode: params.mode ?? undefined,
+      exclude_song_ids: params.excludeSongIds?.length ? params.excludeSongIds : undefined,
+      variation_seed: params.variationSeed ?? undefined,
+    },
     { timeout: 120_000 },
   );
   return data;
