@@ -316,7 +316,12 @@ export async function postServicePlanSongPick(req: Request, res: Response): Prom
     const r = req as AuthReq;
     if (!(await ensureStudio(r, res))) return;
 
-    const body = (req.body ?? {}) as { plan_id?: unknown };
+    const body = (req.body ?? {}) as {
+      plan_id?: unknown;
+      mode?: unknown;
+      exclude_song_ids?: unknown;
+      variation_seed?: unknown;
+    };
     const planIdRaw = body.plan_id;
     const planId =
       planIdRaw == null
@@ -329,7 +334,12 @@ export async function postServicePlanSongPick(req: Request, res: Response): Prom
       return;
     }
 
-    const result = await pickSongsForNearestServicePlan(planId ?? undefined);
+    const result = await pickSongsForNearestServicePlan({
+      planId: planId ?? undefined,
+      mode: body.mode,
+      excludeSongIds: body.exclude_song_ids,
+      variationSeed: body.variation_seed,
+    });
     res.json(result);
   } catch (e) {
     if (e instanceof SongPickAiError) {
