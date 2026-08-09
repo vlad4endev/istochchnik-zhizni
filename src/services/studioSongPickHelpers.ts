@@ -5,7 +5,8 @@
 
 import { hashStringToSeed, mulberry32 } from './feedRanking';
 
-export type SongPickMode = 'fresh' | 'balanced' | 'classic';
+/** `auto` — основной режим для UI: тема + сильная ротация без выбора пользователя. */
+export type SongPickMode = 'auto' | 'fresh' | 'balanced' | 'classic';
 
 export type SlotRole = 'opening' | 'worship' | 'response' | 'closing' | 'general';
 
@@ -49,6 +50,11 @@ export type ModePolicy = {
   relevanceWeight: number;
   /** Шум перемешивания (0..1) — чем выше, тем разнообразнее порядок. */
   shuffleNoise: number;
+  /**
+   * Для `auto`: смешать score нескольких политик в фоне
+   * (свежесть + баланс), без второго LLM-вызова.
+   */
+  blendModes?: Array<'fresh' | 'balanced'>;
   labelRu: string;
 };
 
@@ -56,10 +62,11 @@ export function resolvePickMode(raw: unknown): SongPickMode {
   const v = String(raw ?? '')
     .trim()
     .toLowerCase();
+  if (v === 'fresh' || v === 'свежий') return 'fresh';
   if (v === 'balanced' || v === 'баланс') return 'balanced';
   if (v === 'classic' || v === 'классика' || v === 'familiar') return 'classic';
-  // По умолчанию — свежий подбор с сильной ротацией
-  return 'fresh';
+  // По умолчанию и для UI — авто: тема + ротация в фоне
+  return 'auto';
 }
 
 export function modePolicy(mode: SongPickMode): ModePolicy {
@@ -84,15 +91,27 @@ export function modePolicy(mode: SongPickMode): ModePolicy {
         shuffleNoise: 0.18,
         labelRu: 'Классика',
       };
-    default:
+    case 'balanced':
       return {
-        mode: 'balanced',
+        mode,
         hardCooldownDays: 18,
         temperature: 0.6,
         freshnessWeight: 0.4,
         relevanceWeight: 0.45,
         shuffleNoise: 0.32,
         labelRu: 'Сбалансированный',
+      };
+    default:
+      // Авто: сильная ротация + тема; в ранжировании смешиваем fresh+balanced
+      return {
+        mode: 'auto',
+        hardCooldownDays: 24,
+        temperature: 0.72,
+        freshnessWeight: 0.5,
+        relevanceWeight: 0.42,
+        shuffleNoise: 0.4,
+        blendModes: ['fresh', 'balanced'],
+        labelRu: 'Авто',
       };
   }
 }
@@ -180,6 +199,11 @@ export function rankCatalogForPick(args: {
   hardAvoidIds: Set<number>;
 }): RankedCatalogSong[] {
   const rng = mulberry32(hashStringToSeed(`songpick:${args.seed}`));
+  const blendPolicies =
+    args.policy.blendModes && args.policy.blendModes.length > 0
+      ? args.policy.blendModes.map((m) => modePolicy(m))
+      : null;
+
   const ranked: RankedCatalogSong[] = args.catalog.map((song) => {
     const usage = args.usageBySongId.get(song.id);
     const days =
@@ -188,15 +212,19 @@ export function rankCatalogForPick(args: {
     const usage_count_6m = usage?.usage_count_6m ?? 0;
     const on_cooldown = args.hardAvoidIds.has(song.id);
     const noise = rng();
-    const pick_score = computePickScore(
-      {
-        relevance: song.relevance,
-        usage_count_6m,
-        days_since_last_use: days,
-      },
-      args.policy,
-      noise,
-    );
+    const stats = {
+      relevance: song.relevance,
+      usage_count_6m,
+      days_since_last_use: days,
+    };
+    // auto: в фоне смешиваем «свежий» и «баланс» без второго LLM-вызова
+    let pick_score: number;
+    if (blendPolicies) {
+      const sum = blendPolicies.reduce((acc, p) => acc + computePickScore(stats, p, noise), 0);
+      pick_score = sum / blendPolicies.length;
+    } else {
+      pick_score = computePickScore(stats, args.policy, noise);
+    }
     return {
       ...song,
       usage_count_6m,

@@ -32,7 +32,10 @@ function run(): void {
   assert.equal(resolvePickMode('Свежий'), 'fresh');
   assert.equal(resolvePickMode('classic'), 'classic');
   assert.equal(resolvePickMode('balanced'), 'balanced');
-  assert.equal(resolvePickMode(undefined), 'fresh');
+  assert.equal(resolvePickMode(undefined), 'auto');
+  assert.equal(resolvePickMode('auto'), 'auto');
+  assert.ok(modePolicy('auto').blendModes?.includes('fresh'));
+  assert.ok(modePolicy('auto').blendModes?.includes('balanced'));
 
   assert.equal(inferSlotRole('Вступление'), 'opening');
   assert.equal(inferSlotRole('Песня поклонения'), 'worship');

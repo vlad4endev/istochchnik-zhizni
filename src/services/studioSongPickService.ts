@@ -503,7 +503,7 @@ export async function pickSongsForNearestServicePlan(
       { role: 'system', content: PICK_SYSTEM_PROMPT },
       {
         role: 'user',
-        content: `Подбери песни для программы (режим: ${policy.labelRu}):\n${JSON.stringify(userPayload, null, 2)}`,
+        content: `Подбери песни для программы. Приоритет: соответствие теме проповеди + не повторять недавно певшиеся.\n${JSON.stringify(userPayload, null, 2)}`,
       },
     ],
     {
@@ -610,7 +610,7 @@ export async function pickSongsForNearestServicePlan(
     picks: validated,
     ai_summary:
       String(parsed.summary ?? '').trim() ||
-      `Подбор (${policy.labelRu}): тема проповеди, ротация недавних песен и литургическая дуга.`,
+      'Подбор по теме проповеди с ротацией недавно певшихся песен.',
     meta: {
       mode: policy.mode,
       mode_label: policy.labelRu,

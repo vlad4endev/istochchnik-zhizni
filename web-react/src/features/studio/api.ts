@@ -282,7 +282,7 @@ export async function fetchServicePlanSongUsage(
   return data;
 }
 
-export type SongPickMode = 'fresh' | 'balanced' | 'classic';
+export type SongPickMode = 'auto' | 'fresh' | 'balanced' | 'classic';
 
 export type ServicePlanSongPickAlternative = {
   song_id: number;
