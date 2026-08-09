@@ -31,7 +31,8 @@ function run(): void {
   assert.equal(resolvePickMode('fresh'), 'fresh');
   assert.equal(resolvePickMode('Свежий'), 'fresh');
   assert.equal(resolvePickMode('classic'), 'classic');
-  assert.equal(resolvePickMode(undefined), 'balanced');
+  assert.equal(resolvePickMode('balanced'), 'balanced');
+  assert.equal(resolvePickMode(undefined), 'fresh');
 
   assert.equal(inferSlotRole('Вступление'), 'opening');
   assert.equal(inferSlotRole('Песня поклонения'), 'worship');

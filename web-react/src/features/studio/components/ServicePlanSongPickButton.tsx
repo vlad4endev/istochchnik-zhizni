@@ -23,7 +23,7 @@ const dateFmt = new Intl.DateTimeFormat('ru-RU', {
 });
 
 const MODE_OPTIONS: Array<{ id: SongPickMode; label: string; hint: string }> = [
-  { id: 'fresh', label: 'Свежий', hint: 'Сильная ротация, реже хиты' },
+  { id: 'fresh', label: 'Свежий', hint: 'Сильная ротация, реже хиты · по умолчанию' },
   { id: 'balanced', label: 'Баланс', hint: 'Тема + ротация' },
   { id: 'classic', label: 'Классика', hint: 'Знакомые песни уместны' },
 ];
@@ -128,7 +128,7 @@ function PickResults({
     );
   };
 
-  const modeLabel = result.meta?.mode_label ?? MODE_OPTIONS.find((m) => m.id === mode)?.label ?? 'Баланс';
+  const modeLabel = result.meta?.mode_label ?? MODE_OPTIONS.find((m) => m.id === mode)?.label ?? 'Свежий';
 
   return createPortal(
     <div
@@ -296,7 +296,7 @@ function PickResults({
 export function ServicePlanSongPickButton({ onApplied }: { onApplied?: () => void }) {
   const [result, setResult] = useState<ServicePlanSongPickResult | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
-  const [mode, setMode] = useState<SongPickMode>('balanced');
+  const [mode, setMode] = useState<SongPickMode>('fresh');
   const [resultKey, setResultKey] = useState(0);
   const editorBackTo = useStudioEditorBackTo();
 

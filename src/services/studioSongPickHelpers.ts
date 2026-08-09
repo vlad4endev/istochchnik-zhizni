@@ -56,9 +56,10 @@ export function resolvePickMode(raw: unknown): SongPickMode {
   const v = String(raw ?? '')
     .trim()
     .toLowerCase();
-  if (v === 'fresh' || v === 'свежий') return 'fresh';
+  if (v === 'balanced' || v === 'баланс') return 'balanced';
   if (v === 'classic' || v === 'классика' || v === 'familiar') return 'classic';
-  return 'balanced';
+  // По умолчанию — свежий подбор с сильной ротацией
+  return 'fresh';
 }
 
 export function modePolicy(mode: SongPickMode): ModePolicy {
