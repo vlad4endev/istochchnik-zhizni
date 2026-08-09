@@ -28,6 +28,7 @@ import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { keys } from '@/lib/queryKeys';
 import { deleteSong, updateSong } from '../api';
 import { convertToChordPro } from '../addSong/chordProConversion';
+import { SongTagPicker } from '../../studio/components/SongTagPicker';
 import { polishSongContent } from '../addSong/polishSongContent';
 import { extractChordsFromText, guessKeyFromChords } from '../addSong/keyDetection';
 import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImportModal';
@@ -187,6 +188,13 @@ type ChordAutoUndoState = {
   expiresAt: number;
 };
 
+function isUserManagedTag(tag: string): boolean {
+  const t = tag.trim();
+  if (!t || t.startsWith('__')) return false;
+  const lower = t.toLowerCase();
+  return lower !== 'импортированная' && lower !== 'импортировано' && lower !== 'нет_текста';
+}
+
 function detectSongStatus(isPublished: boolean, tags: string[]): SongStatus {
   if (isPublished) return 'published';
   return tags.includes(ARCHIVE_TAG) ? 'archived' : 'draft';
@@ -195,6 +203,11 @@ function detectSongStatus(isPublished: boolean, tags: string[]): SongStatus {
 function withArchiveTag(tags: string[], status: SongStatus): string[] {
   const clean = tags.filter((t) => t !== ARCHIVE_TAG);
   return status === 'archived' ? [...clean, ARCHIVE_TAG] : clean;
+}
+
+function mergeManagedAndSystemTags(managed: string[], existing: string[], status: SongStatus): string[] {
+  const system = existing.filter((t) => t !== ARCHIVE_TAG && !isUserManagedTag(t));
+  return withArchiveTag([...managed.map((t) => t.trim()).filter(Boolean), ...system], status);
 }
 
 function parseKeyForApi(guessLabel: string): string {
@@ -349,7 +362,7 @@ export function StudioEditor() {
   const [keyHint, setKeyHint] = useState<string | null>(null);
   const [catalogTempo, setCatalogTempo] = useState('');
   const [catalogTimeSignature, setCatalogTimeSignature] = useState('');
-  const [catalogTags, setCatalogTags] = useState('');
+  const [catalogTags, setCatalogTags] = useState<string[]>([]);
   const [songStatus, setSongStatus] = useState<SongStatus>('published');
   const [quickRoot, setQuickRoot] = useState('G');
   const [quickMode, setQuickMode] = useState<'major' | 'minor'>('major');
@@ -451,7 +464,7 @@ export function StudioEditor() {
     setCatalogTempo(s.tempo == null ? '' : String(s.tempo));
     setCatalogTimeSignature(s.time_signature ?? '');
     const initialTags = Array.isArray(s.tags) ? s.tags : [];
-    setCatalogTags(initialTags.filter((t) => t !== ARCHIVE_TAG).join(', '));
+    setCatalogTags(initialTags.filter((t) => isUserManagedTag(t)));
     setSongStatus(detectSongStatus(Boolean(s.is_published), initialTags));
     try {
       setShowWelcome(localStorage.getItem('studio:welcome:dismissed') !== '1');
@@ -462,7 +475,7 @@ export function StudioEditor() {
     const catalogSnapshot = JSON.stringify({
       tempo: s.tempo == null ? '' : String(s.tempo),
       timeSignature: s.time_signature ?? '',
-      tags: initialTags.filter((t) => t !== ARCHIVE_TAG).join(', '),
+      tags: initialTags.filter((t) => isUserManagedTag(t)),
       songStatus: detectSongStatus(Boolean(s.is_published), initialTags),
     });
     lastSavedSnapshotRef.current = JSON.stringify({
@@ -516,25 +529,22 @@ export function StudioEditor() {
     if (tempoNum != null && (!Number.isFinite(tempoNum) || tempoNum <= 0 || tempoNum > 400)) {
       throw new Error('BPM должен быть числом от 1 до 400');
     }
-    const tags = catalogTags
-      .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean);
+    const existingTags = Array.isArray(songQ.data?.tags) ? songQ.data.tags : [];
     const isPublished = songStatus === 'published';
     await updateSong(id, {
       tempo: tempoNum,
       time_signature: catalogTimeSignature.trim() || null,
-      tags: withArchiveTag(tags, songStatus),
+      tags: mergeManagedAndSystemTags(catalogTags, existingTags, songStatus),
       is_published: isPublished,
     });
-  }, [canEditCatalogMeta, catalogTempo, catalogTimeSignature, catalogTags, songStatus, id]);
+  }, [canEditCatalogMeta, catalogTempo, catalogTimeSignature, catalogTags, songStatus, id, songQ.data?.tags]);
 
   const buildCatalogMetaSnapshot = useCallback(
     () =>
       JSON.stringify({
         tempo: catalogTempo.trim(),
         timeSignature: catalogTimeSignature.trim(),
-        tags: catalogTags.trim(),
+        tags: catalogTags,
         songStatus,
       }),
     [catalogTempo, catalogTimeSignature, catalogTags, songStatus],
@@ -1427,16 +1437,17 @@ export function StudioEditor() {
                     />
                   </label>
                 </div>
-                <label className="space-y-1">
-                  <span className={`text-[11px] ${shell.muted}`}>Теги (через запятую)</span>
-                  <input
+                <div className="space-y-1">
+                  <span className={`text-[11px] ${shell.muted}`}>Теги</span>
+                  <SongTagPicker
                     value={catalogTags}
-                    onChange={(e) => setCatalogTags(e.target.value)}
+                    onChange={setCatalogTags}
                     disabled={!canEditCatalogMeta}
-                    className={`w-full min-h-[42px] rounded-lg px-2 py-1.5 text-sm outline-none ${shell.field} disabled:opacity-60`}
-                    placeholder="praise, worship, fast"
+                    allowCreate={canEditCatalogMeta}
+                    inputClassName={`w-full min-h-[42px] rounded-lg px-2 py-1.5 text-sm outline-none ${shell.field} disabled:opacity-60`}
+                    mutedClassName={shell.muted}
                   />
-                </label>
+                </div>
                 <label className="space-y-1">
                   <span className={`text-[11px] ${shell.muted}`}>Статус песни</span>
                   <select

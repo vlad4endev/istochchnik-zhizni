@@ -11,6 +11,7 @@ import { canModerateSongCatalogSession } from '../../auth/studioAccess';
 import { fetchSongs, type SongListQuery } from '../../songbook/api';
 import {
   fetchPublicCatalogSyncStatus,
+  fetchStudioSongTags,
   syncStudioToPublicCatalog,
 } from '../api';
 import { studioEditSongLink, useStudioEditorBackTo, useStudioModuleSurface } from '../studioPaths';
@@ -25,18 +26,26 @@ export function CatalogPage() {
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 320);
     return () => clearTimeout(t);
   }, [search]);
 
+  const tagsQ = useQuery({
+    queryKey: ['studio', 'tags'],
+    queryFn: fetchStudioSongTags,
+    staleTime: 60_000,
+  });
+
   const queryParams = useMemo((): SongListQuery => {
     const next: SongListQuery = {};
     const q = debouncedSearch.trim();
     if (q) next.q = q;
+    if (selectedTag) next.tags = [selectedTag];
     return next;
-  }, [debouncedSearch]);
+  }, [debouncedSearch, selectedTag]);
 
   const query = useQuery({
     queryKey: [...keys.songs, 'studio-catalog', queryParams] as const,
@@ -130,6 +139,47 @@ export function CatalogPage() {
         ) : null}
       </div>
 
+      {(tagsQ.data?.length ?? 0) > 0 ? (
+        <div className="flex flex-wrap gap-1.5" aria-label="Фильтр по тегам">
+          <button
+            type="button"
+            onClick={() => setSelectedTag(null)}
+            className={[
+              'inline-flex min-h-[32px] items-center rounded-lg border px-2.5 text-xs font-medium transition',
+              selectedTag == null
+                ? 'border-[var(--studio-editor-accent)] bg-[var(--studio-nav-active-bg)] text-[var(--studio-editor-accent)]'
+                : 'border-[var(--studio-editor-border)] text-[var(--studio-editor-mute)] hover:border-[var(--studio-editor-accent)]/40',
+            ].join(' ')}
+          >
+            Все
+          </button>
+          {tagsQ.data!
+            .filter((t) => t.song_count > 0)
+            .slice(0, 24)
+            .map((tag) => (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() => setSelectedTag((prev) => (prev === tag.name ? null : tag.name))}
+                className={[
+                  'inline-flex min-h-[32px] items-center rounded-lg border px-2.5 text-xs font-medium transition',
+                  selectedTag === tag.name
+                    ? 'border-[var(--studio-editor-accent)] bg-[var(--studio-nav-active-bg)] text-[var(--studio-editor-accent)]'
+                    : 'border-[var(--studio-editor-border)] text-[var(--studio-editor-text)] hover:border-[var(--studio-editor-accent)]/40',
+                ].join(' ')}
+              >
+                {tag.name}
+              </button>
+            ))}
+          <Link
+            to="/studio/tags"
+            className="inline-flex min-h-[32px] items-center rounded-lg px-2 text-xs font-semibold text-[var(--studio-editor-accent)] hover:underline"
+          >
+            Управление…
+          </Link>
+        </div>
+      ) : null}
+
       {query.isLoading ? <SongListSkeleton variant="studio" /> : null}
       {query.isError ? (
         <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -176,7 +226,7 @@ export function CatalogPage() {
           </ul>
           {rows.length === 0 ? (
             <p className="rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] py-10 text-center text-sm text-[var(--studio-editor-mute)]">
-              {debouncedSearch.trim()
+              {debouncedSearch.trim() || selectedTag
                 ? 'Ничего не найдено.'
                 : canModerate && hiddenInProject > 0
                   ? 'Каталог пуст: нажмите «Опубликовать все готовые песни» выше.'

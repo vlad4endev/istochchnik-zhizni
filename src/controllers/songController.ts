@@ -388,16 +388,20 @@ export async function updateSongHandler(req: Request, res: Response): Promise<vo
       is_published?: boolean;
     };
     const tags = parseTagsField(body);
-    const updated = await updateSong(id, {
-      title: body.title,
-      content: body.content,
-      default_key: body.default_key,
-      tempo: body.tempo,
-      time_signature: body.time_signature,
-      ...(tags !== undefined ? { tags } : {}),
-      // Импортирующий редактор не может сам опубликовать через PATCH — только через /publish.
-      ...(isModerator ? { is_published: body.is_published } : {}),
-    });
+    const updated = await updateSong(
+      id,
+      {
+        title: body.title,
+        content: body.content,
+        default_key: body.default_key,
+        tempo: body.tempo,
+        time_signature: body.time_signature,
+        ...(tags !== undefined ? { tags } : {}),
+        // Импортирующий редактор не может сам опубликовать через PATCH — только через /publish.
+        ...(isModerator ? { is_published: body.is_published } : {}),
+      },
+      { memberId: r.authUserId ?? null },
+    );
     if (!updated) {
       res.status(404).json({ error: 'Не найдено' });
       return;

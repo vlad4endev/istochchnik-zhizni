@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LuArrowLeft, LuBookOpen, LuChartColumnIncreasing, LuCirclePlus, LuEllipsis, LuGuitar, LuListMusic, LuMusic2 } from 'react-icons/lu';
+import { LuArrowLeft, LuBookOpen, LuChartColumnIncreasing, LuCirclePlus, LuEllipsis, LuGuitar, LuListMusic, LuMusic2, LuTags } from 'react-icons/lu';
 
 import { useAuthStore } from '../auth/authStore';
 import { canModerateSongCatalogSession } from '../auth/studioAccess';
@@ -65,6 +65,14 @@ function buildNavGroups(showAddSong: boolean): NavGroup[] {
               },
             ]
           : []),
+        {
+          to: '/studio/tags',
+          label: 'Теги',
+          shortLabel: 'Теги',
+          hint: 'Метки для песен: создать и управлять',
+          Icon: LuTags,
+          mobilePrimary: true,
+        },
       ],
     },
     {
@@ -127,6 +135,7 @@ function flattenMobileNavItems(groups: NavGroup[]): NavItem[] {
 function studioRouteTitle(pathname: string): string {
   if (pathname.startsWith('/studio/add-song')) return 'Новая песня';
   if (pathname.startsWith('/studio/catalog')) return 'Каталог';
+  if (pathname.startsWith('/studio/tags')) return 'Теги';
   if (pathname.startsWith('/studio/my-songs')) return 'Мои версии';
   if (pathname.includes('/perform')) return 'Выступление';
   if (pathname.startsWith('/studio/setlists')) return 'Сетлисты';

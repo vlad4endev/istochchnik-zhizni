@@ -32,6 +32,10 @@ import {
   setlistsDelete,
   setlistsList,
   setlistsUpdate,
+  songTagsCreate,
+  songTagsDelete,
+  songTagsList,
+  songTagsUpdate,
 } from '../controllers/studioController';
 import { requireAuthSession } from '../middleware/authSession';
 
@@ -60,6 +64,11 @@ router.delete('/drafts/:id', draftsDelete);
 
 router.get('/instruments', instrumentsGet);
 router.patch('/instruments', instrumentsPatch);
+
+router.get('/tags', songTagsList);
+router.post('/tags', songTagsCreate);
+router.patch('/tags/:id', songTagsUpdate);
+router.delete('/tags/:id', songTagsDelete);
 
 router.get('/setlists', setlistsList);
 router.post('/setlists', setlistsCreate);

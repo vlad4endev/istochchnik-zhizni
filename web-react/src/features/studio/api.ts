@@ -366,6 +366,40 @@ export async function patchInstrumentSettings(patch: Record<string, unknown>): P
   await apiClient.patch(`${STUDIO}/instruments`, patch);
 }
 
+export interface StudioSongTag {
+  id: string;
+  name: string;
+  song_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchStudioSongTags(): Promise<StudioSongTag[]> {
+  const { data } = await apiClient.get<StudioSongTag[]>(`${STUDIO}/tags`);
+  return data;
+}
+
+export async function createStudioSongTag(name: string): Promise<StudioSongTag> {
+  const { data } = await apiClient.post<StudioSongTag>(`${STUDIO}/tags`, { name });
+  return data;
+}
+
+export async function renameStudioSongTag(id: number, name: string): Promise<StudioSongTag> {
+  const { data } = await apiClient.patch<StudioSongTag>(`${STUDIO}/tags/${id}`, { name });
+  return data;
+}
+
+export async function deleteStudioSongTag(
+  id: number,
+  removeFromSongs = true,
+): Promise<{ deleted: true; name: string; songsUpdated: number }> {
+  const { data } = await apiClient.delete<{ deleted: true; name: string; songsUpdated: number }>(
+    `${STUDIO}/tags/${id}`,
+    { params: { removeFromSongs: removeFromSongs ? '1' : '0' } },
+  );
+  return data;
+}
+
 export async function aiChordPlacement(content: string): Promise<{
   content: string;
   changedLines: number;

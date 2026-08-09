@@ -1,4 +1,5 @@
 import { query } from '../config/db';
+import { ensureStudioSongTags, isManagedSongTagName } from './studioSongTagsService';
 
 export interface SongRow {
   id: string;
@@ -333,13 +334,32 @@ export interface CreateSongInput {
   created_by_member_id: number | null;
 }
 
+async function normalizeSongTagsForWrite(
+  tags: string[] | undefined,
+  memberId: number | null,
+): Promise<string[]> {
+  if (!tags?.length) return [];
+  const managed = tags.filter((t) => isManagedSongTagName(String(t)));
+  const system = tags.map((t) => String(t).trim()).filter((t) => t && !isManagedSongTagName(t));
+  const ensured = await ensureStudioSongTags(managed, memberId);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of [...ensured, ...system]) {
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
 export async function createSong(input: CreateSongInput): Promise<SongRow> {
   const title = input.title.trim();
   if (!title) {
     throw new Error('title required');
   }
 
-  const tags = input.tags?.length ? input.tags : [];
+  const tags = await normalizeSongTagsForWrite(input.tags, input.created_by_member_id);
 
   const result = await query(
     `INSERT INTO songs (song_number, title, slug, content, default_key, tempo, time_signature, tags, is_published, created_by_member_id)
@@ -392,7 +412,11 @@ export interface UpdateSongInput {
   is_published?: boolean;
 }
 
-export async function updateSong(id: number, input: UpdateSongInput): Promise<SongRow | null> {
+export async function updateSong(
+  id: number,
+  input: UpdateSongInput,
+  opts?: { memberId?: number | null },
+): Promise<SongRow | null> {
   const fields: string[] = [];
   const vals: unknown[] = [];
   let n = 0;
@@ -407,7 +431,9 @@ export async function updateSong(id: number, input: UpdateSongInput): Promise<So
   if (input.default_key !== undefined) push('default_key', input.default_key);
   if (input.tempo !== undefined) push('tempo', input.tempo);
   if (input.time_signature !== undefined) push('time_signature', input.time_signature);
-  if (input.tags !== undefined) push('tags', input.tags);
+  if (input.tags !== undefined) {
+    push('tags', await normalizeSongTagsForWrite(input.tags, opts?.memberId ?? null));
+  }
   if (input.is_published !== undefined) push('is_published', input.is_published);
 
   if (fields.length === 0) {

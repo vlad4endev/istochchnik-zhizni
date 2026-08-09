@@ -51,6 +51,11 @@ const StudioInstrumentsPage = lazy(async () => {
   return { default: m.InstrumentsPage };
 });
 
+const StudioTagsPage = lazy(async () => {
+  const m = await import('../features/studio/pages/TagsPage');
+  return { default: m.TagsPage };
+});
+
 const StudioSongUsagePage = lazy(async () => {
   const m = await import('../features/studio/pages/ServicePlanSongUsagePage');
   return { default: m.ServicePlanSongUsagePage };
@@ -195,6 +200,14 @@ export function AppRouterStudio() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <StudioInstrumentsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="tags"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <StudioTagsPage />
               </Suspense>
             }
           />

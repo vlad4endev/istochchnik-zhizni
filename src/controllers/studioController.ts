@@ -46,6 +46,12 @@ import {
   pickSongsForNearestServicePlan,
   AiAgentError as SongPickAiError,
 } from '../services/studioSongPickService';
+import {
+  createStudioSongTag,
+  deleteStudioSongTag,
+  listStudioSongTags,
+  renameStudioSongTag,
+} from '../services/studioSongTagsService';
 
 type AuthReq = Request & SessionRoleSource & { authUserId?: number; authUserRole?: AppRole };
 
@@ -834,5 +840,117 @@ export async function postAiSongCleanup(req: Request, res: Response): Promise<vo
     }
     console.error('[studio] ai song-cleanup error', e);
     res.status(500).json({ error: 'Не удалось привести текст в порядок' });
+  }
+}
+
+export async function songTagsList(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureStudio(r, res))) return;
+    res.json(await listStudioSongTags());
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Не удалось загрузить теги' });
+  }
+}
+
+export async function songTagsCreate(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureStudio(r, res))) return;
+    if (!sessionCanModerateCatalog(r)) {
+      res.status(403).json({ error: 'Недостаточно прав для управления тегами' });
+      return;
+    }
+    const body = req.body as { name?: unknown };
+    const name = typeof body.name === 'string' ? body.name : '';
+    try {
+      const tag = await createStudioSongTag(name, r.authUserId ?? null);
+      res.status(201).json(tag);
+    } catch (e: unknown) {
+      const err = e as { code?: string };
+      if (err.code === 'invalid_name') {
+        res.status(400).json({ error: 'Укажите корректное название тега (до 80 символов)' });
+        return;
+      }
+      if (err.code === 'duplicate') {
+        res.status(409).json({ error: 'Такой тег уже есть' });
+        return;
+      }
+      throw e;
+    }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Не удалось создать тег' });
+  }
+}
+
+export async function songTagsUpdate(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureStudio(r, res))) return;
+    if (!sessionCanModerateCatalog(r)) {
+      res.status(403).json({ error: 'Недостаточно прав для управления тегами' });
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: 'Invalid id' });
+      return;
+    }
+    const body = req.body as { name?: unknown };
+    const name = typeof body.name === 'string' ? body.name : '';
+    try {
+      const tag = await renameStudioSongTag(id, name);
+      if (!tag) {
+        res.status(404).json({ error: 'Тег не найден' });
+        return;
+      }
+      res.json(tag);
+    } catch (e: unknown) {
+      const err = e as { code?: string };
+      if (err.code === 'invalid_name') {
+        res.status(400).json({ error: 'Укажите корректное название тега (до 80 символов)' });
+        return;
+      }
+      if (err.code === 'duplicate') {
+        res.status(409).json({ error: 'Такой тег уже есть' });
+        return;
+      }
+      throw e;
+    }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Не удалось обновить тег' });
+  }
+}
+
+export async function songTagsDelete(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureStudio(r, res))) return;
+    if (!sessionCanModerateCatalog(r)) {
+      res.status(403).json({ error: 'Недостаточно прав для управления тегами' });
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: 'Invalid id' });
+      return;
+    }
+    const removeFromSongsRaw = req.query.removeFromSongs;
+    const removeFromSongs =
+      removeFromSongsRaw === '1' ||
+      removeFromSongsRaw === 'true' ||
+      (req.body as { removeFromSongs?: unknown } | null)?.removeFromSongs === true;
+    const result = await deleteStudioSongTag(id, removeFromSongs);
+    if (!result) {
+      res.status(404).json({ error: 'Тег не найден' });
+      return;
+    }
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Не удалось удалить тег' });
   }
 }

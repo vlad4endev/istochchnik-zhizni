@@ -1999,6 +1999,25 @@ CREATE TABLE IF NOT EXISTS studio_song_recents (
 );
 CREATE INDEX IF NOT EXISTS idx_studio_song_recents_member ON studio_song_recents (member_id, last_opened_at DESC);
 
+CREATE TABLE IF NOT EXISTS studio_song_tags (
+  id BIGSERIAL PRIMARY KEY,
+  name VARCHAR(80) NOT NULL,
+  created_by_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS studio_song_tags_name_lower_uidx
+  ON studio_song_tags (LOWER(TRIM(name)));
+CREATE INDEX IF NOT EXISTS idx_studio_song_tags_name ON studio_song_tags (name);
+INSERT INTO studio_song_tags (name)
+SELECT DISTINCT TRIM(t.tag)
+FROM songs s
+CROSS JOIN LATERAL unnest(COALESCE(s.tags, '{}'::text[])) AS t(tag)
+WHERE TRIM(t.tag) <> ''
+  AND TRIM(t.tag) NOT LIKE '\\_\\_%' ESCAPE '\\'
+  AND LOWER(TRIM(t.tag)) NOT IN ('импортированная', 'импортировано', 'нет_текста')
+ON CONFLICT DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS dashboard_coordinator_notes (
   kind VARCHAR(32) PRIMARY KEY CHECK (kind IN ('urgent_prayer', 'announcement')),
   body TEXT NOT NULL DEFAULT '',

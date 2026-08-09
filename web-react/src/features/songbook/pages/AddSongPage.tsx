@@ -7,6 +7,7 @@ import axios from 'axios';
 import { useAuthStore } from '../../auth/authStore';
 import { canModerateSongCatalogSession } from '../../auth/studioAccess';
 import { createDraft, updateDraft } from '../../studio/api';
+import { SongTagPicker } from '../../studio/components/SongTagPicker';
 import { useStudioAppChrome } from '../../studio/useStudioAppChrome';
 import {
   getStudioModuleSurface,
@@ -61,7 +62,6 @@ export function AddSongPage() {
   const tempoRef = useRef<HTMLInputElement>(null);
   const timeSigRef = useRef<HTMLInputElement>(null);
   const youtubeRef = useRef<HTMLInputElement>(null);
-  const tagsRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState(1);
   const [importOpen, setImportOpen] = useState(false);
@@ -79,7 +79,7 @@ export function AddSongPage() {
   const [quickMode, setQuickMode] = useState<'major' | 'minor'>('major');
   const [tempo, setTempo] = useState('');
   const [timeSig, setTimeSig] = useState('');
-  const [tags, setTags] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
   const [keyHint, setKeyHint] = useState<string | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
   const [mobileEditorPane, setMobileEditorPane] = useState<'editor' | 'preview'>('editor');
@@ -229,10 +229,7 @@ export function AddSongPage() {
     default_key: defaultKey.trim() || null,
     tempo: tempo.trim() ? Number(tempo) : null,
     time_signature: timeSig.trim() || null,
-    tags: tags
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
+    tags: tags.filter(Boolean),
     is_published: true,
     ...(force ? { force: true } : {}),
   });
@@ -849,7 +846,6 @@ export function AddSongPage() {
                     ref={youtubeRef}
                     value={youtubeUrl}
                     onChange={(e) => setYoutubeUrl(e.target.value)}
-                    onKeyDown={(e) => onEnterFocusNext(e, tagsRef)}
                     className={`min-h-[48px] min-w-[200px] flex-1 rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                     placeholder="https://www.youtube.com/watch?v=…"
                   />
@@ -866,16 +862,19 @@ export function AddSongPage() {
                 </p>
               </div>
 
-              <label className="block">
-                <span className={`text-xs font-bold uppercase ${theme.muted}`}>Теги (через запятую)</span>
-                <input
-                  ref={tagsRef}
-                  value={tags}
-                  onChange={(e) => setTags(e.target.value)}
-                  className={`mt-1 min-h-[48px] w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
-                  placeholder="worship, fast"
-                />
-              </label>
+              <div className="block">
+                <span className={`text-xs font-bold uppercase ${theme.muted}`}>Теги</span>
+                <div className="mt-1">
+                  <SongTagPicker
+                    value={tags}
+                    onChange={setTags}
+                    allowCreate={canPublishCatalog}
+                    inputClassName={`min-h-[48px] w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
+                    mutedClassName={theme.muted}
+                    chipClassName={`inline-flex min-h-[36px] items-center gap-1 rounded-lg border px-2.5 text-sm transition ${theme.btnOutline}`}
+                  />
+                </div>
+              </div>
             </>
           ) : null}
 
