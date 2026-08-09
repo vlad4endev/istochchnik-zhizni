@@ -597,8 +597,8 @@
   }
 
   @media (hover: none) {
-    /* Не трогаем вкладки фильтра чатов и кнопки аудиоплеера: sticky :hover иначе сносит фон. */
-    button:hover:not(.tg-smart-tab):not(.tab-filter-button):not(.tg-voice-play):not(.tg-voice-speed),
+    /* Не трогаем бренд-кнопки: sticky :hover после тапа иначе сносит фон (отправка, play, вкладки). */
+    button:hover:not(.tg-smart-tab):not(.tab-filter-button):not(.tg-voice-play):not(.tg-voice-speed):not(.sendBtn):not(.tg-send-btn),
     .card:hover,
     .list-item:hover,
     a:hover {
@@ -609,17 +609,43 @@
   }
 
   /* Тактильный отклик без opacity — на PWA/iOS Safari кнопки (вкладки, отправка) выглядели «прозрачными». */
-  button:active:not(:disabled):not(.tg-smart-tab):not(.tab-filter-button):not(.tg-voice-play):not(.tg-voice-speed),
+  button:active:not(:disabled):not(.tg-smart-tab):not(.tab-filter-button):not(.tg-voice-play):not(.tg-voice-speed):not(.sendBtn):not(.tg-send-btn),
   .tappable:active {
     opacity: 1 !important;
     transform: scale(0.98) !important;
   }
 
-  /* Send/mic: не даём UA :disabled и клавиатуре гасить кружок */
+  /* Send/mic: не даём UA :disabled, sticky :hover и клавиатуре гасить кружок / цвет */
   .tg-messenger .sendBtn,
-  .tg-messenger .tg-send-btn {
+  .tg-messenger .tg-send-btn,
+  .tg-messenger .sendBtn:hover,
+  .tg-messenger .tg-send-btn:hover,
+  .tg-messenger .sendBtn:active,
+  .tg-messenger .tg-send-btn:active,
+  .tg-messenger .sendBtn:disabled,
+  .tg-messenger .tg-send-btn:disabled {
     opacity: 1 !important;
     visibility: visible !important;
+  }
+
+  .tg-messenger .sendBtn:hover:not(.recording):not(.videoMode):not(:disabled),
+  .tg-messenger .tg-send-btn:hover:not(.recording):not(.videoMode):not(:disabled),
+  .tg-messenger .sendBtn:active:not(.recording):not(.videoMode):not(:disabled),
+  .tg-messenger .tg-send-btn:active:not(.recording):not(.videoMode):not(:disabled) {
+    background: var(--tg-primary, #7d3640) !important;
+    background-color: var(--tg-primary, #7d3640) !important;
+  }
+
+  .tg-messenger .sendBtn.recording:is(:hover, :active),
+  .tg-messenger .tg-send-btn.recording:is(:hover, :active) {
+    background: #ff3b30 !important;
+    background-color: #ff3b30 !important;
+  }
+
+  .tg-messenger .sendBtn.videoMode:is(:hover, :active),
+  .tg-messenger .tg-send-btn.videoMode:is(:hover, :active) {
+    background: #5856d6 !important;
+    background-color: #5856d6 !important;
   }
   * {
     -webkit-overflow-scrolling: touch;

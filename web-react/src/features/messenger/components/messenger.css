@@ -1653,11 +1653,16 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
 }
 
 .tg-send-btn:hover:not(:disabled) {
+  /* Явно держим brand-цвет: sticky :hover на таче иначе может снести фон (см. mobile.css). */
+  background: var(--tg-primary);
+  background-color: var(--tg-primary);
   box-shadow: 0 4px 14px rgba(125, 54, 64, 0.45);
   transform: scale(1.05);
 }
 
 .tg-send-btn:active:not(:disabled) {
+  background: var(--tg-primary);
+  background-color: var(--tg-primary);
   transform: scale(0.96);
   opacity: 1 !important;
 }
@@ -1666,6 +1671,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   opacity: 1 !important;
   cursor: not-allowed;
   background: color-mix(in srgb, var(--tg-primary, #7d3640) 72%, #c4c4c4);
+  background-color: color-mix(in srgb, var(--tg-primary, #7d3640) 72%, #c4c4c4);
   box-shadow: none;
 }
 
@@ -3767,15 +3773,24 @@ html.dark .msg-videonote-circle--placeholder {
   will-change: background-color;
 }
 
+.sendBtn:hover:not(:disabled):not(.recording):not(.videoMode) {
+  /* Sticky :hover на таче не должен обесцвечивать кнопку отправки. */
+  background-color: var(--tg-primary, #7d3640);
+}
+
 .sendBtn:active:not(:disabled) {
   transform: translateZ(0) scale(0.92);
   opacity: 1 !important;
 }
 
+.sendBtn:active:not(:disabled):not(.recording):not(.videoMode) {
+  background-color: var(--tg-primary, #7d3640);
+}
+
 .sendBtn:disabled {
   opacity: 1 !important;
   cursor: not-allowed;
-  background-color: color-mix(in srgb, var(--tg-primary, #2AABEE) 72%, #c4c4c4);
+  background-color: color-mix(in srgb, var(--tg-primary, #7d3640) 72%, #c4c4c4);
   box-shadow: none;
 }
 
@@ -3788,7 +3803,15 @@ html.dark .msg-videonote-circle--placeholder {
   animation: recordPulse 1.2s ease-in-out infinite;
 }
 
+.sendBtn.recording:is(:hover, :active) {
+  background-color: #FF3B30;
+}
+
 .sendBtn.videoMode {
+  background-color: #5856D6;
+}
+
+.sendBtn.videoMode:is(:hover, :active) {
   background-color: #5856D6;
 }
 
