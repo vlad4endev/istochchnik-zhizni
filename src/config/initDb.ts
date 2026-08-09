@@ -1963,6 +1963,9 @@ CREATE TABLE IF NOT EXISTS service_plans (
   title TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS created_by_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL;
+ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS last_edited_by_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL;
+ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS music_ministry_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL;
 DO $$
 BEGIN
   IF to_regclass('public.service_plans') IS NOT NULL
@@ -2002,7 +2005,7 @@ CREATE INDEX IF NOT EXISTS idx_studio_song_recents_member ON studio_song_recents
 CREATE TABLE IF NOT EXISTS studio_song_tags (
   id BIGSERIAL PRIMARY KEY,
   name VARCHAR(80) NOT NULL,
-  created_by_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  created_by_member_id INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -2017,7 +2020,7 @@ WHERE TRIM(t.tag) <> ''
   AND char_length(TRIM(t.tag)) <= 80
   AND TRIM(t.tag) NOT LIKE '\\_\\_%' ESCAPE '\\'
   AND LOWER(TRIM(t.tag)) NOT IN ('импортированная', 'импортировано', 'нет_текста')
-ON CONFLICT ((LOWER(TRIM(name)))) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS dashboard_coordinator_notes (
   kind VARCHAR(32) PRIMARY KEY CHECK (kind IN ('urgent_prayer', 'announcement')),

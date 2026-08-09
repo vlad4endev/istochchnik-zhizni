@@ -18,21 +18,32 @@ let schemaReady = false;
 /** Self-heal: create catalog table if deploy skipped migration / old initDb. */
 export async function ensureStudioSongTagsSchema(): Promise<void> {
   if (schemaReady) return;
+
+  // No FK in CREATE — some app DB roles cannot add REFERENCES; column alone is enough.
   await query(`
-    CREATE TABLE IF NOT EXISTS studio_song_tags (
+    CREATE TABLE IF NOT EXISTS public.studio_song_tags (
       id BIGSERIAL PRIMARY KEY,
       name VARCHAR(${TAG_NAME_MAX}) NOT NULL,
-      created_by_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+      created_by_member_id INTEGER,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+
+  // Collapse case-insensitive duplicates before unique index (legacy seed may have them).
+  await query(`
+    DELETE FROM public.studio_song_tags a
+    USING public.studio_song_tags b
+    WHERE a.ctid > b.ctid
+      AND LOWER(TRIM(a.name)) = LOWER(TRIM(b.name))
+  `);
+
   await query(`
     CREATE UNIQUE INDEX IF NOT EXISTS studio_song_tags_name_lower_uidx
-      ON studio_song_tags (LOWER(TRIM(name)))
+      ON public.studio_song_tags (LOWER(TRIM(name)))
   `);
   await query(`
-    CREATE INDEX IF NOT EXISTS idx_studio_song_tags_name ON studio_song_tags (name)
+    CREATE INDEX IF NOT EXISTS idx_studio_song_tags_name ON public.studio_song_tags (name)
   `);
   schemaReady = true;
 }
@@ -71,39 +82,49 @@ const LIST_SQL = `
     t.updated_at,
     COALESCE((
       SELECT COUNT(*)::int
-      FROM songs s
+      FROM public.songs s
       WHERE s.tags && ARRAY[t.name]::text[]
     ), 0) AS song_count
-  FROM studio_song_tags t
+  FROM public.studio_song_tags t
 `;
 
 /** Pull distinct user tags from songs into the catalog (idempotent). */
 export async function syncSongTagsFromSongs(): Promise<number> {
   await ensureStudioSongTagsSchema();
   const r = await query(
-    `INSERT INTO studio_song_tags (name)
+    `INSERT INTO public.studio_song_tags (name)
      SELECT DISTINCT LEFT(TRIM(x.tag), ${TAG_NAME_MAX})
-     FROM songs s
+     FROM public.songs s
      CROSS JOIN LATERAL unnest(COALESCE(s.tags, '{}'::text[])) AS x(tag)
      WHERE TRIM(x.tag) <> ''
        AND char_length(TRIM(x.tag)) <= ${TAG_NAME_MAX}
        AND TRIM(x.tag) NOT LIKE '\\_\\_%' ESCAPE '\\'
        AND LOWER(TRIM(x.tag)) NOT IN ('импортированная', 'импортировано', 'нет_текста')
-     ON CONFLICT ((LOWER(TRIM(name)))) DO NOTHING`,
+     ON CONFLICT DO NOTHING`,
   );
   return r.rowCount ?? 0;
 }
 
 export async function listStudioSongTags(): Promise<StudioSongTag[]> {
-  await ensureStudioSongTagsSchema();
+  try {
+    await ensureStudioSongTagsSchema();
+  } catch (e) {
+    console.error('[studio-song-tags] ensure schema failed:', e);
+    return [];
+  }
   try {
     await syncSongTagsFromSongs();
   } catch (e) {
     // Listing must still work even if seed/sync fails (bad legacy tags, etc.).
     console.error('[studio-song-tags] sync from songs failed:', e);
   }
-  const r = await query(`${LIST_SQL} ORDER BY LOWER(t.name) ASC`);
-  return r.rows.map((row) => mapRow(row as Record<string, unknown>));
+  try {
+    const r = await query(`${LIST_SQL} ORDER BY LOWER(t.name) ASC`);
+    return r.rows.map((row) => mapRow(row as Record<string, unknown>));
+  } catch (e) {
+    console.error('[studio-song-tags] list failed:', e);
+    return [];
+  }
 }
 
 export async function createStudioSongTag(
@@ -118,7 +139,7 @@ export async function createStudioSongTag(
 
   try {
     const inserted = await query(
-      `INSERT INTO studio_song_tags (name, created_by_member_id)
+      `INSERT INTO public.studio_song_tags (name, created_by_member_id)
        VALUES ($1, $2)
        RETURNING id`,
       [name, memberId],
@@ -145,7 +166,7 @@ export async function renameStudioSongTag(
     throw Object.assign(new Error('invalid_name'), { code: 'invalid_name' });
   }
 
-  const existing = await query(`SELECT id, name FROM studio_song_tags WHERE id = $1`, [id]);
+  const existing = await query(`SELECT id, name FROM public.studio_song_tags WHERE id = $1`, [id]);
   const row = existing.rows[0] as { id: string; name: string } | undefined;
   if (!row) return null;
 
@@ -157,7 +178,7 @@ export async function renameStudioSongTag(
 
   try {
     await query(
-      `UPDATE studio_song_tags SET name = $2, updated_at = NOW() WHERE id = $1`,
+      `UPDATE public.studio_song_tags SET name = $2, updated_at = NOW() WHERE id = $1`,
       [id, name],
     );
   } catch (e: unknown) {
@@ -170,7 +191,7 @@ export async function renameStudioSongTag(
 
   // Keep songs.tags in sync with the renamed catalog entry.
   await query(
-    `UPDATE songs s
+    `UPDATE public.songs s
      SET tags = (
        SELECT ARRAY(
          SELECT DISTINCT CASE WHEN x = $1 THEN $2 ELSE x END
@@ -191,14 +212,14 @@ export async function deleteStudioSongTag(
   removeFromSongs: boolean,
 ): Promise<{ deleted: true; name: string; songsUpdated: number } | null> {
   await ensureStudioSongTagsSchema();
-  const existing = await query(`SELECT id, name FROM studio_song_tags WHERE id = $1`, [id]);
+  const existing = await query(`SELECT id, name FROM public.studio_song_tags WHERE id = $1`, [id]);
   const row = existing.rows[0] as { id: string; name: string } | undefined;
   if (!row) return null;
 
   let songsUpdated = 0;
   if (removeFromSongs) {
     const upd = await query(
-      `UPDATE songs s
+      `UPDATE public.songs s
        SET tags = COALESCE((
          SELECT ARRAY(SELECT x FROM unnest(COALESCE(s.tags, '{}'::text[])) AS x WHERE x <> $1)
        ), '{}'::text[]),
@@ -209,7 +230,7 @@ export async function deleteStudioSongTag(
     songsUpdated = upd.rowCount ?? 0;
   }
 
-  await query(`DELETE FROM studio_song_tags WHERE id = $1`, [id]);
+  await query(`DELETE FROM public.studio_song_tags WHERE id = $1`, [id]);
   return { deleted: true, name: row.name, songsUpdated };
 }
 
@@ -232,9 +253,9 @@ export async function ensureStudioSongTags(
 
   for (const name of normalized) {
     await query(
-      `INSERT INTO studio_song_tags (name, created_by_member_id)
+      `INSERT INTO public.studio_song_tags (name, created_by_member_id)
        VALUES ($1, $2)
-       ON CONFLICT ((LOWER(TRIM(name)))) DO NOTHING`,
+       ON CONFLICT DO NOTHING`,
       [name, memberId],
     );
   }

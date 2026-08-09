@@ -11,6 +11,29 @@ function resolvePublicTokenTtlDays(): number {
 // SECURITY FIX: ограничиваем срок жизни публичного share_token для сетлистов.
 const PUBLIC_SETLIST_TOKEN_MAX_AGE_DAYS = resolvePublicTokenTtlDays();
 
+let servicePlanAccessColumnsReady = false;
+
+/**
+ * listSetlists/canAccessSetlist join service_plans columns that the initDb stub
+ * may not have when SKIP_DB_INIT_ON_START / planner schema never ran.
+ */
+async function ensureServicePlanAccessColumns(): Promise<void> {
+  if (servicePlanAccessColumnsReady) return;
+  await query(`
+    CREATE TABLE IF NOT EXISTS public.service_plans (
+      id BIGSERIAL PRIMARY KEY,
+      service_date DATE,
+      title TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  // Column-only (no FK): works even when app role cannot create REFERENCES.
+  await query(`ALTER TABLE public.service_plans ADD COLUMN IF NOT EXISTS created_by_member_id INTEGER`);
+  await query(`ALTER TABLE public.service_plans ADD COLUMN IF NOT EXISTS last_edited_by_member_id INTEGER`);
+  await query(`ALTER TABLE public.service_plans ADD COLUMN IF NOT EXISTS music_ministry_member_id INTEGER`);
+  servicePlanAccessColumnsReady = true;
+}
+
 function mapSong(row: Record<string, unknown>): SongRow {
   const rawTags = row.tags;
   const tags = Array.isArray(rawTags) ? rawTags.map((t) => String(t)) : [];
@@ -355,6 +378,7 @@ export async function listSetlists(
   memberId: number,
   opts?: { includeAllPlanner?: boolean }
 ): Promise<SetlistRow[]> {
+  await ensureServicePlanAccessColumns();
   const includeAllPlanner = Boolean(opts?.includeAllPlanner);
   const result = await query(
     `SELECT DISTINCT ON (sl.id) sl.*
@@ -454,6 +478,7 @@ export async function canAccessSetlist(
   setlistId: number,
   opts?: { includeAllPlanner?: boolean }
 ): Promise<boolean> {
+  await ensureServicePlanAccessColumns();
   const includeAllPlanner = Boolean(opts?.includeAllPlanner);
   const r = await query(
     `SELECT 1
