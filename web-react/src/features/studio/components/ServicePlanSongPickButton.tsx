@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
@@ -254,7 +254,18 @@ function PickResults({
   );
 }
 
-export function ServicePlanSongPickButton({ onApplied }: { onApplied?: () => void }) {
+export type ServicePlanSongPickButtonVariant = 'default' | 'sidebar' | 'icon';
+
+export function ServicePlanSongPickButton({
+  onApplied,
+  variant = 'default',
+  className = '',
+}: {
+  onApplied?: () => void;
+  variant?: ServicePlanSongPickButtonVariant;
+  className?: string;
+}) {
+  const qc = useQueryClient();
   const [result, setResult] = useState<ServicePlanSongPickResult | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [resultKey, setResultKey] = useState(0);
@@ -295,24 +306,44 @@ export function ServicePlanSongPickButton({ onApplied }: { onApplied?: () => voi
     });
   };
 
+  const handleApplied = () => {
+    void qc.invalidateQueries({ queryKey: ['studio', 'service-plan-song-usage'] });
+    onApplied?.();
+  };
+
+  const buttonClass =
+    variant === 'sidebar'
+      ? [
+          'flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[var(--studio-editor-accent)] to-[#9a4550] px-3 text-sm font-semibold text-white shadow-md transition hover:opacity-95 disabled:opacity-60',
+          'lg:justify-start',
+        ].join(' ')
+      : variant === 'icon'
+        ? 'studio-touch-target inline-flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-[var(--studio-editor-accent)] to-[#9a4550] text-white shadow-md transition hover:opacity-95 disabled:opacity-60'
+        : 'inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--studio-editor-accent)] to-[#9a4550] px-4 text-sm font-semibold text-white shadow-md transition hover:opacity-95 disabled:opacity-60';
+
+  const label =
+    variant === 'icon' ? null : pickMut.isPending ? 'Подбираем…' : 'Подбор песен';
+
   return (
-    <div className="space-y-2">
+    <div className={['space-y-2', className].filter(Boolean).join(' ')}>
       <button
         type="button"
         onClick={() => pickMut.mutate({})}
         disabled={pickMut.isPending}
         aria-busy={pickMut.isPending}
-        className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--studio-editor-accent)] to-[#9a4550] px-4 text-sm font-semibold text-white shadow-md transition hover:opacity-95 disabled:opacity-60"
+        aria-label="Подбор песен под проповедь"
+        title="Подобрать песни под тему проповеди"
+        className={buttonClass}
       >
         {pickMut.isPending ? (
-          <LuLoaderCircle className="h-4 w-4 animate-spin" aria-hidden />
+          <LuLoaderCircle className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
         ) : (
-          <LuSparkles className="h-4 w-4" aria-hidden />
+          <LuSparkles className="h-4 w-4 shrink-0" aria-hidden />
         )}
-        {pickMut.isPending ? 'Подбираем песни…' : 'Подбор песен'}
+        {label ? <span className={variant === 'sidebar' ? 'hidden truncate lg:inline' : undefined}>{label}</span> : null}
       </button>
 
-      {inlineError ? (
+      {inlineError && variant !== 'sidebar' && variant !== 'icon' ? (
         <p className="max-w-xl rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-relaxed text-rose-900 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-100">
           {inlineError}
         </p>
@@ -323,7 +354,7 @@ export function ServicePlanSongPickButton({ onApplied }: { onApplied?: () => voi
           key={resultKey}
           result={result}
           onClose={() => setResult(null)}
-          onApplied={() => onApplied?.()}
+          onApplied={handleApplied}
           onRegenerate={regenerate}
           regenerating={pickMut.isPending}
           editorBackTo={editorBackTo}

@@ -3,6 +3,7 @@ import { LuArrowLeft, LuBookOpen, LuChartColumnIncreasing, LuCirclePlus, LuEllip
 
 import { useAuthStore } from '../auth/authStore';
 import { canModerateSongCatalogSession } from '../auth/studioAccess';
+import { ServicePlanSongPickButton } from './components/ServicePlanSongPickButton';
 
 type NavItem = {
   to: string;
@@ -160,7 +161,12 @@ function StudioSidebar({ groups, onBack }: StudioSidebarProps) {
           <LuArrowLeft className="h-5 w-5" />
         </button>
       </div>
-      <nav className="mt-2 flex flex-1 flex-col gap-4 px-2 pb-6 lg:px-3" aria-label="Разделы студии">
+
+      <div className="px-2 pb-3 lg:px-3">
+        <ServicePlanSongPickButton variant="sidebar" />
+      </div>
+
+      <nav className="mt-1 flex flex-1 flex-col gap-4 px-2 pb-6 lg:px-3" aria-label="Разделы студии">
         {groups.map((group, gi) => (
           <div
             key={group.id}
@@ -215,6 +221,7 @@ function StudioTopBar({
         <LuArrowLeft className="h-5 w-5" />
       </button>
       <h1 className="min-w-0 flex-1 truncate text-base font-bold text-[var(--studio-editor-text)]">{title}</h1>
+      <ServicePlanSongPickButton variant="icon" />
       {showMoreLink ? (
         <NavLink
           to="/studio/instruments"
