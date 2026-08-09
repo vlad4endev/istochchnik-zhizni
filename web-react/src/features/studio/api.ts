@@ -445,16 +445,27 @@ export async function deleteStudioSongTag(
   return data;
 }
 
+/** Долгие LLM-запросы: дефолтный apiClient timeout (25s) слишком короткий. */
+const AI_REQUEST_TIMEOUT_MS = 120_000;
+
 export async function aiChordPlacement(content: string): Promise<{
   content: string;
   changedLines: number;
   totalChords: number;
 }> {
-  const { data } = await apiClient.post(`${STUDIO}/ai/chord-placement`, { content });
+  const { data } = await apiClient.post(
+    `${STUDIO}/ai/chord-placement`,
+    { content },
+    { timeout: AI_REQUEST_TIMEOUT_MS },
+  );
   return data as { content: string; changedLines: number; totalChords: number };
 }
 
 export async function aiSongCleanup(content: string): Promise<{ chordPro: string }> {
-  const { data } = await apiClient.post<{ chordPro: string }>(`${STUDIO}/ai/song-cleanup`, { content });
+  const { data } = await apiClient.post<{ chordPro: string }>(
+    `${STUDIO}/ai/song-cleanup`,
+    { content },
+    { timeout: AI_REQUEST_TIMEOUT_MS },
+  );
   return data;
 }
