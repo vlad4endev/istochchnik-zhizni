@@ -22,6 +22,7 @@ import {
   isMessageEncryptionEnabled,
 } from '../lib/messageCrypto';
 import { normalizeChatDisplayText } from '../utils/normalizeChatDisplayText';
+import { coerceBirthDateToYmd } from '../lib/birthDate';
 
 const MARK_READ_DEDUP_WINDOW_MS = 5_000;
 const recentMarkReadCalls = new Map<string, number>();
@@ -1353,7 +1354,7 @@ export async function getPrivateChatProfile(
       m.app_role,
       m.ministry_role,
       m.ministry_direction,
-      m.birth_date,
+      m.birth_date::text AS birth_date,
       m.last_seen_at
     FROM conversation_participants cp
     JOIN conversations c ON c.id = cp.conversation_id
@@ -1378,7 +1379,7 @@ export async function getPrivateChatProfile(
     app_role: r.app_role ?? null,
     ministry_role: r.ministry_role ?? null,
     ministry_direction: r.ministry_direction ?? null,
-    birth_date: r.birth_date ? new Date(r.birth_date).toISOString().slice(0, 10) : null,
+    birth_date: coerceBirthDateToYmd(r.birth_date),
     last_seen_at:
       r.last_seen_at != null ? new Date(r.last_seen_at as string | Date).toISOString() : null,
   };

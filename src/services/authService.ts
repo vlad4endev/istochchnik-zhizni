@@ -28,6 +28,7 @@ import {
   type SessionAuditContext,
   type SessionInvalidationReason,
 } from '../lib/sessionAuditLog';
+import { coerceBirthDateToYmd } from '../lib/birthDate';
 
 const scrypt = promisify(scryptCallback);
 const MIN_PASSWORD_LENGTH = 8;
@@ -401,7 +402,7 @@ function mapAuthUser(row: MemberRow): AuthUser {
     phone_number: row.phone_number,
     ministry_role: (row.ministry_role ?? null) as string | null,
     ministry_direction: (row.ministry_direction ?? null) as string | null,
-    birth_date: row.birth_date ?? null,
+    birth_date: coerceBirthDateToYmd(row.birth_date),
     email: row.email ?? null,
     prayer_request: row.prayer_request ?? null,
     app_role: normalizeRole(row.app_role),
@@ -1854,7 +1855,7 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
       m.phone_number,
       m.ministry_role,
       m.ministry_direction,
-      m.birth_date,
+      m.birth_date::text AS birth_date,
       m.email,
       ${mpcPick.prayerRequest} AS prayer_request,
       m.app_role,

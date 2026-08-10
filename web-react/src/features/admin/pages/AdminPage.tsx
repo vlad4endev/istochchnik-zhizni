@@ -80,6 +80,7 @@ import { GlobalNeedsSection } from '../GlobalNeedsSection';
 import { UserListSkeleton } from '../../../components/skeletons/UserListSkeleton';
 import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
 import { BirthDayMonthFields } from '@/components/BirthDayMonthFields';
+import { formatBirthDateDisplay } from '../../../lib/birthDate';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { nextOccurrenceLocalYmd } from '../../../lib/weekdayAnchor';
 import {
@@ -1555,6 +1556,14 @@ function MembersSection({
                   <div>
                     <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
                     <p className="mt-0.5 text-sm text-stone-600">{u.phone_number ?? '—'}</p>
+                    {formatBirthDateDisplay(u.birth_date) ? (
+                      <p className="mt-1 text-sm text-stone-600">
+                        День рождения:{' '}
+                        <span className="font-semibold text-stone-800">
+                          {formatBirthDateDisplay(u.birth_date)}
+                        </span>
+                      </p>
+                    ) : null}
                   </div>
                   <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary">
                     Карточка
@@ -1618,6 +1627,7 @@ function MembersSection({
               <tr className="border-b border-stone-200 bg-stone-50/90 text-xs font-extrabold uppercase tracking-wider text-stone-500">
                 <th className="px-4 py-3">Участник</th>
                 <th className="whitespace-nowrap px-4 py-3">Телефон</th>
+                <th className="whitespace-nowrap px-4 py-3">День рождения</th>
                 <th className="px-4 py-3">Роль</th>
                 <th className="px-4 py-3">Статус</th>
                 {showImpersonateButton ? <th className="px-4 py-3">Действия</th> : null}
@@ -1626,7 +1636,7 @@ function MembersSection({
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={showImpersonateButton ? 5 : 4} className="px-4 py-10 text-center text-stone-500">
+                  <td colSpan={showImpersonateButton ? 6 : 5} className="px-4 py-10 text-center text-stone-500">
                     {search.trim() || roleFilter ? 'Никого не найдено.' : 'Список пуст.'}
                   </td>
                 </tr>
@@ -1635,6 +1645,7 @@ function MembersSection({
                   const name = memberRosterName(u);
                   const { bg, fg } = memberAvatarColors(name);
                   const bday = birthdayBadge(u, now, 30);
+                  const birthLabel = formatBirthDateDisplay(u.birth_date);
                   return (
                     <tr
                       key={u.id}
@@ -1674,6 +1685,9 @@ function MembersSection({
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-stone-600">
                         {u.phone_number ?? '—'}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-stone-600">
+                        {birthLabel || '—'}
                       </td>
                       <td className="px-4 py-2.5">
                         <span className={appRoleBadgeClass(u.app_role)}>{appRoleLabel(u.app_role)}</span>

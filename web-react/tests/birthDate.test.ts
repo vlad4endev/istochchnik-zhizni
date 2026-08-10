@@ -21,6 +21,14 @@ describe('birthDate helpers', () => {
     expect(parseBirthDayMonthFromApi('not-a-date')).toEqual({ day: '', month: '' });
   });
 
+  it('parses ISO timestamps by calendar prefix (no timezone shift)', () => {
+    expect(parseBirthDayMonthFromApi('2000-03-15T00:00:00.000Z')).toEqual({
+      day: '15',
+      month: '3',
+    });
+    expect(formatBirthDateDisplay('2000-03-15T21:00:00.000Z')).toBe('15 марта');
+  });
+
   it('validates leap-year February against placeholder year 2000', () => {
     expect(isValidBirthDayMonth(29, 2)).toBe(true);
     expect(daysInBirthMonth(2)).toBe(29);

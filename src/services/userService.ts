@@ -1,4 +1,5 @@
 import { query } from '../config/db';
+import { coerceBirthDateToYmd } from '../lib/birthDate';
 import type { AppRole } from '../types/appRole';
 import { mergeAppRoles, normalizeAppRole, normalizeAppRoles, pickPrimaryAppRole } from '../types/appRole';
 import { addUtcDaysToIsoDate, computePrayerCycleAnchorStartDate, getPrayerCyclePosition } from '../utils/isoDates';
@@ -239,7 +240,7 @@ function normalizeOptionalString(value: unknown): string | null {
 }
 
 function mapUser(
-  row: AppUser & { user_id?: unknown; app_role?: unknown; app_roles?: unknown },
+  row: AppUser & { user_id?: unknown; app_role?: unknown; app_roles?: unknown; birth_date?: unknown },
 ): AppUser {
   const uid = row.user_id;
   const appRoles = normalizeAppRoles(row.app_roles, row.app_role);
@@ -249,6 +250,7 @@ function mapUser(
     user_id: uid != null && String(uid).trim() !== '' ? String(uid) : '',
     app_role: normalizeAppRole(primaryRole),
     app_roles: appRoles,
+    birth_date: coerceBirthDateToYmd(row.birth_date),
   };
 }
 
@@ -293,7 +295,7 @@ export async function listUsers(): Promise<AppUser[]> {
       m.ministry_role,
       m.ministry_direction,
       ${mpcPick.prayerRequest} AS prayer_request,
-      m.birth_date,
+      m.birth_date::text AS birth_date,
       m.email,
       m.account_provider,
       m.account_id,
@@ -331,7 +333,7 @@ export async function getUserById(id: number): Promise<AppUser | null> {
       m.ministry_role,
       m.ministry_direction,
       ${mpcPick.prayerRequest} AS prayer_request,
-      m.birth_date,
+      m.birth_date::text AS birth_date,
       m.email,
       m.account_provider,
       m.account_id,
