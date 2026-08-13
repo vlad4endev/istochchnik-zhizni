@@ -165,25 +165,26 @@ function memberIsAdmin(u: AppUser): boolean {
 }
 
 function appRoleBadgeClass(role: string): string {
+  const base = 'inline-flex max-w-full shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold';
   if (role === 'admin') {
-    return 'rounded-full bg-primary/12 px-2.5 py-0.5 text-xs font-bold text-primary';
+    return `${base} bg-primary/12 font-bold text-primary`;
   }
   if (role === 'parishioner') {
-    return 'rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-800';
+    return `${base} bg-slate-100 text-slate-800`;
   }
   if (role === 'pastor') {
-    return 'rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-900';
+    return `${base} bg-emerald-100 text-emerald-900`;
   }
   if (role === 'minister') {
-    return 'rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900';
+    return `${base} bg-amber-100 text-amber-900`;
   }
   if (role === 'editor') {
-    return 'rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-800';
+    return `${base} bg-violet-100 text-violet-800`;
   }
   if (role === 'musician') {
-    return 'rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900';
+    return `${base} bg-sky-100 text-sky-900`;
   }
-  return 'rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600';
+  return `${base} bg-stone-100 text-stone-600`;
 }
 
 function MemberAppRoleBadges({
@@ -1120,7 +1121,7 @@ function MembersSection({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {banner && (
         <div
           className={
@@ -1141,8 +1142,8 @@ function MembersSection({
         </div>
       )}
 
-      {/* Metric cards — клик включает фильтр */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+      {/* Метрики — компактная полоса, клик включает фильтр */}
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {(
           [
             {
@@ -1181,7 +1182,7 @@ function MembersSection({
             },
             {
               key: 'admin',
-              label: 'Администраторы',
+              label: 'Админы',
               value: stats.admins,
               valueClass: 'text-primary',
               active: roleFilter === 'admin',
@@ -1200,14 +1201,14 @@ function MembersSection({
             aria-pressed={card.active}
             className={
               card.active
-                ? 'rounded-xl border border-primary/40 bg-primary/[0.06] px-3 py-2.5 text-left sm:rounded-2xl sm:px-4 sm:py-3'
-                : 'rounded-xl border border-stone-200/80 bg-[var(--surface-elevated)] px-3 py-2.5 text-left transition hover:border-primary/30 sm:rounded-2xl sm:px-4 sm:py-3'
+                ? 'inline-flex shrink-0 items-baseline gap-1.5 rounded-full border border-primary/40 bg-primary/[0.08] px-3 py-1.5'
+                : 'inline-flex shrink-0 items-baseline gap-1.5 rounded-full border border-stone-200/80 bg-[var(--surface-elevated)] px-3 py-1.5 transition hover:border-primary/30'
             }
           >
-            <p className="text-[11px] text-stone-500 sm:text-xs">{card.label}</p>
-            <p className={`mt-0.5 text-xl font-extrabold sm:text-2xl ${card.valueClass}`}>{card.value}</p>
+            <span className="text-[11px] font-medium text-stone-500">{card.label}</span>
+            <span className={`text-sm font-extrabold tabular-nums ${card.valueClass}`}>{card.value}</span>
             {card.key === 'all' && isFetching && !isLoading ? (
-              <p className="mt-0.5 text-[10px] text-stone-400">Обновление…</p>
+              <span className="text-[10px] font-medium text-stone-400">…</span>
             ) : null}
           </button>
         ))}
@@ -1218,7 +1219,7 @@ function MembersSection({
         <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
           <button
             type="button"
-            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+            className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
             onClick={() => setShowBirthdays((v) => !v)}
             aria-expanded={showBirthdays}
           >
@@ -1273,8 +1274,8 @@ function MembersSection({
 
       {/* Toolbar */}
       <div className="sticky top-0 z-20 -mx-1 space-y-2 bg-[var(--surface,#f4f1ed)]/95 px-1 py-2 backdrop-blur">
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="relative min-w-[220px] flex-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <label className="relative min-w-0 flex-1 basis-[12rem]">
             <LuSearch
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400"
               aria-hidden
@@ -1299,7 +1300,7 @@ function MembersSection({
             ) : null}
           </label>
           <select
-            className="rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="max-w-[11.5rem] min-w-0 rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             value={roleFilter}
             onChange={(e) => patchMemberListParams({ role: e.target.value })}
             aria-label="Фильтр по роли приложения"
@@ -1313,7 +1314,7 @@ function MembersSection({
           </select>
           {ministryOptions.length > 0 ? (
             <select
-              className="rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              className="max-w-[12rem] min-w-0 rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               value={ministryFilter}
               onChange={(e) => patchMemberListParams({ dir: e.target.value })}
               aria-label="Фильтр по направлению служения"
@@ -1787,17 +1788,20 @@ function MembersSection({
       )}
 
       {/* Карточки — мобильные */}
-      <div className="space-y-3 shell:hidden">
+      <div className="space-y-1.5 shell:hidden">
         {filtered.length === 0 ? (
           <MemberListEmptyState filtersActive={filtersActive} onReset={clearMemberFilters} />
         ) : (
           letterGroups.map((group) => (
-            <div key={group.letter} className="space-y-2">
+            <div key={group.letter} className="space-y-1.5">
               <p
                 data-member-letter={group.letter}
-                className="sticky top-14 z-[1] bg-[var(--surface,#f4f1ed)]/95 px-1 py-1 text-xs font-extrabold uppercase tracking-wider text-stone-400 backdrop-blur"
+                className="sticky top-14 z-[1] bg-[var(--surface,#f4f1ed)]/95 px-1 py-0.5 text-[11px] font-extrabold uppercase tracking-wider text-stone-400 backdrop-blur"
               >
                 {group.letter === '#' ? 'Без фамилии' : group.letter}
+                <span className="ml-1.5 font-semibold normal-case tracking-normal text-stone-300">
+                  {group.members.length}
+                </span>
               </p>
               {group.members.map((u) => {
                 const bday = birthdayBadge(u, now, 30);
@@ -1805,7 +1809,7 @@ function MembersSection({
                 return (
                   <article
                     key={u.id}
-                    className={`cursor-pointer rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] transition hover:border-primary/40 hover:shadow-md ${u.is_active ? '' : 'opacity-70'}`}
+                    className={`cursor-pointer rounded-xl border border-stone-200/80 bg-[var(--surface-elevated)] px-3 py-2.5 shadow-sm transition hover:border-primary/40 ${u.is_active ? '' : 'opacity-70'}`}
                     role="button"
                     tabIndex={0}
                     onClick={() => openEdit(u)}
@@ -1816,54 +1820,55 @@ function MembersSection({
                       }
                     }}
                   >
-                    <div className="min-w-0">
-                      <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
-                      <button
-                        type="button"
-                        className="mt-0.5 text-left text-sm text-stone-600 hover:text-primary"
-                        title={u.phone_number ? 'Скопировать телефон' : undefined}
-                        onClick={(e) => void copyMemberPhone(e, u.phone_number)}
-                      >
-                        {formatMemberPhone(u.phone_number)}
-                      </button>
-                      {service ? <p className="mt-0.5 truncate text-xs text-stone-500">{service}</p> : null}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold leading-tight text-stone-900">{memberRosterName(u)}</p>
+                        <button
+                          type="button"
+                          className="mt-0.5 text-left text-[13px] tabular-nums text-stone-600 hover:text-primary"
+                          title={u.phone_number ? 'Скопировать телефон' : undefined}
+                          onClick={(e) => void copyMemberPhone(e, u.phone_number)}
+                        >
+                          {formatMemberPhone(u.phone_number)}
+                        </button>
+                        {service ? <p className="mt-0.5 truncate text-[11px] text-stone-500">{service}</p> : null}
+                      </div>
+                      {showImpersonateButton && !memberIsAdmin(u) ? (
+                        <button
+                          type="button"
+                          className="shrink-0 rounded-lg border border-stone-200 bg-white px-2 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-50"
+                          title="Войти в аккаунт"
+                          onClick={(e) => handleImpersonate(u, e)}
+                        >
+                          Войти
+                        </button>
+                      ) : null}
                     </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
                       <MemberRegistrationBadge u={u} />
                       <MemberAppRoleBadges u={u} onSelect={toggleRoleFilter} />
                       {bday ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2.5 py-0.5 text-xs font-semibold text-pink-800">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-semibold text-pink-800">
                           <span aria-hidden>🎂</span>
                           {bday.dateLabel}
-                          <span className="font-bold text-pink-700">· {bday.relativeLabel}</span>
                         </span>
                       ) : null}
                       {!u.is_active ? (
-                        <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
+                        <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-500">
                           Неактивен
                         </span>
                       ) : null}
                       {u.is_collection_coordinator ? (
-                        <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
                           Сбор
                         </span>
                       ) : null}
                       {u.in_prayer_cycle ? (
-                        <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900">
+                        <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-900">
                           В цикле
                         </span>
                       ) : null}
                     </div>
-                    {showImpersonateButton && !memberIsAdmin(u) ? (
-                      <button
-                        type="button"
-                        className="mt-3 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-                        title="Войти в аккаунт"
-                        onClick={(e) => handleImpersonate(u, e)}
-                      >
-                        👁 Войти
-                      </button>
-                    ) : null}
                   </article>
                 );
               })}
@@ -1873,128 +1878,140 @@ function MembersSection({
       </div>
 
       {/* Table — shown at shell+ breakpoint */}
-      <div className="hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)] shell:block">
-        <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-smooth">
-          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-stone-200 bg-stone-50/90 text-xs font-extrabold uppercase tracking-wider text-stone-500">
-                <th className="px-4 py-3">Участник</th>
-                <th className="whitespace-nowrap px-4 py-3">Телефон</th>
-                <th className="px-4 py-3">Роли</th>
-                <th className="px-4 py-3">Статус</th>
-                {showImpersonateButton ? <th className="px-4 py-3">Действия</th> : null}
+      <div className="hidden min-w-0 overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)] shell:block">
+        <table className="w-full table-fixed border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-stone-200 bg-stone-50/90 text-[11px] font-extrabold uppercase tracking-wider text-stone-500">
+              <th className="w-[40%] px-3 py-2">Участник</th>
+              <th className="hidden w-[10.75rem] px-3 py-2 lg:table-cell">Телефон</th>
+              <th className="px-3 py-2">Роли</th>
+              {showImpersonateButton ? (
+                <th className="w-[4.25rem] px-2 py-2">
+                  <span className="sr-only">Действия</span>
+                </th>
+              ) : null}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={showImpersonateButton ? 4 : 3} className="px-3 py-6">
+                  <MemberListEmptyState filtersActive={filtersActive} onReset={clearMemberFilters} />
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={showImpersonateButton ? 5 : 4} className="px-4 py-6">
-                    <MemberListEmptyState filtersActive={filtersActive} onReset={clearMemberFilters} />
+            ) : (
+              letterGroups.flatMap((group) => [
+                <tr key={`letter-${group.letter}`} className="bg-stone-50/90">
+                  <td
+                    colSpan={showImpersonateButton ? 4 : 3}
+                    data-member-letter={group.letter}
+                    className="px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-stone-400"
+                  >
+                    {group.letter === '#' ? 'Без фамилии' : group.letter}
+                    <span className="ml-2 font-semibold normal-case tracking-normal text-stone-300">
+                      {group.members.length}
+                    </span>
                   </td>
-                </tr>
-              ) : (
-                letterGroups.flatMap((group) => [
-                  <tr key={`letter-${group.letter}`} className="bg-stone-50/90">
-                    <td
-                      colSpan={showImpersonateButton ? 5 : 4}
-                      data-member-letter={group.letter}
-                      className="sticky top-0 z-[1] px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wider text-stone-400"
+                </tr>,
+                ...group.members.map((u) => {
+                  const name = memberRosterName(u);
+                  const { bg, fg } = memberAvatarColors(name);
+                  const bday = birthdayBadge(u, now, 30);
+                  const service = memberServiceLine(u);
+                  return (
+                    <tr
+                      key={u.id}
+                      tabIndex={0}
+                      title="Открыть карточку"
+                      className={`cursor-pointer border-b border-stone-100/90 transition last:border-0 hover:bg-primary/[0.06] ${u.is_active ? '' : 'opacity-70'}`}
+                      onClick={() => openEdit(u)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openEdit(u);
+                        }
+                      }}
                     >
-                      {group.letter === '#' ? 'Без фамилии' : group.letter}
-                      <span className="ml-2 font-semibold normal-case tracking-normal text-stone-300">
-                        {group.members.length}
-                      </span>
-                    </td>
-                  </tr>,
-                  ...group.members.map((u) => {
-                    const name = memberRosterName(u);
-                    const { bg, fg } = memberAvatarColors(name);
-                    const bday = birthdayBadge(u, now, 30);
-                    const service = memberServiceLine(u);
-                    return (
-                      <tr
-                        key={u.id}
-                        tabIndex={0}
-                        title="Открыть карточку"
-                        className={`cursor-pointer border-b border-stone-100/90 transition last:border-0 hover:bg-primary/[0.06] ${u.is_active ? '' : 'opacity-70'}`}
-                        onClick={() => openEdit(u)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            openEdit(u);
-                          }
-                        }}
-                      >
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-2.5">
-                            <div
-                              className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-                              style={{ backgroundColor: bg, color: fg }}
-                              aria-hidden
-                            >
-                              {memberInitials(u)}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="truncate font-medium text-stone-900">{name}</p>
-                              {service ? <p className="truncate text-xs text-stone-500">{service}</p> : null}
-                              {bday ? (
-                                <p className="mt-0.5 truncate text-[11px] font-semibold text-pink-800">
-                                  <span aria-hidden>🎂</span> {bday.dateLabel}{' '}
-                                  <span className="font-bold text-pink-700">· {bday.relativeLabel}</span>
-                                </p>
-                              ) : null}
-                            </div>
+                      <td className="px-3 py-1.5 align-middle">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <div
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
+                            style={{ backgroundColor: bg, color: fg }}
+                            aria-hidden
+                          >
+                            {memberInitials(u)}
                           </div>
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-2.5">
-                          {u.phone_number ? (
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium leading-tight text-stone-900">{name}</p>
+                            {service ? <p className="truncate text-[11px] leading-tight text-stone-500">{service}</p> : null}
+                            <p className="truncate text-[12px] tabular-nums leading-tight text-stone-600 lg:hidden">
+                              {u.phone_number ? (
+                                <button
+                                  type="button"
+                                  className="hover:text-primary"
+                                  title="Скопировать телефон"
+                                  onClick={(e) => void copyMemberPhone(e, u.phone_number)}
+                                >
+                                  {formatMemberPhone(u.phone_number)}
+                                </button>
+                              ) : (
+                                <span className="text-stone-400">—</span>
+                              )}
+                            </p>
+                            {bday ? (
+                              <p className="truncate text-[11px] font-semibold text-pink-800">
+                                <span aria-hidden>🎂</span> {bday.dateLabel}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="hidden px-3 py-1.5 align-middle lg:table-cell">
+                        {u.phone_number ? (
+                          <button
+                            type="button"
+                            className="block max-w-full truncate tabular-nums text-stone-600 hover:text-primary"
+                            title="Скопировать телефон"
+                            onClick={(e) => void copyMemberPhone(e, u.phone_number)}
+                          >
+                            {formatMemberPhone(u.phone_number)}
+                          </button>
+                        ) : (
+                          <span className="text-stone-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 align-middle">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1">
+                          <MemberAppRoleBadges u={u} onSelect={toggleRoleFilter} />
+                          <MemberRegistrationBadge u={u} />
+                          {!u.is_active ? (
+                            <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-500">
+                              Неактивен
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      {showImpersonateButton ? (
+                        <td className="px-2 py-1.5 align-middle">
+                          {!memberIsAdmin(u) ? (
                             <button
                               type="button"
-                              className="text-stone-600 hover:text-primary"
-                              title="Скопировать телефон"
-                              onClick={(e) => void copyMemberPhone(e, u.phone_number)}
+                              className="rounded-lg border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-50"
+                              title="Войти в аккаунт"
+                              onClick={(e) => handleImpersonate(u, e)}
                             >
-                              {formatMemberPhone(u.phone_number)}
+                              Войти
                             </button>
-                          ) : (
-                            <span className="text-stone-400">—</span>
-                          )}
+                          ) : null}
                         </td>
-                        <td className="px-4 py-2.5">
-                          <MemberAppRoleBadges u={u} onSelect={toggleRoleFilter} />
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <MemberRegistrationBadge u={u} />
-                            {!u.is_active ? (
-                              <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
-                                Неактивен
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
-                        {showImpersonateButton ? (
-                          <td className="px-4 py-2.5">
-                            {!memberIsAdmin(u) ? (
-                              <button
-                                type="button"
-                                className="rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-                                title="Войти в аккаунт"
-                                onClick={(e) => handleImpersonate(u, e)}
-                              >
-                                👁 Войти
-                              </button>
-                            ) : null}
-                          </td>
-                        ) : null}
-                      </tr>
-                    );
-                  }),
-                ])
-              )}
-            </tbody>
-          </table>
-        </div>
+                      ) : null}
+                    </tr>
+                  );
+                }),
+              ])
+            )}
+          </tbody>
+        </table>
       </div>
 
       {editing ? (
