@@ -222,6 +222,26 @@ function splitMobileNavTabs(visible: NavItem[]): { primary: NavItem[]; overflow:
   return { primary, overflow };
 }
 
+const MOBILE_MORE_TILE_BASE =
+  'relative flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-2xl border px-1.5 py-2.5 text-center transition-[transform,background-color,border-color,color] duration-150 tap-highlight-transparent motion-reduce:transition-none motion-reduce:active:scale-100 active:scale-[0.97]';
+
+function mobileMoreTileClass(active: boolean): string {
+  return [
+    MOBILE_MORE_TILE_BASE,
+    active
+      ? 'border-primary/25 bg-primary/12 text-primary shadow-sm dark:border-primary/35 dark:bg-primary/20'
+      : 'border-stone-200/70 bg-stone-50/90 text-stone-800 hover:border-stone-300/90 hover:bg-white dark:border-stone-700/80 dark:bg-stone-800/55 dark:text-stone-100 dark:hover:border-stone-600 dark:hover:bg-stone-800/90',
+  ].join(' ');
+}
+
+function MobileMoreBadge({ count }: { count: number }) {
+  return (
+    <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white dark:ring-stone-900">
+      {formatNavBadgeCount(count)}
+    </span>
+  );
+}
+
 function MobileNavOverflow({
   items,
   activityBadgeTotal,
@@ -243,6 +263,13 @@ function MobileNavOverflow({
   const [adminOpen, setAdminOpen] = useState(isAdminRoute);
   const menuId = useId();
   const touchStartYRef = useRef<number | null>(null);
+
+  const sectionItems = useMemo(() => items.filter((item) => item.to !== '/admin'), [items]);
+  const hasAdmin = items.some((item) => item.to === '/admin');
+  const adminBadgeTotal = useMemo(() => {
+    if (!hasAdmin) return 0;
+    return ADMIN_TABS.reduce((sum, tab) => sum + (adminBadgeFor(tab.id) ?? 0), 0);
+  }, [adminBadgeFor, hasAdmin]);
 
   useEffect(() => {
     setOpen(false);
@@ -311,7 +338,7 @@ function MobileNavOverflow({
             <div className="flex max-h-[min(78dvh,640px)] flex-col">
               <div className="shrink-0 pt-2">
                 <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-stone-300/90 dark:bg-stone-600" aria-hidden />
-                <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-0.5">
+                <div className="flex items-center justify-between gap-3 px-4 pb-2.5 pt-0.5">
                   <p className="text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100">
                     Все разделы
                   </p>
@@ -325,110 +352,105 @@ function MobileNavOverflow({
                   </button>
                 </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(0.75rem,env(safe-area-inset-bottom,12px))] pt-1 sm:px-4 [webkit-overflow-scrolling:touch]">
-                <div className="app-mobile-sections-grid mx-auto grid w-full max-w-full grid-cols-2 gap-2.5 min-[360px]:grid-cols-3 min-[440px]:grid-cols-4 sm:gap-3">
-                  {items.map((item) => {
-                    if (item.to === '/admin') {
-                      return (
-                        <div key={item.to} className="col-span-full flex flex-col gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setAdminOpen((v) => !v)}
-                            className={[
-                              'relative flex min-h-[52px] w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-colors',
-                              isAdminRoute
-                                ? 'border-primary/25 bg-primary/12 text-primary shadow-sm dark:border-primary/35 dark:bg-primary/20'
-                                : 'border-stone-200/70 bg-stone-50/90 text-stone-800 dark:border-stone-700/80 dark:bg-stone-800/55 dark:text-stone-100',
-                            ].join(' ')}
-                            aria-expanded={adminOpen}
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(0.75rem,env(safe-area-inset-bottom,12px))] pt-0.5 sm:px-4 [webkit-overflow-scrolling:touch]">
+                <div className="mx-auto flex w-full max-w-full flex-col gap-4">
+                  {sectionItems.length > 0 ? (
+                    <div className="app-mobile-sections-grid grid w-full grid-cols-2 gap-2.5 min-[360px]:grid-cols-3 min-[440px]:grid-cols-4 sm:gap-3">
+                      {sectionItems.map((item) => {
+                        const Icon = item.Icon;
+                        const badge = navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount);
+                        return (
+                          <PrefetchNavLink
+                            key={item.to}
+                            to={item.to}
+                            queryKey={NAV_PREFETCH_BY_PATH[item.to]?.queryKey}
+                            queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
+                            staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
+                            onClick={() => setOpen(false)}
+                            className={({ isActive }) => mobileMoreTileClass(isActive)}
                           >
-                            <LuShield className={navIconClass(isAdminRoute, true)} strokeWidth={2} aria-hidden />
-                            <span className="min-w-0 flex-1 text-sm font-semibold">Админ</span>
-                            <LuChevronDown
-                              className={[
-                                'h-4 w-4 shrink-0 transition-transform',
-                                adminOpen ? 'rotate-0' : '-rotate-90',
-                              ].join(' ')}
-                              strokeWidth={2.25}
-                              aria-hidden
-                            />
-                          </button>
-                          {adminOpen ? (
-                            <div className="grid grid-cols-2 gap-2 min-[360px]:grid-cols-3 min-[440px]:grid-cols-4">
-                              {ADMIN_TABS.map((tab) => {
-                                const Icon = tab.Icon;
-                                const active = isAdminRoute && activeAdminTab === tab.id;
-                                const badge = adminBadgeFor(tab.id);
-                                return (
-                                  <Link
-                                    key={tab.id}
-                                    to={adminTabPath(tab.id)}
-                                    onClick={() => setOpen(false)}
-                                    aria-current={active ? 'page' : undefined}
-                                    className={[
-                                      'relative flex min-h-[76px] flex-col items-center justify-center gap-1 rounded-2xl border px-1.5 py-2.5 text-center transition-[transform,background-color,border-color,color] duration-150 tap-highlight-transparent active:scale-[0.97]',
-                                      active
-                                        ? 'border-primary/25 bg-primary/12 text-primary shadow-sm dark:border-primary/35 dark:bg-primary/20'
-                                        : 'border-stone-200/70 bg-stone-50/90 text-stone-800 hover:border-stone-300/90 hover:bg-white dark:border-stone-700/80 dark:bg-stone-800/55 dark:text-stone-100',
-                                    ].join(' ')}
-                                  >
-                                    <span className="relative inline-flex shrink-0">
-                                      <Icon className={navIconClass(active, true)} strokeWidth={2} aria-hidden />
-                                      {badge != null ? (
-                                        <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white dark:ring-stone-900">
-                                          {formatNavBadgeCount(badge)}
-                                        </span>
-                                      ) : null}
-                                    </span>
-                                    <span className="line-clamp-2 w-full max-w-[5.5rem] text-[11px] font-semibold leading-snug sm:max-w-none sm:text-xs">
-                                      {tab.navLabel ?? tab.label}
-                                    </span>
-                                  </Link>
-                                );
-                              })}
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    }
-                    const Icon = item.Icon;
-                    return (
-                      <PrefetchNavLink
-                        key={item.to}
-                        to={item.to}
-                        queryKey={NAV_PREFETCH_BY_PATH[item.to]?.queryKey}
-                        queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
-                        staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
-                        onClick={() => setOpen(false)}
-                        className={({ isActive }) =>
-                          [
-                            'relative flex min-h-[76px] flex-col items-center justify-center gap-1 rounded-2xl border px-1.5 py-2.5 text-center transition-[transform,background-color,border-color,color] duration-150 tap-highlight-transparent motion-reduce:transition-none motion-reduce:active:scale-100 active:scale-[0.97]',
-                            isActive
-                              ? 'border-primary/25 bg-primary/12 text-primary shadow-sm dark:border-primary/35 dark:bg-primary/20'
-                              : 'border-stone-200/70 bg-stone-50/90 text-stone-800 hover:border-stone-300/90 hover:bg-white dark:border-stone-700/80 dark:bg-stone-800/55 dark:text-stone-100 dark:hover:border-stone-600 dark:hover:bg-stone-800/90',
-                          ].join(' ')
-                        }
-                      >
-                        {({ isActive }) => (
-                          <>
-                            <span className="relative inline-flex shrink-0">
-                              <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
-                              {navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount) > 0 ? (
-                                <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white dark:ring-stone-900">
-                                  {formatNavBadgeCount(
-                                    navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount),
-                                  )}
+                            {({ isActive }) => (
+                              <>
+                                <span className="relative inline-flex shrink-0">
+                                  <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                                  {badge > 0 ? <MobileMoreBadge count={badge} /> : null}
                                 </span>
-                              ) : null}
-                            </span>
-                            <span className="line-clamp-2 w-full max-w-[5.5rem] text-[11px] font-semibold leading-snug sm:max-w-none sm:text-xs">
-                              {item.label}
-                            </span>
-                          </>
-                        )}
-                      </PrefetchNavLink>
-                    );
-                  })}
+                                <span className="line-clamp-2 w-full max-w-[5.5rem] text-[11px] font-semibold leading-snug sm:max-w-none sm:text-xs">
+                                  {item.label}
+                                </span>
+                              </>
+                            )}
+                          </PrefetchNavLink>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+
+                  {hasAdmin ? (
+                    <section className="app-mobile-more-admin flex flex-col gap-2.5" aria-label="Админ">
+                      <button
+                        type="button"
+                        onClick={() => setAdminOpen((v) => !v)}
+                        className={[
+                          'flex min-h-[44px] w-full items-center gap-2.5 rounded-xl px-1 py-1 text-left transition-colors',
+                          isAdminRoute ? 'text-primary' : 'text-stone-600 dark:text-stone-300',
+                        ].join(' ')}
+                        aria-expanded={adminOpen}
+                      >
+                        <span
+                          className={[
+                            'grid h-8 w-8 shrink-0 place-items-center rounded-lg',
+                            isAdminRoute
+                              ? 'bg-primary/15 text-primary'
+                              : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400',
+                          ].join(' ')}
+                          aria-hidden
+                        >
+                          <LuShield className="h-4 w-4" strokeWidth={2} />
+                        </span>
+                        <span className="min-w-0 flex-1 text-[13px] font-semibold tracking-tight">Админ</span>
+                        {adminBadgeTotal > 0 && !adminOpen ? (
+                          <span className="inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-extrabold leading-none text-white">
+                            {formatNavBadgeCount(adminBadgeTotal)}
+                          </span>
+                        ) : null}
+                        <LuChevronDown
+                          className={[
+                            'h-4 w-4 shrink-0 text-stone-400 transition-transform duration-200',
+                            adminOpen ? 'rotate-0' : '-rotate-90',
+                          ].join(' ')}
+                          strokeWidth={2.25}
+                          aria-hidden
+                        />
+                      </button>
+                      {adminOpen ? (
+                        <div className="app-mobile-sections-grid grid w-full grid-cols-2 gap-2.5 min-[360px]:grid-cols-3 min-[440px]:grid-cols-4 sm:gap-3">
+                          {ADMIN_TABS.map((tab) => {
+                            const Icon = tab.Icon;
+                            const active = isAdminRoute && activeAdminTab === tab.id;
+                            const badge = adminBadgeFor(tab.id);
+                            return (
+                              <Link
+                                key={tab.id}
+                                to={adminTabPath(tab.id)}
+                                onClick={() => setOpen(false)}
+                                aria-current={active ? 'page' : undefined}
+                                className={mobileMoreTileClass(active)}
+                              >
+                                <span className="relative inline-flex shrink-0">
+                                  <Icon className={navIconClass(active, true)} strokeWidth={2} aria-hidden />
+                                  {badge != null ? <MobileMoreBadge count={badge} /> : null}
+                                </span>
+                                <span className="line-clamp-2 w-full max-w-[5.5rem] text-[11px] font-semibold leading-snug sm:max-w-none sm:text-xs">
+                                  {tab.navLabel ?? tab.label}
+                                </span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </section>
+                  ) : null}
                 </div>
               </div>
             </div>

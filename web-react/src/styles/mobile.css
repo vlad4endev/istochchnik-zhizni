@@ -127,22 +127,31 @@
     gap: 12px !important;
   }
 
-  /* Нижний лист «Все разделы»: возвращаем многоколоночную сетку поверх общего grid-cols-* fallback. */
+  /* Нижний лист «Все разделы»: многоколоночная сетка поверх общего grid-cols-* fallback. */
+  .app-mobile-nav-more-sheet .app-mobile-sections-grid,
   .app-mobile-sections-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 10px !important;
   }
 
   @media (min-width: 360px) {
+    .app-mobile-nav-more-sheet .app-mobile-sections-grid,
     .app-mobile-sections-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     }
   }
 
   @media (min-width: 440px) {
+    .app-mobile-nav-more-sheet .app-mobile-sections-grid,
     .app-mobile-sections-grid {
       grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
     }
+  }
+
+  /* Админ-блок ниже основных плиток: визуальный разделитель без «карточки на всю ширину». */
+  .app-mobile-nav-more-sheet .app-mobile-more-admin {
+    padding-top: 12px;
+    border-top: 1px solid color-mix(in srgb, var(--border, #e7e5e4) 85%, transparent);
   }
 
   .profile-widget {
