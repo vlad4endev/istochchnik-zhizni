@@ -7,6 +7,7 @@
 # 3. Том api_uploads_prod: аватары и файлы мессенджера в /app/uploads. Без тома файлы пропадут при обновлении
 #    образа / пересоздании контейнера (в чате останутся ссылки — 404). Не используйте `docker compose down -v`.
 #    Альтернатива: bind-mount хоста + UPLOADS_DIR (см. .env.example).
+# 3b. Том api_backups_prod: резервные копии из админки (/app/backups). Без тома снимки пропадут при recreate.
 # 4. Запуск: docker compose -f docker-compose.prod.yml up -d --build
 # 5. Остановка: docker compose -f docker-compose.prod.yml down
 # 6. Стабильный мессенджер при нескольких инстансах API: Redis — docker-compose.redis-addon.yml (см. .env.example).
@@ -43,6 +44,7 @@ services:
         condition: service_healthy
     volumes:
       - api_uploads_prod:/app/uploads
+      - api_backups_prod:/app/backups
       - ./secrets:/app/secrets:ro
       # Либо каталог на VPS (проще бэкапить): раскомментируйте и задайте UPLOADS_DIR=/data/uploads
       # - /var/lib/istochnik/uploads:/data/uploads
@@ -50,6 +52,7 @@ services:
       NODE_ENV: production
       PORT: "40978"
       DATABASE_URL: ${DATABASE_URL:?Задайте DATABASE_URL, хост db — имя сервиса Postgres}
+      BACKUP_DIR: ${BACKUP_DIR:-/app/backups}
       DB_SSL: ${DB_SSL:-false}
       DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}
       SKIP_DB_INIT_ON_START: ${SKIP_DB_INIT_ON_START:-false}
@@ -109,3 +112,4 @@ services:
 volumes:
   postgres_data_prod:
   api_uploads_prod:
+  api_backups_prod:

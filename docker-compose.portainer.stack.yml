@@ -23,6 +23,9 @@
 #   4) В Environment стека можно задать UPLOADS_DIR=/app/uploads (или не задавать — это значение по умолчанию).
 #
 # Проверка: в логах контейнера api при старте строка [uploads] serving static files from: ...
+#
+# Резервные копии (Админка → Резервная копия): том istochnik_app_backups → /app/backups.
+# Без тома снимки пропадут при recreate контейнера.
 
 services:
   api:
@@ -33,10 +36,12 @@ services:
     restart: unless-stopped
     volumes:
       - istochnik_app_uploads:/app/uploads
+      - istochnik_app_backups:/app/backups
       - ./secrets:/app/secrets:ro
     environment:
       PORT: "40978"
       UPLOADS_DIR: ${UPLOADS_DIR:-}
+      BACKUP_DIR: ${BACKUP_DIR:-/app/backups}
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in Portainer}
       DB_SSL: ${DB_SSL:-true}
       DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}
@@ -107,3 +112,4 @@ services:
 
 volumes:
   istochnik_app_uploads:
+  istochnik_app_backups:

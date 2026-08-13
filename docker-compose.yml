@@ -7,10 +7,12 @@ services:
     restart: unless-stopped
     volumes:
       - ./uploads:/app/uploads
+      - ./backups:/app/backups
       - ./secrets:/app/secrets:ro
     environment:
       PORT: "40978"
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+      BACKUP_DIR: ${BACKUP_DIR:-/app/backups}
       DB_SSL: ${DB_SSL:-false}
       DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}
       DB_DEBUG_LOG: ${DB_DEBUG_LOG:-false}

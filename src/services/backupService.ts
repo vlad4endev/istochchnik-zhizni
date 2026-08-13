@@ -19,8 +19,35 @@ import {
   sendTelegramTextToChat,
 } from './telegramService';
 
-const PROJECT_ROOT = path.resolve(__dirname, '../..');
+const PROJECT_ROOT = resolveProjectRoot();
 const TELEGRAM_DOCUMENT_MAX_BYTES = 49 * 1024 * 1024; // запас до лимита Bot API ~50MB
+
+/** Корень репозитория / контейнера (/app), где лежат scripts/backup.sh. */
+function resolveProjectRoot(): string {
+  const candidates = [
+    process.env.PROJECT_ROOT?.trim(),
+    path.resolve(__dirname, '../..'), // dist/services → /app
+    path.resolve(__dirname, '../../..'), // на случай вложенности
+    process.cwd(),
+    '/app',
+  ].filter((v): v is string => Boolean(v));
+
+  for (const root of candidates) {
+    if (fs.existsSync(path.join(root, 'scripts/backup.sh'))) {
+      return root;
+    }
+  }
+  // fallback: как раньше (ожидаем /app при Docker)
+  return path.resolve(__dirname, '../..');
+}
+
+function backupScriptPath(): string {
+  return path.join(PROJECT_ROOT, 'scripts/backup.sh');
+}
+
+function restoreScriptPath(): string {
+  return path.join(PROJECT_ROOT, 'scripts/restore.sh');
+}
 
 let createInFlight: Promise<BackupCreateResult> | null = null;
 let restoreInFlight: Promise<BackupRestoreResult> | null = null;
@@ -439,7 +466,7 @@ export async function sendBackupViaTelegram(
 async function runBackupScript(retentionDays: number): Promise<{ id: string; dirPath: string }> {
   const root = backupsRoot();
   await fsp.mkdir(root, { recursive: true });
-  const script = path.join(PROJECT_ROOT, 'scripts/backup.sh');
+  const script = backupScriptPath();
   if (!fs.existsSync(script)) {
     throw new Error('backup_script_missing');
   }
@@ -623,7 +650,7 @@ async function runRestoreScript(
     skipSafetyBackup?: boolean;
   },
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  const script = path.join(PROJECT_ROOT, 'scripts/restore.sh');
+  const script = restoreScriptPath();
   if (!fs.existsSync(script)) {
     throw new Error('restore_script_missing');
   }

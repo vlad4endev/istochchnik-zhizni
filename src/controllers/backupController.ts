@@ -51,10 +51,18 @@ function mapBackupError(error: unknown): { status: number; error: string } {
     return { status: 400, error: 'Время должно быть в формате HH:MM' };
   }
   if (msg === 'backup_script_missing') {
-    return { status: 500, error: 'Скрипт scripts/backup.sh не найден на сервере' };
+    return {
+      status: 500,
+      error:
+        'Скрипт scripts/backup.sh не найден в контейнере API. Пересоберите образ API (Dockerfile должен копировать scripts/) и перезапустите стек.',
+    };
   }
   if (msg === 'restore_script_missing') {
-    return { status: 500, error: 'Скрипт scripts/restore.sh не найден на сервере' };
+    return {
+      status: 500,
+      error:
+        'Скрипт scripts/restore.sh не найден в контейнере API. Пересоберите образ API и перезапустите стек.',
+    };
   }
   if (msg === 'restore_confirm_required') {
     return {
