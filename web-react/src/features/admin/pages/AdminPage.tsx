@@ -13,7 +13,6 @@ import {
   LuCalendarDays,
   LuChevronDown,
   LuGripVertical,
-  LuHistory,
   LuImage,
   LuSearch,
   LuTable2,
@@ -35,7 +34,7 @@ import { AiAssistantMonitorSection } from '../AiAssistantMonitorSection';
 import { AiSettingsSection } from '../AiSettingsSection';
 import { AppSectionsAccessSection } from '../AppSectionsAccessSection';
 import { RolePermissionsManagerSection } from '../RolePermissionsManagerSection';
-import { MemberAppRolesPicker } from '../MemberAppRolesPicker';
+import { AdminMemberEditSheet } from '../AdminMemberEditSheet';
 import {
   countMembersMatchingRole,
   displayMemberAppRoles,
@@ -57,7 +56,6 @@ import { ProjectJournalSection } from '../ProjectJournalSection';
 import { DiagnosticsDashboardSection } from '../DiagnosticsDashboardSection';
 import { useBrandingStore } from '../../branding/brandingStore';
 import {
-  addAdminPrayerRequestHistory,
   anchorPrayerCycleMember,
   apiErrorMessage,
   bulkCreateAdminMembers,
@@ -105,7 +103,6 @@ import {
   splitMemberNameParts,
 } from '../../../lib/memberRosterName';
 import type { AppUser } from '../types';
-import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useImpersonation } from '../hooks/useImpersonation';
 import { isAppAdministratorSession } from '../../auth/authStore';
@@ -664,8 +661,6 @@ function MembersSection({
     is_active: true,
     in_prayer_cycle: false,
   });
-  const [oneTimeId, setOneTimeId] = useState<number | null>(null);
-  const [oneTimeDate, setOneTimeDate] = useState('');
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [showBulkCreate, setShowBulkCreate] = useState(false);
   const [bulkRows, setBulkRows] = useState<BulkMemberRow[]>(() => [
@@ -675,8 +670,6 @@ function MembersSection({
   ]);
   const [bulkMergeDupes, setBulkMergeDupes] = useState(false);
   const [bulkPasteText, setBulkPasteText] = useState('');
-  const [isPrayerRequestEditing, setIsPrayerRequestEditing] = useState(false);
-  const [showPrayerHistory, setShowPrayerHistory] = useState(false);
   const memberEditTitleId = useId();
 
   useEffect(() => {
@@ -1068,13 +1061,8 @@ function MembersSection({
   });
 
   const oneTimeMut = useMutation({
-    mutationFn: () => {
-      if (oneTimeId == null || !oneTimeDate.trim()) throw new Error('no date');
-      return setOneTimeMemberDate(oneTimeId, oneTimeDate.trim());
-    },
+    mutationFn: ({ id, date }: { id: number; date: string }) => setOneTimeMemberDate(id, date),
     onSuccess: () => {
-      setOneTimeId(null);
-      setOneTimeDate('');
       setBanner({ type: 'ok', text: 'Разовая дата назначена.' });
       invalidate();
     },
@@ -1083,8 +1071,6 @@ function MembersSection({
 
   function openEdit(u: AppUser) {
     setEditing(u);
-    setIsPrayerRequestEditing(false);
-    setShowPrayerHistory(false);
     const { first_name: ef, last_name: el } = splitNameForEditForm(u);
     setEditForm({
       first_name: ef,
@@ -1112,9 +1098,6 @@ function MembersSection({
     setBanner(null);
     createMut.mutate();
   }
-
-  const oneTimeSubject =
-    oneTimeId != null ? ((data ?? []).find((u) => u.id === oneTimeId) ?? null) : null;
 
   if (isLoading) {
     return (
@@ -2014,716 +1997,43 @@ function MembersSection({
         </div>
       </div>
 
-      {oneTimeId != null && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="one-time-title"
-        >
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
-            <h3 id="one-time-title" className="text-lg font-extrabold text-stone-900">
-              Разовая дата в цикле
-            </h3>
-            <p className="mt-1 text-sm text-stone-600">
-              Член церкви:{' '}
-              <strong>{oneTimeSubject ? memberRosterName(oneTimeSubject) : `#${oneTimeId}`}</strong>
-            </p>
-            <p className="mt-2 text-xs text-stone-500">
-              Назначение на один день без сдвига общего расписания цикла.
-            </p>
-            <label className="mt-4 block text-xs font-semibold text-stone-600">Дата</label>
-            <input
-              type="date"
-              className={`${fieldClass()} mt-1`}
-              value={oneTimeDate}
-              onChange={(e) => setOneTimeDate(e.target.value)}
-            />
-            <div className="mt-5 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={btnPrimary('flex-1')}
-                disabled={!oneTimeDate || oneTimeMut.isPending}
-                onClick={() => {
-                  setBanner(null);
-                  oneTimeMut.mutate();
-                }}
-              >
-                {oneTimeMut.isPending ? 'Сохранение…' : 'Сохранить'}
-              </button>
-              <button type="button" className={btnSecondary()} onClick={() => setOneTimeId(null)}>
-                Отмена
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editing && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4 max-lg:p-0"
-          role="presentation"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setEditing(null);
+      {editing ? (
+        <AdminMemberEditSheet
+          editing={editing}
+          editForm={editForm}
+          setEditForm={setEditForm}
+          titleId={memberEditTitleId}
+          dirs={dirs}
+          roleOptionsForDirection={roleOptionsForDirection}
+          savePending={saveEditMut.isPending}
+          deletePending={deleteMut.isPending}
+          swapPending={swapNameFieldsMut.isPending}
+          resetPasswordPending={resetPasswordMut.isPending}
+          oneTimePending={oneTimeMut.isPending}
+          roleMut={roleMut}
+          onClose={() => setEditing(null)}
+          onSave={() => saveEditMut.mutate()}
+          onDelete={() => deleteMut.mutate(editing.id)}
+          onSwapNames={() => swapNameFieldsMut.mutate()}
+          onResetPassword={() => resetPasswordMut.mutate(editing.id)}
+          onClearBanner={() => setBanner(null)}
+          onToggleCollectionCoordinator={() => {
+            void updateAdminMember(editing.id, {
+              is_collection_coordinator: !editing.is_collection_coordinator,
+            }).then(
+              (updated) => {
+                setEditing(updated);
+                setBanner({ type: 'ok', text: 'Роль «сбор» обновлена.' });
+                invalidate();
+              },
+              (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
+            );
           }}
-        >
-          <div
-            className="user-modal max-h-[90dvh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl max-lg:max-h-[100dvh] lg:max-h-[90dvh]"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={memberEditTitleId}
-          >
-            {/* Header */}
-            <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-3 border-b border-stone-100 bg-white px-4 py-3 backdrop-blur-sm max-lg:px-3 max-lg:py-2.5 sm:px-5 sm:py-4">
-              <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
-                <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold sm:h-[52px] sm:w-[52px] sm:text-base"
-                  style={{ backgroundColor: '#F3EEF0', color: '#7B2D3F' }}
-                >
-                  {memberInitials(editing)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h3
-                    id={memberEditTitleId}
-                    className="text-base font-medium tracking-tight text-stone-900 sm:text-[18px]"
-                  >
-                    {memberRosterName(editing)}
-                  </h3>
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5 sm:mt-1.5 sm:gap-2">
-                    <MemberRegistrationBadge u={editing} />
-                    <MemberAppRoleBadges u={editing} />
-                    <span
-                      className={
-                        editForm.is_active
-                          ? 'rounded-full bg-teal-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-teal-800 sm:px-2.5 sm:text-[10px]'
-                          : 'rounded-full bg-stone-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-stone-500 sm:px-2.5 sm:text-[10px]'
-                      }
-                    >
-                      {editForm.is_active ? 'Активен' : 'Неактивен'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditing(null)}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-stone-200 text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 max-lg:h-10 max-lg:w-10 max-lg:min-h-[44px] max-lg:min-w-[44px] lg:h-7 lg:w-7"
-                aria-label="Закрыть карточку"
-                title="Закрыть"
-              >
-                <LuX className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
-              </button>
-            </div>
-
-            <div className="user-form space-y-4 p-4 max-lg:space-y-3 sm:space-y-5 sm:p-5">
-              {/* Personal info */}
-              <section>
-                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400 sm:mb-3">
-                  Личные данные
-                </p>
-                <div className="user-card-grid grid gap-2.5 sm:grid-cols-2 sm:gap-3">
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</label>
-                    <input
-                      className={fieldClass()}
-                      value={editForm.last_name}
-                      onChange={(e) => setEditForm((s) => ({ ...s, last_name: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Имя</label>
-                    <input
-                      className={fieldClass()}
-                      value={editForm.first_name}
-                      onChange={(e) => setEditForm((s) => ({ ...s, first_name: e.target.value }))}
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <button
-                      type="button"
-                      className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
-                      disabled={swapNameFieldsMut.isPending}
-                      onClick={() => {
-                        if (
-                          !window.confirm(
-                            'Поменять в базе местами поля «имя» и «фамилия» у этого пользователя? Используйте, если данные оказались в неправильных колонках.',
-                          )
-                        ) {
-                          return;
-                        }
-                        setBanner(null);
-                        swapNameFieldsMut.mutate();
-                      }}
-                    >
-                      {swapNameFieldsMut.isPending ? 'Меняем…' : 'поменять местами →'}
-                    </button>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Телефон</label>
-                    <input
-                      className={fieldClass()}
-                      inputMode="tel"
-                      value={editForm.phone_number}
-                      onChange={(e) => setEditForm((s) => ({ ...s, phone_number: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Telegram ID</label>
-                    <input
-                      className={fieldClass()}
-                      value={editForm.telegram_chat_id}
-                      onChange={(e) => setEditForm((s) => ({ ...s, telegram_chat_id: e.target.value }))}
-                      placeholder="например: 123456789"
-                    />
-                    {editing?.telegram_delivery_blocked ? (
-                      <p className="mt-1.5 text-xs font-semibold text-red-700">
-                        ● Telegram недоступен для рассылок
-                        {editing.telegram_delivery_block_reason ? `: ${editing.telegram_delivery_block_reason}` : ''}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div>
-                    <BirthDayMonthFields
-                      value={editForm.birth_date}
-                      onChange={(apiYmd) => setEditForm((s) => ({ ...s, birth_date: apiYmd }))}
-                      labelClassName="mb-1 block text-xs font-semibold text-stone-600"
-                      selectClassName={fieldClass()}
-                    />
-                  </div>
-                </div>
-              </section>
-
-              {/* Ministry */}
-              <section>
-                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400 sm:mb-3">
-                  Служение
-                </p>
-                <div className="user-card-grid grid gap-2.5 sm:grid-cols-2 sm:gap-3">
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Направление</label>
-                    <details className="group relative">
-                      <summary
-                        className={`${fieldClass()} list-none cursor-pointer pr-9 [&::-webkit-details-marker]:hidden`}
-                      >
-                        {directionArray(editForm.ministry_direction).length > 0
-                          ? directionArray(editForm.ministry_direction).join(', ')
-                          : 'Выберите направление(я)'}
-                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 transition group-open:rotate-180">
-                          ▾
-                        </span>
-                      </summary>
-                      <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-stone-200 bg-white p-2 shadow-lg">
-                        <div className="mb-2 flex gap-2 border-b border-stone-200 pb-2">
-                          <button
-                            type="button"
-                            className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
-                            onClick={() =>
-                              setEditForm((s) => ({
-                                ...s,
-                                ministry_direction: normalizeMinistryRoles(dirs.map((d) => d.title).join(', ')),
-                              }))
-                            }
-                          >
-                            Выбрать все
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
-                            onClick={() => setEditForm((s) => ({ ...s, ministry_direction: '' }))}
-                          >
-                            Очистить
-                          </button>
-                        </div>
-                        {dirs.map((d) => {
-                          const selected = directionArray(editForm.ministry_direction).includes(d.title);
-                          return (
-                            <label
-                              key={d.id}
-                              className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-stone-700 hover:bg-stone-100"
-                            >
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 shrink-0 rounded border-stone-300 text-primary"
-                                checked={selected}
-                                onChange={(e) => {
-                                  const current = directionArray(editForm.ministry_direction);
-                                  const next = e.target.checked
-                                    ? Array.from(new Set([...current, d.title]))
-                                    : current.filter((x) => x !== d.title);
-                                  setEditForm((s) => ({
-                                    ...s,
-                                    ministry_direction: normalizeMinistryRoles(next.join(', ')),
-                                  }));
-                                }}
-                              />
-                              <span className="min-w-0 flex-1 truncate">{d.title}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </details>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
-                    <details className="group relative">
-                      <summary
-                        className={`${fieldClass()} list-none cursor-pointer pr-9 [&::-webkit-details-marker]:hidden`}
-                      >
-                        {roleArray(editForm.ministry_role).length > 0
-                          ? roleArray(editForm.ministry_role).join(', ')
-                          : 'Выберите роль(и)'}
-                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 transition group-open:rotate-180">
-                          ▾
-                        </span>
-                      </summary>
-                      <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-stone-200 bg-white p-2 shadow-lg">
-                        <div className="mb-2 flex gap-2 border-b border-stone-200 pb-2">
-                          <button
-                            type="button"
-                            className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
-                            onClick={() =>
-                              setEditForm((s) => ({
-                                ...s,
-                                ministry_role: normalizeMinistryRoles(
-                                  roleOptionsForDirection(s.ministry_direction).join(', '),
-                                ),
-                              }))
-                            }
-                          >
-                            Выбрать все
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
-                            onClick={() => setEditForm((s) => ({ ...s, ministry_role: '' }))}
-                          >
-                            Очистить
-                          </button>
-                        </div>
-                        {roleOptionsForDirection(editForm.ministry_direction).map((role) => {
-                          const selected = roleArray(editForm.ministry_role).includes(role);
-                          return (
-                            <label
-                              key={role}
-                              className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-stone-700 hover:bg-stone-100"
-                            >
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 shrink-0 rounded border-stone-300 text-primary"
-                                checked={selected}
-                                onChange={(e) => {
-                                  const current = roleArray(editForm.ministry_role);
-                                  const next = e.target.checked
-                                    ? Array.from(new Set([...current, role]))
-                                    : current.filter((x) => x !== role);
-                                  setEditForm((s) => ({
-                                    ...s,
-                                    ministry_role: normalizeMinistryRoles(next.join(', ')),
-                                  }));
-                                }}
-                              />
-                              <span className="min-w-0 flex-1 truncate">{role}</span>
-                            </label>
-                          );
-                        })}
-                        {roleOptionsForDirection(editForm.ministry_direction).length === 0 ? (
-                          <p className="px-2 py-1.5 text-xs text-stone-500">Нет ролей для выбранного направления</p>
-                        ) : null}
-                      </div>
-                    </details>
-                  </div>
-                </div>
-              </section>
-
-              {/* Access and role */}
-              <section>
-                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400 sm:mb-3">
-                  Доступ и роль
-                </p>
-                <div className="space-y-2.5 sm:space-y-3">
-                  <MemberAppRolesPicker
-                    editing={editing}
-                    roleMut={roleMut}
-                    onBannerClear={() => setBanner(null)}
-                  />
-                  <label className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-stone-200 px-2.5 py-2 sm:px-3 sm:py-2.5">
-                    <span className="min-w-0 flex-1 text-xs leading-snug text-stone-800 sm:text-sm">
-                      Активен (может войти в приложение)
-                    </span>
-                    <span className="relative inline-flex h-6 w-11 items-center">
-                      <input
-                        type="checkbox"
-                        className="peer sr-only"
-                        checked={editForm.is_active}
-                        onChange={(e) => setEditForm((s) => ({ ...s, is_active: e.target.checked }))}
-                      />
-                      <span className="h-6 w-11 rounded-full bg-stone-300 transition-colors peer-checked:bg-primary" />
-                      <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
-                    </span>
-                  </label>
-                  <label className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-stone-200 px-2.5 py-2 sm:px-3 sm:py-2.5">
-                    <span className="min-w-0 flex-1 text-xs leading-snug text-stone-800 sm:text-sm">В молитвенном цикле</span>
-                    <span className="relative inline-flex h-6 w-11 items-center">
-                      <input
-                        type="checkbox"
-                        className="peer sr-only"
-                        checked={editForm.in_prayer_cycle}
-                        onChange={(e) => setEditForm((s) => ({ ...s, in_prayer_cycle: e.target.checked }))}
-                      />
-                      <span className="h-6 w-11 rounded-full bg-stone-300 transition-colors peer-checked:bg-primary" />
-                      <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
-                    </span>
-                  </label>
-                  <div className="rounded-xl bg-stone-100 px-2.5 py-2 text-xs leading-snug text-stone-700 sm:px-3 sm:py-2.5 sm:text-sm sm:leading-normal">
-                    <div className="flex items-start gap-2 border-b border-stone-200 pb-2 sm:items-center">
-                      <span
-                        className={`mt-0.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full sm:mt-0 ${editing.password_reset_required ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                      />
-                      <span className="min-w-0">
-                        Статус входа:{' '}
-                        <strong>
-                          {editing.password_reset_required
-                            ? 'требуется задать новый пароль'
-                            : editing.has_registered
-                              ? 'пароль создан, вход доступен'
-                              : 'вход не оформлен'}
-                        </strong>
-                      </span>
-                    </div>
-                    <div className="mt-2 flex items-start gap-2 sm:items-center">
-                      <span className="mt-0.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-stone-400 sm:mt-0" />
-                      <span className="min-w-0 break-all">Логин: {editForm.phone_number.trim() || '—'}</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-stretch sm:justify-end">
-                    <button
-                      type="button"
-                      className={`${btnSecondary('text-xs')} w-full sm:w-auto`}
-                      disabled={resetPasswordMut.isPending}
-                      onClick={() => {
-                        if (!window.confirm('Сбросить пароль пользователя? При следующем входе он задаст новый пароль.')) {
-                          return;
-                        }
-                        setBanner(null);
-                        resetPasswordMut.mutate(editing.id);
-                      }}
-                    >
-                      {resetPasswordMut.isPending ? 'Сбрасываем…' : 'Сбросить пароль'}
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              {/* Prayer request */}
-              <section>
-                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400 sm:mb-3">
-                  Молитвенная нужда
-                </p>
-                {isPrayerRequestEditing ? (
-                  <textarea
-                    className={`${fieldClass()} min-h-[88px] resize-y sm:min-h-[100px]`}
-                    value={editForm.prayer_request}
-                    onChange={(e) => setEditForm((s) => ({ ...s, prayer_request: e.target.value }))}
-                    placeholder="Текст молитвенной нужды…"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsPrayerRequestEditing(true)}
-                    className="w-full overflow-hidden rounded-xl border border-stone-200 text-left"
-                  >
-                    {(editForm.prayer_request || '')
-                      .split('\n')
-                      .map((line) => line.trim())
-                      .filter(Boolean)
-                      .map((line, i) => (
-                        <div
-                          key={`${line}-${i}`}
-                          className="border-b border-stone-200 px-3 py-2.5 text-sm text-stone-700 last:border-b-0"
-                        >
-                          {line}
-                        </div>
-                      ))}
-                    {!editForm.prayer_request.trim() ? (
-                      <div className="px-3 py-2.5 text-sm text-stone-400">Нажмите, чтобы добавить молитвенную нужду…</div>
-                    ) : null}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowPrayerHistory((v) => !v)}
-                  className="mt-2 text-xs font-semibold text-primary underline-offset-2 hover:underline"
-                >
-                  История молитвенных нужд →
-                </button>
-                {showPrayerHistory ? <AdminPrayerHistory memberId={editing.id} /> : null}
-              </section>
-
-              {/* Danger zone */}
-              <section className="rounded-xl border border-red-200 bg-red-50/40 p-3 sm:rounded-2xl sm:p-4">
-                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-red-700 sm:mb-3">
-                  Опасная зона
-                </p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <button
-                    type="button"
-                    className={`${btnSecondary()} w-full justify-center sm:w-auto`}
-                    onClick={() => {
-                      setOneTimeId(editing.id);
-                      setOneTimeDate('');
-                      setBanner(null);
-                    }}
-                  >
-                    Разовая дата в цикле
-                  </button>
-                  <button
-                    type="button"
-                    className={`${btnSecondary()} w-full justify-center sm:w-auto`}
-                    onClick={() => {
-                      setBanner(null);
-                      void updateAdminMember(editing.id, {
-                        is_collection_coordinator: !editing.is_collection_coordinator,
-                      }).then(
-                        (updated) => {
-                          setEditing(updated);
-                          setBanner({ type: 'ok', text: 'Роль «сбор» обновлена.' });
-                          invalidate();
-                        },
-                        (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-                      );
-                    }}
-                  >
-                    Ответственный за сбор
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full justify-center rounded-xl border border-red-300 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 sm:w-auto sm:py-2"
-                    disabled={deleteMut.isPending}
-                    onClick={() => {
-                      if (!window.confirm(`Удалить ${memberRosterName(editing)}?`)) return;
-                      setBanner(null);
-                      deleteMut.mutate(editing.id);
-                    }}
-                  >
-                    {deleteMut.isPending ? 'Удаление…' : 'Удалить пользователя'}
-                  </button>
-                </div>
-              </section>
-
-              {/* Actions */}
-              <div className="flex flex-col-reverse gap-2 border-t border-stone-100 bg-white pt-3 max-lg:sticky max-lg:bottom-0 max-lg:z-10 max-lg:pb-[calc(12px+env(safe-area-inset-bottom,0px))] sm:flex-row sm:justify-end sm:gap-2 sm:pt-4 sm:pb-0">
-                <button
-                  type="button"
-                  className={`${btnSecondary()} w-full justify-center sm:w-auto`}
-                  onClick={() => setEditing(null)}
-                >
-                  Отмена
-                </button>
-                <button
-                  type="button"
-                  className={`${btnPrimary()} w-full justify-center sm:w-auto`}
-                  disabled={saveEditMut.isPending}
-                  onClick={() => {
-                    setBanner(null);
-                    saveEditMut.mutate();
-                  }}
-                >
-                  {saveEditMut.isPending ? 'Сохранение…' : 'Сохранить'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Сворачиваемый/разворачиваемый блок с историей молитвенных нужд пользователя. */
-function AdminPrayerHistory({ memberId }: { memberId: number }) {
-  const [open, setOpen] = useState(false);
-  const [manualText, setManualText] = useState('');
-  const [cycleInput, setCycleInput] = useState('');
-  const qc = useQueryClient();
-
-  const { data, isPending } = useQuery({
-    queryKey: ['admin', 'prayer-history', memberId],
-    queryFn: () => fetchPrayerRequestHistory(memberId, 30),
-    enabled: open,
-    staleTime: 30_000,
-  });
-
-  const addHistoryMut = useMutation({
-    mutationFn: () => {
-      const trimmed = manualText.trim();
-      if (!trimmed) {
-        return Promise.reject(new Error('Укажите текст нужды'));
-      }
-      const cycleTrim = cycleInput.trim();
-      let cycle_number: number | undefined;
-      if (cycleTrim !== '') {
-        const n = Number.parseInt(cycleTrim, 10);
-        if (!Number.isFinite(n) || n < 1) {
-          return Promise.reject(new Error('Номер цикла — целое число от 1'));
-        }
-        cycle_number = n;
-      }
-      return addAdminPrayerRequestHistory(memberId, { prayer_request: trimmed, cycle_number });
-    },
-    onSuccess: async () => {
-      setManualText('');
-      setCycleInput('');
-      await qc.invalidateQueries({ queryKey: ['admin', 'prayer-history', memberId] });
-    },
-  });
-
-  return (
-    <section>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex min-h-[40px] w-full items-center gap-2 rounded-xl border border-stone-200/80 bg-stone-50/60 px-3.5 py-2.5 text-left text-[13px] font-bold text-stone-600 transition-colors hover:bg-stone-100/70 hover:text-stone-800"
-      >
-        <LuHistory className="h-4 w-4 shrink-0 text-primary/70" strokeWidth={2} aria-hidden />
-        <span className="flex-1">История молитвенных нужд</span>
-        <LuChevronDown
-          className={`h-4 w-4 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-          strokeWidth={2}
-          aria-hidden
+          onAssignOneTimeDate={(date) => oneTimeMut.mutateAsync({ id: editing.id, date })}
         />
-      </button>
-
-      <div
-        className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
-      >
-        <div className="overflow-hidden">
-          <div className="pt-3 pb-1">
-            <div className="mb-4 rounded-xl border border-dashed border-primary/30 bg-primary/[0.04] p-3">
-              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
-                Добавить запись вручную
-              </p>
-              <label className="block">
-                <span className="sr-only">Текст молитвенной нужды</span>
-                <textarea
-                  value={manualText}
-                  onChange={(e) => setManualText(e.target.value)}
-                  rows={3}
-                  maxLength={8000}
-                  placeholder="Текст нужды…"
-                  className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-[13px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-1"
-                />
-              </label>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
-                <label className="block min-w-0 sm:max-w-[11rem]">
-                  <span className="mb-0.5 block text-[11px] font-semibold text-stone-500">
-                    № цикла (необязательно)
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={cycleInput}
-                    onChange={(e) => setCycleInput(e.target.value.replace(/\D/g, ''))}
-                    placeholder="Как в списке: 5"
-                    className="w-full rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-[13px] text-stone-800 outline-none focus:border-primary focus:ring-1"
-                  />
-                </label>
-                <button
-                  type="button"
-                  disabled={addHistoryMut.isPending || !manualText.trim()}
-                  onClick={() => void addHistoryMut.mutateAsync()}
-                  className="min-h-[40px] shrink-0 rounded-lg bg-primary px-4 text-[13px] font-bold text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {addHistoryMut.isPending ? 'Сохранение…' : 'Добавить в историю'}
-                </button>
-              </div>
-              {addHistoryMut.isError ? (
-                <p className="mt-2 text-[12px] text-red-600">
-                  {apiErrorMessage(
-                    addHistoryMut.error,
-                    addHistoryMut.error instanceof Error ? addHistoryMut.error.message : 'Ошибка',
-                  )}
-                </p>
-              ) : null}
-            </div>
-
-            {isPending ? (
-              <div className="space-y-3 py-2">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="flex gap-3 animate-pulse">
-                    <div className="h-2 w-2 mt-1.5 shrink-0 rounded-full bg-stone-200" />
-                    <div className="flex-1 space-y-1.5">
-                      <div className="h-3 w-28 rounded bg-stone-100" />
-                      <div className="h-3 w-full rounded bg-stone-100" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : data && data.length > 0 ? (
-              <div className="space-y-0">
-                {data.map((item, idx) => (
-                  <AdminPrayerHistoryRow key={item.id} item={item} isLast={idx === data.length - 1} />
-                ))}
-              </div>
-            ) : (
-              <p className="py-4 text-center text-[13px] italic text-stone-400">
-                Пока нет записей
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function AdminPrayerHistoryRow({ item, isLast }: { item: PrayerHistoryItem; isLast: boolean }) {
-  const prayedDate = item.prayed_on_date
-    ? formatAdminDate(item.prayed_on_date)
-    : null;
-  const createdDate = formatAdminDate(item.created_at);
-
-  return (
-    <div className={`relative flex gap-3 py-2.5 ${!isLast ? 'border-b border-stone-100' : ''}`}>
-      {/* Timeline dot */}
-      <div className="flex flex-col items-center pt-1.5">
-        <div className="h-2 w-2 shrink-0 rounded-full bg-primary/40" />
-        {!isLast ? (
-          <div className="mt-1 flex-1 w-px bg-stone-100" />
-        ) : null}
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          {prayedDate ? (
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary">
-              <LuCalendarDays className="h-3 w-3" aria-hidden />
-              Цикл {item.cycle_index != null ? item.cycle_index + 1 : '—'} · {prayedDate}
-            </span>
-          ) : (
-            <span className="text-[11px] font-semibold text-stone-400">
-              {createdDate}
-            </span>
-          )}
-        </div>
-        <p className="mt-1 text-[13px] leading-snug text-stone-600 whitespace-pre-wrap break-words">
-          {item.prayer_request}
-        </p>
-      </div>
+      ) : null}
     </div>
   );
-}
-
-/** Форматирование даты для истории: «25 марта 2026» или «25 мар» если текущий год. */
-function formatAdminDate(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return dateStr;
-    const now = new Date();
-    const sameYear = d.getFullYear() === now.getFullYear();
-    return format(d, sameYear ? 'd MMM' : 'd MMM yyyy', { locale: ru });
-  } catch {
-    return dateStr;
-  }
 }
 
 function reorderArray<T>(list: readonly T[], from: number, to: number): T[] {

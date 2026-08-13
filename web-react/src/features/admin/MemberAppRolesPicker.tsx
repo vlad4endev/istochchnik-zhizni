@@ -1,4 +1,5 @@
 import type { UseMutationResult } from '@tanstack/react-query';
+import { LuCheck } from 'react-icons/lu';
 import { appRoleLabel, type AppRole } from '../settings/sectionVisibilityApi';
 import { memberAppRoles } from './memberListQuery';
 import type { AppUser } from './types';
@@ -44,11 +45,11 @@ export function MemberAppRolesPicker({
 
   return (
     <div>
-      <label className="mb-1.5 block text-xs font-semibold text-stone-600">Роли приложения</label>
-      <p className="mb-2 text-[11px] leading-snug text-stone-500">
-        Можно назначить несколько ролей. Прихожанин несовместим с остальными ролями.
+      <h4 className="text-[13px] font-extrabold tracking-tight text-stone-900 sm:text-sm">Роли приложения</h4>
+      <p className="mt-0.5 mb-3 text-[12px] leading-snug text-stone-500">
+        Можно назначить несколько ролей. Прихожанин несовместим с остальными.
       </p>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {ASSIGNABLE_ROLES.map((role) => {
           const checked = selected.includes(role);
           return (
@@ -58,12 +59,13 @@ export function MemberAppRolesPicker({
               disabled={roleMut.isPending}
               onClick={() => toggleRole(role)}
               className={[
-                'rounded-[14px] border px-2.5 py-1 text-xs font-medium transition',
+                'inline-flex min-h-[48px] items-center justify-center gap-1.5 rounded-2xl border px-3 text-[13px] font-semibold transition disabled:opacity-60',
                 checked
-                  ? 'border-primary/35 bg-primary/10 text-[var(--primary)]'
-                  : 'border-stone-200 bg-transparent text-[var(--text-secondary)] hover:bg-stone-50',
+                  ? 'border-primary bg-primary text-white shadow-sm shadow-primary/20'
+                  : 'border-stone-200 bg-white text-stone-700 hover:border-stone-300 hover:bg-stone-50',
               ].join(' ')}
             >
+              {checked ? <LuCheck className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden /> : null}
               {appRoleLabel(role)}
             </button>
           );
