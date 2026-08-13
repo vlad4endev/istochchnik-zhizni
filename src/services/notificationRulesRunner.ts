@@ -108,21 +108,63 @@ function addDaysYmd(ymd: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function getCollectionClaimOwnerForMemberInCycle(
-  cycleIndex: number,
+function mondayWeekStartFromYmd(dateYmd: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateYmd.trim());
+  if (!m) return dateYmd.trim();
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0));
+  const day = dt.getUTCDay();
+  const daysFromMonday = day === 0 ? 6 : day - 1;
+  dt.setUTCDate(dt.getUTCDate() - daysFromMonday);
+  return dt.toISOString().slice(0, 10);
+}
+
+async function getCollectionClaimOwnerForMember(
   memberId: number,
+  dateYmd: string,
+  cycleIndex: number | null | undefined,
 ): Promise<number | null> {
   if (!pool) return null;
-  const result = await pool.query(
+  const weekStart = mondayWeekStartFromYmd(dateYmd);
+
+  const byWeek = await pool.query(
     `SELECT claimed_by_member_id
      FROM cycle_collection_claims
-     WHERE cycle_index = $1 AND member_id = $2
+     WHERE member_id = $1 AND week_start_date = $2::date
      LIMIT 1`,
-    [cycleIndex, memberId],
+    [memberId, weekStart],
   );
-  const raw = result.rows[0]?.claimed_by_member_id;
-  if (raw == null) return null;
-  const n = Number(raw);
+  const weekRaw = byWeek.rows[0]?.claimed_by_member_id;
+  if (weekRaw != null) {
+    const n = Number(weekRaw);
+    if (Number.isFinite(n)) return n;
+  }
+
+  if (typeof cycleIndex !== 'number') return null;
+
+  const byLegacy = await pool.query(
+    `SELECT claimed_by_member_id
+     FROM cycle_collection_claims
+     WHERE member_id = $1 AND cycle_index = $2 AND week_start_date IS NULL
+     LIMIT 1`,
+    [memberId, cycleIndex],
+  );
+  const legacyRaw = byLegacy.rows[0]?.claimed_by_member_id;
+  if (legacyRaw != null) {
+    const n = Number(legacyRaw);
+    if (Number.isFinite(n)) return n;
+  }
+
+  const byCycle = await pool.query(
+    `SELECT claimed_by_member_id
+     FROM cycle_collection_claims
+     WHERE member_id = $1 AND cycle_index = $2
+     ORDER BY week_start_date DESC NULLS LAST, id DESC
+     LIMIT 1`,
+    [memberId, cycleIndex],
+  );
+  const cycleRaw = byCycle.rows[0]?.claimed_by_member_id;
+  if (cycleRaw == null) return null;
+  const n = Number(cycleRaw);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -140,13 +182,15 @@ async function notifyMissingPrayerNeedForDate(
   const memberName = assigned.name?.trim() || `Участник ${assigned.id}`;
   const recipients = new Set<number>();
 
-  const admins = await getAdminMemberIdsWithPush();
-  for (const id of admins) recipients.add(id);
+  const cycleIndex =
+    typeof dayData.prayer_cycle?.index === 'number' ? dayData.prayer_cycle.index : null;
+  const ownerId = await getCollectionClaimOwnerForMember(assigned.id, dateYmd, cycleIndex);
+  if (ownerId != null) recipients.add(ownerId);
 
-  const cycleIndex = dayData.prayer_cycle?.index;
-  if (typeof cycleIndex === 'number') {
-    const ownerId = await getCollectionClaimOwnerForMemberInCycle(cycleIndex, assigned.id);
-    if (ownerId != null) recipients.add(ownerId);
+  // Админам — если координатор не найден (иначе дублируют лишние пуши).
+  if (recipients.size === 0) {
+    const admins = await getAdminMemberIdsWithPush();
+    for (const id of admins) recipients.add(id);
   }
 
   const fallbackBody =

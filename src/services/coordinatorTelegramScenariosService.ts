@@ -149,25 +149,20 @@ async function getAdminMemberIdsWithTelegram(): Promise<number[]> {
     .filter((id) => Number.isInteger(id) && id > 0);
 }
 
-async function getCollectionClaimOwnerForMemberInCycle(
-  cycleIndex: number,
-  memberId: number,
-): Promise<{ id: number; name: string } | null> {
-  const result = await query(
-    `SELECT
-       c.claimed_by_member_id AS id,
-       COALESCE(
-         NULLIF(TRIM(COALESCE(cm.first_name, '') || ' ' || COALESCE(cm.last_name, '')), ''),
-         cm.name,
-         'Куратор'
-       ) AS display_name
-     FROM cycle_collection_claims c
-     JOIN members cm ON cm.id = c.claimed_by_member_id
-     WHERE c.cycle_index = $1 AND c.member_id = $2
-     LIMIT 1`,
-    [cycleIndex, memberId],
-  );
-  const row = result.rows[0] as { id?: unknown; display_name?: unknown } | undefined;
+/** Понедельник календарной недели для даты YYYY-MM-DD (UTC-день как календарная дата). */
+function mondayWeekStartFromYmd(dateYmd: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateYmd.trim());
+  if (!m) return dateYmd.trim();
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0));
+  const day = dt.getUTCDay(); // 0=вс … 6=сб
+  const daysFromMonday = day === 0 ? 6 : day - 1;
+  dt.setUTCDate(dt.getUTCDate() - daysFromMonday);
+  return dt.toISOString().slice(0, 10);
+}
+
+function mapClaimOwnerRow(
+  row: { id?: unknown; display_name?: unknown } | undefined,
+): { id: number; name: string } | null {
   if (!row) return null;
   const id = Number(row.id);
   if (!Number.isFinite(id)) return null;
@@ -175,6 +170,67 @@ async function getCollectionClaimOwnerForMemberInCycle(
     id,
     name: typeof row.display_name === 'string' ? row.display_name.trim() : 'Куратор',
   };
+}
+
+const CLAIM_OWNER_SELECT = `
+  SELECT
+    c.claimed_by_member_id AS id,
+    COALESCE(
+      NULLIF(TRIM(COALESCE(cm.first_name, '') || ' ' || COALESCE(cm.last_name, '')), ''),
+      cm.name,
+      'Куратор'
+    ) AS display_name
+  FROM cycle_collection_claims c
+  JOIN members cm ON cm.id = c.claimed_by_member_id
+`;
+
+/**
+ * Ответственный координатор за участника.
+ * Сначала по week_start_date (актуальная схема назначений), затем legacy по cycle_index.
+ */
+async function getCollectionClaimOwnerForMember(args: {
+  memberId: number;
+  dateYmd: string;
+  cycleIndex?: number | null;
+}): Promise<{ id: number; name: string } | null> {
+  const weekStart = mondayWeekStartFromYmd(args.dateYmd);
+
+  const byWeek = await query(
+    `${CLAIM_OWNER_SELECT}
+     WHERE c.member_id = $1 AND c.week_start_date = $2::date
+     LIMIT 1`,
+    [args.memberId, weekStart],
+  );
+  const fromWeek = mapClaimOwnerRow(
+    byWeek.rows[0] as { id?: unknown; display_name?: unknown } | undefined,
+  );
+  if (fromWeek) return fromWeek;
+
+  if (args.cycleIndex == null || !Number.isFinite(args.cycleIndex)) return null;
+
+  const byLegacy = await query(
+    `${CLAIM_OWNER_SELECT}
+     WHERE c.member_id = $1
+       AND c.cycle_index = $2
+       AND c.week_start_date IS NULL
+     LIMIT 1`,
+    [args.memberId, args.cycleIndex],
+  );
+  const fromLegacy = mapClaimOwnerRow(
+    byLegacy.rows[0] as { id?: unknown; display_name?: unknown } | undefined,
+  );
+  if (fromLegacy) return fromLegacy;
+
+  const byCycleAny = await query(
+    `${CLAIM_OWNER_SELECT}
+     WHERE c.member_id = $1 AND c.cycle_index = $2
+     ORDER BY c.week_start_date DESC NULLS LAST, c.id DESC
+     LIMIT 1`,
+    [args.memberId, args.cycleIndex],
+  );
+  return mapClaimOwnerRow(
+    byCycleAny.rows[0] as { id?: unknown; display_name?: unknown } | undefined,
+  );
 }
 
 async function getMemberDisplayName(memberId: number): Promise<string | null> {
@@ -415,10 +471,11 @@ async function notifyMissingNeedTelegram(
   const memberName = assigned.name?.trim() || `Участник ${assigned.id}`;
   const cycleIndex =
     typeof dayData.prayer_cycle?.index === 'number' ? dayData.prayer_cycle.index : null;
-  const owner =
-    cycleIndex != null
-      ? await getCollectionClaimOwnerForMemberInCycle(cycleIndex, assigned.id)
-      : null;
+  const owner = await getCollectionClaimOwnerForMember({
+    memberId: assigned.id,
+    dateYmd,
+    cycleIndex,
+  });
 
   const vars = {
     ...missingNeedVars({
@@ -440,13 +497,6 @@ async function notifyMissingNeedTelegram(
         : `${memberName}: поле нужды на ${dateYmd} (через ${dayOffset} дн.) не заполнено.`;
   const text = renderScenarioText(scenario, vars, `${title}\n\n${fallbackBody}`);
 
-  const recipients = new Set<number>();
-  if (scenarioWantsDm(scenario.target)) {
-    const admins = await getAdminMemberIdsWithTelegram();
-    for (const id of admins) recipients.add(id);
-    if (owner) recipients.add(owner.id);
-  }
-
   return withCoordinatorSendLog(
     {
       batchId: newTelegramSendBatchId(),
@@ -456,9 +506,25 @@ async function notifyMissingNeedTelegram(
     },
     async () => {
       let sent = 0;
-      for (const id of recipients) {
-        if (await sendDmSafe(id, text)) sent += 1;
+      let coordinatorSent = false;
+
+      // Личка — координатору; админам только если координатор не найден / без Telegram.
+      if (scenarioWantsDm(scenario.target)) {
+        if (owner) {
+          if (await sendDmSafe(owner.id, text)) {
+            sent += 1;
+            coordinatorSent = true;
+          }
+        }
+        if (!coordinatorSent) {
+          const admins = await getAdminMemberIdsWithTelegram();
+          for (const id of admins) {
+            if (owner && id === owner.id) continue;
+            if (await sendDmSafe(id, text)) sent += 1;
+          }
+        }
       }
+
       if (scenarioWantsChat(scenario.target)) {
         if (await sendCoordinatorChatSafe(text)) sent += 1;
       }
@@ -563,32 +629,35 @@ async function notifyMissingCycleNeedTelegram(
           if (await sendDmSafe(group.coordinatorId, text)) sent += 1;
         }
 
-        const admins = await getAdminMemberIdsWithTelegram();
-        if (admins.length > 0) {
-          const summaryLines = groups.map(
-            (g) => `${g.coordinatorName}: ${g.missing.map((m) => m.memberName).join(', ')}`,
-          );
-          const totalMissing = groups.reduce((n, g) => n + g.missing.length, 0);
-          const adminVars = {
-            ...baseWeekVars(ctx),
-            title,
-            coordinator_name: groups.map((g) => g.coordinatorName).join(', '),
-            missing_participants: summaryLines.join('\n'),
-            missing_participants_list: summaryLines.map((l) => `• ${l}`).join('\n'),
-            missing_count: String(totalMissing),
-            participants: baseWeekVars(ctx).all_participants,
-          };
-          const adminFallback = [
-            title,
-            '',
-            `Неделя: ${ctx.weekRange} (цикл ${ctx.cycleIndex}).`,
-            `Без нужды: ${totalMissing}`,
-            '',
-            ...summaryLines,
-          ].join('\n');
-          const adminText = renderScenarioText(scenario, adminVars, adminFallback);
-          for (const adminId of admins) {
-            if (await sendDmSafe(adminId, adminText)) sent += 1;
+        // Админам — только если ни одному координатору не ушло (нет telegram_chat_id и т.п.).
+        if (sent === 0) {
+          const admins = await getAdminMemberIdsWithTelegram();
+          if (admins.length > 0) {
+            const summaryLines = groups.map(
+              (g) => `${g.coordinatorName}: ${g.missing.map((m) => m.memberName).join(', ')}`,
+            );
+            const totalMissing = groups.reduce((n, g) => n + g.missing.length, 0);
+            const adminVars = {
+              ...baseWeekVars(ctx),
+              title,
+              coordinator_name: groups.map((g) => g.coordinatorName).join(', '),
+              missing_participants: summaryLines.join('\n'),
+              missing_participants_list: summaryLines.map((l) => `• ${l}`).join('\n'),
+              missing_count: String(totalMissing),
+              participants: baseWeekVars(ctx).all_participants,
+            };
+            const adminFallback = [
+              title,
+              '',
+              `Неделя: ${ctx.weekRange} (цикл ${ctx.cycleIndex}).`,
+              `Без нужды: ${totalMissing}`,
+              '',
+              ...summaryLines,
+            ].join('\n');
+            const adminText = renderScenarioText(scenario, adminVars, adminFallback);
+            for (const adminId of admins) {
+              if (await sendDmSafe(adminId, adminText)) sent += 1;
+            }
           }
         }
       }
