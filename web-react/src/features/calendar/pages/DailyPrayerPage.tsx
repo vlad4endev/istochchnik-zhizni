@@ -645,8 +645,8 @@ function TelegramPrayerDispatchModal(props: {
                               }))
                             }
                           />
-                          <span className="min-w-0 flex-1 text-[14px] font-medium text-stone-800 sm:text-sm">{u.name}</span>
-                          <span className="shrink-0 font-mono text-[11px] text-stone-400 sm:text-xs">({u.telegram_chat_id})</span>
+                          <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-stone-800 sm:text-sm">{u.name}</span>
+                          <span className="max-w-[42%] shrink-0 truncate font-mono text-[11px] text-stone-400 sm:text-xs">({u.telegram_chat_id})</span>
                         </label>
                       );
                     })}

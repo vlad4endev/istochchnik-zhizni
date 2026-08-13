@@ -349,7 +349,7 @@ function MatrixCategoryTable({
                   <td key={roleId} className="px-2 py-2 text-center">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 rounded border-stone-300 text-primary focus:ring-primary disabled:opacity-40"
+                      className="h-4 w-4 shrink-0 rounded border-stone-300 text-primary focus:ring-primary disabled:opacity-40"
                       checked={checked}
                       disabled={isBusy || locked}
                       title={locked ? 'Обязательное право администратора' : def.label}

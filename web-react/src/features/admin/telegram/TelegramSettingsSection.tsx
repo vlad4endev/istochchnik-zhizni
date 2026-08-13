@@ -1639,10 +1639,11 @@ export function TelegramSettingsSection() {
                           return (
                             <label
                               key={u.id}
-                              className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-stone-50"
+                              className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-stone-50"
                             >
                               <input
                                 type="checkbox"
+                                className="h-4 w-4 shrink-0 rounded border-stone-300 text-[#7B2D3F]"
                                 checked={checked}
                                 onChange={(e) =>
                                   setDispatchForm((s) => ({
@@ -1653,8 +1654,12 @@ export function TelegramSettingsSection() {
                                   }))
                                 }
                               />
-                              <span className="text-sm text-stone-700">{u.name}</span>
-                              <span className="text-xs text-stone-400">({u.telegram_chat_id})</span>
+                              <span className="min-w-0 flex-1 truncate text-sm text-stone-700">
+                                {u.name}
+                              </span>
+                              <span className="max-w-[40%] shrink-0 truncate text-xs text-stone-400">
+                                ({u.telegram_chat_id})
+                              </span>
                             </label>
                           );
                         })}
@@ -2429,11 +2434,11 @@ export function TelegramSettingsSection() {
                   </div>
                 </StepBlock>
 
-                <div className="sticky bottom-0 z-10 -mx-5 border-t border-stone-200 bg-white/95 px-5 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-                  <div className="flex flex-wrap items-center gap-2">
+                <div className="sticky bottom-0 z-10 -mx-3 border-t border-stone-200 bg-white/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:-mx-5 sm:px-5 sm:py-4">
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 sm:flex sm:flex-wrap sm:items-center">
                     <button
                       type="button"
-                      className={btnSecondary()}
+                      className={btnSecondary('min-w-0 w-full sm:w-auto')}
                       disabled={programPreviewMut.isPending}
                       onClick={() => {
                         setNote(null);
@@ -2444,7 +2449,7 @@ export function TelegramSettingsSection() {
                     </button>
                     <button
                       type="button"
-                      className={btnPrimary()}
+                      className={btnPrimary('min-w-0 w-full sm:w-auto')}
                       disabled={saveProgramTemplateMut.isPending}
                       onClick={() => {
                         setNote(null);
@@ -2455,7 +2460,7 @@ export function TelegramSettingsSection() {
                     </button>
                     <button
                       type="button"
-                      className={btnSecondary()}
+                      className={btnSecondary('col-span-2 min-w-0 w-full sm:col-auto sm:w-auto')}
                       disabled={programMailingMut.isPending}
                       onClick={() => {
                         if (
@@ -2471,7 +2476,7 @@ export function TelegramSettingsSection() {
                     >
                       {programMailingMut.isPending ? 'Отправка…' : 'Отправить сейчас'}
                     </button>
-                    <span className="text-xs text-stone-400">
+                    <span className="col-span-2 text-xs leading-snug text-stone-400 sm:col-auto">
                       1 → 2 → 3 → сохранить · отправка по желанию
                     </span>
                   </div>
@@ -2619,11 +2624,11 @@ export function TelegramSettingsSection() {
                   </div>
                 </StepBlock>
 
-                <div className="sticky bottom-0 z-10 -mx-5 border-t border-stone-200 bg-white/95 px-5 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-                  <div className="flex flex-wrap items-center gap-2">
+                <div className="sticky bottom-0 z-10 -mx-3 border-t border-stone-200 bg-white/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:-mx-5 sm:px-5 sm:py-4">
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 sm:flex sm:flex-wrap sm:items-center">
                     <button
                       type="button"
-                      className={btnSecondary()}
+                      className={btnSecondary('min-w-0 w-full sm:w-auto')}
                       disabled={publishedPreviewMut.isPending}
                       onClick={() => {
                         setNote(null);
@@ -2634,7 +2639,7 @@ export function TelegramSettingsSection() {
                     </button>
                     <button
                       type="button"
-                      className={btnPrimary()}
+                      className={btnPrimary('min-w-0 w-full sm:w-auto')}
                       disabled={savePublishedTemplateMut.isPending}
                       onClick={() => {
                         setNote(null);
@@ -2643,7 +2648,7 @@ export function TelegramSettingsSection() {
                     >
                       {savePublishedTemplateMut.isPending ? 'Сохранение…' : 'Сохранить'}
                     </button>
-                    <span className="text-xs text-stone-400">
+                    <span className="col-span-2 text-xs leading-snug text-stone-400 sm:col-auto">
                       Уходит при «Опубликовать» в планировщике
                     </span>
                   </div>

@@ -1223,14 +1223,16 @@ function MembersSection({
             имя, телефон, дата, по желанию направление и роль служения.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-stone-700">
+            <label className="inline-flex min-w-0 cursor-pointer items-start gap-2 text-xs font-semibold text-stone-700">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-stone-300 text-primary focus:ring-primary/30"
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-stone-300 text-primary focus:ring-primary/30"
                 checked={bulkMergeDupes}
                 onChange={(e) => setBulkMergeDupes(e.target.checked)}
               />
-              При совпадении имени и фамилии — объединить с существующей карточкой
+              <span className="min-w-0 flex-1">
+                При совпадении имени и фамилии — объединить с существующей карточкой
+              </span>
             </label>
           </div>
           <div className="mt-4 grid gap-2 lg:grid-cols-[1fr_auto] lg:items-end">
@@ -1964,11 +1966,11 @@ function MembersSection({
                           return (
                             <label
                               key={d.id}
-                              className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-stone-700 hover:bg-stone-100"
+                              className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-stone-700 hover:bg-stone-100"
                             >
                               <input
                                 type="checkbox"
-                                className="h-4 w-4 rounded border-stone-300 text-primary"
+                                className="h-4 w-4 shrink-0 rounded border-stone-300 text-primary"
                                 checked={selected}
                                 onChange={(e) => {
                                   const current = directionArray(editForm.ministry_direction);
@@ -1981,7 +1983,7 @@ function MembersSection({
                                   }));
                                 }}
                               />
-                              <span>{d.title}</span>
+                              <span className="min-w-0 flex-1 truncate">{d.title}</span>
                             </label>
                           );
                         })}
@@ -2030,11 +2032,11 @@ function MembersSection({
                           return (
                             <label
                               key={role}
-                              className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-stone-700 hover:bg-stone-100"
+                              className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-stone-700 hover:bg-stone-100"
                             >
                               <input
                                 type="checkbox"
-                                className="h-4 w-4 rounded border-stone-300 text-primary"
+                                className="h-4 w-4 shrink-0 rounded border-stone-300 text-primary"
                                 checked={selected}
                                 onChange={(e) => {
                                   const current = roleArray(editForm.ministry_role);
@@ -2047,7 +2049,7 @@ function MembersSection({
                                   }));
                                 }}
                               />
-                              <span>{role}</span>
+                              <span className="min-w-0 flex-1 truncate">{role}</span>
                             </label>
                           );
                         })}
@@ -3960,11 +3962,11 @@ function TemplatesSection() {
                     return (
                       <label
                         key={r.id}
-                        className="flex cursor-pointer items-center gap-2 rounded-xl border border-stone-100 bg-stone-50/40 px-3 py-2 text-sm text-stone-800 hover:bg-stone-50"
+                        className="flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border border-stone-100 bg-stone-50/40 px-3 py-2 text-sm text-stone-800 hover:bg-stone-50"
                       >
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-stone-300 text-primary"
+                          className="h-4 w-4 shrink-0 rounded border-stone-300 text-primary"
                           checked={checked}
                           onChange={(e) => {
                             const on = e.target.checked;
@@ -3974,7 +3976,7 @@ function TemplatesSection() {
                             });
                           }}
                         />
-                        <span className="min-w-0 truncate">{r.title}</span>
+                        <span className="min-w-0 flex-1 truncate">{r.title}</span>
                       </label>
                     );
                   })}
@@ -4275,14 +4277,14 @@ function ProjectSection() {
             updateBranding({ logoScalePercent: Number.parseInt(e.target.value, 10) || 110 })
           }
         />
-        <label className="mt-4 flex items-start gap-2 text-sm text-stone-700">
+        <label className="mt-4 flex min-w-0 items-start gap-2 text-sm text-stone-700">
           <input
             type="checkbox"
-            className="mt-1 h-4 w-4 rounded border-stone-300"
+            className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300"
             checked={removeLightBackground}
             onChange={(e) => updateBranding({ removeLightBackground: e.target.checked })}
           />
-          <span>Убирать светлый фон при загрузке PNG/JPEG</span>
+          <span className="min-w-0 flex-1">Убирать светлый фон при загрузке PNG/JPEG</span>
         </label>
         <div className="mt-4 flex flex-wrap items-center gap-4">
           <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-[1rem] border border-stone-200 bg-stone-50 p-1.5 focus:border-primary">

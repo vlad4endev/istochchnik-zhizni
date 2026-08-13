@@ -119,12 +119,23 @@
     display: none !important;
   }
 
+  /* Дашборд/виджеты — всегда в одну колонку на <lg. */
   .dashboard-grid,
-  [class*='widgets-grid'],
-  .grid-cols-3,
-  .grid-cols-2 {
+  [class*='widgets-grid'] {
     grid-template-columns: 1fr !important;
     gap: 12px !important;
+  }
+
+  /*
+   * Не форсим ВСЕ .grid-cols-2/3 в 1fr до 1023px — ломает вкладки, метрики, превью на планшетах.
+   * Только узкие телефоны; с sm остаётся Tailwind.
+   */
+  @media (max-width: 639px) {
+    .grid-cols-3:not(.app-mobile-sections-grid),
+    .grid-cols-2:not(.app-mobile-sections-grid) {
+      grid-template-columns: 1fr !important;
+      gap: 12px !important;
+    }
   }
 
   /* Нижний лист «Все разделы»: многоколоночная сетка поверх общего grid-cols-* fallback. */
@@ -430,7 +441,16 @@
     display: inline !important;
   }
 
-  input,
+  /*
+   * Текстовые поля — на всю ширину и ≥16px (анти-zoom iOS).
+   * НЕ трогаем checkbox/radio/range/color/file/hidden/button — иначе галочки
+   * становятся width:100% и выталкивают подписи за край экрана (clip body overflow-x).
+   */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not(
+      [type='file']
+    ):not([type='hidden']):not([type='button']):not([type='submit']):not([type='reset']):not(
+      [type='image']
+    ),
   textarea,
   select {
     width: 100% !important;
@@ -442,6 +462,14 @@
   textarea {
     min-height: 100px !important;
   }
+  /* Галочки/радио: не раздувать (исключены из width:100%), не сжимать во flex-рядах. */
+  input[type='checkbox']:not(.sr-only),
+  input[type='radio']:not(.sr-only) {
+    flex-shrink: 0 !important;
+    max-width: 1.5rem !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
   input[type='text'],
   input[type='email'],
   input[type='tel'],
@@ -449,13 +477,20 @@
   input[type='date'],
   input[type='time'],
   input[type='number'],
+  input[type='search'],
+  input[type='url'],
   select {
     font-size: 16px !important;
   }
-  button,
+  /* Tap-target ≥44px, но не раздуваем узкие icon-кнопки с явным w-*/h-*. */
+  button:not([class*='w-']):not([class*='h-']),
   .btn {
     min-height: 44px !important;
     min-width: 44px !important;
+  }
+  button[class*='w-'],
+  button[class*='h-'] {
+    min-height: 44px !important;
   }
   .card,
   [class*='section-card'],

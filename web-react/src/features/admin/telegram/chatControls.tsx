@@ -106,11 +106,13 @@ export function ChatMultiSelect({
   const selected = new Set(selectedIds);
 
   return (
-    <div>
+    <div className="min-w-0">
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <label className="block text-xs font-semibold text-stone-700">{label}</label>
+        <label className="min-w-0 flex-1 text-xs font-semibold text-stone-700">{label}</label>
         {selectedIds.length > 0 ? (
-          <span className="text-[11px] font-medium text-stone-500">Выбрано: {selectedIds.length}</span>
+          <span className="shrink-0 text-[11px] font-medium text-stone-500">
+            Выбрано: {selectedIds.length}
+          </span>
         ) : null}
       </div>
       <p className="mb-2 text-xs text-stone-500">{hint}</p>
@@ -119,13 +121,13 @@ export function ChatMultiSelect({
           {emptyHint ?? 'Сначала добавьте чаты в раздел «Чаты».'}
         </p>
       ) : (
-        <ul className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-stone-200 bg-stone-50/50 p-2">
+        <ul className="max-h-56 space-y-1 overflow-y-auto overflow-x-hidden rounded-xl border border-stone-200 bg-stone-50/50 p-2">
           {orphans.map((id) => (
-            <li key={`orphan-${id}`}>
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-white">
+            <li key={`orphan-${id}`} className="min-w-0">
+              <label className="flex min-w-0 cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-white">
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-4 w-4 rounded border-stone-300 text-[#7B2D3F] focus:ring-[#7B2D3F]/30"
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-stone-300 text-[#7B2D3F] focus:ring-[#7B2D3F]/30"
                   checked={selected.has(id)}
                   onChange={(e) => {
                     onChange(
@@ -135,8 +137,8 @@ export function ChatMultiSelect({
                     );
                   }}
                 />
-                <span className="min-w-0 flex-1">
-                  <span className="block font-mono text-sm text-stone-800">{id}</span>
+                <span className="min-w-0 flex-1 overflow-hidden">
+                  <span className="block truncate font-mono text-sm text-stone-800">{id}</span>
                   <span className="mt-0.5 block text-[11px] text-amber-700">Нет в реестре</span>
                 </span>
               </label>
@@ -145,12 +147,14 @@ export function ChatMultiSelect({
           {chats.map((chat) => {
             const checked = selected.has(chat.chat_id);
             const badge = chatTypeBadge(chat.type);
+            const title =
+              chat.title?.trim() || (chat.username ? `@${chat.username}` : null) || chat.chat_id;
             return (
-              <li key={chat.id}>
-                <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-white">
+              <li key={chat.id} className="min-w-0">
+                <label className="flex min-w-0 cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-white">
                   <input
                     type="checkbox"
-                    className="mt-0.5 h-4 w-4 rounded border-stone-300 text-[#7B2D3F] focus:ring-[#7B2D3F]/30"
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-stone-300 text-[#7B2D3F] focus:ring-[#7B2D3F]/30"
                     checked={checked}
                     onChange={(e) => {
                       onChange(
@@ -160,20 +164,20 @@ export function ChatMultiSelect({
                       );
                     }}
                   />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-stone-900">
-                        {chat.title?.trim() ||
-                          (chat.username ? `@${chat.username}` : null) ||
-                          chat.chat_id}
+                  <span className="min-w-0 flex-1 overflow-hidden">
+                    <span className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="min-w-0 break-words text-sm font-medium text-stone-900">
+                        {title}
                       </span>
                       <span
-                        className={`inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}
+                        className={`inline-flex shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}
                       >
                         {badge.label}
                       </span>
                     </span>
-                    <span className="mt-0.5 block font-mono text-[11px] text-stone-400">{chat.chat_id}</span>
+                    <span className="mt-0.5 block truncate font-mono text-[11px] text-stone-400">
+                      {chat.chat_id}
+                    </span>
                   </span>
                 </label>
               </li>
@@ -208,7 +212,7 @@ export function MailingDestinationsEditor({
   const selected = new Set(value.messenger_conversation_ids);
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <ChatMultiSelect
         label="Telegram — чаты из реестра"
         hint="Отметьте один или несколько чатов."
@@ -218,11 +222,13 @@ export function MailingDestinationsEditor({
         emptyHint="Реестр пуст — добавьте чаты в разделе «Чаты»."
       />
 
-      <div>
+      <div className="min-w-0">
         <div className="mb-1.5 flex items-center justify-between gap-2">
-          <label className="block text-xs font-semibold text-stone-700">Чаты в приложении</label>
+          <label className="min-w-0 flex-1 text-xs font-semibold text-stone-700">
+            Чаты в приложении
+          </label>
           {value.messenger_conversation_ids.length > 0 ? (
-            <span className="text-[11px] font-medium text-stone-500">
+            <span className="shrink-0 text-[11px] font-medium text-stone-500">
               Выбрано: {value.messenger_conversation_ids.length}
             </span>
           ) : null}
@@ -237,16 +243,16 @@ export function MailingDestinationsEditor({
             Пока нет каналов или групп в мессенджере. Создайте их в приложении — они появятся здесь.
           </p>
         ) : (
-          <ul className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-stone-200 bg-stone-50/50 p-2">
+          <ul className="max-h-56 space-y-1 overflow-y-auto overflow-x-hidden rounded-xl border border-stone-200 bg-stone-50/50 p-2">
             {chats.map((chat) => {
               const checked = selected.has(chat.id);
               const recommended = chat.recommended_for.includes(purpose);
               return (
-                <li key={chat.id}>
-                  <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-white">
+                <li key={chat.id} className="min-w-0">
+                  <label className="flex min-w-0 cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-white">
                     <input
                       type="checkbox"
-                      className="mt-0.5 h-4 w-4 rounded border-stone-300 text-[#7B2D3F] focus:ring-[#7B2D3F]/30"
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-stone-300 text-[#7B2D3F] focus:ring-[#7B2D3F]/30"
                       checked={checked}
                       onChange={(e) => {
                         const nextIds = e.target.checked
@@ -255,8 +261,10 @@ export function MailingDestinationsEditor({
                         onChange({ ...value, messenger_conversation_ids: nextIds });
                       }}
                     />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium text-stone-900">{chat.title}</span>
+                    <span className="min-w-0 flex-1 overflow-hidden">
+                      <span className="block break-words text-sm font-medium text-stone-900">
+                        {chat.title}
+                      </span>
                       <span className="mt-0.5 block text-[11px] text-stone-500">
                         {chat.type === 'group' ? 'Группа' : 'Канал'}
                         {recommended ? ' · рекомендуется' : ''}
