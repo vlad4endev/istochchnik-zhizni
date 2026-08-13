@@ -2292,6 +2292,94 @@ export async function sendTelegramToChat(args: {
   return { chat_id: chatId, status: sent.status };
 }
 
+/** Простая текстовая отправка в чат (без inline-кнопки) — для системных уведомлений. */
+export async function sendTelegramTextToChat(
+  chatId: string,
+  text: string,
+): Promise<{ ok: boolean; status: number }> {
+  const cfg = await resolveTelegramConfig();
+  if (!cfg.enabled) throw new Error('telegram_disabled');
+  if (!cfg.botToken) throw new Error('telegram_missing_token');
+  const chat = normalizeOptionalString(chatId);
+  if (!chat) throw new Error('telegram_missing_chat');
+  const body = text.trim();
+  if (!body) throw new Error('telegram_empty_text');
+  const sent = await sendTelegramMessageRawSequence(cfg.botToken, chat, body);
+  return { ok: sent.ok, status: sent.status };
+}
+
+/**
+ * Отправка файла через Bot API sendDocument (multipart).
+ * Лимит Telegram ~50 МБ — проверяйте размер до вызова.
+ */
+export async function sendTelegramDocumentToChat(args: {
+  chatId: string;
+  filePath: string;
+  fileName?: string;
+  caption?: string;
+}): Promise<{ ok: boolean; status: number }> {
+  const cfg = await resolveTelegramConfig();
+  if (!cfg.enabled) throw new Error('telegram_disabled');
+  if (!cfg.botToken) throw new Error('telegram_missing_token');
+  const chat = normalizeOptionalString(args.chatId);
+  if (!chat) throw new Error('telegram_missing_chat');
+
+  const fsPromises = await import('node:fs/promises');
+  const { openAsBlob } = await import('node:fs');
+  const pathMod = await import('node:path');
+
+  try {
+    const st = await fsPromises.stat(args.filePath);
+    if (!st.isFile()) throw new Error('telegram_document_not_file');
+  } catch (e) {
+    if (e instanceof Error && e.message === 'telegram_document_not_file') throw e;
+    throw new Error('telegram_document_missing');
+  }
+
+  const fileName =
+    normalizeOptionalString(args.fileName) ?? pathMod.basename(args.filePath) ?? 'backup.tar.gz';
+  const caption = typeof args.caption === 'string' ? args.caption.slice(0, 1024) : '';
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 180_000);
+  try {
+    const blob = await openAsBlob(args.filePath);
+    const form = new FormData();
+    form.append('chat_id', chat);
+    form.append('document', blob, fileName);
+    if (caption) form.append('caption', caption);
+    form.append('disable_content_type_detection', 'true');
+
+    const endpoint = `${telegramApiBaseForBot(cfg.botToken)}/sendDocument`;
+    const response = await fetchTelegramHttp(endpoint, {
+      method: 'POST',
+      body: form,
+      signal: controller.signal,
+    });
+    let body: unknown = null;
+    try {
+      body = (await response.json()) as unknown;
+    } catch {
+      body = null;
+    }
+    const bodyObj =
+      body && typeof body === 'object' ? (body as { ok?: unknown; description?: unknown }) : null;
+    return {
+      ok: response.ok && bodyObj?.ok === true,
+      status: response.status,
+    };
+  } catch (e) {
+    if (isLikelyAbortError(e) || (e instanceof Error && e.name === 'AbortError')) {
+      throw new Error('telegram_connection_timeout');
+    }
+    if (e instanceof Error && e.message.startsWith('telegram_')) throw e;
+    const detail = e instanceof Error ? e.message : String(e);
+    throw new Error(`telegram_send_document_failed:${detail.slice(0, 400)}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function sendTodayPrayerTelegramToAllMembers(
   prayerDateYmd?: string | null,
   options?: { trigger?: TelegramSendTrigger; batchId?: string },

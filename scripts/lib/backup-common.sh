@@ -205,8 +205,8 @@ backup_decrypt_file() {
 # Удаление старых бекапов: KEEP_DAYS (по умолчанию 14) и KEEP_COUNT (по умолчанию 14).
 backup_apply_retention() {
   local backups_root="${1:?}"
-  local keep_days="${BACKUP_KEEP_DAYS:-14}"
-  local keep_count="${BACKUP_KEEP_COUNT:-14}"
+  local keep_days="${BACKUP_KEEP_DAYS:-30}"
+  local keep_count="${BACKUP_KEEP_COUNT:-31}"
 
   [[ -d "$backups_root" ]] || return 0
 

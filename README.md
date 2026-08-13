@@ -115,7 +115,7 @@ bash scripts/restore.sh backups/latest
 CONFIRM_RESTORE=YES bash scripts/restore.sh backups/latest
 ```
 
-На проде в `.env` задайте `BACKUP_BEFORE_UPDATE=1` (бекап перед `npm run server:update`) и по возможности `BACKUP_ENCRYPT_PASSPHRASE`. Подробности: [docs/backup.md](docs/backup.md).
+На проде в `.env` задайте `BACKUP_BEFORE_UPDATE=1` (бекап перед `npm run server:update`) и по возможности `BACKUP_ENCRYPT_PASSPHRASE`. В админке: **Система → Резервная копия** (`/admin?tab=backup`) — создание/скачивание, автобекап и отправка в Telegram. Подробности: [docs/backup.md](docs/backup.md).
 
 ## Обновление на сервере (одна команда)
 

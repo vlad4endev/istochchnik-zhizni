@@ -26,6 +26,7 @@ import pushRoutes from './routes/pushRoutes';
 import notificationsRoutes from './routes/notificationsRoutes';
 import telegramRoutes from './routes/telegramRoutes';
 import smsRoutes from './routes/smsRoutes';
+import backupRoutes from './routes/backupRoutes';
 import publicRoutes from './routes/publicRoutes';
 import songRoutes from './routes/songRoutes';
 import songImportRoutes from './routes/songImportRoutes';
@@ -49,6 +50,7 @@ import {
 } from './realtime/wsHub';
 import { initPushCronJobs } from './cron/pushJobs';
 import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
+import { initBackupJob } from './cron/backupJob';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel, ensureMediykaMessengerChannel, ensureServicePlanPlanningMessengerChannel } from './services/messengerService';
 import { ensurePushSubscriptionsSchema } from './services/pushSubscriptionsSchema';
@@ -382,6 +384,7 @@ app.use('/api/push', pushRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/sms', smsRoutes);
+app.use('/api/backup', backupRoutes);
 
 // Debug/version endpoint (helps verify that deploy updated)
 app.get('/api/version', (_req, res) => {
@@ -563,6 +566,7 @@ async function start(): Promise<void> {
   
   initPushCronJobs();
   initTelegramDispatchJob();
+  initBackupJob();
   startAnalyticsMaintenance();
 
   const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
