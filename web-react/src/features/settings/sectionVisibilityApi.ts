@@ -47,7 +47,7 @@ export function appRoleLabel(role: AppRole): string {
   if (role === 'editor') return 'Редактор';
   if (role === 'musician') return 'Музыкант';
   if (role === 'parishioner') return 'Прихожанин';
-  return 'Участник';
+  return 'Член церкви';
 }
 
 export function appSectionLabel(section: AppSectionId): string {

@@ -13,8 +13,8 @@ import {
   LuCalendarDays,
   LuChevronDown,
   LuGripVertical,
-  LuHistory,
   LuImage,
+  LuSearch,
   LuTable2,
   LuX,
 } from 'react-icons/lu';
@@ -34,7 +34,21 @@ import { AiAssistantMonitorSection } from '../AiAssistantMonitorSection';
 import { AiSettingsSection } from '../AiSettingsSection';
 import { AppSectionsAccessSection } from '../AppSectionsAccessSection';
 import { RolePermissionsManagerSection } from '../RolePermissionsManagerSection';
-import { MemberAppRolesPicker } from '../MemberAppRolesPicker';
+import { AdminMemberEditSheet } from '../AdminMemberEditSheet';
+import {
+  countMembersMatchingRole,
+  displayMemberAppRoles,
+  filterAdminMembers,
+  formatMemberPhone,
+  groupMembersByLetter,
+  memberHasAppRole,
+  memberListQueryIsActive,
+  isAppRoleId,
+  parseMemberAccountFilter,
+  ruPeopleCount,
+  uniqueMinistryDirections,
+  type MemberAccountFilter,
+} from '../memberListQuery';
 import { NotificationsSettingsSection } from '../NotificationsSettingsSection';
 import { TelegramSettingsSection } from '../TelegramSettingsSection';
 import { BackupSettingsSection } from '../BackupSettingsSection';
@@ -42,7 +56,6 @@ import { ProjectJournalSection } from '../ProjectJournalSection';
 import { DiagnosticsDashboardSection } from '../DiagnosticsDashboardSection';
 import { useBrandingStore } from '../../branding/brandingStore';
 import {
-  addAdminPrayerRequestHistory,
   anchorPrayerCycleMember,
   apiErrorMessage,
   bulkCreateAdminMembers,
@@ -90,10 +103,10 @@ import {
   splitMemberNameParts,
 } from '../../../lib/memberRosterName';
 import type { AppUser } from '../types';
-import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useImpersonation } from '../hooks/useImpersonation';
 import { isAppAdministratorSession } from '../../auth/authStore';
+import { APP_ROLE_IDS, appRoleLabel } from '../../settings/sectionVisibilityApi';
 
 type UpcomingBirthday = {
   nextDate: Date;
@@ -147,28 +160,8 @@ function upcomingBirthday(birthDateYmd: string | null | undefined, now: Date, wi
   };
 }
 
-function appRoleLabel(role: string): string {
-  switch (role) {
-    case 'admin':
-      return 'Администратор';
-    case 'parishioner':
-      return 'Прихожанин';
-    case 'minister':
-      return 'Служитель';
-    case 'pastor':
-      return 'Пастор';
-    case 'editor':
-      return 'Редактор каталога';
-    case 'musician':
-      return 'Музыкант';
-    default:
-      return 'Член церкви';
-  }
-}
-
 function memberIsAdmin(u: AppUser): boolean {
-  if (u.app_role === 'admin') return true;
-  return Array.isArray(u.app_roles) && u.app_roles.includes('admin');
+  return memberHasAppRole(u, 'admin');
 }
 
 function appRoleBadgeClass(role: string): string {
@@ -191,6 +184,79 @@ function appRoleBadgeClass(role: string): string {
     return 'rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900';
   }
   return 'rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600';
+}
+
+function MemberAppRoleBadges({
+  u,
+  onSelect,
+}: {
+  u: AppUser;
+  onSelect?: (role: (typeof APP_ROLE_IDS)[number]) => void;
+}) {
+  return (
+    <span className="inline-flex max-w-full flex-wrap items-center gap-1">
+      {displayMemberAppRoles(u).map((role) => {
+        const className = appRoleBadgeClass(role);
+        if (!onSelect) {
+          return (
+            <span key={role} className={className}>
+              {appRoleLabel(role)}
+            </span>
+          );
+        }
+        return (
+          <button
+            key={role}
+            type="button"
+            className={className}
+            title={`Показать всех с ролью «${appRoleLabel(role)}»`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(role);
+            }}
+          >
+            {appRoleLabel(role)}
+          </button>
+        );
+      })}
+    </span>
+  );
+}
+
+function scrollToMemberLetter(letter: string) {
+  const nodes = document.querySelectorAll(`[data-member-letter="${letter}"]`);
+  for (const node of nodes) {
+    if (node instanceof HTMLElement && node.getClientRects().length > 0) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+  }
+}
+
+function MemberListEmptyState({
+  filtersActive,
+  onReset,
+}: {
+  filtersActive: boolean;
+  onReset: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-dashed border-stone-200 px-4 py-10 text-center">
+      <p className="text-sm font-semibold text-stone-700">
+        {filtersActive ? 'Никого не найдено' : 'Список пуст'}
+      </p>
+      <p className="mt-1 text-sm text-stone-500">
+        {filtersActive
+          ? 'Попробуйте другое имя, телефон или сбросьте фильтры.'
+          : 'Добавьте первого пользователя кнопкой выше.'}
+      </p>
+      {filtersActive ? (
+        <button type="button" className="mt-3 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50" onClick={onReset}>
+          Сбросить поиск и фильтры
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 const Q_MEMBERS = ['admin', 'members'] as const;
@@ -281,6 +347,10 @@ function directionArray(value: string): string[] {
   return roleArray(value);
 }
 
+function memberServiceLine(u: AppUser): string {
+  return [u.ministry_direction, u.ministry_role].map((x) => (x ?? '').trim()).filter(Boolean).join(' · ');
+}
+
 function displayName(u: AppUser): string {
   const f = (u.first_name ?? '').trim();
   const l = (u.last_name ?? '').trim();
@@ -301,8 +371,8 @@ function MemberRegistrationBadge({ u }: { u: AppUser }) {
     <span
       className={
         ok
-          ? 'inline-flex items-center gap-1 rounded-full border border-emerald-200/90 bg-gradient-to-r from-emerald-50 to-teal-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-900 shadow-sm shadow-emerald-900/5'
-          : 'inline-flex items-center gap-1 rounded-full border border-amber-200/90 bg-gradient-to-r from-amber-50 to-orange-50/80 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-950 shadow-sm shadow-amber-900/5'
+          ? 'inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800'
+          : 'inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900'
       }
       title={
         ok
@@ -310,21 +380,10 @@ function MemberRegistrationBadge({ u }: { u: AppUser }) {
           : 'В списке пользователей, но вход в приложение ещё не оформлен'
       }
     >
-      {ok ? (
-        <>
-          <span className="text-emerald-600" aria-hidden>
-            ✓
-          </span>
-          В приложении
-        </>
-      ) : (
-        <>
-          <span className="text-amber-700/90" aria-hidden>
-            ○
-          </span>
-          Нет входа
-        </>
-      )}
+      <span className={ok ? 'text-emerald-600' : 'text-amber-700'} aria-hidden>
+        {ok ? '●' : '○'}
+      </span>
+      {ok ? 'В приложении' : 'Нет входа'}
     </span>
   );
 }
@@ -564,6 +623,7 @@ function MembersSection({
   onAddUserClose: () => void;
 }) {
   const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { startImpersonation, canStartImpersonation, isImpersonating } = useImpersonation();
   const showImpersonateButton = canStartImpersonation && isAppAdministratorSession() && !isImpersonating;
   const { data, isLoading, error, isFetching } = useQuery({
@@ -572,9 +632,13 @@ function MembersSection({
   });
   const dirsQ = useQuery({ queryKey: Q_DIRS, queryFn: fetchDirectionTemplates, staleTime: 30_000 });
 
-  const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
+  const search = searchParams.get('q') ?? '';
+  const roleFromUrl = searchParams.get('role') ?? '';
+  const roleFilter = isAppRoleId(roleFromUrl) ? roleFromUrl : '';
+  const accountFilter = parseMemberAccountFilter(searchParams.get('status'));
+  const ministryFilter = searchParams.get('dir') ?? '';
   const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [showBirthdays, setShowBirthdays] = useState(false);
   const [form, setForm] = useState({
     first_name: '',
     last_name: '',
@@ -597,8 +661,6 @@ function MembersSection({
     is_active: true,
     in_prayer_cycle: false,
   });
-  const [oneTimeId, setOneTimeId] = useState<number | null>(null);
-  const [oneTimeDate, setOneTimeDate] = useState('');
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [showBulkCreate, setShowBulkCreate] = useState(false);
   const [bulkRows, setBulkRows] = useState<BulkMemberRow[]>(() => [
@@ -608,8 +670,6 @@ function MembersSection({
   ]);
   const [bulkMergeDupes, setBulkMergeDupes] = useState(false);
   const [bulkPasteText, setBulkPasteText] = useState('');
-  const [isPrayerRequestEditing, setIsPrayerRequestEditing] = useState(false);
-  const [showPrayerHistory, setShowPrayerHistory] = useState(false);
   const memberEditTitleId = useId();
 
   useEffect(() => {
@@ -628,19 +688,19 @@ function MembersSection({
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: Q_MEMBERS });
 
+  const listQuery = useMemo(
+    () => ({ search, role: roleFilter, account: accountFilter, ministry: ministryFilter }),
+    [search, roleFilter, accountFilter, ministryFilter],
+  );
+  const filtersActive = memberListQueryIsActive(listQuery);
+
   const filtered = useMemo(() => {
-    const list = data ?? [];
-    const q = search.trim().toLowerCase();
-    const roleFiltered = !roleFilter ? list : list.filter((u) => u.app_role === roleFilter);
-    const matched = !q
-      ? roleFiltered
-      : roleFiltered.filter((u) => {
-          const blob =
-            `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''} ${u.telegram_chat_id ?? ''}`.toLowerCase();
-          return blob.includes(q);
-        });
+    const matched = filterAdminMembers(data ?? [], listQuery);
     return [...matched].sort(compareMembersByPrayerCycleOrder);
-  }, [data, search, roleFilter]);
+  }, [data, listQuery]);
+
+  const letterGroups = useMemo(() => groupMembersByLetter(filtered), [filtered]);
+  const ministryOptions = useMemo(() => uniqueMinistryDirections(data ?? []), [data]);
 
   const now = useMemo(() => new Date(), []);
   const upcomingBirthdays = useMemo(() => {
@@ -680,12 +740,65 @@ function MembersSection({
     const registered = list.filter((u) => u.has_registered).length;
     return {
       total: list.length,
-      active: list.filter((u) => u.is_active).length,
-      admins: list.filter((u) => u.app_role === 'admin').length,
+      admins: list.filter((u) => memberHasAppRole(u, 'admin')).length,
       registered,
       withoutApp: Math.max(0, list.length - registered),
     };
   }, [data]);
+
+  const roleFilterCounts = useMemo(() => {
+    const list = data ?? [];
+    return Object.fromEntries(APP_ROLE_IDS.map((role) => [role, countMembersMatchingRole(list, role)])) as Record<
+      (typeof APP_ROLE_IDS)[number],
+      number
+    >;
+  }, [data]);
+
+  function patchMemberListParams(patch: {
+    q?: string;
+    role?: string;
+    status?: MemberAccountFilter;
+    dir?: string;
+  }) {
+    const next = new URLSearchParams(searchParams);
+    if (patch.q !== undefined) {
+      if (patch.q) next.set('q', patch.q);
+      else next.delete('q');
+    }
+    if (patch.role !== undefined) {
+      if (patch.role) next.set('role', patch.role);
+      else next.delete('role');
+    }
+    if (patch.status !== undefined) {
+      if (patch.status === 'all') next.delete('status');
+      else next.set('status', patch.status);
+    }
+    if (patch.dir !== undefined) {
+      if (patch.dir) next.set('dir', patch.dir);
+      else next.delete('dir');
+    }
+    setSearchParams(next, { replace: true });
+  }
+
+  const clearMemberFilters = () => {
+    patchMemberListParams({ q: '', role: '', status: 'all', dir: '' });
+  };
+
+  function toggleRoleFilter(role: string) {
+    patchMemberListParams({ role: roleFilter === role ? '' : role });
+  }
+
+  async function copyMemberPhone(e: MouseEvent, phone: string | null) {
+    e.stopPropagation();
+    const raw = (phone ?? '').trim();
+    if (!raw) return;
+    try {
+      await navigator.clipboard.writeText(raw);
+      setBanner({ type: 'ok', text: 'Телефон скопирован' });
+    } catch {
+      setBanner({ type: 'err', text: 'Не удалось скопировать телефон' });
+    }
+  }
 
   const createPayload = () => ({
     first_name: form.first_name.trim(),
@@ -948,13 +1061,8 @@ function MembersSection({
   });
 
   const oneTimeMut = useMutation({
-    mutationFn: () => {
-      if (oneTimeId == null || !oneTimeDate.trim()) throw new Error('no date');
-      return setOneTimeMemberDate(oneTimeId, oneTimeDate.trim());
-    },
+    mutationFn: ({ id, date }: { id: number; date: string }) => setOneTimeMemberDate(id, date),
     onSuccess: () => {
-      setOneTimeId(null);
-      setOneTimeDate('');
       setBanner({ type: 'ok', text: 'Разовая дата назначена.' });
       invalidate();
     },
@@ -963,8 +1071,6 @@ function MembersSection({
 
   function openEdit(u: AppUser) {
     setEditing(u);
-    setIsPrayerRequestEditing(false);
-    setShowPrayerHistory(false);
     const { first_name: ef, last_name: el } = splitNameForEditForm(u);
     setEditForm({
       first_name: ef,
@@ -992,9 +1098,6 @@ function MembersSection({
     setBanner(null);
     createMut.mutate();
   }
-
-  const oneTimeSubject =
-    oneTimeId != null ? ((data ?? []).find((u) => u.id === oneTimeId) ?? null) : null;
 
   if (isLoading) {
     return (
@@ -1038,178 +1141,292 @@ function MembersSection({
         </div>
       )}
 
-      {/* Metric cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
-          <p className="text-xs text-stone-500">Всего участников</p>
-          <p className="mt-1 text-2xl font-extrabold text-stone-900">{stats.total}</p>
-          {isFetching && !isLoading ? (
-            <p className="mt-0.5 text-[10px] text-stone-400">Обновление…</p>
-          ) : null}
-        </div>
-        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
-          <p className="text-xs text-stone-500">В приложении</p>
-          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{stats.registered}</p>
-        </div>
-        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
-          <p className="text-xs text-stone-500">Без входа</p>
-          <p className="mt-1 text-2xl font-extrabold text-red-600">{stats.withoutApp}</p>
-        </div>
-        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
-          <p className="text-xs text-stone-500">Администраторов</p>
-          <p className="mt-1 text-2xl font-extrabold text-primary">{stats.admins}</p>
-        </div>
+      {/* Metric cards — клик включает фильтр */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        {(
+          [
+            {
+              key: 'all',
+              label: 'Всего',
+              value: stats.total,
+              valueClass: 'text-stone-900',
+              active: !filtersActive,
+              onClick: () => clearMemberFilters(),
+            },
+            {
+              key: 'in_app',
+              label: 'В приложении',
+              value: stats.registered,
+              valueClass: 'text-emerald-700',
+              active: accountFilter === 'in_app' && !roleFilter && !ministryFilter,
+              onClick: () =>
+                patchMemberListParams({
+                  role: '',
+                  dir: '',
+                  status: accountFilter === 'in_app' ? 'all' : 'in_app',
+                }),
+            },
+            {
+              key: 'no_login',
+              label: 'Нет входа',
+              value: stats.withoutApp,
+              valueClass: 'text-red-600',
+              active: accountFilter === 'no_login' && !roleFilter && !ministryFilter,
+              onClick: () =>
+                patchMemberListParams({
+                  role: '',
+                  dir: '',
+                  status: accountFilter === 'no_login' ? 'all' : 'no_login',
+                }),
+            },
+            {
+              key: 'admin',
+              label: 'Администраторы',
+              value: stats.admins,
+              valueClass: 'text-primary',
+              active: roleFilter === 'admin',
+              onClick: () =>
+                patchMemberListParams({
+                  status: 'all',
+                  role: roleFilter === 'admin' ? '' : 'admin',
+                }),
+            },
+          ] as const
+        ).map((card) => (
+          <button
+            key={card.key}
+            type="button"
+            onClick={card.onClick}
+            aria-pressed={card.active}
+            className={
+              card.active
+                ? 'rounded-xl border border-primary/40 bg-primary/[0.06] px-3 py-2.5 text-left sm:rounded-2xl sm:px-4 sm:py-3'
+                : 'rounded-xl border border-stone-200/80 bg-[var(--surface-elevated)] px-3 py-2.5 text-left transition hover:border-primary/30 sm:rounded-2xl sm:px-4 sm:py-3'
+            }
+          >
+            <p className="text-[11px] text-stone-500 sm:text-xs">{card.label}</p>
+            <p className={`mt-0.5 text-xl font-extrabold sm:text-2xl ${card.valueClass}`}>{card.value}</p>
+            {card.key === 'all' && isFetching && !isLoading ? (
+              <p className="mt-0.5 text-[10px] text-stone-400">Обновление…</p>
+            ) : null}
+          </button>
+        ))}
       </div>
 
-      {/* Upcoming birthdays */}
+      {/* Upcoming birthdays — свёрнуты, чтобы не закрывать список */}
       {upcomingBirthdays.length ? (
-        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-stone-400">Дни рождения</p>
-              <p className="mt-1 text-sm font-semibold text-stone-900">
-                <span aria-hidden>🎂</span> Ближайшие 30 дней
-              </p>
+        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+            onClick={() => setShowBirthdays((v) => !v)}
+            aria-expanded={showBirthdays}
+          >
+            <span className="min-w-0 text-sm font-semibold text-stone-900">
+              <span aria-hidden>🎂</span> Дни рождения в ближайшие 30 дней
+              <span className="ml-2 rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-bold text-pink-800">
+                {upcomingBirthdays.length}
+              </span>
+            </span>
+            <LuChevronDown
+              className={`h-4 w-4 shrink-0 text-stone-400 transition ${showBirthdays ? 'rotate-180' : ''}`}
+              aria-hidden
+            />
+          </button>
+          {showBirthdays ? (
+            <div className="border-t border-stone-100 px-4 pb-4 pt-3">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {upcomingBirthdays.slice(0, 8).map(({ u, b }) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => openEdit(u)}
+                    className="group flex min-w-0 items-center justify-between gap-3 rounded-xl border border-stone-200/80 bg-white px-3 py-2 text-left shadow-sm transition hover:border-primary/40 hover:bg-primary/[0.04]"
+                    title="Открыть карточку"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-stone-900">
+                        {memberRosterName(u)}
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-stone-500">
+                        {formatMemberPhone(u.phone_number)}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block whitespace-nowrap text-xs font-semibold text-stone-700">{b.dateLabel}</span>
+                      <span className="mt-0.5 block whitespace-nowrap text-[11px] font-bold text-primary">
+                        {b.relativeLabel}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {upcomingBirthdays.length > 8 ? (
+                <p className="mt-2 text-xs text-stone-500">
+                  И ещё: <strong>{upcomingBirthdays.length - 8}</strong>
+                </p>
+              ) : null}
             </div>
-            <p className="text-xs text-stone-500">Показаны активные пользователи</p>
-          </div>
-
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {upcomingBirthdays.slice(0, 8).map(({ u, b }) => (
-              <button
-                key={u.id}
-                type="button"
-                onClick={() => openEdit(u)}
-                className="group flex min-w-0 items-center justify-between gap-3 rounded-xl border border-stone-200/80 bg-white px-3 py-2 text-left shadow-sm transition hover:border-primary/40 hover:bg-primary/[0.04]"
-                title="Открыть карточку"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-stone-900">
-                    {memberRosterName(u)}
-                  </span>
-                  <span className="mt-0.5 block truncate text-xs text-stone-500">{u.phone_number ?? '—'}</span>
-                </span>
-                <span className="shrink-0 text-right">
-                  <span className="block whitespace-nowrap text-xs font-semibold text-stone-700">{b.dateLabel}</span>
-                  <span className="mt-0.5 block whitespace-nowrap text-[11px] font-bold text-primary">
-                    {b.relativeLabel}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {upcomingBirthdays.length > 8 ? (
-            <p className="mt-2 text-xs text-stone-500">
-              И ещё: <strong>{upcomingBirthdays.length - 8}</strong>
-            </p>
           ) : null}
         </div>
       ) : null}
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="search"
-          className={`${fieldClass()} min-w-[160px] flex-1`}
-          placeholder="Поиск по имени или телефону…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label="Поиск пользователей"
-        />
-        <select
-          className="rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-          aria-label="Фильтр по роли"
-        >
-          <option value="">Все роли</option>
-          <option value="parishioner">Прихожанин</option>
-          <option value="member">Член церкви</option>
-          <option value="minister">Служитель</option>
-          <option value="pastor">Пастор</option>
-          <option value="musician">Музыкант</option>
-          <option value="editor">Редактор</option>
-          <option value="admin">Администратор</option>
-        </select>
-        <button
-          type="button"
-          className={btnSecondary('')}
-          onClick={() => {
-            setSearch('');
-            setRoleFilter('');
-          }}
-          title="Сбросить фильтры"
-        >
-          Сброс
-        </button>
-        <button
-          type="button"
-          className={
-            showBulkCreate
-              ? `${btnPrimary('')} inline-flex items-center gap-1.5`
-              : `${btnSecondary('')} inline-flex items-center gap-1.5`
-          }
-          onClick={() => setShowBulkCreate((v) => !v)}
-        >
-          <LuTable2 className="h-4 w-4 shrink-0" aria-hidden />
-          Массово из таблицы
-        </button>
-        <div className="relative">
+      <div className="sticky top-0 z-20 -mx-1 space-y-2 bg-[var(--surface,#f4f1ed)]/95 px-1 py-2 backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="relative min-w-[220px] flex-1">
+            <LuSearch
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400"
+              aria-hidden
+            />
+            <input
+              type="search"
+              className={`${fieldClass()} pl-9 ${search ? 'pr-9' : ''}`}
+              placeholder="Имя, фамилия, телефон, роль, служение…"
+              value={search}
+              onChange={(e) => patchMemberListParams({ q: e.target.value })}
+              aria-label="Поиск пользователей"
+            />
+            {search ? (
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                onClick={() => patchMemberListParams({ q: '' })}
+                aria-label="Очистить поиск"
+              >
+                <LuX className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            ) : null}
+          </label>
+          <select
+            className="rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            value={roleFilter}
+            onChange={(e) => patchMemberListParams({ role: e.target.value })}
+            aria-label="Фильтр по роли приложения"
+          >
+            <option value="">Все роли</option>
+            {APP_ROLE_IDS.map((role) => (
+              <option key={role} value={role}>
+                {appRoleLabel(role)} ({roleFilterCounts[role]})
+              </option>
+            ))}
+          </select>
+          {ministryOptions.length > 0 ? (
+            <select
+              className="rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              value={ministryFilter}
+              onChange={(e) => patchMemberListParams({ dir: e.target.value })}
+              aria-label="Фильтр по направлению служения"
+            >
+              <option value="">Все служения</option>
+              {ministryOptions.map((dir) => (
+                <option key={dir} value={dir}>
+                  {dir}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {filtersActive ? (
+            <button type="button" className={btnSecondary('')} onClick={clearMemberFilters} title="Сбросить поиск и фильтры">
+              Сбросить
+            </button>
+          ) : null}
           <button
             type="button"
-            className={btnSecondary('')}
-            onClick={() => setShowActionsMenu((v) => !v)}
+            className={
+              showBulkCreate
+                ? `${btnPrimary('')} inline-flex items-center gap-1.5`
+                : `${btnSecondary('')} inline-flex items-center gap-1.5`
+            }
+            onClick={() => setShowBulkCreate((v) => !v)}
           >
-            ⋯ Действия
+            <LuTable2 className="h-4 w-4 shrink-0" aria-hidden />
+            Массово
           </button>
-          {showActionsMenu && (
-            <>
-              <div
-                className="fixed inset-0 z-20"
-                onClick={() => setShowActionsMenu(false)}
-                aria-hidden
-              />
-              <div className="absolute right-0 top-full z-30 mt-1 min-w-[230px] rounded-xl border border-stone-200 bg-white py-1 shadow-lg">
-                <button
-                  type="button"
-                  className="w-full px-4 py-2 text-left text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-                  disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
-                  onClick={() => {
-                    setShowActionsMenu(false);
-                    if (
-                      !window.confirm(
-                        'Объединить дубликаты пользователей? Останется одна карточка с меньшим номером, пароль и данные перенесутся.',
+          <div className="relative">
+            <button
+              type="button"
+              className={btnSecondary('')}
+              onClick={() => setShowActionsMenu((v) => !v)}
+            >
+              ⋯
+            </button>
+            {showActionsMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-20"
+                  onClick={() => setShowActionsMenu(false)}
+                  aria-hidden
+                />
+                <div className="absolute right-0 top-full z-30 mt-1 min-w-[230px] rounded-xl border border-stone-200 bg-white py-1 shadow-lg">
+                  <button
+                    type="button"
+                    className="w-full px-4 py-2 text-left text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+                    disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      if (
+                        !window.confirm(
+                          'Объединить дубликаты пользователей? Останется одна карточка с меньшим номером, пароль и данные перенесутся.',
+                        )
                       )
-                    )
-                      return;
-                    setBanner(null);
-                    mergeDupesMut.mutate();
-                  }}
-                >
-                  {mergeDupesMut.isPending ? 'Объединение…' : 'Объединить дубликаты'}
-                </button>
-                <button
-                  type="button"
-                  className="w-full px-4 py-2 text-left text-sm font-semibold text-amber-900 hover:bg-stone-50 disabled:opacity-50"
-                  disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
-                  onClick={() => {
-                    setShowActionsMenu(false);
-                    if (
-                      !window.confirm(
-                        'Поменять местами поля «имя» и «фамилия» у ВСЕХ пользователей? Повторный запуск снова меняет местами (откат).',
+                        return;
+                      setBanner(null);
+                      mergeDupesMut.mutate();
+                    }}
+                  >
+                    {mergeDupesMut.isPending ? 'Объединение…' : 'Объединить дубликаты'}
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full px-4 py-2 text-left text-sm font-semibold text-amber-900 hover:bg-stone-50 disabled:opacity-50"
+                    disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      if (
+                        !window.confirm(
+                          'Поменять местами поля «имя» и «фамилия» у ВСЕХ пользователей? Повторный запуск снова меняет местами (откат).',
+                        )
                       )
-                    )
-                      return;
-                    setBanner(null);
-                    swapAllNamesMut.mutate();
-                  }}
-                >
-                  {swapAllNamesMut.isPending ? 'Обновление…' : 'Поменять имя/фамилию у всех'}
-                </button>
-              </div>
-            </>
-          )}
+                        return;
+                      setBanner(null);
+                      swapAllNamesMut.mutate();
+                    }}
+                  >
+                    {swapAllNamesMut.isPending ? 'Обновление…' : 'Поменять имя/фамилию у всех'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-stone-500" aria-live="polite">
+            {filtersActive
+              ? `Показано ${ruPeopleCount(filtered.length)} из ${stats.total}`
+              : `${ruPeopleCount(stats.total)} · по фамилии А–Я`}
+            {roleFilter && isAppRoleId(roleFilter) ? ` · ${appRoleLabel(roleFilter)}` : ''}
+            {accountFilter !== 'all'
+              ? ` · ${accountFilter === 'in_app' ? 'в приложении' : accountFilter === 'no_login' ? 'нет входа' : 'неактивные'}`
+              : ''}
+            {ministryFilter ? ` · ${ministryFilter}` : ''}
+          </p>
+          {letterGroups.length > 3 && filtered.length >= 16 ? (
+            <div className="hidden max-w-full flex-wrap gap-0.5 shell:flex" aria-label="Переход по буквам">
+              {letterGroups
+                .filter((g) => g.letter !== '#')
+                .map((g) => (
+                  <button
+                    key={g.letter}
+                    type="button"
+                    className="rounded px-1 py-0.5 text-[11px] font-bold text-stone-500 hover:bg-stone-200 hover:text-stone-800"
+                    onClick={() => scrollToMemberLetter(g.letter)}
+                  >
+                    {g.letter}
+                  </button>
+                ))}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -1572,94 +1789,98 @@ function MembersSection({
       {/* Карточки — мобильные */}
       <div className="space-y-3 shell:hidden">
         {filtered.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-stone-200 py-10 text-center text-sm text-stone-500">
-            {search.trim() ? 'Никого не найдено.' : 'Список пуст.'}
-          </p>
+          <MemberListEmptyState filtersActive={filtersActive} onReset={clearMemberFilters} />
         ) : (
-          filtered.map((u) => {
-            const bday = birthdayBadge(u, now, 30);
-            return (
-              <article
-                key={u.id}
-                className="cursor-pointer rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] transition hover:border-primary/40 hover:shadow-md"
-                role="button"
-                tabIndex={0}
-                onClick={() => openEdit(u)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    openEdit(u);
-                  }
-                }}
+          letterGroups.map((group) => (
+            <div key={group.letter} className="space-y-2">
+              <p
+                data-member-letter={group.letter}
+                className="sticky top-14 z-[1] bg-[var(--surface,#f4f1ed)]/95 px-1 py-1 text-xs font-extrabold uppercase tracking-wider text-stone-400 backdrop-blur"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
-                    <p className="mt-0.5 text-sm text-stone-600">{u.phone_number ?? '—'}</p>
-                  </div>
-                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary">
-                    Карточка
-                  </span>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <MemberRegistrationBadge u={u} />
-                  <span className={appRoleBadgeClass(u.app_role)}>{appRoleLabel(u.app_role)}</span>
-                  {bday ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2.5 py-0.5 text-xs font-semibold text-pink-800">
-                      <span aria-hidden>🎂</span>
-                      {bday.dateLabel}
-                      <span className="font-bold text-pink-700">· {bday.relativeLabel}</span>
-                    </span>
-                  ) : null}
-                  <span
-                    className={
-                      u.is_active
-                        ? 'rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800'
-                        : 'rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500'
-                    }
+                {group.letter === '#' ? 'Без фамилии' : group.letter}
+              </p>
+              {group.members.map((u) => {
+                const bday = birthdayBadge(u, now, 30);
+                const service = memberServiceLine(u);
+                return (
+                  <article
+                    key={u.id}
+                    className={`cursor-pointer rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] transition hover:border-primary/40 hover:shadow-md ${u.is_active ? '' : 'opacity-70'}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openEdit(u)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openEdit(u);
+                      }
+                    }}
                   >
-                    {u.is_active ? 'Активен' : 'Неактивен'}
-                  </span>
-                  {u.is_collection_coordinator ? (
-                    <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
-                      Сбор
-                    </span>
-                  ) : null}
-                  {u.in_prayer_cycle ? (
-                    <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900">
-                      В цикле
-                    </span>
-                  ) : (
-                    <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
-                      Вне цикла
-                    </span>
-                  )}
-                </div>
-                {showImpersonateButton && !memberIsAdmin(u) ? (
-                  <button
-                    type="button"
-                    className="mt-3 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-                    title="Войти в аккаунт"
-                    onClick={(e) => handleImpersonate(u, e)}
-                  >
-                    👁 Войти
-                  </button>
-                ) : null}
-              </article>
-            );
-          })
+                    <div className="min-w-0">
+                      <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
+                      <button
+                        type="button"
+                        className="mt-0.5 text-left text-sm text-stone-600 hover:text-primary"
+                        title={u.phone_number ? 'Скопировать телефон' : undefined}
+                        onClick={(e) => void copyMemberPhone(e, u.phone_number)}
+                      >
+                        {formatMemberPhone(u.phone_number)}
+                      </button>
+                      {service ? <p className="mt-0.5 truncate text-xs text-stone-500">{service}</p> : null}
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <MemberRegistrationBadge u={u} />
+                      <MemberAppRoleBadges u={u} onSelect={toggleRoleFilter} />
+                      {bday ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2.5 py-0.5 text-xs font-semibold text-pink-800">
+                          <span aria-hidden>🎂</span>
+                          {bday.dateLabel}
+                          <span className="font-bold text-pink-700">· {bday.relativeLabel}</span>
+                        </span>
+                      ) : null}
+                      {!u.is_active ? (
+                        <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
+                          Неактивен
+                        </span>
+                      ) : null}
+                      {u.is_collection_coordinator ? (
+                        <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+                          Сбор
+                        </span>
+                      ) : null}
+                      {u.in_prayer_cycle ? (
+                        <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900">
+                          В цикле
+                        </span>
+                      ) : null}
+                    </div>
+                    {showImpersonateButton && !memberIsAdmin(u) ? (
+                      <button
+                        type="button"
+                        className="mt-3 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                        title="Войти в аккаунт"
+                        onClick={(e) => handleImpersonate(u, e)}
+                      >
+                        👁 Войти
+                      </button>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          ))
         )}
       </div>
 
       {/* Table — shown at shell+ breakpoint */}
       <div className="hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)] shell:block">
         <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-smooth">
-          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50/90 text-xs font-extrabold uppercase tracking-wider text-stone-500">
                 <th className="px-4 py-3">Участник</th>
                 <th className="whitespace-nowrap px-4 py-3">Телефон</th>
-                <th className="px-4 py-3">Роль</th>
+                <th className="px-4 py-3">Роли</th>
                 <th className="px-4 py-3">Статус</th>
                 {showImpersonateButton ? <th className="px-4 py-3">Действия</th> : null}
               </tr>
@@ -1667,792 +1888,152 @@ function MembersSection({
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={showImpersonateButton ? 5 : 4} className="px-4 py-10 text-center text-stone-500">
-                    {search.trim() || roleFilter ? 'Никого не найдено.' : 'Список пуст.'}
+                  <td colSpan={showImpersonateButton ? 5 : 4} className="px-4 py-6">
+                    <MemberListEmptyState filtersActive={filtersActive} onReset={clearMemberFilters} />
                   </td>
                 </tr>
               ) : (
-                filtered.map((u) => {
-                  const name = memberRosterName(u);
-                  const { bg, fg } = memberAvatarColors(name);
-                  const bday = birthdayBadge(u, now, 30);
-                  return (
-                    <tr
-                      key={u.id}
-                      tabIndex={0}
-                      title="Открыть карточку"
-                      className="cursor-pointer border-b border-stone-100/90 transition last:border-0 hover:bg-primary/[0.06]"
-                      onClick={() => openEdit(u)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          openEdit(u);
-                        }
-                      }}
+                letterGroups.flatMap((group) => [
+                  <tr key={`letter-${group.letter}`} className="bg-stone-50/90">
+                    <td
+                      colSpan={showImpersonateButton ? 5 : 4}
+                      data-member-letter={group.letter}
+                      className="sticky top-0 z-[1] px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wider text-stone-400"
                     >
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-                            style={{ backgroundColor: bg, color: fg }}
-                            aria-hidden
-                          >
-                            {memberInitials(u)}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="truncate font-medium text-stone-900">{name}</p>
-                            {u.ministry_role ? (
-                              <p className="truncate text-xs text-stone-500">{u.ministry_role}</p>
-                            ) : null}
-                            {bday ? (
-                              <p className="mt-0.5 truncate text-[11px] font-semibold text-pink-800">
-                                <span aria-hidden>🎂</span> {bday.dateLabel}{' '}
-                                <span className="font-bold text-pink-700">· {bday.relativeLabel}</span>
-                              </p>
-                            ) : null}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-stone-600">
-                        {u.phone_number ?? '—'}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span className={appRoleBadgeClass(u.app_role)}>{appRoleLabel(u.app_role)}</span>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <MemberRegistrationBadge u={u} />
-                      </td>
-                      {showImpersonateButton ? (
+                      {group.letter === '#' ? 'Без фамилии' : group.letter}
+                      <span className="ml-2 font-semibold normal-case tracking-normal text-stone-300">
+                        {group.members.length}
+                      </span>
+                    </td>
+                  </tr>,
+                  ...group.members.map((u) => {
+                    const name = memberRosterName(u);
+                    const { bg, fg } = memberAvatarColors(name);
+                    const bday = birthdayBadge(u, now, 30);
+                    const service = memberServiceLine(u);
+                    return (
+                      <tr
+                        key={u.id}
+                        tabIndex={0}
+                        title="Открыть карточку"
+                        className={`cursor-pointer border-b border-stone-100/90 transition last:border-0 hover:bg-primary/[0.06] ${u.is_active ? '' : 'opacity-70'}`}
+                        onClick={() => openEdit(u)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openEdit(u);
+                          }
+                        }}
+                      >
                         <td className="px-4 py-2.5">
-                          {!memberIsAdmin(u) ? (
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+                              style={{ backgroundColor: bg, color: fg }}
+                              aria-hidden
+                            >
+                              {memberInitials(u)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-stone-900">{name}</p>
+                              {service ? <p className="truncate text-xs text-stone-500">{service}</p> : null}
+                              {bday ? (
+                                <p className="mt-0.5 truncate text-[11px] font-semibold text-pink-800">
+                                  <span aria-hidden>🎂</span> {bday.dateLabel}{' '}
+                                  <span className="font-bold text-pink-700">· {bday.relativeLabel}</span>
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-2.5">
+                          {u.phone_number ? (
                             <button
                               type="button"
-                              className="rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-                              title="Войти в аккаунт"
-                              onClick={(e) => handleImpersonate(u, e)}
+                              className="text-stone-600 hover:text-primary"
+                              title="Скопировать телефон"
+                              onClick={(e) => void copyMemberPhone(e, u.phone_number)}
                             >
-                              👁 Войти
+                              {formatMemberPhone(u.phone_number)}
                             </button>
-                          ) : null}
+                          ) : (
+                            <span className="text-stone-400">—</span>
+                          )}
                         </td>
-                      ) : null}
-                    </tr>
-                  );
-                })
+                        <td className="px-4 py-2.5">
+                          <MemberAppRoleBadges u={u} onSelect={toggleRoleFilter} />
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <MemberRegistrationBadge u={u} />
+                            {!u.is_active ? (
+                              <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
+                                Неактивен
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        {showImpersonateButton ? (
+                          <td className="px-4 py-2.5">
+                            {!memberIsAdmin(u) ? (
+                              <button
+                                type="button"
+                                className="rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                                title="Войти в аккаунт"
+                                onClick={(e) => handleImpersonate(u, e)}
+                              >
+                                👁 Войти
+                              </button>
+                            ) : null}
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  }),
+                ])
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {oneTimeId != null && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="one-time-title"
-        >
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
-            <h3 id="one-time-title" className="text-lg font-extrabold text-stone-900">
-              Разовая дата в цикле
-            </h3>
-            <p className="mt-1 text-sm text-stone-600">
-              Член церкви:{' '}
-              <strong>{oneTimeSubject ? memberRosterName(oneTimeSubject) : `#${oneTimeId}`}</strong>
-            </p>
-            <p className="mt-2 text-xs text-stone-500">
-              Назначение на один день без сдвига общего расписания цикла.
-            </p>
-            <label className="mt-4 block text-xs font-semibold text-stone-600">Дата</label>
-            <input
-              type="date"
-              className={`${fieldClass()} mt-1`}
-              value={oneTimeDate}
-              onChange={(e) => setOneTimeDate(e.target.value)}
-            />
-            <div className="mt-5 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={btnPrimary('flex-1')}
-                disabled={!oneTimeDate || oneTimeMut.isPending}
-                onClick={() => {
-                  setBanner(null);
-                  oneTimeMut.mutate();
-                }}
-              >
-                {oneTimeMut.isPending ? 'Сохранение…' : 'Сохранить'}
-              </button>
-              <button type="button" className={btnSecondary()} onClick={() => setOneTimeId(null)}>
-                Отмена
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editing && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4 max-lg:p-0"
-          role="presentation"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setEditing(null);
+      {editing ? (
+        <AdminMemberEditSheet
+          editing={editing}
+          editForm={editForm}
+          setEditForm={setEditForm}
+          titleId={memberEditTitleId}
+          dirs={dirs}
+          roleOptionsForDirection={roleOptionsForDirection}
+          savePending={saveEditMut.isPending}
+          deletePending={deleteMut.isPending}
+          swapPending={swapNameFieldsMut.isPending}
+          resetPasswordPending={resetPasswordMut.isPending}
+          oneTimePending={oneTimeMut.isPending}
+          roleMut={roleMut}
+          onClose={() => setEditing(null)}
+          onSave={() => saveEditMut.mutate()}
+          onDelete={() => deleteMut.mutate(editing.id)}
+          onSwapNames={() => swapNameFieldsMut.mutate()}
+          onResetPassword={() => resetPasswordMut.mutate(editing.id)}
+          onClearBanner={() => setBanner(null)}
+          onToggleCollectionCoordinator={() => {
+            void updateAdminMember(editing.id, {
+              is_collection_coordinator: !editing.is_collection_coordinator,
+            }).then(
+              (updated) => {
+                setEditing(updated);
+                setBanner({ type: 'ok', text: 'Роль «сбор» обновлена.' });
+                invalidate();
+              },
+              (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
+            );
           }}
-        >
-          <div
-            className="user-modal max-h-[90dvh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl max-lg:max-h-[100dvh] lg:max-h-[90dvh]"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={memberEditTitleId}
-          >
-            {/* Header */}
-            <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-3 border-b border-stone-100 bg-white px-4 py-3 backdrop-blur-sm max-lg:px-3 max-lg:py-2.5 sm:px-5 sm:py-4">
-              <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
-                <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold sm:h-[52px] sm:w-[52px] sm:text-base"
-                  style={{ backgroundColor: '#F3EEF0', color: '#7B2D3F' }}
-                >
-                  {memberInitials(editing)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h3
-                    id={memberEditTitleId}
-                    className="text-base font-medium tracking-tight text-stone-900 sm:text-[18px]"
-                  >
-                    {memberRosterName(editing)}
-                  </h3>
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5 sm:mt-1.5 sm:gap-2">
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-800 sm:px-2.5 sm:text-[10px]">
-                      В приложении
-                    </span>
-                    <span className="rounded-full border border-stone-300 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-stone-600 sm:px-2.5 sm:text-[10px]">
-                      {appRoleLabel(editing.app_role)}
-                    </span>
-                    <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-teal-800 sm:px-2.5 sm:text-[10px]">
-                      Активен
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditing(null)}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-stone-200 text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 max-lg:h-10 max-lg:w-10 max-lg:min-h-[44px] max-lg:min-w-[44px] lg:h-7 lg:w-7"
-                aria-label="Закрыть карточку"
-                title="Закрыть"
-              >
-                <LuX className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
-              </button>
-            </div>
-
-            <div className="user-form space-y-4 p-4 max-lg:space-y-3 sm:space-y-5 sm:p-5">
-              {/* Personal info */}
-              <section>
-                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400 sm:mb-3">
-                  Личные данные
-                </p>
-                <div className="user-card-grid grid gap-2.5 sm:grid-cols-2 sm:gap-3">
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</label>
-                    <input
-                      className={fieldClass()}
-                      value={editForm.last_name}
-                      onChange={(e) => setEditForm((s) => ({ ...s, last_name: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Имя</label>
-                    <input
-                      className={fieldClass()}
-                      value={editForm.first_name}
-                      onChange={(e) => setEditForm((s) => ({ ...s, first_name: e.target.value }))}
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <button
-                      type="button"
-                      className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
-                      disabled={swapNameFieldsMut.isPending}
-                      onClick={() => {
-                        if (
-                          !window.confirm(
-                            'Поменять в базе местами поля «имя» и «фамилия» у этого пользователя? Используйте, если данные оказались в неправильных колонках.',
-                          )
-                        ) {
-                          return;
-                        }
-                        setBanner(null);
-                        swapNameFieldsMut.mutate();
-                      }}
-                    >
-                      {swapNameFieldsMut.isPending ? 'Меняем…' : 'поменять местами →'}
-                    </button>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Телефон</label>
-                    <input
-                      className={fieldClass()}
-                      inputMode="tel"
-                      value={editForm.phone_number}
-                      onChange={(e) => setEditForm((s) => ({ ...s, phone_number: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Telegram ID</label>
-                    <input
-                      className={fieldClass()}
-                      value={editForm.telegram_chat_id}
-                      onChange={(e) => setEditForm((s) => ({ ...s, telegram_chat_id: e.target.value }))}
-                      placeholder="например: 123456789"
-                    />
-                    {editing?.telegram_delivery_blocked ? (
-                      <p className="mt-1.5 text-xs font-semibold text-red-700">
-                        ● Telegram недоступен для рассылок
-                        {editing.telegram_delivery_block_reason ? `: ${editing.telegram_delivery_block_reason}` : ''}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div>
-                    <BirthDayMonthFields
-                      value={editForm.birth_date}
-                      onChange={(apiYmd) => setEditForm((s) => ({ ...s, birth_date: apiYmd }))}
-                      labelClassName="mb-1 block text-xs font-semibold text-stone-600"
-                      selectClassName={fieldClass()}
-                    />
-                  </div>
-                </div>
-              </section>
-
-              {/* Ministry */}
-              <section>
-                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400 sm:mb-3">
-                  Служение
-                </p>
-                <div className="user-card-grid grid gap-2.5 sm:grid-cols-2 sm:gap-3">
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Направление</label>
-                    <details className="group relative">
-                      <summary
-                        className={`${fieldClass()} list-none cursor-pointer pr-9 [&::-webkit-details-marker]:hidden`}
-                      >
-                        {directionArray(editForm.ministry_direction).length > 0
-                          ? directionArray(editForm.ministry_direction).join(', ')
-                          : 'Выберите направление(я)'}
-                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 transition group-open:rotate-180">
-                          ▾
-                        </span>
-                      </summary>
-                      <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-stone-200 bg-white p-2 shadow-lg">
-                        <div className="mb-2 flex gap-2 border-b border-stone-200 pb-2">
-                          <button
-                            type="button"
-                            className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
-                            onClick={() =>
-                              setEditForm((s) => ({
-                                ...s,
-                                ministry_direction: normalizeMinistryRoles(dirs.map((d) => d.title).join(', ')),
-                              }))
-                            }
-                          >
-                            Выбрать все
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
-                            onClick={() => setEditForm((s) => ({ ...s, ministry_direction: '' }))}
-                          >
-                            Очистить
-                          </button>
-                        </div>
-                        {dirs.map((d) => {
-                          const selected = directionArray(editForm.ministry_direction).includes(d.title);
-                          return (
-                            <label
-                              key={d.id}
-                              className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-stone-700 hover:bg-stone-100"
-                            >
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 shrink-0 rounded border-stone-300 text-primary"
-                                checked={selected}
-                                onChange={(e) => {
-                                  const current = directionArray(editForm.ministry_direction);
-                                  const next = e.target.checked
-                                    ? Array.from(new Set([...current, d.title]))
-                                    : current.filter((x) => x !== d.title);
-                                  setEditForm((s) => ({
-                                    ...s,
-                                    ministry_direction: normalizeMinistryRoles(next.join(', ')),
-                                  }));
-                                }}
-                              />
-                              <span className="min-w-0 flex-1 truncate">{d.title}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </details>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
-                    <details className="group relative">
-                      <summary
-                        className={`${fieldClass()} list-none cursor-pointer pr-9 [&::-webkit-details-marker]:hidden`}
-                      >
-                        {roleArray(editForm.ministry_role).length > 0
-                          ? roleArray(editForm.ministry_role).join(', ')
-                          : 'Выберите роль(и)'}
-                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 transition group-open:rotate-180">
-                          ▾
-                        </span>
-                      </summary>
-                      <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-stone-200 bg-white p-2 shadow-lg">
-                        <div className="mb-2 flex gap-2 border-b border-stone-200 pb-2">
-                          <button
-                            type="button"
-                            className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
-                            onClick={() =>
-                              setEditForm((s) => ({
-                                ...s,
-                                ministry_role: normalizeMinistryRoles(
-                                  roleOptionsForDirection(s.ministry_direction).join(', '),
-                                ),
-                              }))
-                            }
-                          >
-                            Выбрать все
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
-                            onClick={() => setEditForm((s) => ({ ...s, ministry_role: '' }))}
-                          >
-                            Очистить
-                          </button>
-                        </div>
-                        {roleOptionsForDirection(editForm.ministry_direction).map((role) => {
-                          const selected = roleArray(editForm.ministry_role).includes(role);
-                          return (
-                            <label
-                              key={role}
-                              className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-stone-700 hover:bg-stone-100"
-                            >
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 shrink-0 rounded border-stone-300 text-primary"
-                                checked={selected}
-                                onChange={(e) => {
-                                  const current = roleArray(editForm.ministry_role);
-                                  const next = e.target.checked
-                                    ? Array.from(new Set([...current, role]))
-                                    : current.filter((x) => x !== role);
-                                  setEditForm((s) => ({
-                                    ...s,
-                                    ministry_role: normalizeMinistryRoles(next.join(', ')),
-                                  }));
-                                }}
-                              />
-                              <span className="min-w-0 flex-1 truncate">{role}</span>
-                            </label>
-                          );
-                        })}
-                        {roleOptionsForDirection(editForm.ministry_direction).length === 0 ? (
-                          <p className="px-2 py-1.5 text-xs text-stone-500">Нет ролей для выбранного направления</p>
-                        ) : null}
-                      </div>
-                    </details>
-                  </div>
-                </div>
-              </section>
-
-              {/* Access and role */}
-              <section>
-                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400 sm:mb-3">
-                  Доступ и роль
-                </p>
-                <div className="space-y-2.5 sm:space-y-3">
-                  <MemberAppRolesPicker
-                    editing={editing}
-                    roleMut={roleMut}
-                    onBannerClear={() => setBanner(null)}
-                  />
-                  <label className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-stone-200 px-2.5 py-2 sm:px-3 sm:py-2.5">
-                    <span className="min-w-0 flex-1 text-xs leading-snug text-stone-800 sm:text-sm">
-                      Активен (может войти в приложение)
-                    </span>
-                    <span className="relative inline-flex h-6 w-11 items-center">
-                      <input
-                        type="checkbox"
-                        className="peer sr-only"
-                        checked={editForm.is_active}
-                        onChange={(e) => setEditForm((s) => ({ ...s, is_active: e.target.checked }))}
-                      />
-                      <span className="h-6 w-11 rounded-full bg-stone-300 transition-colors peer-checked:bg-primary" />
-                      <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
-                    </span>
-                  </label>
-                  <label className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-stone-200 px-2.5 py-2 sm:px-3 sm:py-2.5">
-                    <span className="min-w-0 flex-1 text-xs leading-snug text-stone-800 sm:text-sm">В молитвенном цикле</span>
-                    <span className="relative inline-flex h-6 w-11 items-center">
-                      <input
-                        type="checkbox"
-                        className="peer sr-only"
-                        checked={editForm.in_prayer_cycle}
-                        onChange={(e) => setEditForm((s) => ({ ...s, in_prayer_cycle: e.target.checked }))}
-                      />
-                      <span className="h-6 w-11 rounded-full bg-stone-300 transition-colors peer-checked:bg-primary" />
-                      <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
-                    </span>
-                  </label>
-                  <div className="rounded-xl bg-stone-100 px-2.5 py-2 text-xs leading-snug text-stone-700 sm:px-3 sm:py-2.5 sm:text-sm sm:leading-normal">
-                    <div className="flex items-start gap-2 border-b border-stone-200 pb-2 sm:items-center">
-                      <span
-                        className={`mt-0.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full sm:mt-0 ${editing.password_reset_required ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                      />
-                      <span className="min-w-0">
-                        Статус входа:{' '}
-                        <strong>
-                          {editing.password_reset_required
-                            ? 'требуется задать новый пароль'
-                            : editing.has_registered
-                              ? 'пароль создан, вход доступен'
-                              : 'вход не оформлен'}
-                        </strong>
-                      </span>
-                    </div>
-                    <div className="mt-2 flex items-start gap-2 sm:items-center">
-                      <span className="mt-0.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-stone-400 sm:mt-0" />
-                      <span className="min-w-0 break-all">Логин: {editForm.phone_number.trim() || '—'}</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-stretch sm:justify-end">
-                    <button
-                      type="button"
-                      className={`${btnSecondary('text-xs')} w-full sm:w-auto`}
-                      disabled={resetPasswordMut.isPending}
-                      onClick={() => {
-                        if (!window.confirm('Сбросить пароль пользователя? При следующем входе он задаст новый пароль.')) {
-                          return;
-                        }
-                        setBanner(null);
-                        resetPasswordMut.mutate(editing.id);
-                      }}
-                    >
-                      {resetPasswordMut.isPending ? 'Сбрасываем…' : 'Сбросить пароль'}
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              {/* Prayer request */}
-              <section>
-                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400 sm:mb-3">
-                  Молитвенная нужда
-                </p>
-                {isPrayerRequestEditing ? (
-                  <textarea
-                    className={`${fieldClass()} min-h-[88px] resize-y sm:min-h-[100px]`}
-                    value={editForm.prayer_request}
-                    onChange={(e) => setEditForm((s) => ({ ...s, prayer_request: e.target.value }))}
-                    placeholder="Текст молитвенной нужды…"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsPrayerRequestEditing(true)}
-                    className="w-full overflow-hidden rounded-xl border border-stone-200 text-left"
-                  >
-                    {(editForm.prayer_request || '')
-                      .split('\n')
-                      .map((line) => line.trim())
-                      .filter(Boolean)
-                      .map((line, i) => (
-                        <div
-                          key={`${line}-${i}`}
-                          className="border-b border-stone-200 px-3 py-2.5 text-sm text-stone-700 last:border-b-0"
-                        >
-                          {line}
-                        </div>
-                      ))}
-                    {!editForm.prayer_request.trim() ? (
-                      <div className="px-3 py-2.5 text-sm text-stone-400">Нажмите, чтобы добавить молитвенную нужду…</div>
-                    ) : null}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowPrayerHistory((v) => !v)}
-                  className="mt-2 text-xs font-semibold text-primary underline-offset-2 hover:underline"
-                >
-                  История молитвенных нужд →
-                </button>
-                {showPrayerHistory ? <AdminPrayerHistory memberId={editing.id} /> : null}
-              </section>
-
-              {/* Danger zone */}
-              <section className="rounded-xl border border-red-200 bg-red-50/40 p-3 sm:rounded-2xl sm:p-4">
-                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-red-700 sm:mb-3">
-                  Опасная зона
-                </p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <button
-                    type="button"
-                    className={`${btnSecondary()} w-full justify-center sm:w-auto`}
-                    onClick={() => {
-                      setOneTimeId(editing.id);
-                      setOneTimeDate('');
-                      setBanner(null);
-                    }}
-                  >
-                    Разовая дата в цикле
-                  </button>
-                  <button
-                    type="button"
-                    className={`${btnSecondary()} w-full justify-center sm:w-auto`}
-                    onClick={() => {
-                      setBanner(null);
-                      void updateAdminMember(editing.id, {
-                        is_collection_coordinator: !editing.is_collection_coordinator,
-                      }).then(
-                        (updated) => {
-                          setEditing(updated);
-                          setBanner({ type: 'ok', text: 'Роль «сбор» обновлена.' });
-                          invalidate();
-                        },
-                        (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-                      );
-                    }}
-                  >
-                    Ответственный за сбор
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full justify-center rounded-xl border border-red-300 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 sm:w-auto sm:py-2"
-                    disabled={deleteMut.isPending}
-                    onClick={() => {
-                      if (!window.confirm(`Удалить ${memberRosterName(editing)}?`)) return;
-                      setBanner(null);
-                      deleteMut.mutate(editing.id);
-                    }}
-                  >
-                    {deleteMut.isPending ? 'Удаление…' : 'Удалить пользователя'}
-                  </button>
-                </div>
-              </section>
-
-              {/* Actions */}
-              <div className="flex flex-col-reverse gap-2 border-t border-stone-100 bg-white pt-3 max-lg:sticky max-lg:bottom-0 max-lg:z-10 max-lg:pb-[calc(12px+env(safe-area-inset-bottom,0px))] sm:flex-row sm:justify-end sm:gap-2 sm:pt-4 sm:pb-0">
-                <button
-                  type="button"
-                  className={`${btnSecondary()} w-full justify-center sm:w-auto`}
-                  onClick={() => setEditing(null)}
-                >
-                  Отмена
-                </button>
-                <button
-                  type="button"
-                  className={`${btnPrimary()} w-full justify-center sm:w-auto`}
-                  disabled={saveEditMut.isPending}
-                  onClick={() => {
-                    setBanner(null);
-                    saveEditMut.mutate();
-                  }}
-                >
-                  {saveEditMut.isPending ? 'Сохранение…' : 'Сохранить'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Сворачиваемый/разворачиваемый блок с историей молитвенных нужд пользователя. */
-function AdminPrayerHistory({ memberId }: { memberId: number }) {
-  const [open, setOpen] = useState(false);
-  const [manualText, setManualText] = useState('');
-  const [cycleInput, setCycleInput] = useState('');
-  const qc = useQueryClient();
-
-  const { data, isPending } = useQuery({
-    queryKey: ['admin', 'prayer-history', memberId],
-    queryFn: () => fetchPrayerRequestHistory(memberId, 30),
-    enabled: open,
-    staleTime: 30_000,
-  });
-
-  const addHistoryMut = useMutation({
-    mutationFn: () => {
-      const trimmed = manualText.trim();
-      if (!trimmed) {
-        return Promise.reject(new Error('Укажите текст нужды'));
-      }
-      const cycleTrim = cycleInput.trim();
-      let cycle_number: number | undefined;
-      if (cycleTrim !== '') {
-        const n = Number.parseInt(cycleTrim, 10);
-        if (!Number.isFinite(n) || n < 1) {
-          return Promise.reject(new Error('Номер цикла — целое число от 1'));
-        }
-        cycle_number = n;
-      }
-      return addAdminPrayerRequestHistory(memberId, { prayer_request: trimmed, cycle_number });
-    },
-    onSuccess: async () => {
-      setManualText('');
-      setCycleInput('');
-      await qc.invalidateQueries({ queryKey: ['admin', 'prayer-history', memberId] });
-    },
-  });
-
-  return (
-    <section>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex min-h-[40px] w-full items-center gap-2 rounded-xl border border-stone-200/80 bg-stone-50/60 px-3.5 py-2.5 text-left text-[13px] font-bold text-stone-600 transition-colors hover:bg-stone-100/70 hover:text-stone-800"
-      >
-        <LuHistory className="h-4 w-4 shrink-0 text-primary/70" strokeWidth={2} aria-hidden />
-        <span className="flex-1">История молитвенных нужд</span>
-        <LuChevronDown
-          className={`h-4 w-4 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-          strokeWidth={2}
-          aria-hidden
+          onAssignOneTimeDate={(date) => oneTimeMut.mutateAsync({ id: editing.id, date })}
         />
-      </button>
-
-      <div
-        className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
-      >
-        <div className="overflow-hidden">
-          <div className="pt-3 pb-1">
-            <div className="mb-4 rounded-xl border border-dashed border-primary/30 bg-primary/[0.04] p-3">
-              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
-                Добавить запись вручную
-              </p>
-              <label className="block">
-                <span className="sr-only">Текст молитвенной нужды</span>
-                <textarea
-                  value={manualText}
-                  onChange={(e) => setManualText(e.target.value)}
-                  rows={3}
-                  maxLength={8000}
-                  placeholder="Текст нужды…"
-                  className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-[13px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-1"
-                />
-              </label>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
-                <label className="block min-w-0 sm:max-w-[11rem]">
-                  <span className="mb-0.5 block text-[11px] font-semibold text-stone-500">
-                    № цикла (необязательно)
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={cycleInput}
-                    onChange={(e) => setCycleInput(e.target.value.replace(/\D/g, ''))}
-                    placeholder="Как в списке: 5"
-                    className="w-full rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-[13px] text-stone-800 outline-none focus:border-primary focus:ring-1"
-                  />
-                </label>
-                <button
-                  type="button"
-                  disabled={addHistoryMut.isPending || !manualText.trim()}
-                  onClick={() => void addHistoryMut.mutateAsync()}
-                  className="min-h-[40px] shrink-0 rounded-lg bg-primary px-4 text-[13px] font-bold text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {addHistoryMut.isPending ? 'Сохранение…' : 'Добавить в историю'}
-                </button>
-              </div>
-              {addHistoryMut.isError ? (
-                <p className="mt-2 text-[12px] text-red-600">
-                  {apiErrorMessage(
-                    addHistoryMut.error,
-                    addHistoryMut.error instanceof Error ? addHistoryMut.error.message : 'Ошибка',
-                  )}
-                </p>
-              ) : null}
-            </div>
-
-            {isPending ? (
-              <div className="space-y-3 py-2">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="flex gap-3 animate-pulse">
-                    <div className="h-2 w-2 mt-1.5 shrink-0 rounded-full bg-stone-200" />
-                    <div className="flex-1 space-y-1.5">
-                      <div className="h-3 w-28 rounded bg-stone-100" />
-                      <div className="h-3 w-full rounded bg-stone-100" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : data && data.length > 0 ? (
-              <div className="space-y-0">
-                {data.map((item, idx) => (
-                  <AdminPrayerHistoryRow key={item.id} item={item} isLast={idx === data.length - 1} />
-                ))}
-              </div>
-            ) : (
-              <p className="py-4 text-center text-[13px] italic text-stone-400">
-                Пока нет записей
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function AdminPrayerHistoryRow({ item, isLast }: { item: PrayerHistoryItem; isLast: boolean }) {
-  const prayedDate = item.prayed_on_date
-    ? formatAdminDate(item.prayed_on_date)
-    : null;
-  const createdDate = formatAdminDate(item.created_at);
-
-  return (
-    <div className={`relative flex gap-3 py-2.5 ${!isLast ? 'border-b border-stone-100' : ''}`}>
-      {/* Timeline dot */}
-      <div className="flex flex-col items-center pt-1.5">
-        <div className="h-2 w-2 shrink-0 rounded-full bg-primary/40" />
-        {!isLast ? (
-          <div className="mt-1 flex-1 w-px bg-stone-100" />
-        ) : null}
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          {prayedDate ? (
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary">
-              <LuCalendarDays className="h-3 w-3" aria-hidden />
-              Цикл {item.cycle_index != null ? item.cycle_index + 1 : '—'} · {prayedDate}
-            </span>
-          ) : (
-            <span className="text-[11px] font-semibold text-stone-400">
-              {createdDate}
-            </span>
-          )}
-        </div>
-        <p className="mt-1 text-[13px] leading-snug text-stone-600 whitespace-pre-wrap break-words">
-          {item.prayer_request}
-        </p>
-      </div>
+      ) : null}
     </div>
   );
-}
-
-/** Форматирование даты для истории: «25 марта 2026» или «25 мар» если текущий год. */
-function formatAdminDate(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return dateStr;
-    const now = new Date();
-    const sameYear = d.getFullYear() === now.getFullYear();
-    return format(d, sameYear ? 'd MMM' : 'd MMM yyyy', { locale: ru });
-  } catch {
-    return dateStr;
-  }
 }
 
 function reorderArray<T>(list: readonly T[], from: number, to: number): T[] {
