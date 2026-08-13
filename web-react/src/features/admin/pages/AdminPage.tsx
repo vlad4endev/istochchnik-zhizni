@@ -450,7 +450,29 @@ export function AdminPage() {
 }
 
 function IntegrationsSection() {
-  const [subTab, setSubTab] = useState<'sms' | 'ai' | 'ai_monitor' | 'song_import'>('sms');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const subFromUrl = searchParams.get('sub');
+  const hasAiChat = Boolean(searchParams.get('ai_chat'));
+  const initialSub =
+    subFromUrl === 'ai' ||
+    subFromUrl === 'ai_monitor' ||
+    subFromUrl === 'sms' ||
+    subFromUrl === 'song_import'
+      ? subFromUrl
+      : hasAiChat
+        ? 'ai_monitor'
+        : 'sms';
+  const [subTab, setSubTab] = useState<'sms' | 'ai' | 'ai_monitor' | 'song_import'>(initialSub);
+
+  const openSub = (next: 'sms' | 'ai' | 'ai_monitor' | 'song_import') => {
+    setSubTab(next);
+    const params = new URLSearchParams(searchParams);
+    if (next === 'sms') params.delete('sub');
+    else params.set('sub', next);
+    if (next !== 'ai_monitor') params.delete('ai_chat');
+    setSearchParams(params, { replace: true });
+  };
+
   return (
     <div className="space-y-6">
       <section className="rounded-[10px] bg-stone-100 p-1">
@@ -462,7 +484,7 @@ function IntegrationsSection() {
                 ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
                 : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
             }
-            onClick={() => setSubTab('sms')}
+            onClick={() => openSub('sms')}
           >
             <span aria-hidden>💬</span>
             SMS.ru
@@ -475,7 +497,7 @@ function IntegrationsSection() {
                 ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
                 : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
             }
-            onClick={() => setSubTab('ai')}
+            onClick={() => openSub('ai')}
           >
             <span aria-hidden>🤖</span>
             ИИ интеграции
@@ -488,7 +510,7 @@ function IntegrationsSection() {
                 ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
                 : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
             }
-            onClick={() => setSubTab('ai_monitor')}
+            onClick={() => openSub('ai_monitor')}
           >
             <span aria-hidden>📡</span>
             Мониторинг ИИ
@@ -500,7 +522,7 @@ function IntegrationsSection() {
                 ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
                 : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
             }
-            onClick={() => setSubTab('song_import')}
+            onClick={() => openSub('song_import')}
           >
             <span aria-hidden>🎵</span>
             Импорт песен

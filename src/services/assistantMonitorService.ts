@@ -22,6 +22,7 @@ export type AssistantMonitorConversation = {
   owner_first_name: string | null;
   owner_last_name: string | null;
   owner_avatar_url: string | null;
+  owner_phone: string | null;
   owner_app_role: string | null;
   owner_app_roles: string[];
   message_count: number;
@@ -33,6 +34,9 @@ export type AssistantMonitorConversation = {
   created_at: string;
   updated_at: string;
 };
+
+export type AssistantMonitorActivity = 'all' | 'today' | '7d';
+export type AssistantMonitorSort = 'recent' | 'messages' | 'user_messages';
 
 export type AssistantMonitorStats = {
   conversation_count: number;
@@ -114,12 +118,18 @@ function lastMessageFrom(senderId: unknown, payload: unknown): 'user' | 'assista
 
 export async function listAssistantConversationsForAdmin(opts?: {
   search?: string;
+  activity?: AssistantMonitorActivity;
+  sort?: AssistantMonitorSort;
   limit?: number;
   offset?: number;
 }): Promise<AssistantMonitorListResult> {
   const limit = Math.min(100, Math.max(1, Math.floor(opts?.limit ?? 50)));
   const offset = Math.max(0, Math.floor(opts?.offset ?? 0));
   const search = (opts?.search ?? '').trim().slice(0, 120);
+  const activity: AssistantMonitorActivity =
+    opts?.activity === 'today' || opts?.activity === '7d' ? opts.activity : 'all';
+  const sort: AssistantMonitorSort =
+    opts?.sort === 'messages' || opts?.sort === 'user_messages' ? opts.sort : 'recent';
 
   const params: unknown[] = [MESSENGER_ASSISTANT_CHANNEL_KIND];
   let searchSql = '';
@@ -132,6 +142,20 @@ export async function listAssistantConversationsForAdmin(opts?: {
       OR (c.metadata->>'owner_member_id') LIKE $${params.length}
     )`;
   }
+
+  let activitySql = '';
+  if (activity === 'today') {
+    activitySql = `AND COALESCE(lm.created_at, c.updated_at) >= (NOW() - INTERVAL '1 day')`;
+  } else if (activity === '7d') {
+    activitySql = `AND COALESCE(lm.created_at, c.updated_at) >= (NOW() - INTERVAL '7 days')`;
+  }
+
+  const orderSql =
+    sort === 'messages'
+      ? 'ORDER BY COALESCE(cnt.message_count, 0) DESC, COALESCE(lm.created_at, c.updated_at) DESC, c.id DESC'
+      : sort === 'user_messages'
+        ? 'ORDER BY COALESCE(cnt.user_message_count, 0) DESC, COALESCE(lm.created_at, c.updated_at) DESC, c.id DESC'
+        : 'ORDER BY COALESCE(lm.created_at, c.updated_at) DESC, c.id DESC';
 
   const statsResult = await dbQuery(
     `
@@ -181,44 +205,7 @@ export async function listAssistantConversationsForAdmin(opts?: {
     active_7d_count: asNumber(statsRow.active_7d_count),
   };
 
-  const countParams = [...params];
-  const countResult = await dbQuery(
-    `
-    SELECT COUNT(*)::int AS total
-    FROM conversations c
-    LEFT JOIN members m
-      ON m.id = NULLIF(c.metadata->>'owner_member_id', '')::int
-    WHERE c.type = 'channel'
-      AND c.metadata->>'kind' = $1
-      ${searchSql}
-    `,
-    countParams,
-  );
-  const total = asNumber((countResult.rows[0] as { total?: unknown } | undefined)?.total);
-
-  params.push(limit, offset);
-  const listResult = await dbQuery(
-    `
-    SELECT
-      c.id AS conversation_id,
-      c.created_at,
-      c.updated_at,
-      NULLIF(c.metadata->>'owner_member_id', '')::int AS owner_member_id,
-      m.first_name AS owner_first_name,
-      m.last_name AS owner_last_name,
-      m.name AS owner_name_raw,
-      m.avatar_url AS owner_avatar_url,
-      m.app_role AS owner_app_role,
-      m.app_roles AS owner_app_roles,
-      COALESCE(cnt.message_count, 0)::int AS message_count,
-      COALESCE(cnt.user_message_count, 0)::int AS user_message_count,
-      COALESCE(cnt.assistant_message_count, 0)::int AS assistant_message_count,
-      lm.id AS last_message_id,
-      lm.content AS last_message_content,
-      lm.is_deleted AS last_message_is_deleted,
-      lm.sender_id AS last_message_sender_id,
-      lm.payload AS last_message_payload,
-      lm.created_at AS last_message_at
+  const filteredFromSql = `
     FROM conversations c
     LEFT JOIN members m
       ON m.id = NULLIF(c.metadata->>'owner_member_id', '')::int
@@ -251,7 +238,41 @@ export async function listAssistantConversationsForAdmin(opts?: {
     WHERE c.type = 'channel'
       AND c.metadata->>'kind' = $1
       ${searchSql}
-    ORDER BY COALESCE(lm.created_at, c.updated_at) DESC, c.id DESC
+      ${activitySql}
+  `;
+
+  const countResult = await dbQuery(
+    `SELECT COUNT(*)::int AS total ${filteredFromSql}`,
+    params,
+  );
+  const total = asNumber((countResult.rows[0] as { total?: unknown } | undefined)?.total);
+
+  params.push(limit, offset);
+  const listResult = await dbQuery(
+    `
+    SELECT
+      c.id AS conversation_id,
+      c.created_at,
+      c.updated_at,
+      NULLIF(c.metadata->>'owner_member_id', '')::int AS owner_member_id,
+      m.first_name AS owner_first_name,
+      m.last_name AS owner_last_name,
+      m.name AS owner_name_raw,
+      m.avatar_url AS owner_avatar_url,
+      m.phone_number AS owner_phone,
+      m.app_role AS owner_app_role,
+      m.app_roles AS owner_app_roles,
+      COALESCE(cnt.message_count, 0)::int AS message_count,
+      COALESCE(cnt.user_message_count, 0)::int AS user_message_count,
+      COALESCE(cnt.assistant_message_count, 0)::int AS assistant_message_count,
+      lm.id AS last_message_id,
+      lm.content AS last_message_content,
+      lm.is_deleted AS last_message_is_deleted,
+      lm.sender_id AS last_message_sender_id,
+      lm.payload AS last_message_payload,
+      lm.created_at AS last_message_at
+    ${filteredFromSql}
+    ${orderSql}
     LIMIT $${params.length - 1}
     OFFSET $${params.length}
     `,
@@ -274,6 +295,7 @@ export async function listAssistantConversationsForAdmin(opts?: {
       owner_first_name: asNullableString(r.owner_first_name),
       owner_last_name: asNullableString(r.owner_last_name),
       owner_avatar_url: asNullableString(r.owner_avatar_url),
+      owner_phone: asNullableString(r.owner_phone),
       owner_app_role: asNullableString(r.owner_app_role),
       owner_app_roles: parseAppRoles(r.owner_app_roles, r.owner_app_role),
       message_count: asNumber(r.message_count),
@@ -347,7 +369,7 @@ export async function loadAssistantConversationMessagesForAdmin(
   const memberResult =
     ownerId > 0
       ? await dbQuery(
-          `SELECT id, first_name, last_name, name, avatar_url, app_role, app_roles
+          `SELECT id, first_name, last_name, name, avatar_url, phone_number, app_role, app_roles
            FROM members WHERE id = $1 LIMIT 1`,
           [ownerId],
         )
@@ -394,6 +416,7 @@ export async function loadAssistantConversationMessagesForAdmin(
     owner_first_name: asNullableString(member.first_name),
     owner_last_name: asNullableString(member.last_name),
     owner_avatar_url: asNullableString(member.avatar_url),
+    owner_phone: asNullableString(member.phone_number),
     owner_app_role: asNullableString(member.app_role),
     owner_app_roles: parseAppRoles(member.app_roles, member.app_role),
     message_count: asNumber(countRow.message_count),

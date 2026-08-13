@@ -1022,6 +1022,9 @@ export async function postAiTest(options?: {
 }
 
 /** Мониторинг диалогов с ИИ-помощником (админ). */
+export type AssistantMonitorActivity = 'all' | 'today' | '7d';
+export type AssistantMonitorSort = 'recent' | 'messages' | 'user_messages';
+
 export interface AssistantMonitorStats {
   conversation_count: number;
   message_count: number;
@@ -1038,6 +1041,7 @@ export interface AssistantMonitorConversation {
   owner_first_name: string | null;
   owner_last_name: string | null;
   owner_avatar_url: string | null;
+  owner_phone: string | null;
   owner_app_role: string | null;
   owner_app_roles: string[];
   message_count: number;
@@ -1081,12 +1085,16 @@ export interface AssistantMonitorMessagesResponse {
 
 export async function fetchAssistantMonitorConversations(params?: {
   search?: string;
+  activity?: AssistantMonitorActivity;
+  sort?: AssistantMonitorSort;
   limit?: number;
   offset?: number;
 }): Promise<AssistantMonitorListResponse> {
   const { data } = await apiClient.get<AssistantMonitorListResponse>('/api/settings/ai/conversations', {
     params: {
       search: params?.search?.trim() || undefined,
+      activity: params?.activity && params.activity !== 'all' ? params.activity : undefined,
+      sort: params?.sort && params.sort !== 'recent' ? params.sort : undefined,
       limit: params?.limit,
       offset: params?.offset,
     },

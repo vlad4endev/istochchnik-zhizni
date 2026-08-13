@@ -3,6 +3,8 @@ import type { Request, Response } from 'express';
 import {
   listAssistantConversationsForAdmin,
   loadAssistantConversationMessagesForAdmin,
+  type AssistantMonitorActivity,
+  type AssistantMonitorSort,
 } from '../services/assistantMonitorService';
 
 type AuthRequest = Request & {
@@ -37,6 +39,14 @@ function parseOffset(raw: unknown): number {
   return Math.floor(n);
 }
 
+function parseActivity(raw: unknown): AssistantMonitorActivity {
+  return raw === 'today' || raw === '7d' ? raw : 'all';
+}
+
+function parseSort(raw: unknown): AssistantMonitorSort {
+  return raw === 'messages' || raw === 'user_messages' ? raw : 'recent';
+}
+
 /** GET /api/settings/ai/conversations — список чатов с ИИ-помощником. */
 export async function listAssistantConversationsAdminHandler(
   req: Request,
@@ -47,6 +57,8 @@ export async function listAssistantConversationsAdminHandler(
     const search = typeof req.query.search === 'string' ? req.query.search : '';
     const result = await listAssistantConversationsForAdmin({
       search,
+      activity: parseActivity(req.query.activity),
+      sort: parseSort(req.query.sort),
       limit: parseLimit(req.query.limit, 50),
       offset: parseOffset(req.query.offset),
     });
