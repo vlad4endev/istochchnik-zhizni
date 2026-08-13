@@ -64,7 +64,7 @@ function urlBase64ToUint8Array(base64String: string) {
  * Синхронизация Web Push с бэкендом (мессенджер, календарь и т.д.).
  * Вызывается из `useWebPushSync` в Layout после входа (веб/PWA, не Capacitor).
  *
- * - разрешение default/denied — выходим (запрос прав — через баннер NotificationPrompt или профиль);
+ * - разрешение default/denied — выходим (запрос прав — через баннер, модалку и виджет на главной);
  * - разрешение granted — создаём подписку при необходимости и POST /api/notifications/subscribe.
  */
 function readPushSubscribeError(err: unknown): string {

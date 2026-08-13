@@ -3,15 +3,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { emitAppToast } from '../lib/uiFeedback';
 import {
   isCapacitorNative,
-  queryNativePushPermission,
-  requestNativePushPermission,
   type NativePermissionState,
 } from '../lib/nativeApp';
 import { useAuthStore } from '../features/auth/authStore';
+import {
+  NOTIFICATION_PERMISSION_CHANGED_EVENT,
+  isMissingDeviceNotificationPermission,
+  markNotificationPromptDismissedThisSession,
+  queryDeviceNotificationPermission,
+  requestDeviceNotificationPermission,
+  wasNotificationPromptDismissedThisSession,
+  type DeviceNotificationPermission,
+} from '../lib/deviceNotificationPermission';
 
 type PermissionStateLike = NativePermissionState;
 
-const LS_DISMISSED_KEY = 'app:permissions-prompt-dismissed:v1';
+/** Permanent skip for camera/mic only. Notifications are re-prompted each visit until granted. */
+const LS_CAM_MIC_DISMISSED_KEY = 'app:permissions-prompt-dismissed:v1';
 
 async function queryPermission(name: 'camera' | 'microphone'): Promise<PermissionStateLike> {
   const perms = (navigator as Navigator & { permissions?: Permissions })?.permissions;
@@ -24,72 +32,73 @@ async function queryPermission(name: 'camera' | 'microphone'): Promise<Permissio
   }
 }
 
-async function queryNotificationPermission(): Promise<PermissionStateLike> {
-  if (isCapacitorNative()) {
-    return queryNativePushPermission();
-  }
-  if (typeof Notification !== 'undefined') {
-    return Notification.permission as PermissionStateLike;
-  }
-  return 'unknown';
-}
-
 export function PermissionsRequestModal() {
   const token = useAuthStore((s) => s.token);
   const [open, setOpen] = useState(false);
   const [cam, setCam] = useState<PermissionStateLike>('unknown');
   const [mic, setMic] = useState<PermissionStateLike>('unknown');
-  const [notif, setNotif] = useState<PermissionStateLike>('unknown');
+  const [notif, setNotif] = useState<DeviceNotificationPermission>('default');
   const [busy, setBusy] = useState(false);
-  const dismissedRef = useRef(false);
+  const camMicDismissedRef = useRef(false);
 
   useEffect(() => {
     if (!token) return;
     try {
-      dismissedRef.current = localStorage.getItem(LS_DISMISSED_KEY) === '1';
+      camMicDismissedRef.current = localStorage.getItem(LS_CAM_MIC_DISMISSED_KEY) === '1';
     } catch {
-      dismissedRef.current = false;
+      camMicDismissedRef.current = false;
     }
   }, [token]);
 
+  const evaluate = useCallback(async () => {
+    const [c, m, n] = await Promise.all([
+      queryPermission('camera'),
+      queryPermission('microphone'),
+      queryDeviceNotificationPermission(),
+    ]);
+    setCam(c);
+    setMic(m);
+    setNotif(n);
+    const needsCamMic = !camMicDismissedRef.current && (c !== 'granted' || m !== 'granted');
+    const needsNotif =
+      isMissingDeviceNotificationPermission(n) && !wasNotificationPromptDismissedThisSession();
+    setOpen(needsCamMic || needsNotif);
+  }, []);
+
+  useEffect(() => {
+    if (!token) {
+      setOpen(false);
+      return;
+    }
+    void evaluate();
+  }, [token, evaluate]);
+
   useEffect(() => {
     if (!token) return;
-    if (dismissedRef.current) return;
-
-    let alive = true;
-    void (async () => {
-      const [c, m, n] = await Promise.all([
-        queryPermission('camera'),
-        queryPermission('microphone'),
-        queryNotificationPermission(),
-      ]);
-      if (!alive) return;
-      setCam(c);
-      setMic(m);
-      setNotif(n);
-      const needs =
-        c !== 'granted' ||
-        m !== 'granted' ||
-        n !== 'granted';
-      setOpen(needs);
-    })();
-    return () => {
-      alive = false;
+    const onChanged = () => {
+      void evaluate();
     };
-  }, [token]);
+    window.addEventListener('focus', onChanged);
+    window.addEventListener(NOTIFICATION_PERMISSION_CHANGED_EVENT, onChanged);
+    return () => {
+      window.removeEventListener('focus', onChanged);
+      window.removeEventListener(NOTIFICATION_PERMISSION_CHANGED_EVENT, onChanged);
+    };
+  }, [token, evaluate]);
 
   const needsText = useMemo(() => {
     const missing: string[] = [];
     if (cam !== 'granted') missing.push('камера');
     if (mic !== 'granted') missing.push('микрофон');
-    if (notif !== 'granted') missing.push('уведомления');
+    if (isMissingDeviceNotificationPermission(notif)) missing.push('уведомления');
     return missing.length > 0 ? missing.join(', ') : '';
   }, [cam, mic, notif]);
 
   const dismiss = useCallback(() => {
     setOpen(false);
+    markNotificationPromptDismissedThisSession();
     try {
-      localStorage.setItem(LS_DISMISSED_KEY, '1');
+      localStorage.setItem(LS_CAM_MIC_DISMISSED_KEY, '1');
     } catch {
       /* ignore */
     }
@@ -104,33 +113,24 @@ export function PermissionsRequestModal() {
         stream.getTracks().forEach((t) => t.stop());
       }
 
-      let n: PermissionStateLike = 'unknown';
-      if (isCapacitorNative()) {
-        n = await requestNativePushPermission();
-      } else if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-        try {
-          await Notification.requestPermission();
-        } catch {
-          /* ignore */
-        }
-        n = Notification.permission as PermissionStateLike;
-      }
+      const n = await requestDeviceNotificationPermission();
 
       const [c, m] = await Promise.all([queryPermission('camera'), queryPermission('microphone')]);
-      if (n === 'unknown') {
-        n = await queryNotificationPermission();
-      }
       setCam(c);
       setMic(m);
       setNotif(n);
 
-      const ok =
-        c === 'granted' &&
-        m === 'granted' &&
-        n === 'granted';
+      const ok = c === 'granted' && m === 'granted' && n === 'granted';
       if (ok) {
         emitAppToast('Разрешения получены', 'success');
         dismiss();
+      } else if (n !== 'granted') {
+        emitAppToast(
+          isCapacitorNative()
+            ? 'Без уведомлений на устройстве вы не узнаете, когда пишут в чате. Настройки → Приложения → Источник жизни → Уведомления.'
+            : 'Без уведомлений вы не узнаете, когда пишут в чате. Разрешите их в настройках сайта.',
+          'error',
+        );
       } else if (isCapacitorNative()) {
         emitAppToast(
           'Не все разрешения выданы. Откройте Настройки → Приложения → Источник жизни → Разрешения.',
@@ -183,6 +183,12 @@ export function PermissionsRequestModal() {
         <p className="mt-2 text-[13px] leading-relaxed text-zinc-200/90">
           Для звонков, сообщений и уведомлений нужны разрешения:{' '}
           <span className="font-semibold">{needsText || 'камера, микрофон, уведомления'}</span>.
+          {isMissingDeviceNotificationPermission(notif) ? (
+            <>
+              {' '}
+              Без разрешения на уведомления на устройстве вы не получите сигнал, когда вам пишут в чате.
+            </>
+          ) : null}
         </p>
         <div className="mt-4 flex flex-col gap-2">
           <button
