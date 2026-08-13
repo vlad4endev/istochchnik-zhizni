@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { runAppLogCleanup, writeAppLog } from '../services/appLogService';
+import { runTelegramSendLogCleanup } from '../services/telegramSendLogService';
 
 let isRunning = false;
 
@@ -16,14 +17,15 @@ export function initAppLogCleanupJob(): void {
       isRunning = true;
       try {
         const cleanup = await runAppLogCleanup();
-        const details = `retention=${cleanup.deletedByRetention}, limit=${cleanup.deletedByLimit}`;
+        const tgCleanup = await runTelegramSendLogCleanup();
+        const details = `retention=${cleanup.deletedByRetention}, limit=${cleanup.deletedByLimit}, tg_retention=${tgCleanup.deletedByRetention}, tg_limit=${tgCleanup.deletedByLimit}`;
         console.log(`[CRON] app log cleanup: ${details}`);
         await writeAppLog({
           level: 'info',
           scope: 'app_log',
           event: 'app_log.cleanup.weekly',
           message: `Автоочистка журнала выполнена (${details})`,
-          context: cleanup,
+          context: { ...cleanup, telegram: tgCleanup },
         });
       } catch (error) {
         console.error('[CRON] app log cleanup failed:', error);

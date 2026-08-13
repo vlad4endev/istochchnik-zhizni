@@ -592,6 +592,64 @@ export interface AppLogItem {
   created_at: string;
 }
 
+export type TelegramSendLogChannel =
+  | 'prayer_dispatch'
+  | 'service_plan_mailing'
+  | 'service_plan_published'
+  | 'coordinator_scenario'
+  | 'manual'
+  | 'password_reset';
+
+export type TelegramSendLogStatus = 'ok' | 'failed' | 'skipped' | 'blocked';
+
+export interface TelegramSendLogBatchItem {
+  batch_id: string;
+  channel: TelegramSendLogChannel;
+  trigger_source: 'cron' | 'run_now' | 'api' | 'event';
+  kind: string | null;
+  scenario_id: string | null;
+  created_at: string;
+  total: number;
+  ok_count: number;
+  failed_count: number;
+  blocked_count: number;
+  skipped_count: number;
+  preview_text: string;
+  recipients: Array<{
+    id: number;
+    status: TelegramSendLogStatus;
+    member_id: number | null;
+    member_name: string | null;
+    telegram_chat_id: string | null;
+    chat_title: string | null;
+    error_description: string | null;
+    message_text: string;
+    created_at: string;
+  }>;
+}
+
+export async function fetchTelegramSendLogsAdmin(params?: {
+  channel?: TelegramSendLogChannel | 'all';
+  status?: TelegramSendLogStatus | 'all';
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<TelegramSendLogBatchItem[]> {
+  const { data } = await apiClient.get<{ items?: TelegramSendLogBatchItem[] }>(
+    '/api/settings/logs/telegram-sends',
+    {
+      params: {
+        channel: params?.channel && params.channel !== 'all' ? params.channel : undefined,
+        status: params?.status && params.status !== 'all' ? params.status : undefined,
+        search: params?.search?.trim() || undefined,
+        limit: params?.limit ?? 40,
+        offset: params?.offset ?? 0,
+      },
+    },
+  );
+  return Array.isArray(data?.items) ? data.items : [];
+}
+
 export async function fetchTelegramSettings(): Promise<TelegramSettingsResponse> {
   const { data } = await apiClient.get<TelegramSettingsResponse>('/api/telegram/settings');
   return data;

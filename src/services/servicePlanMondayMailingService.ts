@@ -9,6 +9,7 @@ import {
   sendTelegramByPurpose,
   sendTelegramToChat,
 } from './telegramService';
+import { newTelegramSendBatchId } from './telegramSendLogService';
 import {
   ensureMediykaMessengerChannel,
   ensureServicePlanPlanningMessengerChannel,
@@ -1147,9 +1148,12 @@ export async function runServicePlanMondayMailing(options?: {
   dryRun?: boolean;
   /** Черновик шаблона из редактора (предпросмотр без сохранения). */
   templateOverride?: string | null;
+  /** Источник запуска для журнала Telegram. */
+  trigger?: 'cron' | 'run_now' | 'api';
 }): Promise<ServicePlanMondayMailingResult> {
   const force = options?.force === true;
   const dryRun = options?.dryRun === true;
+  const trigger = options?.trigger ?? (force ? 'run_now' : 'cron');
   const now = options?.now ?? new Date();
   let scheduleTz: string | null = null;
   try {
@@ -1365,12 +1369,21 @@ export async function runServicePlanMondayMailing(options?: {
           process.env.TELEGRAM_SERVICE_PLAN_CHAT_ID,
         ]);
 
+  const telegramBatchId = newTelegramSendBatchId();
   for (const chatId of telegramChatIds) {
     try {
       await sendTelegramByPurpose({
         purpose: 'default',
         text,
         chatIdOverride: chatId,
+        log: {
+          channel: 'service_plan_mailing',
+          trigger,
+          batchId: telegramBatchId,
+          kind: plan.service_date,
+          recipientType: 'telegram_chat',
+          meta: { plan_id: planId, sunday: sundayYmd },
+        },
       });
       telegramOkChats.push(chatId);
       telegramOk = true;
@@ -1588,12 +1601,21 @@ export async function notifyServicePlanPublished(input: {
   const telegramChatIds = publishedDest.telegram_chat_ids;
 
   const telegramOkChats: string[] = [];
+  const publishedBatchId = newTelegramSendBatchId();
   for (const chatId of telegramChatIds) {
     try {
       const sent = await sendTelegramToChat({
         chatId,
         text: textTelegram,
         inlineUrlButton: { text: buttonText, url: shareUrl },
+        log: {
+          channel: 'service_plan_published',
+          trigger: 'event',
+          batchId: publishedBatchId,
+          kind: serviceDateYmd,
+          recipientType: 'telegram_chat',
+          meta: { plan_id: planId, share_token: shareToken },
+        },
       });
       telegramOkChats.push(sent.chat_id);
     } catch (e) {

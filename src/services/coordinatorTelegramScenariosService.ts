@@ -23,6 +23,7 @@ import {
   sendTelegramByPurpose,
   sendTelegramToChat,
 } from './telegramService';
+import { newTelegramSendBatchId } from './telegramSendLogService';
 
 let schemaReady = false;
 
@@ -176,11 +177,72 @@ async function getCollectionClaimOwnerForMemberInCycle(
   };
 }
 
-async function sendDmSafe(memberId: number, text: string): Promise<boolean> {
+async function getMemberDisplayName(memberId: number): Promise<string | null> {
+  if (!Number.isInteger(memberId) || memberId <= 0) return null;
+  const result = await query(
+    `SELECT COALESCE(
+       NULLIF(trim(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))), ''),
+       NULLIF(trim(name), ''),
+       CONCAT('#', id::text)
+     ) AS display_name
+     FROM members
+     WHERE id = $1
+     LIMIT 1`,
+    [memberId],
+  );
+  const name = result.rows[0]?.display_name;
+  return typeof name === 'string' && name.trim() ? name.trim() : null;
+}
+
+type CoordinatorSendLogOpts = {
+  batchId: string;
+  trigger: 'cron' | 'run_now' | 'event';
+  scenarioId: string;
+  kind?: string | null;
+};
+
+/** Контекст журнала для текущего прогона сценария (без проброса через все вызовы). */
+let activeCoordinatorSendLog: CoordinatorSendLogOpts | undefined;
+
+async function withCoordinatorSendLog<T>(
+  opts: CoordinatorSendLogOpts,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const prev = activeCoordinatorSendLog;
+  activeCoordinatorSendLog = opts;
+  try {
+    return await fn();
+  } finally {
+    activeCoordinatorSendLog = prev;
+  }
+}
+
+async function sendDmSafe(
+  memberId: number,
+  text: string,
+  logOpts?: CoordinatorSendLogOpts,
+): Promise<boolean> {
   const chatId = await getMemberTelegramChatId(memberId);
   if (!chatId) return false;
+  const effectiveLog = logOpts ?? activeCoordinatorSendLog;
   try {
-    await sendTelegramToChat({ chatId, text });
+    const memberName = await getMemberDisplayName(memberId);
+    await sendTelegramToChat({
+      chatId,
+      text,
+      log: effectiveLog
+        ? {
+            channel: 'coordinator_scenario',
+            trigger: effectiveLog.trigger,
+            batchId: effectiveLog.batchId,
+            scenarioId: effectiveLog.scenarioId,
+            kind: effectiveLog.kind,
+            memberId,
+            memberName,
+            recipientType: 'member',
+          }
+        : undefined,
+    });
     return true;
   } catch (err) {
     console.warn(`[coordinator-tg] DM failed for member ${memberId}:`, err);
@@ -188,9 +250,26 @@ async function sendDmSafe(memberId: number, text: string): Promise<boolean> {
   }
 }
 
-async function sendCoordinatorChatSafe(text: string): Promise<boolean> {
+async function sendCoordinatorChatSafe(
+  text: string,
+  logOpts?: CoordinatorSendLogOpts,
+): Promise<boolean> {
+  const effectiveLog = logOpts ?? activeCoordinatorSendLog;
   try {
-    await sendTelegramByPurpose({ purpose: 'coordinator', text });
+    await sendTelegramByPurpose({
+      purpose: 'coordinator',
+      text,
+      log: effectiveLog
+        ? {
+            channel: 'coordinator_scenario',
+            trigger: effectiveLog.trigger,
+            batchId: effectiveLog.batchId,
+            scenarioId: effectiveLog.scenarioId,
+            kind: effectiveLog.kind,
+            recipientType: 'telegram_chat',
+          }
+        : undefined,
+    });
     return true;
   } catch (err) {
     console.warn('[coordinator-tg] coordinator chat send failed:', err);
@@ -280,15 +359,25 @@ export async function notifyCoordinatorTelegramAssignment(args: {
   const fallback = `${args.title}\n\n${args.body}`;
   const text = renderScenarioText(scenario, vars, fallback);
 
-  let sentDm = false;
-  let sentChat = false;
-  if (scenarioWantsDm(scenario.target)) {
-    sentDm = await sendDmSafe(args.coordinatorId, text);
-  }
-  if (scenarioWantsChat(scenario.target)) {
-    sentChat = await sendCoordinatorChatSafe(text);
-  }
-  return { sent_dm: sentDm, sent_chat: sentChat };
+  return withCoordinatorSendLog(
+    {
+      batchId: newTelegramSendBatchId(),
+      trigger: 'event',
+      scenarioId: 'assignment',
+      kind: weekKind,
+    },
+    async () => {
+      let sentDm = false;
+      let sentChat = false;
+      if (scenarioWantsDm(scenario.target)) {
+        sentDm = await sendDmSafe(args.coordinatorId, text);
+      }
+      if (scenarioWantsChat(scenario.target)) {
+        sentChat = await sendCoordinatorChatSafe(text);
+      }
+      return { sent_dm: sentDm, sent_chat: sentChat };
+    },
+  );
 }
 
 /**
@@ -316,6 +405,7 @@ async function notifyMissingNeedTelegram(
   title: string,
   dayOffset: number,
   scenario: CoordinatorTelegramScenario,
+  trigger: 'cron' | 'run_now' = 'cron',
 ): Promise<{ sent: number }> {
   const dayData = await getPrayerDataByDate(dateYmd);
   const assigned = dayData.members[0];
@@ -357,14 +447,24 @@ async function notifyMissingNeedTelegram(
     if (owner) recipients.add(owner.id);
   }
 
-  let sent = 0;
-  for (const id of recipients) {
-    if (await sendDmSafe(id, text)) sent += 1;
-  }
-  if (scenarioWantsChat(scenario.target)) {
-    if (await sendCoordinatorChatSafe(text)) sent += 1;
-  }
-  return { sent };
+  return withCoordinatorSendLog(
+    {
+      batchId: newTelegramSendBatchId(),
+      trigger,
+      scenarioId: scenario.id,
+      kind: dateYmd,
+    },
+    async () => {
+      let sent = 0;
+      for (const id of recipients) {
+        if (await sendDmSafe(id, text)) sent += 1;
+      }
+      if (scenarioWantsChat(scenario.target)) {
+        if (await sendCoordinatorChatSafe(text)) sent += 1;
+      }
+      return { sent };
+    },
+  );
 }
 
 function claimsWeekKind(scenario: CoordinatorTelegramScenario): WeekPlanKind {
@@ -377,6 +477,7 @@ function claimsWeekKind(scenario: CoordinatorTelegramScenario): WeekPlanKind {
  */
 async function notifyMissingCycleNeedTelegram(
   scenario: CoordinatorTelegramScenario,
+  trigger: 'cron' | 'run_now' = 'cron',
 ): Promise<{ sent: number }> {
   const weekKind = claimsWeekKind(scenario);
   const ctx = await loadCoordinatorWeekTemplateContext(weekKind);
@@ -429,87 +530,98 @@ async function notifyMissingCycleNeedTelegram(
   if (groups.length === 0) return { sent: 0 };
 
   const title = scenario.title || 'Нет актуальной молитвенной нужды в этом цикле';
-  let sent = 0;
 
-  if (scenarioWantsDm(scenario.target)) {
-    for (const group of groups) {
-      const assignment = ctx.assignments.find((a) => a.coordinatorId === group.coordinatorId);
-      if (!assignment) continue;
-      const missingNames = group.missing.map((m) => m.memberName);
-      const vars = {
-        ...coordinatorPersonalVars(ctx, assignment, { title }),
-        missing_participants: missingNames.join(', '),
-        missing_participants_list: missingNames.map((n) => `• ${n}`).join('\n'),
-        missing_count: String(group.missing.length),
-      };
-      const fallback = [
-        title,
-        '',
-        `Неделя: ${ctx.weekRange} (цикл ${ctx.cycleIndex}).`,
-        `Без нужды (${group.missing.length}):`,
-        ...missingNames.map((n) => `• ${n}`),
-      ].join('\n');
-      const text = renderScenarioText(scenario, vars, fallback);
-      if (await sendDmSafe(group.coordinatorId, text)) sent += 1;
-    }
+  return withCoordinatorSendLog(
+    {
+      batchId: newTelegramSendBatchId(),
+      trigger,
+      scenarioId: scenario.id,
+      kind: ctx.weekRange,
+    },
+    async () => {
+      let sent = 0;
 
-    const admins = await getAdminMemberIdsWithTelegram();
-    if (admins.length > 0) {
-      const summaryLines = groups.map(
-        (g) => `${g.coordinatorName}: ${g.missing.map((m) => m.memberName).join(', ')}`,
-      );
-      const totalMissing = groups.reduce((n, g) => n + g.missing.length, 0);
-      const adminVars = {
-        ...baseWeekVars(ctx),
-        title,
-        coordinator_name: groups.map((g) => g.coordinatorName).join(', '),
-        missing_participants: summaryLines.join('\n'),
-        missing_participants_list: summaryLines.map((l) => `• ${l}`).join('\n'),
-        missing_count: String(totalMissing),
-        participants: baseWeekVars(ctx).all_participants,
-      };
-      const adminFallback = [
-        title,
-        '',
-        `Неделя: ${ctx.weekRange} (цикл ${ctx.cycleIndex}).`,
-        `Без нужды: ${totalMissing}`,
-        '',
-        ...summaryLines,
-      ].join('\n');
-      const adminText = renderScenarioText(scenario, adminVars, adminFallback);
-      for (const adminId of admins) {
-        if (await sendDmSafe(adminId, adminText)) sent += 1;
+      if (scenarioWantsDm(scenario.target)) {
+        for (const group of groups) {
+          const assignment = ctx.assignments.find((a) => a.coordinatorId === group.coordinatorId);
+          if (!assignment) continue;
+          const missingNames = group.missing.map((m) => m.memberName);
+          const vars = {
+            ...coordinatorPersonalVars(ctx, assignment, { title }),
+            missing_participants: missingNames.join(', '),
+            missing_participants_list: missingNames.map((n) => `• ${n}`).join('\n'),
+            missing_count: String(group.missing.length),
+          };
+          const fallback = [
+            title,
+            '',
+            `Неделя: ${ctx.weekRange} (цикл ${ctx.cycleIndex}).`,
+            `Без нужды (${group.missing.length}):`,
+            ...missingNames.map((n) => `• ${n}`),
+          ].join('\n');
+          const text = renderScenarioText(scenario, vars, fallback);
+          if (await sendDmSafe(group.coordinatorId, text)) sent += 1;
+        }
+
+        const admins = await getAdminMemberIdsWithTelegram();
+        if (admins.length > 0) {
+          const summaryLines = groups.map(
+            (g) => `${g.coordinatorName}: ${g.missing.map((m) => m.memberName).join(', ')}`,
+          );
+          const totalMissing = groups.reduce((n, g) => n + g.missing.length, 0);
+          const adminVars = {
+            ...baseWeekVars(ctx),
+            title,
+            coordinator_name: groups.map((g) => g.coordinatorName).join(', '),
+            missing_participants: summaryLines.join('\n'),
+            missing_participants_list: summaryLines.map((l) => `• ${l}`).join('\n'),
+            missing_count: String(totalMissing),
+            participants: baseWeekVars(ctx).all_participants,
+          };
+          const adminFallback = [
+            title,
+            '',
+            `Неделя: ${ctx.weekRange} (цикл ${ctx.cycleIndex}).`,
+            `Без нужды: ${totalMissing}`,
+            '',
+            ...summaryLines,
+          ].join('\n');
+          const adminText = renderScenarioText(scenario, adminVars, adminFallback);
+          for (const adminId of admins) {
+            if (await sendDmSafe(adminId, adminText)) sent += 1;
+          }
+        }
       }
-    }
-  }
 
-  if (scenarioWantsChat(scenario.target)) {
-    const summaryLines = groups.map(
-      (g) => `${g.coordinatorName}: ${g.missing.map((m) => m.memberName).join(', ')}`,
-    );
-    const totalMissing = groups.reduce((n, g) => n + g.missing.length, 0);
-    const chatVars = {
-      ...baseWeekVars(ctx),
-      title,
-      coordinator_name: groups.map((g) => g.coordinatorName).join(', '),
-      missing_participants: summaryLines.join('\n'),
-      missing_participants_list: summaryLines.map((l) => `• ${l}`).join('\n'),
-      missing_count: String(totalMissing),
-      participants: baseWeekVars(ctx).all_participants,
-    };
-    const chatFallback = [
-      title,
-      '',
-      `Неделя: ${ctx.weekRange} (цикл ${ctx.cycleIndex}).`,
-      `Без нужды: ${totalMissing}`,
-      '',
-      ...summaryLines,
-    ].join('\n');
-    const chatText = renderScenarioText(scenario, chatVars, chatFallback);
-    if (await sendCoordinatorChatSafe(chatText)) sent += 1;
-  }
+      if (scenarioWantsChat(scenario.target)) {
+        const summaryLines = groups.map(
+          (g) => `${g.coordinatorName}: ${g.missing.map((m) => m.memberName).join(', ')}`,
+        );
+        const totalMissing = groups.reduce((n, g) => n + g.missing.length, 0);
+        const chatVars = {
+          ...baseWeekVars(ctx),
+          title,
+          coordinator_name: groups.map((g) => g.coordinatorName).join(', '),
+          missing_participants: summaryLines.join('\n'),
+          missing_participants_list: summaryLines.map((l) => `• ${l}`).join('\n'),
+          missing_count: String(totalMissing),
+          participants: baseWeekVars(ctx).all_participants,
+        };
+        const chatFallback = [
+          title,
+          '',
+          `Неделя: ${ctx.weekRange} (цикл ${ctx.cycleIndex}).`,
+          `Без нужды: ${totalMissing}`,
+          '',
+          ...summaryLines,
+        ].join('\n');
+        const chatText = renderScenarioText(scenario, chatVars, chatFallback);
+        if (await sendCoordinatorChatSafe(chatText)) sent += 1;
+      }
 
-  return { sent };
+      return { sent };
+    },
+  );
 }
 
 /** Текст недельного списка: назначения сгруппированы по координаторам. */
@@ -527,6 +639,7 @@ export async function buildCoordinatorWeekListTelegramText(
 async function runWeekListScenario(
   scenario: CoordinatorTelegramScenario,
   weekKind?: WeekPlanKind,
+  trigger: 'cron' | 'run_now' = 'cron',
 ): Promise<{ sent_dm: number; sent_chat: boolean; text: string }> {
   const resolvedWeek = weekKind ?? claimsWeekKind(scenario);
   const ctx = await loadCoordinatorWeekTemplateContext(resolvedWeek);
@@ -540,29 +653,39 @@ async function runWeekListScenario(
   };
   const chatText = renderScenarioText(scenario, chatVars, defaultChatText);
 
-  let sentChat = false;
-  let sentDm = 0;
+  return withCoordinatorSendLog(
+    {
+      batchId: newTelegramSendBatchId(),
+      trigger,
+      scenarioId: scenario.id,
+      kind: ctx.weekRange,
+    },
+    async () => {
+      let sentChat = false;
+      let sentDm = 0;
 
-  if (scenarioWantsChat(scenario.target)) {
-    sentChat = await sendCoordinatorChatSafe(chatText);
-  }
+      if (scenarioWantsChat(scenario.target)) {
+        sentChat = await sendCoordinatorChatSafe(chatText);
+      }
 
-  if (scenarioWantsDm(scenario.target)) {
-    for (const row of ctx.assignments) {
-      if (row.members.length === 0) continue;
-      const personalVars = coordinatorPersonalVars(ctx, row, { title: scenario.title });
-      const personalFallback = [
-        `Сбор нужд на ${ctx.weekLabel} неделю (${ctx.weekRange})`,
-        '',
-        `Вам назначено ${row.members.length} участник(ов):`,
-        personalVars.participants_with_dates,
-      ].join('\n');
-      const personal = renderScenarioText(scenario, personalVars, personalFallback);
-      if (await sendDmSafe(row.coordinatorId, personal)) sentDm += 1;
-    }
-  }
+      if (scenarioWantsDm(scenario.target)) {
+        for (const row of ctx.assignments) {
+          if (row.members.length === 0) continue;
+          const personalVars = coordinatorPersonalVars(ctx, row, { title: scenario.title });
+          const personalFallback = [
+            `Сбор нужд на ${ctx.weekLabel} неделю (${ctx.weekRange})`,
+            '',
+            `Вам назначено ${row.members.length} участник(ов):`,
+            personalVars.participants_with_dates,
+          ].join('\n');
+          const personal = renderScenarioText(scenario, personalVars, personalFallback);
+          if (await sendDmSafe(row.coordinatorId, personal)) sentDm += 1;
+        }
+      }
 
-  return { sent_dm: sentDm, sent_chat: sentChat, text: chatText };
+      return { sent_dm: sentDm, sent_chat: sentChat, text: chatText };
+    },
+  );
 }
 
 export async function runCoordinatorTelegramScenarioNow(
@@ -588,7 +711,7 @@ export async function runCoordinatorTelegramScenarioNow(
   const z = getZonedNow(doc.timezone || 'Europe/Moscow');
 
   if (scenarioId === 'week_list') {
-    const result = await runWeekListScenario(scenario);
+    const result = await runWeekListScenario(scenario, undefined, 'run_now');
     return {
       ok: result.sent_chat || result.sent_dm > 0,
       scenario_id: scenarioId,
@@ -599,7 +722,7 @@ export async function runCoordinatorTelegramScenarioNow(
   }
 
   if (usesMissingInCycle(scenario) || scenarioId === 'missing_cycle_need') {
-    const result = await notifyMissingCycleNeedTelegram(scenario);
+    const result = await notifyMissingCycleNeedTelegram(scenario, 'run_now');
     return { ok: true, scenario_id: scenarioId, sent: result.sent };
   }
 
@@ -614,6 +737,7 @@ export async function runCoordinatorTelegramScenarioNow(
           : 'Нет молитвенной нужды на день цикла'),
       offset,
       scenario,
+      'run_now',
     );
     return { ok: true, scenario_id: scenarioId, sent: result.sent };
   }

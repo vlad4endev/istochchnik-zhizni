@@ -9,7 +9,7 @@ import {
   getNotificationSettingsPublic,
   patchNotificationSettings,
 } from '../controllers/notificationSettingsController';
-import { getAppLogsAdmin } from '../controllers/appLogController';
+import { getAppLogsAdmin, getTelegramSendLogsAdmin } from '../controllers/appLogController';
 import {
   getSectionVisibilitySettingsAdmin,
   getSectionVisibilitySettingsPublic,
@@ -28,6 +28,7 @@ router.get('/notifications', getNotificationSettingsPublic);
 router.get('/notifications/admin', getNotificationSettingsAdmin);
 router.patch('/notifications', patchNotificationSettings);
 router.get('/logs/admin', getAppLogsAdmin);
+router.get('/logs/telegram-sends', getTelegramSendLogsAdmin);
 
 /** Настройки языковых моделей (только админ). */
 router.get('/ai/admin', getAiSettingsAdminHandler);
