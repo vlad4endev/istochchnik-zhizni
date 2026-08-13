@@ -1,3 +1,7 @@
+Для продакшена в Docker: образ API должен включать `scripts/` (см. Dockerfile) и пакеты
+`bash` + `postgresql16-client`. Каталог снимков — том `/app/backups` (`BACKUP_DIR`).
+После обновления кода: **пересоберите образ API** (`docker compose build --no-cache api && docker compose up -d api`).
+
 ## Админка: «Резервная копия»
 
 В веб-админке (`/admin?tab=backup`) доступны:

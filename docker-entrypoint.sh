@@ -7,6 +7,11 @@ if [ "$(id -u)" = "0" ]; then
   if ! chown -R app:app "$UPLOADS_ROOT" 2>/dev/null; then
     echo "[entrypoint] warning: chown $UPLOADS_ROOT failed (NFS/special FS?); uploads may break for user app"
   fi
+  BACKUPS_ROOT="${BACKUP_DIR:-/app/backups}"
+  mkdir -p "$BACKUPS_ROOT"
+  if ! chown -R app:app "$BACKUPS_ROOT" 2>/dev/null; then
+    echo "[entrypoint] warning: chown $BACKUPS_ROOT failed; backup writes may fail for user app"
+  fi
   SECRETS_ROOT="${SECRETS_DIR:-/app/secrets}"
   if [ -d "$SECRETS_ROOT" ]; then
     if ! chown -R app:app "$SECRETS_ROOT" 2>/dev/null; then
