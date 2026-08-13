@@ -69,9 +69,10 @@ export function PostEditor(props: {
     };
   }, [caption, items]);
 
+  const onChange = props.onChange;
   useEffect(() => {
-    props.onChange?.({ caption, files: items.map((x) => x.file) });
-  }, [caption, items, props]);
+    onChange?.({ caption, files: items.map((x) => x.file) });
+  }, [caption, items, onChange]);
 
   useEffect(() => {
     return () => {

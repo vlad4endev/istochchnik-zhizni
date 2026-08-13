@@ -98,6 +98,22 @@
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  margin: 0 -1rem -1rem;
+  padding: 0.75rem 1rem;
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  background: var(--profile-surface-elevated, #fafaf9);
+  border-top: 1px solid var(--profile-border, rgba(120, 113, 108, 0.16));
+}
+
+@media (min-width: 640px) {
+  .actions {
+    margin: 0 -1.15rem -1.15rem;
+    padding-left: 1.15rem;
+    padding-right: 1.15rem;
+  }
 }
 
 .cancelBtn,
