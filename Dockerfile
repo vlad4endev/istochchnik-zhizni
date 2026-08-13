@@ -27,9 +27,10 @@ ENV PORT=40978
 ENV BACKUP_DIR=/app/backups
 
 # bash + pg_dump/pg_restore — нужны для scripts/backup.sh и scripts/restore.sh из админки
-RUN apk add --no-cache curl su-exec ffmpeg bash openssl tar gzip \
-    postgresql16-client util-linux && \
-  addgroup -g 1001 -S app && adduser -S app -u 1001 -G app
+RUN apk add --no-cache curl su-exec ffmpeg bash openssl tar gzip util-linux && \
+  (apk add --no-cache postgresql16-client || apk add --no-cache postgresql-client) && \
+  addgroup -g 1001 -S app && adduser -S app -u 1001 -G app && \
+  command -v pg_dump && command -v bash
 
 COPY package.json package-lock.json ./
 COPY --from=prod-deps /app/node_modules ./node_modules
