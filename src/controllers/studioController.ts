@@ -541,8 +541,9 @@ export async function setlistsList(req: Request, res: Response): Promise<void> {
     if (!(await ensureStudio(r, res))) return;
     res.json(await listSetlists(r.authUserId!, { includeAllPlanner: studioIncludeAllPlanner(r) }));
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Ошибка' });
+    console.error('[studio] setlistsList:', e);
+    const detail = e instanceof Error ? e.message : 'Ошибка';
+    res.status(500).json({ error: `Не удалось загрузить сетлисты: ${detail}` });
   }
 }
 
@@ -665,8 +666,9 @@ export async function setlistItemsList(req: Request, res: Response): Promise<voi
       }),
     );
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Ошибка' });
+    console.error('[studio] setlistItemsList:', e);
+    const detail = e instanceof Error ? e.message : 'Ошибка';
+    res.status(500).json({ error: `Не удалось загрузить позиции сетлиста: ${detail}` });
   }
 }
 
@@ -784,8 +786,9 @@ export async function performanceGet(req: Request, res: Response): Promise<void>
     }
     res.json(payload);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Ошибка' });
+    console.error('[studio] performanceGet:', e);
+    const detail = e instanceof Error ? e.message : 'Ошибка';
+    res.status(500).json({ error: `Не удалось загрузить режим выступления: ${detail}` });
   }
 }
 
