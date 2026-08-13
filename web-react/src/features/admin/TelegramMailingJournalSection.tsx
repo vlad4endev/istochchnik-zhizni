@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
 import {
+  apiErrorMessage,
   fetchTelegramSendLogsAdmin,
   type TelegramSendLogBatchItem,
   type TelegramSendLogChannel,
@@ -203,7 +204,9 @@ export function TelegramMailingJournalSection() {
         {q.isLoading ? (
           <div className="p-5 text-sm text-stone-500">Загружаю журнал авторассылки...</div>
         ) : q.isError ? (
-          <div className="p-5 text-sm text-red-700">Не удалось загрузить журнал авторассылки.</div>
+          <div className="p-5 text-sm text-red-700">
+            {apiErrorMessage(q.error, 'Не удалось загрузить журнал авторассылки.')}
+          </div>
         ) : items.length === 0 ? (
           <div className="p-5 text-sm text-stone-500">
             Пока нет записей. Они появятся после ближайшей авторассылки или ручного запуска.

@@ -1,13 +1,14 @@
 -- Журнал отправок Telegram (авторассылки и связанные уведомления)
-CREATE TABLE IF NOT EXISTS telegram_send_logs (
+-- Без FK на members: у части ролей БД нет права REFERENCES; связь мягкая.
+CREATE TABLE IF NOT EXISTS public.telegram_send_logs (
   id BIGSERIAL PRIMARY KEY,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   batch_id UUID NOT NULL,
   channel VARCHAR(64) NOT NULL,
   trigger_source VARCHAR(32) NOT NULL,
-  status VARCHAR(16) NOT NULL CHECK (status IN ('ok', 'failed', 'skipped', 'blocked')),
-  recipient_type VARCHAR(32) NOT NULL CHECK (recipient_type IN ('member', 'telegram_chat')),
-  member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  status VARCHAR(16) NOT NULL,
+  recipient_type VARCHAR(32) NOT NULL,
+  member_id INTEGER,
   member_name TEXT,
   telegram_chat_id TEXT,
   chat_title TEXT,
@@ -21,13 +22,13 @@ CREATE TABLE IF NOT EXISTS telegram_send_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_telegram_send_logs_created_desc
-  ON telegram_send_logs (created_at DESC, id DESC);
+  ON public.telegram_send_logs (created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_telegram_send_logs_batch
-  ON telegram_send_logs (batch_id, created_at DESC, id DESC);
+  ON public.telegram_send_logs (batch_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_telegram_send_logs_channel_created
-  ON telegram_send_logs (channel, created_at DESC, id DESC);
+  ON public.telegram_send_logs (channel, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_telegram_send_logs_status_created
-  ON telegram_send_logs (status, created_at DESC, id DESC);
+  ON public.telegram_send_logs (status, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_telegram_send_logs_member
-  ON telegram_send_logs (member_id, created_at DESC)
+  ON public.telegram_send_logs (member_id, created_at DESC)
   WHERE member_id IS NOT NULL;
