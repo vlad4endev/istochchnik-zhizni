@@ -11,27 +11,73 @@ function resolvePublicTokenTtlDays(): number {
 // SECURITY FIX: ограничиваем срок жизни публичного share_token для сетлистов.
 const PUBLIC_SETLIST_TOKEN_MAX_AGE_DAYS = resolvePublicTokenTtlDays();
 
-let servicePlanAccessColumnsReady = false;
+let setlistSchemaEnsure: Promise<void> | null = null;
+
+async function alterIfTableExists(table: string, alterSql: string): Promise<void> {
+  const reg = await query(`SELECT to_regclass($1) AS reg`, [`public.${table}`]);
+  const exists = (reg.rows[0] as { reg?: string | null } | undefined)?.reg;
+  if (!exists) return;
+  await query(alterSql);
+}
 
 /**
- * listSetlists/canAccessSetlist join service_plans columns that the initDb stub
- * may not have when SKIP_DB_INIT_ON_START / planner schema never ran.
+ * Схема сетлистов/доступа к программам, нужная API студии.
+ * На проде с SKIP_DB_INIT_ON_START миграции могут не примениться — без этих
+ * колонок GET /api/studio/setlists и /items|/performance отвечают 500.
+ * Column-only ALTER (без FK): работает даже если роль не может REFERENCES.
  */
-async function ensureServicePlanAccessColumns(): Promise<void> {
-  if (servicePlanAccessColumnsReady) return;
-  await query(`
-    CREATE TABLE IF NOT EXISTS public.service_plans (
-      id BIGSERIAL PRIMARY KEY,
-      service_date DATE,
-      title TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  // Column-only (no FK): works even when app role cannot create REFERENCES.
-  await query(`ALTER TABLE public.service_plans ADD COLUMN IF NOT EXISTS created_by_member_id INTEGER`);
-  await query(`ALTER TABLE public.service_plans ADD COLUMN IF NOT EXISTS last_edited_by_member_id INTEGER`);
-  await query(`ALTER TABLE public.service_plans ADD COLUMN IF NOT EXISTS music_ministry_member_id INTEGER`);
-  servicePlanAccessColumnsReady = true;
+export async function ensureSetlistSchema(): Promise<void> {
+  if (!setlistSchemaEnsure) {
+    setlistSchemaEnsure = (async () => {
+      await query(`
+        CREATE TABLE IF NOT EXISTS public.service_plans (
+          id BIGSERIAL PRIMARY KEY,
+          service_date DATE,
+          title TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await query(
+        `ALTER TABLE public.service_plans ADD COLUMN IF NOT EXISTS created_by_member_id INTEGER`,
+      );
+      await query(
+        `ALTER TABLE public.service_plans ADD COLUMN IF NOT EXISTS last_edited_by_member_id INTEGER`,
+      );
+      await query(
+        `ALTER TABLE public.service_plans ADD COLUMN IF NOT EXISTS music_ministry_member_id INTEGER`,
+      );
+
+      // listSetlists / canAccessSetlist JOIN по source_service_plan_id
+      await alterIfTableExists(
+        'setlists',
+        `ALTER TABLE public.setlists ADD COLUMN IF NOT EXISTS source_service_plan_id BIGINT`,
+      );
+
+      // fetchSetlistItemRows читает заметки музыканта
+      await alterIfTableExists(
+        'setlist_items',
+        `ALTER TABLE public.setlist_items ADD COLUMN IF NOT EXISTS musician_notes JSONB NOT NULL DEFAULT '{}'::jsonb`,
+      );
+
+      // Партитуры в studio_versions (migration 20260624120000)
+      await alterIfTableExists(
+        'studio_versions',
+        `ALTER TABLE public.studio_versions ADD COLUMN IF NOT EXISTS sheet_content TEXT`,
+      );
+      await alterIfTableExists(
+        'studio_versions',
+        `ALTER TABLE public.studio_versions ADD COLUMN IF NOT EXISTS sheet_key VARCHAR(32)`,
+      );
+      await alterIfTableExists(
+        'studio_versions',
+        `ALTER TABLE public.studio_versions ADD COLUMN IF NOT EXISTS sheet_meta JSONB`,
+      );
+    })().catch((err) => {
+      setlistSchemaEnsure = null;
+      throw err;
+    });
+  }
+  await setlistSchemaEnsure;
 }
 
 function mapSong(row: Record<string, unknown>): SongRow {
@@ -378,7 +424,7 @@ export async function listSetlists(
   memberId: number,
   opts?: { includeAllPlanner?: boolean }
 ): Promise<SetlistRow[]> {
-  await ensureServicePlanAccessColumns();
+  await ensureSetlistSchema();
   const includeAllPlanner = Boolean(opts?.includeAllPlanner);
   const result = await query(
     `SELECT DISTINCT ON (sl.id) sl.*
@@ -478,7 +524,7 @@ export async function canAccessSetlist(
   setlistId: number,
   opts?: { includeAllPlanner?: boolean }
 ): Promise<boolean> {
-  await ensureServicePlanAccessColumns();
+  await ensureSetlistSchema();
   const includeAllPlanner = Boolean(opts?.includeAllPlanner);
   const r = await query(
     `SELECT 1
@@ -574,6 +620,7 @@ function sanitizeMusicianNotes(raw: unknown): MusicianNotesV1 {
 }
 
 async function fetchSetlistItemRows(setlistId: number): Promise<SetlistItemRow[]> {
+  await ensureSetlistSchema();
   const result = await query(
     `SELECT si.id, si.setlist_id, si.position, si.song_id, si.studio_version_id, si.musician_notes,
             s.id AS s_id, s.song_number, s.title, s.slug, s.content, s.default_key, s.tempo, s.time_signature,
