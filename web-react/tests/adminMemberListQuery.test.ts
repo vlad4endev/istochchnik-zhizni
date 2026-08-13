@@ -4,11 +4,14 @@ import {
   countMembersMatchingRole,
   displayMemberAppRoles,
   filterAdminMembers,
+  formatMemberPhone,
+  groupMembersByLetter,
   memberAppRoles,
   memberHasAppRole,
   memberMatchesRoleFilter,
   memberMatchesSearch,
   phoneDigitsForSearch,
+  ruPeopleCount,
 } from '../src/features/admin/memberListQuery';
 import type { AppUser } from '../src/features/admin/types';
 
@@ -160,18 +163,57 @@ describe('filterAdminMembers', () => {
   ];
 
   it('combines search, role and account filters', () => {
-    expect(filterAdminMembers(list, { search: 'анна', role: 'admin', account: 'all' }).map((u) => u.id)).toEqual([
+    expect(filterAdminMembers(list, { search: 'анна', role: 'admin', account: 'all', ministry: '' }).map((u) => u.id)).toEqual([
       2,
     ]);
-    expect(filterAdminMembers(list, { search: '', role: '', account: 'no_login' }).map((u) => u.id)).toEqual([
+    expect(filterAdminMembers(list, { search: '', role: '', account: 'no_login', ministry: '' }).map((u) => u.id)).toEqual([
       3,
     ]);
-    expect(filterAdminMembers(list, { search: '8916', role: '', account: 'all' }).map((u) => u.id)).toEqual([
+    expect(filterAdminMembers(list, { search: '8916', role: '', account: 'all', ministry: '' }).map((u) => u.id)).toEqual([
       3,
     ]);
   });
 
   it('counts admins by app_roles, not only primary field', () => {
     expect(countMembersMatchingRole(list, 'admin')).toBe(1);
+  });
+
+  it('filters by ministry direction', () => {
+    const withDir = [
+      user({ id: 1, ministry_direction: 'Прославление' }),
+      user({ id: 2, last_name: 'Борисова', first_name: 'Анна', name: 'Анна Борисова', ministry_direction: 'Медиа, Прославление' }),
+      user({ id: 3, last_name: 'Волков', first_name: 'Илья', name: 'Илья Волков', ministry_direction: 'Медиа' }),
+    ];
+    expect(
+      filterAdminMembers(withDir, { search: '', role: '', account: 'all', ministry: 'Прославление' }).map((u) => u.id),
+    ).toEqual([1, 2]);
+  });
+});
+
+describe('formatMemberPhone and grouping', () => {
+  it('formats russian numbers', () => {
+    expect(formatMemberPhone('+7 (900) 123-45-67')).toBe('+7 900 123-45-67');
+    expect(formatMemberPhone('89001234567')).toBe('+7 900 123-45-67');
+    expect(formatMemberPhone('')).toBe('—');
+  });
+
+  it('groups a sorted list by last-name letter', () => {
+    const list = [
+      user({ id: 1, last_name: 'Андреев', first_name: 'Олег', name: 'Олег Андреев' }),
+      user({ id: 2, last_name: 'Борисова', first_name: 'Анна', name: 'Анна Борисова' }),
+      user({ id: 3, last_name: 'Волков', first_name: 'Илья', name: 'Илья Волков' }),
+    ];
+    expect(groupMembersByLetter(list).map((g) => [g.letter, g.members.length])).toEqual([
+      ['А', 1],
+      ['Б', 1],
+      ['В', 1],
+    ]);
+  });
+
+  it('pluralizes пользователь', () => {
+    expect(ruPeopleCount(1)).toBe('1 пользователь');
+    expect(ruPeopleCount(2)).toBe('2 пользователя');
+    expect(ruPeopleCount(5)).toBe('5 пользователей');
+    expect(ruPeopleCount(21)).toBe('21 пользователь');
   });
 });

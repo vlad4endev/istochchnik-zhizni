@@ -48,7 +48,7 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     label: 'Пользователи',
     Icon: LuUsersRound,
     short: 'Люди',
-    description: 'Карточки пользователей, роли, доступ и разовая дата в цикле молитв.',
+    description: 'Список людей церкви: поиск, роли, доступ и карточка участника.',
   },
   {
     id: 'requests',

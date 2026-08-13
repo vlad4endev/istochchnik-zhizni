@@ -1,4 +1,4 @@
-import { memberRosterName } from '../../lib/memberRosterName';
+import { memberRosterName, splitMemberNameParts } from '../../lib/memberRosterName';
 import {
   APP_ROLE_IDS,
   appRoleLabel,
@@ -12,6 +12,7 @@ export type MemberListQuery = {
   search: string;
   role: string;
   account: MemberAccountFilter;
+  ministry: string;
 };
 
 const ROLE_RANK: Record<AppRole, number> = {
@@ -96,6 +97,11 @@ export function memberMatchesRoleFilter(
   return roles.includes(roleFilter);
 }
 
+export function parseMemberAccountFilter(value: string | null | undefined): MemberAccountFilter {
+  if (value === 'in_app' || value === 'no_login' || value === 'inactive') return value;
+  return 'all';
+}
+
 export function memberMatchesAccountFilter(
   u: Pick<AppUser, 'is_active' | 'has_registered'>,
   account: MemberAccountFilter,
@@ -104,6 +110,31 @@ export function memberMatchesAccountFilter(
   if (account === 'in_app') return u.has_registered && u.is_active;
   if (account === 'no_login') return !u.has_registered;
   return !u.is_active;
+}
+
+export function memberMinistryDirections(u: Pick<AppUser, 'ministry_direction'>): string[] {
+  return (u.ministry_direction ?? '')
+    .split(/[,;]/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+export function memberMatchesMinistryFilter(
+  u: Pick<AppUser, 'ministry_direction'>,
+  ministry: string,
+): boolean {
+  if (!ministry.trim()) return true;
+  return memberMinistryDirections(u).includes(ministry.trim());
+}
+
+export function uniqueMinistryDirections(list: readonly Pick<AppUser, 'ministry_direction'>[]): string[] {
+  const set = new Set<string>();
+  for (const u of list) {
+    for (const direction of memberMinistryDirections(u)) {
+      set.add(direction);
+    }
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, 'ru'));
 }
 
 /** Цифры телефона; российская 8XXXXXXXXXX приводится к 7XXXXXXXXXX. */
@@ -157,12 +188,61 @@ export function memberMatchesSearch(u: AppUser, rawQuery: string): boolean {
   });
 }
 
+export function formatMemberPhone(raw: string | null | undefined): string {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return '—';
+  const digits = phoneDigitsForSearch(trimmed);
+  if (digits.length === 11 && digits.startsWith('7')) {
+    return `+7 ${digits.slice(1, 4)} ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}`;
+  }
+  if (digits.length === 10) {
+    return `+7 ${digits.slice(0, 3)} ${digits.slice(3, 6)}-${digits.slice(6, 8)}-${digits.slice(8)}`;
+  }
+  return trimmed;
+}
+
+export function ruPeopleCount(n: number): string {
+  const n10 = n % 10;
+  const n100 = n % 100;
+  if (n10 === 1 && n100 !== 11) return `${n} пользователь`;
+  if (n10 >= 2 && n10 <= 4 && (n100 < 12 || n100 > 14)) return `${n} пользователя`;
+  return `${n} пользователей`;
+}
+
+export function memberSortLetter(u: {
+  name: string;
+  first_name?: string | null;
+  last_name?: string | null;
+}): string {
+  const parts = splitMemberNameParts(u);
+  const source = parts.last.trim() || parts.first.trim() || memberRosterName(u);
+  const ch = source.charAt(0).toLocaleUpperCase('ru-RU');
+  if (ch === 'Ё') return 'Е';
+  if (/[А-ЯA-Z]/.test(ch)) return ch;
+  return '#';
+}
+
+export function groupMembersByLetter(list: readonly AppUser[]): Array<{ letter: string; members: AppUser[] }> {
+  const groups: Array<{ letter: string; members: AppUser[] }> = [];
+  for (const u of list) {
+    const letter = memberSortLetter(u);
+    const last = groups[groups.length - 1];
+    if (last && last.letter === letter) {
+      last.members.push(u);
+    } else {
+      groups.push({ letter, members: [u] });
+    }
+  }
+  return groups;
+}
+
 export function filterAdminMembers(list: readonly AppUser[], query: MemberListQuery): AppUser[] {
   return list.filter(
     (u) =>
       memberMatchesSearch(u, query.search) &&
       memberMatchesRoleFilter(u, query.role) &&
-      memberMatchesAccountFilter(u, query.account),
+      memberMatchesAccountFilter(u, query.account) &&
+      memberMatchesMinistryFilter(u, query.ministry),
   );
 }
 
@@ -178,9 +258,14 @@ export function countMembersMatchingAccount(
 }
 
 export function memberListQueryIsActive(query: MemberListQuery): boolean {
-  return Boolean(query.search.trim()) || Boolean(query.role) || query.account !== 'all';
+  return (
+    Boolean(query.search.trim()) ||
+    Boolean(query.role) ||
+    query.account !== 'all' ||
+    Boolean(query.ministry.trim())
+  );
 }
 
 export function emptyMemberListQuery(): MemberListQuery {
-  return { search: '', role: '', account: 'all' };
+  return { search: '', role: '', account: 'all', ministry: '' };
 }

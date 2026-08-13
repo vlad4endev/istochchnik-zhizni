@@ -37,15 +37,17 @@ import { AppSectionsAccessSection } from '../AppSectionsAccessSection';
 import { RolePermissionsManagerSection } from '../RolePermissionsManagerSection';
 import { MemberAppRolesPicker } from '../MemberAppRolesPicker';
 import {
-  MEMBER_ACCOUNT_FILTER_OPTIONS,
-  countMembersMatchingAccount,
   countMembersMatchingRole,
   displayMemberAppRoles,
-  emptyMemberListQuery,
   filterAdminMembers,
+  formatMemberPhone,
+  groupMembersByLetter,
   memberHasAppRole,
   memberListQueryIsActive,
   isAppRoleId,
+  parseMemberAccountFilter,
+  ruPeopleCount,
+  uniqueMinistryDirections,
   type MemberAccountFilter,
 } from '../memberListQuery';
 import { NotificationsSettingsSection } from '../NotificationsSettingsSection';
@@ -187,16 +189,51 @@ function appRoleBadgeClass(role: string): string {
   return 'rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600';
 }
 
-function MemberAppRoleBadges({ u }: { u: AppUser }) {
+function MemberAppRoleBadges({
+  u,
+  onSelect,
+}: {
+  u: AppUser;
+  onSelect?: (role: (typeof APP_ROLE_IDS)[number]) => void;
+}) {
   return (
     <span className="inline-flex max-w-full flex-wrap items-center gap-1">
-      {displayMemberAppRoles(u).map((role) => (
-        <span key={role} className={appRoleBadgeClass(role)}>
-          {appRoleLabel(role)}
-        </span>
-      ))}
+      {displayMemberAppRoles(u).map((role) => {
+        const className = appRoleBadgeClass(role);
+        if (!onSelect) {
+          return (
+            <span key={role} className={className}>
+              {appRoleLabel(role)}
+            </span>
+          );
+        }
+        return (
+          <button
+            key={role}
+            type="button"
+            className={className}
+            title={`Показать всех с ролью «${appRoleLabel(role)}»`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(role);
+            }}
+          >
+            {appRoleLabel(role)}
+          </button>
+        );
+      })}
     </span>
   );
+}
+
+function scrollToMemberLetter(letter: string) {
+  const nodes = document.querySelectorAll(`[data-member-letter="${letter}"]`);
+  for (const node of nodes) {
+    if (node instanceof HTMLElement && node.getClientRects().length > 0) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+  }
 }
 
 function MemberListEmptyState({
@@ -313,6 +350,10 @@ function directionArray(value: string): string[] {
   return roleArray(value);
 }
 
+function memberServiceLine(u: AppUser): string {
+  return [u.ministry_direction, u.ministry_role].map((x) => (x ?? '').trim()).filter(Boolean).join(' · ');
+}
+
 function displayName(u: AppUser): string {
   const f = (u.first_name ?? '').trim();
   const l = (u.last_name ?? '').trim();
@@ -333,8 +374,8 @@ function MemberRegistrationBadge({ u }: { u: AppUser }) {
     <span
       className={
         ok
-          ? 'inline-flex items-center gap-1 rounded-full border border-emerald-200/90 bg-gradient-to-r from-emerald-50 to-teal-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-900 shadow-sm shadow-emerald-900/5'
-          : 'inline-flex items-center gap-1 rounded-full border border-amber-200/90 bg-gradient-to-r from-amber-50 to-orange-50/80 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-950 shadow-sm shadow-amber-900/5'
+          ? 'inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800'
+          : 'inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900'
       }
       title={
         ok
@@ -342,21 +383,10 @@ function MemberRegistrationBadge({ u }: { u: AppUser }) {
           : 'В списке пользователей, но вход в приложение ещё не оформлен'
       }
     >
-      {ok ? (
-        <>
-          <span className="text-emerald-600" aria-hidden>
-            ✓
-          </span>
-          В приложении
-        </>
-      ) : (
-        <>
-          <span className="text-amber-700/90" aria-hidden>
-            ○
-          </span>
-          Нет входа
-        </>
-      )}
+      <span className={ok ? 'text-emerald-600' : 'text-amber-700'} aria-hidden>
+        {ok ? '●' : '○'}
+      </span>
+      {ok ? 'В приложении' : 'Нет входа'}
     </span>
   );
 }
@@ -596,6 +626,7 @@ function MembersSection({
   onAddUserClose: () => void;
 }) {
   const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { startImpersonation, canStartImpersonation, isImpersonating } = useImpersonation();
   const showImpersonateButton = canStartImpersonation && isAppAdministratorSession() && !isImpersonating;
   const { data, isLoading, error, isFetching } = useQuery({
@@ -604,10 +635,13 @@ function MembersSection({
   });
   const dirsQ = useQuery({ queryKey: Q_DIRS, queryFn: fetchDirectionTemplates, staleTime: 30_000 });
 
-  const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
-  const [accountFilter, setAccountFilter] = useState<MemberAccountFilter>('all');
+  const search = searchParams.get('q') ?? '';
+  const roleFromUrl = searchParams.get('role') ?? '';
+  const roleFilter = isAppRoleId(roleFromUrl) ? roleFromUrl : '';
+  const accountFilter = parseMemberAccountFilter(searchParams.get('status'));
+  const ministryFilter = searchParams.get('dir') ?? '';
   const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [showBirthdays, setShowBirthdays] = useState(false);
   const [form, setForm] = useState({
     first_name: '',
     last_name: '',
@@ -662,8 +696,8 @@ function MembersSection({
   const invalidate = () => void qc.invalidateQueries({ queryKey: Q_MEMBERS });
 
   const listQuery = useMemo(
-    () => ({ search, role: roleFilter, account: accountFilter }),
-    [search, roleFilter, accountFilter],
+    () => ({ search, role: roleFilter, account: accountFilter, ministry: ministryFilter }),
+    [search, roleFilter, accountFilter, ministryFilter],
   );
   const filtersActive = memberListQueryIsActive(listQuery);
 
@@ -671,6 +705,9 @@ function MembersSection({
     const matched = filterAdminMembers(data ?? [], listQuery);
     return [...matched].sort(compareMembersByPrayerCycleOrder);
   }, [data, listQuery]);
+
+  const letterGroups = useMemo(() => groupMembersByLetter(filtered), [filtered]);
+  const ministryOptions = useMemo(() => uniqueMinistryDirections(data ?? []), [data]);
 
   const now = useMemo(() => new Date(), []);
   const upcomingBirthdays = useMemo(() => {
@@ -724,21 +761,51 @@ function MembersSection({
     >;
   }, [data]);
 
-  const accountFilterCounts = useMemo(() => {
-    const list = data ?? [];
-    return {
-      in_app: countMembersMatchingAccount(list, 'in_app'),
-      no_login: countMembersMatchingAccount(list, 'no_login'),
-      inactive: countMembersMatchingAccount(list, 'inactive'),
-    };
-  }, [data]);
+  function patchMemberListParams(patch: {
+    q?: string;
+    role?: string;
+    status?: MemberAccountFilter;
+    dir?: string;
+  }) {
+    const next = new URLSearchParams(searchParams);
+    if (patch.q !== undefined) {
+      if (patch.q) next.set('q', patch.q);
+      else next.delete('q');
+    }
+    if (patch.role !== undefined) {
+      if (patch.role) next.set('role', patch.role);
+      else next.delete('role');
+    }
+    if (patch.status !== undefined) {
+      if (patch.status === 'all') next.delete('status');
+      else next.set('status', patch.status);
+    }
+    if (patch.dir !== undefined) {
+      if (patch.dir) next.set('dir', patch.dir);
+      else next.delete('dir');
+    }
+    setSearchParams(next, { replace: true });
+  }
 
   const clearMemberFilters = () => {
-    const empty = emptyMemberListQuery();
-    setSearch(empty.search);
-    setRoleFilter(empty.role);
-    setAccountFilter(empty.account);
+    patchMemberListParams({ q: '', role: '', status: 'all', dir: '' });
   };
+
+  function toggleRoleFilter(role: string) {
+    patchMemberListParams({ role: roleFilter === role ? '' : role });
+  }
+
+  async function copyMemberPhone(e: MouseEvent, phone: string | null) {
+    e.stopPropagation();
+    const raw = (phone ?? '').trim();
+    if (!raw) return;
+    try {
+      await navigator.clipboard.writeText(raw);
+      setBanner({ type: 'ok', text: 'Телефон скопирован' });
+    } catch {
+      setBanner({ type: 'err', text: 'Не удалось скопировать телефон' });
+    }
+  }
 
   const createPayload = () => ({
     first_name: form.first_name.trim(),
@@ -1092,7 +1159,7 @@ function MembersSection({
       )}
 
       {/* Metric cards — клик включает фильтр */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
         {(
           [
             {
@@ -1108,22 +1175,26 @@ function MembersSection({
               label: 'В приложении',
               value: stats.registered,
               valueClass: 'text-emerald-700',
-              active: accountFilter === 'in_app' && !roleFilter,
-              onClick: () => {
-                setRoleFilter('');
-                setAccountFilter((prev) => (prev === 'in_app' ? 'all' : 'in_app'));
-              },
+              active: accountFilter === 'in_app' && !roleFilter && !ministryFilter,
+              onClick: () =>
+                patchMemberListParams({
+                  role: '',
+                  dir: '',
+                  status: accountFilter === 'in_app' ? 'all' : 'in_app',
+                }),
             },
             {
               key: 'no_login',
               label: 'Нет входа',
               value: stats.withoutApp,
               valueClass: 'text-red-600',
-              active: accountFilter === 'no_login' && !roleFilter,
-              onClick: () => {
-                setRoleFilter('');
-                setAccountFilter((prev) => (prev === 'no_login' ? 'all' : 'no_login'));
-              },
+              active: accountFilter === 'no_login' && !roleFilter && !ministryFilter,
+              onClick: () =>
+                patchMemberListParams({
+                  role: '',
+                  dir: '',
+                  status: accountFilter === 'no_login' ? 'all' : 'no_login',
+                }),
             },
             {
               key: 'admin',
@@ -1131,10 +1202,11 @@ function MembersSection({
               value: stats.admins,
               valueClass: 'text-primary',
               active: roleFilter === 'admin',
-              onClick: () => {
-                setAccountFilter('all');
-                setRoleFilter((prev) => (prev === 'admin' ? '' : 'admin'));
-              },
+              onClick: () =>
+                patchMemberListParams({
+                  status: 'all',
+                  role: roleFilter === 'admin' ? '' : 'admin',
+                }),
             },
           ] as const
         ).map((card) => (
@@ -1145,71 +1217,79 @@ function MembersSection({
             aria-pressed={card.active}
             className={
               card.active
-                ? 'rounded-2xl border border-primary/40 bg-primary/[0.06] px-4 py-3 text-left shadow-[var(--shadow)]'
-                : 'rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 text-left shadow-[var(--shadow)] transition hover:border-primary/30'
+                ? 'rounded-xl border border-primary/40 bg-primary/[0.06] px-3 py-2.5 text-left sm:rounded-2xl sm:px-4 sm:py-3'
+                : 'rounded-xl border border-stone-200/80 bg-[var(--surface-elevated)] px-3 py-2.5 text-left transition hover:border-primary/30 sm:rounded-2xl sm:px-4 sm:py-3'
             }
           >
-            <p className="text-xs text-stone-500">{card.label}</p>
-            <p className={`mt-1 text-2xl font-extrabold ${card.valueClass}`}>{card.value}</p>
+            <p className="text-[11px] text-stone-500 sm:text-xs">{card.label}</p>
+            <p className={`mt-0.5 text-xl font-extrabold sm:text-2xl ${card.valueClass}`}>{card.value}</p>
             {card.key === 'all' && isFetching && !isLoading ? (
               <p className="mt-0.5 text-[10px] text-stone-400">Обновление…</p>
-            ) : (
-              <p className="mt-0.5 text-[10px] text-stone-400">
-                {card.active ? 'Показан этот список' : 'Нажмите, чтобы отфильтровать'}
-              </p>
-            )}
+            ) : null}
           </button>
         ))}
       </div>
 
-      {/* Upcoming birthdays */}
+      {/* Upcoming birthdays — свёрнуты, чтобы не закрывать список */}
       {upcomingBirthdays.length ? (
-        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-stone-400">Дни рождения</p>
-              <p className="mt-1 text-sm font-semibold text-stone-900">
-                <span aria-hidden>🎂</span> Ближайшие 30 дней
-              </p>
+        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+            onClick={() => setShowBirthdays((v) => !v)}
+            aria-expanded={showBirthdays}
+          >
+            <span className="min-w-0 text-sm font-semibold text-stone-900">
+              <span aria-hidden>🎂</span> Дни рождения в ближайшие 30 дней
+              <span className="ml-2 rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-bold text-pink-800">
+                {upcomingBirthdays.length}
+              </span>
+            </span>
+            <LuChevronDown
+              className={`h-4 w-4 shrink-0 text-stone-400 transition ${showBirthdays ? 'rotate-180' : ''}`}
+              aria-hidden
+            />
+          </button>
+          {showBirthdays ? (
+            <div className="border-t border-stone-100 px-4 pb-4 pt-3">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {upcomingBirthdays.slice(0, 8).map(({ u, b }) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => openEdit(u)}
+                    className="group flex min-w-0 items-center justify-between gap-3 rounded-xl border border-stone-200/80 bg-white px-3 py-2 text-left shadow-sm transition hover:border-primary/40 hover:bg-primary/[0.04]"
+                    title="Открыть карточку"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-stone-900">
+                        {memberRosterName(u)}
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-stone-500">
+                        {formatMemberPhone(u.phone_number)}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block whitespace-nowrap text-xs font-semibold text-stone-700">{b.dateLabel}</span>
+                      <span className="mt-0.5 block whitespace-nowrap text-[11px] font-bold text-primary">
+                        {b.relativeLabel}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {upcomingBirthdays.length > 8 ? (
+                <p className="mt-2 text-xs text-stone-500">
+                  И ещё: <strong>{upcomingBirthdays.length - 8}</strong>
+                </p>
+              ) : null}
             </div>
-            <p className="text-xs text-stone-500">Показаны активные пользователи</p>
-          </div>
-
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {upcomingBirthdays.slice(0, 8).map(({ u, b }) => (
-              <button
-                key={u.id}
-                type="button"
-                onClick={() => openEdit(u)}
-                className="group flex min-w-0 items-center justify-between gap-3 rounded-xl border border-stone-200/80 bg-white px-3 py-2 text-left shadow-sm transition hover:border-primary/40 hover:bg-primary/[0.04]"
-                title="Открыть карточку"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-stone-900">
-                    {memberRosterName(u)}
-                  </span>
-                  <span className="mt-0.5 block truncate text-xs text-stone-500">{u.phone_number ?? '—'}</span>
-                </span>
-                <span className="shrink-0 text-right">
-                  <span className="block whitespace-nowrap text-xs font-semibold text-stone-700">{b.dateLabel}</span>
-                  <span className="mt-0.5 block whitespace-nowrap text-[11px] font-bold text-primary">
-                    {b.relativeLabel}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {upcomingBirthdays.length > 8 ? (
-            <p className="mt-2 text-xs text-stone-500">
-              И ещё: <strong>{upcomingBirthdays.length - 8}</strong>
-            </p>
           ) : null}
         </div>
       ) : null}
 
       {/* Toolbar */}
-      <div className="space-y-2">
+      <div className="sticky top-0 z-20 -mx-1 space-y-2 bg-[var(--surface,#f4f1ed)]/95 px-1 py-2 backdrop-blur">
         <div className="flex flex-wrap items-center gap-2">
           <label className="relative min-w-[220px] flex-1">
             <LuSearch
@@ -1221,14 +1301,14 @@ function MembersSection({
               className={`${fieldClass()} pl-9 ${search ? 'pr-9' : ''}`}
               placeholder="Имя, фамилия, телефон, роль, служение…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => patchMemberListParams({ q: e.target.value })}
               aria-label="Поиск пользователей"
             />
             {search ? (
               <button
                 type="button"
                 className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-                onClick={() => setSearch('')}
+                onClick={() => patchMemberListParams({ q: '' })}
                 aria-label="Очистить поиск"
               >
                 <LuX className="h-3.5 w-3.5" aria-hidden />
@@ -1238,7 +1318,7 @@ function MembersSection({
           <select
             className="rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
+            onChange={(e) => patchMemberListParams({ role: e.target.value })}
             aria-label="Фильтр по роли приложения"
           >
             <option value="">Все роли</option>
@@ -1248,20 +1328,21 @@ function MembersSection({
               </option>
             ))}
           </select>
-          <select
-            className="rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            value={accountFilter}
-            onChange={(e) => setAccountFilter(e.target.value as MemberAccountFilter)}
-            aria-label="Фильтр по статусу входа"
-          >
-            {MEMBER_ACCOUNT_FILTER_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.value === 'all'
-                  ? opt.label
-                  : `${opt.label} (${accountFilterCounts[opt.value]})`}
-              </option>
-            ))}
-          </select>
+          {ministryOptions.length > 0 ? (
+            <select
+              className="rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              value={ministryFilter}
+              onChange={(e) => patchMemberListParams({ dir: e.target.value })}
+              aria-label="Фильтр по направлению служения"
+            >
+              <option value="">Все служения</option>
+              {ministryOptions.map((dir) => (
+                <option key={dir} value={dir}>
+                  {dir}
+                </option>
+              ))}
+            </select>
+          ) : null}
           {filtersActive ? (
             <button type="button" className={btnSecondary('')} onClick={clearMemberFilters} title="Сбросить поиск и фильтры">
               Сбросить
@@ -1277,7 +1358,7 @@ function MembersSection({
             onClick={() => setShowBulkCreate((v) => !v)}
           >
             <LuTable2 className="h-4 w-4 shrink-0" aria-hidden />
-            Массово из таблицы
+            Массово
           </button>
           <div className="relative">
             <button
@@ -1285,7 +1366,7 @@ function MembersSection({
               className={btnSecondary('')}
               onClick={() => setShowActionsMenu((v) => !v)}
             >
-              ⋯ Действия
+              ⋯
             </button>
             {showActionsMenu && (
               <>
@@ -1336,15 +1417,34 @@ function MembersSection({
             )}
           </div>
         </div>
-        <p className="text-xs text-stone-500" aria-live="polite">
-          {filtersActive
-            ? `Показано ${filtered.length} из ${stats.total}`
-            : `${stats.total} ${stats.total === 1 ? 'пользователь' : 'пользователей'} · по фамилии А–Я`}
-          {roleFilter && isAppRoleId(roleFilter) ? ` · роль: ${appRoleLabel(roleFilter)}` : ''}
-          {accountFilter !== 'all'
-            ? ` · ${MEMBER_ACCOUNT_FILTER_OPTIONS.find((o) => o.value === accountFilter)?.label ?? ''}`
-            : ''}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-stone-500" aria-live="polite">
+            {filtersActive
+              ? `Показано ${ruPeopleCount(filtered.length)} из ${stats.total}`
+              : `${ruPeopleCount(stats.total)} · по фамилии А–Я`}
+            {roleFilter && isAppRoleId(roleFilter) ? ` · ${appRoleLabel(roleFilter)}` : ''}
+            {accountFilter !== 'all'
+              ? ` · ${accountFilter === 'in_app' ? 'в приложении' : accountFilter === 'no_login' ? 'нет входа' : 'неактивные'}`
+              : ''}
+            {ministryFilter ? ` · ${ministryFilter}` : ''}
+          </p>
+          {letterGroups.length > 3 && filtered.length >= 16 ? (
+            <div className="hidden max-w-full flex-wrap gap-0.5 shell:flex" aria-label="Переход по буквам">
+              {letterGroups
+                .filter((g) => g.letter !== '#')
+                .map((g) => (
+                  <button
+                    key={g.letter}
+                    type="button"
+                    className="rounded px-1 py-0.5 text-[11px] font-bold text-stone-500 hover:bg-stone-200 hover:text-stone-800"
+                    onClick={() => scrollToMemberLetter(g.letter)}
+                  >
+                    {g.letter}
+                  </button>
+                ))}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {showBulkCreate ? (
@@ -1708,68 +1808,84 @@ function MembersSection({
         {filtered.length === 0 ? (
           <MemberListEmptyState filtersActive={filtersActive} onReset={clearMemberFilters} />
         ) : (
-          filtered.map((u) => {
-            const bday = birthdayBadge(u, now, 30);
-            return (
-              <article
-                key={u.id}
-                className={`cursor-pointer rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] transition hover:border-primary/40 hover:shadow-md ${u.is_active ? '' : 'opacity-70'}`}
-                role="button"
-                tabIndex={0}
-                onClick={() => openEdit(u)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    openEdit(u);
-                  }
-                }}
+          letterGroups.map((group) => (
+            <div key={group.letter} className="space-y-2">
+              <p
+                data-member-letter={group.letter}
+                className="sticky top-14 z-[1] bg-[var(--surface,#f4f1ed)]/95 px-1 py-1 text-xs font-extrabold uppercase tracking-wider text-stone-400 backdrop-blur"
               >
-                <div className="min-w-0">
-                  <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
-                  <p className="mt-0.5 text-sm text-stone-600">{u.phone_number ?? '—'}</p>
-                  {u.ministry_role ? (
-                    <p className="mt-0.5 truncate text-xs text-stone-500">{u.ministry_role}</p>
-                  ) : null}
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <MemberRegistrationBadge u={u} />
-                  <MemberAppRoleBadges u={u} />
-                  {bday ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2.5 py-0.5 text-xs font-semibold text-pink-800">
-                      <span aria-hidden>🎂</span>
-                      {bday.dateLabel}
-                      <span className="font-bold text-pink-700">· {bday.relativeLabel}</span>
-                    </span>
-                  ) : null}
-                  {!u.is_active ? (
-                    <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
-                      Неактивен
-                    </span>
-                  ) : null}
-                  {u.is_collection_coordinator ? (
-                    <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
-                      Сбор
-                    </span>
-                  ) : null}
-                  {u.in_prayer_cycle ? (
-                    <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900">
-                      В цикле
-                    </span>
-                  ) : null}
-                </div>
-                {showImpersonateButton && !memberIsAdmin(u) ? (
-                  <button
-                    type="button"
-                    className="mt-3 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-                    title="Войти в аккаунт"
-                    onClick={(e) => handleImpersonate(u, e)}
+                {group.letter === '#' ? 'Без фамилии' : group.letter}
+              </p>
+              {group.members.map((u) => {
+                const bday = birthdayBadge(u, now, 30);
+                const service = memberServiceLine(u);
+                return (
+                  <article
+                    key={u.id}
+                    className={`cursor-pointer rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] transition hover:border-primary/40 hover:shadow-md ${u.is_active ? '' : 'opacity-70'}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openEdit(u)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openEdit(u);
+                      }
+                    }}
                   >
-                    👁 Войти
-                  </button>
-                ) : null}
-              </article>
-            );
-          })
+                    <div className="min-w-0">
+                      <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
+                      <button
+                        type="button"
+                        className="mt-0.5 text-left text-sm text-stone-600 hover:text-primary"
+                        title={u.phone_number ? 'Скопировать телефон' : undefined}
+                        onClick={(e) => void copyMemberPhone(e, u.phone_number)}
+                      >
+                        {formatMemberPhone(u.phone_number)}
+                      </button>
+                      {service ? <p className="mt-0.5 truncate text-xs text-stone-500">{service}</p> : null}
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <MemberRegistrationBadge u={u} />
+                      <MemberAppRoleBadges u={u} onSelect={toggleRoleFilter} />
+                      {bday ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2.5 py-0.5 text-xs font-semibold text-pink-800">
+                          <span aria-hidden>🎂</span>
+                          {bday.dateLabel}
+                          <span className="font-bold text-pink-700">· {bday.relativeLabel}</span>
+                        </span>
+                      ) : null}
+                      {!u.is_active ? (
+                        <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
+                          Неактивен
+                        </span>
+                      ) : null}
+                      {u.is_collection_coordinator ? (
+                        <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+                          Сбор
+                        </span>
+                      ) : null}
+                      {u.in_prayer_cycle ? (
+                        <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900">
+                          В цикле
+                        </span>
+                      ) : null}
+                    </div>
+                    {showImpersonateButton && !memberIsAdmin(u) ? (
+                      <button
+                        type="button"
+                        className="mt-3 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                        title="Войти в аккаунт"
+                        onClick={(e) => handleImpersonate(u, e)}
+                      >
+                        👁 Войти
+                      </button>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          ))
         )}
       </div>
 
@@ -1794,80 +1910,104 @@ function MembersSection({
                   </td>
                 </tr>
               ) : (
-                filtered.map((u) => {
-                  const name = memberRosterName(u);
-                  const { bg, fg } = memberAvatarColors(name);
-                  const bday = birthdayBadge(u, now, 30);
-                  return (
-                    <tr
-                      key={u.id}
-                      tabIndex={0}
-                      title="Открыть карточку"
-                      className={`cursor-pointer border-b border-stone-100/90 transition last:border-0 hover:bg-primary/[0.06] ${u.is_active ? '' : 'opacity-70'}`}
-                      onClick={() => openEdit(u)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          openEdit(u);
-                        }
-                      }}
+                letterGroups.flatMap((group) => [
+                  <tr key={`letter-${group.letter}`} className="bg-stone-50/90">
+                    <td
+                      colSpan={showImpersonateButton ? 5 : 4}
+                      data-member-letter={group.letter}
+                      className="sticky top-0 z-[1] px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wider text-stone-400"
                     >
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-                            style={{ backgroundColor: bg, color: fg }}
-                            aria-hidden
-                          >
-                            {memberInitials(u)}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="truncate font-medium text-stone-900">{name}</p>
-                            {u.ministry_role ? (
-                              <p className="truncate text-xs text-stone-500">{u.ministry_role}</p>
-                            ) : null}
-                            {bday ? (
-                              <p className="mt-0.5 truncate text-[11px] font-semibold text-pink-800">
-                                <span aria-hidden>🎂</span> {bday.dateLabel}{' '}
-                                <span className="font-bold text-pink-700">· {bday.relativeLabel}</span>
-                              </p>
-                            ) : null}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-stone-600">
-                        {u.phone_number ?? '—'}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <MemberAppRoleBadges u={u} />
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <MemberRegistrationBadge u={u} />
-                          {!u.is_active ? (
-                            <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
-                              Неактивен
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      {showImpersonateButton ? (
+                      {group.letter === '#' ? 'Без фамилии' : group.letter}
+                      <span className="ml-2 font-semibold normal-case tracking-normal text-stone-300">
+                        {group.members.length}
+                      </span>
+                    </td>
+                  </tr>,
+                  ...group.members.map((u) => {
+                    const name = memberRosterName(u);
+                    const { bg, fg } = memberAvatarColors(name);
+                    const bday = birthdayBadge(u, now, 30);
+                    const service = memberServiceLine(u);
+                    return (
+                      <tr
+                        key={u.id}
+                        tabIndex={0}
+                        title="Открыть карточку"
+                        className={`cursor-pointer border-b border-stone-100/90 transition last:border-0 hover:bg-primary/[0.06] ${u.is_active ? '' : 'opacity-70'}`}
+                        onClick={() => openEdit(u)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openEdit(u);
+                          }
+                        }}
+                      >
                         <td className="px-4 py-2.5">
-                          {!memberIsAdmin(u) ? (
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+                              style={{ backgroundColor: bg, color: fg }}
+                              aria-hidden
+                            >
+                              {memberInitials(u)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-stone-900">{name}</p>
+                              {service ? <p className="truncate text-xs text-stone-500">{service}</p> : null}
+                              {bday ? (
+                                <p className="mt-0.5 truncate text-[11px] font-semibold text-pink-800">
+                                  <span aria-hidden>🎂</span> {bday.dateLabel}{' '}
+                                  <span className="font-bold text-pink-700">· {bday.relativeLabel}</span>
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-2.5">
+                          {u.phone_number ? (
                             <button
                               type="button"
-                              className="rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-                              title="Войти в аккаунт"
-                              onClick={(e) => handleImpersonate(u, e)}
+                              className="text-stone-600 hover:text-primary"
+                              title="Скопировать телефон"
+                              onClick={(e) => void copyMemberPhone(e, u.phone_number)}
                             >
-                              👁 Войти
+                              {formatMemberPhone(u.phone_number)}
                             </button>
-                          ) : null}
+                          ) : (
+                            <span className="text-stone-400">—</span>
+                          )}
                         </td>
-                      ) : null}
-                    </tr>
-                  );
-                })
+                        <td className="px-4 py-2.5">
+                          <MemberAppRoleBadges u={u} onSelect={toggleRoleFilter} />
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <MemberRegistrationBadge u={u} />
+                            {!u.is_active ? (
+                              <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
+                                Неактивен
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        {showImpersonateButton ? (
+                          <td className="px-4 py-2.5">
+                            {!memberIsAdmin(u) ? (
+                              <button
+                                type="button"
+                                className="rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                                title="Войти в аккаунт"
+                                onClick={(e) => handleImpersonate(u, e)}
+                              >
+                                👁 Войти
+                              </button>
+                            ) : null}
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  }),
+                ])
               )}
             </tbody>
           </table>
