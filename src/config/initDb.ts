@@ -644,15 +644,15 @@ CREATE INDEX IF NOT EXISTS idx_app_logs_scope_created
   ON app_logs (scope, created_at DESC, id DESC);
 
 -- Журнал отправок Telegram (авторассылки)
-CREATE TABLE IF NOT EXISTS telegram_send_logs (
+CREATE TABLE IF NOT EXISTS public.telegram_send_logs (
   id BIGSERIAL PRIMARY KEY,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   batch_id UUID NOT NULL,
   channel VARCHAR(64) NOT NULL,
   trigger_source VARCHAR(32) NOT NULL,
-  status VARCHAR(16) NOT NULL CHECK (status IN ('ok', 'failed', 'skipped', 'blocked')),
-  recipient_type VARCHAR(32) NOT NULL CHECK (recipient_type IN ('member', 'telegram_chat')),
-  member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  status VARCHAR(16) NOT NULL,
+  recipient_type VARCHAR(32) NOT NULL,
+  member_id INTEGER,
   member_name TEXT,
   telegram_chat_id TEXT,
   chat_title TEXT,
@@ -665,15 +665,15 @@ CREATE TABLE IF NOT EXISTS telegram_send_logs (
   meta JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_telegram_send_logs_created_desc
-  ON telegram_send_logs (created_at DESC, id DESC);
+  ON public.telegram_send_logs (created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_telegram_send_logs_batch
-  ON telegram_send_logs (batch_id, created_at DESC, id DESC);
+  ON public.telegram_send_logs (batch_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_telegram_send_logs_channel_created
-  ON telegram_send_logs (channel, created_at DESC, id DESC);
+  ON public.telegram_send_logs (channel, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_telegram_send_logs_status_created
-  ON telegram_send_logs (status, created_at DESC, id DESC);
+  ON public.telegram_send_logs (status, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_telegram_send_logs_member
-  ON telegram_send_logs (member_id, created_at DESC)
+  ON public.telegram_send_logs (member_id, created_at DESC)
   WHERE member_id IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION resolve_prayer_cycle_roster_member_ids(p_cycle_index bigint)

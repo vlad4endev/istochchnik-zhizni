@@ -15,6 +15,7 @@ import { initDb } from './config/initDb';
 import { ensurePrayerCycleAnchor } from './config/prayerCycleAnchor';
 import { ensureMediaScheduleSchema } from './services/mediaScheduleMigrations';
 import { ensureMusicScheduleSchema } from './services/musicScheduleMigrations';
+import { ensureTelegramSendLogsSchema } from './services/telegramSendLogService';
 import { resolveAuthSession } from './middleware/authSession';
 import { enforceRoleAccess, resolveUserRole } from './middleware/roleAccess';
 import routes from './routes';
@@ -523,6 +524,12 @@ async function start(): Promise<void> {
         console.log('[sermon-notes] schema ensured');
       } catch (e) {
         console.warn('[sermon-notes] ensureSermonNotesSchema failed:', e);
+      }
+      try {
+        await ensureTelegramSendLogsSchema();
+        console.log('[telegram-send-log] schema ensured');
+      } catch (e) {
+        console.warn('[telegram-send-log] ensureTelegramSendLogsSchema failed:', e);
       }
     }
   }

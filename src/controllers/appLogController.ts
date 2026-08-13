@@ -45,7 +45,11 @@ export async function getTelegramSendLogsAdmin(req: Request, res: Response): Pro
     });
     res.json({ items: batches });
   } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
     console.error('[telegram-send-log] GET admin failed', err);
-    res.status(500).json({ error: 'Не удалось загрузить журнал авторассылки Telegram' });
+    res.status(500).json({
+      error: 'Не удалось загрузить журнал авторассылки Telegram',
+      detail: detail.slice(0, 400),
+    });
   }
 }
