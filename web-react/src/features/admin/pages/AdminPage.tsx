@@ -37,6 +37,7 @@ import { RolePermissionsManagerSection } from '../RolePermissionsManagerSection'
 import { MemberAppRolesPicker } from '../MemberAppRolesPicker';
 import { NotificationsSettingsSection } from '../NotificationsSettingsSection';
 import { TelegramSettingsSection } from '../TelegramSettingsSection';
+import { BackupSettingsSection } from '../BackupSettingsSection';
 import { ProjectJournalSection } from '../ProjectJournalSection';
 import { DiagnosticsDashboardSection } from '../DiagnosticsDashboardSection';
 import { useBrandingStore } from '../../branding/brandingStore';
@@ -442,6 +443,7 @@ export function AdminPage() {
         {tab === 'journal' && <ProjectJournalSection />}
         {tab === 'notifications' && <NotificationsSettingsSection />}
         {tab === 'telegram' && <TelegramSettingsSection />}
+        {tab === 'backup' && <BackupSettingsSection />}
         {tab === 'diagnostics' && <DiagnosticsDashboardSection />}
         {tab === 'integrations' && <IntegrationsSection />}
       </div>

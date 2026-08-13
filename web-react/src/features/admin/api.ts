@@ -1175,3 +1175,153 @@ export async function fetchAssistantMonitorMessages(
   );
   return data;
 }
+
+// ─── Backup / резервная копия ───────────────────────────────────────────────
+
+export type BackupTelegramTarget = 'admins' | 'default_chat' | 'both';
+export type BackupScheduleKind = 'daily' | 'weekly';
+
+export interface BackupSettings {
+  auto_enabled: boolean;
+  schedule_time: string;
+  schedule_kind: BackupScheduleKind;
+  schedule_weekdays: number[];
+  timezone: string;
+  telegram_send: boolean;
+  telegram_target: BackupTelegramTarget;
+  retention_days: number;
+  last_run_at: string | null;
+  last_run_status: 'ok' | 'error' | 'running' | null;
+  last_run_message: string | null;
+  last_run_backup_id: string | null;
+  last_telegram_at: string | null;
+  last_telegram_status: 'ok' | 'error' | 'skipped' | null;
+  last_telegram_message: string | null;
+  backups_dir: string;
+  max_retention_days: number;
+  telegram_bot_ready: boolean;
+}
+
+export interface BackupListItem {
+  id: string;
+  created_at: string | null;
+  dir_path: string;
+  archive_path: string | null;
+  size_bytes: number;
+  has_archive: boolean;
+  has_manifest: boolean;
+  age_days: number;
+}
+
+export async function fetchBackupSettings(): Promise<{
+  settings: BackupSettings;
+  running: boolean;
+  restore_confirm_phrase: string;
+}> {
+  const { data } = await apiClient.get<{
+    settings: BackupSettings;
+    running: boolean;
+    restore_confirm_phrase: string;
+  }>('/api/backup/settings');
+  return data;
+}
+
+export async function patchBackupSettings(body: {
+  auto_enabled?: boolean;
+  schedule_time?: string;
+  schedule_kind?: BackupScheduleKind;
+  schedule_weekdays?: number[];
+  timezone?: string;
+  telegram_send?: boolean;
+  telegram_target?: BackupTelegramTarget;
+  retention_days?: number;
+}): Promise<{ settings: BackupSettings }> {
+  const { data } = await apiClient.patch<{ settings: BackupSettings }>('/api/backup/settings', body);
+  return data;
+}
+
+export async function fetchBackupList(): Promise<{ items: BackupListItem[]; running: boolean }> {
+  const { data } = await apiClient.get<{ items: BackupListItem[]; running: boolean }>('/api/backup/list');
+  return data;
+}
+
+export async function createBackup(body?: { send_telegram?: boolean }): Promise<{
+  ok: boolean;
+  backup: {
+    id: string;
+    archive_path: string | null;
+    size_bytes: number;
+    telegram?: { ok: boolean; sent: number; message: string };
+  };
+}> {
+  const { data } = await apiClient.post<{
+    ok: boolean;
+    backup: {
+      id: string;
+      archive_path: string | null;
+      size_bytes: number;
+      telegram?: { ok: boolean; sent: number; message: string };
+    };
+  }>('/api/backup/create', body ?? {}, { timeout: 50 * 60_000 });
+  return data;
+}
+
+export async function deleteBackup(id: string): Promise<void> {
+  await apiClient.delete(`/api/backup/${encodeURIComponent(id)}`);
+}
+
+export async function sendBackupTelegram(
+  id: string,
+  body?: { telegram_target?: BackupTelegramTarget },
+): Promise<{ ok: boolean; sent: number; message: string }> {
+  const { data } = await apiClient.post<{ ok: boolean; sent: number; message: string }>(
+    `/api/backup/${encodeURIComponent(id)}/send-telegram`,
+    body ?? {},
+    { timeout: 5 * 60_000 },
+  );
+  return data;
+}
+
+export async function downloadBackupArchive(id: string): Promise<void> {
+  const { data } = await apiClient.get<Blob>(`/api/backup/${encodeURIComponent(id)}/download`, {
+    responseType: 'blob',
+    timeout: 30 * 60_000,
+  });
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${id}.tar.gz`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export interface BackupRestoreResult {
+  id: string;
+  dry_run: boolean;
+  ok: boolean;
+  message: string;
+  log_tail: string;
+  restored: { db: boolean; uploads: boolean; secrets: boolean };
+}
+
+export async function restoreBackup(
+  id: string,
+  body: {
+    dry_run?: boolean;
+    confirm?: string;
+    restore_db?: boolean;
+    restore_uploads?: boolean;
+    restore_secrets?: boolean;
+    encrypt_passphrase?: string;
+    skip_safety_backup?: boolean;
+  },
+): Promise<BackupRestoreResult> {
+  const { data } = await apiClient.post<BackupRestoreResult>(
+    `/api/backup/${encodeURIComponent(id)}/restore`,
+    body,
+    { timeout: 60 * 60_000 },
+  );
+  return data;
+}
