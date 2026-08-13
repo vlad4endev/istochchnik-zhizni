@@ -14,6 +14,7 @@ import {
   getPrayerBotMessage,
   getPrayerData,
   getPrayerSectionTodayViewers,
+  getCalendarSundayServices,
   getCuratorDistributionTargetWeek,
   getTodayPrayerBotMessage,
   patchCycleCollectionClaims,
@@ -80,6 +81,7 @@ router.get('/next-week/collection', getCycleCollectionClaims);
 router.patch('/next-week/collection', patchCycleCollectionClaims);
 router.get('/next-week/global', getNextWeekGlobal);
 router.get('/birthdays/week', getWeekBirthdays);
+router.get('/sunday-services', getCalendarSundayServices);
 router.get('/events/occurrence-overrides', getOccurrenceOverrides);
 router.get('/events', getActiveEvents);
 router.get('/events/category-options', getEventCategoryOptions);

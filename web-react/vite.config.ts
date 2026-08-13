@@ -171,9 +171,9 @@ export default defineConfig(({ mode }) => {
               icons: [{ src: '/assets/pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
             },
             {
-              name: 'Календарь',
-              short_name: 'Календарь',
-              url: '/calendar',
+              name: 'Мероприятия',
+              short_name: 'Мероприятия',
+              url: '/events',
               icons: [{ src: '/assets/pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
             },
             {

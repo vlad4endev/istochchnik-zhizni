@@ -262,6 +262,70 @@ export async function getActiveEvents(): Promise<ChurchEventItem[]> {
   return Array.isArray(data) ? data : [];
 }
 
+function normalizeSundayPerson(raw: unknown): import('./sundayServiceTypes').CalendarSundayServicePerson | null {
+  if (!isRecord(raw)) return null;
+  const id = typeof raw.id === 'number' ? raw.id : Number(raw.id);
+  const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+  if (!Number.isFinite(id) || id <= 0 || !name) return null;
+  const avatar = raw.avatar_url;
+  return {
+    id,
+    name,
+    avatar_url: typeof avatar === 'string' && avatar.trim() ? avatar.trim() : null,
+  };
+}
+
+function normalizeSundaySong(raw: unknown): import('./sundayServiceTypes').CalendarSundayServiceSong | null {
+  if (!isRecord(raw)) return null;
+  const title = typeof raw.title === 'string' ? raw.title.trim() : '';
+  if (!title) return null;
+  const key = typeof raw.key === 'string' && raw.key.trim() ? raw.key.trim() : null;
+  return { title, key };
+}
+
+function normalizeSundayService(raw: unknown): import('./sundayServiceTypes').CalendarSundayService | null {
+  if (!isRecord(raw)) return null;
+  const serviceDate = typeof raw.service_date === 'string' ? raw.service_date.slice(0, 10) : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(serviceDate)) return null;
+  const idRaw = raw.id;
+  const id = typeof idRaw === 'number' ? idRaw : Number(idRaw);
+  const start = typeof raw.start_time === 'string' ? raw.start_time.slice(0, 5) : '10:00';
+  const statusRaw = raw.status;
+  const status = statusRaw === 'published' || statusRaw === 'draft' ? statusRaw : null;
+  const songsRaw = Array.isArray(raw.songs) ? raw.songs : [];
+  const songs = songsRaw.map(normalizeSundaySong).filter((s): s is NonNullable<typeof s> => s != null);
+  const topic = typeof raw.sermon_topic === 'string' ? raw.sermon_topic.trim() : '';
+  const scripture = typeof raw.sermon_scripture === 'string' ? raw.sermon_scripture.trim() : '';
+  const titleRaw = typeof raw.title === 'string' ? raw.title.trim() : '';
+  const template = typeof raw.template_name === 'string' ? raw.template_name.trim() : '';
+  const token = typeof raw.share_token === 'string' ? raw.share_token.trim() : '';
+  return {
+    id: Number.isFinite(id) ? id : 0,
+    service_date: serviceDate,
+    start_time: /^\d{2}:\d{2}$/.test(start) ? start : '10:00',
+    status,
+    template_name: template || null,
+    title: titleRaw || template || 'Воскресное служение',
+    has_program: raw.has_program === true,
+    share_token: token || null,
+    leader: normalizeSundayPerson(raw.leader),
+    preacher: normalizeSundayPerson(raw.preacher),
+    sermon_topic: topic || null,
+    sermon_scripture: scripture || null,
+    songs,
+  };
+}
+
+/** GET `/api/calendar/sunday-services` — воскресные служения с темой, песнями и ведущим. */
+export async function getCalendarSundayServices(params?: {
+  from?: string;
+  to?: string;
+}): Promise<import('./sundayServiceTypes').CalendarSundayService[]> {
+  const { data } = await apiClient.get<unknown>('/api/calendar/sunday-services', { params });
+  if (!Array.isArray(data)) return [];
+  return data.map(normalizeSundayService).filter((row): row is NonNullable<typeof row> => row != null);
+}
+
 export async function getOccurrenceOverrides(): Promise<ChurchEventOccurrenceOverride[]> {
   const { data } = await apiClient.get<unknown>('/api/calendar/events/occurrence-overrides');
   if (!Array.isArray(data)) return [];

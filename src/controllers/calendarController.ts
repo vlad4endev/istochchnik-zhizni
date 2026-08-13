@@ -11,6 +11,10 @@ import {
   type WeekPlanKind,
 } from '../services/calendarService';
 import {
+  isValidYmd,
+  listCalendarSundayServices,
+} from '../services/calendarSundayServicesService';
+import {
   addManualPreviousPrayerNeed,
   deleteManualPreviousPrayerNeed,
   setCoordinatorPrayerNeedForDate,
@@ -877,6 +881,38 @@ export async function getPrayerSectionTodayViewers(req: Request, res: Response):
     res.json({ date: visitDateYmd, unique_viewers_today, viewers });
   } catch (err) {
     console.error('getPrayerSectionTodayViewers error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+function parseOptionalYmd(raw: unknown): string | null {
+  const s = String(raw ?? '').trim().slice(0, 10);
+  return isValidYmd(s) ? s : null;
+}
+
+function defaultSundayServicesRange(): { from: string; to: string } {
+  const now = new Date();
+  const from = new Date(now);
+  from.setDate(from.getDate() - 14);
+  const to = new Date(now);
+  to.setDate(to.getDate() + 90);
+  return { from: formatYmdLocal(from), to: formatYmdLocal(to) };
+}
+
+/** Воскресные служения для календаря мероприятий: тема проповеди, песни, ведущий. */
+export async function getCalendarSundayServices(req: Request, res: Response): Promise<void> {
+  try {
+    const defaults = defaultSundayServicesRange();
+    const from = parseOptionalYmd(req.query.from) ?? defaults.from;
+    const to = parseOptionalYmd(req.query.to) ?? defaults.to;
+    if (from.localeCompare(to) > 0) {
+      res.status(400).json({ error: 'Invalid range. Expected from <= to.' });
+      return;
+    }
+    const items = await listCalendarSundayServices({ from, to });
+    res.json(items);
+  } catch (err) {
+    console.error('getCalendarSundayServices error:', err);
     res.status(500).json({ error: 'Database error' });
   }
 }

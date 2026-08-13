@@ -253,6 +253,29 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
     },
   });
 
+  await runCase({
+    id: 'http_calendar_sunday_services',
+    name: 'GET /api/calendar/sunday-services',
+    category: 'HTTP · календарь',
+    tier: 'standard',
+    fn: async () => {
+      const r = await fetchProbe(baseUrl, '/api/calendar/sunday-services');
+      const ok = r.status === 200;
+      pushSmoke('/api/calendar/sunday-services', ok, r.status, r.durationMs);
+      if (!ok) return httpFailure(r, `HTTP ${r.status}`);
+      const json = parseJsonSafe(r.text);
+      if (!Array.isArray(json)) {
+        return {
+          ok: false,
+          message: 'Ожидался JSON-массив',
+          httpStatus: r.status,
+          responsePreview: clipBody(r.text),
+        };
+      }
+      return { ok: true, message: `служений: ${json.length}` };
+    },
+  });
+
   // ── Безопасность (без cookie) ─────────────────────────────
   await runCase({
     id: 'sec_auth_me_closed',
