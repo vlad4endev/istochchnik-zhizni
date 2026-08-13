@@ -107,7 +107,7 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     label: 'Журнал',
     Icon: LuHistory,
     short: 'Логи',
-    description: 'Логи процессов, HTTP-запросов и ошибок сервера для быстрой диагностики проблем.',
+    description: 'Системные логи и журнал авторассылки Telegram: кому и что ушло.',
   },
   {
     id: 'notifications',

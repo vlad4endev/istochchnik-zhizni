@@ -1025,6 +1025,7 @@ export async function runServicePlanMondayMailingNow(req: Request, res: Response
     const result = await runServicePlanMondayMailing({
       force,
       dryRun,
+      trigger: force ? 'run_now' : 'api',
       ...(templateOverride !== undefined ? { templateOverride } : {}),
     });
     res.json({ ok: true, result });

@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { listAppLogs, type AppLogLevel } from '../services/appLogService';
+import { listTelegramSendLogBatches } from '../services/telegramSendLogService';
 
 type AuthReq = Request & { authUserRole?: string };
 
@@ -29,5 +30,22 @@ export async function getAppLogsAdmin(req: Request, res: Response): Promise<void
   } catch (err) {
     console.error('[app-log] GET admin failed', err);
     res.status(500).json({ error: 'Не удалось загрузить журнал' });
+  }
+}
+
+export async function getTelegramSendLogsAdmin(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    const batches = await listTelegramSendLogBatches({
+      limit: req.query.limit,
+      offset: req.query.offset,
+      channel: typeof req.query.channel === 'string' ? req.query.channel : undefined,
+      status: typeof req.query.status === 'string' ? req.query.status : undefined,
+      search: typeof req.query.search === 'string' ? req.query.search : '',
+    });
+    res.json({ items: batches });
+  } catch (err) {
+    console.error('[telegram-send-log] GET admin failed', err);
+    res.status(500).json({ error: 'Не удалось загрузить журнал авторассылки Telegram' });
   }
 }

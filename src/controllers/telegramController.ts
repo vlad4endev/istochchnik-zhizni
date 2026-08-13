@@ -653,7 +653,7 @@ export async function postTelegramDispatchRunNowHandler(req: Request, res: Respo
       res.status(400).json({ error: 'Поле "date" должно быть строкой YYYY-MM-DD или отсутствовать' });
       return;
     }
-    const sent = await runTelegramDispatchNow(prayerDate);
+    const sent = await runTelegramDispatchNow(prayerDate, { trigger: 'run_now' });
     res.json({ ok: true, sent_count: sent.sent_count, mode: sent.mode });
   } catch (error) {
     const mapped = errorToStatus(error);

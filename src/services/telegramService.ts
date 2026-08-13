@@ -18,6 +18,13 @@ import {
   telegramIdsFromLegacyScalars,
   type ServicePlanMailingDestinations,
 } from './servicePlanMailingDestinations';
+import {
+  newTelegramSendBatchId,
+  resolveTelegramChatTitle,
+  writeTelegramSendLog,
+  type TelegramSendChannel,
+  type TelegramSendTrigger,
+} from './telegramSendLogService';
 
 export interface TelegramProxyStatus {
   /** Включено ли использование прокси из настроек проекта (БД) */
@@ -1836,20 +1843,6 @@ export async function testTelegramProxyConnection(opts?: {
   };
 }
 
-async function listMemberTelegramChatIds(): Promise<string[]> {
-  await ensureMembersTelegramColumn();
-  const result = await query(
-    `SELECT DISTINCT telegram_chat_id
-     FROM members
-     WHERE is_active = TRUE
-       AND COALESCE(telegram_delivery_blocked, FALSE) = FALSE
-       AND NULLIF(TRIM(COALESCE(telegram_chat_id, '')), '') IS NOT NULL`,
-  );
-  return result.rows
-    .map((row) => normalizeOptionalString((row as { telegram_chat_id?: unknown }).telegram_chat_id))
-    .filter((id): id is string => Boolean(id));
-}
-
 export async function listTelegramDispatchRecipients(): Promise<TelegramDispatchRecipient[]> {
   await ensureMembersTelegramColumn();
   const result = await query(
@@ -2151,10 +2144,58 @@ export async function sendPasswordResetTelegramMessage(chatId: string, text: str
   }
 }
 
+export type TelegramOutgoingLogOpts = {
+  channel: TelegramSendChannel;
+  trigger: TelegramSendTrigger;
+  batchId?: string;
+  memberId?: number | null;
+  memberName?: string | null;
+  chatTitle?: string | null;
+  scenarioId?: string | null;
+  kind?: string | null;
+  recipientType?: 'member' | 'telegram_chat';
+  meta?: Record<string, unknown>;
+};
+
+async function persistOutgoingTelegramLog(
+  opts: TelegramOutgoingLogOpts | undefined,
+  args: {
+    chatId: string;
+    text: string;
+    status: 'ok' | 'failed' | 'skipped' | 'blocked';
+    httpStatus?: number | null;
+    errorDescription?: string | null;
+  },
+): Promise<void> {
+  if (!opts) return;
+  const chatTitle =
+    opts.chatTitle?.trim() ||
+    (await resolveTelegramChatTitle(args.chatId)) ||
+    null;
+  await writeTelegramSendLog({
+    batchId: opts.batchId,
+    channel: opts.channel,
+    trigger: opts.trigger,
+    status: args.status,
+    recipientType: opts.recipientType ?? (opts.memberId ? 'member' : 'telegram_chat'),
+    memberId: opts.memberId,
+    memberName: opts.memberName,
+    telegramChatId: args.chatId,
+    chatTitle,
+    scenarioId: opts.scenarioId,
+    kind: opts.kind,
+    messageText: args.text,
+    httpStatus: args.httpStatus,
+    errorDescription: args.errorDescription,
+    meta: opts.meta,
+  });
+}
+
 export async function sendTelegramByPurpose(args: {
   purpose: TelegramPurpose;
   text: string;
   chatIdOverride?: string | null;
+  log?: TelegramOutgoingLogOpts;
 }): Promise<{ chat_id: string; status: number }> {
   const cfg = await resolveTelegramConfig();
   if (!cfg.enabled) {
@@ -2175,10 +2216,23 @@ export async function sendTelegramByPurpose(args: {
   if (!sent.ok) {
     const description =
       typeof sent.body?.description === 'string' ? sent.body.description.trim() : '';
+    await persistOutgoingTelegramLog(args.log, {
+      chatId,
+      text,
+      status: 'failed',
+      httpStatus: sent.status,
+      errorDescription: description || `Telegram HTTP ${sent.status}`,
+    });
     throw new Error(
       description ? `telegram_send_failed:${sent.status}:${description}` : `telegram_send_failed:${sent.status}`,
     );
   }
+  await persistOutgoingTelegramLog(args.log, {
+    chatId,
+    text,
+    status: 'ok',
+    httpStatus: sent.status,
+  });
   return { chat_id: chatId, status: sent.status };
 }
 
@@ -2189,6 +2243,7 @@ export async function sendTelegramToChat(args: {
   chatId: string;
   text: string;
   inlineUrlButton?: { text: string; url: string } | null;
+  log?: TelegramOutgoingLogOpts;
 }): Promise<{ chat_id: string; status: number }> {
   const cfg = await resolveTelegramConfig();
   if (!cfg.enabled) {
@@ -2217,15 +2272,29 @@ export async function sendTelegramToChat(args: {
   if (!sent.ok) {
     const description =
       typeof sent.body?.description === 'string' ? sent.body.description.trim() : '';
+    await persistOutgoingTelegramLog(args.log, {
+      chatId,
+      text,
+      status: 'failed',
+      httpStatus: sent.status,
+      errorDescription: description || `Telegram HTTP ${sent.status}`,
+    });
     throw new Error(
       description ? `telegram_send_failed:${sent.status}:${description}` : `telegram_send_failed:${sent.status}`,
     );
   }
+  await persistOutgoingTelegramLog(args.log, {
+    chatId,
+    text,
+    status: 'ok',
+    httpStatus: sent.status,
+  });
   return { chat_id: chatId, status: sent.status };
 }
 
 export async function sendTodayPrayerTelegramToAllMembers(
   prayerDateYmd?: string | null,
+  options?: { trigger?: TelegramSendTrigger; batchId?: string },
 ): Promise<{ sent_count: number; total: number }> {
   const cfg = await resolveTelegramConfig();
   if (!cfg.enabled) {
@@ -2235,16 +2304,18 @@ export async function sendTodayPrayerTelegramToAllMembers(
     throw new Error('telegram_missing_token');
   }
 
-  const [text, chatIds] = await Promise.all([
-    buildTodayPrayerTelegramText(prayerDateYmd),
-    listMemberTelegramChatIds(),
-  ]);
-  if (chatIds.length === 0) {
+  const recipients = await listTelegramDispatchRecipients();
+  if (recipients.length === 0) {
     throw new Error('telegram_missing_member_chats');
   }
+  const text = await buildTodayPrayerTelegramText(prayerDateYmd);
+  const prayerDate = resolvePrayerDispatchCalendarYmd(prayerDateYmd);
+  const batchId = options?.batchId ?? newTelegramSendBatchId();
+  const trigger = options?.trigger ?? 'api';
 
   let sent = 0;
-  for (const chatId of chatIds) {
+  for (const recipient of recipients) {
+    const chatId = recipient.telegram_chat_id;
     const result = await sendTelegramMessageRawSequence(cfg.botToken, chatId, text);
     if (!result.ok) {
       const description = extractTelegramFailureDescription(result);
@@ -2255,34 +2326,79 @@ export async function sendTodayPrayerTelegramToAllMembers(
           status: result.status,
           description,
         });
+        await writeTelegramSendLog({
+          batchId,
+          channel: 'prayer_dispatch',
+          trigger,
+          status: 'blocked',
+          recipientType: 'member',
+          memberId: recipient.id,
+          memberName: recipient.name,
+          telegramChatId: chatId,
+          kind: prayerDate,
+          messageText: text,
+          httpStatus: result.status,
+          errorDescription: description || `Telegram ${result.status}: recipient unavailable`,
+        });
         continue;
       }
+      await writeTelegramSendLog({
+        batchId,
+        channel: 'prayer_dispatch',
+        trigger,
+        status: 'failed',
+        recipientType: 'member',
+        memberId: recipient.id,
+        memberName: recipient.name,
+        telegramChatId: chatId,
+        kind: prayerDate,
+        messageText: text,
+        httpStatus: result.status,
+        errorDescription: description || `Telegram HTTP ${result.status}`,
+      });
       throw new Error(
         description
           ? `telegram_send_failed:${result.status}:${description}`
           : `telegram_send_failed:${result.status}`,
       );
     }
+    await writeTelegramSendLog({
+      batchId,
+      channel: 'prayer_dispatch',
+      trigger,
+      status: 'ok',
+      recipientType: 'member',
+      memberId: recipient.id,
+      memberName: recipient.name,
+      telegramChatId: chatId,
+      kind: prayerDate,
+      messageText: text,
+      httpStatus: result.status,
+    });
     sent += 1;
   }
-  return { sent_count: sent, total: chatIds.length };
+  return { sent_count: sent, total: recipients.length };
 }
 
 export async function sendTodayPrayerTelegramToSelectedMembers(
   memberIds: number[],
   prayerDateYmd?: string | null,
+  options?: { trigger?: TelegramSendTrigger; batchId?: string },
 ): Promise<{ sent_count: number; total: number }> {
   const cfg = await resolveTelegramConfig();
   if (!cfg.enabled) throw new Error('telegram_disabled');
   if (!cfg.botToken) throw new Error('telegram_missing_token');
   const ids = Array.from(new Set(memberIds.map((x) => Number(x)).filter((x) => Number.isInteger(x) && x > 0)));
   if (ids.length === 0) throw new Error('telegram_missing_member_chats');
-  const recipients = await listTelegramDispatchRecipients();
-  const chatIds = recipients.filter((r) => ids.includes(r.id)).map((r) => r.telegram_chat_id);
-  if (chatIds.length === 0) throw new Error('telegram_missing_member_chats');
+  const recipients = (await listTelegramDispatchRecipients()).filter((r) => ids.includes(r.id));
+  if (recipients.length === 0) throw new Error('telegram_missing_member_chats');
   const text = await buildTodayPrayerTelegramText(prayerDateYmd);
+  const prayerDate = resolvePrayerDispatchCalendarYmd(prayerDateYmd);
+  const batchId = options?.batchId ?? newTelegramSendBatchId();
+  const trigger = options?.trigger ?? 'api';
   let sent = 0;
-  for (const chatId of chatIds) {
+  for (const recipient of recipients) {
+    const chatId = recipient.telegram_chat_id;
     const result = await sendTelegramMessageRawSequence(cfg.botToken, chatId, text);
     if (!result.ok) {
       const description = extractTelegramFailureDescription(result);
@@ -2293,28 +2409,72 @@ export async function sendTodayPrayerTelegramToSelectedMembers(
           status: result.status,
           description,
         });
+        await writeTelegramSendLog({
+          batchId,
+          channel: 'prayer_dispatch',
+          trigger,
+          status: 'blocked',
+          recipientType: 'member',
+          memberId: recipient.id,
+          memberName: recipient.name,
+          telegramChatId: chatId,
+          kind: prayerDate,
+          messageText: text,
+          httpStatus: result.status,
+          errorDescription: description || `Telegram ${result.status}: recipient unavailable`,
+        });
         continue;
       }
+      await writeTelegramSendLog({
+        batchId,
+        channel: 'prayer_dispatch',
+        trigger,
+        status: 'failed',
+        recipientType: 'member',
+        memberId: recipient.id,
+        memberName: recipient.name,
+        telegramChatId: chatId,
+        kind: prayerDate,
+        messageText: text,
+        httpStatus: result.status,
+        errorDescription: description || `Telegram HTTP ${result.status}`,
+      });
       throw new Error(
         description
           ? `telegram_send_failed:${result.status}:${description}`
           : `telegram_send_failed:${result.status}`,
       );
     }
+    await writeTelegramSendLog({
+      batchId,
+      channel: 'prayer_dispatch',
+      trigger,
+      status: 'ok',
+      recipientType: 'member',
+      memberId: recipient.id,
+      memberName: recipient.name,
+      telegramChatId: chatId,
+      kind: prayerDate,
+      messageText: text,
+      httpStatus: result.status,
+    });
     sent += 1;
   }
-  return { sent_count: sent, total: chatIds.length };
+  return { sent_count: sent, total: recipients.length };
 }
 
 export async function runTelegramDispatchNow(
   prayerDateYmd?: string | null,
+  options?: { trigger?: TelegramSendTrigger },
 ): Promise<{ sent_count: number; mode: 'all' | 'selected' }> {
+  const trigger = options?.trigger ?? 'run_now';
+  const batchId = newTelegramSendBatchId();
   const s = await getTelegramDispatchSettings();
   if (s.target === 'selected') {
-    const r = await sendTodayPrayerTelegramToSelectedMembers(s.member_ids, prayerDateYmd);
+    const r = await sendTodayPrayerTelegramToSelectedMembers(s.member_ids, prayerDateYmd, { trigger, batchId });
     return { sent_count: r.sent_count, mode: 'selected' };
   }
-  const r = await sendTodayPrayerTelegramToAllMembers(prayerDateYmd);
+  const r = await sendTodayPrayerTelegramToAllMembers(prayerDateYmd, { trigger, batchId });
   return { sent_count: r.sent_count, mode: 'all' };
 }
 
@@ -2342,7 +2502,7 @@ export async function processTelegramDispatchDue(now = new Date()): Promise<{ tr
     const alreadyToday =
       last != null && formatYmdInTimeZone(tz, last) === formatYmdInTimeZone(tz, now);
     if (cur !== hhmm || alreadyToday) return { triggered: false };
-    const run = await runTelegramDispatchNow();
+    const run = await runTelegramDispatchNow(undefined, { trigger: 'cron' });
     await markSent();
     return { triggered: true, sent_count: run.sent_count };
   }
@@ -2351,7 +2511,7 @@ export async function processTelegramDispatchDue(now = new Date()): Promise<{ tr
   if (!onceAt || Number.isNaN(onceAt.getTime())) return { triggered: false };
   const alreadyDone = last != null && last.toISOString() >= onceAt.toISOString();
   if (alreadyDone || nowIso < onceAt.toISOString()) return { triggered: false };
-  const run = await runTelegramDispatchNow();
+  const run = await runTelegramDispatchNow(undefined, { trigger: 'cron' });
   await query(
     'UPDATE global_settings SET telegram_dispatch_last_sent_at = NOW(), telegram_dispatch_enabled = FALSE WHERE id = 1',
   );

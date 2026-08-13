@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
 import { fetchAppLogsAdmin, type AppLogItem } from './api';
+import { TelegramMailingJournalSection } from './TelegramMailingJournalSection';
 
 const Q_JOURNAL = ['admin', 'journal', 'logs'] as const;
 const SLOW_MS = 1200;
@@ -167,6 +168,7 @@ function analyzeLogs(items: AppLogItem[]): JournalAnalysis {
 }
 
 export function ProjectJournalSection() {
+  const [section, setSection] = useState<'system' | 'telegram'>('system');
   const [level, setLevel] = useState<'all' | 'info' | 'warn' | 'error'>('all');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -181,6 +183,7 @@ export function ProjectJournalSection() {
         limit: 150,
       }),
     refetchInterval: 15000,
+    enabled: section === 'system',
   });
 
   const items = q.data ?? [];
@@ -192,6 +195,37 @@ export function ProjectJournalSection() {
   const analysis = useMemo(() => analyzeLogs(items), [items]);
 
   return (
+    <div className="space-y-4">
+      <section className="rounded-[10px] bg-stone-100 p-1">
+        <div className="grid grid-cols-2 gap-1">
+          <button
+            type="button"
+            className={
+              section === 'system'
+                ? 'rounded-lg bg-white px-3 py-2 text-sm font-medium text-stone-900 shadow-sm'
+                : 'rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:text-stone-900'
+            }
+            onClick={() => setSection('system')}
+          >
+            Система
+          </button>
+          <button
+            type="button"
+            className={
+              section === 'telegram'
+                ? 'rounded-lg bg-white px-3 py-2 text-sm font-medium text-stone-900 shadow-sm'
+                : 'rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:text-stone-900'
+            }
+            onClick={() => setSection('telegram')}
+          >
+            Авторассылка Telegram
+          </button>
+        </div>
+      </section>
+
+      {section === 'telegram' ? (
+        <TelegramMailingJournalSection />
+      ) : (
     <section className="space-y-4">
       <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -344,5 +378,7 @@ export function ProjectJournalSection() {
         )}
       </div>
     </section>
+      )}
+    </div>
   );
 }
