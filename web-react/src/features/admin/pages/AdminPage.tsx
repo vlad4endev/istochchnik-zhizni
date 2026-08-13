@@ -30,6 +30,7 @@ import {
   type AdminTabId,
 } from '../adminTabs';
 import { AccessRequestsSection } from '../AccessRequestsSection';
+import { AiAssistantMonitorSection } from '../AiAssistantMonitorSection';
 import { AiSettingsSection } from '../AiSettingsSection';
 import { AppSectionsAccessSection } from '../AppSectionsAccessSection';
 import { RolePermissionsManagerSection } from '../RolePermissionsManagerSection';
@@ -449,11 +450,11 @@ export function AdminPage() {
 }
 
 function IntegrationsSection() {
-  const [subTab, setSubTab] = useState<'sms' | 'ai' | 'song_import'>('sms');
+  const [subTab, setSubTab] = useState<'sms' | 'ai' | 'ai_monitor' | 'song_import'>('sms');
   return (
     <div className="space-y-6">
       <section className="rounded-[10px] bg-stone-100 p-1">
-        <div className="grid grid-cols-3 gap-1">
+        <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
           <button
             type="button"
             className={
@@ -483,6 +484,18 @@ function IntegrationsSection() {
           <button
             type="button"
             className={
+              subTab === 'ai_monitor'
+                ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
+                : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
+            }
+            onClick={() => setSubTab('ai_monitor')}
+          >
+            <span aria-hidden>📡</span>
+            Мониторинг ИИ
+          </button>
+          <button
+            type="button"
+            className={
               subTab === 'song_import'
                 ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
                 : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
@@ -499,6 +512,8 @@ function IntegrationsSection() {
         <SmsSection />
       ) : subTab === 'ai' ? (
         <AiSettingsSection />
+      ) : subTab === 'ai_monitor' ? (
+        <AiAssistantMonitorSection />
       ) : (
         <section className="rounded-2xl border border-stone-200 bg-white p-4">
           <h3 className="text-sm font-semibold text-stone-900">Импорт песен</h3>

@@ -5,6 +5,10 @@ import {
   postAiTestHandler,
 } from '../controllers/aiSettingsController';
 import {
+  getAssistantConversationMessagesAdminHandler,
+  listAssistantConversationsAdminHandler,
+} from '../controllers/assistantMonitorController';
+import {
   getNotificationSettingsAdmin,
   getNotificationSettingsPublic,
   patchNotificationSettings,
@@ -33,6 +37,9 @@ router.get('/logs/admin', getAppLogsAdmin);
 router.get('/ai/admin', getAiSettingsAdminHandler);
 router.patch('/ai', patchAiSettingsHandler);
 router.post('/ai/test', postAiTestHandler);
+/** Мониторинг диалогов с ИИ-помощником (только админ). */
+router.get('/ai/conversations', listAssistantConversationsAdminHandler);
+router.get('/ai/conversations/:id/messages', getAssistantConversationMessagesAdminHandler);
 router.get('/sections', getSectionVisibilitySettingsPublic);
 router.get('/sections/admin', getSectionVisibilitySettingsAdmin);
 router.patch('/sections', patchSectionVisibilitySettingsHandler);

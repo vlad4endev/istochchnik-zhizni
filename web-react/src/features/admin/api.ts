@@ -1020,3 +1020,92 @@ export async function postAiTest(options?: {
   });
   return data;
 }
+
+/** Мониторинг диалогов с ИИ-помощником (админ). */
+export interface AssistantMonitorStats {
+  conversation_count: number;
+  message_count: number;
+  user_message_count: number;
+  assistant_message_count: number;
+  active_today_count: number;
+  active_7d_count: number;
+}
+
+export interface AssistantMonitorConversation {
+  conversation_id: string;
+  owner_member_id: number;
+  owner_name: string;
+  owner_first_name: string | null;
+  owner_last_name: string | null;
+  owner_avatar_url: string | null;
+  owner_app_role: string | null;
+  owner_app_roles: string[];
+  message_count: number;
+  user_message_count: number;
+  assistant_message_count: number;
+  last_message_at: string | null;
+  last_message_preview: string | null;
+  last_message_from: 'user' | 'assistant' | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssistantMonitorListResponse {
+  items: AssistantMonitorConversation[];
+  total: number;
+  stats: AssistantMonitorStats;
+}
+
+export interface AssistantMonitorMessage {
+  id: string;
+  conversation_id: string;
+  sender_id: number | null;
+  content: string;
+  payload_type: string;
+  payload: Record<string, unknown> | null;
+  is_deleted: boolean;
+  is_edited: boolean;
+  created_at: string;
+  updated_at: string;
+  sender_name: string | null;
+  sender_first_name: string | null;
+  sender_last_name: string | null;
+  from: 'user' | 'assistant';
+}
+
+export interface AssistantMonitorMessagesResponse {
+  conversation: AssistantMonitorConversation;
+  messages: AssistantMonitorMessage[];
+  has_more: boolean;
+}
+
+export async function fetchAssistantMonitorConversations(params?: {
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<AssistantMonitorListResponse> {
+  const { data } = await apiClient.get<AssistantMonitorListResponse>('/api/settings/ai/conversations', {
+    params: {
+      search: params?.search?.trim() || undefined,
+      limit: params?.limit,
+      offset: params?.offset,
+    },
+  });
+  return data;
+}
+
+export async function fetchAssistantMonitorMessages(
+  conversationId: string,
+  params?: { limit?: number; before?: string | null },
+): Promise<AssistantMonitorMessagesResponse> {
+  const { data } = await apiClient.get<AssistantMonitorMessagesResponse>(
+    `/api/settings/ai/conversations/${encodeURIComponent(conversationId)}/messages`,
+    {
+      params: {
+        limit: params?.limit,
+        before: params?.before || undefined,
+      },
+    },
+  );
+  return data;
+}
