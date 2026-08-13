@@ -22,6 +22,8 @@
 #   RUN_SUPABASE_PUSH=1    — дополнительно npx supabase db push (нужен DATABASE_URL)
 #   UPDATE_COMPOSE_FILES=… — свои флаги compose, напр. "-f docker-compose.yml -f …"
 #   SERVICES=api web       — какие сервисы пересобирать (по умолчанию весь стек)
+#   BACKUP_BEFORE_UPDATE=1 — полный бекап БД+uploads перед обновлением (рекомендуется)
+#   SKIP_BACKUP=1          — не делать бекап даже если BACKUP_BEFORE_UPDATE=1
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -236,6 +238,8 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "help" ]]; then
   RUN_SUPABASE_PUSH=1    supabase db push после контейнеров
   SERVICES="api web"     пересобрать только эти сервисы
   UPDATE_COMPOSE_FILES=  свои -f флаги compose
+  BACKUP_BEFORE_UPDATE=1 полный бекап БД+uploads до обновления
+  SKIP_BACKUP=1          отключить бекап
 EOF
   exit 0
 fi
@@ -260,6 +264,15 @@ if [[ ! -f .env ]]; then
   else
     die "Нет .env. Скопируйте .env.example → .env и задайте DATABASE_URL"
   fi
+fi
+
+# 0) Бекап до любых разрушительных шагов (git pull / recreate)
+if [[ "${SKIP_BACKUP:-0}" != "1" ]] && { [[ "${BACKUP_BEFORE_UPDATE:-0}" == "1" ]] || env_flag_true "BACKUP_BEFORE_UPDATE"; }; then
+  log "Бекап перед обновлением (BACKUP_BEFORE_UPDATE)…"
+  bash "$ROOT/scripts/backup.sh" create || die "Бекап перед обновлением не удался — обновление отменено"
+  log "Бекап OK (backups/latest)"
+else
+  log "Бекап перед обновлением пропущен (включите BACKUP_BEFORE_UPDATE=1 в .env для защиты данных)"
 fi
 
 # 1) Git

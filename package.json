@@ -73,7 +73,11 @@
     "server:update": "bash scripts/server-update.sh",
     "go:stop": "docker compose stop api web",
     "go:restart": "docker compose restart api web && docker compose logs -f api",
-    "docker:web:rebuild": "docker compose build --no-cache web && docker compose up -d web"
+    "docker:web:rebuild": "docker compose build --no-cache web && docker compose up -d web",
+    "backup": "bash scripts/backup.sh",
+    "backup:list": "bash scripts/backup.sh list",
+    "backup:verify": "bash scripts/backup.sh verify",
+    "restore": "bash scripts/restore.sh"
   },
   "keywords": [],
   "author": "",

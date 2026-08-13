@@ -100,6 +100,22 @@ VAPID_SUBJECT=mailto:your-support@domain.com
 ## Project Docs
 
 - [Logo and icon guidelines](docs/logo-guidelines.md)
+- [Backup & restore](docs/backup.md) — полный бекап БД + uploads
+
+## Бекап (БД + uploads)
+
+Полного бекапа в репозитории раньше не было — используйте:
+
+```bash
+npm run backup                 # создать снимок в backups/
+npm run backup:list
+npm run backup:verify -- backups/latest
+# Восстановление (сначала dry-run, потом с подтверждением):
+bash scripts/restore.sh backups/latest
+CONFIRM_RESTORE=YES bash scripts/restore.sh backups/latest
+```
+
+На проде в `.env` задайте `BACKUP_BEFORE_UPDATE=1` (бекап перед `npm run server:update`) и по возможности `BACKUP_ENCRYPT_PASSPHRASE`. Подробности: [docs/backup.md](docs/backup.md).
 
 ## Обновление на сервере (одна команда)
 
@@ -112,16 +128,18 @@ npm run server:update
 ```
 
 Скрипт `scripts/server-update.sh`:
-1. `git pull --ff-only` (сбрасывает локальные правки `package*.json`, мешающие merge)
-2. пересобирает образы и перезапускает Docker (`npm ci` внутри Dockerfile)
-3. применяет миграции (`initDb` + media/song CLI), если возможно
-4. ждёт health API/web и пишет лог в `.run/updates/`
+1. опционально полный бекап (`BACKUP_BEFORE_UPDATE=1`)
+2. `git pull --ff-only` (сбрасывает локальные правки `package*.json`, мешающие merge)
+3. пересобирает образы и перезапускает Docker (`npm ci` внутри Dockerfile)
+4. применяет миграции (`initDb` + media/song CLI), если возможно
+5. ждёт health API/web и пишет лог в `.run/updates/`
 
 Полезные флаги:
+- `BACKUP_BEFORE_UPDATE=1` — бекап БД+uploads до обновления (рекомендуется)
 - `USE_PROD_OVERLAY=1` — overlay с API на loopback
 - `PREBUILT_WEB=1` / `HOST_BUILD=1` — сборка фронта на хосте + `release/web/`
 - `RUN_SUPABASE_PUSH=1` — дополнительно `supabase db push`
-- `SKIP_MIGRATE=1`, `OFFLINE=1`, `SKIP_DOCKER=1` — точечные пропуски шагов
+- `SKIP_MIGRATE=1`, `OFFLINE=1`, `SKIP_DOCKER=1`, `SKIP_BACKUP=1` — точечные пропуски шагов
 
 ## Docker Deployment (API + Postgres)
 
