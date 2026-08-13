@@ -2,7 +2,7 @@ import cron from 'node-cron';
 
 import {
   createFullBackup,
-  isBackupCreateRunning,
+  isBackupBusy,
   applyRetention,
 } from '../services/backupService';
 import { loadBackupSettingsDocument } from '../services/backupSettingsService';
@@ -31,7 +31,7 @@ async function runAutoBackupTick(): Promise<void> {
   if (process.env.DISABLE_BACKUP_CRON === 'true' || process.env.DISABLE_BACKUP_CRON === '1') {
     return;
   }
-  if (isBackupCreateRunning()) {
+  if (isBackupBusy()) {
     console.log('[CRON] backup: уже выполняется — пропуск');
     return;
   }

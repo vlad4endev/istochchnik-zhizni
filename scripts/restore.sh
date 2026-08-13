@@ -147,7 +147,7 @@ if [[ "${SKIP_SAFETY_BACKUP:-0}" != "1" ]]; then
   backup_log "Создаю safety-бекап текущего состояния перед restore…"
   # Тот же flock уже удерживается restore — вложенный backup без повторного lock.
   BACKUP_DIR="$BACKUPS_ROOT" \
-    BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-14}" \
+    BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}" \
     BACKUP_SKIP_LOCK=1 \
     bash "$ROOT/scripts/backup.sh" create || backup_die "Safety-бекап не удался — restore отменён"
   backup_log "Safety-бекап готов (см. $BACKUPS_ROOT/latest)"

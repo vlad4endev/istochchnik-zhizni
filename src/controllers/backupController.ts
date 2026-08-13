@@ -6,11 +6,13 @@ import {
   createFullBackup,
   deleteBackup,
   getBackupSettingsAdminView,
-  isBackupCreateRunning,
+  isBackupBusy,
   listBackups,
   resolveDownloadPath,
   sendBackupViaTelegram,
   applyRetention,
+  restoreFullBackup,
+  RESTORE_CONFIRM_PHRASE,
 } from '../services/backupService';
 import {
   patchBackupSettings,
@@ -37,7 +39,7 @@ function ensureAdmin(req: Request, res: Response): AuthRequest | null {
 function mapBackupError(error: unknown): { status: number; error: string } {
   const msg = error instanceof Error ? error.message : String(error);
   if (msg === 'backup_already_running') {
-    return { status: 409, error: 'Создание бекапа уже выполняется. Дождитесь завершения.' };
+    return { status: 409, error: 'Уже выполняется создание или восстановление бекапа. Дождитесь завершения.' };
   }
   if (msg === 'invalid_backup_id' || msg === 'invalid_backup_path') {
     return { status: 400, error: 'Некорректный идентификатор бекапа' };
@@ -51,8 +53,29 @@ function mapBackupError(error: unknown): { status: number; error: string } {
   if (msg === 'backup_script_missing') {
     return { status: 500, error: 'Скрипт scripts/backup.sh не найден на сервере' };
   }
+  if (msg === 'restore_script_missing') {
+    return { status: 500, error: 'Скрипт scripts/restore.sh не найден на сервере' };
+  }
+  if (msg === 'restore_confirm_required') {
+    return {
+      status: 400,
+      error: `Для восстановления введите подтверждение: ${RESTORE_CONFIRM_PHRASE}`,
+    };
+  }
+  if (msg === 'restore_nothing_selected') {
+    return { status: 400, error: 'Выберите хотя бы один компонент: БД, uploads или secrets' };
+  }
   if (msg.startsWith('backup_script_failed:')) {
     return { status: 500, error: `Ошибка создания бекапа: ${msg.slice('backup_script_failed:'.length).slice(0, 500)}` };
+  }
+  if (msg.startsWith('restore_script_failed:')) {
+    return {
+      status: 500,
+      error: `Ошибка восстановления: ${msg.slice('restore_script_failed:'.length).slice(0, 500)}`,
+    };
+  }
+  if (msg.startsWith('extract_failed:')) {
+    return { status: 500, error: `Не удалось распаковать архив: ${msg.slice('extract_failed:'.length).slice(0, 400)}` };
   }
   if (msg.startsWith('telegram_')) {
     return { status: 400, error: `Telegram: ${msg}` };
@@ -67,7 +90,8 @@ export async function getBackupSettingsHandler(req: Request, res: Response): Pro
     const settings = await getBackupSettingsAdminView();
     res.json({
       settings,
-      running: isBackupCreateRunning(),
+      running: isBackupBusy(),
+      restore_confirm_phrase: RESTORE_CONFIRM_PHRASE,
     });
   } catch (error) {
     const mapped = mapBackupError(error);
@@ -157,7 +181,7 @@ export async function listBackupsHandler(req: Request, res: Response): Promise<v
     const items = await listBackups();
     res.json({
       items,
-      running: isBackupCreateRunning(),
+      running: isBackupBusy(),
     });
   } catch (error) {
     const mapped = mapBackupError(error);
@@ -230,6 +254,38 @@ export async function sendBackupTelegramHandler(req: Request, res: Response): Pr
   }
   try {
     const result = await sendBackupViaTelegram(id, target);
+    res.json(result);
+  } catch (error) {
+    const mapped = mapBackupError(error);
+    res.status(mapped.status).json({ error: mapped.error });
+  }
+}
+
+export async function restoreBackupHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const id = typeof req.params.id === 'string' ? req.params.id : '';
+  const body = (req.body ?? {}) as {
+    dry_run?: unknown;
+    confirm?: unknown;
+    restore_db?: unknown;
+    restore_uploads?: unknown;
+    restore_secrets?: unknown;
+    encrypt_passphrase?: unknown;
+    skip_safety_backup?: unknown;
+  };
+
+  const dryRun = body.dry_run === true;
+  try {
+    const result = await restoreFullBackup(id, {
+      dryRun,
+      confirm: typeof body.confirm === 'string' ? body.confirm : undefined,
+      restoreDb: typeof body.restore_db === 'boolean' ? body.restore_db : undefined,
+      restoreUploads: typeof body.restore_uploads === 'boolean' ? body.restore_uploads : undefined,
+      restoreSecrets: typeof body.restore_secrets === 'boolean' ? body.restore_secrets : undefined,
+      encryptPassphrase:
+        typeof body.encrypt_passphrase === 'string' ? body.encrypt_passphrase : undefined,
+      skipSafetyBackup: body.skip_safety_backup === true,
+    });
     res.json(result);
   } catch (error) {
     const mapped = mapBackupError(error);

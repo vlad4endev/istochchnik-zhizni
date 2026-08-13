@@ -23,6 +23,33 @@ const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const TELEGRAM_DOCUMENT_MAX_BYTES = 49 * 1024 * 1024; // запас до лимита Bot API ~50MB
 
 let createInFlight: Promise<BackupCreateResult> | null = null;
+let restoreInFlight: Promise<BackupRestoreResult> | null = null;
+
+export const RESTORE_CONFIRM_PHRASE = 'ВОССТАНОВИТЬ';
+
+export interface BackupRestoreResult {
+  id: string;
+  dry_run: boolean;
+  ok: boolean;
+  message: string;
+  log_tail: string;
+  restored: {
+    db: boolean;
+    uploads: boolean;
+    secrets: boolean;
+  };
+}
+
+export interface BackupRestoreOptions {
+  dryRun?: boolean;
+  confirm?: string;
+  restoreDb?: boolean;
+  restoreUploads?: boolean;
+  restoreSecrets?: boolean;
+  /** Передать passphrase, если бекап зашифрован */
+  encryptPassphrase?: string | null;
+  skipSafetyBackup?: boolean;
+}
 
 export interface BackupListItem {
   id: string;
@@ -454,7 +481,7 @@ export async function createFullBackup(options?: {
   sendTelegram?: boolean;
   trigger?: 'manual' | 'auto' | 'api';
 }): Promise<BackupCreateResult> {
-  if (createInFlight) {
+  if (createInFlight || restoreInFlight) {
     throw new Error('backup_already_running');
   }
 
@@ -518,6 +545,205 @@ export async function createFullBackup(options?: {
 
 export function isBackupCreateRunning(): boolean {
   return createInFlight !== null;
+}
+
+export function isBackupRestoreRunning(): boolean {
+  return restoreInFlight !== null;
+}
+
+export function isBackupBusy(): boolean {
+  return createInFlight !== null || restoreInFlight !== null;
+}
+
+/** Гарантирует наличие каталога бекапа (распакует .tar.gz при необходимости). */
+export async function ensureBackupDirectory(id: string): Promise<string> {
+  if (!stampFromId(id)) throw new Error('invalid_backup_id');
+  const root = backupsRoot();
+  const dirPath = path.join(root, id);
+  try {
+    const st = await fsp.stat(dirPath);
+    if (st.isDirectory()) {
+      await fsp.access(path.join(dirPath, 'MANIFEST.txt'));
+      return dirPath;
+    }
+  } catch {
+    /* extract from archive */
+  }
+
+  const archivePath = path.join(root, `${id}.tar.gz`);
+  try {
+    const st = await fsp.stat(archivePath);
+    if (!st.isFile()) throw new Error('backup_not_found');
+  } catch {
+    throw new Error('backup_not_found');
+  }
+
+  const stage = path.join(root, `.extract-${id}-${Date.now()}`);
+  await fsp.mkdir(stage, { recursive: true });
+  try {
+    const result = await runCmd('tar', ['-xzf', archivePath, '-C', stage], {
+      timeoutMs: 30 * 60_000,
+    });
+    if (result.code !== 0) {
+      throw new Error(`extract_failed:${result.stderr.slice(0, 400)}`);
+    }
+    // Архив мог содержать istochnik-backup-…/ или плоские файлы
+    const nested = path.join(stage, id);
+    let source = stage;
+    try {
+      if ((await fsp.stat(nested)).isDirectory()) source = nested;
+    } catch {
+      source = stage;
+    }
+    await fsp.rm(dirPath, { recursive: true, force: true }).catch(() => undefined);
+    await fsp.mkdir(path.dirname(dirPath), { recursive: true });
+    // Если source === stage и файлы лежат прямо в stage — переименуем stage в dirPath
+    if (source === stage) {
+      await fsp.rename(stage, dirPath);
+    } else {
+      await fsp.rename(source, dirPath);
+      await fsp.rm(stage, { recursive: true, force: true }).catch(() => undefined);
+    }
+    await fsp.access(path.join(dirPath, 'MANIFEST.txt'));
+    return dirPath;
+  } catch (e) {
+    await fsp.rm(stage, { recursive: true, force: true }).catch(() => undefined);
+    throw e;
+  }
+}
+
+async function runRestoreScript(
+  dirPath: string,
+  options: {
+    dryRun: boolean;
+    restoreDb: boolean;
+    restoreUploads: boolean;
+    restoreSecrets: boolean;
+    encryptPassphrase?: string | null;
+    skipSafetyBackup?: boolean;
+  },
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const script = path.join(PROJECT_ROOT, 'scripts/restore.sh');
+  if (!fs.existsSync(script)) {
+    throw new Error('restore_script_missing');
+  }
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    BACKUP_DIR: backupsRoot(),
+    BACKUP_KEEP_DAYS: String(BACKUP_RETENTION_DAYS_MAX),
+  };
+  if (options.dryRun) {
+    delete env.CONFIRM_RESTORE;
+  } else {
+    env.CONFIRM_RESTORE = 'YES';
+  }
+  env.RESTORE_DB = options.restoreDb ? '1' : '0';
+  env.RESTORE_UPLOADS = options.restoreUploads ? '1' : '0';
+  env.RESTORE_SECRETS = options.restoreSecrets ? '1' : '0';
+  env.RESTORE_ENV = '0';
+  if (options.skipSafetyBackup) env.SKIP_SAFETY_BACKUP = '1';
+  if (options.encryptPassphrase) {
+    env.BACKUP_ENCRYPT_PASSPHRASE = options.encryptPassphrase;
+  }
+
+  return runCmd('bash', [script, dirPath], {
+    cwd: PROJECT_ROOT,
+    env,
+    timeoutMs: 60 * 60_000,
+  });
+}
+
+export async function restoreFullBackup(
+  id: string,
+  options: BackupRestoreOptions = {},
+): Promise<BackupRestoreResult> {
+  if (createInFlight || restoreInFlight) {
+    throw new Error('backup_already_running');
+  }
+
+  const dryRun = Boolean(options.dryRun);
+  const restoreDb = options.restoreDb !== false;
+  const restoreUploads = options.restoreUploads !== false;
+  const restoreSecrets = Boolean(options.restoreSecrets);
+
+  if (!dryRun) {
+    const phrase = typeof options.confirm === 'string' ? options.confirm.trim() : '';
+    if (phrase !== RESTORE_CONFIRM_PHRASE) {
+      throw new Error('restore_confirm_required');
+    }
+    if (!restoreDb && !restoreUploads && !restoreSecrets) {
+      throw new Error('restore_nothing_selected');
+    }
+  }
+
+  restoreInFlight = (async () => {
+    await updateBackupRunStatus({
+      last_run_at: new Date().toISOString(),
+      last_run_status: 'running',
+      last_run_message: dryRun
+        ? `Проверка восстановления из ${id}…`
+        : `Восстановление из ${id}…`,
+      last_run_backup_id: id,
+    });
+
+    try {
+      const dirPath = await ensureBackupDirectory(id);
+      const result = await runRestoreScript(dirPath, {
+        dryRun,
+        restoreDb,
+        restoreUploads,
+        restoreSecrets,
+        encryptPassphrase: options.encryptPassphrase,
+        skipSafetyBackup: options.skipSafetyBackup,
+      });
+
+      const combined = `${result.stdout}\n${result.stderr}`.trim();
+      const log_tail = combined.slice(-4000);
+
+      if (result.code !== 0) {
+        throw new Error(`restore_script_failed:${log_tail.slice(-800)}`);
+      }
+
+      const message = dryRun
+        ? `Проверка OK: бекап ${id} целостен и готов к восстановлению.`
+        : `Восстановление из ${id} завершено. Перезапустите API/web при необходимости.`;
+
+      await updateBackupRunStatus({
+        last_run_at: new Date().toISOString(),
+        last_run_status: 'ok',
+        last_run_message: message,
+        last_run_backup_id: id,
+      });
+
+      return {
+        id,
+        dry_run: dryRun,
+        ok: true,
+        message,
+        log_tail,
+        restored: {
+          db: !dryRun && restoreDb,
+          uploads: !dryRun && restoreUploads,
+          secrets: !dryRun && restoreSecrets,
+        },
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await updateBackupRunStatus({
+        last_run_at: new Date().toISOString(),
+        last_run_status: 'error',
+        last_run_message: msg.slice(0, 1000),
+        last_run_backup_id: id,
+      });
+      throw e;
+    }
+  })();
+
+  try {
+    return await restoreInFlight;
+  } finally {
+    restoreInFlight = null;
+  }
 }
 
 export async function getBackupSettingsAdminView(): Promise<BackupSettingsAdminView> {

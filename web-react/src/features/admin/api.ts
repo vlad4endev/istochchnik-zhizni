@@ -1213,8 +1213,16 @@ export interface BackupListItem {
   age_days: number;
 }
 
-export async function fetchBackupSettings(): Promise<{ settings: BackupSettings; running: boolean }> {
-  const { data } = await apiClient.get<{ settings: BackupSettings; running: boolean }>('/api/backup/settings');
+export async function fetchBackupSettings(): Promise<{
+  settings: BackupSettings;
+  running: boolean;
+  restore_confirm_phrase: string;
+}> {
+  const { data } = await apiClient.get<{
+    settings: BackupSettings;
+    running: boolean;
+    restore_confirm_phrase: string;
+  }>('/api/backup/settings');
   return data;
 }
 
@@ -1287,4 +1295,33 @@ export async function downloadBackupArchive(id: string): Promise<void> {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+export interface BackupRestoreResult {
+  id: string;
+  dry_run: boolean;
+  ok: boolean;
+  message: string;
+  log_tail: string;
+  restored: { db: boolean; uploads: boolean; secrets: boolean };
+}
+
+export async function restoreBackup(
+  id: string,
+  body: {
+    dry_run?: boolean;
+    confirm?: string;
+    restore_db?: boolean;
+    restore_uploads?: boolean;
+    restore_secrets?: boolean;
+    encrypt_passphrase?: string;
+    skip_safety_backup?: boolean;
+  },
+): Promise<BackupRestoreResult> {
+  const { data } = await apiClient.post<BackupRestoreResult>(
+    `/api/backup/${encodeURIComponent(id)}/restore`,
+    body,
+    { timeout: 60 * 60_000 },
+  );
+  return data;
 }

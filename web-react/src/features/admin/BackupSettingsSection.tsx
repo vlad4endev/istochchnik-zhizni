@@ -4,8 +4,10 @@ import {
   LuDownload,
   LuHardDrive,
   LuRefreshCw,
+  LuRotateCcw,
   LuSend,
   LuTrash2,
+  LuX,
 } from 'react-icons/lu';
 
 import {
@@ -16,6 +18,7 @@ import {
   fetchBackupList,
   fetchBackupSettings,
   patchBackupSettings,
+  restoreBackup,
   sendBackupTelegram,
   type BackupScheduleKind,
   type BackupSettings,
@@ -34,6 +37,8 @@ const WEEK_DAYS = [
   { id: 6, label: 'Сб' },
   { id: 0, label: 'Вс' },
 ] as const;
+
+const DEFAULT_CONFIRM = 'ВОССТАНОВИТЬ';
 
 function fieldClass() {
   return (
@@ -77,7 +82,8 @@ export function BackupSettingsSection() {
   const settingsQ = useQuery({
     queryKey: Q_SETTINGS,
     queryFn: fetchBackupSettings,
-    refetchInterval: (q) => (q.state.data?.running || q.state.data?.settings.last_run_status === 'running' ? 4000 : false),
+    refetchInterval: (q) =>
+      q.state.data?.running || q.state.data?.settings.last_run_status === 'running' ? 4000 : false,
   });
   const listQ = useQuery({
     queryKey: Q_LIST,
@@ -88,6 +94,17 @@ export function BackupSettingsSection() {
   const [draft, setDraft] = useState<BackupSettings | null>(null);
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [sendTelegramOnCreate, setSendTelegramOnCreate] = useState(false);
+
+  const [restoreId, setRestoreId] = useState<string | null>(null);
+  const [restoreDb, setRestoreDb] = useState(true);
+  const [restoreUploads, setRestoreUploads] = useState(true);
+  const [restoreSecrets, setRestoreSecrets] = useState(false);
+  const [restoreConfirm, setRestoreConfirm] = useState('');
+  const [restorePassphrase, setRestorePassphrase] = useState('');
+  const [restoreLog, setRestoreLog] = useState<string | null>(null);
+  const [dryRunOk, setDryRunOk] = useState(false);
+
+  const confirmPhrase = settingsQ.data?.restore_confirm_phrase || DEFAULT_CONFIRM;
 
   useEffect(() => {
     if (settingsQ.data?.settings) {
@@ -158,8 +175,54 @@ export function BackupSettingsSection() {
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось скачать архив.') }),
   });
 
-  const running = Boolean(settingsQ.data?.running || listQ.data?.running || createMut.isPending);
+  const restoreMut = useMutation({
+    mutationFn: (opts: { dry_run: boolean }) => {
+      if (!restoreId) throw new Error('no id');
+      return restoreBackup(restoreId, {
+        dry_run: opts.dry_run,
+        confirm: opts.dry_run ? undefined : restoreConfirm.trim(),
+        restore_db: restoreDb,
+        restore_uploads: restoreUploads,
+        restore_secrets: restoreSecrets,
+        encrypt_passphrase: restorePassphrase.trim() || undefined,
+      });
+    },
+    onSuccess: (data) => {
+      setRestoreLog(data.log_tail || null);
+      if (data.dry_run) {
+        setDryRunOk(true);
+        setNote({ type: 'ok', text: data.message });
+      } else {
+        setNote({ type: 'ok', text: data.message });
+        setRestoreId(null);
+        setRestoreConfirm('');
+        setDryRunOk(false);
+        void qc.invalidateQueries({ queryKey: Q_SETTINGS });
+        void qc.invalidateQueries({ queryKey: Q_LIST });
+      }
+    },
+    onError: (e) => {
+      setDryRunOk(false);
+      setNote({ type: 'err', text: apiErrorMessage(e, 'Восстановление не удалось.') });
+    },
+  });
+
+  const running = Boolean(
+    settingsQ.data?.running || listQ.data?.running || createMut.isPending || restoreMut.isPending,
+  );
   const maxDays = draft?.max_retention_days ?? 30;
+
+  function openRestore(id: string) {
+    setRestoreId(id);
+    setRestoreDb(true);
+    setRestoreUploads(true);
+    setRestoreSecrets(false);
+    setRestoreConfirm('');
+    setRestorePassphrase('');
+    setRestoreLog(null);
+    setDryRunOk(false);
+    setNote(null);
+  }
 
   function toggleWeekday(day: number) {
     if (!draft) return;
@@ -206,8 +269,8 @@ export function BackupSettingsSection() {
               Создать резервную копию
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-stone-600">
-              Полный снимок: база PostgreSQL, локальные uploads и secrets. Архив можно скачать и при
-              необходимости отправить администратору в Telegram.
+              Полный снимок: база PostgreSQL, локальные uploads и secrets. Архив можно скачать,
+              отправить в Telegram или восстановить обратно.
             </p>
           </div>
           <button
@@ -217,7 +280,7 @@ export function BackupSettingsSection() {
             onClick={() => createMut.mutate()}
           >
             <LuRefreshCw className={`h-4 w-4 ${running ? 'animate-spin' : ''}`} />
-            {running ? 'Создаём…' : 'Создать архив сейчас'}
+            {running ? 'Выполняется…' : 'Создать архив сейчас'}
           </button>
         </div>
         <label className="mt-4 flex items-center gap-2 text-sm text-stone-700">
@@ -430,6 +493,15 @@ export function BackupSettingsSection() {
                   </button>
                   <button
                     type="button"
+                    className={btnSecondary('border-primary/40 text-primary')}
+                    disabled={running}
+                    onClick={() => openRestore(item.id)}
+                  >
+                    <LuRotateCcw className="h-4 w-4" />
+                    Восстановить
+                  </button>
+                  <button
+                    type="button"
                     className={btnSecondary()}
                     disabled={sendMut.isPending || !draft.telegram_bot_ready}
                     onClick={() => sendMut.mutate(item.id)}
@@ -459,6 +531,161 @@ export function BackupSettingsSection() {
           </ul>
         )}
       </section>
+
+      {restoreId && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/40 p-4 sm:items-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl sm:p-6"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-stone-900">Восстановление из бекапа</h3>
+                <p className="mt-1 text-sm text-stone-600">
+                  <span className="font-semibold text-stone-800">{restoreId}</span>
+                  <br />
+                  Текущие данные будут заменены. Перед записью сервер создаст safety-бекап.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg p-1 text-stone-500 hover:bg-stone-100"
+                onClick={() => !restoreMut.isPending && setRestoreId(null)}
+                aria-label="Закрыть"
+              >
+                <LuX className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3 text-sm">
+              <label className="flex items-center gap-2 font-medium text-stone-800">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-stone-300 text-primary"
+                  checked={restoreDb}
+                  onChange={(e) => {
+                    setRestoreDb(e.target.checked);
+                    setDryRunOk(false);
+                  }}
+                />
+                База данных (PostgreSQL)
+              </label>
+              <label className="flex items-center gap-2 font-medium text-stone-800">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-stone-300 text-primary"
+                  checked={restoreUploads}
+                  onChange={(e) => {
+                    setRestoreUploads(e.target.checked);
+                    setDryRunOk(false);
+                  }}
+                />
+                Файлы uploads
+              </label>
+              <label className="flex items-center gap-2 font-medium text-stone-800">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-stone-300 text-primary"
+                  checked={restoreSecrets}
+                  onChange={(e) => {
+                    setRestoreSecrets(e.target.checked);
+                    setDryRunOk(false);
+                  }}
+                />
+                secrets/ (ключи Firebase и др.)
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block font-medium text-stone-700">
+                  Пароль шифрования бекапа (если был)
+                </span>
+                <input
+                  type="password"
+                  className={fieldClass()}
+                  value={restorePassphrase}
+                  onChange={(e) => {
+                    setRestorePassphrase(e.target.value);
+                    setDryRunOk(false);
+                  }}
+                  placeholder="Необязательно"
+                  autoComplete="off"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block font-medium text-stone-700">
+                  Для записи введите{' '}
+                  <span className="font-bold text-red-700">{confirmPhrase}</span>
+                </span>
+                <input
+                  className={fieldClass()}
+                  value={restoreConfirm}
+                  onChange={(e) => setRestoreConfirm(e.target.value)}
+                  placeholder={confirmPhrase}
+                  autoComplete="off"
+                />
+              </label>
+
+              {dryRunOk && (
+                <p className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-900">
+                  Проверка пройдена. Можно запускать полное восстановление.
+                </p>
+              )}
+
+              {restoreLog && (
+                <pre className="max-h-40 overflow-auto rounded-lg bg-stone-900 p-3 text-[11px] leading-relaxed text-stone-100">
+                  {restoreLog}
+                </pre>
+              )}
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={btnSecondary()}
+                disabled={restoreMut.isPending || (!restoreDb && !restoreUploads && !restoreSecrets)}
+                onClick={() => restoreMut.mutate({ dry_run: true })}
+              >
+                {restoreMut.isPending && restoreMut.variables?.dry_run
+                  ? 'Проверяем…'
+                  : '1. Проверить (безопасно)'}
+              </button>
+              <button
+                type="button"
+                className={btnPrimary('bg-red-600 shadow-red-600/20')}
+                disabled={
+                  restoreMut.isPending ||
+                  restoreConfirm.trim() !== confirmPhrase ||
+                  (!restoreDb && !restoreUploads && !restoreSecrets)
+                }
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Восстановить проект из ${restoreId}? Текущие данные будут перезаписаны.`,
+                    )
+                  ) {
+                    restoreMut.mutate({ dry_run: false });
+                  }
+                }}
+              >
+                <LuRotateCcw className={`h-4 w-4 ${restoreMut.isPending && !restoreMut.variables?.dry_run ? 'animate-spin' : ''}`} />
+                {restoreMut.isPending && !restoreMut.variables?.dry_run
+                  ? 'Восстанавливаем…'
+                  : '2. Восстановить всё'}
+              </button>
+              <button
+                type="button"
+                className={btnSecondary()}
+                disabled={restoreMut.isPending}
+                onClick={() => setRestoreId(null)}
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
