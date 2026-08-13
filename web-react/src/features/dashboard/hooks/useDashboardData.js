@@ -252,13 +252,13 @@ export function useDashboardData() {
           title: nearestEvent.event.title || 'Событие',
           description: nearestEvent.event.description || null,
           when: format(nearestEvent.dt, 'dd.MM.yyyy HH:mm'),
-          link: '/calendar',
+          link: '/events',
         }
       : {
-          title: 'Ближайшее событие',
-          description: 'События скоро появятся',
+          title: 'Ближайшее мероприятие',
+          description: 'Мероприятия скоро появятся',
           when: null,
-          link: '/calendar',
+          link: '/events',
         },
   };
 

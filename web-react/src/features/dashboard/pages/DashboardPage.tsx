@@ -185,8 +185,8 @@ function pickUpcomingEvent(now: Date, items: ChurchEventItem[]): DashboardEvent 
   if (rows.length === 0) {
     return {
       id: 'no-events',
-      title: 'Событий пока нет',
-      description: 'Администратор скоро добавит новые события.',
+      title: 'Мероприятий пока нет',
+      description: 'Администратор скоро добавит новые мероприятия.',
       whenLabel: 'Следите за обновлениями',
       posterUrl: null,
     };
@@ -548,7 +548,7 @@ const DASHBOARD_QUICK_ACTIONS: DashboardQuickAction[] = [
   {
     id: 'schedule',
     to: '/events',
-    label: 'Расписание',
+    label: 'Мероприятия',
     Icon: LuCalendarRange,
     chipBg: 'bg-[#EBF7EF] dark:bg-[#1A9A55]/14',
     chipRing: 'ring-[#1A9A55]/20 dark:ring-[#1A9A55]/30',
@@ -1195,7 +1195,7 @@ function DashboardMain() {
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#1A9A55] text-white">
                         <LuCalendarDays className="h-4 w-4" strokeWidth={2} aria-hidden />
                       </span>
-                      <p className={`${DESKTOP_WIDGET_LABEL} text-[#0F6636]`}>Событие</p>
+                      <p className={`${DESKTOP_WIDGET_LABEL} text-[#0F6636]`}>Мероприятие</p>
                     </div>
                     <p className="mt-3 line-clamp-2 text-[15px] font-semibold leading-snug text-stone-900">{event.title}</p>
                     <p className="mt-2 text-sm font-medium text-stone-600">{event.whenLabel}</p>
@@ -1376,7 +1376,7 @@ function DashboardMain() {
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#1A9A55] text-white">
                     <LuCalendarDays className="h-4 w-4" strokeWidth={2} aria-hidden />
                   </span>
-                  <p className={`${DESKTOP_WIDGET_LABEL} text-[#0F6636]`}>Событие</p>
+                  <p className={`${DESKTOP_WIDGET_LABEL} text-[#0F6636]`}>Мероприятие</p>
                 </div>
                 <p className="mt-3 line-clamp-2 text-[15px] font-semibold leading-snug text-stone-900">{event.title}</p>
                 <p className="mt-2 text-sm font-medium text-stone-600">{event.whenLabel}</p>
@@ -1706,7 +1706,7 @@ function DashboardMain() {
             onClick={() => setEventOpen(true)}
             className="tap-highlight-transparent touch-manipulation group min-h-[132px] overflow-hidden rounded-2xl border border-[#A8E4C0] bg-gradient-to-br from-[#EDFBF3] to-[#D9F5E6] p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] min-[769px]:col-span-2 sm:min-h-[140px] sm:p-5"
           >
-            <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">События</p>
+            <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">Мероприятия</p>
             <div className="mt-4 flex items-start gap-3">
               <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#1A9A55] text-white">
                 <LuCalendarDays className="h-6 w-6" strokeWidth={2} aria-hidden />
@@ -1714,7 +1714,7 @@ function DashboardMain() {
               <div className="min-w-0">
                 <p className="text-base font-extrabold text-[#0A2E18]">{event.title}</p>
                 <p className="mt-1 text-sm font-semibold text-[#1A9A55]">{event.whenLabel}</p>
-                <p className="mt-2 line-clamp-2 text-sm font-medium text-[#2F6D49]">Нажмите, чтобы открыть описание события.</p>
+                <p className="mt-2 line-clamp-2 text-sm font-medium text-[#2F6D49]">Нажмите, чтобы открыть описание.</p>
               </div>
             </div>
           </button>
@@ -1980,7 +1980,7 @@ function DashboardMain() {
                 className="dashboard-sheet w-full max-w-lg max-h-[min(82dvh,700px)] overflow-y-auto rounded-2xl border border-stone-200/80 bg-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] shadow-[0_24px_70px_rgba(0,0,0,0.2)] [webkit-overflow-scrolling:touch] sm:max-h-[88dvh] sm:p-5"
                 onClick={(e) => e.stopPropagation()}
               >
-                <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">Описание события</p>
+                <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">Мероприятие</p>
                 <h2 className="mt-2 text-xl font-extrabold tracking-tight text-stone-900">{event.title}</h2>
                 <p className="mt-1 text-sm font-semibold text-primary">{event.whenLabel}</p>
                 {event.posterUrl ? (
@@ -1994,7 +1994,17 @@ function DashboardMain() {
                   </div>
                 ) : null}
                 <p className="mt-3 text-sm font-medium leading-relaxed text-stone-700">{event.description}</p>
-                <div className="mt-5 flex items-center justify-end">
+                <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEventOpen(false);
+                      navigate('/events');
+                    }}
+                    className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] items-center justify-center rounded-[12px] bg-[#1A9A55] px-4 text-sm font-extrabold text-white hover:bg-[#158a4d]"
+                  >
+                    Календарь мероприятий
+                  </button>
                   <button
                     type="button"
                     onClick={() => setEventOpen(false)}

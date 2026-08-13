@@ -17,15 +17,19 @@ import {
 } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import {
+  LuBookOpen,
   LuCalendarDays,
   LuCalendarPlus,
   LuChevronLeft,
   LuChevronRight,
+  LuChurch,
   LuClock,
   LuLoaderCircle,
+  LuMusic2,
   LuPencil,
   LuRefreshCw,
   LuTag,
+  LuUser,
 } from 'react-icons/lu';
 
 import { apiErrorMessage, updateAdminEvent } from '@/features/admin/api';
@@ -35,18 +39,28 @@ import { useMe } from '@/hooks/useMe';
 import {
   deleteOccurrenceOverrideForDate,
   getActiveEvents,
+  getCalendarSundayServices,
   getOccurrenceOverrides,
   putOccurrenceOverride,
   type ChurchEventOccurrenceOverride,
 } from '../api';
 import { CreateChurchEventModal } from '../components/CreateChurchEventModal';
+import { SundayServiceDetailSheet } from '../components/SundayServiceDetailSheet';
+import {
+  listCalendarItemsOnLocalDay,
+  sundayServiceSubtitle,
+  upcomingSundayServices,
+  type CalendarGridItem,
+} from '../calendarItems';
 import { listOccurrencesOnLocalDay, type CalendarOccurrence } from '../eventSchedule';
 import { MediaTeamBlock } from '../../mediaSchedule/components/MediaTeamBlock';
 import { resolveMediaPlanForChurchEvent } from '../../mediaSchedule/api';
 import { keys } from '@/lib/queryKeys';
 import { resolvePublicUrl } from '@/lib/resolvePublicUrl';
+import type { CalendarSundayService } from '../sundayServiceTypes';
 
-type ViewMode = 'month' | 'week' | 'day';
+type ViewMode = 'month' | 'week' | 'day' | 'agenda';
+type FilterMode = 'all' | 'sunday' | 'events';
 
 /**
  * Палитры в духе дашборда (изумруд, бирюза как --theme, индиго как member, тёплые акценты).
@@ -143,6 +157,155 @@ const EVENT_TONE_STYLES = [
 function eventToneIndex(eventId: number): number {
   const n = EVENT_TONE_STYLES.length;
   return ((eventId % n) + n) % n;
+}
+
+const SUNDAY_TONE = {
+  monthChip: 'bg-[#F8EEF1] ring-[#E8D0D6] hover:bg-[#F3E3E8] active:bg-[#F3E3E8]',
+  monthTime: 'text-[#6B2D3E]',
+  monthTitle: 'text-[#3D1520]',
+  weekCard:
+    'border-[#E8D0D6] bg-gradient-to-br from-[#FBF7F8] to-white shadow-sm ring-[#E8D0D6]/80 hover:shadow-md active:scale-[0.99]',
+  weekTime: 'text-[#6B2D3E]',
+  dayStripe: 'bg-[#6B2D3E]',
+  dayCard:
+    'border-[#E8D0D6]/90 bg-gradient-to-r from-white to-[#FBF7F8] ring-[#E8D0D6]/60 hover:shadow-md active:scale-[0.995]',
+  pill: 'bg-[#F8EEF1] text-[#6B2D3E] ring-[#E8D0D6]',
+} as const;
+
+function filterGridItems(items: CalendarGridItem[], filter: FilterMode): CalendarGridItem[] {
+  if (filter === 'sunday') return items.filter((row) => row.kind === 'sunday');
+  if (filter === 'events') return items.filter((row) => row.kind === 'event');
+  return items;
+}
+
+function SundayMonthChip({
+  item,
+  onOpen,
+}: {
+  item: Extract<CalendarGridItem, { kind: 'sunday' }>;
+  onOpen: (service: CalendarSundayService) => void;
+}) {
+  const subtitle = sundayServiceSubtitle(item.service);
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen(item.service);
+      }}
+      className={[
+        'tap-highlight-transparent w-full min-h-[32px] rounded-md px-1.5 py-1 text-left text-[10px] font-bold leading-tight ring-1 sm:min-h-0 sm:py-0.5 sm:text-[11px]',
+        'touch-manipulation',
+        SUNDAY_TONE.monthChip,
+      ].join(' ')}
+    >
+      <span className={SUNDAY_TONE.monthTime}>{format(item.startsAt, 'HH:mm')}</span>{' '}
+      <span className={SUNDAY_TONE.monthTitle}>{item.service.title}</span>
+      {subtitle ? <span className="mt-0.5 block truncate font-semibold text-[#6B2D3E]/80">{subtitle}</span> : null}
+    </button>
+  );
+}
+
+function SundayWeekCard({
+  item,
+  onOpen,
+  compact,
+}: {
+  item: Extract<CalendarGridItem, { kind: 'sunday' }>;
+  onOpen: (service: CalendarSundayService) => void;
+  compact?: boolean;
+}) {
+  const subtitle = sundayServiceSubtitle(item.service);
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(item.service)}
+      className={[
+        'tap-highlight-transparent w-full rounded-xl border px-3 py-3 text-left ring-1 transition sm:hover:-translate-y-0.5',
+        compact ? 'px-2.5 py-2' : '',
+        SUNDAY_TONE.weekCard,
+      ].join(' ')}
+    >
+      <p className={`flex items-center gap-1.5 text-[12px] font-extrabold ${SUNDAY_TONE.weekTime}`}>
+        <LuChurch className="h-4 w-4 shrink-0" aria-hidden />
+        {format(item.startsAt, 'HH:mm')}
+      </p>
+      <p className="mt-1.5 line-clamp-2 text-[15px] font-extrabold leading-snug text-stone-900">
+        {item.service.title}
+      </p>
+      {subtitle ? (
+        <p className="mt-1 flex items-center gap-1 truncate text-[12px] font-semibold text-[#6B2D3E]">
+          <LuBookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {subtitle}
+        </p>
+      ) : null}
+      {item.service.leader?.name ? (
+        <p className="mt-1 flex items-center gap-1 truncate text-[11px] font-semibold text-stone-500">
+          <LuUser className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {item.service.leader.name}
+        </p>
+      ) : null}
+      {item.service.songs.length > 0 ? (
+        <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-stone-500">
+          <LuMusic2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {item.service.songs.length} {item.service.songs.length === 1 ? 'песня' : 'песен'}
+        </p>
+      ) : null}
+    </button>
+  );
+}
+
+function UpcomingSundayStrip({
+  services,
+  onOpen,
+}: {
+  services: CalendarSundayService[];
+  onOpen: (service: CalendarSundayService) => void;
+}) {
+  if (services.length === 0) return null;
+  return (
+    <section className="overflow-hidden rounded-2xl border border-[#E8D0D6]/80 bg-gradient-to-br from-[#FBF7F8] via-white to-stone-50 shadow-[var(--shadow-card)]">
+      <div className="flex items-center gap-2.5 border-b border-[#E8D0D6]/50 px-3 py-3 sm:px-4">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#6B2D3E]/10 text-[#6B2D3E]">
+          <LuChurch className="h-4 w-4" aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-extrabold text-stone-900 sm:text-base">Ближайшие воскресные служения</h2>
+          <p className="text-[11px] font-semibold text-stone-500">Тема проповеди, песни и ведущий</p>
+        </div>
+      </div>
+      <div className="flex gap-2 overflow-x-auto p-3 sm:grid sm:grid-cols-3 sm:overflow-visible">
+        {services.map((service, index) => {
+          const [y, m, d] = service.service_date.split('-').map((x) => Number(x));
+          const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
+          const subtitle = sundayServiceSubtitle(service);
+          return (
+            <button
+              key={`${service.id}-${service.service_date}`}
+              type="button"
+              onClick={() => onOpen(service)}
+              className={[
+                'tap-highlight-transparent min-w-[220px] flex-1 rounded-2xl border p-3 text-left shadow-sm sm:min-w-0',
+                index === 0 ? 'border-[#6B2D3E]/25 bg-white ring-1 ring-[#6B2D3E]/10' : 'border-stone-200/80 bg-white/90',
+              ].join(' ')}
+            >
+              <p className="text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
+                {Number.isNaN(dt.getTime()) ? service.service_date : format(dt, 'EEEE, d MMM', { locale: ru })}
+              </p>
+              <p className="mt-0.5 text-sm font-extrabold text-stone-900">{service.title}</p>
+              <p className="text-xs font-semibold text-stone-500">{service.start_time}</p>
+              {subtitle ? (
+                <p className="mt-1.5 line-clamp-2 text-[12px] font-semibold text-[#6B2D3E]">{subtitle}</p>
+              ) : null}
+              {service.leader?.name ? (
+                <p className="mt-1 truncate text-[11px] font-semibold text-stone-500">Ведущий: {service.leader.name}</p>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function capitalizeRuMonthTitle(s: string): string {
@@ -260,7 +423,7 @@ function EventDetailSheet({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-stone-200/90 sm:hidden" aria-hidden />
-        <p className="text-[11px] font-semibold tracking-[0.02em] text-stone-500">Событие</p>
+        <p className="text-[11px] font-semibold tracking-[0.02em] text-stone-500">Мероприятие</p>
         <h2 id="event-cal-detail-title" className="mt-2 text-xl font-extrabold tracking-tight text-stone-900">
           {(item.title ?? '').trim() || 'Событие'}
         </h2>
@@ -426,7 +589,9 @@ export function EventsCalendarPage() {
 
   const [cursorDate, setCursorDate] = useState(() => new Date());
   const [mode, setMode] = useState<ViewMode>('month');
+  const [filter, setFilter] = useState<FilterMode>('all');
   const [detail, setDetail] = useState<CalendarOccurrence | null>(null);
+  const [sundayDetail, setSundayDetail] = useState<CalendarSundayService | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
   const eventsQ = useQuery({
@@ -441,8 +606,40 @@ export function EventsCalendarPage() {
     staleTime: 60_000,
   });
 
+  const sundayRange = useMemo(() => {
+    const from = format(addDays(startOfMonth(addMonths(cursorDate, -1)), -7), 'yyyy-MM-dd');
+    const toCursor = format(endOfMonth(addMonths(cursorDate, 2)), 'yyyy-MM-dd');
+    const toToday = format(addDays(new Date(), 90), 'yyyy-MM-dd');
+    return { from, to: toCursor > toToday ? toCursor : toToday };
+  }, [cursorDate]);
+
+  const sundayQ = useQuery({
+    queryKey: keys.sundayServices(sundayRange.from, sundayRange.to),
+    queryFn: () => getCalendarSundayServices(sundayRange),
+    staleTime: 60_000,
+  });
+
   const items = eventsQ.data ?? [];
   const occOverrides = overridesQ.data ?? [];
+  const sundayServices = sundayQ.data ?? [];
+  const loading = eventsQ.isPending || sundayQ.isPending;
+
+  const itemsOnDay = useCallback(
+    (day: Date) => {
+      const dayKey = format(day, 'yyyy-MM-dd');
+      return filterGridItems(
+        listCalendarItemsOnLocalDay(day, items, occOverrides, sundayServices, dayKey),
+        filter,
+      );
+    },
+    [items, occOverrides, sundayServices, filter],
+  );
+
+  const todayKey = format(new Date(), 'yyyy-MM-dd');
+  const upcomingSundays = useMemo(
+    () => upcomingSundayServices(sundayServices, todayKey, 3),
+    [sundayServices, todayKey],
+  );
 
   const detailExistingOverride = useMemo(() => {
     if (!detail) return null;
@@ -487,7 +684,7 @@ export function EventsCalendarPage() {
   }, [cursorDate]);
 
   const rangeTitle = useMemo(() => {
-    if (mode === 'month') {
+    if (mode === 'month' || mode === 'agenda') {
       return capitalizeRuMonthTitle(format(cursorDate, 'LLLL yyyy', { locale: ru }));
     }
     if (mode === 'week') {
@@ -500,7 +697,7 @@ export function EventsCalendarPage() {
 
   const goPrev = useCallback(() => {
     setCursorDate((d) => {
-      if (mode === 'month') return addMonths(d, -1);
+      if (mode === 'month' || mode === 'agenda') return addMonths(d, -1);
       if (mode === 'week') return addWeeks(d, -1);
       return addDays(d, -1);
     });
@@ -508,7 +705,7 @@ export function EventsCalendarPage() {
 
   const goNext = useCallback(() => {
     setCursorDate((d) => {
-      if (mode === 'month') return addMonths(d, 1);
+      if (mode === 'month' || mode === 'agenda') return addMonths(d, 1);
       if (mode === 'week') return addWeeks(d, 1);
       return addDays(d, 1);
     });
@@ -522,6 +719,22 @@ export function EventsCalendarPage() {
     setDetail(o);
   }, []);
 
+  const openSunday = useCallback((service: CalendarSundayService) => {
+    setSundayDetail(service);
+  }, []);
+
+  const refetchAll = useCallback(() => {
+    void eventsQ.refetch();
+    void sundayQ.refetch();
+    void overridesQ.refetch();
+  }, [eventsQ, sundayQ, overridesQ]);
+
+  const agendaDays = useMemo(() => {
+    const start = startOfMonth(cursorDate);
+    const end = endOfMonth(cursorDate);
+    return eachDayOfInterval({ start, end });
+  }, [cursorDate]);
+
   const weekdayLabelsMonFirst = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
   return (
@@ -529,9 +742,9 @@ export function EventsCalendarPage() {
       <div className="mx-auto w-full max-w-6xl space-y-3 sm:space-y-4">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h1 className="text-xl font-extrabold tracking-tight text-stone-900 sm:text-2xl">Календарь событий</h1>
+            <h1 className="text-xl font-extrabold tracking-tight text-stone-900 sm:text-2xl">Календарь мероприятий</h1>
             <p className="mt-1 text-[13px] font-semibold leading-snug text-stone-500 sm:text-sm">
-              Разовые и повторяющиеся мероприятия церкви
+              Воскресные служения, разовые и повторяющиеся мероприятия церкви
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
@@ -542,17 +755,17 @@ export function EventsCalendarPage() {
                 className="tap-highlight-transparent inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-[#1A9A55] px-4 text-sm font-extrabold text-white shadow-sm hover:bg-[#158a4d] active:brightness-95 sm:w-auto"
               >
                 <LuCalendarPlus className="h-4 w-4 shrink-0" aria-hidden />
-                Создать событие
+                Создать мероприятие
               </button>
             ) : null}
             <button
               type="button"
-              onClick={() => void eventsQ.refetch()}
-              disabled={eventsQ.isFetching}
+              onClick={refetchAll}
+              disabled={eventsQ.isFetching || sundayQ.isFetching}
               className="tap-highlight-transparent inline-flex min-h-[44px] w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-700 shadow-sm hover:bg-stone-50 active:bg-stone-100 disabled:opacity-60 sm:w-auto sm:justify-start sm:px-3"
-              aria-label="Обновить список событий"
+              aria-label="Обновить календарь мероприятий"
             >
-              <LuRefreshCw className={`h-4 w-4 shrink-0 ${eventsQ.isFetching ? 'animate-spin' : ''}`} aria-hidden />
+              <LuRefreshCw className={`h-4 w-4 shrink-0 ${eventsQ.isFetching || sundayQ.isFetching ? 'animate-spin' : ''}`} aria-hidden />
               Обновить
             </button>
           </div>
@@ -569,6 +782,7 @@ export function EventsCalendarPage() {
                 ['month', 'Месяц'],
                 ['week', 'Неделя'],
                 ['day', 'День'],
+                ['agenda', 'Список'],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -617,11 +831,41 @@ export function EventsCalendarPage() {
               </button>
             </div>
           </div>
+
+          <div
+            className="flex w-full rounded-2xl border border-stone-200 bg-stone-50/80 p-1"
+            role="tablist"
+            aria-label="Фильтр мероприятий"
+          >
+            {(
+              [
+                ['all', 'Все'],
+                ['sunday', 'Служения'],
+                ['events', 'Другие'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={filter === id}
+                onClick={() => setFilter(id)}
+                className={[
+                  'tap-highlight-transparent min-h-[40px] flex-1 rounded-[10px] px-2 text-[12px] font-extrabold transition-colors sm:text-sm',
+                  filter === id ? 'bg-white text-stone-900 shadow-sm ring-1 ring-stone-200/90' : 'text-stone-600 hover:text-stone-900',
+                ].join(' ')}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {eventsQ.isError ? (
+        <UpcomingSundayStrip services={upcomingSundays} onOpen={openSunday} />
+
+        {eventsQ.isError || sundayQ.isError ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">
-            Не удалось загрузить события. Проверьте соединение и попробуйте ещё раз.
+            Не удалось загрузить календарь. Проверьте соединение и попробуйте ещё раз.
           </div>
         ) : null}
 
@@ -636,7 +880,10 @@ export function EventsCalendarPage() {
                   {weekdayLabelsMonFirst.map((wd) => (
                     <div
                       key={wd}
-                      className="px-0.5 py-2 text-center text-[10px] font-extrabold uppercase tracking-wide text-stone-500 sm:px-1 sm:text-xs"
+                      className={[
+                        'px-0.5 py-2 text-center text-[10px] font-extrabold uppercase tracking-wide sm:px-1 sm:text-xs',
+                        wd === 'Вс' ? 'text-[#6B2D3E]' : 'text-stone-500',
+                      ].join(' ')}
                     >
                       {wd}
                     </div>
@@ -646,7 +893,8 @@ export function EventsCalendarPage() {
                   {monthGridDays.map((day) => {
                     const inMonth = isSameMonth(day, cursorDate);
                     const today = isToday(day);
-                    const occ = listOccurrencesOnLocalDay(day, items, occOverrides);
+                    const sunday = day.getDay() === 0;
+                    const occ = itemsOnDay(day);
                     const visible = occ.slice(0, 3);
                     const more = occ.length - visible.length;
                     return (
@@ -666,32 +914,36 @@ export function EventsCalendarPage() {
                           }
                         }}
                         className={[
-                          'tap-highlight-transparent flex min-h-[104px] cursor-pointer flex-col items-stretch gap-1 bg-white p-1.5 text-left transition-colors active:bg-stone-50 sm:min-h-[120px] sm:hover:bg-emerald-50/40 sm:p-2',
+                          'tap-highlight-transparent flex min-h-[104px] cursor-pointer flex-col items-stretch gap-1 bg-white p-1.5 text-left transition-colors active:bg-stone-50 sm:min-h-[132px] sm:hover:bg-emerald-50/40 sm:p-2',
                           !inMonth ? 'opacity-40' : '',
                           today ? 'ring-1 ring-inset ring-[#1A9A55]/40' : '',
+                          sunday && inMonth ? 'bg-[#FBF7F8]/70' : '',
                         ].join(' ')}
                       >
                         <span
                           className={[
                             'flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-extrabold sm:h-8 sm:w-8 sm:text-sm',
-                            today ? 'bg-[#1A9A55] text-white' : 'text-stone-800',
+                            today ? 'bg-[#1A9A55] text-white' : sunday ? 'text-[#6B2D3E]' : 'text-stone-800',
                           ].join(' ')}
                         >
                           {format(day, 'd')}
                         </span>
                         <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden sm:gap-1">
-                          {eventsQ.isPending ? (
+                          {loading ? (
                             <span className="text-[10px] font-semibold text-stone-400">…</span>
                           ) : (
-                            visible.map((o) => {
-                              const tone = EVENT_TONE_STYLES[eventToneIndex(o.item.id)];
+                            visible.map((row) => {
+                              if (row.kind === 'sunday') {
+                                return <SundayMonthChip key={row.key} item={row} onOpen={openSunday} />;
+                              }
+                              const tone = EVENT_TONE_STYLES[eventToneIndex(row.occurrence.item.id)];
                               return (
                                 <button
-                                  key={`${o.item.id}-${o.startsAt.getTime()}`}
+                                  key={row.key}
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    openOccurrence(o);
+                                    openOccurrence(row.occurrence);
                                   }}
                                   className={[
                                     'tap-highlight-transparent w-full min-h-[32px] truncate rounded-md px-1.5 py-1 text-left text-[10px] font-bold leading-tight ring-1 sm:min-h-0 sm:py-0.5 sm:text-[11px]',
@@ -699,13 +951,15 @@ export function EventsCalendarPage() {
                                     tone.monthChip,
                                   ].join(' ')}
                                 >
-                                  <span className={tone.monthTime}>{format(o.startsAt, 'HH:mm')}</span>{' '}
-                                  <span className={tone.monthTitle}>{(o.item.title ?? '').trim() || 'Событие'}</span>
+                                  <span className={tone.monthTime}>{format(row.startsAt, 'HH:mm')}</span>{' '}
+                                  <span className={tone.monthTitle}>
+                                    {(row.occurrence.item.title ?? '').trim() || 'Мероприятие'}
+                                  </span>
                                 </button>
                               );
                             })
                           )}
-                          {!eventsQ.isPending && more > 0 ? (
+                          {!loading && more > 0 ? (
                             <span className="text-[10px] font-bold text-stone-500">+ещё {more}</span>
                           ) : null}
                         </div>
@@ -723,12 +977,16 @@ export function EventsCalendarPage() {
             {/* Узкий экран: дни недели вертикально — без горизонтального скролла */}
             <section className="space-y-3 lg:hidden">
               {weekDays.map((day) => {
-                const occ = listOccurrencesOnLocalDay(day, items, occOverrides);
+                const occ = itemsOnDay(day);
                 const today = isSameDay(day, new Date());
+                const sunday = day.getDay() === 0;
                 return (
                   <div
                     key={`m-week-${day.toISOString()}`}
-                    className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)]"
+                    className={[
+                      'overflow-hidden rounded-2xl border bg-white shadow-[var(--shadow-card)]',
+                      sunday ? 'border-[#E8D0D6]/80' : 'border-stone-200/80',
+                    ].join(' ')}
                   >
                     <button
                       type="button"
@@ -739,7 +997,7 @@ export function EventsCalendarPage() {
                       className="tap-highlight-transparent flex w-full items-center justify-between gap-3 border-b border-stone-100 px-4 py-3 text-left active:bg-stone-50"
                     >
                       <div>
-                        <p className="text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
+                        <p className={`text-[11px] font-extrabold uppercase tracking-wide ${sunday ? 'text-[#6B2D3E]' : 'text-stone-500'}`}>
                           {format(day, 'EEEE', { locale: ru })}
                         </p>
                         <p className={`mt-0.5 text-lg font-extrabold ${today ? 'text-[#0F6636]' : 'text-stone-900'}`}>
@@ -749,20 +1007,23 @@ export function EventsCalendarPage() {
                       <span className="shrink-0 text-[12px] font-bold text-primary">День →</span>
                     </button>
                     <div className="space-y-2 p-3">
-                      {eventsQ.isPending ? (
+                      {loading ? (
                         <p className="text-sm font-semibold text-stone-400">Загрузка…</p>
                       ) : occ.length === 0 ? (
                         <p className="rounded-xl bg-stone-50 px-3 py-3 text-center text-sm font-semibold text-stone-500">
-                          Нет событий
+                          Нет мероприятий
                         </p>
                       ) : (
-                        occ.map((o) => {
-                          const tone = EVENT_TONE_STYLES[eventToneIndex(o.item.id)];
+                        occ.map((row) => {
+                          if (row.kind === 'sunday') {
+                            return <SundayWeekCard key={row.key} item={row} onOpen={openSunday} />;
+                          }
+                          const tone = EVENT_TONE_STYLES[eventToneIndex(row.occurrence.item.id)];
                           return (
                             <button
-                              key={`${o.item.id}-${o.startsAt.getTime()}`}
+                              key={row.key}
                               type="button"
-                              onClick={() => openOccurrence(o)}
+                              onClick={() => openOccurrence(row.occurrence)}
                               className={[
                                 'tap-highlight-transparent w-full rounded-xl border px-3 py-3 text-left ring-1 transition sm:hover:-translate-y-0.5',
                                 tone.weekCard,
@@ -770,10 +1031,10 @@ export function EventsCalendarPage() {
                             >
                               <p className={`flex items-center gap-1.5 text-[12px] font-extrabold ${tone.weekTime}`}>
                                 <LuClock className="h-4 w-4 shrink-0" aria-hidden />
-                                {format(o.startsAt, 'HH:mm')}
+                                {format(row.startsAt, 'HH:mm')}
                               </p>
                               <p className="mt-1.5 line-clamp-3 text-[15px] font-extrabold leading-snug text-stone-900">
-                                {(o.item.title ?? '').trim() || 'Событие'}
+                                {(row.occurrence.item.title ?? '').trim() || 'Мероприятие'}
                               </p>
                             </button>
                           );
@@ -788,17 +1049,18 @@ export function EventsCalendarPage() {
             <section className="hidden overflow-x-auto rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)] [-webkit-overflow-scrolling:touch] lg:block">
               <div className="grid min-w-[720px] grid-cols-7 divide-x divide-stone-100">
                 {weekDays.map((day) => {
-                  const occ = listOccurrencesOnLocalDay(day, items, occOverrides);
+                  const occ = itemsOnDay(day);
                   const today = isSameDay(day, new Date());
+                  const sunday = day.getDay() === 0;
                   return (
-                    <div key={day.toISOString()} className="flex min-h-[280px] flex-col bg-white">
+                    <div key={day.toISOString()} className={`flex min-h-[280px] flex-col ${sunday ? 'bg-[#FBF7F8]/50' : 'bg-white'}`}>
                       <div
                         className={[
                           'border-b border-stone-100 px-2 py-2 text-center sm:px-3',
-                          today ? 'bg-emerald-50/90' : 'bg-stone-50/80',
+                          today ? 'bg-emerald-50/90' : sunday ? 'bg-[#F8EEF1]/80' : 'bg-stone-50/80',
                         ].join(' ')}
                       >
-                        <p className="text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
+                        <p className={`text-[11px] font-extrabold uppercase tracking-wide ${sunday ? 'text-[#6B2D3E]' : 'text-stone-500'}`}>
                           {format(day, 'EEE', { locale: ru })}
                         </p>
                         <p className={`mt-1 text-lg font-extrabold ${today ? 'text-[#0F6636]' : 'text-stone-900'}`}>
@@ -806,18 +1068,21 @@ export function EventsCalendarPage() {
                         </p>
                       </div>
                       <div className="flex flex-1 flex-col gap-2 p-2">
-                        {eventsQ.isPending ? (
+                        {loading ? (
                           <p className="text-xs font-semibold text-stone-400">Загрузка…</p>
                         ) : occ.length === 0 ? (
-                          <p className="text-xs font-semibold text-stone-400">Нет событий</p>
+                          <p className="text-xs font-semibold text-stone-400">Нет мероприятий</p>
                         ) : (
-                          occ.map((o) => {
-                            const tone = EVENT_TONE_STYLES[eventToneIndex(o.item.id)];
+                          occ.map((row) => {
+                            if (row.kind === 'sunday') {
+                              return <SundayWeekCard key={row.key} item={row} onOpen={openSunday} compact />;
+                            }
+                            const tone = EVENT_TONE_STYLES[eventToneIndex(row.occurrence.item.id)];
                             return (
                               <button
-                                key={`${o.item.id}-${o.startsAt.getTime()}`}
+                                key={row.key}
                                 type="button"
-                                onClick={() => openOccurrence(o)}
+                                onClick={() => openOccurrence(row.occurrence)}
                                 className={[
                                   'tap-highlight-transparent rounded-xl border px-2.5 py-2 text-left ring-1 transition sm:hover:-translate-y-0.5 sm:hover:shadow-md',
                                   tone.weekCard,
@@ -825,10 +1090,10 @@ export function EventsCalendarPage() {
                               >
                                 <p className={`flex items-center gap-1 text-[11px] font-extrabold ${tone.weekTime}`}>
                                   <LuClock className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                                  {format(o.startsAt, 'HH:mm')}
+                                  {format(row.startsAt, 'HH:mm')}
                                 </p>
                                 <p className="mt-1 line-clamp-3 text-sm font-extrabold text-stone-900">
-                                  {(o.item.title ?? '').trim() || 'Событие'}
+                                  {(row.occurrence.item.title ?? '').trim() || 'Мероприятие'}
                                 </p>
                               </button>
                             );
@@ -859,23 +1124,73 @@ export function EventsCalendarPage() {
               ) : null}
             </div>
             <div className="mt-4 space-y-3">
-              {eventsQ.isPending ? (
-                <p className="text-sm font-semibold text-stone-500">Загрузка событий…</p>
+              {loading ? (
+                <p className="text-sm font-semibold text-stone-500">Загрузка мероприятий…</p>
               ) : (
                 (() => {
-                  const occ = listOccurrencesOnLocalDay(dayOnly, items, occOverrides);
+                  const occ = itemsOnDay(dayOnly);
                   if (occ.length === 0) {
                     return (
                       <p className="rounded-2xl border border-dashed border-stone-200 bg-stone-50/80 px-4 py-10 text-center text-sm font-semibold leading-relaxed text-stone-500">
-                        На этот день событий нет.
+                        На этот день мероприятий нет.
                       </p>
                     );
                   }
-                  return occ.map((o) => {
+                  return occ.map((row) => {
+                    if (row.kind === 'sunday') {
+                      const service = row.service;
+                      const subtitle = sundayServiceSubtitle(service);
+                      return (
+                        <button
+                          key={row.key}
+                          type="button"
+                          onClick={() => openSunday(service)}
+                          className={[
+                            'tap-highlight-transparent flex w-full gap-3 rounded-2xl border p-3 text-left shadow-sm ring-1 transition sm:gap-5 sm:p-4 sm:hover:-translate-y-0.5 sm:hover:shadow-md',
+                            SUNDAY_TONE.dayCard,
+                          ].join(' ')}
+                        >
+                          <div
+                            className={`flex h-[72px] w-[72px] shrink-0 flex-col items-center justify-center rounded-2xl text-white shadow-inner sm:h-16 sm:w-16 ${SUNDAY_TONE.dayStripe}`}
+                          >
+                            <span className="text-[10px] font-bold opacity-90">Время</span>
+                            <span className="text-[17px] font-extrabold leading-none sm:text-lg">
+                              {format(row.startsAt, 'HH:mm')}
+                            </span>
+                          </div>
+                          <div className="min-w-0 flex-1 py-0.5">
+                            <p className="text-[17px] font-extrabold leading-snug text-stone-900 sm:text-lg">
+                              {service.title}
+                            </p>
+                            {subtitle ? (
+                              <p className="mt-1 line-clamp-2 text-[13px] font-semibold leading-snug text-[#6B2D3E]">
+                                {subtitle}
+                              </p>
+                            ) : null}
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${SUNDAY_TONE.pill}`}>
+                                Воскресенье
+                              </span>
+                              {service.leader?.name ? (
+                                <span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-bold text-stone-700 ring-1 ring-stone-200/90">
+                                  Ведущий: {service.leader.name}
+                                </span>
+                              ) : null}
+                              {service.songs.length > 0 ? (
+                                <span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-bold text-stone-700 ring-1 ring-stone-200/90">
+                                  {service.songs.length} песен
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    }
+                    const o = row.occurrence;
                     const tone = EVENT_TONE_STYLES[eventToneIndex(o.item.id)];
                     return (
                       <button
-                        key={`${o.item.id}-${o.startsAt.getTime()}`}
+                        key={row.key}
                         type="button"
                         onClick={() => openOccurrence(o)}
                         className={[
@@ -891,7 +1206,7 @@ export function EventsCalendarPage() {
                         </div>
                         <div className="min-w-0 flex-1 py-0.5">
                           <p className="text-[17px] font-extrabold leading-snug text-stone-900 sm:text-lg">
-                            {(o.item.title ?? '').trim() || 'Событие'}
+                            {(o.item.title ?? '').trim() || 'Мероприятие'}
                           </p>
                           <p className="mt-1 line-clamp-3 text-[13px] font-medium leading-snug text-stone-600 sm:line-clamp-2 sm:text-sm">
                             {(o.item.description ?? '').trim() || 'Нажмите, чтобы открыть описание.'}
@@ -915,7 +1230,84 @@ export function EventsCalendarPage() {
             </div>
           </section>
         ) : null}
+
+        {mode === 'agenda' ? (
+          <section className="space-y-3">
+            {loading ? (
+              <p className="rounded-2xl border border-stone-200 bg-white px-4 py-8 text-center text-sm font-semibold text-stone-500">
+                Загрузка мероприятий…
+              </p>
+            ) : (
+              (() => {
+                const daysWithItems = agendaDays
+                  .map((day) => ({ day, items: itemsOnDay(day) }))
+                  .filter((row) => row.items.length > 0);
+                if (daysWithItems.length === 0) {
+                  return (
+                    <p className="rounded-2xl border border-dashed border-stone-200 bg-white px-4 py-10 text-center text-sm font-semibold text-stone-500">
+                      В этом месяце мероприятий нет.
+                    </p>
+                  );
+                }
+                return daysWithItems.map(({ day, items: dayItems }) => (
+                  <article
+                    key={day.toISOString()}
+                    className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)]"
+                  >
+                    <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
+                      <div>
+                        <p className="text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
+                          {format(day, 'EEEE', { locale: ru })}
+                        </p>
+                        <p className="text-base font-extrabold text-stone-900">{format(day, 'd MMMM', { locale: ru })}</p>
+                      </div>
+                      {isToday(day) ? (
+                        <span className="rounded-full bg-[#1A9A55] px-2.5 py-1 text-[11px] font-extrabold text-white">
+                          Сегодня
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="space-y-2 p-3">
+                      {dayItems.map((row) => {
+                        if (row.kind === 'sunday') {
+                          return <SundayWeekCard key={row.key} item={row} onOpen={openSunday} />;
+                        }
+                        const tone = EVENT_TONE_STYLES[eventToneIndex(row.occurrence.item.id)];
+                        return (
+                          <button
+                            key={row.key}
+                            type="button"
+                            onClick={() => openOccurrence(row.occurrence)}
+                            className={[
+                              'tap-highlight-transparent w-full rounded-xl border px-3 py-3 text-left ring-1',
+                              tone.weekCard,
+                            ].join(' ')}
+                          >
+                            <p className={`flex items-center gap-1.5 text-[12px] font-extrabold ${tone.weekTime}`}>
+                              <LuClock className="h-4 w-4 shrink-0" aria-hidden />
+                              {format(row.startsAt, 'HH:mm')}
+                            </p>
+                            <p className="mt-1 text-[15px] font-extrabold text-stone-900">
+                              {(row.occurrence.item.title ?? '').trim() || 'Мероприятие'}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </article>
+                ));
+              })()
+            )}
+          </section>
+        ) : null}
       </div>
+
+      {sundayDetail && typeof document !== 'undefined'
+        ? createPortal(
+            <SundayServiceDetailSheet service={sundayDetail} onClose={() => setSundayDetail(null)} />,
+            document.body,
+          )
+        : null}
 
       {detail && typeof document !== 'undefined'
         ? createPortal(

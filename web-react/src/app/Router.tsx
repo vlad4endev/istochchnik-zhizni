@@ -411,6 +411,7 @@ export function AppRouter() {
               </RequireSectionAccess>
             }
           />
+          <Route path="calendar" element={<Navigate to="/events" replace />} />
           <Route
             path="prayer"
           element={

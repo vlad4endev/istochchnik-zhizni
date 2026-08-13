@@ -3,7 +3,7 @@ import { LuCalendarDays, LuCirclePlus, LuMessageCircle, LuUserPlus } from 'react
 
 const actions = [
   { to: '/messenger', label: 'Написать в чат', icon: LuMessageCircle },
-  { to: '/calendar', label: 'Расписание', icon: LuCalendarDays },
+  { to: '/events', label: 'Мероприятия', icon: LuCalendarDays },
   { to: '/prayer', label: 'Добавить нужду', icon: LuCirclePlus },
   { to: '/profile', label: 'Пригласить', icon: LuUserPlus },
 ];

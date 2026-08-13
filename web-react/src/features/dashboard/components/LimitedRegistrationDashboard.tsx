@@ -171,22 +171,22 @@ export function LimitedRegistrationDashboard({ registrationStatus, firstName }: 
           </div>
         </section>
 
-        {/* События */}
+        {/* Мероприятия */}
         <section className="rounded-3xl border border-stone-200/80 bg-white/90 p-5 shadow-[var(--shadow-card)] sm:p-6">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-primary">
               <LuCalendarDays className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
-              <span className="text-[11px] font-extrabold uppercase tracking-[0.14em]">События</span>
+              <span className="text-[11px] font-extrabold uppercase tracking-[0.14em]">Мероприятия</span>
             </div>
           </div>
           <h2 className="mt-2 text-lg font-extrabold text-stone-900">Ближайшие встречи</h2>
 
           {eventsQ.isPending ? (
-            <p className="mt-4 text-sm text-stone-500">Загрузка событий…</p>
+            <p className="mt-4 text-sm text-stone-500">Загрузка мероприятий…</p>
           ) : eventsQ.isError ? (
-            <p className="mt-4 text-sm text-rose-600">Не удалось загрузить события. Попробуйте позже.</p>
+            <p className="mt-4 text-sm text-rose-600">Не удалось загрузить мероприятия. Попробуйте позже.</p>
           ) : upcoming.length === 0 ? (
-            <p className="mt-4 text-sm text-stone-500">Скоро здесь появятся актуальные события.</p>
+            <p className="mt-4 text-sm text-stone-500">Скоро здесь появятся актуальные мероприятия.</p>
           ) : (
             <ul className="mt-4 space-y-3">
               {upcoming.map(({ item, dt }) => (

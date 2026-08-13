@@ -52,7 +52,7 @@ export default function EventsFeed({ events }) {
           title={events?.event?.title || 'Событие'}
           description={events?.event?.description || 'Следите за расписанием'}
           status={events?.event?.when || 'Время уточняется'}
-          link={events?.event?.link || '/calendar'}
+          link={events?.event?.link || '/events'}
         />
       </div>
 
@@ -77,7 +77,7 @@ export default function EventsFeed({ events }) {
             title={events?.event?.title || 'Событие'}
             description={events?.event?.description || 'Следите за расписанием'}
             status={events?.event?.when || 'Время уточняется'}
-            link={events?.event?.link || '/calendar'}
+            link={events?.event?.link || '/events'}
           />
         </div>
       </div>

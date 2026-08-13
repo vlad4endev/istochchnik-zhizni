@@ -68,7 +68,7 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
   },
   {
     id: 'events',
-    label: 'События',
+    label: 'Мероприятия',
     Icon: LuCalendarRange,
     short: 'Анонсы',
     description: 'Управление событиями, которые отображаются в дашборде.',

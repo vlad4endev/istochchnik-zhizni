@@ -124,8 +124,8 @@ export function SettingsScreen() {
         <View style={styles.card}>
           <MenuRow
             icon="calendar-outline"
-            label="События церкви"
-            subtitle="Расписание на ближайшие недели"
+            label="Мероприятия"
+            subtitle="Календарь служений и встреч"
             onPress={() => navigation.navigate('Events')}
             colors={colors}
           />

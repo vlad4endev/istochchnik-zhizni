@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { fetchActiveEvents, fetchOccurrenceOverrides } from '../api/events';
+import { fetchActiveEvents, fetchCalendarSundayServices, fetchOccurrenceOverrides, sundayServiceToEventItem } from '../api/events';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
 import { ScreenHeader } from '../components/ScreenHeader';
@@ -104,12 +104,27 @@ export function EventsScreen() {
     queryFn: fetchActiveEvents,
   });
 
+  const sundayQuery = useQuery({
+    queryKey: ['events', 'sunday-services'],
+    queryFn: () => {
+      const from = format(new Date(), 'yyyy-MM-dd');
+      const toDate = new Date();
+      toDate.setDate(toDate.getDate() + 90);
+      return fetchCalendarSundayServices({ from, to: format(toDate, 'yyyy-MM-dd') });
+    },
+  });
+
   const overridesQuery = useQuery({
     queryKey: ['events', 'overrides'],
     queryFn: fetchOccurrenceOverrides,
   });
 
-  const events = eventsQuery.data ?? [];
+  const events = useMemo(() => {
+    const base = eventsQuery.data ?? [];
+    const sundays = sundayQuery.data ?? [];
+    return [...base, ...sundays.map(sundayServiceToEventItem)];
+  }, [eventsQuery.data, sundayQuery.data]);
+
   const categories = useMemo(() => uniqueEventCategories(events), [events]);
 
   const filteredEvents = useMemo(() => {
@@ -117,33 +132,41 @@ export function EventsScreen() {
     return events.filter((e) => (e.category?.trim() ?? '') === category);
   }, [events, category]);
 
-  const groups = useMemo(
-    () =>
-      listUpcomingOccurrencesGrouped(
-        filteredEvents,
-        overridesQuery.data,
-        42,
-      ),
-    [filteredEvents, overridesQuery.data],
-  );
+  const groups = useMemo(() => {
+    const raw = listUpcomingOccurrencesGrouped(filteredEvents, overridesQuery.data, 42);
+    const sundayDates = new Set((sundayQuery.data ?? []).map((s) => s.service_date));
+    return raw
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((occ) => {
+          if (!sundayDates.has(group.dayKey)) return true;
+          if (occ.item.id >= 800_000_000) return true;
+          const title = occ.item.title.trim().toLowerCase().replace(/ё/g, 'е');
+          return !(/воскресн/.test(title) || /богослужен/.test(title));
+        }),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [filteredEvents, overridesQuery.data, sundayQuery.data]);
 
   const totalCount = groups.reduce((n, g) => n + g.items.length, 0);
-  const isLoading = eventsQuery.isPending || overridesQuery.isPending;
-  const isError = eventsQuery.isError || overridesQuery.isError;
+  const isLoading = eventsQuery.isPending || overridesQuery.isPending || sundayQuery.isPending;
+  const isError = eventsQuery.isError || overridesQuery.isError || sundayQuery.isError;
   const error =
     (eventsQuery.error as Error | undefined) ??
-    (overridesQuery.error as Error | undefined);
+    (overridesQuery.error as Error | undefined) ??
+    (sundayQuery.error as Error | undefined);
 
   const refresh = () => {
     void eventsQuery.refetch();
     void overridesQuery.refetch();
+    void sundayQuery.refetch();
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader
-        title="События"
-        subtitle={totalCount > 0 ? `${totalCount} ближайших встреч` : 'Расписание церкви'}
+        title="Мероприятия"
+        subtitle={totalCount > 0 ? `${totalCount} ближайших встреч` : 'Календарь мероприятий церкви'}
       />
 
       {categories.length > 0 ? (
@@ -177,7 +200,7 @@ export function EventsScreen() {
         refreshControl={
           <RefreshControl
             refreshing={
-              (eventsQuery.isFetching || overridesQuery.isFetching) && !isLoading
+              (eventsQuery.isFetching || overridesQuery.isFetching || sundayQuery.isFetching) && !isLoading
             }
             onRefresh={refresh}
             tintColor={colors.primary}
@@ -196,9 +219,9 @@ export function EventsScreen() {
         {!isLoading && !isError && groups.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="calendar-outline" size={44} color={colors.textMuted} />
-            <Text style={styles.emptyTitle}>Нет предстоящих событий</Text>
+            <Text style={styles.emptyTitle}>Нет предстоящих мероприятий</Text>
             <Text style={styles.emptyBody}>
-              Расписание появится здесь, когда администратор добавит события.
+              Воскресные служения и другие мероприятия появятся здесь, когда их добавят.
             </Text>
           </View>
         ) : null}
