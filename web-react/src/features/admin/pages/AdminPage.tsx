@@ -30,6 +30,7 @@ import {
   type AdminTabId,
 } from '../adminTabs';
 import { AccessRequestsSection } from '../AccessRequestsSection';
+import { AiAssistantMonitorSection } from '../AiAssistantMonitorSection';
 import { AiSettingsSection } from '../AiSettingsSection';
 import { AppSectionsAccessSection } from '../AppSectionsAccessSection';
 import { RolePermissionsManagerSection } from '../RolePermissionsManagerSection';
@@ -449,11 +450,33 @@ export function AdminPage() {
 }
 
 function IntegrationsSection() {
-  const [subTab, setSubTab] = useState<'sms' | 'ai' | 'song_import'>('sms');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const subFromUrl = searchParams.get('sub');
+  const hasAiChat = Boolean(searchParams.get('ai_chat'));
+  const initialSub =
+    subFromUrl === 'ai' ||
+    subFromUrl === 'ai_monitor' ||
+    subFromUrl === 'sms' ||
+    subFromUrl === 'song_import'
+      ? subFromUrl
+      : hasAiChat
+        ? 'ai_monitor'
+        : 'sms';
+  const [subTab, setSubTab] = useState<'sms' | 'ai' | 'ai_monitor' | 'song_import'>(initialSub);
+
+  const openSub = (next: 'sms' | 'ai' | 'ai_monitor' | 'song_import') => {
+    setSubTab(next);
+    const params = new URLSearchParams(searchParams);
+    if (next === 'sms') params.delete('sub');
+    else params.set('sub', next);
+    if (next !== 'ai_monitor') params.delete('ai_chat');
+    setSearchParams(params, { replace: true });
+  };
+
   return (
     <div className="space-y-6">
       <section className="rounded-[10px] bg-stone-100 p-1">
-        <div className="grid grid-cols-3 gap-1">
+        <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
           <button
             type="button"
             className={
@@ -461,7 +484,7 @@ function IntegrationsSection() {
                 ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
                 : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
             }
-            onClick={() => setSubTab('sms')}
+            onClick={() => openSub('sms')}
           >
             <span aria-hidden>💬</span>
             SMS.ru
@@ -474,7 +497,7 @@ function IntegrationsSection() {
                 ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
                 : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
             }
-            onClick={() => setSubTab('ai')}
+            onClick={() => openSub('ai')}
           >
             <span aria-hidden>🤖</span>
             ИИ интеграции
@@ -483,11 +506,23 @@ function IntegrationsSection() {
           <button
             type="button"
             className={
+              subTab === 'ai_monitor'
+                ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
+                : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
+            }
+            onClick={() => openSub('ai_monitor')}
+          >
+            <span aria-hidden>📡</span>
+            Мониторинг ИИ
+          </button>
+          <button
+            type="button"
+            className={
               subTab === 'song_import'
                 ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
                 : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
             }
-            onClick={() => setSubTab('song_import')}
+            onClick={() => openSub('song_import')}
           >
             <span aria-hidden>🎵</span>
             Импорт песен
@@ -499,6 +534,8 @@ function IntegrationsSection() {
         <SmsSection />
       ) : subTab === 'ai' ? (
         <AiSettingsSection />
+      ) : subTab === 'ai_monitor' ? (
+        <AiAssistantMonitorSection />
       ) : (
         <section className="rounded-2xl border border-stone-200 bg-white p-4">
           <h3 className="text-sm font-semibold text-stone-900">Импорт песен</h3>
