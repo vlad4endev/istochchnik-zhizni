@@ -1,5 +1,6 @@
 import type { UseMutationResult } from '@tanstack/react-query';
 import { appRoleLabel, type AppRole } from '../settings/sectionVisibilityApi';
+import { memberAppRoles } from './memberListQuery';
 import type { AppUser } from './types';
 
 const ASSIGNABLE_ROLES: AppRole[] = [
@@ -13,10 +14,7 @@ const ASSIGNABLE_ROLES: AppRole[] = [
 ];
 
 function currentRoles(user: AppUser): AppRole[] {
-  if (Array.isArray(user.app_roles) && user.app_roles.length > 0) {
-    return [...user.app_roles];
-  }
-  return [user.app_role];
+  return memberAppRoles(user);
 }
 
 export function MemberAppRolesPicker({

@@ -15,6 +15,7 @@ import {
   LuGripVertical,
   LuHistory,
   LuImage,
+  LuSearch,
   LuTable2,
   LuX,
 } from 'react-icons/lu';
@@ -35,6 +36,18 @@ import { AiSettingsSection } from '../AiSettingsSection';
 import { AppSectionsAccessSection } from '../AppSectionsAccessSection';
 import { RolePermissionsManagerSection } from '../RolePermissionsManagerSection';
 import { MemberAppRolesPicker } from '../MemberAppRolesPicker';
+import {
+  MEMBER_ACCOUNT_FILTER_OPTIONS,
+  countMembersMatchingAccount,
+  countMembersMatchingRole,
+  displayMemberAppRoles,
+  emptyMemberListQuery,
+  filterAdminMembers,
+  memberHasAppRole,
+  memberListQueryIsActive,
+  isAppRoleId,
+  type MemberAccountFilter,
+} from '../memberListQuery';
 import { NotificationsSettingsSection } from '../NotificationsSettingsSection';
 import { TelegramSettingsSection } from '../TelegramSettingsSection';
 import { BackupSettingsSection } from '../BackupSettingsSection';
@@ -94,6 +107,7 @@ import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile
 import { Link, useSearchParams } from 'react-router-dom';
 import { useImpersonation } from '../hooks/useImpersonation';
 import { isAppAdministratorSession } from '../../auth/authStore';
+import { APP_ROLE_IDS, appRoleLabel } from '../../settings/sectionVisibilityApi';
 
 type UpcomingBirthday = {
   nextDate: Date;
@@ -147,28 +161,8 @@ function upcomingBirthday(birthDateYmd: string | null | undefined, now: Date, wi
   };
 }
 
-function appRoleLabel(role: string): string {
-  switch (role) {
-    case 'admin':
-      return 'Администратор';
-    case 'parishioner':
-      return 'Прихожанин';
-    case 'minister':
-      return 'Служитель';
-    case 'pastor':
-      return 'Пастор';
-    case 'editor':
-      return 'Редактор каталога';
-    case 'musician':
-      return 'Музыкант';
-    default:
-      return 'Член церкви';
-  }
-}
-
 function memberIsAdmin(u: AppUser): boolean {
-  if (u.app_role === 'admin') return true;
-  return Array.isArray(u.app_roles) && u.app_roles.includes('admin');
+  return memberHasAppRole(u, 'admin');
 }
 
 function appRoleBadgeClass(role: string): string {
@@ -191,6 +185,44 @@ function appRoleBadgeClass(role: string): string {
     return 'rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900';
   }
   return 'rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600';
+}
+
+function MemberAppRoleBadges({ u }: { u: AppUser }) {
+  return (
+    <span className="inline-flex max-w-full flex-wrap items-center gap-1">
+      {displayMemberAppRoles(u).map((role) => (
+        <span key={role} className={appRoleBadgeClass(role)}>
+          {appRoleLabel(role)}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function MemberListEmptyState({
+  filtersActive,
+  onReset,
+}: {
+  filtersActive: boolean;
+  onReset: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-dashed border-stone-200 px-4 py-10 text-center">
+      <p className="text-sm font-semibold text-stone-700">
+        {filtersActive ? 'Никого не найдено' : 'Список пуст'}
+      </p>
+      <p className="mt-1 text-sm text-stone-500">
+        {filtersActive
+          ? 'Попробуйте другое имя, телефон или сбросьте фильтры.'
+          : 'Добавьте первого пользователя кнопкой выше.'}
+      </p>
+      {filtersActive ? (
+        <button type="button" className="mt-3 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50" onClick={onReset}>
+          Сбросить поиск и фильтры
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 const Q_MEMBERS = ['admin', 'members'] as const;
@@ -574,6 +606,7 @@ function MembersSection({
 
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [accountFilter, setAccountFilter] = useState<MemberAccountFilter>('all');
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [form, setForm] = useState({
     first_name: '',
@@ -628,19 +661,16 @@ function MembersSection({
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: Q_MEMBERS });
 
+  const listQuery = useMemo(
+    () => ({ search, role: roleFilter, account: accountFilter }),
+    [search, roleFilter, accountFilter],
+  );
+  const filtersActive = memberListQueryIsActive(listQuery);
+
   const filtered = useMemo(() => {
-    const list = data ?? [];
-    const q = search.trim().toLowerCase();
-    const roleFiltered = !roleFilter ? list : list.filter((u) => u.app_role === roleFilter);
-    const matched = !q
-      ? roleFiltered
-      : roleFiltered.filter((u) => {
-          const blob =
-            `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''} ${u.telegram_chat_id ?? ''}`.toLowerCase();
-          return blob.includes(q);
-        });
+    const matched = filterAdminMembers(data ?? [], listQuery);
     return [...matched].sort(compareMembersByPrayerCycleOrder);
-  }, [data, search, roleFilter]);
+  }, [data, listQuery]);
 
   const now = useMemo(() => new Date(), []);
   const upcomingBirthdays = useMemo(() => {
@@ -680,12 +710,35 @@ function MembersSection({
     const registered = list.filter((u) => u.has_registered).length;
     return {
       total: list.length,
-      active: list.filter((u) => u.is_active).length,
-      admins: list.filter((u) => u.app_role === 'admin').length,
+      admins: list.filter((u) => memberHasAppRole(u, 'admin')).length,
       registered,
       withoutApp: Math.max(0, list.length - registered),
     };
   }, [data]);
+
+  const roleFilterCounts = useMemo(() => {
+    const list = data ?? [];
+    return Object.fromEntries(APP_ROLE_IDS.map((role) => [role, countMembersMatchingRole(list, role)])) as Record<
+      (typeof APP_ROLE_IDS)[number],
+      number
+    >;
+  }, [data]);
+
+  const accountFilterCounts = useMemo(() => {
+    const list = data ?? [];
+    return {
+      in_app: countMembersMatchingAccount(list, 'in_app'),
+      no_login: countMembersMatchingAccount(list, 'no_login'),
+      inactive: countMembersMatchingAccount(list, 'inactive'),
+    };
+  }, [data]);
+
+  const clearMemberFilters = () => {
+    const empty = emptyMemberListQuery();
+    setSearch(empty.search);
+    setRoleFilter(empty.role);
+    setAccountFilter(empty.account);
+  };
 
   const createPayload = () => ({
     first_name: form.first_name.trim(),
@@ -1038,27 +1091,75 @@ function MembersSection({
         </div>
       )}
 
-      {/* Metric cards */}
+      {/* Metric cards — клик включает фильтр */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
-          <p className="text-xs text-stone-500">Всего участников</p>
-          <p className="mt-1 text-2xl font-extrabold text-stone-900">{stats.total}</p>
-          {isFetching && !isLoading ? (
-            <p className="mt-0.5 text-[10px] text-stone-400">Обновление…</p>
-          ) : null}
-        </div>
-        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
-          <p className="text-xs text-stone-500">В приложении</p>
-          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{stats.registered}</p>
-        </div>
-        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
-          <p className="text-xs text-stone-500">Без входа</p>
-          <p className="mt-1 text-2xl font-extrabold text-red-600">{stats.withoutApp}</p>
-        </div>
-        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
-          <p className="text-xs text-stone-500">Администраторов</p>
-          <p className="mt-1 text-2xl font-extrabold text-primary">{stats.admins}</p>
-        </div>
+        {(
+          [
+            {
+              key: 'all',
+              label: 'Всего',
+              value: stats.total,
+              valueClass: 'text-stone-900',
+              active: !filtersActive,
+              onClick: () => clearMemberFilters(),
+            },
+            {
+              key: 'in_app',
+              label: 'В приложении',
+              value: stats.registered,
+              valueClass: 'text-emerald-700',
+              active: accountFilter === 'in_app' && !roleFilter,
+              onClick: () => {
+                setRoleFilter('');
+                setAccountFilter((prev) => (prev === 'in_app' ? 'all' : 'in_app'));
+              },
+            },
+            {
+              key: 'no_login',
+              label: 'Нет входа',
+              value: stats.withoutApp,
+              valueClass: 'text-red-600',
+              active: accountFilter === 'no_login' && !roleFilter,
+              onClick: () => {
+                setRoleFilter('');
+                setAccountFilter((prev) => (prev === 'no_login' ? 'all' : 'no_login'));
+              },
+            },
+            {
+              key: 'admin',
+              label: 'Администраторы',
+              value: stats.admins,
+              valueClass: 'text-primary',
+              active: roleFilter === 'admin',
+              onClick: () => {
+                setAccountFilter('all');
+                setRoleFilter((prev) => (prev === 'admin' ? '' : 'admin'));
+              },
+            },
+          ] as const
+        ).map((card) => (
+          <button
+            key={card.key}
+            type="button"
+            onClick={card.onClick}
+            aria-pressed={card.active}
+            className={
+              card.active
+                ? 'rounded-2xl border border-primary/40 bg-primary/[0.06] px-4 py-3 text-left shadow-[var(--shadow)]'
+                : 'rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 text-left shadow-[var(--shadow)] transition hover:border-primary/30'
+            }
+          >
+            <p className="text-xs text-stone-500">{card.label}</p>
+            <p className={`mt-1 text-2xl font-extrabold ${card.valueClass}`}>{card.value}</p>
+            {card.key === 'all' && isFetching && !isLoading ? (
+              <p className="mt-0.5 text-[10px] text-stone-400">Обновление…</p>
+            ) : (
+              <p className="mt-0.5 text-[10px] text-stone-400">
+                {card.active ? 'Показан этот список' : 'Нажмите, чтобы отфильтровать'}
+              </p>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Upcoming birthdays */}
@@ -1108,109 +1209,142 @@ function MembersSection({
       ) : null}
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="search"
-          className={`${fieldClass()} min-w-[160px] flex-1`}
-          placeholder="Поиск по имени или телефону…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label="Поиск пользователей"
-        />
-        <select
-          className="rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-          aria-label="Фильтр по роли"
-        >
-          <option value="">Все роли</option>
-          <option value="parishioner">Прихожанин</option>
-          <option value="member">Член церкви</option>
-          <option value="minister">Служитель</option>
-          <option value="pastor">Пастор</option>
-          <option value="musician">Музыкант</option>
-          <option value="editor">Редактор</option>
-          <option value="admin">Администратор</option>
-        </select>
-        <button
-          type="button"
-          className={btnSecondary('')}
-          onClick={() => {
-            setSearch('');
-            setRoleFilter('');
-          }}
-          title="Сбросить фильтры"
-        >
-          Сброс
-        </button>
-        <button
-          type="button"
-          className={
-            showBulkCreate
-              ? `${btnPrimary('')} inline-flex items-center gap-1.5`
-              : `${btnSecondary('')} inline-flex items-center gap-1.5`
-          }
-          onClick={() => setShowBulkCreate((v) => !v)}
-        >
-          <LuTable2 className="h-4 w-4 shrink-0" aria-hidden />
-          Массово из таблицы
-        </button>
-        <div className="relative">
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="relative min-w-[220px] flex-1">
+            <LuSearch
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400"
+              aria-hidden
+            />
+            <input
+              type="search"
+              className={`${fieldClass()} pl-9 ${search ? 'pr-9' : ''}`}
+              placeholder="Имя, фамилия, телефон, роль, служение…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Поиск пользователей"
+            />
+            {search ? (
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                onClick={() => setSearch('')}
+                aria-label="Очистить поиск"
+              >
+                <LuX className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            ) : null}
+          </label>
+          <select
+            className="rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            aria-label="Фильтр по роли приложения"
+          >
+            <option value="">Все роли</option>
+            {APP_ROLE_IDS.map((role) => (
+              <option key={role} value={role}>
+                {appRoleLabel(role)} ({roleFilterCounts[role]})
+              </option>
+            ))}
+          </select>
+          <select
+            className="rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            value={accountFilter}
+            onChange={(e) => setAccountFilter(e.target.value as MemberAccountFilter)}
+            aria-label="Фильтр по статусу входа"
+          >
+            {MEMBER_ACCOUNT_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.value === 'all'
+                  ? opt.label
+                  : `${opt.label} (${accountFilterCounts[opt.value]})`}
+              </option>
+            ))}
+          </select>
+          {filtersActive ? (
+            <button type="button" className={btnSecondary('')} onClick={clearMemberFilters} title="Сбросить поиск и фильтры">
+              Сбросить
+            </button>
+          ) : null}
           <button
             type="button"
-            className={btnSecondary('')}
-            onClick={() => setShowActionsMenu((v) => !v)}
+            className={
+              showBulkCreate
+                ? `${btnPrimary('')} inline-flex items-center gap-1.5`
+                : `${btnSecondary('')} inline-flex items-center gap-1.5`
+            }
+            onClick={() => setShowBulkCreate((v) => !v)}
           >
-            ⋯ Действия
+            <LuTable2 className="h-4 w-4 shrink-0" aria-hidden />
+            Массово из таблицы
           </button>
-          {showActionsMenu && (
-            <>
-              <div
-                className="fixed inset-0 z-20"
-                onClick={() => setShowActionsMenu(false)}
-                aria-hidden
-              />
-              <div className="absolute right-0 top-full z-30 mt-1 min-w-[230px] rounded-xl border border-stone-200 bg-white py-1 shadow-lg">
-                <button
-                  type="button"
-                  className="w-full px-4 py-2 text-left text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-                  disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
-                  onClick={() => {
-                    setShowActionsMenu(false);
-                    if (
-                      !window.confirm(
-                        'Объединить дубликаты пользователей? Останется одна карточка с меньшим номером, пароль и данные перенесутся.',
+          <div className="relative">
+            <button
+              type="button"
+              className={btnSecondary('')}
+              onClick={() => setShowActionsMenu((v) => !v)}
+            >
+              ⋯ Действия
+            </button>
+            {showActionsMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-20"
+                  onClick={() => setShowActionsMenu(false)}
+                  aria-hidden
+                />
+                <div className="absolute right-0 top-full z-30 mt-1 min-w-[230px] rounded-xl border border-stone-200 bg-white py-1 shadow-lg">
+                  <button
+                    type="button"
+                    className="w-full px-4 py-2 text-left text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+                    disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      if (
+                        !window.confirm(
+                          'Объединить дубликаты пользователей? Останется одна карточка с меньшим номером, пароль и данные перенесутся.',
+                        )
                       )
-                    )
-                      return;
-                    setBanner(null);
-                    mergeDupesMut.mutate();
-                  }}
-                >
-                  {mergeDupesMut.isPending ? 'Объединение…' : 'Объединить дубликаты'}
-                </button>
-                <button
-                  type="button"
-                  className="w-full px-4 py-2 text-left text-sm font-semibold text-amber-900 hover:bg-stone-50 disabled:opacity-50"
-                  disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
-                  onClick={() => {
-                    setShowActionsMenu(false);
-                    if (
-                      !window.confirm(
-                        'Поменять местами поля «имя» и «фамилия» у ВСЕХ пользователей? Повторный запуск снова меняет местами (откат).',
+                        return;
+                      setBanner(null);
+                      mergeDupesMut.mutate();
+                    }}
+                  >
+                    {mergeDupesMut.isPending ? 'Объединение…' : 'Объединить дубликаты'}
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full px-4 py-2 text-left text-sm font-semibold text-amber-900 hover:bg-stone-50 disabled:opacity-50"
+                    disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      if (
+                        !window.confirm(
+                          'Поменять местами поля «имя» и «фамилия» у ВСЕХ пользователей? Повторный запуск снова меняет местами (откат).',
+                        )
                       )
-                    )
-                      return;
-                    setBanner(null);
-                    swapAllNamesMut.mutate();
-                  }}
-                >
-                  {swapAllNamesMut.isPending ? 'Обновление…' : 'Поменять имя/фамилию у всех'}
-                </button>
-              </div>
-            </>
-          )}
+                        return;
+                      setBanner(null);
+                      swapAllNamesMut.mutate();
+                    }}
+                  >
+                    {swapAllNamesMut.isPending ? 'Обновление…' : 'Поменять имя/фамилию у всех'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
+        <p className="text-xs text-stone-500" aria-live="polite">
+          {filtersActive
+            ? `Показано ${filtered.length} из ${stats.total}`
+            : `${stats.total} ${stats.total === 1 ? 'пользователь' : 'пользователей'} · по фамилии А–Я`}
+          {roleFilter && isAppRoleId(roleFilter) ? ` · роль: ${appRoleLabel(roleFilter)}` : ''}
+          {accountFilter !== 'all'
+            ? ` · ${MEMBER_ACCOUNT_FILTER_OPTIONS.find((o) => o.value === accountFilter)?.label ?? ''}`
+            : ''}
+        </p>
       </div>
 
       {showBulkCreate ? (
@@ -1572,16 +1706,14 @@ function MembersSection({
       {/* Карточки — мобильные */}
       <div className="space-y-3 shell:hidden">
         {filtered.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-stone-200 py-10 text-center text-sm text-stone-500">
-            {search.trim() ? 'Никого не найдено.' : 'Список пуст.'}
-          </p>
+          <MemberListEmptyState filtersActive={filtersActive} onReset={clearMemberFilters} />
         ) : (
           filtered.map((u) => {
             const bday = birthdayBadge(u, now, 30);
             return (
               <article
                 key={u.id}
-                className="cursor-pointer rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] transition hover:border-primary/40 hover:shadow-md"
+                className={`cursor-pointer rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] transition hover:border-primary/40 hover:shadow-md ${u.is_active ? '' : 'opacity-70'}`}
                 role="button"
                 tabIndex={0}
                 onClick={() => openEdit(u)}
@@ -1592,18 +1724,16 @@ function MembersSection({
                   }
                 }}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
-                    <p className="mt-0.5 text-sm text-stone-600">{u.phone_number ?? '—'}</p>
-                  </div>
-                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary">
-                    Карточка
-                  </span>
+                <div className="min-w-0">
+                  <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
+                  <p className="mt-0.5 text-sm text-stone-600">{u.phone_number ?? '—'}</p>
+                  {u.ministry_role ? (
+                    <p className="mt-0.5 truncate text-xs text-stone-500">{u.ministry_role}</p>
+                  ) : null}
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <MemberRegistrationBadge u={u} />
-                  <span className={appRoleBadgeClass(u.app_role)}>{appRoleLabel(u.app_role)}</span>
+                  <MemberAppRoleBadges u={u} />
                   {bday ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2.5 py-0.5 text-xs font-semibold text-pink-800">
                       <span aria-hidden>🎂</span>
@@ -1611,15 +1741,11 @@ function MembersSection({
                       <span className="font-bold text-pink-700">· {bday.relativeLabel}</span>
                     </span>
                   ) : null}
-                  <span
-                    className={
-                      u.is_active
-                        ? 'rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800'
-                        : 'rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500'
-                    }
-                  >
-                    {u.is_active ? 'Активен' : 'Неактивен'}
-                  </span>
+                  {!u.is_active ? (
+                    <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
+                      Неактивен
+                    </span>
+                  ) : null}
                   {u.is_collection_coordinator ? (
                     <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
                       Сбор
@@ -1629,11 +1755,7 @@ function MembersSection({
                     <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900">
                       В цикле
                     </span>
-                  ) : (
-                    <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
-                      Вне цикла
-                    </span>
-                  )}
+                  ) : null}
                 </div>
                 {showImpersonateButton && !memberIsAdmin(u) ? (
                   <button
@@ -1654,12 +1776,12 @@ function MembersSection({
       {/* Table — shown at shell+ breakpoint */}
       <div className="hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)] shell:block">
         <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-smooth">
-          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50/90 text-xs font-extrabold uppercase tracking-wider text-stone-500">
                 <th className="px-4 py-3">Участник</th>
                 <th className="whitespace-nowrap px-4 py-3">Телефон</th>
-                <th className="px-4 py-3">Роль</th>
+                <th className="px-4 py-3">Роли</th>
                 <th className="px-4 py-3">Статус</th>
                 {showImpersonateButton ? <th className="px-4 py-3">Действия</th> : null}
               </tr>
@@ -1667,8 +1789,8 @@ function MembersSection({
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={showImpersonateButton ? 5 : 4} className="px-4 py-10 text-center text-stone-500">
-                    {search.trim() || roleFilter ? 'Никого не найдено.' : 'Список пуст.'}
+                  <td colSpan={showImpersonateButton ? 5 : 4} className="px-4 py-6">
+                    <MemberListEmptyState filtersActive={filtersActive} onReset={clearMemberFilters} />
                   </td>
                 </tr>
               ) : (
@@ -1681,7 +1803,7 @@ function MembersSection({
                       key={u.id}
                       tabIndex={0}
                       title="Открыть карточку"
-                      className="cursor-pointer border-b border-stone-100/90 transition last:border-0 hover:bg-primary/[0.06]"
+                      className={`cursor-pointer border-b border-stone-100/90 transition last:border-0 hover:bg-primary/[0.06] ${u.is_active ? '' : 'opacity-70'}`}
                       onClick={() => openEdit(u)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -1717,10 +1839,17 @@ function MembersSection({
                         {u.phone_number ?? '—'}
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className={appRoleBadgeClass(u.app_role)}>{appRoleLabel(u.app_role)}</span>
+                        <MemberAppRoleBadges u={u} />
                       </td>
                       <td className="px-4 py-2.5">
-                        <MemberRegistrationBadge u={u} />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <MemberRegistrationBadge u={u} />
+                          {!u.is_active ? (
+                            <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
+                              Неактивен
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       {showImpersonateButton ? (
                         <td className="px-4 py-2.5">
@@ -1821,14 +1950,16 @@ function MembersSection({
                     {memberRosterName(editing)}
                   </h3>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5 sm:mt-1.5 sm:gap-2">
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-800 sm:px-2.5 sm:text-[10px]">
-                      В приложении
-                    </span>
-                    <span className="rounded-full border border-stone-300 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-stone-600 sm:px-2.5 sm:text-[10px]">
-                      {appRoleLabel(editing.app_role)}
-                    </span>
-                    <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-teal-800 sm:px-2.5 sm:text-[10px]">
-                      Активен
+                    <MemberRegistrationBadge u={editing} />
+                    <MemberAppRoleBadges u={editing} />
+                    <span
+                      className={
+                        editForm.is_active
+                          ? 'rounded-full bg-teal-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-teal-800 sm:px-2.5 sm:text-[10px]'
+                          : 'rounded-full bg-stone-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-stone-500 sm:px-2.5 sm:text-[10px]'
+                      }
+                    >
+                      {editForm.is_active ? 'Активен' : 'Неактивен'}
                     </span>
                   </div>
                 </div>
