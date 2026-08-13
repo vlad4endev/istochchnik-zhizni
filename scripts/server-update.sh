@@ -60,7 +60,7 @@ env_flag_true() {
 }
 
 restore_pull_blockers() {
-  # npm/сборка на сервере часто трогают lock/package — иначе pull падает
+  # Локальные правки на сервере (npm/сборка, ручной compose) иначе ломают git pull
   local files=(
     package.json
     package-lock.json
@@ -69,6 +69,15 @@ restore_pull_blockers() {
     web-react/tsconfig.tsbuildinfo
     web-react/vite.config.ts
     web-react/src/features/resources/pages/PodcastsPage.tsx
+    docker-compose.yml
+    docker-compose.prod.yml
+    docker-compose.prod.overlay.yml
+    docker-compose.portainer.stack.yml
+    docker-compose.portainer.yml
+    docker-compose.local.yml
+    docker-compose.redis-addon.yml
+    docker-compose.web-prebuilt.yml
+    docker-compose.web-split.yml
   )
   local f
   for f in "${files[@]}"; do
