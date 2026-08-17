@@ -29,7 +29,7 @@
     /* Горизонтальные отступы только у внутренних shell-обёрток (px-3 / sm:px-4 / …), без дубля на main. */
     padding-left: 0 !important;
     padding-right: 0 !important;
-    /* Нижний отступ под таббар задаётся только в Layout.tsx (без !important — иначе дубль и «грязный» низ). */
+    /* Нижний отступ под таббар — .app-bottom-nav-spacer в Layout, не padding на main. */
     width: 100% !important;
     max-width: 100% !important;
     min-width: 0 !important;

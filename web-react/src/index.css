@@ -45,20 +45,25 @@ textarea {
   --sidebar-width: 88px;
   --app-safe-bottom: env(safe-area-inset-bottom, 0px);
   /*
-   * Нижний safe-area для контента таб-бара (home indicator). Не смешивать с отступом main —
-   * иначе на iPhone PWA двойной зазор (~80–100px): main уже не должен дублировать env().
+   * Нижний safe-area. JS (nativeShellViewport) перезаписывает --app-safe-bottom в px —
+   * env() внутри CSS-переменной на iOS Safari часто остаётся 0.
    */
   --app-bottom-nav-safe-pad: env(safe-area-inset-bottom, 0px);
   --app-safe-top: env(safe-area-inset-top, 0px);
   --app-bottom-nav-bar-height: 56px;
   --app-bottom-nav-row-pad-y: 0.25rem; /* вертикальный pad ряда табов */
   --app-bottom-nav-cols: 5;
-  /* Только «тело» таб-бара — отступ main под фикс. панель без второго env(safe-area). */
+  /* Зазор между последним блоком контента и верхней кромкой таб-бара. */
+  --app-bottom-nav-content-gap: 16px;
+  /* Только «тело» таб-бара без home indicator. */
   --app-bottom-nav-main-gutter: calc(
     var(--app-bottom-nav-bar-height) + var(--app-bottom-nav-row-pad-y)
   );
-  /* Полная высота панели с home indicator: FAB, fixed-бары, max-height модалок */
-  --app-bottom-nav-total-height: calc(var(--app-bottom-nav-main-gutter) + env(safe-area-inset-bottom, 0px));
+  /* Полная высота панели: измерение JS, иначе gutter + safe-area в px. */
+  --app-bottom-nav-total-height: var(
+    --app-bottom-nav-measured-height,
+    calc(var(--app-bottom-nav-main-gutter) + var(--app-safe-bottom, 0px))
+  );
   /* До первого кадра JS — fallback; nativeShellViewport перезаписывает px из visualViewport. */
   --viewport-height: 100dvh;
   --vh: 100dvh;
@@ -551,6 +556,11 @@ html.app-native-shell #root {
   padding-right: 0;
 }
 
+.app-bottom-nav-spacer {
+  flex-shrink: 0;
+  height: 0;
+}
+
 /* iOS + Android: когда открыта клавиатура, fixed bottom-nav скрываем,
    чтобы избежать подпрыгивания и перекрытия полей ввода. */
 html.app-keyboard-open .app-bottom-nav {
@@ -568,6 +578,12 @@ html.app-keyboard-open .studio-mobile-dock {
 /* Таббар скрыт — не оставляем «полосу» под ним (иначе огромный пустой низ на дашборде и в модалках). */
 html.app-keyboard-open main.app-main-content.page-content {
   padding-bottom: 0;
+}
+
+html.app-keyboard-open .app-bottom-nav-spacer {
+  height: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden;
 }
 
 /*
@@ -1020,6 +1036,13 @@ nav.app-bottom-nav .app-bottom-nav__label {
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box;
+    /* Не padding-bottom: iOS не включает padding overflow:auto в scrollHeight. */
+    padding-bottom: 0;
+  }
+
+  .app-bottom-nav-spacer {
+    flex-shrink: 0;
+    height: calc(var(--app-bottom-nav-total-height) + var(--app-bottom-nav-content-gap, 16px));
   }
 
   nav.app-bottom-nav.bottom-nav {

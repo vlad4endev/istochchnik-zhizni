@@ -50,6 +50,7 @@ import { canAccessStudio } from '../features/auth/studioAccess';
 import { canAccessMySermons } from '../features/mySermons/mySermonsAccess';
 import { canViewAnySchedule } from '../features/schedules/ministryScheduleAccess';
 import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
+import { syncBottomNavMeasuredHeight } from '../lib/bottomNavInset';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
 import { apiClient } from '../lib/apiClient';
 import { fetchActiveBroadcast } from '@/api/broadcast';
@@ -818,6 +819,8 @@ export function Layout() {
     document.documentElement.dataset.sidebar = navCollapsed ? 'collapsed' : 'expanded';
   }, [navCollapsed]);
 
+  const bottomNavRef = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
     const onChrome = (e: Event) => {
       const ce = e as CustomEvent<{ visible?: boolean }>;
@@ -828,6 +831,20 @@ export function Layout() {
       window.removeEventListener(LAYOUT_MAIN_CHROME_EVENT, onChrome);
     };
   }, []);
+
+  useEffect(() => {
+    const nav = bottomNavRef.current;
+    if (!nav || typeof ResizeObserver === 'undefined') {
+      syncBottomNavMeasuredHeight();
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      syncBottomNavMeasuredHeight();
+    });
+    observer.observe(nav);
+    syncBottomNavMeasuredHeight();
+    return () => observer.disconnect();
+  }, [mainChromeVisible, mobileNavSplit.primary.length, mobileNavSplit.overflow.length]);
 
   function toggleNavCollapsed() {
     setNavCollapsed((prev) => {
@@ -1232,14 +1249,13 @@ export function Layout() {
         </div>
       </aside>
 
-      {/* Main: отступ слева от сайдбара — на родителе (padding); снизу под нижний бар на мобильных */}
+      {/* Main: слева отступ от сайдбара; снизу на мобиле место резервирует .app-bottom-nav-spacer (padding на overflow:auto iOS игнорирует). */}
       <main
         id="main-content"
         tabIndex={-1}
         className={[
           'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip max-lg:overflow-y-auto lg:overflow-y-visible outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
           'page-content',
-          'max-lg:pb-[var(--app-bottom-nav-total-height)] lg:pb-0',
         ].join(' ')}
       >
         <div key={location.pathname} className="page-enter flex min-h-0 w-full max-w-full flex-1 flex-col">
@@ -1249,8 +1265,18 @@ export function Layout() {
 
       {isDashboardRoute ? <CoordinatorDashboardNoteFab /> : null}
 
+      {/* Резерв высоты под fixed-таббар: сжимает main, контент не уезжает под панель. */}
+      <div
+        className={[
+          'app-bottom-nav-spacer pointer-events-none lg:hidden',
+          mainChromeVisible ? '' : 'hidden',
+        ].join(' ')}
+        aria-hidden="true"
+      />
+
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
+        ref={bottomNavRef}
         className={[
           'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex w-full min-w-0 max-w-full flex-col border-t border-black/[0.07] bg-[color-mix(in_srgb,var(--surface-elevated)_94%,transparent)] pb-[max(0px,env(safe-area-inset-bottom,0px))] shadow-[0_-1px_0_rgba(0,0,0,0.05),0_-10px_40px_rgba(28,25,23,0.08)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] lg:hidden transition-opacity duration-150 ease-out dark:border-white/[0.08] dark:shadow-[0_-1px_0_rgba(255,255,255,0.06),0_-12px_40px_rgba(0,0,0,0.35)] [padding-left:max(0px,env(safe-area-inset-left,0px))] [padding-right:max(0px,env(safe-area-inset-right,0px))]',
           mainChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0',

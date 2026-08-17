@@ -2658,6 +2658,12 @@ html.dark .msg-quick-reaction:hover {
     display: none !important;
   }
 
+  html[data-chat-open="1"] .app-bottom-nav-spacer {
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+  }
+
   html[data-chat-open="1"] .app-main-content {
     padding-bottom: 0 !important;
     min-height: 0 !important;
