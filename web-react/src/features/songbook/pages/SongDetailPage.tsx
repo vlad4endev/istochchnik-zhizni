@@ -324,7 +324,7 @@ export function SongDetailPage() {
             stageMode ? 'songbook-reader--stage' : '',
           ].join(' ')}
         />
-        <div className="h-[calc(var(--app-bottom-nav-total-height)+12px)]" />
+        <div className="h-6 max-lg:h-4" />
       </main>
     </div>
   );

@@ -1,3 +1,5 @@
+import { syncBottomNavMeasuredHeight } from './bottomNavInset';
+
 /**
  * Совпадает с web-react/index.html.
  * `interactive-widget=resizes-content` (Chrome 108+, Android WebView): при клавиатуре layout viewport
@@ -198,6 +200,8 @@ export function syncViewportHeightVars() {
 
   /** iOS safe-area: env() в отдельном элементе → числовое значение для --app-safe-bottom (fix полоски/отступов в PWA). */
   root.style.setProperty('--app-safe-bottom', getSafeAreaBottomPx());
+  /** Реальная высота таб-бара (safe-area + подписи) — env() внутри CSS var на iOS часто даёт 0. */
+  syncBottomNavMeasuredHeight(root);
 }
 
 function attachViewportWatchers() {
