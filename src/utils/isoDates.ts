@@ -58,26 +58,53 @@ export function dayIndexInCycle(cyclePosition: number, memberCount: number): num
 
 /**
  * start_date, при котором на anchorDate очередь приходится на rosterIndex (0..memberCount-1).
- * Обратная операция к getPrayerCyclePosition после перехода на неделю с понедельника.
+ *
+ * Позиция зависит только от понедельника недели `start_date` (день внутри недели не влияет):
+ * `position = daysSince(mondayOf(start))`. Поэтому перебор идёт по понедельникам назад.
+ *
+ * Возвращает `null`, если индекс недостижим (типично когда `memberCount` кратен 7:
+ * в конкретный день недели доступен только один остаток по модулю).
  */
 export function computePrayerCycleAnchorStartDate(
   anchorDate: string,
   rosterIndex: number,
   memberCount: number,
-): string {
+): string | null {
   if (memberCount <= 0) {
     return anchorDate;
   }
   const targetIndex = dayIndexInCycle(rosterIndex, memberCount);
-  const maxDiff = memberCount * 7 + 7;
-  for (let diff = 0; diff <= maxDiff; diff++) {
-    const candidate = addUtcDaysToIsoDate(anchorDate, -diff);
-    const position = getPrayerCyclePosition(anchorDate, candidate);
+  const anchorMonIdx = getMondayBasedDayIndex(anchorDate);
+  // Monday M = anchor − anchorMonIdx − 7·w → position = anchorMonIdx + 7·w
+  for (let w = 0; w <= memberCount; w++) {
+    const position = anchorMonIdx + 7 * w;
     if (dayIndexInCycle(position, memberCount) === targetIndex) {
-      return candidate;
+      return addUtcDaysToIsoDate(anchorDate, -(anchorMonIdx + 7 * w));
     }
   }
-  return addUtcDaysToIsoDate(anchorDate, -targetIndex);
+  return null;
+}
+
+/**
+ * Порядок очереди: с `dayIndex` идёт `memberId`, далее — круговой хвост прежнего списка.
+ * Нужен, когда сдвигом start_date нельзя выставить произвольный индекс «на сегодня».
+ */
+export function buildPrayerCycleOrderWithMemberOnDayIndex(
+  mergedIds: readonly number[],
+  memberId: number,
+  dayIndex: number,
+): number[] | null {
+  const n = mergedIds.length;
+  if (n <= 0) {
+    return null;
+  }
+  const rosterIndex = mergedIds.indexOf(memberId);
+  if (rosterIndex < 0) {
+    return null;
+  }
+  const todayIdx = dayIndexInCycle(dayIndex, n);
+  const fromSelected = [...mergedIds.slice(rosterIndex), ...mergedIds.slice(0, rosterIndex)];
+  return Array.from({ length: n }, (_, i) => fromSelected[(i - todayIdx + n) % n]!);
 }
 
 export function addUtcDaysToIsoDate(isoDate: string, deltaDays: number): string {

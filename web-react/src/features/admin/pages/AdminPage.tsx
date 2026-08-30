@@ -2100,7 +2100,7 @@ function CalendarPrayerCycleRoster() {
     onSuccess: async () => {
       setBanner({
         type: 'ok',
-        text: 'Дата старта цикла обновлена: с сегодняшнего дня первым в очереди идёт выбранный член церкви; дальше — по списку по кругу.',
+        text: 'Готово: сегодня в очереди выбранный член церкви; дальше дни идут по списку по кругу.',
       });
       await qc.invalidateQueries({ queryKey: Q_MEMBERS });
       await qc.invalidateQueries({ queryKey: ['calendar'] });
