@@ -1,10 +1,6 @@
 import { query } from '../config/db';
 import { notifyRealtime } from '../realtime/notify';
-import {
-  addUtcDaysToIsoDate,
-  getMondayBasedDayIndex,
-  getPrayerCyclePosition,
-} from '../utils/isoDates';
+import { addUtcDaysToIsoDate, getPrayerCyclePosition } from '../utils/isoDates';
 import { getPrayerCycleTodayYmd } from '../utils/prayerPlanTimeZone';
 
 /** Участники с этим флагом входят в расчёт длины цикла и очереди «день за днём». */
@@ -83,9 +79,8 @@ export async function getPrayerCycleSnapshotForDate(targetDateIso: string): Prom
   const cyclePosition = getPrayerCyclePosition(targetDateIso, start);
   const cycleIndex = computeCycleIndex(cyclePosition, memberCount);
   const dayIndex = dayIndexInCycle(cyclePosition, memberCount);
-  const cycleEpochMonday = addUtcDaysToIsoDate(start, -getMondayBasedDayIndex(start));
-  const rangeStart = addUtcDaysToIsoDate(cycleEpochMonday, cycleIndex * memberCount);
-  const rangeEnd = addUtcDaysToIsoDate(cycleEpochMonday, (cycleIndex + 1) * memberCount - 1);
+  const rangeStart = addUtcDaysToIsoDate(start, cycleIndex * memberCount);
+  const rangeEnd = addUtcDaysToIsoDate(start, (cycleIndex + 1) * memberCount - 1);
 
   return {
     cycle_index: cycleIndex,

@@ -740,7 +740,6 @@ SET search_path = public
 AS $$
 DECLARE
   v_start_date date;
-  v_start_weekday integer;
   v_position integer;
   v_total_members integer;
   v_index integer;
@@ -755,8 +754,7 @@ BEGIN
 
   SELECT start_date INTO v_start_date FROM global_settings WHERE id = 1;
 
-  v_start_weekday := EXTRACT(ISODOW FROM v_start_date)::integer - 1;
-  v_position := (target_date - v_start_date) + v_start_weekday;
+  v_position := target_date - v_start_date;
 
   SELECT COUNT(*)::integer INTO v_total_members
   FROM members
@@ -837,7 +835,6 @@ AS $$
 declare
   v_today date := current_date;
   v_start_date date;
-  v_start_weekday integer;
   v_old_total integer;
   v_new_total integer;
   v_old_index integer;
@@ -854,8 +851,6 @@ begin
     into v_start_date
   from global_settings
   where id = 1;
-
-  v_start_weekday := EXTRACT(ISODOW FROM v_start_date)::integer - 1;
 
   if TG_OP = 'INSERT' then
     if NEW.is_active is distinct from true or NEW.in_prayer_cycle is distinct from true then
@@ -875,7 +870,7 @@ begin
       return null;
     end if;
 
-    v_old_index := ((v_today - v_start_date + v_start_weekday) % v_old_total + v_old_total) % v_old_total;
+    v_old_index := ((v_today - v_start_date) % v_old_total + v_old_total) % v_old_total;
 
     select m.id
       into v_old_member_id
@@ -937,7 +932,7 @@ begin
         return null;
       end if;
 
-      v_old_index := ((v_today - v_start_date + v_start_weekday) % v_old_total + v_old_total) % v_old_total;
+      v_old_index := ((v_today - v_start_date) % v_old_total + v_old_total) % v_old_total;
 
       select m.id
         into v_old_member_id
@@ -996,7 +991,7 @@ begin
       end if;
 
       v_old_total := v_new_total + 1;
-      v_old_index := ((v_today - v_start_date + v_start_weekday) % v_old_total + v_old_total) % v_old_total;
+      v_old_index := ((v_today - v_start_date) % v_old_total + v_old_total) % v_old_total;
 
       select m.id
         into v_old_member_id
@@ -1103,7 +1098,7 @@ begin
       end if;
 
       v_old_total := v_new_total + 1;
-      v_old_index := ((v_today - v_start_date + v_start_weekday) % v_old_total + v_old_total) % v_old_total;
+      v_old_index := ((v_today - v_start_date) % v_old_total + v_old_total) % v_old_total;
 
       select m.id
         into v_old_member_id
@@ -1211,7 +1206,7 @@ begin
         return null;
       end if;
 
-      v_old_index := ((v_today - v_start_date + v_start_weekday) % v_new_total + v_new_total) % v_new_total;
+      v_old_index := ((v_today - v_start_date) % v_new_total + v_new_total) % v_new_total;
 
       select m.id
         into v_old_member_id
@@ -1282,7 +1277,7 @@ begin
     end if;
 
     v_old_total := v_new_total + 1;
-    v_old_index := ((v_today - v_start_date + v_start_weekday) % v_old_total + v_old_total) % v_old_total;
+    v_old_index := ((v_today - v_start_date) % v_old_total + v_old_total) % v_old_total;
 
     with roster as (
       select

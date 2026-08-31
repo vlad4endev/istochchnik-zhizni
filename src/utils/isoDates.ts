@@ -42,11 +42,10 @@ export function getMondayBasedDayIndex(isoDate: string): number {
 
 /**
  * Позиция дня в молитвенном цикле относительно якоря `startDate`.
- * Понедельник = 0 (первый в списке), вторник = 1, …, воскресенье = 6.
- * Полный проход по списку = один цикл; следующий день снова с начала списка.
+ * День старта = индекс 0 в очереди, следующий календарный день = +1, и так по кругу.
  */
 export function getPrayerCyclePosition(targetDate: string, startDate: string): number {
-  return getDiffDays(targetDate, startDate) + getMondayBasedDayIndex(startDate);
+  return getDiffDays(targetDate, startDate);
 }
 
 export function dayIndexInCycle(cyclePosition: number, memberCount: number): number {
@@ -57,54 +56,19 @@ export function dayIndexInCycle(cyclePosition: number, memberCount: number): num
 }
 
 /**
- * start_date, при котором на anchorDate очередь приходится на rosterIndex (0..memberCount-1).
- *
- * Позиция зависит только от понедельника недели `start_date` (день внутри недели не влияет):
- * `position = daysSince(mondayOf(start))`. Поэтому перебор идёт по понедельникам назад.
- *
- * Возвращает `null`, если индекс недостижим (типично когда `memberCount` кратен 7:
- * в конкретный день недели доступен только один остаток по модулю).
+ * start_date, при котором на anchorDate очередь приходится на rosterIndex (0..memberCount-1),
+ * при сохранении порядка списка (обычно А–Я).
  */
 export function computePrayerCycleAnchorStartDate(
   anchorDate: string,
   rosterIndex: number,
   memberCount: number,
-): string | null {
+): string {
   if (memberCount <= 0) {
     return anchorDate;
   }
   const targetIndex = dayIndexInCycle(rosterIndex, memberCount);
-  const anchorMonIdx = getMondayBasedDayIndex(anchorDate);
-  // Monday M = anchor − anchorMonIdx − 7·w → position = anchorMonIdx + 7·w
-  for (let w = 0; w <= memberCount; w++) {
-    const position = anchorMonIdx + 7 * w;
-    if (dayIndexInCycle(position, memberCount) === targetIndex) {
-      return addUtcDaysToIsoDate(anchorDate, -(anchorMonIdx + 7 * w));
-    }
-  }
-  return null;
-}
-
-/**
- * Порядок очереди: с `dayIndex` идёт `memberId`, далее — круговой хвост прежнего списка.
- * Нужен, когда сдвигом start_date нельзя выставить произвольный индекс «на сегодня».
- */
-export function buildPrayerCycleOrderWithMemberOnDayIndex(
-  mergedIds: readonly number[],
-  memberId: number,
-  dayIndex: number,
-): number[] | null {
-  const n = mergedIds.length;
-  if (n <= 0) {
-    return null;
-  }
-  const rosterIndex = mergedIds.indexOf(memberId);
-  if (rosterIndex < 0) {
-    return null;
-  }
-  const todayIdx = dayIndexInCycle(dayIndex, n);
-  const fromSelected = [...mergedIds.slice(rosterIndex), ...mergedIds.slice(0, rosterIndex)];
-  return Array.from({ length: n }, (_, i) => fromSelected[(i - todayIdx + n) % n]!);
+  return addUtcDaysToIsoDate(anchorDate, -targetIndex);
 }
 
 export function addUtcDaysToIsoDate(isoDate: string, deltaDays: number): string {
