@@ -2410,7 +2410,10 @@ function CalendarPrayerCycleRoster() {
                               draggableId={`pc-roster-${e.id}`}
                               index={qIdx}
                               isDragDisabled={
-                                saveOrderMut.isPending || patchMut.isPending || anchorQueueMut.isPending
+                                saveOrderMut.isPending ||
+                                patchMut.isPending ||
+                                anchorQueueMut.isPending ||
+                                sortAzMut.isPending
                               }
                             >
                               {(dragProvided, dragSnapshot) => (
