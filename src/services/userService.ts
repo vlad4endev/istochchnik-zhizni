@@ -1,15 +1,11 @@
 import { query } from '../config/db';
 import type { AppRole } from '../types/appRole';
 import { mergeAppRoles, normalizeAppRole, normalizeAppRoles, pickPrimaryAppRole } from '../types/appRole';
-import {
-  buildPrayerCycleOrderWithMemberOnDayIndex,
-  computePrayerCycleAnchorStartDate,
-  dayIndexInCycle,
-  getPrayerCyclePosition,
-} from '../utils/isoDates';
+import { computePrayerCycleAnchorStartDate, getPrayerCyclePosition } from '../utils/isoDates';
 import { getPrayerDataByDate } from './calendarService';
 import { reconcileCollectionClaimsAfterMemberLeftPrayerCycle } from './cycleCollectionClaimsService';
 import {
+  dayIndexInCycle,
   getCurrentCycleIndexForUpsert,
   getCycleStartDate,
   getPrayerCycleSnapshotForDate,
@@ -1044,56 +1040,28 @@ export async function anchorPrayerCycleMemberOnDate(
   anchorDateYmd: string,
 ): Promise<AnchorPrayerCycleMemberResult> {
   const anchorDate = normalizeIsoDate(anchorDateYmd.trim());
-  const snap = await getPrayerCycleSnapshotForDate(anchorDate);
-  const cycleIdx = snap?.cycle_index ?? 0;
+  /** Только алфавитная очередь: «Первым сегодня» не меняет порядок списка, только дату старта. */
   const alphaIds = await getAlphaPrayerCycleRosterMemberIds();
-  const custom = await getPrayerCycleCustomOrderMemberIds(cycleIdx);
-  const mergedIds = mergePrayerCycleRosterOrderIds(alphaIds, custom);
-  const rosterIndex = mergedIds.indexOf(memberId);
+  const rosterIndex = alphaIds.indexOf(memberId);
   if (rosterIndex < 0) {
     throw new Error('Member not in active prayer cycle');
   }
-  const n = mergedIds.length;
-  /** Очередь «с выбранного»: он первый, дальше — прежний круговой порядок. */
-  const fromSelected = [...mergedIds.slice(rosterIndex), ...mergedIds.slice(0, rosterIndex)];
-
+  const newStartDate = computePrayerCycleAnchorStartDate(anchorDate, rosterIndex, alphaIds.length);
+  await query(
+    `INSERT INTO global_settings (id, start_date)
+     VALUES (1, $1::date)
+     ON CONFLICT (id) DO UPDATE SET start_date = EXCLUDED.start_date`,
+    [newStartDate],
+  );
   /**
-   * Предпочтительно: today_index = 0 и в списке выбранный первый.
-   * Это возможно не всегда (формула с понедельника) — тогда крутим порядок под текущий today_index.
+   * Сбрасываем сохранённый DnD-порядок: иначе после сдвига якоря «сегодня» и список
+   * расходятся с А–Я. На новом цикле снова действует сортировка по фамилии.
    */
-  const startForZero = computePrayerCycleAnchorStartDate(anchorDate, 0, n);
-  if (
-    startForZero != null &&
-    dayIndexInCycle(getPrayerCyclePosition(anchorDate, startForZero), n) === 0
-  ) {
-    await query(
-      `INSERT INTO global_settings (id, start_date)
-       VALUES (1, $1::date)
-       ON CONFLICT (id) DO UPDATE SET start_date = EXCLUDED.start_date`,
-      [startForZero],
-    );
-    const snapAfter = await getPrayerCycleSnapshotForDate(anchorDate);
-    const cycleIdxAfter = snapAfter?.cycle_index ?? 0;
-    await upsertPrayerCycleRosterCustomOrder(cycleIdxAfter, fromSelected);
-    return {
-      start_date: startForZero,
-      anchor_date: anchorDate,
-      roster_index: 0,
-      member_id: memberId,
-    };
-  }
-
-  const startDate = await getCycleStartDate();
-  const todayIdx = dayIndexInCycle(getPrayerCyclePosition(anchorDate, startDate), n);
-  const newOrder = buildPrayerCycleOrderWithMemberOnDayIndex(mergedIds, memberId, todayIdx);
-  if (!newOrder) {
-    throw new Error('Member not in active prayer cycle');
-  }
-  await upsertPrayerCycleRosterCustomOrder(cycleIdx, newOrder);
+  await query(`DELETE FROM prayer_cycle_roster_custom_order`);
   return {
-    start_date: startDate,
+    start_date: newStartDate,
     anchor_date: anchorDate,
-    roster_index: todayIdx,
+    roster_index: rosterIndex,
     member_id: memberId,
   };
 }
