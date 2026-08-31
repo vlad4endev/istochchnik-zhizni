@@ -245,7 +245,28 @@ CREATE TABLE IF NOT EXISTS access_requests (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Fix foreign keys for existing tables to include ON DELETE CASCADE / SET NULL
+-- Fix foreign keys for existing tables to include ON DELETE CASCADE / SET NULL.
+-- Сначала убираем «осиротевшие» строки (member удалён, FK ещё не было / было без CASCADE),
+-- иначе ADD CONSTRAINT валит весь initDb и не доходят поздние CREATE OR REPLACE FUNCTION.
+DELETE FROM member_cycle_overrides o
+ WHERE NOT EXISTS (SELECT 1 FROM members m WHERE m.id = o.member_id);
+DELETE FROM member_prayer_request_history h
+ WHERE NOT EXISTS (SELECT 1 FROM members m WHERE m.id = h.member_id);
+DELETE FROM member_prayer_by_cycle p
+ WHERE NOT EXISTS (SELECT 1 FROM members m WHERE m.id = p.member_id);
+DELETE FROM auth_sessions s
+ WHERE NOT EXISTS (SELECT 1 FROM members m WHERE m.id = s.member_id);
+DELETE FROM auth_refresh_sessions r
+ WHERE NOT EXISTS (SELECT 1 FROM members m WHERE m.id = r.member_id);
+UPDATE access_requests ar
+   SET member_id = NULL
+ WHERE member_id IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM members m WHERE m.id = ar.member_id);
+UPDATE access_requests ar
+   SET reviewed_by_member_id = NULL
+ WHERE reviewed_by_member_id IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM members m WHERE m.id = ar.reviewed_by_member_id);
+
 ALTER TABLE member_cycle_overrides DROP CONSTRAINT IF EXISTS member_cycle_overrides_member_id_fkey;
 ALTER TABLE member_cycle_overrides ADD CONSTRAINT member_cycle_overrides_member_id_fkey FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE;
 
