@@ -70,6 +70,7 @@ import {
   fetchAdminMembers,
   fetchPrayerCycleRoster,
   savePrayerCycleRosterOrder,
+  clearPrayerCycleRosterOrder,
   fetchDirectionTemplates,
   fetchAdminEvents,
   fetchChurchEventCategoryOptions,
@@ -2756,6 +2757,15 @@ function CalendarSection() {
     },
     onError: (e) => setMsg({ type: 'err', text: apiErrorMessage(e, 'Не удалось запустить цикл.') }),
   });
+  const clearOrderMut = useMutation({
+    mutationFn: () => clearPrayerCycleRosterOrder(),
+    onSuccess: async () => {
+      setMsg({ type: 'ok', text: 'Порядок очереди сброшен к алфавиту А–Я.' });
+      await qc.invalidateQueries({ queryKey: ['admin', 'prayer-cycle-roster'] });
+      await qc.invalidateQueries({ queryKey: ['calendar'] });
+    },
+    onError: (e) => setMsg({ type: 'err', text: apiErrorMessage(e, 'Не удалось сбросить порядок.') }),
+  });
 
   return (
     <div className="space-y-6">
@@ -2856,15 +2866,20 @@ function CalendarSection() {
           <div className="min-w-0">
             <h3 className="text-base font-semibold text-stone-900">Очередь членов</h3>
             <p className="mt-1 text-sm text-stone-600">
-              Одна таблица очереди; добавление участников — кнопка «Не в очереди». Иконка ⋮⋮ меняет порядок в текущем цикле.
+              Список всегда по алфавиту А–Я; «сегодня» помечается в строке. Иконка ⋮⋮ временно меняет
+              порядок только текущего цикла.
             </p>
           </div>
           <button
             type="button"
-            className="rounded-md border border-stone-200 bg-transparent px-3 py-1.5 text-xs font-medium text-stone-500 transition hover:bg-stone-50"
-            onClick={() => void qc.invalidateQueries({ queryKey: ['admin', 'prayer-cycle-roster'] })}
+            className="rounded-md border border-stone-200 bg-transparent px-3 py-1.5 text-xs font-medium text-stone-500 transition hover:bg-stone-50 disabled:opacity-50"
+            disabled={clearOrderMut.isPending}
+            onClick={() => {
+              setMsg(null);
+              clearOrderMut.mutate();
+            }}
           >
-            Сбросить порядок
+            {clearOrderMut.isPending ? 'Сброс…' : 'Сбросить к А–Я'}
           </button>
         </div>
         <CalendarPrayerCycleRoster />

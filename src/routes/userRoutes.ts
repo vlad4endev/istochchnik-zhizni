@@ -20,6 +20,7 @@ import {
   adminResetUserPasswordHandler,
   getPrayerCycleRosterHandler,
   savePrayerCycleRosterOrderHandler,
+  clearPrayerCycleRosterOrderHandler,
   startPrayerCycleHandler,
   updateUserHandler,
   bulkCreateUsersHandler,
@@ -45,6 +46,7 @@ router.post('/swap-all-first-last-names', swapAllMembersFirstLastNamesHandler);
 router.post('/sync-telegram-profiles', syncUsersTelegramProfilesHandler);
 router.get('/prayer-cycle/roster', getPrayerCycleRosterHandler);
 router.put('/prayer-cycle/roster-order', savePrayerCycleRosterOrderHandler);
+router.delete('/prayer-cycle/roster-order', clearPrayerCycleRosterOrderHandler);
 router.post('/prayer-cycle/anchor-member', anchorPrayerCycleMemberHandler);
 router.post('/prayer-cycle/start', startPrayerCycleHandler);
 router.get('/:id', getUser);

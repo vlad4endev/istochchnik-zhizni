@@ -436,3 +436,9 @@ export async function removeMemberFromPrayerCycleCustomOrders(memberId: number):
     [memberId],
   );
 }
+
+/** Вернуть очередь к алфавиту А–Я (удалить все сохранённые DnD-порядки). */
+export async function clearAllPrayerCycleRosterCustomOrders(): Promise<{ deleted: number }> {
+  const r = await query(`DELETE FROM prayer_cycle_roster_custom_order`);
+  return { deleted: r.rowCount ?? 0 };
+}

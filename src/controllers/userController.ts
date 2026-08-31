@@ -23,6 +23,7 @@ import {
   anchorPrayerCycleMemberOnDate,
   getPrayerCycleRosterSnapshot,
   savePrayerCycleRosterCustomOrderForAnchorDate,
+  clearPrayerCycleRosterCustomOrder,
   setOneTimeMemberDateOverride,
   setUserAppRoles,
   startPrayerCycle,
@@ -921,6 +922,20 @@ export async function savePrayerCycleRosterOrderHandler(req: Request, res: Respo
       }
     }
     console.error('Failed to save prayer cycle roster order', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function clearPrayerCycleRosterOrderHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
+  try {
+    const result = await clearPrayerCycleRosterCustomOrder();
+    notifyRealtime(['calendar', 'members', 'me', 'coordinator-notes']);
+    res.json(result);
+  } catch (error) {
+    console.error('Failed to clear prayer cycle roster order', error);
     res.status(500).json({ error: 'Database error' });
   }
 }

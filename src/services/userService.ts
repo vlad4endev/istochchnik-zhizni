@@ -14,6 +14,7 @@ import {
   mergePrayerCycleRosterOrderIds,
   upsertMemberPrayerForCycle,
   upsertPrayerCycleRosterCustomOrder,
+  clearAllPrayerCycleRosterCustomOrders,
   archiveMemberLegacyPrayerRequestColumn,
   buildCyclePrayerMpcPickSql,
   snapshotPastCyclePrayersToHistory,
@@ -1096,6 +1097,10 @@ export async function savePrayerCycleRosterCustomOrderForAnchorDate(
   }
   await upsertPrayerCycleRosterCustomOrder(snap.cycle_index, orderedMemberIds);
   return { cycle_index: snap.cycle_index };
+}
+
+export async function clearPrayerCycleRosterCustomOrder(): Promise<{ deleted: number }> {
+  return clearAllPrayerCycleRosterCustomOrders();
 }
 
 export async function setOneTimeMemberDateOverride(

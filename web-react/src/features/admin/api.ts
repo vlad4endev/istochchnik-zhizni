@@ -232,6 +232,11 @@ export async function savePrayerCycleRosterOrder(body: {
   return data;
 }
 
+export async function clearPrayerCycleRosterOrder(): Promise<{ deleted: number }> {
+  const { data } = await apiClient.delete<{ deleted: number }>(`${USERS}/prayer-cycle/roster-order`);
+  return data;
+}
+
 export async function anchorPrayerCycleMember(body: {
   member_id: number;
   anchor_date: string;
