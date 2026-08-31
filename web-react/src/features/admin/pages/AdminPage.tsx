@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import {
+  LuArrowDownAZ,
   LuCalendarDays,
   LuChevronDown,
   LuGripVertical,
@@ -2220,6 +2221,20 @@ function CalendarPrayerCycleRoster() {
       setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить порядок очереди.') }),
   });
 
+  const sortAzMut = useMutation({
+    mutationFn: () => clearPrayerCycleRosterOrder(),
+    onSuccess: async () => {
+      setBanner({
+        type: 'ok',
+        text: 'Очередь отсортирована по алфавиту А–Я. Метка «сегодня» остаётся на нужном человеке.',
+      });
+      await qc.invalidateQueries({ queryKey: ['admin', 'prayer-cycle-roster'] });
+      await qc.invalidateQueries({ queryKey: ['calendar'] });
+    },
+    onError: (e) =>
+      setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось отсортировать очередь.') }),
+  });
+
   const handleRosterDragEnd = (result: DropResult) => {
     const roster = rosterSnapQ.data?.roster;
     if (!result.destination || !roster?.length) return;
@@ -2296,21 +2311,41 @@ function CalendarPrayerCycleRoster() {
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold text-stone-900">Очередь членов</h3>
             <p className="mt-1 text-xs text-stone-500">
-              Неактивные с флагом «в цикле» перечислены в конце списка, пока карточку не активируют.
+              По умолчанию А–Я. «Сегодня» — метка в строке. ⋮⋮ временно меняет порядок текущего цикла.
             </p>
           </div>
-          <button
-            type="button"
-            className={btnSecondary('shrink-0 self-start sm:self-center')}
-            onClick={() => setNotInQueueOpen(true)}
-          >
-            Не в очереди
-            {notInQueueTotal > 0 ? (
-              <span className="ml-1.5 inline-flex min-w-[1.5rem] justify-center tabular-nums text-stone-500">
-                ({notInQueueTotal})
-              </span>
-            ) : null}
-          </button>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 self-start sm:self-center">
+            <button
+              type="button"
+              className={btnPrimary('inline-flex items-center gap-1.5 text-xs whitespace-nowrap')}
+              disabled={
+                sortAzMut.isPending ||
+                saveOrderMut.isPending ||
+                patchMut.isPending ||
+                anchorQueueMut.isPending
+              }
+              title="Вернуть порядок фамилий А–Я"
+              onClick={() => {
+                setBanner(null);
+                sortAzMut.mutate();
+              }}
+            >
+              <LuArrowDownAZ className="h-4 w-4" aria-hidden />
+              {sortAzMut.isPending ? 'Сортировка…' : 'Сортировать А–Я'}
+            </button>
+            <button
+              type="button"
+              className={btnSecondary('text-xs whitespace-nowrap')}
+              onClick={() => setNotInQueueOpen(true)}
+            >
+              Не в очереди
+              {notInQueueTotal > 0 ? (
+                <span className="ml-1.5 inline-flex min-w-[1.5rem] justify-center tabular-nums text-stone-500">
+                  ({notInQueueTotal})
+                </span>
+              ) : null}
+            </button>
+          </div>
         </div>
         <label className="mt-4 block text-xs font-semibold text-stone-600">Поиск по очереди</label>
         <input
@@ -2757,15 +2792,6 @@ function CalendarSection() {
     },
     onError: (e) => setMsg({ type: 'err', text: apiErrorMessage(e, 'Не удалось запустить цикл.') }),
   });
-  const clearOrderMut = useMutation({
-    mutationFn: () => clearPrayerCycleRosterOrder(),
-    onSuccess: async () => {
-      setMsg({ type: 'ok', text: 'Порядок очереди сброшен к алфавиту А–Я.' });
-      await qc.invalidateQueries({ queryKey: ['admin', 'prayer-cycle-roster'] });
-      await qc.invalidateQueries({ queryKey: ['calendar'] });
-    },
-    onError: (e) => setMsg({ type: 'err', text: apiErrorMessage(e, 'Не удалось сбросить порядок.') }),
-  });
 
   return (
     <div className="space-y-6">
@@ -2862,26 +2888,6 @@ function CalendarSection() {
         id="cal-roster"
         className="scroll-mt-6 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]"
       >
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-base font-semibold text-stone-900">Очередь членов</h3>
-            <p className="mt-1 text-sm text-stone-600">
-              Список всегда по алфавиту А–Я; «сегодня» помечается в строке. Иконка ⋮⋮ временно меняет
-              порядок только текущего цикла.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="rounded-md border border-stone-200 bg-transparent px-3 py-1.5 text-xs font-medium text-stone-500 transition hover:bg-stone-50 disabled:opacity-50"
-            disabled={clearOrderMut.isPending}
-            onClick={() => {
-              setMsg(null);
-              clearOrderMut.mutate();
-            }}
-          >
-            {clearOrderMut.isPending ? 'Сброс…' : 'Сбросить к А–Я'}
-          </button>
-        </div>
         <CalendarPrayerCycleRoster />
       </section>
 
