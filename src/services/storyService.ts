@@ -115,9 +115,22 @@ async function ensureProfileRow(memberId: number): Promise<void> {
   );
 }
 
+/** pg/JSON may yield string ids — always coerce before Map keys / === checks. */
+function asMemberId(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
+  return n;
+}
+
 async function loadAuthorsForMemberIds(memberIds: number[]): Promise<Map<number, ProfilePostAuthor>> {
   const map = new Map<number, ProfilePostAuthor>();
-  const uniq = [...new Set(memberIds)].filter((n) => Number.isInteger(n) && n > 0);
+  const uniq = [
+    ...new Set(
+      memberIds
+        .map((id) => asMemberId(id))
+        .filter((n): n is number => n != null),
+    ),
+  ];
   if (uniq.length === 0) return map;
   const res = await query(
     `SELECT
@@ -144,8 +157,10 @@ async function loadAuthorsForMemberIds(memberIds: number[]): Promise<Map<number,
     display_name: string | null;
     avatar_url: string | null;
   }>) {
-    map.set(row.member_id, {
-      member_id: row.member_id,
+    const memberId = asMemberId(row.member_id);
+    if (memberId == null) continue;
+    map.set(memberId, {
+      member_id: memberId,
       username: row.username,
       first_name: row.first_name,
       last_name: row.last_name,
@@ -194,7 +209,8 @@ export async function listActiveStories(viewerMemberId: number): Promise<StoryAu
 
   if (rows.length === 0) {
     const meAuthors = await loadAuthorsForMemberIds([viewerMemberId]);
-    const me = meAuthors.get(viewerMemberId);
+    const viewerId = asMemberId(viewerMemberId);
+    const me = viewerId != null ? meAuthors.get(viewerId) : undefined;
     if (!me) return [];
     return [
       {
@@ -211,12 +227,15 @@ export async function listActiveStories(viewerMemberId: number): Promise<StoryAu
     viewerMemberId,
   ]);
 
+  const viewerId = asMemberId(viewerMemberId);
   const byMember = new Map<number, StoryItem[]>();
   for (const row of rows) {
-    const list = byMember.get(row.member_id) ?? [];
+    const memberId = asMemberId(row.member_id);
+    if (memberId == null) continue;
+    const list = byMember.get(memberId) ?? [];
     list.push({
       id: row.id,
-      member_id: row.member_id,
+      member_id: memberId,
       media_url: row.media_url,
       media_type: row.media_type === 'video' ? 'video' : 'image',
       caption: row.caption,
@@ -224,27 +243,39 @@ export async function listActiveStories(viewerMemberId: number): Promise<StoryAu
       expires_at: row.expires_at,
       viewed_by_me: Boolean(row.viewed_by_me),
     });
-    byMember.set(row.member_id, list);
+    byMember.set(memberId, list);
   }
 
   const groups: StoryAuthorGroup[] = [];
   for (const [memberId, stories] of byMember) {
-    const author = authors.get(memberId);
-    if (!author) continue;
-    const isMe = memberId === viewerMemberId;
+    let author = authors.get(memberId);
+    if (!author) {
+      // Don't drop a ring if profile join raced — keep a placeholder author.
+      author = {
+        member_id: memberId,
+        username: `member-${memberId}`,
+        first_name: null,
+        last_name: null,
+        display_name: null,
+        avatar_url: null,
+      };
+    }
+    const isMe = viewerId != null && memberId === viewerId;
     const all_seen = isMe ? true : stories.every((s) => s.viewed_by_me);
     groups.push({ author, stories, all_seen, is_me: isMe });
   }
 
-  if (!groups.some((g) => g.is_me)) {
-    const me = authors.get(viewerMemberId);
+  if (viewerId != null && !groups.some((g) => g.is_me)) {
+    const me = authors.get(viewerId);
     if (me) {
       groups.unshift({ author: me, stories: [], all_seen: true, is_me: true });
     }
   }
 
   // Affinity к авторам сторис (лайки/комменты к их постам) — умный порядок колец.
-  const authorIds = groups.map((g) => g.author.member_id).filter((id) => id !== viewerMemberId);
+  const authorIds = groups
+    .map((g) => asMemberId(g.author.member_id))
+    .filter((id): id is number => id != null && id !== viewerId);
   const affinity = new Map<number, { likes: number; comments: number }>();
   if (authorIds.length > 0) {
     const [likesAff, commentsAff] = await Promise.all([
@@ -266,20 +297,24 @@ export async function listActiveStories(viewerMemberId: number): Promise<StoryAu
       ),
     ]);
     for (const row of likesAff.rows as Array<{ author_id: number; cnt: number }>) {
-      const prev = affinity.get(row.author_id) ?? { likes: 0, comments: 0 };
+      const authorId = asMemberId(row.author_id);
+      if (authorId == null) continue;
+      const prev = affinity.get(authorId) ?? { likes: 0, comments: 0 };
       prev.likes = Number(row.cnt ?? 0);
-      affinity.set(row.author_id, prev);
+      affinity.set(authorId, prev);
     }
     for (const row of commentsAff.rows as Array<{ author_id: number; cnt: number }>) {
-      const prev = affinity.get(row.author_id) ?? { likes: 0, comments: 0 };
+      const authorId = asMemberId(row.author_id);
+      if (authorId == null) continue;
+      const prev = affinity.get(authorId) ?? { likes: 0, comments: 0 };
       prev.comments = Number(row.cnt ?? 0);
-      affinity.set(row.author_id, prev);
+      affinity.set(authorId, prev);
     }
   }
 
   const ranked = rankStoryGroups(
     groups.map((g) => {
-      const aff = affinity.get(g.author.member_id) ?? { likes: 0, comments: 0 };
+      const aff = affinity.get(Number(g.author.member_id)) ?? { likes: 0, comments: 0 };
       const unseen = g.is_me ? 0 : g.stories.filter((s) => !s.viewed_by_me).length;
       const newest = g.stories[g.stories.length - 1]?.created_at
         ?? g.stories[0]?.created_at
