@@ -24,6 +24,11 @@ import {
   getCycleCollectionClaimsSnapshot,
   setCycleCollectionClaim,
 } from '../services/cycleCollectionClaimsService';
+import {
+  PRAYER_NEED_SUBMISSION_MAX_LENGTH,
+  PRAYER_NEED_SUBMISSION_MIN_LENGTH,
+  submitPrayerNeedToPrayerChat,
+} from '../services/prayerNeedSubmissionService';
 import { notifyRealtime } from '../realtime/notify';
 import { sendPush } from '../services/pushService';
 import { notifyCoordinatorTelegramAssignment } from '../services/coordinatorTelegramScenariosService';
@@ -859,6 +864,64 @@ export async function postPrayerSectionVisit(req: Request, res: Response): Promi
   } catch (err) {
     console.error('postPrayerSectionVisit error:', err);
     res.status(500).json({ error: 'Database error' });
+  }
+}
+
+/** Ошибки Telegram — участнику без технических деталей, в лог сервера с подробностями. */
+function prayerNeedSendErrorToResponse(error: unknown): { status: number; message: string } {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (msg === 'telegram_disabled' || msg === 'telegram_missing_token' || msg === 'telegram_missing_chat') {
+    return {
+      status: 503,
+      message: 'Отправка в молитвенный чат сейчас не настроена. Сообщите координатору или администратору.',
+    };
+  }
+  if (msg === 'telegram_connection_timeout') {
+    return { status: 504, message: 'Чат не ответил вовремя. Попробуйте отправить нужду ещё раз.' };
+  }
+  if (msg.startsWith('telegram_send_failed:')) {
+    return { status: 502, message: 'Не удалось отправить нужду в чат. Попробуйте позже.' };
+  }
+  return { status: 500, message: 'Не удалось отправить нужду в чат. Попробуйте позже.' };
+}
+
+/**
+ * Нужда участника с главной страницы уходит сообщением в молитвенный Telegram-чат.
+ * Доступно любому авторизованному участнику (роутер: `requireAuthSession` + лимит частоты).
+ */
+export async function postPrayerNeedSubmit(req: Request, res: Response): Promise<void> {
+  const memberId = (req as AuthRequest).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Требуется вход в аккаунт' });
+    return;
+  }
+
+  const rawText = req.body?.text;
+  if (typeof rawText !== 'string') {
+    res.status(400).json({ error: 'Ожидается text (строка)' });
+    return;
+  }
+
+  try {
+    const sent = await submitPrayerNeedToPrayerChat({ memberId, text: rawText });
+    res.json({ ok: true, chat_id: sent.chat_id });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === 'prayer_need_text_too_short') {
+      res.status(400).json({
+        error: `Опишите нужду подробнее — минимум ${PRAYER_NEED_SUBMISSION_MIN_LENGTH} символов.`,
+      });
+      return;
+    }
+    if (msg === 'prayer_need_text_too_long') {
+      res.status(400).json({
+        error: `Слишком длинный текст — максимум ${PRAYER_NEED_SUBMISSION_MAX_LENGTH} символов.`,
+      });
+      return;
+    }
+    console.error('[calendar] prayer-need submit error:', err);
+    const mapped = prayerNeedSendErrorToResponse(err);
+    res.status(mapped.status).json({ error: mapped.message });
   }
 }
 

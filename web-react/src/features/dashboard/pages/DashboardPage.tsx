@@ -68,6 +68,7 @@ import { BirthdayBlock } from '../components/BirthdayBlock';
 import { AndroidAppReleaseWidget } from '../components/AndroidAppReleaseWidget';
 import { MyServiceWeekWidget } from '../components/MyServiceWeekWidget';
 import { NotificationPermissionWidget } from '../components/NotificationPermissionWidget';
+import { PrayerNeedSubmitModal } from '../components/PrayerNeedSubmitModal';
 import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
 import { keys } from '@/lib/queryKeys';
 import { fetchServicePlan, fetchServicePlans, type ServicePlanDetails, type ServicePlanListItem } from '../../servicePlanner/api';
@@ -615,7 +616,10 @@ function BroadcastCompactCard({
 
 type DashboardQuickAction = {
   id: string;
-  to: string;
+  /** Переход по маршруту; для `openPrayerNeedForm` не задаётся — открывается форма нужды. */
+  to?: string;
+  /** Кнопка открывает форму отправки нужды в молитвенный чат вместо перехода в раздел. */
+  openPrayerNeedForm?: boolean;
   label: string;
   Icon: IconType;
   /** Подложка иконки — мягкий тон, как у карточек дашборда. */
@@ -646,7 +650,7 @@ const DASHBOARD_QUICK_ACTIONS: DashboardQuickAction[] = [
   },
   {
     id: 'send-need',
-    to: '/prayer',
+    openPrayerNeedForm: true,
     label: 'Отправить нужду',
     Icon: LuHandHeart,
     chipBg: 'bg-[#F6EBED] dark:bg-[#C0415A]/16',
@@ -674,9 +678,11 @@ const DESKTOP_WIDGET_LABEL =
 function DashboardQuickActionsStrip({
   isParishionerGuest,
   onNavigate,
+  onOpenPrayerNeedForm,
 }: {
   isParishionerGuest: boolean;
   onNavigate: (to: string) => void;
+  onOpenPrayerNeedForm: () => void;
 }) {
   const items = useMemo(
     () =>
@@ -718,7 +724,13 @@ function DashboardQuickActionsStrip({
           <button
             key={action.id}
             type="button"
-            onClick={() => onNavigate(action.to)}
+            onClick={() => {
+              if (action.openPrayerNeedForm) {
+                onOpenPrayerNeedForm();
+                return;
+              }
+              if (action.to) onNavigate(action.to);
+            }}
             className={[
               /* База — нейтральная «капсула» под общую палитру проекта */
               'group relative flex w-full min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-full',
@@ -790,6 +802,8 @@ function DashboardMain() {
   );
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const shouldAutoplayDashboardSermonRef = useRef(false);
+  /** Форма «Отправить нужду» — текст уходит в молитвенный чат. */
+  const [prayerNeedFormOpen, setPrayerNeedFormOpen] = useState(false);
 
   const [activeAudioUrl, setActiveAudioUrl] = useState<string | null>(null);
   const [latestPlaybackPlaying, setLatestPlaybackPlaying] = useState(false);
@@ -1247,6 +1261,11 @@ function DashboardMain() {
         <DashboardQuickActionsStrip
           isParishionerGuest={isParishionerGuest}
           onNavigate={(to) => navigate(to)}
+          onOpenPrayerNeedForm={() => setPrayerNeedFormOpen(true)}
+        />
+        <PrayerNeedSubmitModal
+          open={prayerNeedFormOpen}
+          onClose={() => setPrayerNeedFormOpen(false)}
         />
         <div className="dashboard-desktop hidden lg:flex lg:flex-col lg:gap-5 lg:py-4 xl:gap-6">
           <div className="grid grid-cols-12 items-start gap-4 xl:gap-5">

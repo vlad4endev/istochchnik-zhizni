@@ -103,9 +103,12 @@ function isSundayScheduleDatePatch(method: string, path: string): boolean {
   return method === 'PATCH' && SUNDAY_SCHEDULE_DATE_PATCH.test(path);
 }
 
-/** То же для координаторов: POST улучшения текста нужды — проверка роли в контроллере. */
+/**
+ * То же для координаторов: POST улучшения текста нужды — проверка роли в контроллере.
+ * `prayer-need/submit` — своя нужда в молитвенный чат, доступна любому авторизованному участнику.
+ */
 const MEMBER_ALLOWED_CALENDAR_POST =
-  /^\/api\/calendar\/(?:prayer-need\/improve-text|prayer-section\/visit)\/?$/;
+  /^\/api\/calendar\/(?:prayer-need\/(?:improve-text|submit)|prayer-section\/visit)\/?$/;
 
 /** Срочная нужда / объявление на дашборде — только координаторы и админ (проверка в контроллере). */
 const COORDINATOR_DASHBOARD_NOTES_POST = /^\/api\/calendar\/dashboard-coordinator-notes\/?$/;

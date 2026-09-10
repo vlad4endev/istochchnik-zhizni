@@ -100,6 +100,8 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       __WEB_REACT_BUILD_STAMP__: JSON.stringify(buildStamp),
+      /** simple-peer / randombytes ожидают Node `global` в браузере. */
+      global: 'globalThis',
     },
     plugins: [
       react(),
