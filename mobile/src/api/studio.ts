@@ -5,6 +5,17 @@ import type { MusicianNotesV1 } from '../lib/performNotes';
 
 const STUDIO = '/api/studio';
 
+export type StudioSheetMeta = {
+  bpm?: number | null;
+  timeSignature?: string | null;
+  composer?: string | null;
+  arranger?: string | null;
+  title?: string | null;
+  generalNotes?: string | null;
+  abcNotation?: string | null;
+  sourceImageUrl?: string | null;
+};
+
 export interface StudioVersionListItem {
   id: string;
   member_id: number;
@@ -25,7 +36,7 @@ export interface StudioVersionRow {
   custom_key: string | null;
   sheet_content?: string | null;
   sheet_key?: string | null;
-  sheet_meta?: Record<string, unknown> | null;
+  sheet_meta?: StudioSheetMeta | null;
   updated_at: string;
 }
 
@@ -52,6 +63,9 @@ export interface SetlistItemRow {
   effective_content: string;
   effective_content_preview: string;
   musician_notes?: MusicianNotesV1 | null;
+  sheet_content?: string | null;
+  sheet_key?: string | null;
+  sheet_meta?: StudioSheetMeta | null;
 }
 
 export async function fetchMyVersions(): Promise<StudioVersionListItem[]> {
@@ -78,6 +92,21 @@ export async function saveVersion(
   body: { custom_content?: string | null; custom_key?: string | null },
 ): Promise<StudioVersionRow> {
   const { data } = await apiClient.put<StudioVersionRow>(`${STUDIO}/versions/${songId}`, body);
+  return data;
+}
+
+export async function saveSheetVersion(
+  songId: number,
+  body: {
+    sheet_content: string;
+    sheet_key?: string | null;
+    sheet_meta?: StudioSheetMeta | null;
+  },
+): Promise<StudioVersionRow> {
+  const { data } = await apiClient.put<StudioVersionRow>(
+    `${STUDIO}/versions/${songId}/sheet`,
+    body,
+  );
   return data;
 }
 

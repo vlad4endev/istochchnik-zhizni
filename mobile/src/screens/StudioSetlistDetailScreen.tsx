@@ -30,6 +30,7 @@ import {
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
 import { SetlistMusicianNotesEditor } from '../components/studio/SetlistMusicianNotesEditor';
+import { hasSheetMusic } from '../components/studio/SheetMusicPreview';
 import { musicianNotesCount } from '../lib/performNotes';
 import type { RootStackParamList } from '../navigation/types';
 import { useTheme, type ThemeColors } from '../theme';
@@ -188,6 +189,7 @@ export function StudioSetlistDetailScreen() {
         }
         renderItem={({ item, index }) => {
           const notesCount = musicianNotesCount(item.musician_notes);
+          const hasSheet = hasSheetMusic(item);
           return (
             <Pressable
               onLongPress={() => confirmRemove(item)}
@@ -202,6 +204,7 @@ export function StudioSetlistDetailScreen() {
                   {[
                     item.effective_key,
                     item.studio_version_id ? 'моя версия' : null,
+                    hasSheet ? 'ноты' : null,
                     notesCount > 0 ? `заметки · ${notesCount}` : null,
                   ]
                     .filter(Boolean)

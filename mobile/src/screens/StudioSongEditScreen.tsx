@@ -23,14 +23,49 @@ import {
   aiChordPlacement,
   aiSongCleanup,
   fetchVersionForSong,
+  saveSheetVersion,
   saveVersion,
+  type StudioSheetMeta,
 } from '../api/studio';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
+import { SheetMusicPreview } from '../components/studio/SheetMusicPreview';
 import type { RootStackParamList } from '../navigation/types';
 import { useTheme, type ThemeColors } from '../theme';
 
 type Route = RouteProp<RootStackParamList, 'StudioSongEdit'>;
+type Pane = 'lyrics' | 'sheet';
+
+type LyricsBaseline = { content: string; key: string };
+type SheetBaseline = {
+  content: string;
+  key: string;
+  meta: StudioSheetMeta;
+};
+
+function emptyMeta(): StudioSheetMeta {
+  return {
+    bpm: null,
+    timeSignature: null,
+    composer: null,
+    arranger: null,
+    title: null,
+    generalNotes: null,
+    abcNotation: null,
+    sourceImageUrl: null,
+  };
+}
+
+function normalizeMeta(raw: StudioSheetMeta | null | undefined): StudioSheetMeta {
+  return {
+    ...emptyMeta(),
+    ...(raw ?? {}),
+  };
+}
+
+function metaEqual(a: StudioSheetMeta, b: StudioSheetMeta): boolean {
+  return JSON.stringify(normalizeMeta(a)) === JSON.stringify(normalizeMeta(b));
+}
 
 export function StudioSongEditScreen() {
   const { colors, isDark } = useTheme();
@@ -41,9 +76,17 @@ export function StudioSongEditScreen() {
   const { songId, title } = route.params;
   const qc = useQueryClient();
 
+  const [pane, setPane] = useState<Pane>('lyrics');
+  const [showSheetPreview, setShowSheetPreview] = useState(false);
+
   const [content, setContent] = useState('');
   const [key, setKey] = useState('');
-  const [baseline, setBaseline] = useState<{ content: string; key: string } | null>(null);
+  const [lyricsBaseline, setLyricsBaseline] = useState<LyricsBaseline | null>(null);
+
+  const [sheetContent, setSheetContent] = useState('');
+  const [sheetKey, setSheetKey] = useState('');
+  const [sheetMeta, setSheetMeta] = useState<StudioSheetMeta>(emptyMeta());
+  const [sheetBaseline, setSheetBaseline] = useState<SheetBaseline | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   const songQuery = useQuery({
@@ -70,14 +113,29 @@ export function StudioSongEditScreen() {
     const nextKey = (version?.custom_key ?? songQuery.data.default_key ?? '').toString();
     setContent(nextContent);
     setKey(nextKey);
-    setBaseline({ content: nextContent, key: nextKey });
+    setLyricsBaseline({ content: nextContent, key: nextKey });
+
+    const nextSheetContent = (version?.sheet_content ?? '').toString();
+    const nextSheetKey = (version?.sheet_key ?? '').toString();
+    const nextMeta = normalizeMeta(version?.sheet_meta);
+    setSheetContent(nextSheetContent);
+    setSheetKey(nextSheetKey);
+    setSheetMeta(nextMeta);
+    setSheetBaseline({ content: nextSheetContent, key: nextSheetKey, meta: nextMeta });
     setHydrated(true);
   }, [hydrated, songQuery.data, songQuery.isLoading, versionQuery.data, versionQuery.isLoading]);
 
-  const dirty =
-    baseline != null && (content !== baseline.content || key !== baseline.key);
+  const lyricsDirty =
+    lyricsBaseline != null &&
+    (content !== lyricsBaseline.content || key !== lyricsBaseline.key);
+  const sheetDirty =
+    sheetBaseline != null &&
+    (sheetContent !== sheetBaseline.content ||
+      sheetKey !== sheetBaseline.key ||
+      !metaEqual(sheetMeta, sheetBaseline.meta));
+  const dirty = pane === 'lyrics' ? lyricsDirty : sheetDirty;
 
-  const saveMut = useMutation({
+  const saveLyricsMut = useMutation({
     mutationFn: () =>
       saveVersion(songId, {
         custom_content: content,
@@ -88,14 +146,58 @@ export function StudioSongEditScreen() {
       const nextKey = saved.custom_key ?? '';
       setContent(nextContent);
       setKey(nextKey);
-      setBaseline({ content: nextContent, key: nextKey });
+      setLyricsBaseline({ content: nextContent, key: nextKey });
       void qc.invalidateQueries({ queryKey: ['studio', 'versions'] });
       void qc.invalidateQueries({ queryKey: ['studio', 'version', songId] });
       void qc.invalidateQueries({ queryKey: ['song', songId] });
-      Alert.alert('Сохранено', 'Версия песни обновлена');
+      Alert.alert('Сохранено', 'Текстовая версия обновлена');
     },
     onError: (err: unknown) => {
       Alert.alert('Ошибка', err instanceof Error ? err.message : 'Не удалось сохранить');
+    },
+  });
+
+  const saveSheetMut = useMutation({
+    mutationFn: () => {
+      if (!sheetContent.trim()) {
+        throw new Error('Введите ChordPro / текст нотной версии');
+      }
+      const metaPayload: StudioSheetMeta = {
+        ...sheetMeta,
+        bpm:
+          sheetMeta.bpm == null || Number.isNaN(Number(sheetMeta.bpm))
+            ? null
+            : Number(sheetMeta.bpm),
+        timeSignature: sheetMeta.timeSignature?.trim() || null,
+        composer: sheetMeta.composer?.trim() || null,
+        arranger: sheetMeta.arranger?.trim() || null,
+        title: sheetMeta.title?.trim() || null,
+        generalNotes: sheetMeta.generalNotes?.trim() || null,
+        abcNotation: sheetMeta.abcNotation?.trim() || null,
+        sourceImageUrl: sheetMeta.sourceImageUrl?.trim() || null,
+      };
+      return saveSheetVersion(songId, {
+        sheet_content: sheetContent,
+        sheet_key: sheetKey.trim() ? sheetKey.trim() : null,
+        sheet_meta: metaPayload,
+      });
+    },
+    onSuccess: (saved) => {
+      const nextContent = saved.sheet_content ?? sheetContent;
+      const nextKey = saved.sheet_key ?? '';
+      const nextMeta = normalizeMeta(saved.sheet_meta);
+      setSheetContent(nextContent);
+      setSheetKey(nextKey);
+      setSheetMeta(nextMeta);
+      setSheetBaseline({ content: nextContent, key: nextKey, meta: nextMeta });
+      void qc.invalidateQueries({ queryKey: ['studio', 'versions'] });
+      void qc.invalidateQueries({ queryKey: ['studio', 'version', songId] });
+      void qc.invalidateQueries({ queryKey: ['studio', 'setlist'] });
+      void qc.invalidateQueries({ queryKey: ['studio', 'perform'] });
+      Alert.alert('Сохранено', 'Нотная версия обновлена');
+    },
+    onError: (err: unknown) => {
+      Alert.alert('Ошибка', err instanceof Error ? err.message : 'Не удалось сохранить ноты');
     },
   });
 
@@ -138,6 +240,7 @@ export function StudioSongEditScreen() {
     },
   });
 
+  const saving = saveLyricsMut.isPending || saveSheetMut.isPending;
   const aiBusy = cleanupMut.isPending || chordsMut.isPending;
 
   const runCleanup = () => {
@@ -163,7 +266,7 @@ export function StudioSongEditScreen() {
   };
 
   const confirmDiscard = () => {
-    if (!dirty) {
+    if (!lyricsDirty && !sheetDirty) {
       navigation.goBack();
       return;
     }
@@ -171,6 +274,15 @@ export function StudioSongEditScreen() {
       { text: 'Остаться', style: 'cancel' },
       { text: 'Выйти', style: 'destructive', onPress: () => navigation.goBack() },
     ]);
+  };
+
+  const onSave = () => {
+    if (pane === 'lyrics') saveLyricsMut.mutate();
+    else saveSheetMut.mutate();
+  };
+
+  const patchMeta = <K extends keyof StudioSheetMeta>(field: K, value: StudioSheetMeta[K]) => {
+    setSheetMeta((prev) => ({ ...prev, [field]: value }));
   };
 
   const loading = songQuery.isLoading || versionQuery.isLoading || !hydrated;
@@ -217,19 +329,27 @@ export function StudioSongEditScreen() {
             {title || songQuery.data?.title || 'Песня'}
           </Text>
           <Text style={styles.toolbarSub}>
-            {dirty ? 'Есть изменения' : versionQuery.data ? 'Ваша версия' : 'Новая версия'}
+            {dirty
+              ? 'Есть изменения'
+              : pane === 'sheet'
+                ? sheetBaseline?.content
+                  ? 'Нотная версия'
+                  : 'Новая нотная версия'
+                : versionQuery.data?.custom_content
+                  ? 'Ваша версия'
+                  : 'Новая версия'}
           </Text>
         </View>
         <Pressable
-          onPress={() => saveMut.mutate()}
-          disabled={!dirty || saveMut.isPending || aiBusy}
+          onPress={onSave}
+          disabled={!dirty || saving || aiBusy}
           style={({ pressed }) => [
             styles.saveBtn,
-            (!dirty || saveMut.isPending || aiBusy) && { opacity: 0.45 },
+            (!dirty || saving || aiBusy) && { opacity: 0.45 },
             pressed && dirty && { opacity: 0.9 },
           ]}
         >
-          {saveMut.isPending ? (
+          {saving ? (
             <ActivityIndicator size="small" color={colors.textOnPrimary} />
           ) : (
             <Text style={styles.saveBtnText}>Сохранить</Text>
@@ -237,75 +357,242 @@ export function StudioSongEditScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.aiRow}>
+      <View style={styles.tabs}>
         <Pressable
-          onPress={runCleanup}
-          disabled={aiBusy || saveMut.isPending}
-          style={({ pressed }) => [
-            styles.aiBtn,
-            (aiBusy || saveMut.isPending) && { opacity: 0.5 },
-            pressed && { opacity: 0.85 },
-          ]}
+          onPress={() => setPane('lyrics')}
+          style={[styles.tab, pane === 'lyrics' && styles.tabActive]}
         >
-          {cleanupMut.isPending ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
-          )}
-          <Text style={styles.aiBtnText}>Привести в порядок</Text>
+          <Text style={[styles.tabText, pane === 'lyrics' && styles.tabTextActive]}>
+            Текст
+          </Text>
         </Pressable>
         <Pressable
-          onPress={runChords}
-          disabled={aiBusy || saveMut.isPending}
-          style={({ pressed }) => [
-            styles.aiBtn,
-            (aiBusy || saveMut.isPending) && { opacity: 0.5 },
-            pressed && { opacity: 0.85 },
-          ]}
+          onPress={() => setPane('sheet')}
+          style={[styles.tab, pane === 'sheet' && styles.tabActive]}
         >
-          {chordsMut.isPending ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Ionicons name="musical-notes-outline" size={16} color={colors.primary} />
-          )}
-          <Text style={styles.aiBtnText}>Аккорды</Text>
+          <Text style={[styles.tabText, pane === 'sheet' && styles.tabTextActive]}>
+            Ноты
+          </Text>
         </Pressable>
       </View>
+
+      {pane === 'lyrics' ? (
+        <View style={styles.aiRow}>
+          <Pressable
+            onPress={runCleanup}
+            disabled={aiBusy || saving}
+            style={({ pressed }) => [
+              styles.aiBtn,
+              (aiBusy || saving) && { opacity: 0.5 },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            {cleanupMut.isPending ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+            )}
+            <Text style={styles.aiBtnText}>Привести в порядок</Text>
+          </Pressable>
+          <Pressable
+            onPress={runChords}
+            disabled={aiBusy || saving}
+            style={({ pressed }) => [
+              styles.aiBtn,
+              (aiBusy || saving) && { opacity: 0.5 },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            {chordsMut.isPending ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Ionicons name="musical-notes-outline" size={16} color={colors.primary} />
+            )}
+            <Text style={styles.aiBtnText}>Аккорды</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.aiRow}>
+          <Pressable
+            onPress={() => setShowSheetPreview((v) => !v)}
+            style={({ pressed }) => [styles.aiBtn, pressed && { opacity: 0.85 }]}
+          >
+            <Ionicons
+              name={showSheetPreview ? 'create-outline' : 'eye-outline'}
+              size={16}
+              color={colors.primary}
+            />
+            <Text style={styles.aiBtnText}>
+              {showSheetPreview ? 'Редактор' : 'Просмотр'}
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: 24 + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.label}>Тональность</Text>
-        <TextInput
-          style={styles.keyInput}
-          value={key}
-          onChangeText={setKey}
-          placeholder={songQuery.data?.default_key || 'например Am'}
-          placeholderTextColor={colors.textMuted}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+        {pane === 'lyrics' ? (
+          <>
+            <Text style={styles.label}>Тональность</Text>
+            <TextInput
+              style={styles.keyInput}
+              value={key}
+              onChangeText={setKey}
+              placeholder={songQuery.data?.default_key || 'например Am'}
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
 
-        <Text style={styles.label}>ChordPro / текст</Text>
-        <TextInput
-          style={styles.editor}
-          value={content}
-          onChangeText={setContent}
-          placeholder="Текст песни в формате ChordPro…"
-          placeholderTextColor={colors.textMuted}
-          multiline
-          textAlignVertical="top"
-          autoCapitalize="none"
-          autoCorrect={false}
-          spellCheck={false}
-        />
+            <Text style={styles.label}>ChordPro / текст</Text>
+            <TextInput
+              style={styles.editor}
+              value={content}
+              onChangeText={setContent}
+              placeholder="Текст песни в формате ChordPro…"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              textAlignVertical="top"
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+            />
+          </>
+        ) : showSheetPreview ? (
+          <SheetMusicPreview
+            sheetMeta={sheetMeta}
+            sheetKey={sheetKey}
+            songTitle={title || songQuery.data?.title}
+            fallbackContent={sheetContent}
+          />
+        ) : (
+          <>
+            <Text style={styles.label}>Тональность нот</Text>
+            <TextInput
+              style={styles.keyInput}
+              value={sheetKey}
+              onChangeText={setSheetKey}
+              placeholder={key || songQuery.data?.default_key || 'например C'}
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <Text style={styles.label}>Заголовок нот</Text>
+            <TextInput
+              style={styles.keyInput}
+              value={sheetMeta.title ?? ''}
+              onChangeText={(v) => patchMeta('title', v)}
+              placeholder={title || songQuery.data?.title || 'Название'}
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <View style={styles.metaRow}>
+              <View style={styles.metaHalf}>
+                <Text style={styles.label}>BPM</Text>
+                <TextInput
+                  style={styles.keyInput}
+                  value={sheetMeta.bpm == null ? '' : String(sheetMeta.bpm)}
+                  onChangeText={(v) => {
+                    const n = v.trim() === '' ? null : Number(v);
+                    patchMeta('bpm', n != null && Number.isFinite(n) ? n : null);
+                  }}
+                  keyboardType="number-pad"
+                  placeholder="120"
+                  placeholderTextColor={colors.textMuted}
+                />
+              </View>
+              <View style={styles.metaHalf}>
+                <Text style={styles.label}>Размер</Text>
+                <TextInput
+                  style={styles.keyInput}
+                  value={sheetMeta.timeSignature ?? ''}
+                  onChangeText={(v) => patchMeta('timeSignature', v)}
+                  placeholder="4/4"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="none"
+                />
+              </View>
+            </View>
+
+            <Text style={styles.label}>Композитор</Text>
+            <TextInput
+              style={styles.keyInput}
+              value={sheetMeta.composer ?? ''}
+              onChangeText={(v) => patchMeta('composer', v)}
+              placeholder="Необязательно"
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <Text style={styles.label}>Аранжировка</Text>
+            <TextInput
+              style={styles.keyInput}
+              value={sheetMeta.arranger ?? ''}
+              onChangeText={(v) => patchMeta('arranger', v)}
+              placeholder="Необязательно"
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <Text style={styles.label}>ChordPro / текст нот</Text>
+            <TextInput
+              style={styles.editor}
+              value={sheetContent}
+              onChangeText={setSheetContent}
+              placeholder="Нотная версия в ChordPro…"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              textAlignVertical="top"
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+            />
+
+            <Text style={styles.label}>ABC (если есть)</Text>
+            <TextInput
+              style={styles.abcEditor}
+              value={sheetMeta.abcNotation ?? ''}
+              onChangeText={(v) => patchMeta('abcNotation', v)}
+              placeholder="X:1 …"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              textAlignVertical="top"
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+            />
+
+            <Text style={styles.label}>URL скана</Text>
+            <TextInput
+              style={styles.keyInput}
+              value={sheetMeta.sourceImageUrl ?? ''}
+              onChangeText={(v) => patchMeta('sourceImageUrl', v)}
+              placeholder="/uploads/… или https://…"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <Text style={styles.label}>Общие заметки</Text>
+            <TextInput
+              style={styles.notesEditor}
+              value={sheetMeta.generalNotes ?? ''}
+              onChangeText={(v) => patchMeta('generalNotes', v)}
+              placeholder="Комментарии к партитуре…"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              textAlignVertical="top"
+            />
+          </>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 function createStyles(colors: ThemeColors, isDark: boolean) {
+  const border = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(28,25,23,0.1)';
   return StyleSheet.create({
     safe: {
       flex: 1,
@@ -318,7 +605,7 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       paddingHorizontal: 12,
       paddingVertical: 10,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(28,25,23,0.1)',
+      borderBottomColor: border,
       backgroundColor: colors.surfaceElevated,
     },
     toolBtn: {
@@ -354,13 +641,39 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       fontWeight: '800',
       fontSize: 13,
     },
+    tabs: {
+      flexDirection: 'row',
+      marginHorizontal: 12,
+      marginTop: 10,
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: 12,
+      padding: 4,
+      gap: 4,
+    },
+    tab: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 10,
+      alignItems: 'center',
+    },
+    tabActive: {
+      backgroundColor: colors.primary,
+    },
+    tabText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    tabTextActive: {
+      color: colors.textOnPrimary,
+    },
     aiRow: {
       flexDirection: 'row',
       gap: 8,
       paddingHorizontal: 12,
       paddingVertical: 8,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(28,25,23,0.1)',
+      borderBottomColor: border,
       backgroundColor: colors.surface,
     },
     aiBtn: {
@@ -371,7 +684,7 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       paddingVertical: 8,
       borderRadius: 10,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(28,25,23,0.1)',
+      borderColor: border,
       backgroundColor: colors.surfaceElevated,
     },
     aiBtnText: {
@@ -393,18 +706,25 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
     keyInput: {
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(28,25,23,0.1)',
+      borderColor: border,
       backgroundColor: colors.surfaceElevated,
       paddingHorizontal: 12,
       paddingVertical: 11,
       fontSize: 16,
       color: colors.text,
     },
+    metaRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    metaHalf: {
+      flex: 1,
+    },
     editor: {
-      minHeight: 420,
+      minHeight: 320,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(28,25,23,0.1)',
+      borderColor: border,
       backgroundColor: colors.surfaceElevated,
       paddingHorizontal: 12,
       paddingVertical: 12,
@@ -412,6 +732,31 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       lineHeight: 22,
       color: colors.text,
       fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    },
+    abcEditor: {
+      minHeight: 140,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: border,
+      backgroundColor: colors.surfaceElevated,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      fontSize: 13,
+      lineHeight: 18,
+      color: colors.text,
+      fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    },
+    notesEditor: {
+      minHeight: 90,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: border,
+      backgroundColor: colors.surfaceElevated,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      fontSize: 15,
+      lineHeight: 22,
+      color: colors.text,
     },
   });
 }
