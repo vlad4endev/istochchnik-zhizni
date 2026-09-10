@@ -56,7 +56,19 @@ function eventLabel(title: string, templateName?: string | null): string {
   return name || 'Воскресное богослужение';
 }
 
-function collectMusicRows(events: MusicEvent[], serviceDate: string): ServiceWeekAssignment[] {
+/** Collapse duplicate event payloads so each assignment id appears once. */
+export function dedupeServiceWeekAssignments(
+  rows: ServiceWeekAssignment[],
+): ServiceWeekAssignment[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    if (seen.has(row.key)) return false;
+    seen.add(row.key);
+    return true;
+  });
+}
+
+export function collectMusicRows(events: MusicEvent[], serviceDate: string): ServiceWeekAssignment[] {
   const out: ServiceWeekAssignment[] = [];
   for (const event of events) {
     if (event.event_date !== serviceDate) continue;
@@ -79,7 +91,7 @@ function collectMusicRows(events: MusicEvent[], serviceDate: string): ServiceWee
   return out;
 }
 
-function collectMediaRows(events: MediaEvent[], serviceDate: string): ServiceWeekAssignment[] {
+export function collectMediaRows(events: MediaEvent[], serviceDate: string): ServiceWeekAssignment[] {
   const out: ServiceWeekAssignment[] = [];
   for (const event of events) {
     if (event.event_date !== serviceDate) continue;
@@ -164,11 +176,11 @@ export function useMyServiceWeekAssignments(
   });
 
   const assignments = useMemo((): ServiceWeekAssignment[] => {
-    const rows = [
+    const rows = dedupeServiceWeekAssignments([
       ...collectMusicRows(musicQ.data ?? [], serviceDate),
       ...collectMediaRows(mediaQ.data ?? [], serviceDate),
       ...collectSundayRows(sundayQ.data ?? [], serviceDate, memberId),
-    ];
+    ]);
     const ministryOrder: Record<ServiceWeekMinistry, number> = { sunday: 0, music: 1, media: 2 };
     return rows.sort((a, b) => ministryOrder[a.ministry] - ministryOrder[b.ministry]);
   }, [musicQ.data, mediaQ.data, sundayQ.data, serviceDate, memberId]);
