@@ -34,6 +34,7 @@ import {
 } from '../api/messenger';
 import { AddMembersSheet } from '../components/messenger/AddMembersSheet';
 import { ChatAvatar } from '../components/messenger/ChatAvatar';
+import { MemberPermissionsModal } from '../components/messenger/MemberPermissionsModal';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
 import {
@@ -96,6 +97,7 @@ export function ChatInfoScreen() {
   const [titleDraft, setTitleDraft] = useState('');
   const [addMembersOpen, setAddMembersOpen] = useState(false);
   const [permDraft, setPermDraft] = useState<Record<ChatPermissionKey, boolean> | null>(null);
+  const [memberPermsTarget, setMemberPermsTarget] = useState<ConversationMember | null>(null);
   const inviteBootstrapRef = useRef(false);
 
   const conversationsQuery = useQuery({
@@ -283,6 +285,26 @@ export function ChatInfoScreen() {
     },
   });
 
+  const memberPermsMutation = useMutation({
+    mutationFn: (input: {
+      targetId: number;
+      permissions: Record<ChatPermissionKey, boolean>;
+    }) =>
+      patchConversationMember(conversationId, input.targetId, {
+        permissions: input.permissions,
+      }),
+    onSuccess: async () => {
+      setMemberPermsTarget(null);
+      await queryClient.invalidateQueries({
+        queryKey: ['messenger', 'members', conversationId],
+      });
+      Alert.alert('Готово', 'Права участника сохранены');
+    },
+    onError: () => {
+      Alert.alert('Ошибка', 'Не удалось сохранить права участника');
+    },
+  });
+
   const addMember = async (targetId: number) => {
     const result = await addParticipant(conversationId, targetId);
     await queryClient.invalidateQueries({
@@ -396,6 +418,13 @@ export function ChatInfoScreen() {
       buttons.push({
         text: 'Снять администратора',
         onPress: () => roleMutation.mutate({ targetId: m.member_id, role: 'member' }),
+      });
+    }
+
+    if (canManage && !isSelf && m.role !== 'owner') {
+      buttons.push({
+        text: 'Права участника',
+        onPress: () => setMemberPermsTarget(m),
       });
     }
 
@@ -696,6 +725,23 @@ export function ChatInfoScreen() {
         currentMemberId={memberId}
         onClose={() => setAddMembersOpen(false)}
         onAdd={addMember}
+      />
+
+      <MemberPermissionsModal
+        visible={memberPermsTarget != null}
+        member={memberPermsTarget}
+        meta={meta}
+        saving={memberPermsMutation.isPending}
+        onClose={() => {
+          if (!memberPermsMutation.isPending) setMemberPermsTarget(null);
+        }}
+        onSave={(permissions) => {
+          if (!memberPermsTarget) return;
+          memberPermsMutation.mutate({
+            targetId: memberPermsTarget.member_id,
+            permissions,
+          });
+        }}
       />
     </>
   );
