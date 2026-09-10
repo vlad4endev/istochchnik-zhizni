@@ -158,7 +158,7 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors']) {
       marginBottom: 16,
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.textMuted,
     },
     logoImage: {
       width: 80,
