@@ -2,9 +2,9 @@
   "expo": {
     "name": "Моя Церковь",
     "slug": "istochnik-zhizni",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
-    "scheme": "istochnik",
+    "scheme": "moyatserkov",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.istochnikzhizni.molitva",
+      "bundleIdentifier": "ru.churchtambov.moyatserkov",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Нужен доступ к микрофону для голосовых сообщений",
         "NSPhotoLibraryUsageDescription": "Нужен доступ к фото для публикаций, историй, чата и распознавания нот",
@@ -23,8 +23,8 @@
       "associatedDomains": ["applinks:app.church-tambov.ru"]
     },
     "android": {
-      "package": "com.istochnikzhizni.molitva",
-      "versionCode": 2,
+      "package": "ru.churchtambov.moyatserkov",
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#7d3640",
         "foregroundImage": "./assets/android-icon-foreground.png",
