@@ -706,3 +706,30 @@ export async function clearConversationHistory(conversationId: string) {
     if (key.startsWith(`${conversationId}:`)) pinnedCache.delete(key);
   }
 }
+
+export type InviteJoinPreview = {
+  conversationId: string;
+  type: ConversationType;
+  title: string | null;
+  avatar_url: string | null;
+  alreadyMember: boolean;
+};
+
+export type InviteJoinResult = InviteJoinPreview & {
+  ok: true;
+  conversation: ConversationListItem | null;
+};
+
+export async function previewInviteJoin(token: string): Promise<InviteJoinPreview> {
+  const { data } = await apiClient.get<InviteJoinPreview>(
+    `${BASE}/join/${encodeURIComponent(token.trim())}`,
+  );
+  return data;
+}
+
+export async function joinByInviteToken(token: string): Promise<InviteJoinResult> {
+  const { data } = await apiClient.post<InviteJoinResult>(`${BASE}/join`, {
+    token: token.trim(),
+  });
+  return data;
+}

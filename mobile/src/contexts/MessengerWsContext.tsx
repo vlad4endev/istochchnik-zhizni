@@ -53,8 +53,12 @@ export function MessengerWsProvider({ children }: { children: ReactNode }) {
       }
 
       if (type === 'conv:created' || type === 'conv:updated') {
+        const convId = typeof msg.conversationId === 'string' ? msg.conversationId : null;
         void queryClient.invalidateQueries({ queryKey: ['messenger', 'conversations'] });
         void queryClient.invalidateQueries({ queryKey: ['messenger', 'unread'] });
+        if (convId) {
+          void queryClient.invalidateQueries({ queryKey: ['messenger', 'pinned', convId] });
+        }
       }
     });
   }, [token, queryClient, handleWsMessage]);

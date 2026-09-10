@@ -101,6 +101,11 @@ const MessengerRoutes = lazy(async () => {
   return { default: m.MessengerRoutes };
 });
 
+const JoinInvitePage = lazy(async () => {
+  const m = await import('../features/messenger/pages/JoinInvitePage');
+  return { default: m.JoinInvitePage };
+});
+
 const AdminPage = lazy(async () => {
   const m = await import('../features/admin/pages/AdminPage');
   return { default: m.AdminPage };
@@ -436,6 +441,20 @@ export function AppRouter() {
                 </Suspense>
               </RequireSectionAccess>
             </RequireMessengerAccess>
+          }
+        />
+        <Route
+          path="join/:token"
+          element={
+            <RequireFullMember>
+              <RequireMessengerAccess>
+                <RequireSectionAccess sectionId="messenger">
+                  <Suspense fallback={<RouteFallback />}>
+                    <JoinInvitePage />
+                  </Suspense>
+                </RequireSectionAccess>
+              </RequireMessengerAccess>
+            </RequireFullMember>
           }
         />
         <Route

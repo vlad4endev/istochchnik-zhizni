@@ -173,8 +173,11 @@ export async function putSheetVersion(req: Request, res: Response): Promise<void
         bpm: typeof m.bpm === 'number' ? m.bpm : null,
         timeSignature: typeof m.timeSignature === 'string' ? m.timeSignature : null,
         composer: typeof m.composer === 'string' ? m.composer : null,
+        arranger: typeof m.arranger === 'string' ? m.arranger : null,
         title: typeof m.title === 'string' ? m.title : null,
         generalNotes: typeof m.generalNotes === 'string' ? m.generalNotes : null,
+        abcNotation: typeof m.abcNotation === 'string' ? m.abcNotation : null,
+        sourceImageUrl: typeof m.sourceImageUrl === 'string' ? m.sourceImageUrl : null,
       };
     }
     const version = await upsertStudioSheetVersion(
