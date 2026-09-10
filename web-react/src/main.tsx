@@ -216,14 +216,24 @@ initPwaStandaloneHtmlHint();
 })();
 initAppearance();
 void forceClientRefreshOnVersionChange();
-void Promise.race([
-  client.ping(),
-  new Promise<never>((_, reject) => {
-    window.setTimeout(() => reject(new Error('appwrite ping timeout')), 5000);
-  }),
-]).catch((error: unknown) => {
-  console.warn('Appwrite ping failed:', error);
-});
+if (client.isConfigured()) {
+  void Promise.race([
+    client.ping().then(async (response) => {
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(
+          `Appwrite ping HTTP ${response.status}${body ? `: ${body}` : ''}`,
+        );
+      }
+      return response;
+    }),
+    new Promise<never>((_, reject) => {
+      window.setTimeout(() => reject(new Error('appwrite ping timeout')), 5000);
+    }),
+  ]).catch((error: unknown) => {
+    console.warn('Appwrite ping failed:', error);
+  });
+}
 
 try {
   const osThemeMql = window.matchMedia('(prefers-color-scheme: dark)');
