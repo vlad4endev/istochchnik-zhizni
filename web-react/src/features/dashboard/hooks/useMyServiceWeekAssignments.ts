@@ -11,18 +11,38 @@ import type { MediaEvent } from '../../mediaSchedule/types';
 
 export type ServiceWeekMinistry = 'music' | 'media' | 'sunday';
 
+export type ServiceWeekRoleStatus = 'assigned' | 'confirmed' | 'declined' | 'pending' | 'info';
+
+export type ServiceWeekRoleSlot = {
+  assignmentId: number | null;
+  roleName: string;
+  roleColor: string | null;
+  status: ServiceWeekRoleStatus;
+};
+
+/** Одна карточка = одно служение (событие); внутри может быть несколько позиций. */
 export type ServiceWeekAssignment = {
   key: string;
   ministry: ServiceWeekMinistry;
-  assignmentId: number | null;
+  eventRefId: number | null;
   eventDate: string;
   startTime: string | null;
-  roleName: string;
   eventTitle: string;
-  status: 'assigned' | 'confirmed' | 'declined' | 'pending' | 'info';
   description: string;
   scheduleLink: string;
-  roleColor: string | null;
+  roles: ServiceWeekRoleSlot[];
+};
+
+type ServiceWeekRoleRow = {
+  key: string;
+  ministry: ServiceWeekMinistry;
+  eventRefId: number | null;
+  eventDate: string;
+  startTime: string | null;
+  eventTitle: string;
+  description: string;
+  scheduleLink: string;
+  role: ServiceWeekRoleSlot;
 };
 
 function formatYmd(d: Date): string {
@@ -36,12 +56,12 @@ export function resolveAnchorSundayDate(anchor: string | null | undefined): stri
   return formatYmd(sunday);
 }
 
-function musicDescription(roleName: string): string {
-  return `Твоё служение в воскресенье в группе прославления — ${roleName}`;
+function musicDescription(roleNames: string[]): string {
+  return `Твоё служение в воскресенье в группе прославления — ${roleNames.join(', ')}`;
 }
 
-function mediaDescription(roleName: string): string {
-  return `Твоё служение в воскресенье на трансляции — ${roleName}`;
+function mediaDescription(roleNames: string[]): string {
+  return `Твоё служение в воскресенье на трансляции — ${roleNames.join(', ')}`;
 }
 
 function sundayDescription(roleName: string): string {
@@ -57,6 +77,16 @@ function eventLabel(title: string, templateName?: string | null): string {
 }
 
 /** Collapse duplicate event payloads so each assignment id appears once. */
+export function dedupeServiceWeekRoleRows(rows: ServiceWeekRoleRow[]): ServiceWeekRoleRow[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    if (seen.has(row.key)) return false;
+    seen.add(row.key);
+    return true;
+  });
+}
+
+/** @deprecated use dedupeServiceWeekRoleRows — kept for older test imports */
 export function dedupeServiceWeekAssignments(
   rows: ServiceWeekAssignment[],
 ): ServiceWeekAssignment[] {
@@ -68,46 +98,106 @@ export function dedupeServiceWeekAssignments(
   });
 }
 
-export function collectMusicRows(events: MusicEvent[], serviceDate: string): ServiceWeekAssignment[] {
-  const out: ServiceWeekAssignment[] = [];
+function groupKey(row: ServiceWeekRoleRow): string {
+  if (row.eventRefId != null) return `${row.ministry}:${row.eventRefId}`;
+  return `${row.ministry}:${row.eventDate}:${row.startTime ?? ''}:${row.eventTitle}`;
+}
+
+/** Объединяет позиции одного служения в одну карточку. */
+export function mergeServiceWeekRoleRows(rows: ServiceWeekRoleRow[]): ServiceWeekAssignment[] {
+  const order: string[] = [];
+  const buckets = new Map<string, ServiceWeekRoleRow[]>();
+
+  for (const row of dedupeServiceWeekRoleRows(rows)) {
+    const key = groupKey(row);
+    if (!buckets.has(key)) {
+      buckets.set(key, []);
+      order.push(key);
+    }
+    buckets.get(key)!.push(row);
+  }
+
+  return order.map((key) => {
+    const group = buckets.get(key)!;
+    const head = group[0]!;
+    const roles = group.map((r) => r.role);
+    const roleNames = roles.map((r) => r.roleName);
+    const description =
+      head.ministry === 'music'
+        ? musicDescription(roleNames)
+        : head.ministry === 'media'
+          ? mediaDescription(roleNames)
+          : head.description;
+
+    return {
+      key,
+      ministry: head.ministry,
+      eventRefId: head.eventRefId,
+      eventDate: head.eventDate,
+      startTime: head.startTime,
+      eventTitle: head.eventTitle,
+      description,
+      scheduleLink: head.scheduleLink,
+      roles,
+    };
+  });
+}
+
+export function aggregateServiceWeekStatus(
+  roles: ServiceWeekRoleSlot[],
+): ServiceWeekRoleStatus {
+  if (roles.some((r) => r.status === 'assigned' || r.status === 'pending')) return 'pending';
+  if (roles.some((r) => r.status === 'declined')) return 'declined';
+  if (roles.length > 0 && roles.every((r) => r.status === 'confirmed')) return 'confirmed';
+  return 'info';
+}
+
+export function collectMusicRows(events: MusicEvent[], serviceDate: string): ServiceWeekRoleRow[] {
+  const out: ServiceWeekRoleRow[] = [];
   for (const event of events) {
     if (event.event_date !== serviceDate) continue;
     for (const assignment of event.assignments) {
       out.push({
         key: `music-${assignment.id}`,
         ministry: 'music',
-        assignmentId: assignment.id,
+        eventRefId: event.event_ref_id ?? event.id ?? null,
         eventDate: event.event_date,
         startTime: event.start_time ?? null,
-        roleName: assignment.role.name,
         eventTitle: eventLabel(event.title, event.template_name),
-        status: assignment.status,
-        description: musicDescription(assignment.role.name),
+        description: musicDescription([assignment.role.name]),
         scheduleLink: '/schedules/music/my',
-        roleColor: assignment.role.color,
+        role: {
+          assignmentId: assignment.id,
+          roleName: assignment.role.name,
+          roleColor: assignment.role.color,
+          status: assignment.status,
+        },
       });
     }
   }
   return out;
 }
 
-export function collectMediaRows(events: MediaEvent[], serviceDate: string): ServiceWeekAssignment[] {
-  const out: ServiceWeekAssignment[] = [];
+export function collectMediaRows(events: MediaEvent[], serviceDate: string): ServiceWeekRoleRow[] {
+  const out: ServiceWeekRoleRow[] = [];
   for (const event of events) {
     if (event.event_date !== serviceDate) continue;
     for (const assignment of event.assignments) {
       out.push({
         key: `media-${assignment.id}`,
         ministry: 'media',
-        assignmentId: assignment.id,
+        eventRefId: event.event_ref_id ?? event.id ?? null,
         eventDate: event.event_date,
         startTime: event.start_time ?? null,
-        roleName: assignment.role.name,
         eventTitle: eventLabel(event.title, event.template_name),
-        status: assignment.status,
-        description: mediaDescription(assignment.role.name),
+        description: mediaDescription([assignment.role.name]),
         scheduleLink: '/schedules/media/my',
-        roleColor: assignment.role.color,
+        role: {
+          assignmentId: assignment.id,
+          roleName: assignment.role.name,
+          roleColor: assignment.role.color,
+          status: assignment.status,
+        },
       });
     }
   }
@@ -118,7 +208,7 @@ function collectSundayRows(
   plans: Awaited<ReturnType<typeof fetchMySundaySchedule>>,
   serviceDate: string,
   memberId: number | null,
-): ServiceWeekAssignment[] {
+): ServiceWeekRoleRow[] {
   if (memberId == null) return [];
   const plan = plans.find((p) => p.service_date === serviceDate);
   if (!plan) return [];
@@ -128,15 +218,18 @@ function collectSundayRows(
     {
       key: `sunday-${plan.id}-${role}`,
       ministry: 'sunday',
-      assignmentId: null,
+      eventRefId: plan.id,
       eventDate: plan.service_date,
       startTime: plan.start_time ?? null,
-      roleName: role,
       eventTitle: serviceTitle(plan),
-      status: 'info',
       description: sundayDescription(role),
       scheduleLink: '/schedules/sunday/my',
-      roleColor: '#6B2D3E',
+      role: {
+        assignmentId: null,
+        roleName: role,
+        roleColor: '#6B2D3E',
+        status: 'info',
+      },
     },
   ];
 }
@@ -176,7 +269,7 @@ export function useMyServiceWeekAssignments(
   });
 
   const assignments = useMemo((): ServiceWeekAssignment[] => {
-    const rows = dedupeServiceWeekAssignments([
+    const rows = mergeServiceWeekRoleRows([
       ...collectMusicRows(musicQ.data ?? [], serviceDate),
       ...collectMediaRows(mediaQ.data ?? [], serviceDate),
       ...collectSundayRows(sundayQ.data ?? [], serviceDate, memberId),
@@ -185,9 +278,11 @@ export function useMyServiceWeekAssignments(
     return rows.sort((a, b) => ministryOrder[a.ministry] - ministryOrder[b.ministry]);
   }, [musicQ.data, mediaQ.data, sundayQ.data, serviceDate, memberId]);
 
-  const pendingCount = assignments.filter(
-    (a) => a.status === 'assigned' || a.status === 'pending',
-  ).length;
+  const pendingCount = assignments.reduce(
+    (sum, card) =>
+      sum + card.roles.filter((r) => r.status === 'assigned' || r.status === 'pending').length,
+    0,
+  );
 
   const isLoading = musicQ.isLoading || mediaQ.isLoading || sundayQ.isLoading;
 

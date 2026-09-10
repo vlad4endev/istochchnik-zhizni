@@ -23,9 +23,12 @@ import {
   updateMediaAssignmentStatus,
 } from '../../mediaSchedule/api';
 import {
+  aggregateServiceWeekStatus,
   useMyServiceWeekAssignments,
   type ServiceWeekAssignment,
   type ServiceWeekMinistry,
+  type ServiceWeekRoleSlot,
+  type ServiceWeekRoleStatus,
 } from '../hooks/useMyServiceWeekAssignments';
 
 const MAROON = '#732B38';
@@ -54,7 +57,7 @@ const MINISTRY_META: Record<
   },
 };
 
-function isPending(status: ServiceWeekAssignment['status']): boolean {
+function isPending(status: ServiceWeekRoleStatus): boolean {
   return status === 'assigned' || status === 'pending';
 }
 
@@ -84,7 +87,7 @@ function DateSidebar({ eventDate }: { eventDate: string }) {
   );
 }
 
-function StatusBadge({ status }: { status: ServiceWeekAssignment['status'] }) {
+function StatusBadge({ status }: { status: ServiceWeekRoleStatus }) {
   if (status === 'confirmed') {
     return (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#E8F5EC] px-2.5 py-1 text-[11px] font-bold text-[#2F6B3C]">
@@ -113,6 +116,55 @@ function StatusBadge({ status }: { status: ServiceWeekAssignment['status'] }) {
   return null;
 }
 
+function RoleList({ roles }: { roles: ServiceWeekRoleSlot[] }) {
+  if (roles.length <= 1) {
+    const only = roles[0];
+    return (
+      <h3 className="text-[17px] font-bold leading-snug text-stone-900 sm:text-lg">
+        Служение: {only?.roleName ?? '—'}
+      </h3>
+    );
+  }
+
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-stone-400">Служение</p>
+      <ul className="mt-1.5 divide-y divide-stone-100 overflow-hidden rounded-xl bg-stone-50/80 ring-1 ring-black/[0.04]">
+        {roles.map((role) => (
+          <li
+            key={`${role.assignmentId ?? role.roleName}`}
+            className="flex items-center gap-2.5 px-3 py-2.5"
+          >
+            <span
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ backgroundColor: role.roleColor || MAROON }}
+              aria-hidden
+            />
+            <span className="min-w-0 flex-1 truncate text-[16px] font-bold leading-snug text-stone-900 sm:text-[17px]">
+              {role.roleName}
+            </span>
+            {role.status === 'confirmed' ? (
+              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-[#C8E6D0] text-[#2F6B3C]">
+                <LuCheck className="h-3 w-3" strokeWidth={3} aria-hidden />
+              </span>
+            ) : null}
+            {role.status === 'declined' ? (
+              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-rose-100 text-rose-600">
+                <LuX className="h-3 w-3" aria-hidden />
+              </span>
+            ) : null}
+            {isPending(role.status) ? (
+              <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-amber-200/80">
+                ?
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function ServiceCard({
   item,
   onConfirm,
@@ -128,7 +180,8 @@ function ServiceCard({
 }) {
   const meta = MINISTRY_META[item.ministry];
   const Icon = meta.Icon;
-  const pending = isPending(item.status);
+  const cardStatus = aggregateServiceWeekStatus(item.roles);
+  const pendingRoles = item.roles.filter((r) => isPending(r.status) && r.assignmentId != null);
   const timeLabel = formatServiceTime(item.startTime);
 
   return (
@@ -147,17 +200,15 @@ function ServiceCard({
               </span>
               <span className="text-sm font-medium text-stone-500">{meta.label}</span>
             </div>
-            <StatusBadge status={item.status} />
+            <StatusBadge status={cardStatus} />
           </div>
 
           <div className="mt-3 min-w-0">
-            <h3 className="text-[17px] font-bold leading-snug text-stone-900 sm:text-lg">
-              Служение: {item.roleName}
-            </h3>
-            <p className="mt-1 text-sm font-medium text-stone-500">{item.eventTitle}</p>
+            <RoleList roles={item.roles} />
+            <p className="mt-2 text-sm font-medium text-stone-500">{item.eventTitle}</p>
           </div>
 
-          {pending && item.assignmentId != null ? (
+          {pendingRoles.length > 0 ? (
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
@@ -166,7 +217,7 @@ function ServiceCard({
                 className="tap-highlight-transparent inline-flex min-h-[40px] flex-1 items-center justify-center rounded-xl text-sm font-bold text-white disabled:opacity-50"
                 style={{ backgroundColor: MAROON }}
               >
-                Подтвердить
+                {pendingRoles.length > 1 ? 'Подтвердить все' : 'Подтвердить'}
               </button>
               <button
                 type="button"
@@ -174,7 +225,7 @@ function ServiceCard({
                 onClick={() => onDecline(item)}
                 className="tap-highlight-transparent inline-flex min-h-[40px] flex-1 items-center justify-center rounded-xl border border-stone-200 bg-stone-50 text-sm font-bold text-stone-700 disabled:opacity-50"
               >
-                Отказать
+                {pendingRoles.length > 1 ? 'Отказать по всем' : 'Отказать'}
               </button>
             </div>
           ) : null}
@@ -222,14 +273,19 @@ export function MyServiceWeekWidget({
       item: ServiceWeekAssignment;
       status: 'confirmed' | 'declined';
     }) => {
-      if (item.assignmentId == null) return;
-      if (item.ministry === 'music') {
-        await updateMusicAssignmentStatus(item.assignmentId, status);
-        return;
-      }
-      if (item.ministry === 'media') {
-        await updateMediaAssignmentStatus(item.assignmentId, status);
-      }
+      const pending = item.roles.filter((r) => isPending(r.status) && r.assignmentId != null);
+      await Promise.all(
+        pending.map(async (role) => {
+          const id = role.assignmentId!;
+          if (item.ministry === 'music') {
+            await updateMusicAssignmentStatus(id, status);
+            return;
+          }
+          if (item.ministry === 'media') {
+            await updateMediaAssignmentStatus(id, status);
+          }
+        }),
+      );
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['music-schedule'] });
