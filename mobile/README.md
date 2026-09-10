@@ -19,7 +19,7 @@
 - Главная, чаты + realtime, молитва, песенник, проповеди
 - Студия (сетлисты / perform), планировщик служения
 - Расписания: медиа / музыка / воскресенье
-- Лента: лайки, комментарии, создание поста, **репост / удаление**, stories (просмотр / создание / **ответ / удаление своих**)
+- Лента: лайки, комментарии, создание поста, репост / удаление, stories (просмотр / создание / ответ / удаление своих)
 - Профиль (просмотр / редактирование / аватар)
 - Трансляции, конспекты проповедей (создание и редактирование)
 - Push-регистрация + тап по уведомлению → чат/лента
@@ -32,52 +32,33 @@
 3. Шаблон: `mobile/google-services.json.example`
 4. `app.config.js` подключает файл только если он есть — без него preview-сборка всё равно возможна (Expo push token)
 
+## Сборка Android APK
+
+1. Установить зависимости: `cd mobile && npm install`
+2. Один раз: `npx eas-cli login && npx eas-cli init`
+3. Preview APK: `npm run build:apk` (или из корня `npm run expo:build:apk`)
+4. Production AAB: `npm run build:aab`
+
+Локально (нужен Android SDK): `npm run prebuild:android` затем `npx expo run:android`.
+
+## Dev против локального API
+
+- Эмулятор Android: по умолчанию `http://10.0.2.2:40978`
+- Реальное устройство: в «Ещё» укажите LAN IP, например `http://192.168.1.5:40978`
+- API: `npx ts-node-dev --transpile-only --respawn src/main.ts`
+
+## Команды из корня
+
+```bash
+npm run expo:start
+npm run expo:android
+npm run expo:typecheck
+npm run expo:build:apk
+```
+
 ## Дальше (паритет с вебом)
 
 - Полные редакторы студии и AI/импорт
 - Admin / analytics
 - WebRTC-звонки
 - Полировка мессенджера (опросы, голосовые, права группы)
-
-1. Установить зависимости:
-   ```bash
-   cd mobile && npm install
-   ```
-2. Один раз привязать EAS: `cd mobile && npx eas-cli login && npx eas-cli init`
-3. Preview APK:
-   ```bash
-   npm run build:apk
-   ```
-   или из корня монорепо: `npm run expo:build:apk`
-4. Production AAB (Play Store): `npm run build:aab`
-
-Локальный prebuild (нужен Android SDK):
-
-```bash
-npm run prebuild:android
-# затем открыть android/ в Android Studio или:
-npx expo run:android
-```
-
-## Dev против локального API
-
-- Эмулятор Android: по умолчанию `http://10.0.2.2:40978`
-- Реальное устройство: в «Ещё» укажите LAN IP, например `http://192.168.1.5:40978`
-- API должен быть запущен отдельно (`npx ts-node-dev --transpile-only --respawn src/main.ts`)
-
-## Команды из корня
-
-```bash
-npm run expo:start      # Metro
-npm run expo:android    # Expo + Android
-npm run expo:typecheck  # tsc в mobile/
-npm run expo:build:apk  # EAS preview APK
-```
-
-## Дальше (паритет с вебом)
-
-- Репосты / удаление постов, reply на stories
-- Полные редакторы студии и AI/импорт
-- Admin / analytics
-- Production FCM (`google-services.json` в EAS)
-- WebRTC-звонки
