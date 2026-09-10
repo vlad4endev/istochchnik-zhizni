@@ -68,7 +68,6 @@
           "microphonePermission": "Нужен доступ к микрофону для голосовых сообщений"
         }
       ],
-      "react-native-reanimated",
       [
         "expo-image-picker",
         {
