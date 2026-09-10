@@ -55,7 +55,11 @@ export default {
           '0%, 100%': { opacity: '0.35', transform: 'scale(1)' },
           '50%': { opacity: '0.55', transform: 'scale(1.05)' },
         },
-        /** PWA: баннер «На экран Домой» (iOS), центр по X */
+        /**
+         * PWA: баннер «На экран Домой» (iOS). translateX(-50%) здесь только чтобы
+         * не сбить центровку во время анимации — сам центр держит `-translate-x-1/2`
+         * на элементе, иначе `motion-reduce:animate-none` уводил баннер за экран.
+         */
         'pwa-ios-install-in': {
           '0%': { opacity: '0', transform: 'translateX(-50%) translateY(16px) scale(0.96)' },
           '100%': { opacity: '1', transform: 'translateX(-50%) translateY(0) scale(1)' },

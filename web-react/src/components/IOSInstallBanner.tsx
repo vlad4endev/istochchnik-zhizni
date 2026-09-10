@@ -38,7 +38,14 @@ export function IOSInstallBanner() {
         role="dialog"
         aria-label="Установить приложение"
         aria-modal="false"
-        className="motion-reduce:animate-none pointer-events-none fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.75rem)] left-1/2 z-[9999] w-[calc(100%-2rem)] max-w-md animate-pwa-ios-install-in"
+        /*
+         * `-translate-x-1/2` обязателен рядом с `left-1/2`: центрирование по X раньше
+         * жило только в кейфрейме `pwa-ios-install-in`, а `motion-reduce:animate-none`
+         * его отключает. С включённым «Уменьшением движения» баннер уезжал вправо на
+         * половину своей ширины. Пока анимация играет, её transform всё равно
+         * перекрывает этот класс, поэтому для остальных ничего не меняется.
+         */
+        className="motion-reduce:animate-none pointer-events-none fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.75rem)] left-1/2 z-[9999] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 animate-pwa-ios-install-in"
       >
         <div className="pointer-events-auto relative">
           <div
