@@ -25,6 +25,7 @@ import {
 } from '../../lib/messengerUtils';
 import { MESSENGER_BRAND } from '../../theme/messenger';
 import { MessengerText, MessengerTimeText } from './MessengerText';
+import { VoiceNotePlayer } from './VoiceNotePlayer';
 import { useTheme } from '../../theme';
 
 const SWIPE_REPLY_THRESHOLD = 52;
@@ -61,6 +62,7 @@ export function MessageBubble({
   const payloadType = message.payload_type ?? 'text';
   const showImage = payloadType === 'image' && !message.is_deleted;
   const showPoll = payloadType === 'poll' && !message.is_deleted;
+  const showAudio = payloadType === 'audio' && !message.is_deleted;
 
   const imageUri = useMemo(() => {
     if (!showImage) return null;
@@ -91,7 +93,7 @@ export function MessageBubble({
 
   const bodyText = message.is_deleted
     ? 'Сообщение удалено'
-    : showPoll
+    : showPoll || showAudio
       ? ''
       : payloadType === 'text'
         ? String(message.content ?? '')
@@ -245,6 +247,24 @@ export function MessageBubble({
           isOwn={isOwn}
           styles={styles}
           onVotePoll={onVotePoll}
+        />
+      ) : showAudio ? (
+        <VoiceNotePlayer
+          messageId={message.id}
+          localUri={
+            typeof message.payload?.url === 'string' &&
+            (String(message.payload.url).startsWith('file:') ||
+              message.status === 'sending')
+              ? String(message.payload.url)
+              : null
+          }
+          durationSec={
+            typeof message.payload?.durationSec === 'number'
+              ? message.payload.durationSec
+              : null
+          }
+          isOwn={isOwn}
+          isPending={isPending}
         />
       ) : bodyText ? (
         <MessengerText style={[styles.text, message.is_deleted && styles.deletedText]}>

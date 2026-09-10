@@ -13,7 +13,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.istochnikzhizni.molitva"
+      "bundleIdentifier": "com.istochnikzhizni.molitva",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Нужен доступ к микрофону для голосовых сообщений",
+        "NSPhotoLibraryUsageDescription": "Нужен доступ к фото для публикаций, историй и чата"
+      }
     },
     "android": {
       "package": "com.istochnikzhizni.molitva",
@@ -40,7 +44,12 @@
     },
     "plugins": [
       "expo-status-bar",
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Нужен доступ к микрофону для голосовых сообщений"
+        }
+      ],
       "react-native-reanimated",
       [
         "expo-image-picker",

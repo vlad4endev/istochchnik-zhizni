@@ -29,6 +29,7 @@ import {
   sendImageMessage,
   sendMessage,
   sendPollMessage,
+  sendAudioMessage,
   unpinChatMessage,
   uploadMessengerFile,
   votePoll,
@@ -297,6 +298,73 @@ export function ChatThreadScreen() {
         const saved = await sendImageMessage(conversationId, {
           caption: input.caption,
           uploaded,
+          clientMsgId,
+          replyToMessageId: replyId,
+        });
+        setOptimistic((prev) => prev.filter((m) => m.client_msg_id !== clientMsgId));
+        setReplyTo(null);
+        await invalidateThread();
+        return saved;
+      } catch (e) {
+        setOptimistic((prev) =>
+          prev.map((m) => (m.client_msg_id === clientMsgId ? { ...m, status: 'error' } : m)),
+        );
+        throw e;
+      }
+    },
+  });
+
+  const voiceMutation = useMutation({
+    mutationFn: async (input: {
+      uri: string;
+      name: string;
+      type: string;
+      durationSec: number;
+    }) => {
+      const clientMsgId = createClientMsgId();
+      const replyId = replyTo?.id ?? null;
+      const optimisticMsg: MessageWithSender = {
+        id: clientMsgId,
+        conversation_id: conversationId,
+        sender_id: memberId,
+        client_msg_id: clientMsgId,
+        content: '',
+        payload_type: 'audio',
+        payload: {
+          url: input.uri,
+          name: input.name,
+          mimeType: input.type,
+          durationSec: input.durationSec,
+          kind: 'voice',
+        },
+        reply_to_message_id: replyId,
+        is_edited: false,
+        is_deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        sender_name: null,
+        sender_first_name: null,
+        sender_last_name: null,
+        reply_preview: replyTo
+          ? {
+              id: replyTo.id,
+              content: replyTo.content,
+              sender_name: replyTo.sender_name,
+              is_deleted: replyTo.is_deleted,
+            }
+          : null,
+        reactions: [],
+        status: 'sending',
+      };
+      setOptimistic((prev) => [...prev, optimisticMsg]);
+      try {
+        const uploaded = await uploadMessengerFile(
+          { uri: input.uri, name: input.name, type: input.type },
+          { conversationId },
+        );
+        const saved = await sendAudioMessage(conversationId, {
+          uploaded,
+          durationSec: input.durationSec,
           clientMsgId,
           replyToMessageId: replyId,
         });
@@ -596,8 +664,14 @@ export function ChatThreadScreen() {
           onSendImage={async (input) => {
             await imageMutation.mutateAsync(input);
           }}
+          onSendVoice={async (input) => {
+            await voiceMutation.mutateAsync(input);
+          }}
           disabled={
-            sendMutation.isPending || pollMutation.isPending || imageMutation.isPending
+            sendMutation.isPending ||
+            pollMutation.isPending ||
+            imageMutation.isPending ||
+            voiceMutation.isPending
           }
         />
       </View>

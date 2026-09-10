@@ -147,3 +147,28 @@ export async function reorderSetlistItems(
     ordered_item_ids: orderedItemIds,
   });
 }
+
+/** LLM-запросы дольше дефолтного timeout apiClient (25s). */
+const AI_REQUEST_TIMEOUT_MS = 120_000;
+
+export async function aiSongCleanup(content: string): Promise<{ chordPro: string }> {
+  const { data } = await apiClient.post<{ chordPro: string }>(
+    `${STUDIO}/ai/song-cleanup`,
+    { content },
+    { timeout: AI_REQUEST_TIMEOUT_MS },
+  );
+  return data;
+}
+
+export async function aiChordPlacement(content: string): Promise<{
+  content: string;
+  changedLines: number;
+  totalChords: number;
+}> {
+  const { data } = await apiClient.post<{
+    content: string;
+    changedLines: number;
+    totalChords: number;
+  }>(`${STUDIO}/ai/chord-placement`, { content }, { timeout: AI_REQUEST_TIMEOUT_MS });
+  return data;
+}

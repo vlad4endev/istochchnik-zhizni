@@ -329,6 +329,33 @@ export async function sendImageMessage(
   );
 }
 
+export async function sendAudioMessage(
+  conversationId: string,
+  input: {
+    uploaded: UploadedMessengerFile;
+    durationSec?: number;
+    clientMsgId?: string;
+    replyToMessageId?: string | null;
+  },
+): Promise<MessageWithSender> {
+  const u = input.uploaded;
+  if (!u?.url) {
+    throw new Error('Нет загруженного аудио');
+  }
+  return sendMessage(conversationId, '', input.clientMsgId, input.replyToMessageId ?? null, {
+    payloadType: 'audio',
+    payload: {
+      url: u.url,
+      name: u.name ?? 'voice.m4a',
+      objectPath: u.objectPath,
+      mimeType: u.mimeType || 'audio/mp4',
+      size: u.size ?? 0,
+      durationSec: input.durationSec ?? null,
+      kind: 'voice',
+    },
+  });
+}
+
 export async function forwardMessage(
   messageId: string,
   conversationIds: string[],

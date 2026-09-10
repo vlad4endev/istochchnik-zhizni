@@ -19,7 +19,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchSong } from '../api/songs';
-import { fetchVersionForSong, saveVersion } from '../api/studio';
+import {
+  aiChordPlacement,
+  aiSongCleanup,
+  fetchVersionForSong,
+  saveVersion,
+} from '../api/studio';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
 import type { RootStackParamList } from '../navigation/types';
@@ -94,6 +99,69 @@ export function StudioSongEditScreen() {
     },
   });
 
+  const cleanupMut = useMutation({
+    mutationFn: () => aiSongCleanup(content),
+    onSuccess: (res) => {
+      const next = String(res.chordPro ?? '').trim();
+      if (!next) {
+        Alert.alert('AI', 'Пустой ответ — текст не изменён');
+        return;
+      }
+      if (next === content.trim()) {
+        Alert.alert('AI', 'Текст уже в порядке');
+        return;
+      }
+      setContent(next);
+      Alert.alert('Готово', 'Текст приведён в ChordPro — проверьте и сохраните');
+    },
+    onError: (err: unknown) => {
+      Alert.alert('AI', err instanceof Error ? err.message : 'Не удалось обработать текст');
+    },
+  });
+
+  const chordsMut = useMutation({
+    mutationFn: () => aiChordPlacement(content),
+    onSuccess: (res) => {
+      const next = String(res.content ?? '').trim();
+      if (!next) {
+        Alert.alert('AI', 'Пустой ответ — текст не изменён');
+        return;
+      }
+      setContent(next);
+      Alert.alert(
+        'Готово',
+        `Аккорды расставлены (${res.totalChords ?? 0}). Проверьте и сохраните`,
+      );
+    },
+    onError: (err: unknown) => {
+      Alert.alert('AI', err instanceof Error ? err.message : 'Не удалось расставить аккорды');
+    },
+  });
+
+  const aiBusy = cleanupMut.isPending || chordsMut.isPending;
+
+  const runCleanup = () => {
+    if (!content.trim()) {
+      Alert.alert('AI', 'Сначала введите текст песни');
+      return;
+    }
+    Alert.alert('Привести в порядок?', 'AI переформатирует текст в ChordPro. Сохранение вручную.', [
+      { text: 'Отмена', style: 'cancel' },
+      { text: 'Запустить', onPress: () => cleanupMut.mutate() },
+    ]);
+  };
+
+  const runChords = () => {
+    if (!content.trim()) {
+      Alert.alert('AI', 'Сначала введите текст песни');
+      return;
+    }
+    Alert.alert('Расставить аккорды?', 'AI добавит аккорды к тексту. Сохранение вручную.', [
+      { text: 'Отмена', style: 'cancel' },
+      { text: 'Запустить', onPress: () => chordsMut.mutate() },
+    ]);
+  };
+
   const confirmDiscard = () => {
     if (!dirty) {
       navigation.goBack();
@@ -154,10 +222,10 @@ export function StudioSongEditScreen() {
         </View>
         <Pressable
           onPress={() => saveMut.mutate()}
-          disabled={!dirty || saveMut.isPending}
+          disabled={!dirty || saveMut.isPending || aiBusy}
           style={({ pressed }) => [
             styles.saveBtn,
-            (!dirty || saveMut.isPending) && { opacity: 0.45 },
+            (!dirty || saveMut.isPending || aiBusy) && { opacity: 0.45 },
             pressed && dirty && { opacity: 0.9 },
           ]}
         >
@@ -166,6 +234,41 @@ export function StudioSongEditScreen() {
           ) : (
             <Text style={styles.saveBtnText}>Сохранить</Text>
           )}
+        </Pressable>
+      </View>
+
+      <View style={styles.aiRow}>
+        <Pressable
+          onPress={runCleanup}
+          disabled={aiBusy || saveMut.isPending}
+          style={({ pressed }) => [
+            styles.aiBtn,
+            (aiBusy || saveMut.isPending) && { opacity: 0.5 },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          {cleanupMut.isPending ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+          )}
+          <Text style={styles.aiBtnText}>Привести в порядок</Text>
+        </Pressable>
+        <Pressable
+          onPress={runChords}
+          disabled={aiBusy || saveMut.isPending}
+          style={({ pressed }) => [
+            styles.aiBtn,
+            (aiBusy || saveMut.isPending) && { opacity: 0.5 },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          {chordsMut.isPending ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Ionicons name="musical-notes-outline" size={16} color={colors.primary} />
+          )}
+          <Text style={styles.aiBtnText}>Аккорды</Text>
         </Pressable>
       </View>
 
@@ -250,6 +353,31 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       color: colors.textOnPrimary,
       fontWeight: '800',
       fontSize: 13,
+    },
+    aiRow: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(28,25,23,0.1)',
+      backgroundColor: colors.surface,
+    },
+    aiBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(28,25,23,0.1)',
+      backgroundColor: colors.surfaceElevated,
+    },
+    aiBtnText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.primary,
     },
     content: {
       padding: 16,
