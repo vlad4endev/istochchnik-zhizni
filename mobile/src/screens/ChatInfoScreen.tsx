@@ -21,6 +21,7 @@ import {
   fetchConversationMeta,
   fetchConversations,
   fetchPrivateChatProfile,
+  addParticipant,
   patchConversationPermissions,
   patchMyConversationUi,
   removeParticipant,
@@ -28,6 +29,7 @@ import {
   type ConversationMember,
   type ParticipantRole,
 } from '../api/messenger';
+import { AddMembersSheet } from '../components/messenger/AddMembersSheet';
 import { ChatAvatar } from '../components/messenger/ChatAvatar';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
@@ -81,6 +83,7 @@ export function ChatInfoScreen() {
   const queryClient = useQueryClient();
   const [renameOpen, setRenameOpen] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
+  const [addMembersOpen, setAddMembersOpen] = useState(false);
   const inviteBootstrapRef = useRef(false);
 
   const conversationsQuery = useQuery({
@@ -157,6 +160,10 @@ export function ChatInfoScreen() {
   });
 
   const canManage = metaQuery.data?.my_effective_permissions?.can_manage_chat === true;
+  const canAddUsers = metaQuery.data?.my_effective_permissions?.can_add_users === true;
+  const myRole = metaQuery.data?.my_role;
+  const canKick =
+    canManage || myRole === 'owner' || myRole === 'admin';
   const inviteToken = inviteTokenFromMeta(
     metaQuery.data?.settings as Record<string, unknown> | undefined,
   );
@@ -215,6 +222,32 @@ export function ChatInfoScreen() {
     },
   });
 
+  const kickMutation = useMutation({
+    mutationFn: (targetId: number) => removeParticipant(conversationId, targetId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['messenger', 'members', conversationId],
+      });
+      await queryClient.invalidateQueries({ queryKey: ['messenger', 'meta', conversationId] });
+    },
+    onError: () => {
+      Alert.alert('Ошибка', 'Не удалось исключить участника');
+    },
+  });
+
+  const addMember = async (targetId: number) => {
+    const result = await addParticipant(conversationId, targetId);
+    await queryClient.invalidateQueries({
+      queryKey: ['messenger', 'members', conversationId],
+    });
+    await queryClient.invalidateQueries({ queryKey: ['messenger', 'meta', conversationId] });
+    if (result.alreadyMember) {
+      Alert.alert('Уже в чате', 'Этот человек уже состоит в группе');
+      return;
+    }
+    Alert.alert('Готово', 'Участник добавлен');
+  };
+
   const loading =
     conversationsQuery.isLoading ||
     metaQuery.isLoading ||
@@ -270,6 +303,24 @@ export function ChatInfoScreen() {
         },
       ],
     );
+  };
+
+  const confirmKick = (m: ConversationMember) => {
+    if (!canKick) return;
+    if (memberId != null && m.member_id === memberId) return;
+    if (m.role === 'owner') {
+      Alert.alert('Нельзя исключить', 'Создателя группы исключить нельзя');
+      return;
+    }
+    const name = memberDisplayName(m);
+    Alert.alert('Исключить участника?', name, [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Исключить',
+        style: 'destructive',
+        onPress: () => kickMutation.mutate(m.member_id),
+      },
+    ]);
   };
 
   if (isPrivate) {
@@ -407,6 +458,18 @@ export function ChatInfoScreen() {
 
         <Text style={styles.sectionLabel}>Участники</Text>
         <View style={styles.card}>
+          {canAddUsers ? (
+            <Pressable
+              onPress={() => setAddMembersOpen(true)}
+              style={({ pressed }) => [styles.addMemberRow, pressed && styles.pressed]}
+            >
+              <View style={styles.rowIcon}>
+                <Ionicons name="person-add-outline" size={20} color={colors.primary} />
+              </View>
+              <Text style={styles.addMemberText}>Добавить участников</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+            </Pressable>
+          ) : null}
           {membersQuery.isError ? (
             <ErrorView
               message="Не удалось загрузить участников"
@@ -424,9 +487,15 @@ export function ChatInfoScreen() {
                 styles={styles}
                 colors={colors}
                 isLast={index === members.length - 1}
+                showKick={
+                  canKick &&
+                  item.role !== 'owner' &&
+                  (memberId == null || item.member_id !== memberId)
+                }
                 onPress={() =>
                   navigation.navigate('Profile', { memberId: item.member_id })
                 }
+                onKick={() => confirmKick(item)}
               />
             ))
           )}
@@ -490,6 +559,14 @@ export function ChatInfoScreen() {
           </View>
         </View>
       </Modal>
+
+      <AddMembersSheet
+        visible={addMembersOpen}
+        existingMemberIds={members.map((m) => m.member_id)}
+        currentMemberId={memberId}
+        onClose={() => setAddMembersOpen(false)}
+        onAdd={addMember}
+      />
     </>
   );
 }
@@ -518,19 +595,25 @@ function MemberRow({
   styles,
   colors,
   isLast,
+  showKick,
   onPress,
+  onKick,
 }: {
   member: ConversationMember;
   styles: ReturnType<typeof createStyles>;
   colors: ReturnType<typeof useTheme>['colors'];
   isLast: boolean;
+  showKick?: boolean;
   onPress: () => void;
+  onKick?: () => void;
 }) {
   const name = memberDisplayName(member);
   const avatar = resolvePublicUrl(member.avatar_url ?? null);
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={showKick ? onKick : undefined}
+      delayLongPress={350}
       style={({ pressed }) => [
         styles.memberRow,
         !isLast && styles.memberRowBorder,
@@ -551,7 +634,18 @@ function MemberRow({
         </Text>
         <Text style={styles.memberRole}>{roleLabel(member.role)}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+      {showKick ? (
+        <Pressable
+          onPress={onKick}
+          hitSlop={10}
+          style={({ pressed }) => [styles.kickBtn, pressed && styles.pressed]}
+          accessibilityLabel="Исключить"
+        >
+          <Ionicons name="remove-circle-outline" size={22} color="#dc2626" />
+        </Pressable>
+      ) : (
+        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+      )}
     </Pressable>
   );
 }
@@ -701,6 +795,24 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boo
       padding: 16,
       color: colors.textMuted,
       textAlign: 'center',
+    },
+    addMemberRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: border,
+    },
+    addMemberText: {
+      flex: 1,
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    kickBtn: {
+      padding: 4,
     },
     dangerRow: {
       flexDirection: 'row',
