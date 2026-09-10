@@ -509,7 +509,8 @@ dd {
     }
 
     .dashboard-adaptive .dashboard-sermon-card,
-    .dashboard-adaptive .dashboard-sermon-card__hero {
+    .dashboard-adaptive .dashboard-sermon-card__hero,
+    .dashboard-adaptive .dashboard-service-card {
       box-shadow: none !important;
     }
 
