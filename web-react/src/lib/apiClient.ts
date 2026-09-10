@@ -53,6 +53,8 @@ function getTokenForRequest(): string | null {
 type RetryableAxiosConfig = InternalAxiosRequestConfig & {
   _retryAfterRefresh?: boolean;
   _retryCookieOnly?: boolean;
+  /** Один повтор при кратков сетевом сбое (рестарт API / nginx upstream). */
+  _retryNetworkOnce?: boolean;
   /** Зонд cookie-only: не чистить сессию в этом проходе — решает внешний 401-handler. */
   _suppressAuthClear?: boolean;
   /** Не показывать глобальный toast при 4xx/5xx (ошибку обрабатывает экран). */
@@ -115,6 +117,40 @@ export const apiClient = axios.create({
   withCredentials: true,
 });
 
+/** Не спамить admin-toast при серии фоновых poll'ов во время краткого рестарта API. */
+const NETWORK_TOAST_COOLDOWN_MS = 60_000;
+const SERVER_ERROR_TOAST_COOLDOWN_MS = 60_000;
+const TRANSIENT_NETWORK_RETRY_DELAY_MS = 700;
+let lastNetworkToastAt = 0;
+let lastServerErrorToastAt = 0;
+
+function shouldEmitCooldownToast(lastAt: number, cooldownMs: number): boolean {
+  const now = Date.now();
+  if (now - lastAt < cooldownMs) return false;
+  return true;
+}
+
+function markCooldownToast(kind: 'network' | 'server'): void {
+  const now = Date.now();
+  if (kind === 'network') lastNetworkToastAt = now;
+  else lastServerErrorToastAt = now;
+}
+
+function isDocumentHidden(): boolean {
+  return typeof document !== 'undefined' && document.visibilityState === 'hidden';
+}
+
+function isTransientNetworkError(error: AxiosError): boolean {
+  if (error.response) return false;
+  const code = String(error.code ?? '');
+  return (
+    code === 'ERR_NETWORK' ||
+    code === 'ECONNABORTED' ||
+    code === 'ETIMEDOUT' ||
+    /network|timeout|failed to fetch/i.test(String(error.message ?? ''))
+  );
+}
+
 function applyBaseURL(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
   config.baseURL = resolveAxiosBaseURL();
   return config;
@@ -147,17 +183,26 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const cfg = error.config;
+    const cfg = error.config as RetryableAxiosConfig | undefined;
     const url = cfg?.url ?? '';
     const status = error.response?.status;
     const bodyMsg = readResponseErrorMessage(error.response?.data);
+
+    // Краткий обрыв (рестарт контейнера / proxy): один повтор до toast.
+    if (cfg && !cfg._retryNetworkOnce && isTransientNetworkError(error)) {
+      cfg._retryNetworkOnce = true;
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, TRANSIENT_NETWORK_RETRY_DELAY_MS);
+      });
+      return apiClient.request(cfg);
+    }
 
     if (status === 401) {
       if (shouldSkip401Handling(url)) {
         return Promise.reject(error);
       }
 
-      const retryCfg = cfg as RetryableAxiosConfig | undefined;
+      const retryCfg = cfg;
       if (retryCfg && !retryCfg._retryAfterRefresh) {
         retryCfg._retryAfterRefresh = true;
         try {
@@ -206,12 +251,12 @@ apiClient.interceptors.response.use(
         }
       }
 
-      if ((cfg as RetryableAxiosConfig | undefined)?._suppressAuthClear) {
+      if (cfg?._suppressAuthClear) {
         return Promise.reject(error);
       }
 
       // Фоновые sync-запросы (push subscribe и т.п.) не должны выкидывать пользователя.
-      if ((cfg as RetryableAxiosConfig | undefined)?.skipAuthClearOn401) {
+      if (cfg?.skipAuthClearOn401) {
         return Promise.reject(error);
       }
 
@@ -222,21 +267,27 @@ apiClient.interceptors.response.use(
       }
       emitAppToast({ message: bodyMsg ?? 'Сессия недействительна или истекла. Войдите снова.', kind: 'error' });
       return Promise.reject(error);
-    } else if (!(cfg as RetryableAxiosConfig | undefined)?.silentErrorToast) {
+    } else if (!cfg?.silentErrorToast && !isDocumentHidden()) {
       if (!error.response) {
-        emitAppToast({
-          message: 'Нет связи с сервером. Проверьте интернет и доступность API.',
-          kind: 'error',
-          adminOnly: true,
-        });
+        if (shouldEmitCooldownToast(lastNetworkToastAt, NETWORK_TOAST_COOLDOWN_MS)) {
+          markCooldownToast('network');
+          emitAppToast({
+            message: 'Нет связи с сервером. Проверьте интернет и доступность API.',
+            kind: 'error',
+            adminOnly: true,
+          });
+        }
       } else if (status != null && status >= 500) {
-        emitAppToast({
-          message:
-            bodyMsg ??
-            formatApiFailureHint(status, url, 'Сервер временно недоступен. Попробуйте через несколько минут.'),
-          kind: 'error',
-          adminOnly: true,
-        });
+        if (shouldEmitCooldownToast(lastServerErrorToastAt, SERVER_ERROR_TOAST_COOLDOWN_MS)) {
+          markCooldownToast('server');
+          emitAppToast({
+            message:
+              bodyMsg ??
+              formatApiFailureHint(status, url, 'Сервер временно недоступен. Попробуйте через несколько минут.'),
+            kind: 'error',
+            adminOnly: true,
+          });
+        }
       } else if (status === 403) {
         emitAppToast({
           message:
