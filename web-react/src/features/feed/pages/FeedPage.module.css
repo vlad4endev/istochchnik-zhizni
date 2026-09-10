@@ -156,6 +156,11 @@
   border-bottom: 1px solid color-mix(in srgb, var(--profile-border, rgba(120, 113, 108, 0.18)) 80%, transparent);
   background: var(--profile-surface, #f4f1ed);
   min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: visible;
+  box-sizing: border-box;
 }
 
 @keyframes menuPop {

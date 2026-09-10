@@ -1,16 +1,23 @@
 .bar {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: flex-start;
   gap: 0.85rem;
+  width: 100%;
+  max-width: 36rem;
+  margin: 0 auto;
   overflow-x: auto;
   overflow-y: visible;
   padding: 0.55rem 0.75rem 0.75rem;
   padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
   padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
-  margin: 0 auto;
-  max-width: 36rem;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
+  /* Prevent shrink-to-fit from collapsing the tray to one ring width. */
+  min-width: 0;
 }
 
 @media (min-width: 640px) {
@@ -24,31 +31,35 @@
   display: none;
 }
 
+/* Flex item is a plain div — <button> as flex child breaks horizontal layout in some WebViews. */
 .item {
+  position: relative;
   flex: 0 0 auto;
+  flex-shrink: 0;
   width: 4.6rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.35rem;
-  border: none;
-  background: transparent;
+  min-width: 4.6rem;
+  max-width: 4.6rem;
+  margin: 0;
   padding: 0;
-  cursor: pointer;
-  color: inherit;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  float: none;
+  inset: auto;
+  transform: none;
+  box-sizing: border-box;
 }
 
 @media (min-width: 640px) {
   .item {
     width: 4.85rem;
+    min-width: 4.85rem;
+    max-width: 4.85rem;
   }
 }
 
 @media (max-width: 359px) {
   .item {
     width: 4.25rem;
+    min-width: 4.25rem;
+    max-width: 4.25rem;
   }
 
   .ring,
@@ -58,7 +69,26 @@
   }
 }
 
-.item:active .ring {
+.itemBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.itemBtn:active .ring {
   transform: scale(0.96);
 }
 
@@ -67,9 +97,10 @@
   height: 4.1rem;
   border-radius: 9999px;
   padding: 2.5px;
-  display: grid;
-  place-items: center;
+  display: block;
   position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
   transition: transform 0.15s ease;
   background: linear-gradient(
     45deg,
@@ -79,7 +110,6 @@
     #cc2366 75%,
     #bc1888 100%
   );
-  /* место под бейдж «+» */
   overflow: visible;
 }
 
@@ -119,8 +149,9 @@
   overflow: hidden;
   background: var(--profile-surface, #f4f1ed);
   border: 2.5px solid var(--profile-surface, #f4f1ed);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
   box-sizing: border-box;
   z-index: 1;
@@ -142,14 +173,17 @@
   border-radius: 9999px;
   background: #0095f6;
   color: #fff;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 2.5px solid var(--profile-surface, #f4f1ed);
   z-index: 2;
   pointer-events: none;
+  box-sizing: border-box;
 }
 
 .label {
+  display: block;
   max-width: 100%;
   font-size: 0.6875rem;
   font-weight: 500;
