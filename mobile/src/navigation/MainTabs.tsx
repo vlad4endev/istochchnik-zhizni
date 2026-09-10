@@ -17,6 +17,7 @@ import { ChatThreadScreen } from '../screens/ChatThreadScreen';
 import { EventsScreen } from '../screens/EventsScreen';
 import { FeedPostCommentsScreen } from '../screens/FeedPostCommentsScreen';
 import { FeedScreen } from '../screens/FeedScreen';
+import { JoinInviteScreen } from '../screens/JoinInviteScreen';
 import { MediaScheduleScreen } from '../screens/MediaScheduleScreen';
 import { MusicScheduleScreen } from '../screens/MusicScheduleScreen';
 import { MySermonsScreen } from '../screens/MySermonsScreen';
@@ -324,6 +325,11 @@ export function MainStack() {
         name="StoryViewer"
         component={StoryViewerScreen}
         options={{ headerShown: false, presentation: 'fullScreenModal' }}
+      />
+      <Stack.Screen
+        name="JoinInvite"
+        component={JoinInviteScreen}
+        options={{ headerShown: false, presentation: 'modal' }}
       />
     </Stack.Navigator>
   );

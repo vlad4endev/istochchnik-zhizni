@@ -2,6 +2,7 @@ import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { useInviteDeepLink } from '../hooks/useInviteDeepLink';
 import { isActiveMember, useAuthStore } from '../stores/authStore';
 import { useTheme } from '../theme';
 import { AuthNavigator } from './AuthNavigator';
@@ -25,6 +26,9 @@ export function RootNavigator() {
       void refreshProfile();
     }
   }, [token, refreshProfile]);
+
+  const showMain = Boolean(token) && isActiveMember(registrationStatus);
+  useInviteDeepLink(showMain);
 
   const navTheme = isDark
     ? {
@@ -58,7 +62,6 @@ export function RootNavigator() {
     );
   }
 
-  const showMain = Boolean(token) && isActiveMember(registrationStatus);
   const authInitial = token ? 'PendingReview' : 'Login';
 
   return (

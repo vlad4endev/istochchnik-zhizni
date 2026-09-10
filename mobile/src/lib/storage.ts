@@ -105,3 +105,19 @@ export function getOrCreateDeviceId(): string {
   storage.set(LS_DEVICE_ID, id);
   return id;
 }
+
+const LS_PENDING_INVITE = 'pending_invite_token';
+
+export function setPendingInviteToken(token: string): void {
+  const t = token.trim();
+  if (t.length < 4) return;
+  storage.set(LS_PENDING_INVITE, t);
+}
+
+/** Считывает и очищает отложенный invite-токен (после логина). */
+export function takePendingInviteToken(): string | null {
+  const t = storage.getString(LS_PENDING_INVITE)?.trim() ?? '';
+  if (!t) return null;
+  storage.remove(LS_PENDING_INVITE);
+  return t;
+}

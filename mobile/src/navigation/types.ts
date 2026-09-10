@@ -40,4 +40,5 @@ export type RootStackParamList = {
   ComposePost: undefined;
   FeedPostComments: { postId: string };
   StoryViewer: { groupIndex: number; groups: StoryAuthorGroup[] };
+  JoinInvite: { token: string };
 };

@@ -41,6 +41,7 @@ import {
   getConversationAvatarUrl,
   getConversationTitle,
 } from '../lib/messengerUtils';
+import { PRODUCTION_API_ORIGIN } from '../lib/config';
 import { resolvePublicUrl } from '../lib/resolvePublicUrl';
 import type { RootStackParamList } from '../navigation/types';
 import { useAuthStore } from '../stores/authStore';
@@ -48,7 +49,7 @@ import { useTheme } from '../theme';
 
 type ChatInfoRoute = RouteProp<RootStackParamList, 'ChatInfo'>;
 
-const INVITE_BASE = 'https://app.church-tambov.ru/join';
+const INVITE_BASE = `${PRODUCTION_API_ORIGIN}/join`;
 
 const PERMISSION_ROWS: { key: ChatPermissionKey; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'can_send_messages', label: 'Отправлять сообщения', icon: 'chatbubble-outline' },
