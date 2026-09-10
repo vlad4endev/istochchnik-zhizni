@@ -10,7 +10,6 @@ import {
   LuCalendarRange,
   LuCheck,
   LuChurch,
-  LuExternalLink,
   LuEye,
   LuHandHeart,
   LuHeadphones,
@@ -18,10 +17,10 @@ import {
   LuMinus,
   LuPause,
   LuPlay,
-  LuStar,
   LuUser,
   LuX,
 } from 'react-icons/lu';
+import '../components/ServiceMinistryCard.css';
 import type { IconType } from 'react-icons';
 
 import { fetchActiveBroadcast, type BroadcastData } from '../../../api/broadcast';
@@ -266,10 +265,22 @@ function buildBibleVerseUrl(scripture: string): string {
   return `https://www.bible.com/ru/search/bible?q=${encodeURIComponent(q)}`;
 }
 
-function preacherNameTwoLines(name: string): string {
-  const parts = name.trim().split(/\s+/).filter((x) => x.length > 0);
-  if (parts.length <= 1) return name;
-  return `${parts[0]}\n${parts.slice(1).join(' ')}`;
+function profileDisplayName(
+  profile: { first_name: string | null; last_name: string | null; display_name: string | null } | undefined,
+  fallback: string,
+): string {
+  if (!profile) return fallback;
+  const full = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim();
+  if (full) return full;
+  const display = profile.display_name?.trim();
+  if (display) return display;
+  return fallback;
+}
+
+function formatServiceCardDateLabel(startsAt: Date | undefined): string {
+  if (!startsAt) return '';
+  const raw = format(startsAt, 'EEE, d MMMM yyyy', { locale: ru });
+  return raw.replace(/^./, (ch) => ch.toUpperCase());
 }
 
 type SermonPlanPhase = 'upcoming' | 'live' | 'feedback' | 'closed';
@@ -330,8 +341,10 @@ type NearestSermonData = {
   serviceDate: string;
   startTime: string;
   preacherMemberId: number;
+  leaderMemberId: number | null;
   topic: string;
   scripture: string;
+  topicTag: string | null;
 };
 
 function extractNearestSermonData(plan: ServicePlanDetails | null): NearestSermonData | null {
@@ -344,82 +357,115 @@ function extractNearestSermonData(plan: ServicePlanDetails | null): NearestSermo
     return topic.length > 0 && scripture.length > 0;
   });
   if (!sermonBlock) return null;
+  const title = String(sermonBlock.title ?? '').trim();
+  const topicTag =
+    title && !/проповед/i.test(title) && title.toLowerCase() !== String(sermonBlock.content_json.sermon_topic).trim().toLowerCase()
+      ? title
+      : null;
   return {
     planId: plan.id,
     shareToken: plan.share_token,
     serviceDate: plan.service_date,
     startTime: plan.start_time,
     preacherMemberId: plan.preacher_member_id,
+    leaderMemberId: plan.leader_member_id ?? null,
     topic: String(sermonBlock.content_json.sermon_topic).trim(),
     scripture: String(sermonBlock.content_json.sermon_scripture).trim(),
+    topicTag,
   };
+}
+
+function ServicePersonAvatar({
+  name,
+  avatarUrl,
+}: {
+  name: string;
+  avatarUrl: string | null;
+}) {
+  if (avatarUrl) {
+    return <img src={avatarUrl} alt="" decoding="async" />;
+  }
+  return <>{preacherInitials(name)}</>;
 }
 
 function UpcomingPreacherCard({
   preacherName,
   preacherAvatarUrl,
+  preacherDetail,
+  hostName,
+  hostAvatarUrl,
   topic,
   scripture,
+  topicTag,
   dateLabel,
   canRate,
   onOpenComments,
 }: {
   preacherName: string;
   preacherAvatarUrl: string | null;
+  preacherDetail: string | null;
+  hostName: string | null;
+  hostAvatarUrl: string | null;
   topic: string;
   scripture: string;
+  topicTag: string | null;
   dateLabel: string;
   canRate: boolean;
   onOpenComments: () => void;
 }) {
-  const initials = preacherInitials(preacherName);
   const scriptureUrl = buildBibleVerseUrl(scripture);
-  const preacherNameDisplay = preacherNameTwoLines(preacherName);
+  const topicTitle = /^[«"].*[»"]$/.test(topic.trim()) ? topic.trim() : `«${topic.trim()}»`;
+  const showHost = Boolean(hostName?.trim());
+
   return (
-    <section className="dashboard-sermon-card flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-[#E8E0DC] bg-white max-lg:shadow-none sm:max-w-[420px] lg:max-w-none lg:shadow-[var(--shadow-card)]">
-      <div className="dashboard-sermon-card__hero flex min-w-0 items-end gap-3 bg-[#6B2D3E] px-4 pt-4 sm:gap-4 sm:px-5 sm:pt-5 lg:bg-gradient-to-br lg:from-[#6B2D3E] lg:to-[#7F364D]">
-        <div className="min-w-0 flex-1 pb-3 sm:pb-4">
-          <p className="text-[10px] uppercase tracking-[0.1em] text-[#EAC7D2]">Проповедь</p>
-          <p className="mt-2 whitespace-pre-line break-words text-[28px] font-semibold leading-[1.08] text-white sm:text-[34px] lg:text-[38px]">
-            {preacherNameDisplay}
-          </p>
-        </div>
-        <div className="h-[84px] w-[70px] shrink-0 overflow-hidden rounded-t-[10px] bg-[#915066] sm:h-[98px] sm:w-[82px] lg:h-[108px] lg:w-[90px]">
-          {preacherAvatarUrl ? (
-            <img src={preacherAvatarUrl} alt="" decoding="async" className="h-full w-full object-cover" />
-          ) : (
-            <div className="grid h-full w-full place-items-center text-[24px] font-semibold text-[#F0D9E1] sm:text-[28px]">
-              {initials}
-            </div>
-          )}
-        </div>
+    <section className="dashboard-service-card dashboard-sermon-card sm:max-w-[460px] lg:max-w-none" aria-label="Карточка служения">
+      <div className="dashboard-service-card__band">
+        <span className="dashboard-service-card__eyebrow">Богослужение</span>
+        <span className="dashboard-service-card__date">{dateLabel}</span>
       </div>
-      <div className="flex min-w-0 flex-col gap-2.5 bg-white px-4 py-3 sm:gap-3 sm:px-5 sm:py-4">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#6B2D3E]" aria-hidden />
-          <span className="min-w-0 break-words text-xs font-semibold text-stone-500">{dateLabel}</span>
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div className="inline-flex min-h-[28px] min-w-0 max-w-full items-center gap-1.5 rounded-full border border-[#DDE7CD] bg-[#F6FAEF] px-2.5 py-1 text-[11px] font-semibold text-[#48652E] sm:min-h-[30px] sm:px-3 sm:text-xs">
-            <LuStar className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span className="min-w-0 truncate">{topic}</span>
+
+      <div className="dashboard-service-card__roster">
+        <div className="dashboard-service-card__person dashboard-service-card__person--preacher">
+          <div className="dashboard-service-card__avatar" aria-hidden>
+            <ServicePersonAvatar name={preacherName} avatarUrl={preacherAvatarUrl} />
           </div>
-          <a
-            href={scriptureUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-h-[28px] min-w-0 max-w-full items-center gap-1.5 rounded-full border border-[#E3D7DB] bg-[#F8F2F4] px-2.5 py-1 text-[11px] font-semibold text-[#6B2D3E] transition hover:bg-[#EFE3E8] sm:min-h-[30px] sm:px-3 sm:text-xs"
-          >
-            <span className="min-w-0 truncate">{scripture}</span>
-            <LuExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <div className="dashboard-service-card__text">
+            <p className="dashboard-service-card__role">Проповедник</p>
+            <p className="dashboard-service-card__name">{preacherName}</p>
+            {preacherDetail ? <p className="dashboard-service-card__detail">{preacherDetail}</p> : null}
+          </div>
+        </div>
+
+        {showHost ? (
+          <>
+            <div className="dashboard-service-card__divider" aria-hidden />
+            <div className="dashboard-service-card__person dashboard-service-card__person--host">
+              <div className="dashboard-service-card__avatar" aria-hidden>
+                <ServicePersonAvatar name={hostName!} avatarUrl={hostAvatarUrl} />
+              </div>
+              <div className="dashboard-service-card__text">
+                <p className="dashboard-service-card__role">Ведущий</p>
+                <p className="dashboard-service-card__name">{hostName}</p>
+              </div>
+            </div>
+          </>
+        ) : null}
+      </div>
+
+      <div className="dashboard-service-card__sermon">
+        <p className="dashboard-service-card__title">{topicTitle}</p>
+        <div className="dashboard-service-card__tags">
+          <a className="dashboard-service-card__tag dashboard-service-card__tag--ref" href={scriptureUrl} target="_blank" rel="noreferrer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
+              <path d="M6 4h9a3 3 0 0 1 3 3v13H8a2 2 0 0 1-2-2V4Z" />
+              <path d="M6 17h12" />
+            </svg>
+            <span>{scripture}</span>
           </a>
+          {topicTag ? <span className="dashboard-service-card__tag dashboard-service-card__tag--topic">{topicTag}</span> : null}
         </div>
         {canRate ? (
-          <button
-            type="button"
-            onClick={onOpenComments}
-            className="inline-flex min-h-[36px] items-center justify-center rounded-xl bg-[#6B2D3E] px-4 text-xs font-extrabold text-white hover:bg-[#5B2332] sm:min-h-[40px] sm:text-sm"
-          >
+          <button type="button" onClick={onOpenComments} className="dashboard-service-card__rate">
             Оценить и оставить комментарий
           </button>
         ) : null}
@@ -922,18 +968,24 @@ function DashboardMain() {
     enabled: nearestSermonData != null,
     staleTime: 60_000,
   });
+  const hostProfileQ = useQuery({
+    queryKey: ['profile', 'dashboard-host', nearestSermonData?.leaderMemberId ?? null],
+    queryFn: () => fetchProfileByMemberId(nearestSermonData!.leaderMemberId!),
+    enabled: nearestSermonData?.leaderMemberId != null,
+    staleTime: 60_000,
+  });
   const preacherAvatarUrl = resolvePublicUrl(preacherProfileQ.data?.profile.avatar_url ?? null);
-  const preacherName = useMemo(() => {
-    const profile = preacherProfileQ.data?.profile;
-    if (!profile) return 'Проповедник';
-    const full = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim();
-    if (full) return full;
-    const display = profile.display_name?.trim();
-    if (display) return display;
-    return 'Проповедник';
-  }, [preacherProfileQ.data?.profile]);
+  const hostAvatarUrl = resolvePublicUrl(hostProfileQ.data?.profile.avatar_url ?? null);
+  const preacherName = useMemo(
+    () => profileDisplayName(preacherProfileQ.data?.profile, 'Проповедник'),
+    [preacherProfileQ.data?.profile],
+  );
+  const hostName = useMemo(() => {
+    if (nearestSermonData?.leaderMemberId == null) return null;
+    return profileDisplayName(hostProfileQ.data?.profile, 'Ведущий');
+  }, [hostProfileQ.data?.profile, nearestSermonData?.leaderMemberId]);
   const nearestSermonDateLabel = useMemo(
-    () => (nearestPlan?.startsAt ? format(nearestPlan.startsAt, 'd MMMM yyyy', { locale: ru }) : ''),
+    () => formatServiceCardDateLabel(nearestPlan?.startsAt),
     [nearestPlan?.startsAt],
   );
   const canRateSermon = nearestPlan?.phase === 'feedback';
@@ -1153,8 +1205,12 @@ function DashboardMain() {
                 <UpcomingPreacherCard
                   preacherName={preacherName}
                   preacherAvatarUrl={preacherAvatarUrl}
+                  preacherDetail="Проповеди"
+                  hostName={hostName}
+                  hostAvatarUrl={hostAvatarUrl}
                   topic={nearestSermonData!.topic}
                   scripture={nearestSermonData!.scripture}
+                  topicTag={nearestSermonData!.topicTag}
                   dateLabel={nearestSermonDateLabel}
                   canRate={canRateSermon}
                   onOpenComments={() => navigate(`/service-plan/sermon-comments/${nearestSermonData!.shareToken}`)}
@@ -1517,8 +1573,12 @@ function DashboardMain() {
               <UpcomingPreacherCard
                 preacherName={preacherName}
                 preacherAvatarUrl={preacherAvatarUrl}
+                preacherDetail="Проповеди"
+                hostName={hostName}
+                hostAvatarUrl={hostAvatarUrl}
                 topic={nearestSermonData!.topic}
                 scripture={nearestSermonData!.scripture}
+                topicTag={nearestSermonData!.topicTag}
                 dateLabel={nearestSermonDateLabel}
                 canRate={canRateSermon}
                 onOpenComments={() => navigate(`/service-plan/sermon-comments/${nearestSermonData!.shareToken}`)}
