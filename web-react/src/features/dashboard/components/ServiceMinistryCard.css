@@ -91,6 +91,42 @@ html[data-mantine-color-scheme='dark'] .dashboard-service-card {
   min-width: 0;
 }
 
+.dashboard-service-card__chat {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--svc-wine) 12%, transparent);
+  color: var(--svc-wine);
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.dashboard-service-card__chat:hover {
+  background: color-mix(in srgb, var(--svc-wine) 18%, transparent);
+}
+
+.dashboard-service-card__chat:active {
+  transform: scale(0.95);
+}
+
+.dashboard-service-card__chat--host {
+  background: var(--svc-gold-soft);
+  color: var(--svc-gold);
+}
+
+.dashboard-service-card__chat--host:hover {
+  background: color-mix(in srgb, var(--svc-gold) 22%, transparent);
+}
+
 .dashboard-service-card__avatar {
   flex: none;
   width: 48px;
