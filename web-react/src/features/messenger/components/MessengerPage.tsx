@@ -182,8 +182,13 @@ export function MessengerPage() {
   }, [activeId, ensurePrivateDraftFromConversationId, location.search, navigate, setActive]);
 
   useEffect(() => {
+    // Пока deep-link `?conversationId=` ещё резолвится, не затираем сохранённый id нулём.
+    if (activeId == null) {
+      const pending = new URLSearchParams(location.search).get('conversationId')?.trim() ?? '';
+      if (pending) return;
+    }
     saveActiveMessengerConversation(activeId);
-  }, [activeId]);
+  }, [activeId, location.search]);
 
   const handleSelectConversation = useCallback((id: string) => {
     blurActiveElement();

@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/features/messenger/api/messengerApi', () => ({
   sendMessage: vi.fn(),
+  fetchConversations: vi.fn(async () => []),
+  fetchMessengerMember: vi.fn(async () => null),
 }));
 
 vi.mock('../src/utils/audio', () => ({
@@ -167,6 +169,8 @@ describe('messenger chatStore last message preview', () => {
   it('reuses existing private conversation instead of opening a draft', async () => {
     useChatStore.setState((s) => ({
       ...s,
+      conversationsLoaded: true,
+      conversationsLoading: false,
       conversations: [
         {
           id: 'priv-77',
@@ -191,5 +195,41 @@ describe('messenger chatStore last message preview', () => {
     expect(ok).toBe(true);
     expect(useChatStore.getState().activeConversationId).toBe('priv-77');
     expect(useChatStore.getState().privateDraftPeer).toBeNull();
+  });
+
+  it('keeps draft active conversation after loadConversations refresh', async () => {
+    vi.mocked(messengerApi.fetchConversations).mockResolvedValue([
+      {
+        id: 'group-1',
+        type: 'group',
+        title: 'Общий',
+        avatar_url: null,
+        updated_at: '2026-05-07T12:00:00.000Z',
+        last_message: null,
+        unread_count: 0,
+        other_member: null,
+      },
+    ] as never);
+
+    useChatStore.setState((s) => ({
+      ...s,
+      conversationsLoaded: true,
+      conversationsLoading: false,
+      conversationsLastLoadedAt: 0,
+    }));
+
+    useChatStore.getState().openPrivateDraft({
+      id: 42,
+      name: 'Проповедник',
+      first_name: 'Алексей',
+      last_name: 'Гришин',
+      avatar_url: null,
+    });
+    expect(useChatStore.getState().activeConversationId).toBe('draft:42');
+
+    await useChatStore.getState().loadConversations({ force: true });
+
+    expect(useChatStore.getState().activeConversationId).toBe('draft:42');
+    expect(useChatStore.getState().privateDraftPeer?.id).toBe(42);
   });
 });

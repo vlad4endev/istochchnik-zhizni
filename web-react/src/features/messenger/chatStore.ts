@@ -1110,8 +1110,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (om && ls) memberLastSeenAt[om.id] = ls;
       }
       const activeId = get().activeConversationId;
+      // draft:* — локальный черновик ЛС, его нет в списке с сервера; не сбрасывать при refetch.
       const activeStillVisible =
-        activeId == null || conversations.some((c) => String(c.id) === String(activeId));
+        activeId == null ||
+        isDraftPrivateConversationId(activeId) ||
+        conversations.some((c) => String(c.id) === String(activeId));
       set({
         conversations,
         conversationsLoaded: true,
@@ -1196,6 +1199,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
   ensurePrivateDraftFromConversationId: async (conversationId) => {
     const memberId = parseDraftPrivateMemberId(conversationId);
     if (memberId == null) return false;
+
+    // Дождаться списка чатов, чтобы открыть существующее ЛС вместо нового draft.
+    if (!get().conversationsLoaded) {
+      try {
+        await get().loadConversations({ force: true });
+      } catch {
+        /* offline — ниже откроем draft по карточке участника */
+      }
+    }
+    // Параллельный loadConversations с MessengerPage мог уже идти — дождёмся его.
+    const waitStarted = Date.now();
+    while (get().conversationsLoading && Date.now() - waitStarted < 8_000) {
+      await new Promise((r) => setTimeout(r, 40));
+    }
 
     const existingConv = (get().conversations || EMPTY_ARRAY).find(
       (c) => c.type === 'private' && c.other_member != null && Number(c.other_member.id) === memberId,
