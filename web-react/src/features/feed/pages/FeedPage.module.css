@@ -19,7 +19,7 @@
   align-items: center;
   gap: 0.25rem;
   min-height: 2.85rem;
-  /* body уже даёт safe-area-inset-top — здесь только внутренний отступ. */
+  /* #root уже даёт safe-area-inset-top — здесь только внутренний отступ. */
   padding: 0.2rem 0.35rem;
   padding-left: max(0.55rem, env(safe-area-inset-left, 0px));
   padding-right: max(0.55rem, env(safe-area-inset-right, 0px));
