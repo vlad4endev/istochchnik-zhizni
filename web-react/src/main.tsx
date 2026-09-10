@@ -183,7 +183,7 @@ async function forceClientRefreshOnVersionChange(): Promise<void> {
   window.location.reload();
 }
 
-if (import.meta.env.DEV) {
+if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_WDYR === 'true') {
   void import('@welldone-software/why-did-you-render')
     .then(({ default: whyDidYouRender }) => {
       whyDidYouRender(React, {
