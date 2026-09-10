@@ -18,7 +18,6 @@ import {
   LuMessageCircle,
   LuPause,
   LuPlay,
-  LuUser,
   LuX,
 } from 'react-icons/lu';
 import '../components/ServiceMinistryCard.css';
@@ -51,17 +50,14 @@ import { NextWeekPrayerPlanSection } from '../../calendar/components/NextWeekPra
 import { userCanViewNextWeekPrayerPlan } from '../../calendar/prayerAccess';
 import { fetchRolePermissionsPublic } from '../../settings/rolePermissionsApi';
 import { useMe } from '@/hooks/useMe';
-import { fetchProfileByMemberId, fetchProfileByUsername } from '../../profile/publicProfileApi';
-import { memberNameFirstLast } from '../../profile/memberDisplayName';
+import { fetchProfileByMemberId } from '../../profile/publicProfileApi';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClassNested } from '../../../lib/sectionHeroChrome';
 import { apiBoolean } from '../../../lib/apiBoolean';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { memberRosterName } from '../../../lib/memberRosterName';
-import { pluralizeRu } from '../../../lib/pluralizeRu';
 import type { Member } from '../../../types';
 import { useAuthStore } from '../../auth/authStore';
-import { useProfileDraftStore } from '../../profile/profileDraftStore';
 import { useCoordinatorNoteEditorRequestStore } from '../coordinatorNoteEditorRequestStore';
 import { LimitedRegistrationDashboard } from '../components/LimitedRegistrationDashboard';
 import { BirthdayBlock } from '../components/BirthdayBlock';
@@ -848,25 +844,15 @@ function DashboardMain() {
     staleTime: 120_000,
   });
 
-  const profileUsername = useAuthStore((s) => s.username ?? '');
   const profileMemberId = useAuthStore((s) => s.memberId);
   const resolvedMemberId =
     profileMemberId ?? (typeof meQ.data?.id === 'number' ? meQ.data.id : null);
-  const publicProfileSlug =
-    profileUsername.trim() || (profileMemberId != null ? `member-${profileMemberId}` : '');
 
   const openMessengerDm = (memberId: number) => {
     const path = messengerDraftConversationPath(memberId);
     if (path === '/messenger') return;
     navigate(path);
   };
-
-  const myPublicProfileQ = useQuery({
-    queryKey: ['profile', 'dashboard-public', publicProfileSlug],
-    queryFn: () => fetchProfileByUsername(publicProfileSlug),
-    enabled: publicProfileSlug.length > 0,
-    staleTime: 60_000,
-  });
 
   const prayerQ = useQuery({
     queryKey: keys.calendarDay(todayDateKey),
@@ -940,37 +926,6 @@ function DashboardMain() {
   });
 
   const me = meQ.data ?? null;
-  const fullName = `${me?.first_name ?? ''} ${me?.last_name ?? ''}`.trim() || me?.name || 'Профиль';
-  const pf = myPublicProfileQ.data ?? null;
-
-  const profileDisplayTitle = useMemo(() => {
-    if (!pf) return fullName;
-    const fromMember = memberNameFirstLast(pf.profile);
-    if (fromMember) return fromMember;
-    const fromProfile = pf.profile.display_name?.trim();
-    if (fromProfile) return fromProfile;
-    return fullName || pf.profile.username || 'Профиль';
-  }, [pf, fullName]);
-
-  const isPlaceholderUsername = Boolean(
-    pf?.profile.username?.trim() && /^member-\d+$/i.test(pf.profile.username.trim()),
-  );
-
-  const profileHandleLine = useMemo(() => {
-    if (!pf || isPlaceholderUsername) return null;
-    const u = pf.profile.username?.trim();
-    if (!u) return null;
-    const at = `@${u}`;
-    const t = profileDisplayTitle.trim();
-    if (t.toLowerCase() === at.toLowerCase() || t.toLowerCase() === u.toLowerCase()) return null;
-    return at;
-  }, [pf, isPlaceholderUsername, profileDisplayTitle]);
-
-  const avatarUrl = resolvePublicUrl(pf?.profile.avatar_url ?? me?.avatar_url ?? null);
-  const publicationsCount = pf?.posts?.length ?? 0;
-  const publicationsLabel = pluralizeRu(publicationsCount, ['публикация', 'публикации', 'публикаций']);
-  const bioText = pf?.profile.bio?.trim() ?? '';
-  const hasProfilePostDraft = useProfileDraftStore((s) => s.hasActivePostDraft);
 
   const memberToday = prayerQ.data?.members?.[0] ?? null;
   const todayLabel = formatTodayLabel(now);
@@ -1318,40 +1273,6 @@ function DashboardMain() {
             </div>
 
             <div className="col-span-5 flex min-w-0 flex-col gap-4">
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    publicProfileSlug
-                      ? `/profile/${encodeURIComponent(publicProfileSlug)}`
-                      : '/profile',
-                  )
-                }
-                className={`${DESKTOP_WIDGET_CARD} group p-4 text-left`}
-              >
-                <p className={DESKTOP_WIDGET_LABEL}>Мой профиль</p>
-                <div className="mt-3 flex items-start gap-3">
-                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-stone-200/80 bg-stone-100 ring-1 ring-stone-200/60">
-                    {avatarUrl ? (
-                      <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="grid h-full w-full place-items-center text-stone-500">
-                        <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-base font-bold text-stone-900">{profileDisplayTitle}</p>
-                    <span className="mt-1.5 inline-block rounded-full bg-[#F0ECF9] px-2.5 py-0.5 text-[11px] font-semibold text-[#6B47B8]">
-                      {publicationsCount} {publicationsLabel}
-                    </span>
-                    <p className="mt-2 line-clamp-2 text-sm leading-snug text-stone-600">
-                      {bioText || 'Откройте профиль для обновления информации'}
-                    </p>
-                  </div>
-                </div>
-              </button>
-
               <div
                 className={[
                   'grid flex-1 gap-4',
@@ -1651,58 +1572,8 @@ function DashboardMain() {
             </div>
           )}
 
-          <div className="flex min-w-0 w-full flex-col gap-3">
-            <button
-              type="button"
-              onClick={() =>
-                navigate(
-                  publicProfileSlug
-                    ? `/profile/${encodeURIComponent(publicProfileSlug)}`
-                    : '/profile',
-                )
-              }
-              className="tap-highlight-transparent touch-manipulation relative w-full overflow-hidden rounded-2xl border border-stone-200/70 bg-white/90 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:p-4"
-            >
-              <div className="pointer-events-none absolute right-0 top-0 hidden h-20 w-20 rounded-full bg-primary/[0.06] blur-2xl lg:block" />
-              <div className="relative flex flex-col gap-3">
-                <div className="flex min-h-[1.25rem] items-center justify-between gap-2">
-                  <p className="text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">Мой профиль</p>
-                  {hasProfilePostDraft ? (
-                    <span
-                      className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold tracking-[0.02em] text-amber-900"
-                      title="Есть черновик поста на странице"
-                    >
-                      Черновик
-                    </span>
-                  ) : null}
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-stone-100 ring-1 ring-stone-200/70">
-                    {avatarUrl ? (
-                      <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="grid h-full w-full place-items-center text-stone-500">
-                        <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <p className="truncate text-[15px] font-bold leading-snug text-stone-900">{profileDisplayTitle}</p>
-                    {profileHandleLine ? (
-                      <p className="truncate text-xs font-medium text-stone-500">{profileHandleLine}</p>
-                    ) : null}
-                    <div className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full bg-stone-100/90 px-2 py-1 text-[11px] font-bold text-stone-700">
-                      <span className="tabular-nums text-stone-900">{publicationsCount}</span>
-                      <span>{publicationsLabel}</span>
-                    </div>
-                    <p className="line-clamp-2 text-xs leading-snug text-stone-600 sm:text-sm">
-                      {bioText || 'Откройте страницу, чтобы заполнить описание.'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </button>
-            {displayAnnouncement && dashboardNotesQ.data?.announcement ? (
+          {displayAnnouncement && dashboardNotesQ.data?.announcement ? (
+            <div className="flex min-w-0 w-full flex-col gap-3">
               <section
                 aria-label="Объявление"
                 className="overflow-hidden rounded-2xl border border-[#F5D99A] bg-gradient-to-br from-[#FFF8EC] to-[#FEF0D6] p-4 shadow-[var(--shadow-card)]"
@@ -1750,8 +1621,8 @@ function DashboardMain() {
                   {announcementExpanded ? 'Свернуть' : 'Читать полностью'}
                 </button>
               </section>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
 
           {!isParishionerGuest ? (
             <button
