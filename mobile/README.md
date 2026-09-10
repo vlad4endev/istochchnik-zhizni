@@ -27,10 +27,22 @@
 
 ## FCM (production Android)
 
-1. В Firebase Console создайте Android-приложение с package `com.istochnikzhizni.molitva`
-2. Скачайте `google-services.json` в `mobile/` (файл в `.gitignore`)
+1. В Firebase Console Android-приложение с package `com.istochnikzhizni.molitva`
+2. Скачайте `google-services.json` в `mobile/` (файл в `.gitignore`, в git не коммитится)
 3. Шаблон: `mobile/google-services.json.example`
-4. `app.config.js` подключает файл только если он есть — без него preview-сборка всё равно возможна (Expo push token)
+4. `app.config.js` подключает локальный файл **или** EAS file-env `GOOGLE_SERVICES_JSON`
+
+### EAS cloud build
+
+Без файла в репозитории задайте в Expo Dashboard → Project → Environment variables (для `preview`/`production`):
+
+- Name: `GOOGLE_SERVICES_JSON`
+- Type: **File**
+- Value: содержимое `google-services.json`
+
+Локально: просто положите файл в `mobile/google-services.json` перед `eas build` / `prebuild`.
+
+`EXPO_PUBLIC_PUSH_ENABLED=1` уже в `eas.json` для preview/production.
 
 ## Сборка Android APK
 

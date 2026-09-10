@@ -46,6 +46,9 @@ const SCHEME_OPTIONS: { value: AppSettings['colorScheme']; label: string; icon: 
 ];
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
+const HAS_GOOGLE_SERVICES = Boolean(
+  (Constants.expoConfig?.extra as { hasGoogleServices?: boolean } | undefined)?.hasGoogleServices,
+);
 
 export function SettingsScreen() {
   const { colors, isDark } = useTheme();
@@ -235,6 +238,12 @@ export function SettingsScreen() {
           <View style={{ paddingVertical: 10, marginBottom: 8 }}>
             <Text style={styles.fieldLabel}>Push-уведомления</Text>
             <Text style={styles.hint}>{pushStatusLabel(pushStatus)}</Text>
+            <Text style={styles.hint}>
+              FCM config:{' '}
+              {HAS_GOOGLE_SERVICES
+                ? 'google-services.json подключён'
+                : 'нет файла — нужен для нативного FCM в release'}
+            </Text>
           </View>
           <Text style={styles.fieldLabel}>Адрес API</Text>
           <TextInput
