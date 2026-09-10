@@ -277,10 +277,13 @@ function profileDisplayName(
   return fallback;
 }
 
+const SERVICE_CARD_WEEKDAYS = ['Вск', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'] as const;
+
 function formatServiceCardDateLabel(startsAt: Date | undefined): string {
   if (!startsAt) return '';
-  const raw = format(startsAt, 'EEE, d MMMM yyyy', { locale: ru });
-  return raw.replace(/^./, (ch) => ch.toUpperCase());
+  const weekday = SERVICE_CARD_WEEKDAYS[startsAt.getDay()] ?? format(startsAt, 'EEE', { locale: ru });
+  const rest = format(startsAt, 'd MMMM yyyy', { locale: ru });
+  return `${weekday}, ${rest}`;
 }
 
 type SermonPlanPhase = 'upcoming' | 'live' | 'feedback' | 'closed';
@@ -344,7 +347,6 @@ type NearestSermonData = {
   leaderMemberId: number | null;
   topic: string;
   scripture: string;
-  topicTag: string | null;
 };
 
 function extractNearestSermonData(plan: ServicePlanDetails | null): NearestSermonData | null {
@@ -357,11 +359,6 @@ function extractNearestSermonData(plan: ServicePlanDetails | null): NearestSermo
     return topic.length > 0 && scripture.length > 0;
   });
   if (!sermonBlock) return null;
-  const title = String(sermonBlock.title ?? '').trim();
-  const topicTag =
-    title && !/проповед/i.test(title) && title.toLowerCase() !== String(sermonBlock.content_json.sermon_topic).trim().toLowerCase()
-      ? title
-      : null;
   return {
     planId: plan.id,
     shareToken: plan.share_token,
@@ -371,7 +368,6 @@ function extractNearestSermonData(plan: ServicePlanDetails | null): NearestSermo
     leaderMemberId: plan.leader_member_id ?? null,
     topic: String(sermonBlock.content_json.sermon_topic).trim(),
     scripture: String(sermonBlock.content_json.sermon_scripture).trim(),
-    topicTag,
   };
 }
 
@@ -385,7 +381,7 @@ function ServicePersonAvatar({
   if (avatarUrl) {
     return <img src={avatarUrl} alt="" decoding="async" />;
   }
-  return <>{preacherInitials(name)}</>;
+  return <span>{preacherInitials(name)}</span>;
 }
 
 function UpcomingPreacherCard({
@@ -396,7 +392,6 @@ function UpcomingPreacherCard({
   hostAvatarUrl,
   topic,
   scripture,
-  topicTag,
   dateLabel,
   canRate,
   onOpenComments,
@@ -408,14 +403,16 @@ function UpcomingPreacherCard({
   hostAvatarUrl: string | null;
   topic: string;
   scripture: string;
-  topicTag: string | null;
   dateLabel: string;
   canRate: boolean;
   onOpenComments: () => void;
 }) {
   const scriptureUrl = buildBibleVerseUrl(scripture);
-  const topicTitle = /^[«"].*[»"]$/.test(topic.trim()) ? topic.trim() : `«${topic.trim()}»`;
+  const topicPlain = topic.trim();
+  const topicTitle = /^[«"].*[»"]$/.test(topicPlain) ? topicPlain : `«${topicPlain}»`;
+  const topicForSummary = topicPlain.replace(/^[«"]|[»"]$/g, '');
   const showHost = Boolean(hostName?.trim());
+  const summary = `${preacherName} - ${topicForSummary}`;
 
   return (
     <section className="dashboard-service-card dashboard-sermon-card sm:max-w-[460px] lg:max-w-none" aria-label="Карточка служения">
@@ -426,7 +423,13 @@ function UpcomingPreacherCard({
 
       <div className="dashboard-service-card__roster">
         <div className="dashboard-service-card__person dashboard-service-card__person--preacher">
-          <div className="dashboard-service-card__avatar" aria-hidden>
+          <div
+            className={[
+              'dashboard-service-card__avatar',
+              preacherAvatarUrl ? 'dashboard-service-card__avatar--photo' : 'dashboard-service-card__avatar--initials',
+            ].join(' ')}
+            aria-hidden
+          >
             <ServicePersonAvatar name={preacherName} avatarUrl={preacherAvatarUrl} />
           </div>
           <div className="dashboard-service-card__text">
@@ -437,18 +440,21 @@ function UpcomingPreacherCard({
         </div>
 
         {showHost ? (
-          <>
-            <div className="dashboard-service-card__divider" aria-hidden />
-            <div className="dashboard-service-card__person dashboard-service-card__person--host">
-              <div className="dashboard-service-card__avatar" aria-hidden>
-                <ServicePersonAvatar name={hostName!} avatarUrl={hostAvatarUrl} />
-              </div>
-              <div className="dashboard-service-card__text">
-                <p className="dashboard-service-card__role">Ведущий</p>
-                <p className="dashboard-service-card__name">{hostName}</p>
-              </div>
+          <div className="dashboard-service-card__person dashboard-service-card__person--host">
+            <div
+              className={[
+                'dashboard-service-card__avatar',
+                hostAvatarUrl ? 'dashboard-service-card__avatar--photo' : 'dashboard-service-card__avatar--initials',
+              ].join(' ')}
+              aria-hidden
+            >
+              <ServicePersonAvatar name={hostName!} avatarUrl={hostAvatarUrl} />
             </div>
-          </>
+            <div className="dashboard-service-card__text">
+              <p className="dashboard-service-card__role">Ведущий</p>
+              <p className="dashboard-service-card__name">{hostName}</p>
+            </div>
+          </div>
         ) : null}
       </div>
 
@@ -462,7 +468,9 @@ function UpcomingPreacherCard({
             </svg>
             <span>{scripture}</span>
           </a>
-          {topicTag ? <span className="dashboard-service-card__tag dashboard-service-card__tag--topic">{topicTag}</span> : null}
+          <p className="dashboard-service-card__summary" title={summary}>
+            {summary}
+          </p>
         </div>
         {canRate ? (
           <button type="button" onClick={onOpenComments} className="dashboard-service-card__rate">
@@ -1210,7 +1218,6 @@ function DashboardMain() {
                   hostAvatarUrl={hostAvatarUrl}
                   topic={nearestSermonData!.topic}
                   scripture={nearestSermonData!.scripture}
-                  topicTag={nearestSermonData!.topicTag}
                   dateLabel={nearestSermonDateLabel}
                   canRate={canRateSermon}
                   onOpenComments={() => navigate(`/service-plan/sermon-comments/${nearestSermonData!.shareToken}`)}
@@ -1578,7 +1585,6 @@ function DashboardMain() {
                 hostAvatarUrl={hostAvatarUrl}
                 topic={nearestSermonData!.topic}
                 scripture={nearestSermonData!.scripture}
-                topicTag={nearestSermonData!.topicTag}
                 dateLabel={nearestSermonDateLabel}
                 canRate={canRateSermon}
                 onOpenComments={() => navigate(`/service-plan/sermon-comments/${nearestSermonData!.shareToken}`)}
