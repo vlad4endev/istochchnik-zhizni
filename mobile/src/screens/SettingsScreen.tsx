@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchMe } from '../api/profile';
-import { resolveApiOrigin } from '../lib/config';
+import { getDefaultApiOrigin, resolveApiOrigin } from '../lib/config';
 import { roleLabelRu } from '../lib/roleLabels';
 import { getApiBaseUrl, setApiBaseUrl } from '../lib/storage';
 import type { MainTabParamList, RootStackParamList } from '../navigation/types';
@@ -76,6 +76,13 @@ export function SettingsScreen() {
 
   const saveApiUrl = () => {
     setApiBaseUrl(apiUrl.trim());
+    setApiSaved(true);
+    setTimeout(() => setApiSaved(false), 2000);
+  };
+
+  const resetApiUrl = () => {
+    setApiUrl('');
+    setApiBaseUrl('');
     setApiSaved(true);
     setTimeout(() => setApiSaved(false), 2000);
   };
@@ -234,7 +241,7 @@ export function SettingsScreen() {
             style={styles.input}
             value={apiUrl}
             onChangeText={setApiUrl}
-            placeholder={resolveApiOrigin()}
+            placeholder={getDefaultApiOrigin()}
             placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
@@ -245,8 +252,12 @@ export function SettingsScreen() {
             <Text style={styles.hintMono}>{resolveApiOrigin()}</Text>
           </Text>
           <Text style={styles.hint}>
-            На реальном устройстве укажите IP компьютера в локальной сети, например
-            {' '}http://192.168.1.5:40978
+            По умолчанию сборки:{' '}
+            <Text style={styles.hintMono}>{getDefaultApiOrigin()}</Text>
+          </Text>
+          <Text style={styles.hint}>
+            Preview/production APK ходят на прод. Для локального API на устройстве укажите LAN IP,
+            например http://192.168.1.5:40978. Пустое поле = дефолт сборки.
           </Text>
           <Pressable
             onPress={saveApiUrl}
@@ -256,6 +267,14 @@ export function SettingsScreen() {
               {apiSaved ? 'Сохранено ✓' : 'Сохранить адрес'}
             </Text>
           </Pressable>
+          {getApiBaseUrl().trim() ? (
+            <Pressable
+              onPress={resetApiUrl}
+              style={({ pressed }) => [styles.inlineResetBtn, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={styles.inlineResetText}>Сбросить на дефолт сборки</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <SectionLabel title="Оформление" />
@@ -470,6 +489,17 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boo
       color: colors.textOnPrimary,
       fontWeight: '700',
       fontSize: 14,
+    },
+    inlineResetBtn: {
+      alignSelf: 'flex-start',
+      marginTop: 8,
+      paddingHorizontal: 4,
+      paddingVertical: 6,
+    },
+    inlineResetText: {
+      color: colors.primary,
+      fontWeight: '600',
+      fontSize: 13,
     },
     schemeRow: {
       flexDirection: 'row',

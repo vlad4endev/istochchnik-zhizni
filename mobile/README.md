@@ -43,9 +43,23 @@
 
 ## Dev против локального API
 
-- Эмулятор Android: по умолчанию `http://10.0.2.2:40978`
-- Реальное устройство: в «Ещё» укажите LAN IP, например `http://192.168.1.5:40978`
+- `expo start` / `__DEV__`: по умолчанию эмулятор `http://10.0.2.2:40978` (iOS simulator — `localhost`)
+- Реальное устройство: в «Ещё» укажите LAN IP, например `http://192.168.1.5:40978`, или сбросьте override
 - API: `npx ts-node-dev --transpile-only --respawn src/main.ts`
+
+## Preview / production API
+
+EAS-профили `preview` и `production` задают:
+
+```
+EXPO_PUBLIC_API_ORIGIN=https://app.church-tambov.ru
+```
+
+Release-сборки без ручного override в настройках ходят на этот origin (и `wss://…/api/realtime`). Локальный `.env` в `mobile/` может переопределить для отладки:
+
+```
+EXPO_PUBLIC_API_ORIGIN=https://app.church-tambov.ru
+```
 
 ## Команды из корня
 

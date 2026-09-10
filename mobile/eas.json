@@ -18,6 +18,7 @@
         "buildType": "apk"
       },
       "env": {
+        "EXPO_PUBLIC_API_ORIGIN": "https://app.church-tambov.ru",
         "EXPO_PUBLIC_PUSH_ENABLED": "1"
       }
     },
@@ -26,6 +27,7 @@
         "buildType": "app-bundle"
       },
       "env": {
+        "EXPO_PUBLIC_API_ORIGIN": "https://app.church-tambov.ru",
         "EXPO_PUBLIC_PUSH_ENABLED": "1"
       }
     }
