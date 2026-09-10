@@ -1685,7 +1685,7 @@ export function StudioEditor() {
         </>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2 gap-y-3 max-lg:sticky max-lg:top-0 max-lg:z-[calc(var(--z-sticky)-1)] max-lg:-mx-2 max-lg:border-b max-lg:border-[var(--studio-editor-border)] max-lg:bg-[var(--studio-toolbar-bg)] max-lg:px-2 max-lg:py-2 max-lg:backdrop-blur-sm" style={{ paddingTop: 'max(0px, env(safe-area-inset-top, 0px))' }}>
+      <div className="flex flex-wrap items-center gap-2 gap-y-3 max-lg:sticky max-lg:top-0 max-lg:z-[calc(var(--z-sticky)-1)] max-lg:-mx-2 max-lg:border-b max-lg:border-[var(--studio-editor-border)] max-lg:bg-[var(--studio-toolbar-bg)] max-lg:px-2 max-lg:py-2 max-lg:backdrop-blur-sm">
         <Link
           to={backTo}
           onClick={(e) => {

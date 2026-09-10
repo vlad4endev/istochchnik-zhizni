@@ -232,15 +232,30 @@ export default defineConfig(({ mode }) => {
             '**/apple-touch-icon-180x180.png',
             /** `includeAssets`; тот же конфликт с `*.ico` в glob. */
             '**/favicon.ico',
+            /**
+             * Сплэши `apple-touch-startup-image` читает SpringBoard при запуске с экрана
+             * Домой — до старта SW и вне его scope, поэтому из precache их не достать ни
+             * разу. Android их вообще не использует. 44 файла — это 1.1 МБ (11% precache),
+             * которые скачивались при установке и ревалидировались на каждом обновлении
+             * SW впустую. В dist они остаются и отдаются обычным HTTP-запросом.
+             */
+            '**/pwa/apple-splash-*.png',
           ],
           /**
-           * true: новый SW вызывает skipWaiting() сразу при установке и захватывает все вкладки.
-           * PWAUpdatePrompt всё равно показывает баннер — пользователь жмёт «Обновить» и
-           * страница перезагружается с новыми ассетами. Без этого пользователи видят старый
-           * CSS до тех пор, пока не закроют ВСЕ вкладки приложения.
+           * false — обязательное условие для `registerType: 'prompt'`.
+           *
+           * При true новый SW активировался сам и вместе с `cleanupOutdatedCaches` вычищал
+           * precache уже открытой вкладки: следующий lazy `import()` падал с ChunkLoadError.
+           * На iOS, где PWA неделями висит в свитчере, это давало белые экраны и внезапные
+           * перезагрузки поверх набранного текста.
+           *
+           * Теперь новый SW ждёт в `waiting`, PWAUpdatePrompt показывает баннер, и переход
+           * на новую версию делает сам пользователь. При `skipWaiting: false` Workbox сам
+           * вписывает в sw.js обработчик сообщения SKIP_WAITING, которое шлёт workbox-window
+           * из `updateServiceWorker(true)` — отдельный listener в custom-sw.js не нужен.
            */
-          skipWaiting: true,
-          clientsClaim: true,
+          skipWaiting: false,
+          clientsClaim: false,
           navigateFallback: '/index.html',
           /**
            * `/storage/v1/...` — частый прокси к Supabase Storage с того же origin, что и SPA.
@@ -360,9 +375,11 @@ export default defineConfig(({ mode }) => {
       port: 4173,
       proxy: apiProxy,
     },
-    css: {
-      postcss: './postcss.config.cjs',
-    },
+    /*
+     * `css.postcss` намеренно не задан: Vite трактует строку как каталог для поиска
+     * конфига, а не как путь к файлу, поэтому прежнее './postcss.config.cjs' молча
+     * игнорировалось. Автопоиск сам находит единственный postcss.config.cjs в корне.
+     */
     build: {
       outDir: 'dist',
       assetsDir: 'assets',

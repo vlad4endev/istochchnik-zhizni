@@ -3,6 +3,16 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "//browserslist": "Порог iOS/Safari 15.4 — первая версия, где появились :has(), dialog и обновлённый env(). Без явного списка Autoprefixer брал дефолтный запрос и целился только в ios_saf 18.5+/26.x, то есть на iPhone с iOS 15-17 CSS уезжал без -webkit-префиксов. Android-порог держим на Chrome 90 под Capacitor-сборку.",
+  "browserslist": [
+    "> 0.5%",
+    "last 2 versions",
+    "Firefox ESR",
+    "not dead",
+    "iOS >= 15.4",
+    "Safari >= 15.4",
+    "Chrome >= 90"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -11,7 +21,7 @@
     "preview": "vite preview",
     "package:server": "bash ../scripts/package-web-for-server.sh",
     "pwa:icons": "npx @vite-pwa/assets-generator assets/logo.svg -r ./public -p minimal -o",
-    "pwa:splash": "npx pwa-asset-generator@8.1.4 public/assets/logo.svg public/pwa -b \"#f4f1ed\" -p \"18%\" -t png --splash-only --portrait-only -o",
+    "pwa:splash": "node scripts/generate-splash.mjs",
     "cap:sync": "cap sync",
     "cap:add:ios": "cap add ios",
     "cap:add:android": "cap add android",

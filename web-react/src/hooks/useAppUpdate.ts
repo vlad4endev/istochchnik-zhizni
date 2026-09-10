@@ -3,34 +3,25 @@ import { useEffect } from 'react';
 export function useAppUpdate() {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
-    const UPDATE_PROMPT_DISMISS_KEY = 'pwa:update-prompt:dismissed-until';
     let swFetchFailureCooldownUntil = 0;
     let swFetchFailureLogged = false;
 
+    /**
+     * Применяет обновление только `PWAUpdatePrompt` (`registerType: 'prompt'`), и он же
+     * перезагружает вкладку после `controlling`. Здесь остаётся страховка для остальных
+     * вкладок: SW сменился в соседней вкладке — эта подхватывает новую версию.
+     *
+     * `hadController` обязателен: при самой первой установке SW тоже приходит
+     * `controllerchange`, и без проверки первый визит заканчивался бы перезагрузкой.
+     */
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    let reloading = false;
     const onControllerChange = () => {
-      const jitterMs = Math.floor(Math.random() * 3000);
-      window.setTimeout(() => {
-        window.location.reload();
-      }, jitterMs);
+      if (!hadController || reloading) return;
+      reloading = true;
+      window.location.reload();
     };
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
-
-    const forceSkipWaitingIfNeeded = async () => {
-      let dismissedUntil = 0;
-      try {
-        const raw = sessionStorage.getItem(UPDATE_PROMPT_DISMISS_KEY);
-        dismissedUntil = raw ? Number.parseInt(raw, 10) : 0;
-      } catch {
-        dismissedUntil = 0;
-      }
-      if (!Number.isFinite(dismissedUntil) || dismissedUntil <= Date.now()) {
-        return;
-      }
-      const reg = await navigator.serviceWorker.getRegistration();
-      const waiting = reg?.waiting;
-      if (!waiting) return;
-      waiting.postMessage({ type: 'SKIP_WAITING' });
-    };
 
     const checkUpdate = async () => {
       if (Date.now() < swFetchFailureCooldownUntil) return;
@@ -45,7 +36,6 @@ export function useAppUpdate() {
             }),
           ]);
         }
-        void forceSkipWaitingIfNeeded();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error ?? '');
         const isSwScriptFetchError =

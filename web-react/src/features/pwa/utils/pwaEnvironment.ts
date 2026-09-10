@@ -23,6 +23,27 @@ export function isAppleMobileWeb(): boolean {
 }
 
 /**
+ * Safari на iPhone/iPad. Единственный браузер на iOS, где работает описанный в
+ * баннере установки сценарий «Поделиться» → «На экран „Домой“».
+ *
+ * Chrome, Firefox, Edge, Opera и Яндекс на iOS тоже держат в UA слово Safari
+ * (все они на WebKit), но прячут установку в собственные меню — инструкция для
+ * них неверна, поэтому их отсекаем по родному токену.
+ */
+export function isIosSafariBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  if (!isAppleMobileWeb()) return false;
+  const ua = navigator.userAgent;
+  if (!/safari/i.test(ua)) return false;
+  return !/crios|fxios|edgios|opios|opt\/|yabrowser|android/i.test(ua);
+}
+
+/** Установленная PWA именно на iOS: Android-standalone сюда не попадает. */
+export function isIosStandalone(): boolean {
+  return isAppleMobileWeb() && isInstalledPwa();
+}
+
+/**
  * На iOS с `navigator.standalone` `matchMedia('(display-mode: standalone)')` иногда не срабатывает
  * до следующего кадра — помечаем `<html data-pwa-standalone>` для CSS (фон, safe hints).
  */
@@ -58,36 +79,37 @@ const PWA_SPLASH_THEME_COLOR = '#f4f1ed';
 const PWA_APP_THEME_COLOR_LIGHT = '#7d3640';
 const PWA_APP_THEME_COLOR_DARK = '#5c2830';
 
-function setThemeColorMeta(content: string): void {
-  document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((meta) => {
-    meta.content = content;
-  });
+/**
+ * Только системная пара из index.html: слот `data-app-managed` принадлежит
+ * applyDocumentAccessibility.ts — там живёт выбранная в приложении тема, и
+ * перетирать её отсюда значило бы гонку двух источников за один элемент.
+ *
+ * Пока слот пуст (тема ещё не применена), он не кандидат по стандарту, поэтому
+ * цвет сплэша ниже виден. Как только тема применится — она и должна выигрывать.
+ */
+function staticThemeColorMetas(): HTMLMetaElement[] {
+  return Array.from(
+    document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]:not([data-app-managed])'),
+  );
 }
 
 /** Статус-бар Chrome в тон кремового сплэша (до первого кадра React). */
 export function applyPwaSplashThemeColor(): void {
   if (typeof document === 'undefined') return;
   if (!isInstalledPwa()) return;
-  setThemeColorMeta(PWA_SPLASH_THEME_COLOR);
+  staticThemeColorMetas().forEach((meta) => {
+    meta.content = PWA_SPLASH_THEME_COLOR;
+  });
 }
 
 /** Вернуть theme-color после сплэша — как в index.html / манифесте. */
 export function restorePwaAppThemeColor(): void {
   if (typeof document === 'undefined') return;
-  const dark =
-    document.documentElement.getAttribute('data-mantine-color-scheme') === 'dark' ||
-    window.matchMedia('(prefers-color-scheme: dark)').matches;
-  document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((meta) => {
+  staticThemeColorMetas().forEach((meta) => {
     const media = meta.getAttribute('media') ?? '';
-    if (media.includes('prefers-color-scheme: dark')) {
-      meta.content = PWA_APP_THEME_COLOR_DARK;
-      return;
-    }
-    if (media.includes('prefers-color-scheme: light')) {
-      meta.content = PWA_APP_THEME_COLOR_LIGHT;
-      return;
-    }
-    meta.content = dark ? PWA_APP_THEME_COLOR_DARK : PWA_APP_THEME_COLOR_LIGHT;
+    meta.content = media.includes('prefers-color-scheme: dark')
+      ? PWA_APP_THEME_COLOR_DARK
+      : PWA_APP_THEME_COLOR_LIGHT;
   });
 }
 

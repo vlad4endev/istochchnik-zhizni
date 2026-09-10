@@ -216,10 +216,13 @@ function StudioTopBar({
   return (
     <header
       className="flex shrink-0 items-center gap-2 border-b border-[var(--studio-toolbar-border)] bg-[var(--studio-toolbar-bg)] px-3 py-2 md:hidden"
-      style={{
-        boxShadow: 'var(--studio-toolbar-shadow)',
-        paddingTop: 'max(0.5rem, env(safe-area-inset-top, 0px))',
-      }}
+      /*
+       * Без env(safe-area-inset-top): корень StudioLayout — обычный блок в потоке,
+       * а body уже держит `padding-top: env(safe-area-inset-top)`. Второй такой
+       * отступ давал на iPhone с вырезом лишние ~59px пустоты над заголовком.
+       * Вертикальный отступ задаёт `py-2` в className.
+       */
+      style={{ boxShadow: 'var(--studio-toolbar-shadow)' }}
     >
       <button
         type="button"

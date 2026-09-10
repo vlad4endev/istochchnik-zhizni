@@ -42,6 +42,16 @@ textarea {
   --a11y-font-scale: 1;
   --a11y-line-height: 1.55;
   --a11y-focus-ring: var(--primary);
+  /*
+   * Фон полосы под статус-баром iOS (см. body::before ниже). Обязан быть тёмным:
+   * `apple-mobile-web-app-status-bar-style: black-translucent` рисует часы и батарею
+   * белым, а светлая тема отдаёт под ними кремовый --surface.
+   * В тёмных темах достаточно самого --surface — полоса становится незаметной.
+   *
+   * Литерал, а не var(--primary): акцент темы бывает светлым (#ffff00 в
+   * high-contrast, #e895a0 в тёмной) — белые глифы на нём не читались бы.
+   */
+  --app-status-bar-bg: #7d3640;
   --sidebar-width: 88px;
   --app-safe-bottom: env(safe-area-inset-bottom, 0px);
   /*
@@ -329,9 +339,20 @@ html[data-a11y-large-cursor='true'] body summary {
     auto;
 }
 
-/* PWA: вертикальный скролл; pinch-zoom может быть включён через viewport-meta (см. nativeShellViewport). */
+/*
+ * PWA: скролл по обеим осям + жест масштабирования.
+ *
+ * `pinch-zoom` в списке обязателен. LOCKED_VIEWPORT в nativeShellViewport.ts намеренно
+ * не ставит `maximum-scale`/`user-scalable=no`, то есть зум разрешён на уровне viewport,
+ * но `touch-action: pan-x pan-y` всё равно гасил его на уровне композитора. Пользователи
+ * со слабым зрением не могли увеличить ни текст, ни фотографии — это нарушение
+ * WCAG 2.1 SC 1.4.4.
+ *
+ * Дочерние элементы со своим `touch-action` (вьюеры с собственными жестами) не
+ * затрагиваются: браузер берёт пересечение значений по цепочке предков.
+ */
 html.app-native-shell {
-  touch-action: pan-x pan-y;
+  touch-action: pan-x pan-y pinch-zoom;
   scrollbar-gutter: auto;
   /*
    * height + max-height: JS (nativeShellViewport) пишет inline-стиль напрямую, поэтому CSS-значение здесь —
@@ -427,6 +448,45 @@ body {
   padding-bottom: 0;
 }
 
+/*
+ * Полоса под статус-баром установленной iOS-PWA.
+ *
+ * index.html объявляет `apple-mobile-web-app-status-bar-style: black-translucent`:
+ * контент уходит под статус-бар, а часы, сеть и батарея рисуются белым — поверх
+ * кремового --surface они практически не читались.
+ *
+ * `position: fixed` обязателен: body — флекс-контейнер, поточный ::before стал бы
+ * флекс-элементом и сдвинул интерфейс. Высота — тот же env(), что и padding-top
+ * body, поэтому на устройствах без выреза и в ландшафте полоса схлопывается в 0.
+ *
+ * z-index 150 — выше обычного контента, но ниже оверлеев (модалки Mantine, вьюеры
+ * медиа и историй, звонки). Полноэкранные оверлеи почти все тёмные и красят эту
+ * зону сами; перекрывать их фирменным бордо было бы хуже, чем ничего не делать.
+ */
+/*
+ * Тёмные темы: --surface сам по себе тёмный, белые глифы на нём читаются.
+ * Красим полосу в него же, чтобы она не выделялась вторым цветом у верхнего края.
+ * Светлые темы (базовая и sepia) остаются на фирменном бордо из :root.
+ */
+html.dark,
+html[data-color-theme='dark'],
+html[data-color-theme='high-contrast'],
+html[data-color-theme='blue'] {
+  --app-status-bar-bg: var(--surface);
+}
+
+html[data-pwa-standalone='1'][data-apple-mobile='1'] body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--app-status-bar-bg);
+  pointer-events: none;
+  z-index: 150;
+}
+
 .corporate-surface {
   background: var(--mantine-color-default, var(--surface-elevated));
   border: 1px solid var(--mantine-color-default-border, var(--border, transparent));
@@ -437,7 +497,7 @@ body {
    CSS здесь — страховка и направление отображения. overflow:hidden убирает второй scroll-контейнер
    (html→body→#root → три вложенных), iOS скроллил «не тот» слой. */
 html.app-native-shell body {
-  touch-action: pan-x pan-y;
+  touch-action: pan-x pan-y pinch-zoom;
   height: var(--viewport-height, 100dvh);
   max-height: var(--viewport-height, 100dvh);
   min-height: 0;
@@ -542,7 +602,7 @@ dd {
   overscroll-behavior-y: contain;
   display: flex;
   flex-direction: column;
-  touch-action: pan-x pan-y;
+  touch-action: pan-x pan-y pinch-zoom;
   background: var(--surface);
   color: var(--text);
 }
