@@ -339,9 +339,20 @@ html[data-a11y-large-cursor='true'] body summary {
     auto;
 }
 
-/* PWA: вертикальный скролл; pinch-zoom может быть включён через viewport-meta (см. nativeShellViewport). */
+/*
+ * PWA: скролл по обеим осям + жест масштабирования.
+ *
+ * `pinch-zoom` в списке обязателен. LOCKED_VIEWPORT в nativeShellViewport.ts намеренно
+ * не ставит `maximum-scale`/`user-scalable=no`, то есть зум разрешён на уровне viewport,
+ * но `touch-action: pan-x pan-y` всё равно гасил его на уровне композитора. Пользователи
+ * со слабым зрением не могли увеличить ни текст, ни фотографии — это нарушение
+ * WCAG 2.1 SC 1.4.4.
+ *
+ * Дочерние элементы со своим `touch-action` (вьюеры с собственными жестами) не
+ * затрагиваются: браузер берёт пересечение значений по цепочке предков.
+ */
 html.app-native-shell {
-  touch-action: pan-x pan-y;
+  touch-action: pan-x pan-y pinch-zoom;
   scrollbar-gutter: auto;
   /*
    * height + max-height: JS (nativeShellViewport) пишет inline-стиль напрямую, поэтому CSS-значение здесь —
@@ -486,7 +497,7 @@ html[data-pwa-standalone='1'][data-apple-mobile='1'] body::before {
    CSS здесь — страховка и направление отображения. overflow:hidden убирает второй scroll-контейнер
    (html→body→#root → три вложенных), iOS скроллил «не тот» слой. */
 html.app-native-shell body {
-  touch-action: pan-x pan-y;
+  touch-action: pan-x pan-y pinch-zoom;
   height: var(--viewport-height, 100dvh);
   max-height: var(--viewport-height, 100dvh);
   min-height: 0;
@@ -591,7 +602,7 @@ dd {
   overscroll-behavior-y: contain;
   display: flex;
   flex-direction: column;
-  touch-action: pan-x pan-y;
+  touch-action: pan-x pan-y pinch-zoom;
   background: var(--surface);
   color: var(--text);
 }
