@@ -11,6 +11,7 @@ import {
   readActiveMessengerConversation,
   saveActiveMessengerConversation,
 } from '../../../lib/persistAppLocation';
+import { syncViewportHeightVars } from '../../../lib/nativeShellViewport';
 import './messenger.css';
 
 const ChatWindow = lazy(async () => {
@@ -105,7 +106,13 @@ export function MessengerPage() {
     } else {
       delete document.documentElement.dataset.chatOpen;
     }
-    return () => { delete document.documentElement.dataset.chatOpen; };
+    // Сразу пересчитываем --viewport-height / inline heights: иначе после фото
+    // в чате укороченная высота может остаться до следующего resize.
+    syncViewportHeightVars();
+    return () => {
+      delete document.documentElement.dataset.chatOpen;
+      syncViewportHeightVars();
+    };
   }, [mobileView]);
 
   /**
