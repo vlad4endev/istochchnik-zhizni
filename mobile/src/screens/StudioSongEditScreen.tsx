@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { fetchSong } from '../api/songs';
+import { fetchSong, type RecognizedSong } from '../api/songs';
 import {
   aiChordPlacement,
   aiSongCleanup,
@@ -30,6 +30,11 @@ import {
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
 import { SheetMusicPreview } from '../components/studio/SheetMusicPreview';
+import { SheetRecognizerModal } from '../components/studio/SheetRecognizerModal';
+import {
+  buildSheetMetaFromRecognition,
+  recognizedSongToSheetChordPro,
+} from '../lib/sheetMusicTypes';
 import type { RootStackParamList } from '../navigation/types';
 import { useTheme, type ThemeColors } from '../theme';
 
@@ -78,6 +83,7 @@ export function StudioSongEditScreen() {
 
   const [pane, setPane] = useState<Pane>('lyrics');
   const [showSheetPreview, setShowSheetPreview] = useState(false);
+  const [recognizerOpen, setRecognizerOpen] = useState(false);
 
   const [content, setContent] = useState('');
   const [key, setKey] = useState('');
@@ -281,6 +287,40 @@ export function StudioSongEditScreen() {
     else saveSheetMut.mutate();
   };
 
+  const applySheetRecognition = async (data: RecognizedSong) => {
+    const hasNotation = Boolean(data.abcNotation?.trim() || data.sourceImageUrl?.trim());
+    const nextChordPro = recognizedSongToSheetChordPro(data);
+    if (!nextChordPro.trim() && !hasNotation) {
+      throw new Error('Не удалось извлечь ноты из партитуры');
+    }
+    const nextMeta = buildSheetMetaFromRecognition(data);
+    const nextKey = data.key?.trim() || '';
+    const contentToSave = nextChordPro.trim() || '{sec:Партитура}\n';
+    const saved = await saveSheetVersion(songId, {
+      sheet_content: contentToSave,
+      sheet_key: nextKey || null,
+      sheet_meta: nextMeta,
+    });
+    const savedContent = saved.sheet_content ?? contentToSave;
+    const savedKey = saved.sheet_key ?? nextKey;
+    const savedMeta = normalizeMeta(saved.sheet_meta ?? nextMeta);
+    setSheetContent(savedContent);
+    setSheetKey(savedKey);
+    setSheetMeta(savedMeta);
+    setSheetBaseline({ content: savedContent, key: savedKey, meta: savedMeta });
+    setPane('sheet');
+    setShowSheetPreview(false);
+    void qc.invalidateQueries({ queryKey: ['studio', 'versions'] });
+    void qc.invalidateQueries({ queryKey: ['studio', 'version', songId] });
+    void qc.invalidateQueries({ queryKey: ['studio', 'setlist'] });
+    void qc.invalidateQueries({ queryKey: ['studio', 'perform'] });
+    const titleBit = data.title?.trim() ? ` «${data.title.trim()}»` : '';
+    Alert.alert(
+      'Готово',
+      `Создана версия с нотами${titleBit}. Основной текст песни не изменён.`,
+    );
+  };
+
   const patchMeta = <K extends keyof StudioSheetMeta>(field: K, value: StudioSheetMeta[K]) => {
     setSheetMeta((prev) => ({ ...prev, [field]: value }));
   };
@@ -425,6 +465,18 @@ export function StudioSongEditScreen() {
             <Text style={styles.aiBtnText}>
               {showSheetPreview ? 'Редактор' : 'Просмотр'}
             </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setRecognizerOpen(true)}
+            disabled={saving || aiBusy}
+            style={({ pressed }) => [
+              styles.aiBtn,
+              (saving || aiBusy) && { opacity: 0.5 },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Ionicons name="camera-outline" size={16} color={colors.primary} />
+            <Text style={styles.aiBtnText}>Распознать</Text>
           </Pressable>
         </View>
       )}
@@ -587,6 +639,12 @@ export function StudioSongEditScreen() {
           </>
         )}
       </ScrollView>
+
+      <SheetRecognizerModal
+        visible={recognizerOpen}
+        onClose={() => setRecognizerOpen(false)}
+        onApply={applySheetRecognition}
+      />
     </KeyboardAvoidingView>
   );
 }

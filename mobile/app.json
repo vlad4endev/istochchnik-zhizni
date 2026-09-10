@@ -16,7 +16,8 @@
       "bundleIdentifier": "com.istochnikzhizni.molitva",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Нужен доступ к микрофону для голосовых сообщений",
-        "NSPhotoLibraryUsageDescription": "Нужен доступ к фото для публикаций, историй и чата"
+        "NSPhotoLibraryUsageDescription": "Нужен доступ к фото для публикаций, историй, чата и распознавания нот",
+        "NSCameraUsageDescription": "Нужен доступ к камере для фото партитуры"
       }
     },
     "android": {
@@ -32,6 +33,7 @@
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.READ_MEDIA_IMAGES",
@@ -54,7 +56,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Нужен доступ к фото для публикаций и историй"
+          "photosPermission": "Нужен доступ к фото для публикаций, историй и распознавания нот",
+          "cameraPermission": "Нужен доступ к камере для фото партитуры"
         }
       ],
       [
