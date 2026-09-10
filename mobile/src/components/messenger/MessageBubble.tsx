@@ -64,13 +64,30 @@ export function MessageBubble({
 
   const imageUri = useMemo(() => {
     if (!showImage) return null;
+    const payloadUrl = typeof message.payload?.url === 'string' ? message.payload.url : '';
+    if (
+      payloadUrl &&
+      (payloadUrl.startsWith('file:') ||
+        payloadUrl.startsWith('content:') ||
+        payloadUrl.startsWith('ph:') ||
+        payloadUrl.startsWith('assets-library:'))
+    ) {
+      return { uri: payloadUrl };
+    }
+    // Optimistic local preview before server id exists
+    if (message.status === 'sending' && payloadUrl.startsWith('http')) {
+      return { uri: payloadUrl };
+    }
+    if (message.status === 'sending' && !/^\d+$/.test(String(message.id)) && payloadUrl) {
+      return { uri: payloadUrl };
+    }
     const token = getAuthToken();
     const path = `/api/messenger/messages/${encodeURIComponent(message.id)}/attachment-file`;
     return {
       uri: `${resolveApiOrigin()}${path}`,
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     };
-  }, [message.id, showImage]);
+  }, [message.id, message.payload?.url, message.status, showImage]);
 
   const bodyText = message.is_deleted
     ? 'Сообщение удалено'
@@ -155,12 +172,41 @@ export function MessageBubble({
 
   const reactions = message.reactions ?? [];
 
+  const forwardedFromLabel = useMemo(() => {
+    const raw = message.forwarded_from;
+    if (raw == null) return null;
+    let obj: unknown = raw;
+    if (typeof raw === 'string') {
+      try {
+        obj = JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+    if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null;
+    const name = String((obj as { sender_name?: unknown }).sender_name ?? '').trim();
+    return name || 'сообщения';
+  }, [message.forwarded_from]);
+
   const bubble = (
     <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
       {showSenderName && !isOwn ? (
         <MessengerText numberOfLines={1} style={styles.senderName}>
           {message.sender_name || message.sender_first_name || 'Участник'}
         </MessengerText>
+      ) : null}
+
+      {forwardedFromLabel && !message.is_deleted ? (
+        <View style={styles.forwardRow}>
+          <Ionicons
+            name="arrow-redo"
+            size={12}
+            color={isOwn ? 'rgba(255,255,255,0.85)' : colors.primary}
+          />
+          <MessengerText numberOfLines={1} style={styles.forwardLabel}>
+            Переслано от {forwardedFromLabel}
+          </MessengerText>
+        </View>
       ) : null}
 
       {message.is_pinned && !message.is_deleted ? (
@@ -509,6 +555,18 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isOwn: bool
       fontWeight: '700',
       color: isOwn ? colors.textOnPrimary : colors.primary,
       opacity: isOwn ? 0.9 : 1,
+    },
+    forwardRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginBottom: 2,
+    },
+    forwardLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: isOwn ? 'rgba(255,255,255,0.85)' : colors.primary,
+      flexShrink: 1,
     },
     pinRow: {
       flexDirection: 'row',

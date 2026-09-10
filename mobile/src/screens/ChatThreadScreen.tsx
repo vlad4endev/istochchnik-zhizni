@@ -22,16 +22,20 @@ import {
   fetchConversations,
   fetchMessages,
   fetchPinnedMessages,
+  forwardMessage,
   markConversationRead,
   pinChatMessage,
   removeReaction,
+  sendImageMessage,
   sendMessage,
   sendPollMessage,
   unpinChatMessage,
+  uploadMessengerFile,
   votePoll,
   type MessageWithSender,
 } from '../api/messenger';
 import { ChatInput } from '../components/messenger/ChatInput';
+import { ForwardMessageSheet } from '../components/messenger/ForwardMessageSheet';
 import { MessageBubble } from '../components/messenger/MessageBubble';
 import { MessageContextMenu } from '../components/messenger/MessageContextMenu';
 import { PollCreateModal } from '../components/messenger/PollCreateModal';
@@ -69,6 +73,7 @@ export function ChatThreadScreen() {
   const [optimistic, setOptimistic] = useState<MessageWithSender[]>([]);
   const [replyTo, setReplyTo] = useState<MessageWithSender | null>(null);
   const [pollOpen, setPollOpen] = useState(false);
+  const [forwardMessageId, setForwardMessageId] = useState<string | null>(null);
   const [menuMessage, setMenuMessage] = useState<{
     message: MessageWithSender;
     isOwn: boolean;
@@ -249,6 +254,80 @@ export function ChatThreadScreen() {
         );
         throw e;
       }
+    },
+  });
+
+  const imageMutation = useMutation({
+    mutationFn: async (input: {
+      caption: string;
+      asset: { uri: string; name: string; type: string };
+    }) => {
+      const clientMsgId = createClientMsgId();
+      const replyId = replyTo?.id ?? null;
+      const optimisticMsg: MessageWithSender = {
+        id: clientMsgId,
+        conversation_id: conversationId,
+        sender_id: memberId,
+        client_msg_id: clientMsgId,
+        content: input.caption,
+        payload_type: 'image',
+        payload: { url: input.asset.uri, name: input.asset.name, mimeType: input.asset.type },
+        reply_to_message_id: replyId,
+        is_edited: false,
+        is_deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        sender_name: null,
+        sender_first_name: null,
+        sender_last_name: null,
+        reply_preview: replyTo
+          ? {
+              id: replyTo.id,
+              content: replyTo.content,
+              sender_name: replyTo.sender_name,
+              is_deleted: replyTo.is_deleted,
+            }
+          : null,
+        reactions: [],
+        status: 'sending',
+      };
+      setOptimistic((prev) => [...prev, optimisticMsg]);
+      try {
+        const uploaded = await uploadMessengerFile(input.asset, { conversationId });
+        const saved = await sendImageMessage(conversationId, {
+          caption: input.caption,
+          uploaded,
+          clientMsgId,
+          replyToMessageId: replyId,
+        });
+        setOptimistic((prev) => prev.filter((m) => m.client_msg_id !== clientMsgId));
+        setReplyTo(null);
+        await invalidateThread();
+        return saved;
+      } catch (e) {
+        setOptimistic((prev) =>
+          prev.map((m) => (m.client_msg_id === clientMsgId ? { ...m, status: 'error' } : m)),
+        );
+        throw e;
+      }
+    },
+  });
+
+  const forwardMutation = useMutation({
+    mutationFn: async ({
+      messageId,
+      conversationIds,
+    }: {
+      messageId: string;
+      conversationIds: string[];
+    }) => forwardMessage(messageId, conversationIds),
+    onSuccess: (result) => {
+      const n = result.forwarded?.length ?? 0;
+      Alert.alert(
+        'Готово',
+        n === 1 ? 'Сообщение переслано' : `Переслано в ${n} чата`,
+      );
+      void queryClient.invalidateQueries({ queryKey: ['messenger', 'conversations'] });
     },
   });
 
@@ -514,7 +593,12 @@ export function ChatThreadScreen() {
           onSend={async (text) => {
             await sendMutation.mutateAsync(text);
           }}
-          disabled={sendMutation.isPending || pollMutation.isPending}
+          onSendImage={async (input) => {
+            await imageMutation.mutateAsync(input);
+          }}
+          disabled={
+            sendMutation.isPending || pollMutation.isPending || imageMutation.isPending
+          }
         />
       </View>
 
@@ -533,6 +617,7 @@ export function ChatThreadScreen() {
         onPinToggle={(message, nextPinned) => {
           void pinMutation.mutateAsync({ message, nextPinned });
         }}
+        onForward={(message) => setForwardMessageId(message.id)}
       />
 
       <PollCreateModal
@@ -540,6 +625,21 @@ export function ChatThreadScreen() {
         onClose={() => setPollOpen(false)}
         onSubmit={async (input) => {
           await pollMutation.mutateAsync(input);
+        }}
+      />
+
+      <ForwardMessageSheet
+        visible={forwardMessageId != null}
+        messageId={forwardMessageId}
+        conversations={conversationsQuery.data ?? []}
+        sourceConversationId={conversationId}
+        onClose={() => setForwardMessageId(null)}
+        onForward={async (conversationIds) => {
+          if (!forwardMessageId) return;
+          await forwardMutation.mutateAsync({
+            messageId: forwardMessageId,
+            conversationIds,
+          });
         }}
       />
     </KeyboardAvoidingView>

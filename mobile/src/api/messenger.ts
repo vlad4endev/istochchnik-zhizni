@@ -70,8 +70,23 @@ export interface MessageWithSender {
   poll_tallies?: number[];
   poll_my_options?: number[];
   is_pinned?: boolean;
+  forwarded_from?: unknown;
   status?: 'sending' | 'sent' | 'delivered' | 'error';
 }
+
+export type UploadedMessengerFile = {
+  url: string;
+  name: string;
+  objectPath?: string;
+  mimeType: string;
+  size: number;
+};
+
+export type LocalMessengerAsset = {
+  uri: string;
+  name: string;
+  type: string;
+};
 
 export interface SearchMember {
   id: number;
@@ -252,4 +267,78 @@ export async function removeReaction(messageId: string, emoji: string): Promise<
   await apiClient.delete(
     `${BASE}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`,
   );
+}
+
+export async function uploadMessengerFile(
+  asset: LocalMessengerAsset,
+  opts?: { conversationId?: string },
+): Promise<UploadedMessengerFile> {
+  const form = new FormData();
+  form.append('file', {
+    uri: asset.uri,
+    name: asset.name,
+    type: asset.type,
+  } as unknown as Blob);
+  if (asset.name) form.append('originalFileName', asset.name);
+  const conv = opts?.conversationId?.trim();
+  if (conv) form.append('conversationId', conv);
+
+  const { data } = await apiClient.post<UploadedMessengerFile>(`${BASE}/upload`, form, {
+    timeout: 180_000,
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export async function sendImageMessage(
+  conversationId: string,
+  input: {
+    caption?: string;
+    uploaded: UploadedMessengerFile | UploadedMessengerFile[];
+    clientMsgId?: string;
+    replyToMessageId?: string | null;
+  },
+): Promise<MessageWithSender> {
+  const list = Array.isArray(input.uploaded) ? input.uploaded : [input.uploaded];
+  const first = list[0];
+  if (!first?.url) {
+    throw new Error('Нет загруженного изображения');
+  }
+  return sendMessage(
+    conversationId,
+    (input.caption ?? '').trim(),
+    input.clientMsgId,
+    input.replyToMessageId ?? null,
+    {
+      payloadType: 'image',
+      payload: {
+        url: first.url,
+        name: first.name ?? '',
+        objectPath: first.objectPath,
+        mimeType: first.mimeType ?? '',
+        size: first.size ?? 0,
+        images: list.map((u) => ({
+          url: u.url,
+          name: u.name,
+          objectPath: u.objectPath,
+          mimeType: u.mimeType,
+          size: u.size,
+        })),
+      },
+    },
+  );
+}
+
+export async function forwardMessage(
+  messageId: string,
+  conversationIds: string[],
+): Promise<{
+  ok: boolean;
+  forwarded: Array<{ conversationId: string; message: MessageWithSender }>;
+}> {
+  const { data } = await apiClient.post<{
+    ok: boolean;
+    forwarded: Array<{ conversationId: string; message: MessageWithSender }>;
+  }>(`${BASE}/messages/${encodeURIComponent(messageId)}/forward`, { conversationIds });
+  return data;
 }

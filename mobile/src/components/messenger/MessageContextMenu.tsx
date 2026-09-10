@@ -25,6 +25,7 @@ interface MessageContextMenuProps {
   onReact: (messageId: string, emoji: string) => void;
   onDelete: (messageId: string) => void;
   onPinToggle?: (message: MessageWithSender, nextPinned: boolean) => void;
+  onForward?: (message: MessageWithSender) => void;
 }
 
 export function MessageContextMenu({
@@ -36,6 +37,7 @@ export function MessageContextMenu({
   onReact,
   onDelete,
   onPinToggle,
+  onForward,
 }: MessageContextMenuProps) {
   const styles = useMemo(() => createStyles(), []);
 
@@ -46,6 +48,13 @@ export function MessageContextMenu({
     (message.payload_type === 'text' || message.payload_type === 'poll') &&
     String(message.content ?? '').trim().length > 0;
   const isPinned = Boolean(message.is_pinned);
+  const canForward =
+    Boolean(onForward) &&
+    !message.is_deleted &&
+    message.status !== 'sending' &&
+    message.status !== 'error' &&
+    /^\d+$/.test(String(message.id)) &&
+    message.payload_type !== 'access_request';
 
   const handleCopy = async () => {
     try {
@@ -101,6 +110,17 @@ export function MessageContextMenu({
               onClose();
             }}
           />
+          {canForward ? (
+            <MenuItem
+              styles={styles}
+              emoji="↪️"
+              label="Переслать"
+              onPress={() => {
+                onForward?.(message);
+                onClose();
+              }}
+            />
+          ) : null}
           {canCopy ? (
             <MenuItem styles={styles} emoji="📋" label="Копировать" onPress={() => void handleCopy()} />
           ) : null}
