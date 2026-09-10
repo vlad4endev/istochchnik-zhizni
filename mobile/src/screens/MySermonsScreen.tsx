@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useMemo } from 'react';
 import {
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -15,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { fetchSermonNotes } from '../api/sermonNotes';
+import { createSermonNote, fetchSermonNotes } from '../api/sermonNotes';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
 import { ScreenHeader } from '../components/ScreenHeader';
@@ -28,10 +29,30 @@ export function MySermonsScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const navigation = useNavigation<Nav>();
+  const qc = useQueryClient();
 
   const notesQuery = useQuery({
     queryKey: ['sermon-notes'],
     queryFn: fetchSermonNotes,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createSermonNote({
+        title: 'Новый конспект',
+        topic: '',
+        scripture: '',
+        body: '',
+        body_format: 'plain',
+      }),
+    onSuccess: (note) => {
+      void qc.invalidateQueries({ queryKey: ['sermon-notes'] });
+      navigation.navigate('SermonNoteDetail', {
+        noteId: note.id,
+        title: note.title || 'Конспект',
+      });
+    },
+    onError: (e) => Alert.alert('Ошибка', String(e)),
   });
 
   if (notesQuery.isLoading) {
@@ -59,7 +80,19 @@ export function MySermonsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Мои проповеди" subtitle="Конспекты проповедника" />
+      <ScreenHeader
+        title="Мои проповеди"
+        subtitle="Конспекты проповедника"
+        right={
+          <Pressable
+            onPress={() => createMutation.mutate()}
+            disabled={createMutation.isPending}
+            hitSlop={10}
+          >
+            <Ionicons name="add-circle-outline" size={28} color={colors.textOnPrimary} />
+          </Pressable>
+        }
+      />
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
@@ -73,6 +106,12 @@ export function MySermonsScreen() {
           <View style={styles.empty}>
             <Ionicons name="document-text-outline" size={40} color={colors.textMuted} />
             <Text style={styles.emptyText}>Пока нет конспектов</Text>
+            <Pressable
+              onPress={() => createMutation.mutate()}
+              style={({ pressed }) => [styles.createBtn, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={styles.createBtnText}>Создать конспект</Text>
+            </Pressable>
           </View>
         ) : (
           notes.map((note) => (
@@ -120,5 +159,13 @@ function createStyles(colors: ThemeColors) {
     date: { fontSize: 12, color: colors.textMuted, marginTop: 10 },
     empty: { alignItems: 'center', paddingTop: 60, gap: 10 },
     emptyText: { color: colors.textMuted, fontWeight: '600' },
+    createBtn: {
+      marginTop: 8,
+      backgroundColor: colors.primary,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 10,
+    },
+    createBtnText: { color: colors.textOnPrimary, fontWeight: '700' },
   });
 }

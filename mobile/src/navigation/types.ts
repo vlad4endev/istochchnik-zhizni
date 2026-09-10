@@ -1,3 +1,5 @@
+import type { StoryAuthorGroup } from '../api/feed';
+
 export type AuthStackParamList = {
   Login: undefined;
   PendingReview: undefined;
@@ -31,4 +33,9 @@ export type RootStackParamList = {
   Broadcast: undefined;
   MySermons: undefined;
   SermonNoteDetail: { noteId: string; title: string };
+  Profile: { username?: string; memberId?: number } | undefined;
+  ProfileEdit: undefined;
+  ComposePost: undefined;
+  FeedPostComments: { postId: string };
+  StoryViewer: { groupIndex: number; groups: StoryAuthorGroup[] };
 };

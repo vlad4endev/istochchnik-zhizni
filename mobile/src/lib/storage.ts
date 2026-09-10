@@ -95,3 +95,13 @@ export function readAuthProfile(): {
     memberId: Number.isFinite(memberId) ? memberId : null,
   };
 }
+
+const LS_DEVICE_ID = 'fcm_push_device_id';
+
+export function getOrCreateDeviceId(): string {
+  const existing = storage.getString(LS_DEVICE_ID)?.trim();
+  if (existing) return existing;
+  const id = `rn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  storage.set(LS_DEVICE_ID, id);
+  return id;
+}

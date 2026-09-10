@@ -22,6 +22,15 @@ export interface SermonNote extends SermonNoteListItem {
   share_token: string;
 }
 
+export type SermonNoteInput = {
+  title?: string;
+  topic?: string;
+  scripture?: string;
+  body?: string;
+  body_format?: SermonNoteBodyFormat;
+  service_plan_id?: number | null;
+};
+
 export async function fetchSermonNotes(): Promise<SermonNoteListItem[]> {
   const { data } = await apiClient.get<SermonNoteListItem[]>(BASE);
   return Array.isArray(data) ? data : [];
@@ -30,4 +39,24 @@ export async function fetchSermonNotes(): Promise<SermonNoteListItem[]> {
 export async function fetchSermonNote(id: string): Promise<SermonNote> {
   const { data } = await apiClient.get<SermonNote>(`${BASE}/${id}`);
   return data;
+}
+
+export async function createSermonNote(input?: SermonNoteInput): Promise<SermonNote> {
+  const { data } = await apiClient.post<SermonNote>(BASE, {
+    body_format: 'plain',
+    ...input,
+  });
+  return data;
+}
+
+export async function updateSermonNote(
+  id: string,
+  patch: SermonNoteInput,
+): Promise<SermonNote> {
+  const { data } = await apiClient.patch<SermonNote>(`${BASE}/${id}`, patch);
+  return data;
+}
+
+export async function deleteSermonNote(id: string): Promise<void> {
+  await apiClient.delete(`${BASE}/${id}`);
 }

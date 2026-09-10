@@ -29,7 +29,10 @@
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -38,7 +41,20 @@
     "plugins": [
       "expo-status-bar",
       "expo-audio",
-      "react-native-reanimated"
+      "react-native-reanimated",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Нужен доступ к фото для публикаций и историй"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#7d3640"
+        }
+      ]
     ]
   }
 }

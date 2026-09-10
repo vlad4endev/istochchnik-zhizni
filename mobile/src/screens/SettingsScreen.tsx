@@ -54,7 +54,6 @@ export function SettingsScreen() {
   const role = useAuthStore((s) => s.role);
   const username = useAuthStore((s) => s.username);
   const logout = useAuthStore((s) => s.logout);
-  const refreshProfile = useAuthStore((s) => s.refreshProfile);
   const { canView: canViewMediaSchedule } = useMediaScheduleAccess();
   const { canView: canViewMusicSchedule } = useMusicScheduleAccess();
   const { canView: canViewSundaySchedule } = useSundayScheduleAccess();
@@ -90,11 +89,6 @@ export function SettingsScreen() {
     ]);
   };
 
-  const refreshAll = () => {
-    void refreshProfile();
-    void meQuery.refetch();
-  };
-
   const initials = useMemo(() => {
     const parts = displayName.trim().split(/\s+/).filter(Boolean);
     if (parts.length >= 2) {
@@ -109,7 +103,7 @@ export function SettingsScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <Pressable
-          onPress={refreshAll}
+          onPress={() => navigation.navigate('Profile')}
           style={({ pressed }) => [styles.profileCard, pressed && { opacity: 0.92 }]}
         >
           <View style={styles.avatar}>
@@ -121,7 +115,7 @@ export function SettingsScreen() {
             {username ? <Text style={styles.profileSub}>@{username}</Text> : null}
             {phone ? <Text style={styles.profileSub}>{phone}</Text> : null}
           </View>
-          <Ionicons name="refresh-outline" size={20} color={colors.textMuted} />
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </Pressable>
 
         <SectionLabel title="Разделы" />
