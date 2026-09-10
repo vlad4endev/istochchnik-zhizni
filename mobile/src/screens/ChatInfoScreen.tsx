@@ -22,10 +22,12 @@ import {
   fetchConversations,
   fetchPrivateChatProfile,
   addParticipant,
+  mergeDefaultChatPermissions,
   patchConversationPermissions,
   patchMyConversationUi,
   removeParticipant,
   updateConversation,
+  type ChatPermissionKey,
   type ConversationMember,
   type ParticipantRole,
 } from '../api/messenger';
@@ -45,6 +47,14 @@ import { useTheme } from '../theme';
 type ChatInfoRoute = RouteProp<RootStackParamList, 'ChatInfo'>;
 
 const INVITE_BASE = 'https://app.church-tambov.ru/join';
+
+const PERMISSION_ROWS: { key: ChatPermissionKey; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'can_send_messages', label: 'Отправлять сообщения', icon: 'chatbubble-outline' },
+  { key: 'can_send_media', label: 'Отправлять медиа', icon: 'image-outline' },
+  { key: 'can_add_users', label: 'Добавлять участников', icon: 'person-add-outline' },
+  { key: 'can_pin_messages', label: 'Закреплять сообщения', icon: 'pin-outline' },
+  { key: 'can_manage_chat', label: 'Управлять чатом', icon: 'shield-outline' },
+];
 
 function randomInviteToken(): string {
   return Math.random().toString(36).slice(2, 12);
@@ -84,6 +94,7 @@ export function ChatInfoScreen() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [addMembersOpen, setAddMembersOpen] = useState(false);
+  const [permDraft, setPermDraft] = useState<Record<ChatPermissionKey, boolean> | null>(null);
   const inviteBootstrapRef = useRef(false);
 
   const conversationsQuery = useQuery({
@@ -158,6 +169,25 @@ export function ChatInfoScreen() {
       Alert.alert('Ошибка', 'Не удалось обновить ссылку-приглашение');
     },
   });
+
+  const permissionsMutation = useMutation({
+    mutationFn: (next: Record<ChatPermissionKey, boolean>) =>
+      patchConversationPermissions(conversationId, { default_permissions: next }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['messenger', 'meta', conversationId] });
+    },
+    onError: () => {
+      Alert.alert('Ошибка', 'Не удалось сохранить разрешения');
+      if (metaQuery.data) {
+        setPermDraft(mergeDefaultChatPermissions(metaQuery.data.default_permissions));
+      }
+    },
+  });
+
+  useEffect(() => {
+    if (!metaQuery.data) return;
+    setPermDraft(mergeDefaultChatPermissions(metaQuery.data.default_permissions));
+  }, [metaQuery.data]);
 
   const canManage = metaQuery.data?.my_effective_permissions?.can_manage_chat === true;
   const canAddUsers = metaQuery.data?.my_effective_permissions?.can_add_users === true;
@@ -437,6 +467,42 @@ export function ChatInfoScreen() {
                 <Text style={styles.resetInviteText}>Сбросить ссылку</Text>
               </Pressable>
             </View>
+          </>
+        ) : null}
+
+        {canManage && permDraft ? (
+          <>
+            <Text style={styles.sectionLabel}>Разрешения участников</Text>
+            <View style={styles.card}>
+              {PERMISSION_ROWS.map((row, index) => (
+                <View
+                  key={row.key}
+                  style={[
+                    styles.row,
+                    index < PERMISSION_ROWS.length - 1 && styles.permRowBorder,
+                  ]}
+                >
+                  <View style={styles.rowIcon}>
+                    <Ionicons name={row.icon} size={20} color={colors.primary} />
+                  </View>
+                  <Text style={styles.rowLabel}>{row.label}</Text>
+                  <Switch
+                    value={permDraft[row.key]}
+                    onValueChange={(value) => {
+                      const next = { ...permDraft, [row.key]: value };
+                      setPermDraft(next);
+                      permissionsMutation.mutate(next);
+                    }}
+                    disabled={permissionsMutation.isPending}
+                    trackColor={{ false: colors.textMuted, true: colors.primary }}
+                    thumbColor="#fff"
+                  />
+                </View>
+              ))}
+            </View>
+            <Text style={styles.permHint}>
+              Эти права действуют для обычных участников. Админы и создатель не ограничены.
+            </Text>
           </>
         ) : null}
 
@@ -748,6 +814,17 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boo
       fontSize: 15,
       fontWeight: '600',
       color: '#dc2626',
+    },
+    permRowBorder: {
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: border,
+    },
+    permHint: {
+      fontSize: 12,
+      color: colors.textMuted,
+      paddingHorizontal: 8,
+      marginTop: -4,
+      lineHeight: 16,
     },
     infoRow: {
       paddingHorizontal: 16,

@@ -471,6 +471,30 @@ export type PatchMyConversationUiBody = {
   uiFolder?: 'personal' | 'ministry' | null;
 };
 
+export type ChatPermissionKey =
+  | 'can_send_messages'
+  | 'can_send_media'
+  | 'can_add_users'
+  | 'can_pin_messages'
+  | 'can_manage_chat';
+
+export const DEFAULT_CHAT_PERMISSIONS: Record<ChatPermissionKey, boolean> = {
+  can_send_messages: true,
+  can_send_media: true,
+  can_add_users: false,
+  can_pin_messages: false,
+  can_manage_chat: false,
+};
+
+export function mergeDefaultChatPermissions(
+  raw: Record<string, boolean> | undefined | null,
+): Record<ChatPermissionKey, boolean> {
+  return {
+    ...DEFAULT_CHAT_PERMISSIONS,
+    ...(raw ?? {}),
+  };
+}
+
 export async function fetchConversationMeta(conversationId: string): Promise<ConversationMeta> {
   const { data } = await apiClient.get<ConversationMeta>(
     `${BASE}/conversations/${encodeURIComponent(conversationId)}/meta`,
