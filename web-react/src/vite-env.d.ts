@@ -20,6 +20,10 @@ interface ImportMetaEnv {
   readonly VITE_APP_VARIANT?: string;
   /** `true` — подключить скрипт Progressier после первого кадра (push/PWA); на проде должен быть настроен домен и файл у них в дашборде. */
   readonly VITE_PROGRESSIER_ENABLED?: string;
+  /** Appwrite Cloud project ID (Settings → Project ID). Without this, startup ping is skipped. */
+  readonly VITE_APPWRITE_PROJECT_ID?: string;
+  /** Appwrite API endpoint; defaults to https://fra.cloud.appwrite.io/v1 */
+  readonly VITE_APPWRITE_ENDPOINT?: string;
 }
 
 interface ImportMeta {
