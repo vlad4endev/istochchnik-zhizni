@@ -60,6 +60,12 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "owner": "vladislav4endevs-team",
+    "extra": {
+      "eas": {
+        "projectId": "2e8867ad-a0ba-423e-bd88-119b68bcf090"
+      }
+    },
     "plugins": [
       "expo-status-bar",
       [
