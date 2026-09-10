@@ -551,6 +551,21 @@ export async function addParticipant(
   return data ?? { ok: true };
 }
 
+export async function patchConversationMember(
+  conversationId: string,
+  memberId: number,
+  patch: {
+    role?: ParticipantRole;
+    permissions?: Record<string, boolean>;
+    muted_until?: string | null;
+  },
+): Promise<void> {
+  await apiClient.patch(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/members/${memberId}`,
+    patch,
+  );
+}
+
 export async function patchMyConversationUi(
   conversationId: string,
   body: PatchMyConversationUiBody,

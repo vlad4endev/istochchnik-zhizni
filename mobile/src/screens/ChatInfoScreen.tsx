@@ -23,6 +23,7 @@ import {
   fetchPrivateChatProfile,
   addParticipant,
   mergeDefaultChatPermissions,
+  patchConversationMember,
   patchConversationPermissions,
   patchMyConversationUi,
   removeParticipant,
@@ -265,6 +266,23 @@ export function ChatInfoScreen() {
     },
   });
 
+  const roleMutation = useMutation({
+    mutationFn: (input: { targetId: number; role: ParticipantRole }) =>
+      patchConversationMember(conversationId, input.targetId, { role: input.role }),
+    onSuccess: async (_data, vars) => {
+      await queryClient.invalidateQueries({
+        queryKey: ['messenger', 'members', conversationId],
+      });
+      Alert.alert(
+        'Готово',
+        vars.role === 'admin' ? 'Назначен администратором' : 'Права администратора сняты',
+      );
+    },
+    onError: () => {
+      Alert.alert('Ошибка', 'Не удалось изменить роль участника');
+    },
+  });
+
   const addMember = async (targetId: number) => {
     const result = await addParticipant(conversationId, targetId);
     await queryClient.invalidateQueries({
@@ -351,6 +369,50 @@ export function ChatInfoScreen() {
         onPress: () => kickMutation.mutate(m.member_id),
       },
     ]);
+  };
+
+  const openMemberActions = (m: ConversationMember) => {
+    const name = memberDisplayName(m);
+    const isSelf = memberId != null && m.member_id === memberId;
+    const buttons: {
+      text: string;
+      style?: 'cancel' | 'destructive' | 'default';
+      onPress?: () => void;
+    }[] = [
+      {
+        text: 'Профиль',
+        onPress: () => navigation.navigate('Profile', { memberId: m.member_id }),
+      },
+    ];
+
+    if (canManage && !isSelf && m.role === 'member') {
+      buttons.push({
+        text: 'Назначить администратором',
+        onPress: () => roleMutation.mutate({ targetId: m.member_id, role: 'admin' }),
+      });
+    }
+
+    if (canManage && !isSelf && m.role === 'admin') {
+      buttons.push({
+        text: 'Снять администратора',
+        onPress: () => roleMutation.mutate({ targetId: m.member_id, role: 'member' }),
+      });
+    }
+
+    if (
+      canKick &&
+      !isSelf &&
+      m.role !== 'owner'
+    ) {
+      buttons.push({
+        text: 'Исключить из группы',
+        style: 'destructive',
+        onPress: () => confirmKick(m),
+      });
+    }
+
+    buttons.push({ text: 'Отмена', style: 'cancel' });
+    Alert.alert(name, undefined, buttons);
   };
 
   if (isPrivate) {
@@ -546,24 +608,26 @@ export function ChatInfoScreen() {
           ) : members.length === 0 ? (
             <Text style={styles.emptyMembers}>Пока никого нет</Text>
           ) : (
-            members.map((item, index) => (
-              <MemberRow
-                key={String(item.member_id)}
-                member={item}
-                styles={styles}
-                colors={colors}
-                isLast={index === members.length - 1}
-                showKick={
-                  canKick &&
-                  item.role !== 'owner' &&
-                  (memberId == null || item.member_id !== memberId)
-                }
-                onPress={() =>
-                  navigation.navigate('Profile', { memberId: item.member_id })
-                }
-                onKick={() => confirmKick(item)}
-              />
-            ))
+            members.map((item, index) => {
+              const isSelf = memberId != null && item.member_id === memberId;
+              const canActOn =
+                canManage ||
+                (canKick && item.role !== 'owner' && !isSelf);
+              return (
+                <MemberRow
+                  key={String(item.member_id)}
+                  member={item}
+                  styles={styles}
+                  colors={colors}
+                  isLast={index === members.length - 1}
+                  showActions={canActOn && !isSelf && item.role !== 'owner'}
+                  onPress={() =>
+                    navigation.navigate('Profile', { memberId: item.member_id })
+                  }
+                  onActions={() => openMemberActions(item)}
+                />
+              );
+            })
           )}
         </View>
 
@@ -661,24 +725,24 @@ function MemberRow({
   styles,
   colors,
   isLast,
-  showKick,
+  showActions,
   onPress,
-  onKick,
+  onActions,
 }: {
   member: ConversationMember;
   styles: ReturnType<typeof createStyles>;
   colors: ReturnType<typeof useTheme>['colors'];
   isLast: boolean;
-  showKick?: boolean;
+  showActions?: boolean;
   onPress: () => void;
-  onKick?: () => void;
+  onActions?: () => void;
 }) {
   const name = memberDisplayName(member);
   const avatar = resolvePublicUrl(member.avatar_url ?? null);
   return (
     <Pressable
       onPress={onPress}
-      onLongPress={showKick ? onKick : undefined}
+      onLongPress={showActions ? onActions : undefined}
       delayLongPress={350}
       style={({ pressed }) => [
         styles.memberRow,
@@ -700,14 +764,14 @@ function MemberRow({
         </Text>
         <Text style={styles.memberRole}>{roleLabel(member.role)}</Text>
       </View>
-      {showKick ? (
+      {showActions ? (
         <Pressable
-          onPress={onKick}
+          onPress={onActions}
           hitSlop={10}
           style={({ pressed }) => [styles.kickBtn, pressed && styles.pressed]}
-          accessibilityLabel="Исключить"
+          accessibilityLabel="Действия с участником"
         >
-          <Ionicons name="remove-circle-outline" size={22} color="#dc2626" />
+          <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
         </Pressable>
       ) : (
         <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
