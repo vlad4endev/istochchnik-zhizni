@@ -8,6 +8,7 @@ import {
   LuHistory,
   LuInbox,
   LuLink2,
+  LuPackage,
   LuPalette,
   LuPanelsTopLeft,
   LuShield,
@@ -30,6 +31,7 @@ export interface AdminTabConfig {
     | 'notifications'
     | 'telegram'
     | 'backup'
+    | 'releases'
     | 'integrations'
     | 'diagnostics';
   /** Заголовок раздела в контенте и полная подпись для подсказки в сайдбаре */
@@ -137,6 +139,14 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
       'Полный бекап БД и файлов: создание архива, скачивание, хранение до 30 дней, автобекап и отправка админу в Telegram.',
   },
   {
+    id: 'releases',
+    label: 'Релизы',
+    Icon: LuPackage,
+    short: 'APK',
+    description:
+      'Публикация Android APK или ссылок на сборки — виджет скачивания на главной странице.',
+  },
+  {
     id: 'diagnostics',
     label: 'Диагностика проекта',
     navLabel: 'Диагностика',
@@ -195,6 +205,7 @@ export const ADMIN_SIDEBAR_GROUPS: readonly AdminSidebarGroup[] = [
       { id: 'notifications' },
       { id: 'telegram' },
       { id: 'backup' },
+      { id: 'releases' },
       { id: 'diagnostics' },
       { id: 'integrations' },
     ],

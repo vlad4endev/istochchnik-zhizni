@@ -28,12 +28,17 @@ export function getProfileMediaDir(): string {
   return path.join(getUploadsRoot(), 'profile-media');
 }
 
+export function getAppReleasesDir(): string {
+  return path.join(getUploadsRoot(), 'releases');
+}
+
 export function ensureUploadsDirs(): void {
   const root = getUploadsRoot();
   try {
     fs.mkdirSync(path.join(root, 'avatars'), { recursive: true });
     fs.mkdirSync(path.join(root, 'event-posters'), { recursive: true });
     fs.mkdirSync(path.join(root, 'profile-media'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'releases'), { recursive: true });
   } catch (e) {
     console.warn('[uploads] cannot create uploads directories:', root, e);
   }

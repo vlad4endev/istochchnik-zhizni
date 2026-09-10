@@ -1344,3 +1344,121 @@ export async function restoreBackup(
   );
   return data;
 }
+
+/* ─── Android app releases ─────────────────────────────────────────────── */
+
+export type AppReleaseItem = {
+  id: number;
+  version_name: string;
+  version_code: number | null;
+  title: string;
+  notes: string;
+  download_url: string;
+  file_name: string | null;
+  file_size_bytes: number | null;
+  is_active: boolean;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AppReleaseLatest = {
+  id: number;
+  version_name: string;
+  version_code: number | null;
+  title: string;
+  notes: string;
+  download_url: string;
+  file_name: string | null;
+  file_size_bytes: number | null;
+  created_at: string;
+};
+
+export async function fetchLatestAppRelease(): Promise<AppReleaseLatest | null> {
+  const { data } = await apiClient.get<{ release: AppReleaseLatest | null }>('/api/releases/latest', {
+    silentErrorToast: true,
+  });
+  return data.release ?? null;
+}
+
+export async function fetchAdminAppReleases(): Promise<AppReleaseItem[]> {
+  const { data } = await apiClient.get<{ items: AppReleaseItem[] }>('/api/releases');
+  return data.items ?? [];
+}
+
+export async function createAdminAppRelease(input: {
+  version_name?: string;
+  version_code?: number | null;
+  title?: string;
+  notes?: string;
+  download_url?: string;
+  is_active?: boolean;
+  apk?: File | null;
+}): Promise<AppReleaseItem> {
+  if (input.apk) {
+    const form = new FormData();
+    if (input.version_name) form.append('version_name', input.version_name);
+    if (input.version_code != null) form.append('version_code', String(input.version_code));
+    if (input.title) form.append('title', input.title);
+    if (input.notes) form.append('notes', input.notes);
+    if (input.download_url) form.append('download_url', input.download_url);
+    if (input.is_active !== undefined) form.append('is_active', String(input.is_active));
+    form.append('apk', input.apk);
+    const { data } = await apiClient.post<{ item: AppReleaseItem }>('/api/releases', form, {
+      timeout: 10 * 60_000,
+    });
+    return data.item;
+  }
+  const { data } = await apiClient.post<{ item: AppReleaseItem }>('/api/releases', {
+    version_name: input.version_name ?? '',
+    version_code: input.version_code ?? null,
+    title: input.title ?? '',
+    notes: input.notes ?? '',
+    download_url: input.download_url ?? '',
+    is_active: input.is_active !== false,
+  });
+  return data.item;
+}
+
+export async function patchAdminAppRelease(
+  id: number,
+  input: {
+    version_name?: string;
+    version_code?: number | null;
+    title?: string;
+    notes?: string;
+    download_url?: string;
+    is_active?: boolean;
+    apk?: File | null;
+  },
+): Promise<AppReleaseItem> {
+  if (input.apk) {
+    const form = new FormData();
+    if (input.version_name !== undefined) form.append('version_name', input.version_name);
+    if (input.version_code !== undefined) {
+      form.append('version_code', input.version_code == null ? '' : String(input.version_code));
+    }
+    if (input.title !== undefined) form.append('title', input.title);
+    if (input.notes !== undefined) form.append('notes', input.notes);
+    if (input.download_url !== undefined) form.append('download_url', input.download_url);
+    if (input.is_active !== undefined) form.append('is_active', String(input.is_active));
+    form.append('apk', input.apk);
+    const { data } = await apiClient.patch<{ item: AppReleaseItem }>(`/api/releases/${id}`, form, {
+      timeout: 10 * 60_000,
+    });
+    return data.item;
+  }
+  const { data } = await apiClient.patch<{ item: AppReleaseItem }>(`/api/releases/${id}`, {
+    version_name: input.version_name,
+    version_code: input.version_code,
+    title: input.title,
+    notes: input.notes,
+    download_url: input.download_url,
+    is_active: input.is_active,
+  });
+  return data.item;
+}
+
+export async function deleteAdminAppRelease(id: number): Promise<void> {
+  await apiClient.delete(`/api/releases/${id}`);
+}

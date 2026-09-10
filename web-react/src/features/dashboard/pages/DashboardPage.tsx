@@ -65,6 +65,7 @@ import { useProfileDraftStore } from '../../profile/profileDraftStore';
 import { useCoordinatorNoteEditorRequestStore } from '../coordinatorNoteEditorRequestStore';
 import { LimitedRegistrationDashboard } from '../components/LimitedRegistrationDashboard';
 import { BirthdayBlock } from '../components/BirthdayBlock';
+import { AndroidAppReleaseWidget } from '../components/AndroidAppReleaseWidget';
 import { MyServiceWeekWidget } from '../components/MyServiceWeekWidget';
 import { NotificationPermissionWidget } from '../components/NotificationPermissionWidget';
 import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
@@ -1241,6 +1242,7 @@ function DashboardMain() {
       </div>
       <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-3 sm:px-4 shell:px-6 md:px-8 xl:px-10 2xl:max-w-[1480px]">
         <div className="dashboard-scroll-pane min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pt-2 max-lg:pb-4 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
+        <AndroidAppReleaseWidget />
         <NotificationPermissionWidget />
         <DashboardQuickActionsStrip
           isParishionerGuest={isParishionerGuest}

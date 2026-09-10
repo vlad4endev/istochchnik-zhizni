@@ -55,6 +55,7 @@ import {
 } from '../memberListQuery';
 import { NotificationsSettingsSection } from '../NotificationsSettingsSection';
 import { TelegramSettingsSection } from '../TelegramSettingsSection';
+import { AppReleasesSection } from '../AppReleasesSection';
 import { BackupSettingsSection } from '../BackupSettingsSection';
 import { ProjectJournalSection } from '../ProjectJournalSection';
 import { DiagnosticsDashboardSection } from '../DiagnosticsDashboardSection';
@@ -508,6 +509,7 @@ export function AdminPage() {
         {tab === 'notifications' && <NotificationsSettingsSection />}
         {tab === 'telegram' && <TelegramSettingsSection />}
         {tab === 'backup' && <BackupSettingsSection />}
+        {tab === 'releases' && <AppReleasesSection />}
         {tab === 'diagnostics' && <DiagnosticsDashboardSection />}
         {tab === 'integrations' && <IntegrationsSection />}
       </div>

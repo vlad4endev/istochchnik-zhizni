@@ -27,6 +27,7 @@ import notificationsRoutes from './routes/notificationsRoutes';
 import telegramRoutes from './routes/telegramRoutes';
 import smsRoutes from './routes/smsRoutes';
 import backupRoutes from './routes/backupRoutes';
+import appReleasesRoutes from './routes/appReleasesRoutes';
 import publicRoutes from './routes/publicRoutes';
 import songRoutes from './routes/songRoutes';
 import songImportRoutes from './routes/songImportRoutes';
@@ -385,6 +386,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/sms', smsRoutes);
 app.use('/api/backup', backupRoutes);
+app.use('/api/releases', appReleasesRoutes);
 
 // Debug/version endpoint (helps verify that deploy updated)
 app.get('/api/version', (_req, res) => {
