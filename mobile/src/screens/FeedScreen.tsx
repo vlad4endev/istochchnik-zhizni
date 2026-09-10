@@ -22,10 +22,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   authorDisplayName,
   createStory,
+  deleteFeedPost,
   fetchChurchFeed,
   fetchStories,
   likeFeedPost,
   markFeedSeen,
+  repostFeedPost,
   unlikeFeedPost,
   type FeedPost,
   type StoryAuthorGroup,
@@ -35,6 +37,7 @@ import { LoadingView } from '../components/LoadingView';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { resolvePublicUrl } from '../lib/resolvePublicUrl';
 import type { RootStackParamList } from '../navigation/types';
+import { useAuthStore } from '../stores/authStore';
 import { useTheme, type ThemeColors } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -44,6 +47,11 @@ export function FeedScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const navigation = useNavigation<Nav>();
   const qc = useQueryClient();
+  const memberId = useAuthStore((s) => s.memberId);
+  const role = useAuthStore((s) => s.role);
+  const roles = useAuthStore((s) => s.roles);
+  const isAdmin =
+    role === 'admin' || roles.some((r) => String(r).toLowerCase() === 'admin');
   const [cursor, setCursor] = useState<string | null>(null);
   const [posts, setPosts] = useState<FeedPost[]>([]);
 
@@ -92,6 +100,76 @@ export function FeedScreen() {
       void qc.invalidateQueries({ queryKey: ['feed'] });
     },
   });
+
+  const repostMutation = useMutation({
+    mutationFn: (post: FeedPost) => repostFeedPost(post.id),
+    onMutate: async (post) => {
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === post.id
+            ? {
+                ...p,
+                reposted_by_me: true,
+                repost_count: p.repost_count + 1,
+              }
+            : p,
+        ),
+      );
+    },
+    onSuccess: () => {
+      setCursor(null);
+      void qc.invalidateQueries({ queryKey: ['feed'] });
+    },
+    onError: (e) => {
+      void qc.invalidateQueries({ queryKey: ['feed'] });
+      Alert.alert('Ошибка', String(e));
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (postId: string) => deleteFeedPost(postId),
+    onSuccess: (_data, postId) => {
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      void qc.invalidateQueries({ queryKey: ['feed'] });
+      void qc.invalidateQueries({ queryKey: ['profile'] });
+    },
+    onError: (e) => Alert.alert('Ошибка', String(e)),
+  });
+
+  const confirmDelete = (post: FeedPost) => {
+    Alert.alert('Удалить публикацию?', 'Это действие нельзя отменить', [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Удалить',
+        style: 'destructive',
+        onPress: () => deleteMutation.mutate(post.id),
+      },
+    ]);
+  };
+
+  const openPostMenu = (post: FeedPost) => {
+    const canDelete = isAdmin || (memberId != null && post.member_id === memberId);
+    const buttons: Array<{
+      text: string;
+      style?: 'cancel' | 'destructive' | 'default';
+      onPress?: () => void;
+    }> = [];
+    if (!post.reposted_by_me) {
+      buttons.push({
+        text: 'Репост',
+        onPress: () => repostMutation.mutate(post),
+      });
+    }
+    if (canDelete) {
+      buttons.push({
+        text: 'Удалить',
+        style: 'destructive',
+        onPress: () => confirmDelete(post),
+      });
+    }
+    buttons.push({ text: 'Отмена', style: 'cancel' });
+    Alert.alert('Публикация', undefined, buttons);
+  };
 
   const storyMutation = useMutation({
     mutationFn: async () => {
@@ -239,6 +317,31 @@ export function FeedScreen() {
               >
                 <Ionicons name="chatbubble-outline" size={18} color={colors.textMuted} />
                 <Text style={styles.actionText}>{item.comment_count}</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (item.reposted_by_me) return;
+                  repostMutation.mutate(item);
+                }}
+                disabled={item.reposted_by_me || repostMutation.isPending}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  pressed && { opacity: 0.7 },
+                  item.reposted_by_me && { opacity: 0.45 },
+                ]}
+              >
+                <Ionicons
+                  name={item.reposted_by_me ? 'repeat' : 'repeat-outline'}
+                  size={20}
+                  color={item.reposted_by_me ? colors.primary : colors.textMuted}
+                />
+                <Text style={styles.actionText}>{item.repost_count}</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => openPostMenu(item)}
+                style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
               </Pressable>
             </View>
           </View>

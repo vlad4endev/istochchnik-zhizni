@@ -221,3 +221,32 @@ export async function createStory(params: {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 }
+
+export async function repostFeedPost(postId: string, caption?: string): Promise<void> {
+  await apiClient.post(
+    `/api/posts/${encodeURIComponent(postId)}/repost`,
+    caption?.trim() ? { caption: caption.trim() } : {},
+  );
+}
+
+export async function deleteFeedPost(postId: string): Promise<void> {
+  await apiClient.delete(`/api/posts/${encodeURIComponent(postId)}`);
+}
+
+export async function deleteStory(storyId: string): Promise<void> {
+  await apiClient.delete(`/api/stories/${encodeURIComponent(storyId)}`);
+}
+
+export async function replyToStory(
+  storyId: string,
+  body: { text?: string; reaction?: string },
+): Promise<{ conversationId: string }> {
+  const { data } = await apiClient.post<{ conversationId?: string }>(
+    `/api/stories/${encodeURIComponent(storyId)}/reply`,
+    {
+      text: body.text?.trim() || undefined,
+      reaction: body.reaction?.trim() || undefined,
+    },
+  );
+  return { conversationId: String(data?.conversationId ?? '') };
+}

@@ -6,6 +6,7 @@ import { isActiveMember, useAuthStore } from '../stores/authStore';
 import { useTheme } from '../theme';
 import { AuthNavigator } from './AuthNavigator';
 import { MainStack } from './MainTabs';
+import { navigationRef } from './navigationRef';
 
 export function RootNavigator() {
   const { colors, isDark } = useTheme();
@@ -61,7 +62,7 @@ export function RootNavigator() {
   const authInitial = token ? 'PendingReview' : 'Login';
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer ref={navigationRef} theme={navTheme}>
       {showMain ? <MainStack /> : <AuthNavigator initialRouteName={authInitial} />}
     </NavigationContainer>
   );
