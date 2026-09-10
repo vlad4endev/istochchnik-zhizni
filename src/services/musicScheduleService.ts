@@ -641,10 +641,15 @@ export async function getMemberSchedule(
   const fromYmd = dateToYmdLocal(from);
   const toYmd = dateToYmdLocal(to);
 
+  // EXISTS (not JOIN): multiple roles on one service must not duplicate the event row.
   const result = await query(
     `${PLAN_SELECT}
-     JOIN music_assignments a ON a.event_ref_id = p.id
-     WHERE a.member_id = $1
+     WHERE EXISTS (
+         SELECT 1
+         FROM music_assignments a
+         WHERE a.event_ref_id = p.id
+           AND a.member_id = $1
+       )
        AND p.service_date >= $2::date
        AND p.service_date <= $3::date
        AND p.is_archived = FALSE
