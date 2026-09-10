@@ -1,24 +1,11 @@
 import { useEffect, useState } from 'react';
 
 import { useAuthStore } from '../features/auth/authStore';
+import { isIosStandalone } from '../features/pwa/utils/pwaEnvironment';
 
 import { useAuthHydrated } from './useAuthHydrated';
 
 let cookieBootstrapOnce: Promise<void> | null = null;
-
-function isIosPwaStandalone(): boolean {
-  try {
-    return (
-      typeof window !== 'undefined' &&
-      /iPhone|iPad|iPod/i.test(navigator.userAgent) &&
-      (('standalone' in navigator &&
-        (navigator as unknown as { standalone?: boolean }).standalone === true) ||
-        window.matchMedia('(display-mode: standalone)').matches)
-    );
-  } catch {
-    return false;
-  }
-}
 
 function runCookieBootstrapOnce(): Promise<void> {
   if (!cookieBootstrapOnce) {
@@ -38,7 +25,7 @@ export function useAuthSessionReady(): boolean {
   useEffect(() => {
     if (!hydrated) return;
     let cancelled = false;
-    const failsafeMs = isIosPwaStandalone() ? 3_000 : 20_000;
+    const failsafeMs = isIosStandalone() ? 3_000 : 20_000;
     /** iOS PWA: редкие зависания fetch без ответа — не держать UI на «загрузке» бесконечно. */
     const failsafe = window.setTimeout(() => {
       if (!cancelled) setCookieAttemptDone(true);

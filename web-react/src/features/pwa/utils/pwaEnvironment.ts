@@ -23,6 +23,27 @@ export function isAppleMobileWeb(): boolean {
 }
 
 /**
+ * Safari на iPhone/iPad. Единственный браузер на iOS, где работает описанный в
+ * баннере установки сценарий «Поделиться» → «На экран „Домой“».
+ *
+ * Chrome, Firefox, Edge, Opera и Яндекс на iOS тоже держат в UA слово Safari
+ * (все они на WebKit), но прячут установку в собственные меню — инструкция для
+ * них неверна, поэтому их отсекаем по родному токену.
+ */
+export function isIosSafariBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  if (!isAppleMobileWeb()) return false;
+  const ua = navigator.userAgent;
+  if (!/safari/i.test(ua)) return false;
+  return !/crios|fxios|edgios|opios|opt\/|yabrowser|android/i.test(ua);
+}
+
+/** Установленная PWA именно на iOS: Android-standalone сюда не попадает. */
+export function isIosStandalone(): boolean {
+  return isAppleMobileWeb() && isInstalledPwa();
+}
+
+/**
  * На iOS с `navigator.standalone` `matchMedia('(display-mode: standalone)')` иногда не срабатывает
  * до следующего кадра — помечаем `<html data-pwa-standalone>` для CSS (фон, safe hints).
  */

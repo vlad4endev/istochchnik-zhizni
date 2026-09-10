@@ -1,35 +1,9 @@
 import { useEffect, useState } from 'react';
 import { LuX, LuShare } from 'react-icons/lu';
 import { useBrandingStore } from '../features/branding/brandingStore';
+import { isInstalledPwa, isIosSafariBrowser } from '../features/pwa/utils/pwaEnvironment';
 
 const STORAGE_KEY = 'ios-install-banner-dismissed';
-
-function isIosSafari(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent;
-  const isIos = /iphone|ipad|ipod/i.test(ua);
-  const isSafari =
-    /safari/i.test(ua) &&
-    !/chrome|crios|fxios|android/i.test(ua);
-  return isIos && isSafari;
-}
-
-function isStandalone(): boolean {
-  try {
-    if (
-      'standalone' in navigator &&
-      (navigator as Navigator & { standalone?: boolean }).standalone === true
-    ) {
-      return true;
-    }
-    if (window.matchMedia('(display-mode: standalone)').matches) return true;
-    if (window.matchMedia('(display-mode: fullscreen)').matches) return true;
-    if (window.matchMedia('(display-mode: minimal-ui)').matches) return true;
-  } catch {
-    /* ignore */
-  }
-  return false;
-}
 
 export function IOSInstallBanner() {
   const [visible, setVisible] = useState(false);
@@ -37,8 +11,8 @@ export function IOSInstallBanner() {
   const customLogoDataUrl = useBrandingStore((s) => s.customLogoDataUrl);
 
   useEffect(() => {
-    if (!isIosSafari()) return;
-    if (isStandalone()) return;
+    if (!isIosSafariBrowser()) return;
+    if (isInstalledPwa()) return;
     if (sessionStorage.getItem(STORAGE_KEY) === '1') return;
 
     const t = setTimeout(() => setVisible(true), 1800);
