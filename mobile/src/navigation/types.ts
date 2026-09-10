@@ -28,6 +28,7 @@ export type RootStackParamList = {
   Studio: undefined;
   StudioSetlistDetail: { setlistId: number; title: string };
   StudioPerform: { setlistId: number; title?: string };
+  StudioSongEdit: { songId: number; title: string };
   PrayerCyclePlan: undefined;
   Feed: undefined;
   Broadcast: undefined;

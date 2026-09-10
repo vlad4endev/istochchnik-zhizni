@@ -32,6 +32,7 @@ import { StoryViewerScreen } from '../screens/StoryViewerScreen';
 import { StudioPerformScreen } from '../screens/StudioPerformScreen';
 import { StudioScreen } from '../screens/StudioScreen';
 import { StudioSetlistDetailScreen } from '../screens/StudioSetlistDetailScreen';
+import { StudioSongEditScreen } from '../screens/StudioSongEditScreen';
 import { SundayScheduleScreen } from '../screens/SundayScheduleScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SongDetailScreen } from '../screens/SongDetailScreen';
@@ -260,6 +261,11 @@ export function MainStack() {
         name="StudioPerform"
         component={StudioPerformScreen}
         options={{ headerShown: false, gestureEnabled: false }}
+      />
+      <Stack.Screen
+        name="StudioSongEdit"
+        component={StudioSongEditScreen}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="PrayerCyclePlan"

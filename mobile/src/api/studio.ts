@@ -1,5 +1,6 @@
 import type { SongListItem } from './songs';
 import { apiClient } from './client';
+import axios from 'axios';
 
 const STUDIO = '/api/studio';
 
@@ -13,6 +14,18 @@ export interface StudioVersionListItem {
   song_title: string;
   song_slug: string;
   song_is_published: boolean;
+}
+
+export interface StudioVersionRow {
+  id: string;
+  member_id: number;
+  song_id: string;
+  custom_content: string | null;
+  custom_key: string | null;
+  sheet_content?: string | null;
+  sheet_key?: string | null;
+  sheet_meta?: Record<string, unknown> | null;
+  updated_at: string;
 }
 
 export interface SetlistRow {
@@ -42,6 +55,28 @@ export interface SetlistItemRow {
 export async function fetchMyVersions(): Promise<StudioVersionListItem[]> {
   const { data } = await apiClient.get<StudioVersionListItem[]>(`${STUDIO}/versions`);
   return data ?? [];
+}
+
+export async function fetchVersionForSong(songId: number): Promise<StudioVersionRow | null> {
+  try {
+    const { data } = await apiClient.get<StudioVersionRow | null>(
+      `${STUDIO}/versions/song/${songId}`,
+    );
+    return data ?? null;
+  } catch (e) {
+    if (axios.isAxiosError(e) && e.response?.status === 404) {
+      return null;
+    }
+    throw e;
+  }
+}
+
+export async function saveVersion(
+  songId: number,
+  body: { custom_content?: string | null; custom_key?: string | null },
+): Promise<StudioVersionRow> {
+  const { data } = await apiClient.put<StudioVersionRow>(`${STUDIO}/versions/${songId}`, body);
+  return data;
 }
 
 export async function fetchRecentSongs(limit = 12): Promise<SongListItem[]> {
