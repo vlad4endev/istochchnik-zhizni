@@ -57,7 +57,7 @@ export function LoginScreen() {
           <View style={styles.logoCircle}>
             <Ionicons name="heart" size={36} color={colors.textOnPrimary} />
           </View>
-          <Text style={styles.brand}>Источник жизни</Text>
+          <Text style={styles.brand}>Моя церковь</Text>
           <Text style={styles.tagline}>Молитва, служение, община</Text>
         </View>
 

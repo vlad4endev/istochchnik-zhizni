@@ -318,7 +318,7 @@ export function SettingsScreen() {
         </Pressable>
 
         <Text style={styles.version}>
-          Источник жизни · v{APP_VERSION} · {isDark ? 'тёмная' : 'светлая'} тема
+          Моя церковь · v{APP_VERSION} · {isDark ? 'тёмная' : 'светлая'} тема
         </Text>
       </ScrollView>
     </SafeAreaView>

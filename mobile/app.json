@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Источник жизни",
+    "name": "Моя церковь",
     "slug": "istochnik-zhizni",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "scheme": "istochnik",
     "icon": "./assets/icon.png",
