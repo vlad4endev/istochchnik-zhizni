@@ -232,6 +232,14 @@ export default defineConfig(({ mode }) => {
             '**/apple-touch-icon-180x180.png',
             /** `includeAssets`; тот же конфликт с `*.ico` в glob. */
             '**/favicon.ico',
+            /**
+             * Сплэши `apple-touch-startup-image` читает SpringBoard при запуске с экрана
+             * Домой — до старта SW и вне его scope, поэтому из precache их не достать ни
+             * разу. Android их вообще не использует. 44 файла — это 1.1 МБ (11% precache),
+             * которые скачивались при установке и ревалидировались на каждом обновлении
+             * SW впустую. В dist они остаются и отдаются обычным HTTP-запросом.
+             */
+            '**/pwa/apple-splash-*.png',
           ],
           /**
            * false — обязательное условие для `registerType: 'prompt'`.
