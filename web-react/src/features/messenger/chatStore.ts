@@ -47,6 +47,13 @@ export function parseDraftPrivateMemberId(id: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/** Deep-link в ЛС по memberId. Не вызывать setActiveConversation('draft:…') до resolve peer. */
+export function messengerDraftConversationPath(memberId: number): string {
+  const id = Number(memberId);
+  if (!Number.isFinite(id) || id <= 0) return '/messenger';
+  return `/messenger?conversationId=${encodeURIComponent(`${DRAFT_PRIVATE_PREFIX}${id}`)}`;
+}
+
 /** Дебаунс markReadUpTo при потоке входящих WS-сообщений — иначе сотни параллельных POST → ERR_INSUFFICIENT_RESOURCES. */
 const markReadDebounceByConv = new Map<string, ReturnType<typeof setTimeout>>();
 

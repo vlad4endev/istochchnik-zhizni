@@ -15,6 +15,7 @@ import {
   LuHeadphones,
   LuMic,
   LuMinus,
+  LuMessageCircle,
   LuPause,
   LuPlay,
   LuUser,
@@ -69,6 +70,7 @@ import { NotificationPermissionWidget } from '../components/NotificationPermissi
 import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
 import { keys } from '@/lib/queryKeys';
 import { fetchServicePlan, fetchServicePlans, type ServicePlanDetails, type ServicePlanListItem } from '../../servicePlanner/api';
+import { messengerDraftConversationPath } from '../../messenger/chatStore';
 
 type DashboardEvent = {
   id: string;
@@ -388,31 +390,43 @@ function UpcomingPreacherCard({
   preacherName,
   preacherAvatarUrl,
   preacherDetail,
+  preacherMemberId,
   hostName,
   hostAvatarUrl,
+  hostMemberId,
+  currentMemberId,
   topic,
   scripture,
   dateLabel,
   canRate,
   onOpenComments,
+  onOpenChat,
 }: {
   preacherName: string;
   preacherAvatarUrl: string | null;
   preacherDetail: string | null;
+  preacherMemberId: number;
   hostName: string | null;
   hostAvatarUrl: string | null;
+  hostMemberId: number | null;
+  currentMemberId: number | null;
   topic: string;
   scripture: string;
   dateLabel: string;
   canRate: boolean;
   onOpenComments: () => void;
+  onOpenChat: (memberId: number) => void;
 }) {
   const scriptureUrl = buildBibleVerseUrl(scripture);
   const topicPlain = topic.trim();
   const topicTitle = /^[«"].*[»"]$/.test(topicPlain) ? topicPlain : `«${topicPlain}»`;
   const topicForSummary = topicPlain.replace(/^[«"]|[»"]$/g, '');
-  const showHost = Boolean(hostName?.trim());
+  const showHost = Boolean(hostName?.trim()) && hostMemberId != null;
   const summary = `${preacherName} - ${topicForSummary}`;
+  const canChatPreacher =
+    preacherMemberId > 0 && (currentMemberId == null || currentMemberId !== preacherMemberId);
+  const canChatHost =
+    hostMemberId != null && hostMemberId > 0 && (currentMemberId == null || currentMemberId !== hostMemberId);
 
   return (
     <section className="dashboard-service-card dashboard-sermon-card sm:max-w-[460px] lg:max-w-none" aria-label="Карточка служения">
@@ -437,6 +451,16 @@ function UpcomingPreacherCard({
             <p className="dashboard-service-card__name">{preacherName}</p>
             {preacherDetail ? <p className="dashboard-service-card__detail">{preacherDetail}</p> : null}
           </div>
+          {canChatPreacher ? (
+            <button
+              type="button"
+              className="dashboard-service-card__chat"
+              aria-label={`Написать проповеднику: ${preacherName}`}
+              onClick={() => onOpenChat(preacherMemberId)}
+            >
+              <LuMessageCircle size={17} aria-hidden />
+            </button>
+          ) : null}
         </div>
 
         {showHost ? (
@@ -454,6 +478,16 @@ function UpcomingPreacherCard({
               <p className="dashboard-service-card__role">Ведущий</p>
               <p className="dashboard-service-card__name">{hostName}</p>
             </div>
+            {canChatHost ? (
+              <button
+                type="button"
+                className="dashboard-service-card__chat dashboard-service-card__chat--host"
+                aria-label={`Написать ведущему: ${hostName}`}
+                onClick={() => onOpenChat(hostMemberId!)}
+              >
+                <LuMessageCircle size={17} aria-hidden />
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -820,6 +854,12 @@ function DashboardMain() {
     profileMemberId ?? (typeof meQ.data?.id === 'number' ? meQ.data.id : null);
   const publicProfileSlug =
     profileUsername.trim() || (profileMemberId != null ? `member-${profileMemberId}` : '');
+
+  const openMessengerDm = (memberId: number) => {
+    const path = messengerDraftConversationPath(memberId);
+    if (path === '/messenger') return;
+    navigate(path);
+  };
 
   const myPublicProfileQ = useQuery({
     queryKey: ['profile', 'dashboard-public', publicProfileSlug],
@@ -1214,13 +1254,17 @@ function DashboardMain() {
                   preacherName={preacherName}
                   preacherAvatarUrl={preacherAvatarUrl}
                   preacherDetail="Проповеди"
+                  preacherMemberId={nearestSermonData!.preacherMemberId}
                   hostName={hostName}
                   hostAvatarUrl={hostAvatarUrl}
+                  hostMemberId={nearestSermonData!.leaderMemberId}
+                  currentMemberId={resolvedMemberId}
                   topic={nearestSermonData!.topic}
                   scripture={nearestSermonData!.scripture}
                   dateLabel={nearestSermonDateLabel}
                   canRate={canRateSermon}
                   onOpenComments={() => navigate(`/service-plan/sermon-comments/${nearestSermonData!.shareToken}`)}
+                  onOpenChat={openMessengerDm}
                 />
               ) : (
                 <div className="grid h-full min-h-[280px] grid-cols-2 gap-4">
@@ -1318,7 +1362,7 @@ function DashboardMain() {
                   {birthdaysThisWeek.length > 0 ? (
                     <BirthdayBlock
                       birthdays={birthdaysThisWeek}
-                      onMessage={(person) => navigate(`/messenger?conversationId=draft:${person.id}`)}
+                      onMessage={(person) => openMessengerDm(person.id)}
                     />
                   ) : (
                     <section className="flex h-full flex-col rounded-2xl border border-[#F9C0D0]/80 bg-gradient-to-br from-[#FFF0F3] to-[#FFE4EC] p-4 shadow-[var(--shadow-card)]">
@@ -1570,7 +1614,7 @@ function DashboardMain() {
             <div className="min-[769px]:col-span-2">
               <BirthdayBlock
                 birthdays={birthdaysThisWeek}
-                onMessage={(person) => navigate(`/messenger?conversationId=draft:${person.id}`)}
+                onMessage={(person) => openMessengerDm(person.id)}
               />
             </div>
           ) : null}
@@ -1581,13 +1625,17 @@ function DashboardMain() {
                 preacherName={preacherName}
                 preacherAvatarUrl={preacherAvatarUrl}
                 preacherDetail="Проповеди"
+                preacherMemberId={nearestSermonData!.preacherMemberId}
                 hostName={hostName}
                 hostAvatarUrl={hostAvatarUrl}
+                hostMemberId={nearestSermonData!.leaderMemberId}
+                currentMemberId={resolvedMemberId}
                 topic={nearestSermonData!.topic}
                 scripture={nearestSermonData!.scripture}
                 dateLabel={nearestSermonDateLabel}
                 canRate={canRateSermon}
                 onOpenComments={() => navigate(`/service-plan/sermon-comments/${nearestSermonData!.shareToken}`)}
+                onOpenChat={openMessengerDm}
               />
               <MyServiceWeekWidget
                 memberId={resolvedMemberId}
