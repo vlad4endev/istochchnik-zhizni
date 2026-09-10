@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -55,9 +56,13 @@ export function LoginScreen() {
       >
         <View style={styles.hero}>
           <View style={styles.logoCircle}>
-            <Ionicons name="heart" size={36} color={colors.textOnPrimary} />
+            <Image
+              source={require('../../assets/icon.png')}
+              style={styles.logoImage}
+              accessibilityLabel="Моя Церковь"
+            />
           </View>
-          <Text style={styles.brand}>Моя церковь</Text>
+          <Text style={styles.brand}>Моя Церковь</Text>
           <Text style={styles.tagline}>Молитва, служение, община</Text>
         </View>
 
@@ -144,13 +149,20 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors']) {
       marginBottom: 40,
     },
     logoCircle: {
-      width: 72,
-      height: 72,
-      borderRadius: 36,
-      backgroundColor: colors.primary,
+      width: 80,
+      height: 80,
+      borderRadius: 20,
+      backgroundColor: '#fff',
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 16,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    logoImage: {
+      width: 80,
+      height: 80,
     },
     brand: {
       fontSize: 28,
