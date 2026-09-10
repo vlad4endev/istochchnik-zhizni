@@ -20,15 +20,21 @@ import { describe, expect, it } from 'vitest';
  *    растягивал корень выше рассчитанной viewport-высоты.
  * 4. При `data-chat-open` sync всё ещё брал Math.min — open/close fullscreen фото
  *    в чате дёргал visualViewport, и укороченная высота залипала после закрытия.
+ * 5. `#root::before` (flex-item top-inset) + `#root { overflow:hidden }` на iOS всё
+ *    ещё укорачивает fixed-CB: таббар оставался DOM-потомком #root (и flex-sibling
+ *    после ::before через Layout `overflow-x-hidden`). Геометрия iPhone 13 Pro:
+ *    shell H=844pt, ::before=47pt → CB usable ≈797pt → bottom:0 на 47pt выше низа.
  *
  * Инварианты: верхний inset — через #root::before (flex-item), не padding;
  * body.padding-top не использует safe-area-inset-top; у #root в index.html нет
- * inline min-height / -webkit-fill-available; Math.min только при клавиатуре.
+ * inline min-height / -webkit-fill-available; Math.min только при клавиатуре;
+ * таббар порталится в document.body (вне #root overflow CB).
  */
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const INDEX_CSS = path.resolve(DIR, '../src/index.css');
 const INDEX_HTML = path.resolve(DIR, '../index.html');
 const NATIVE_SHELL_VIEWPORT = path.resolve(DIR, '../src/lib/nativeShellViewport.ts');
+const LAYOUT_TSX = path.resolve(DIR, '../src/app/Layout.tsx');
 
 function extractRule(css: string, selector: string): string | null {
   const re = new RegExp(
@@ -39,6 +45,10 @@ function extractRule(css: string, selector: string): string | null {
   return match ? match[1] : null;
 }
 
+function stripCssComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
 describe('index.css: safe-area на оболочке без сдвига fixed-таббара', () => {
   const css = readFileSync(INDEX_CSS, 'utf8');
 
@@ -46,14 +56,15 @@ describe('index.css: safe-area на оболочке без сдвига fixed-�
     const bodyBlocks = [...css.matchAll(/(?:^|\n)body\s*\{([^}]*)\}/g)].map((m) => m[1]);
     expect(bodyBlocks.length).toBeGreaterThan(0);
     for (const block of bodyBlocks) {
-      expect(block).not.toMatch(/padding-top\s*:\s*[^;]*safe-area-inset-top/);
+      expect(stripCssComments(block)).not.toMatch(/padding-top\s*:\s*[^;]*safe-area-inset-top/);
     }
   });
 
   it('#root не задаёт padding-top через safe-area-inset-top', () => {
     const root = extractRule(css, '#root');
     expect(root).toBeTruthy();
-    expect(root!).not.toMatch(/padding-top\s*:\s*[^;]*safe-area-inset-top/);
+    expect(stripCssComments(root!)).not.toMatch(/padding-top\s*:\s*[^;]*safe-area-inset-top/);
+    expect(stripCssComments(root!)).toMatch(/padding-top\s*:\s*0\s*;/);
   });
 
   it('#root::before резервирует верхний safe-area как flex-item', () => {
@@ -90,5 +101,17 @@ describe('nativeShellViewport: Math.min только при клавиатуре
 
   it('Math.min-ветка завязана только на keyboardOpen', () => {
     expect(src).toMatch(/if\s*\(\s*keyboardOpen\s*\)\s*\{[\s\S]*?Math\.min/);
+  });
+});
+
+describe('Layout.tsx: таббар вне #root overflow containing block', () => {
+  const src = readFileSync(LAYOUT_TSX, 'utf8');
+
+  it('порталит app-bottom-nav в document.body', () => {
+    expect(src).toMatch(/createPortal\s*\(/);
+    expect(src).toMatch(/document\.body/);
+    expect(src).toMatch(/app-bottom-nav/);
+    // Портал должен охватывать nav, а не только дочерние оверлеи.
+    expect(src).toMatch(/createPortal\s*\(\s*\n?\s*<nav[\s\S]*?app-bottom-nav[\s\S]*?document\.body/);
   });
 });

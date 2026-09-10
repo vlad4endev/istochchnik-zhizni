@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import type { IconType } from 'react-icons';
 import {
   LuBookOpen,
@@ -1274,75 +1275,86 @@ export function Layout() {
         aria-hidden="true"
       />
 
-      {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
-      <nav
-        ref={bottomNavRef}
-        className={[
-          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex w-full min-w-0 max-w-full flex-col border-t border-black/[0.07] bg-[var(--surface-elevated)] pb-[max(0px,env(safe-area-inset-bottom,0px))] shadow-[0_-1px_0_rgba(0,0,0,0.05),0_-10px_40px_rgba(28,25,23,0.08)] lg:hidden transition-opacity duration-150 ease-out dark:border-white/[0.08] dark:shadow-[0_-1px_0_rgba(255,255,255,0.06),0_-12px_40px_rgba(0,0,0,0.35)] [padding-left:max(0px,env(safe-area-inset-left,0px))] [padding-right:max(0px,env(safe-area-inset-right,0px))]',
-          mainChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
-        ].join(' ')}
-        aria-label="Основная навигация"
-        aria-hidden={!mainChromeVisible}
-        style={
-          {
-            '--app-bottom-nav-cols': String(
-              Math.max(
-                1,
-                mobileNavSplit.primary.length + (mobileNavSplit.overflow.length > 0 ? 1 : 0),
-              ),
-            ),
-          } as CSSProperties
-        }
-      >
-        <div className="app-bottom-nav__row">
-          {mobileNavSplit.primary.map((item) => {
-            const Icon = item.Icon;
-            return (
-              <div key={item.to} className="app-bottom-nav__cell relative min-w-0">
-                <PrefetchNavLink
-                  to={item.to}
-                  queryKey={NAV_PREFETCH_BY_PATH[item.to]?.queryKey}
-                  queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
-                  staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
-                  className={({ isActive }) => navClassName(isActive, true)}
-                  aria-label={navItemBadgeAriaLabel(
-                    item.to,
-                    navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount),
-                  )}
-                >
-                  {({ isActive }) => {
-                    const badge = navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount);
-                    return (
-                    <>
-                      <span className={mobileBottomTabIconClass(isActive)}>
-                        <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
-                        {badge > 0 ? (
-                          <span className="app-bottom-nav__badge absolute -right-1 -top-0.5 z-[5] inline-flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white dark:ring-[color-mix(in_srgb,var(--surface-elevated)_92%,transparent)]">
-                            {formatNavBadgeCount(badge)}
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className={mobileBottomTabLabelClass()}>{item.label}</span>
-                    </>
-                    );
-                  }}
-                </PrefetchNavLink>
+      {/*
+        Телефон: нижняя навигация. Портал в document.body обязателен на iOS Safari/PWA:
+        #root { overflow:hidden } + #root::before (safe-area-inset-top ≈ 47pt) даёт
+        containing block для position:fixed короче экрана на top-inset — таббар с
+        bottom:0 садится выше низа, снизу кремовая полоса --surface. Вне #root
+        fixed привязан к body/viewport полной высоты.
+      */}
+      {typeof document !== 'undefined'
+        ? createPortal(
+            <nav
+              ref={bottomNavRef}
+              className={[
+                'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex w-full min-w-0 max-w-full flex-col border-t border-black/[0.07] bg-[var(--surface-elevated)] pb-[max(0px,env(safe-area-inset-bottom,0px))] shadow-[0_-1px_0_rgba(0,0,0,0.05),0_-10px_40px_rgba(28,25,23,0.08)] lg:hidden transition-opacity duration-150 ease-out dark:border-white/[0.08] dark:shadow-[0_-1px_0_rgba(255,255,255,0.06),0_-12px_40px_rgba(0,0,0,0.35)] [padding-left:max(0px,env(safe-area-inset-left,0px))] [padding-right:max(0px,env(safe-area-inset-right,0px))]',
+                mainChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
+              ].join(' ')}
+              aria-label="Основная навигация"
+              aria-hidden={!mainChromeVisible}
+              style={
+                {
+                  '--app-bottom-nav-cols': String(
+                    Math.max(
+                      1,
+                      mobileNavSplit.primary.length + (mobileNavSplit.overflow.length > 0 ? 1 : 0),
+                    ),
+                  ),
+                } as CSSProperties
+              }
+            >
+              <div className="app-bottom-nav__row">
+                {mobileNavSplit.primary.map((item) => {
+                  const Icon = item.Icon;
+                  return (
+                    <div key={item.to} className="app-bottom-nav__cell relative min-w-0">
+                      <PrefetchNavLink
+                        to={item.to}
+                        queryKey={NAV_PREFETCH_BY_PATH[item.to]?.queryKey}
+                        queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
+                        staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
+                        className={({ isActive }) => navClassName(isActive, true)}
+                        aria-label={navItemBadgeAriaLabel(
+                          item.to,
+                          navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount),
+                        )}
+                      >
+                        {({ isActive }) => {
+                          const badge = navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount);
+                          return (
+                          <>
+                            <span className={mobileBottomTabIconClass(isActive)}>
+                              <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                              {badge > 0 ? (
+                                <span className="app-bottom-nav__badge absolute -right-1 -top-0.5 z-[5] inline-flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white dark:ring-[color-mix(in_srgb,var(--surface-elevated)_92%,transparent)]">
+                                  {formatNavBadgeCount(badge)}
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className={mobileBottomTabLabelClass()}>{item.label}</span>
+                          </>
+                          );
+                        }}
+                      </PrefetchNavLink>
+                    </div>
+                  );
+                })}
+                {mobileNavSplit.overflow.length > 0 ? (
+                  <MobileNavOverflow
+                    items={mobileNavSplit.overflow}
+                    activityBadgeTotal={activityBadgeTotal}
+                    feedUnreadCount={feedUnreadCount}
+                    pathname={location.pathname}
+                    isAdminRoute={isAdminRoute}
+                    activeAdminTab={activeAdminTab}
+                    adminBadgeFor={adminBadgeFor}
+                  />
+                ) : null}
               </div>
-            );
-          })}
-          {mobileNavSplit.overflow.length > 0 ? (
-            <MobileNavOverflow
-              items={mobileNavSplit.overflow}
-              activityBadgeTotal={activityBadgeTotal}
-              feedUnreadCount={feedUnreadCount}
-              pathname={location.pathname}
-              isAdminRoute={isAdminRoute}
-              activeAdminTab={activeAdminTab}
-              adminBadgeFor={adminBadgeFor}
-            />
-          ) : null}
-        </div>
-      </nav>
+            </nav>,
+            document.body,
+          )
+        : null}
       </div>
       </div>
       <IOSInstallBanner />
