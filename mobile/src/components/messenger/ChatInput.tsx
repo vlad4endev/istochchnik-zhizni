@@ -6,6 +6,7 @@ import {
   useAudioRecorder,
   useAudioRecorderState,
 } from 'expo-audio';
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -23,6 +24,8 @@ import { sendRealtimeJson } from '../../lib/realtimeWs';
 import { androidRipple, messengerTextProps } from '../../theme/messenger';
 import { useTheme } from '../../theme';
 
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+
 export type PendingChatImage = {
   uri: string;
   name: string;
@@ -36,11 +39,22 @@ export type PendingChatVoice = {
   durationSec: number;
 };
 
+export type PendingChatFile = {
+  uri: string;
+  name: string;
+  type: string;
+  size?: number;
+};
+
 interface ChatInputProps {
   onSend: (text: string) => Promise<void>;
   onSendImage?: (input: {
     caption: string;
     asset: PendingChatImage;
+  }) => Promise<void>;
+  onSendFile?: (input: {
+    caption: string;
+    asset: PendingChatFile;
   }) => Promise<void>;
   onSendVoice?: (input: PendingChatVoice) => Promise<void>;
   disabled?: boolean;
@@ -58,6 +72,7 @@ function formatRecTime(sec: number): string {
 export function ChatInput({
   onSend,
   onSendImage,
+  onSendFile,
   onSendVoice,
   disabled = false,
   conversationId,
@@ -67,6 +82,7 @@ export function ChatInput({
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [text, setText] = useState('');
   const [pendingImage, setPendingImage] = useState<PendingChatImage | null>(null);
+  const [pendingFile, setPendingFile] = useState<PendingChatFile | null>(null);
   const [sending, setSending] = useState(false);
   const [recordingUi, setRecordingUi] = useState(false);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -75,8 +91,15 @@ export function ChatInput({
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder, 200);
 
-  const canSendText = text.trim().length > 0 && !disabled && !sending && !pendingImage && !recordingUi;
+  const canSendText =
+    text.trim().length > 0 &&
+    !disabled &&
+    !sending &&
+    !pendingImage &&
+    !pendingFile &&
+    !recordingUi;
   const canSendImage = pendingImage != null && !disabled && !sending && Boolean(onSendImage);
+  const canSendFile = pendingFile != null && !disabled && !sending && Boolean(onSendFile);
 
   const sendTypingStop = useCallback(() => {
     if (!conversationId) return;
@@ -138,7 +161,45 @@ export function ChatInput({
       asset.fileName?.trim() ||
       `photo-${Date.now()}.${(asset.mimeType || 'image/jpeg').includes('png') ? 'png' : 'jpg'}`;
     const type = asset.mimeType || 'image/jpeg';
+    setPendingFile(null);
     setPendingImage({ uri, name, type });
+  };
+
+  const pickFile = async () => {
+    if (!onSendFile || disabled || sending || recordingUi) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'application/pdf',
+          'text/plain',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-powerpoint',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          '*/*',
+        ],
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      const size = asset.size ?? 0;
+      if (size > MAX_FILE_BYTES) {
+        Alert.alert('Файл слишком большой', 'Максимум 20 МБ для документов');
+        return;
+      }
+      setPendingImage(null);
+      setPendingFile({
+        uri: asset.uri,
+        name: asset.name || `file-${Date.now()}`,
+        type: asset.mimeType || 'application/octet-stream',
+        size: asset.size,
+      });
+    } catch (e) {
+      Alert.alert('Ошибка', e instanceof Error ? e.message : 'Не удалось выбрать файл');
+    }
   };
 
   const startRecording = async () => {
@@ -224,6 +285,25 @@ export function ChatInput({
       return;
     }
 
+    if (pendingFile && onSendFile) {
+      const caption = text.trim();
+      const asset = pendingFile;
+      setSending(true);
+      setText('');
+      setPendingFile(null);
+      sendTypingStop();
+      try {
+        await onSendFile({ caption, asset });
+      } catch (e) {
+        setPendingFile(asset);
+        setText(caption);
+        Alert.alert('Ошибка', e instanceof Error ? e.message : 'Не удалось отправить файл');
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
     const value = text.trim();
     if (!value) return;
     setSending(true);
@@ -286,6 +366,24 @@ export function ChatInput({
           </Pressable>
         </View>
       ) : null}
+      {pendingFile ? (
+        <View style={styles.previewRow}>
+          <View style={styles.filePreview}>
+            <Ionicons name="document-text-outline" size={20} color={colors.primary} />
+            <Text style={styles.filePreviewName} numberOfLines={1}>
+              {pendingFile.name}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => setPendingFile(null)}
+            disabled={sending}
+            hitSlop={8}
+            style={styles.previewRemove}
+          >
+            <Ionicons name="close-circle" size={22} color={colors.textMuted} />
+          </Pressable>
+        </View>
+      ) : null}
       <View style={styles.bar}>
         {onSendImage ? (
           <Pressable
@@ -296,6 +394,17 @@ export function ChatInput({
             style={({ pressed }) => [styles.toolBtn, pressed && { opacity: 0.7 }]}
           >
             <Ionicons name="image-outline" size={22} color={colors.primary} />
+          </Pressable>
+        ) : null}
+        {onSendFile ? (
+          <Pressable
+            onPress={() => void pickFile()}
+            disabled={disabled || sending}
+            android_ripple={androidRipple}
+            hitSlop={8}
+            style={({ pressed }) => [styles.toolBtn, pressed && { opacity: 0.7 }]}
+          >
+            <Ionicons name="attach-outline" size={22} color={colors.primary} />
           </Pressable>
         ) : null}
         {onOpenPoll ? (
@@ -314,25 +423,27 @@ export function ChatInput({
           value={text}
           onChangeText={handleTextChange}
           onBlur={sendTypingStop}
-          placeholder={pendingImage ? 'Подпись…' : 'Сообщение...'}
+          placeholder={pendingImage || pendingFile ? 'Подпись…' : 'Сообщение...'}
           placeholderTextColor={colors.textMuted}
           multiline
           maxLength={8000}
           editable={!disabled && !sending}
           {...messengerTextProps}
         />
-        {canSendText || canSendImage || !onSendVoice ? (
+        {canSendText || canSendImage || canSendFile || !onSendVoice ? (
           <Pressable
             onPress={() => void handleSend()}
-            disabled={!(canSendText || canSendImage)}
+            disabled={!(canSendText || canSendImage || canSendFile)}
             android_ripple={androidRipple}
             style={({ pressed }) => [
               styles.sendBtn,
               {
                 backgroundColor:
-                  canSendText || canSendImage ? colors.primary : colors.textMuted,
+                  canSendText || canSendImage || canSendFile
+                    ? colors.primary
+                    : colors.textMuted,
               },
-              pressed && (canSendText || canSendImage) ? { opacity: 0.85 } : null,
+              pressed && (canSendText || canSendImage || canSendFile) ? { opacity: 0.85 } : null,
             ]}
           >
             {sending ? (
@@ -379,6 +490,22 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors']) {
       height: 72,
       borderRadius: 10,
       backgroundColor: colors.surface,
+    },
+    filePreview: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: colors.surface,
+    },
+    filePreviewName: {
+      flex: 1,
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.text,
     },
     previewRemove: {
       padding: 4,

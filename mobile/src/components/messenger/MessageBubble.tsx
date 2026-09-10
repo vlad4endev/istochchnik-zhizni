@@ -25,6 +25,7 @@ import {
 } from '../../lib/messengerUtils';
 import { MESSENGER_BRAND } from '../../theme/messenger';
 import { MessengerText, MessengerTimeText } from './MessengerText';
+import { FileAttachmentCard } from './FileAttachmentCard';
 import { VoiceNotePlayer } from './VoiceNotePlayer';
 import { useTheme } from '../../theme';
 
@@ -63,6 +64,7 @@ export function MessageBubble({
   const showImage = payloadType === 'image' && !message.is_deleted;
   const showPoll = payloadType === 'poll' && !message.is_deleted;
   const showAudio = payloadType === 'audio' && !message.is_deleted;
+  const showFile = payloadType === 'file' && !message.is_deleted;
 
   const imageUri = useMemo(() => {
     if (!showImage) return null;
@@ -93,7 +95,7 @@ export function MessageBubble({
 
   const bodyText = message.is_deleted
     ? 'Сообщение удалено'
-    : showPoll || showAudio
+    : showPoll || showAudio || showFile
       ? ''
       : payloadType === 'text'
         ? String(message.content ?? '')
@@ -265,6 +267,16 @@ export function MessageBubble({
           }
           isOwn={isOwn}
           isPending={isPending}
+        />
+      ) : showFile ? (
+        <FileAttachmentCard
+          messageId={message.id}
+          fileName={String(message.payload?.name ?? 'Файл')}
+          fileSize={typeof message.payload?.size === 'number' ? message.payload.size : null}
+          mimeType={typeof message.payload?.mimeType === 'string' ? message.payload.mimeType : null}
+          isOwn={isOwn}
+          isPending={isPending}
+          caption={String(message.content ?? '').trim() || undefined}
         />
       ) : bodyText ? (
         <MessengerText style={[styles.text, message.is_deleted && styles.deletedText]}>
