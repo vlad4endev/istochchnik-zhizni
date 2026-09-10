@@ -367,9 +367,11 @@ export default defineConfig(({ mode }) => {
       port: 4173,
       proxy: apiProxy,
     },
-    css: {
-      postcss: './postcss.config.cjs',
-    },
+    /*
+     * `css.postcss` намеренно не задан: Vite трактует строку как каталог для поиска
+     * конфига, а не как путь к файлу, поэтому прежнее './postcss.config.cjs' молча
+     * игнорировалось. Автопоиск сам находит единственный postcss.config.cjs в корне.
+     */
     build: {
       outDir: 'dist',
       assetsDir: 'assets',
