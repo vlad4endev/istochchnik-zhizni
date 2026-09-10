@@ -143,11 +143,10 @@ function isDocumentHidden(): boolean {
 function isTransientNetworkError(error: AxiosError): boolean {
   if (error.response) return false;
   const code = String(error.code ?? '');
+  // Не ретраим таймауты (ECONNABORTED) — это долгие запросы, не краткий обрыв.
   return (
     code === 'ERR_NETWORK' ||
-    code === 'ECONNABORTED' ||
-    code === 'ETIMEDOUT' ||
-    /network|timeout|failed to fetch/i.test(String(error.message ?? ''))
+    /network error|failed to fetch/i.test(String(error.message ?? ''))
   );
 }
 
@@ -192,7 +191,7 @@ apiClient.interceptors.response.use(
     if (cfg && !cfg._retryNetworkOnce && isTransientNetworkError(error)) {
       cfg._retryNetworkOnce = true;
       await new Promise<void>((resolve) => {
-        window.setTimeout(resolve, TRANSIENT_NETWORK_RETRY_DELAY_MS);
+        globalThis.setTimeout(resolve, TRANSIENT_NETWORK_RETRY_DELAY_MS);
       });
       return apiClient.request(cfg);
     }
