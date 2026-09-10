@@ -616,16 +616,18 @@ dd {
    * Без padding-top: на iOS Safari/PWA padding на предке с overflow:hidden + height:100dvh
    * укорачивает containing block для `position:fixed` потомков — таббар с bottom:0
    * садился выше низа экрана на величину inset, снизу оставалась кремовая полоса.
-   * Верхний inset — через ::before как flex-item (см. ниже): он сжимает поток, не
-   * трогая fixed-привязку к viewport.
+   * Верхний inset — через ::before как flex-item (см. ниже). Сам таббар порталится
+   * в document.body (Layout.tsx): иначе overflow:hidden у #root + ::before всё ещё
+   * даёт укороченный fixed-CB на iOS (~47pt = safe-area-inset-top).
    */
   padding-top: 0;
 }
 
 /*
- * In-flow спейсер под вырез/Dynamic Island. flex-item, не padding: fixed-таббар
- * остаётся относительно viewport. В standalone полосу красит body::before
- * (z-index 150); здесь только геометрия потока.
+ * In-flow спейсер под вырез/Dynamic Island. flex-item сжимает поток React-дерева.
+ * Не полагаться на то, что fixed внутри #root останется у низа viewport: на iOS
+ * #root { overflow:hidden } — containing block, а ::before укорачивает usable CB.
+ * Таббар: createPortal(..., document.body). В standalone полосу красит body::before.
  */
 #root::before {
   content: '';
