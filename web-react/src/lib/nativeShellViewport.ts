@@ -130,30 +130,28 @@ export function syncViewportHeightVars() {
     root.dataset.chatOpen === '1';
 
   /**
-   * Высота оболочки = видимая полоса над клавиатурой.
-   * Узкий экран + открытый чат: берём минимум из visual / inner / clientHeight — на мобиле хотя бы одна метрика
-   * уже отражает клавиатуру, иначе остаётся «пол экрана» пустоты.
-   * iOS: если vv отстаёт выше innerHeight — дополнительно clamp от innerHeight.
+   * Высота оболочки.
+   *
+   * Клавиатура / узкий чат: минимум из метрик — иначе остаётся «пол экрана» пустоты
+   * над клавиатурой (vv ещё полный, inner уже сжат).
+   *
+   * Без клавиатуры: МАКСИМУМ, не минимум. На iOS Safari/PWA `visualViewport.height`
+   * иногда короче `innerHeight` ровно на `safe-area-inset-top` (~47pt). Старый
+   * `Math.min(visual, layout)` записывал эту укороченную высоту в --viewport-height →
+   * html/body/#root не добивали до низа экрана, а `position:fixed; bottom:0` таббар
+   * садился на низ укороченного visual viewport — под ним оставалась кремовая полоса
+   * высотой ровно top-inset (подтверждено пиксельным разбором скрина 1170×2532).
    */
   let chosen: number;
-  if (narrowMobileChat) {
+  if (narrowMobileChat || keyboardOpen) {
     const pool = [fromVisual, fromLayout, clientDocH].filter((x) => x > 0);
     chosen = pool.length > 0 ? Math.min(...pool) : 0;
     if (fromLayout > 0 && fromVisual > fromLayout + 4) {
       chosen = Math.min(chosen > 0 ? chosen : fromLayout, fromLayout);
     }
-  } else if (fromLayout > 0 && fromVisual > fromLayout + 4) {
-    chosen = fromLayout;
-  } else if (fromVisual > 0 && fromLayout > 0) {
-    chosen = Math.min(fromVisual, fromLayout);
-  } else if (fromVisual > 0) {
-    chosen = fromVisual;
-  } else if (fromDvhProbe > 0) {
-    chosen = fromDvhProbe;
-  } else if (fromLayout > 0) {
-    chosen = fromLayout;
   } else {
-    chosen = 0;
+    const pool = [fromVisual, fromLayout, fromDvhProbe, clientDocH].filter((x) => x > 0);
+    chosen = pool.length > 0 ? Math.max(...pool) : 0;
   }
   if (chosen <= 0 && typeof window.screen?.height === 'number' && window.screen.height > 0) {
     chosen = Math.round(window.screen.height);
