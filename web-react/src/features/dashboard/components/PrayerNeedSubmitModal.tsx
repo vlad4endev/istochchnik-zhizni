@@ -51,8 +51,7 @@ export function PrayerNeedSubmitModal({ open, onClose }: { open: boolean; onClos
     sendMut.reset();
     const t = setTimeout(() => textareaRef.current?.focus(), 60);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open]); // reset form when opened; ignore sendMut identity
 
   useEffect(() => {
     if (!open) return;
