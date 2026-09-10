@@ -613,6 +613,7 @@ export interface AppLogItem {
 
 export type TelegramSendLogChannel =
   | 'prayer_dispatch'
+  | 'prayer_need_submission'
   | 'service_plan_mailing'
   | 'service_plan_published'
   | 'coordinator_scenario'

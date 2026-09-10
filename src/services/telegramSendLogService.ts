@@ -3,6 +3,7 @@ import { pool, query } from '../config/db';
 
 export type TelegramSendChannel =
   | 'prayer_dispatch'
+  | 'prayer_need_submission'
   | 'service_plan_mailing'
   | 'service_plan_published'
   | 'coordinator_scenario'
@@ -261,6 +262,7 @@ export async function runTelegramSendLogCleanup(): Promise<{
 function parseChannel(raw: unknown): TelegramSendChannel | null {
   if (
     raw === 'prayer_dispatch' ||
+    raw === 'prayer_need_submission' ||
     raw === 'service_plan_mailing' ||
     raw === 'service_plan_published' ||
     raw === 'coordinator_scenario' ||

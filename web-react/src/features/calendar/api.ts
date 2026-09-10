@@ -236,6 +236,16 @@ export async function improvePrayerNeedTextWithAi(text: string, memberName?: str
   return data.text;
 }
 
+/** Минимальная длина нужды — совпадает с проверкой на сервере. */
+export const PRAYER_NEED_SUBMIT_MIN_LENGTH = 5;
+/** Максимальная длина нужды — совпадает с проверкой на сервере. */
+export const PRAYER_NEED_SUBMIT_MAX_LENGTH = 2000;
+
+/** Отправить свою нужду сообщением в молитвенный чат («Молитвенный календарь ИЖ»). */
+export async function submitPrayerNeedToChat(text: string): Promise<void> {
+  await apiClient.post('/api/calendar/prayer-need/submit', { text });
+}
+
 export async function patchMemberPreviousPrayerNeed(
   memberId: number,
   note: string

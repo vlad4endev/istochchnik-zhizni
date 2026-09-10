@@ -20,6 +20,7 @@ import {
   patchCycleCollectionClaims,
   patchMemberCyclePrayer,
   postPrayerNeedImproveText,
+  postPrayerNeedSubmit,
   postCuratorDistribution,
   patchMemberPreviousPrayerNeed,
   putMemberPreviousPrayerNeed,
@@ -54,8 +55,18 @@ import {
   uploadEventPoster,
 } from '../controllers/eventsController';
 import { eventPosterUploadMiddleware } from '../middleware/eventPosterUpload';
+import { createMemberIdRateLimiter } from '../middleware/rateLimit';
 
 const router = Router();
+
+/** Нужда в молитвенный чат: защита от случайных повторов и спама одним участником. */
+const prayerNeedSubmitRateLimiter = createMemberIdRateLimiter({
+  windowMs: 10 * 60_000,
+  maxRequests: 5,
+  keyPrefix: 'rate-limit-prayer-need-submit',
+  message: 'Слишком много отправок подряд. Попробуйте через несколько минут.',
+  resolveMemberId: (req) => (req as { authUserId?: number }).authUserId ?? null,
+});
 
 router.get('/dashboard-coordinator-notes', requireAuthSession, getDashboardCoordinatorNotes);
 router.post('/dashboard-coordinator-notes', requireAuthSession, postDashboardCoordinatorNote);
@@ -70,6 +81,12 @@ router.get('/next-week/curator-distribution/week', getCuratorDistributionTargetW
 router.get('/next-week/curator-distribution', getCuratorDistribution);
 router.post('/next-week/curator-distribution', postCuratorDistribution);
 router.post('/prayer-need/improve-text', postPrayerNeedImproveText);
+router.post(
+  '/prayer-need/submit',
+  requireAuthSession,
+  prayerNeedSubmitRateLimiter,
+  postPrayerNeedSubmit,
+);
 router.patch('/member-cycle-prayer', patchMemberCyclePrayer);
 router.patch('/member-previous-prayer-need', patchMemberPreviousPrayerNeed);
 router.put('/member-previous-prayer-need/:id', putMemberPreviousPrayerNeed);
