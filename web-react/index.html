@@ -128,7 +128,13 @@
   </head>
   <body style="margin:0;background:#f0ebe3">
     <!-- До загрузки React: анимированный сплэш вместо пустого фона. -->
-    <div id="root" style="min-height:100dvh;min-height:-webkit-fill-available">
+    <!--
+      Без inline min-height на #root: style="" перекрывает `#root { min-height: 0 }`
+      из index.css. На iOS standalone `-webkit-fill-available` снова растягивал корень
+      выше --viewport-height → кремовая полоса под fixed-таббаром. Высота сплэша —
+      у .app-splash (position:fixed + свои min-height в app-splash.css).
+    -->
+    <div id="root">
       <div class="app-splash" role="status" aria-live="polite" aria-label="Загрузка приложения">
         <div class="app-splash__bg" aria-hidden="true">
           <div class="app-splash__orb app-splash__orb--1"></div>
