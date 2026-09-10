@@ -31,6 +31,8 @@ export interface AppUser {
   first_name: string | null;
   last_name: string | null;
   name: string;
+  /** Фото участника для виджетов, расписаний и мессенджера. */
+  avatar_url: string | null;
   public_key?: string | null;
   phone_number: string | null;
   telegram_chat_id: string | null;
@@ -240,14 +242,18 @@ function normalizeOptionalString(value: unknown): string | null {
 }
 
 function mapUser(
-  row: AppUser & { user_id?: unknown; app_role?: unknown; app_roles?: unknown },
+  row: AppUser & { user_id?: unknown; app_role?: unknown; app_roles?: unknown; avatar_url?: unknown },
 ): AppUser {
   const uid = row.user_id;
   const appRoles = normalizeAppRoles(row.app_roles, row.app_role);
   const primaryRole = pickPrimaryAppRole(appRoles);
+  const rawAvatar = row.avatar_url;
+  const avatarUrl =
+    typeof rawAvatar === 'string' && rawAvatar.trim() ? rawAvatar.trim() : null;
   return {
     ...row,
     user_id: uid != null && String(uid).trim() !== '' ? String(uid) : '',
+    avatar_url: avatarUrl,
     app_role: normalizeAppRole(primaryRole),
     app_roles: appRoles,
   };
@@ -286,6 +292,7 @@ export async function listUsers(): Promise<AppUser[]> {
       m.first_name,
       m.last_name,
       m.name,
+      m.avatar_url,
       m.phone_number,
       m.telegram_chat_id,
       m.telegram_delivery_blocked,
@@ -324,6 +331,7 @@ export async function getUserById(id: number): Promise<AppUser | null> {
       m.first_name,
       m.last_name,
       m.name,
+      m.avatar_url,
       m.phone_number,
       m.telegram_chat_id,
       m.telegram_delivery_blocked,
@@ -835,6 +843,34 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
 export async function deleteUser(id: number): Promise<boolean> {
   const result = await query('DELETE FROM members WHERE id = $1', [id]);
   return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Назначает или снимает фото участника.
+ * Пишет в `members.avatar_url` и синхронизирует `user_profiles.avatar_url`,
+ * чтобы фото отображалось и в расписаниях/виджетах, и в публичном профиле (COALESCE).
+ */
+export async function updateMemberAvatar(
+  memberId: number,
+  avatarUrl: string | null,
+): Promise<AppUser | null> {
+  const existing = await getUserById(memberId);
+  if (!existing) {
+    return null;
+  }
+  const normalized =
+    typeof avatarUrl === 'string' && avatarUrl.trim() ? avatarUrl.trim() : null;
+  await query(`UPDATE members SET avatar_url = $1, updated_at = NOW() WHERE id = $2`, [
+    normalized,
+    memberId,
+  ]);
+  await query(
+    `UPDATE user_profiles
+     SET avatar_url = $1, updated_at = NOW()
+     WHERE member_id = $2`,
+    [normalized, memberId],
+  );
+  return getUserById(memberId);
 }
 
 export async function linkUserAccount(id: number, input: LinkAccountInput): Promise<AppUser | null> {

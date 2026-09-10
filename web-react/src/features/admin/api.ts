@@ -115,6 +115,20 @@ export async function updateAdminMember(
   return data;
 }
 
+/** Админ загружает фото участника (отображается во всех виджетах). */
+export async function uploadAdminMemberAvatar(id: number, file: File): Promise<AppUser> {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await apiClient.post<AppUser>(`${USERS}/${id}/avatar`, form);
+  return data;
+}
+
+/** Админ снимает фото участника. */
+export async function clearAdminMemberAvatar(id: number): Promise<AppUser> {
+  const { data } = await apiClient.delete<AppUser>(`${USERS}/${id}/avatar`);
+  return data;
+}
+
 export async function deleteAdminMember(id: number): Promise<void> {
   await apiClient.delete(`${USERS}/${id}`);
 }

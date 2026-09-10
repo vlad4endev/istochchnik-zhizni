@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import {
   LuArrowLeftRight,
   LuCalendarDays,
+  LuCamera,
   LuCheck,
   LuChevronDown,
   LuEllipsis,
@@ -20,9 +21,17 @@ import {
 } from 'react-icons/lu';
 
 import { BirthDayMonthFields } from '@/components/BirthDayMonthFields';
+import { AppAvatar } from '@/components/AppAvatar';
 import { memberRosterName, splitMemberNameParts } from '../../lib/memberRosterName';
 import { parseBirthDayMonthFromApi } from '../../lib/birthDate';
-import { apiErrorMessage, addAdminPrayerRequestHistory, type MinistryDirectionTemplate } from './api';
+import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
+import {
+  apiErrorMessage,
+  addAdminPrayerRequestHistory,
+  clearAdminMemberAvatar,
+  uploadAdminMemberAvatar,
+  type MinistryDirectionTemplate,
+} from './api';
 import { MemberAppRolesPicker } from './MemberAppRolesPicker';
 import { displayMemberAppRoles, formatMemberPhone } from './memberListQuery';
 import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../profile/api';
@@ -227,6 +236,8 @@ export function AdminMemberEditSheet({
   onClearBanner,
   onToggleCollectionCoordinator,
   onAssignOneTimeDate,
+  onMemberUpdated,
+  onAvatarError,
 }: {
   editing: AppUser;
   editForm: MemberEditForm;
@@ -256,12 +267,17 @@ export function AdminMemberEditSheet({
   onClearBanner: () => void;
   onToggleCollectionCoordinator: () => void;
   onAssignOneTimeDate: (date: string) => Promise<void> | void;
+  onMemberUpdated: (user: AppUser) => void;
+  onAvatarError?: (message: string) => void;
 }) {
   const [tab, setTab] = useState<SheetTab>('profile');
   const [copied, setCopied] = useState<'phone' | 'telegram' | null>(null);
   const [oneTimeDate, setOneTimeDate] = useState('');
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const displayName = memberRosterName(editing);
   const avatar = memberAvatarColors(displayName);
+  const avatarUrl = resolvePublicUrl(editing.avatar_url ?? null);
   const phonePretty = formatMemberPhone(editForm.phone_number);
   const birthday = birthLabel(editForm.birth_date);
   const selectedDirs = directionArray(editForm.ministry_direction);
@@ -272,6 +288,7 @@ export function AdminMemberEditSheet({
     setTab('profile');
     setCopied(null);
     setOneTimeDate('');
+    setAvatarBusy(false);
   }, [editing.id]);
 
   async function handleCopy(kind: 'phone' | 'telegram', value: string) {
@@ -280,6 +297,36 @@ export function AdminMemberEditSheet({
     if (!ok) return;
     setCopied(kind);
     window.setTimeout(() => setCopied((prev) => (prev === kind ? null : prev)), 1600);
+  }
+
+  async function handleAvatarFile(file: File | null) {
+    if (!file || avatarBusy) return;
+    setAvatarBusy(true);
+    onClearBanner();
+    try {
+      const updated = await uploadAdminMemberAvatar(editing.id, file);
+      onMemberUpdated(updated);
+    } catch (e) {
+      onAvatarError?.(apiErrorMessage(e, 'Не удалось загрузить фото'));
+    } finally {
+      setAvatarBusy(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
+  }
+
+  async function handleClearAvatar() {
+    if (avatarBusy || !editing.avatar_url) return;
+    if (!window.confirm('Убрать фото у этого участника?')) return;
+    setAvatarBusy(true);
+    onClearBanner();
+    try {
+      const updated = await clearAdminMemberAvatar(editing.id);
+      onMemberUpdated(updated);
+    } catch (e) {
+      onAvatarError?.(apiErrorMessage(e, 'Не удалось удалить фото'));
+    } finally {
+      setAvatarBusy(false);
+    }
   }
 
   const loginStatus = editing.password_reset_required
@@ -317,11 +364,40 @@ export function AdminMemberEditSheet({
           </button>
 
           <div className="flex items-start gap-3.5 pr-12 sm:gap-4">
-            <div
-              className="flex h-[68px] w-[68px] shrink-0 items-center justify-center rounded-[22px] text-xl font-bold shadow-sm sm:h-20 sm:w-20 sm:text-2xl"
-              style={{ backgroundColor: avatar.bg, color: avatar.fg }}
-            >
-              {memberInitials(editing)}
+            <div className="relative shrink-0">
+              <AppAvatar
+                src={avatarUrl}
+                fallback={
+                  <span className="text-xl font-bold sm:text-2xl" style={{ color: avatar.fg }}>
+                    {memberInitials(editing)}
+                  </span>
+                }
+                initialsFallbackText={memberInitials(editing)}
+                initialsColorSeed={displayName}
+                className="flex h-[68px] w-[68px] items-center justify-center overflow-hidden rounded-[22px] shadow-sm sm:h-20 sm:w-20"
+                imgClassName="h-full w-full object-cover"
+                style={avatarUrl ? undefined : { backgroundColor: avatar.bg }}
+                priority
+                alt=""
+              />
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
+                className="hidden"
+                disabled={avatarBusy}
+                onChange={(e) => void handleAvatarFile(e.target.files?.[0] ?? null)}
+              />
+              <button
+                type="button"
+                disabled={avatarBusy}
+                onClick={() => avatarInputRef.current?.click()}
+                className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full bg-white text-stone-700 shadow-md ring-1 ring-stone-200/90 transition hover:bg-stone-50 hover:text-stone-900 disabled:opacity-60"
+                title="Назначить фото"
+                aria-label="Назначить фото участника"
+              >
+                <LuCamera className="h-4 w-4" strokeWidth={2} aria-hidden />
+              </button>
             </div>
             <div className="min-w-0 flex-1 pt-0.5">
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-stone-500">Карточка участника</p>
@@ -352,6 +428,27 @@ export function AdminMemberEditSheet({
                 >
                   {editForm.is_active ? 'Активен' : 'Неактивен'}
                 </span>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={avatarBusy}
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="inline-flex min-h-[32px] items-center gap-1.5 rounded-full bg-white/85 px-3 text-[12px] font-semibold text-stone-700 ring-1 ring-stone-200/80 transition hover:bg-white disabled:opacity-60"
+                >
+                  <LuCamera className="h-3.5 w-3.5 text-stone-500" aria-hidden />
+                  {avatarBusy ? 'Загрузка…' : avatarUrl ? 'Сменить фото' : 'Назначить фото'}
+                </button>
+                {avatarUrl ? (
+                  <button
+                    type="button"
+                    disabled={avatarBusy}
+                    onClick={() => void handleClearAvatar()}
+                    className="inline-flex min-h-[32px] items-center gap-1.5 rounded-full bg-white/85 px-3 text-[12px] font-semibold text-rose-700 ring-1 ring-rose-200/80 transition hover:bg-white disabled:opacity-60"
+                  >
+                    Убрать фото
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>

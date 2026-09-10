@@ -1525,6 +1525,10 @@ export async function syncMembersTelegramProfiles(): Promise<TelegramMembersProf
         },
       });
       await query(`UPDATE members SET avatar_url = $1, updated_at = NOW() WHERE id = $2`, [publicUrl, memberId]);
+      await query(
+        `UPDATE user_profiles SET avatar_url = $1, updated_at = NOW() WHERE member_id = $2`,
+        [publicUrl, memberId],
+      );
       result.avatars_updated += 1;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

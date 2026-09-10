@@ -1892,10 +1892,19 @@ export async function updateAuthUserAvatar(
   userId: number,
   avatarUrl: string | null,
 ): Promise<AuthUser | null> {
+  const normalized =
+    typeof avatarUrl === 'string' && avatarUrl.trim() ? avatarUrl.trim() : null;
   await query(`UPDATE members SET avatar_url = $1, updated_at = NOW() WHERE id = $2`, [
-    avatarUrl,
+    normalized,
     userId,
   ]);
+  // Синхронизируем профиль, чтобы виджеты с COALESCE(up.avatar_url, m.avatar_url) показывали то же фото.
+  await query(
+    `UPDATE user_profiles
+     SET avatar_url = $1, updated_at = NOW()
+     WHERE member_id = $2`,
+    [normalized, userId],
+  );
   return getAuthUserById(userId);
 }
 

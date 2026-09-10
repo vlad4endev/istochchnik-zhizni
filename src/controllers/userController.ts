@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import path from 'node:path';
 import { normalizeBirthDateYmd } from '../lib/birthDate';
 import { getPrayerCycleTodayYmd } from '../utils/prayerPlanTimeZone';
 import {
@@ -29,12 +30,20 @@ import {
   startPrayerCycle,
   swapAllMembersFirstLastNames,
   swapMemberFirstLastName,
+  updateMemberAvatar,
   updateUser,
 } from '../services/userService';
 import { isValidAppRoleString } from '../types/appRole';
 import { notifyRealtime, type RealtimeScope } from '../realtime/notify';
 import { mergeAllDuplicateMembers } from '../services/memberMergeService';
 import { syncMembersTelegramProfiles } from '../services/telegramService';
+import {
+  buildUserMediaAvatarPath,
+  getSupabaseStorageMissingEnv,
+  isSupabaseStorageConfigured,
+  uploadBufferToPublicBucket,
+  userMediaBucket,
+} from '../lib/supabaseStorage';
 
 type AuthRequest = Request & { authUserId?: number; authUserRole?: string };
 
@@ -195,6 +204,108 @@ export async function syncUsersTelegramProfilesHandler(req: Request, res: Respon
     }
     console.error('Failed to sync users from Telegram profiles', error);
     res.status(500).json({ error: 'Не удалось обновить пользователей из Telegram' });
+  }
+}
+
+/** Админ назначает фото участнику — отображается во всех виджетах и расписаниях. */
+export async function uploadMemberAvatarHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
+  const userId = parseUserId(req.params.id);
+  if (!userId) {
+    res.status(400).json({ error: 'Invalid user id' });
+    return;
+  }
+  const file = (req as Request & { file?: Express.Multer.File }).file;
+  if (!file) {
+    res.status(400).json({ error: 'File is required' });
+    return;
+  }
+  const buf = file.buffer;
+  if (!buf || !buf.length) {
+    res.status(400).json({ error: 'File is empty' });
+    return;
+  }
+  if (!isSupabaseStorageConfigured()) {
+    res.status(503).json({
+      error: 'Хранилище файлов не настроено (нужны SUPABASE_URL и SUPABASE_SERVICE_ROLE_KEY)',
+      code: 'supabase_not_configured',
+      missingEnv: getSupabaseStorageMissingEnv(),
+    });
+    return;
+  }
+
+  const existing = await getUserById(userId);
+  if (!existing) {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
+
+  const ext = path.extname(file.originalname || '') || '';
+  const safeExt = ext && ext.length <= 10 ? ext.toLowerCase() : '';
+  const mimeType = String(file.mimetype || 'image/jpeg').toLowerCase();
+
+  let avatarUrl: string;
+  try {
+    const objectPath = buildUserMediaAvatarPath(userId, safeExt);
+    const authReq = req as AuthRequest;
+    const { publicUrl } = await uploadBufferToPublicBucket({
+      bucket: userMediaBucket(),
+      objectPath,
+      file: buf,
+      contentType: mimeType,
+      cacheControl: 'public, max-age=31536000, immutable',
+      metadata: {
+        kind: 'avatar',
+        memberId: String(userId),
+        uploadedBy: String(authReq.authUserId ?? ''),
+        source: 'admin',
+      },
+    });
+    avatarUrl = publicUrl;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[users] admin avatar upload failed:', msg);
+    res.status(502).json({ error: 'Не удалось сохранить файл в хранилище', code: 'storage_upload' });
+    return;
+  }
+
+  try {
+    const user = await updateMemberAvatar(userId, avatarUrl);
+    notifyRealtime(['me', 'members']);
+    if (!user) {
+      res.status(500).json({ error: 'Не удалось обновить профиль после загрузки' });
+      return;
+    }
+    res.json(user);
+  } catch (error) {
+    console.error('Failed to save member avatar', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+/** Админ снимает фото участника. */
+export async function clearMemberAvatarHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
+  const userId = parseUserId(req.params.id);
+  if (!userId) {
+    res.status(400).json({ error: 'Invalid user id' });
+    return;
+  }
+  try {
+    const user = await updateMemberAvatar(userId, null);
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    notifyRealtime(['me', 'members']);
+    res.json(user);
+  } catch (error) {
+    console.error('Failed to clear member avatar', error);
+    res.status(500).json({ error: 'Database error' });
   }
 }
 

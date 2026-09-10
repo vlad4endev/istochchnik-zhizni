@@ -23,6 +23,9 @@ import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-p
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
+import { AppAvatar } from '../../../components/AppAvatar';
+import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
+
 import {
   ADMIN_SIDEBAR_GROUPS,
   ADMIN_TABS,
@@ -97,7 +100,6 @@ import { GlobalNeedsSection } from '../GlobalNeedsSection';
 import { UserListSkeleton } from '../../../components/skeletons/UserListSkeleton';
 import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
 import { BirthDayMonthFields } from '@/components/BirthDayMonthFields';
-import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { nextOccurrenceLocalYmd } from '../../../lib/weekdayAnchor';
 import {
   compareMembersByPrayerCycleOrder,
@@ -1823,7 +1825,26 @@ function MembersSection({
                     }}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                        <AppAvatar
+                          src={resolvePublicUrl(u.avatar_url)}
+                          fallback={
+                            <span className="text-[11px] font-semibold" style={{ color: memberAvatarColors(memberRosterName(u)).fg }}>
+                              {memberInitials(u)}
+                            </span>
+                          }
+                          initialsFallbackText={memberInitials(u)}
+                          initialsColorSeed={memberRosterName(u)}
+                          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full"
+                          imgClassName="h-full w-full object-cover"
+                          style={
+                            u.avatar_url
+                              ? undefined
+                              : { backgroundColor: memberAvatarColors(memberRosterName(u)).bg }
+                          }
+                          alt=""
+                        />
+                        <div className="min-w-0 flex-1">
                         <p className="truncate font-semibold leading-tight text-stone-900">{memberRosterName(u)}</p>
                         <button
                           type="button"
@@ -1834,6 +1855,7 @@ function MembersSection({
                           {formatMemberPhone(u.phone_number)}
                         </button>
                         {service ? <p className="mt-0.5 truncate text-[11px] text-stone-500">{service}</p> : null}
+                        </div>
                       </div>
                       {showImpersonateButton && !memberIsAdmin(u) ? (
                         <button
@@ -1936,13 +1958,20 @@ function MembersSection({
                     >
                       <td className="px-3 py-1.5 align-middle">
                         <div className="flex min-w-0 items-center gap-2">
-                          <div
-                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
-                            style={{ backgroundColor: bg, color: fg }}
-                            aria-hidden
-                          >
-                            {memberInitials(u)}
-                          </div>
+                          <AppAvatar
+                            src={resolvePublicUrl(u.avatar_url)}
+                            fallback={
+                              <span className="text-[10px] font-semibold" style={{ color: fg }}>
+                                {memberInitials(u)}
+                              </span>
+                            }
+                            initialsFallbackText={memberInitials(u)}
+                            initialsColorSeed={name}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full"
+                            imgClassName="h-full w-full object-cover"
+                            style={u.avatar_url ? undefined : { backgroundColor: bg }}
+                            alt=""
+                          />
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-medium leading-tight text-stone-900">{name}</p>
                             {service ? <p className="truncate text-[11px] leading-tight text-stone-500">{service}</p> : null}
@@ -2036,6 +2065,12 @@ function MembersSection({
           onSwapNames={() => swapNameFieldsMut.mutate()}
           onResetPassword={() => resetPasswordMut.mutate(editing.id)}
           onClearBanner={() => setBanner(null)}
+          onMemberUpdated={(updated) => {
+            setEditing(updated);
+            setBanner({ type: 'ok', text: updated.avatar_url ? 'Фото участника сохранено.' : 'Фото участника убрано.' });
+            invalidate();
+          }}
+          onAvatarError={(message) => setBanner({ type: 'err', text: message })}
           onToggleCollectionCoordinator={() => {
             void updateAdminMember(editing.id, {
               is_collection_coordinator: !editing.is_collection_coordinator,

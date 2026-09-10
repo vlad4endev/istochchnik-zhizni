@@ -6,6 +6,8 @@ export interface AppUser {
   first_name: string | null;
   last_name: string | null;
   name: string;
+  /** Фото участника для виджетов, расписаний и мессенджера. */
+  avatar_url: string | null;
   phone_number: string | null;
   telegram_chat_id: string | null;
   telegram_delivery_blocked: boolean;

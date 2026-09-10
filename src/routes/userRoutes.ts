@@ -27,7 +27,10 @@ import {
   mergeDuplicateMembersHandler,
   swapAllMembersFirstLastNamesHandler,
   syncUsersTelegramProfilesHandler,
+  uploadMemberAvatarHandler,
+  clearMemberAvatarHandler,
 } from '../controllers/userController';
+import { eventPosterUploadMiddleware } from '../middleware/eventPosterUpload';
 
 const router = Router();
 
@@ -55,6 +58,8 @@ router.post('/:id/prayer-requests/history', addPrayerRequestHistoryHandler);
 router.post('/', createUserHandler);
 router.patch('/:id', updateUserHandler);
 router.patch('/:id/app-role', setUserAppRoleHandler);
+router.post('/:id/avatar', eventPosterUploadMiddleware, uploadMemberAvatarHandler);
+router.delete('/:id/avatar', clearMemberAvatarHandler);
 router.delete('/:id', deleteUserHandler);
 router.post('/:id/reset-password', adminResetUserPasswordHandler);
 router.post('/:id/link-account', linkUserAccountHandler);
