@@ -38,6 +38,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="color-scheme" content="light dark" />
     <meta name="application-name" content="Моя церковь" />
+    <!--
+      Слот под тему приложения. Умышленно без content и первым по порядку в дереве:
+      HTML-стандарт («To obtain a page's theme color») берёт ПЕРВЫЙ meta[name=theme-color],
+      у которого есть content и совпадает media. Без content этот элемент не кандидат,
+      поэтому до старта React работает пара ниже — по системной светлой/тёмной схеме.
+      Как только applyDocumentAccessibility.ts впишет сюда content, слот становится первым
+      кандидатом и перекрывает системную пару: цвет chrome/статус-бара начинает следовать
+      выбранной в приложении теме (dark / sepia / high-contrast), а не схеме ОС.
+
+      Раньше этот meta создавался в рантайме и добавлялся в конец head — то есть ПОСЛЕ
+      пары с media, из которой одна ветка совпадает всегда. По стандарту выигрывает первый,
+      так что тема приложения до chrome не доходила вовсе.
+    -->
+    <meta name="theme-color" data-app-managed="true" />
     <meta name="theme-color" content="#7d3640" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#5c2830" media="(prefers-color-scheme: dark)" />
     <!-- iOS «На экран Домой»: полноэкранный режим и имя под иконкой -->

@@ -59,7 +59,11 @@ function applyFontSize(size: FontSize): void {
   document.documentElement.style.setProperty('--a11y-font-scale', String(fontScaleMap[size]));
 }
 
-/** Статус-бар / оформление Chrome: последний `theme-color` в head перекрывает статичные meta с media. */
+/**
+ * Статус-бар / оформление Chrome. Пишем в слот `data-app-managed` из index.html —
+ * он объявлен ПЕРЕД статичной парой с media, потому что по стандарту выигрывает
+ * первый подходящий `meta[name=theme-color]`, а не последний.
+ */
 function syncThemeColorMeta(): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;

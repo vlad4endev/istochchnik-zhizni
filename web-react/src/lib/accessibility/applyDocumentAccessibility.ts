@@ -1,6 +1,15 @@
 import { useAppearanceStore } from '../../stores/useAppearanceStore';
 import type { AccessibilityState } from './types';
 
+/**
+ * Слот объявлен в index.html перед статичной парой `theme-color` с media: по
+ * стандарту chrome берёт первый подходящий meta, поэтому именно этот элемент
+ * определяет цвет статус-бара, когда тема приложения уже применена.
+ *
+ * Ветка с createElement оставлена для окружений без нашего index.html (jsdom в
+ * тестах). Там элемент уезжает в конец head и приоритет уже не тот, но цвет
+ * статус-бара в тестах никто не читает.
+ */
 function syncThemeColorMeta(isDarkLike: boolean): void {
   if (typeof document === 'undefined') return;
   const content = isDarkLike ? '#121214' : '#7d3640';
