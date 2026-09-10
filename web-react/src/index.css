@@ -443,8 +443,14 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overscroll-behavior-y: contain;
-  /* Верх: вырез/notch. Низ: отступ под таб-бар — у самой панели `padding-bottom` под safe-area. */
-  padding-top: env(safe-area-inset-top, 0px);
+  /*
+   * Без padding-top/bottom: высота body = --viewport-height ровно совпадает с
+   * видимой областью. Верхний inset перенесён на #root (см. ниже): padding на
+   * body при height:100dvh на iOS PWA оставлял снизу пустую полосу высотой
+   * ровно safe-area-inset-top — таббар «парил» над кремовым зазором.
+   * Низ: safe-area держит сама панель (`pb-[env(safe-area-inset-bottom)]`).
+   */
+  padding-top: 0;
   padding-bottom: 0;
 }
 
@@ -456,8 +462,9 @@ body {
  * кремового --surface они практически не читались.
  *
  * `position: fixed` обязателен: body — флекс-контейнер, поточный ::before стал бы
- * флекс-элементом и сдвинул интерфейс. Высота — тот же env(), что и padding-top
- * body, поэтому на устройствах без выреза и в ландшафте полоса схлопывается в 0.
+ * флекс-элементом и сдвинул интерфейс. Высота — env(safe-area-inset-top), тот же
+ * inset, что padding-top у #root; на устройствах без выреза и в ландшафте полоса
+ * схлопывается в 0.
  *
  * z-index 150 — выше обычного контента, но ниже оверлеев (модалки Mantine, вьюеры
  * медиа и историй, звонки). Полноэкранные оверлеи почти все тёмные и красят эту
@@ -521,7 +528,7 @@ dd {
 @supports (padding: max(0px)) {
   body {
     padding-bottom: 0;
-    padding-top: max(0px, env(safe-area-inset-top, 0px));
+    padding-top: 0;
   }
 }
 
@@ -605,6 +612,18 @@ dd {
   touch-action: pan-x pan-y pinch-zoom;
   background: var(--surface);
   color: var(--text);
+  /*
+   * Верхний safe-area здесь, а не на body: box-sizing:border-box + height:100dvh
+   * сжимает flex-область под вырез, не раздувая оболочку. Fixed-таббар остаётся
+   * привязан к низу viewport и своим pb закрывает home-indicator.
+   */
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+@supports (padding: max(0px)) {
+  #root {
+    padding-top: max(0px, env(safe-area-inset-top, 0px));
+  }
 }
 
 /* PWA / нативная оболочка: как у body — не даём #root расти по 100dvh выше layout viewport (полоска снизу на iOS). */

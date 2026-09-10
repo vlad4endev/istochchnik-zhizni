@@ -17,7 +17,7 @@
   min-height: 3.25rem;
   /*
    * Без env(safe-area-inset-top): шапка `position: sticky`, то есть в потоке внутри
-   * body, а тот уже держит `padding-top: env(safe-area-inset-top)`. Слагаемое здесь
+   * #root, а тот уже держит `padding-top: env(safe-area-inset-top)`. Слагаемое здесь
    * давало на iPhone с вырезом двойной отступ. Ср. FeedPage.module.css.
    */
   padding: 0.35rem 0.75rem;
