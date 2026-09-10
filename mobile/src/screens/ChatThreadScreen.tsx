@@ -99,8 +99,50 @@ export function ChatThreadScreen() {
   }, [typingUsers, memberId]);
 
   useEffect(() => {
-    navigation.setOptions({ title: title || 'Чат' });
-  }, [navigation, title]);
+    const displayTitle = title || 'Чат';
+    navigation.setOptions({
+      title: displayTitle,
+      headerTitle: () => (
+        <Pressable
+          onPress={() =>
+            navigation.navigate('ChatInfo', {
+              conversationId,
+              title: displayTitle,
+            })
+          }
+          hitSlop={8}
+          style={{ maxWidth: 220 }}
+        >
+          <Text
+            numberOfLines={1}
+            style={{
+              fontSize: 17,
+              fontWeight: '600',
+              color: colors.text,
+              textAlign: 'center',
+            }}
+          >
+            {displayTitle}
+          </Text>
+        </Pressable>
+      ),
+      headerRight: () => (
+        <Pressable
+          onPress={() =>
+            navigation.navigate('ChatInfo', {
+              conversationId,
+              title: displayTitle,
+            })
+          }
+          hitSlop={10}
+          style={{ paddingHorizontal: 4 }}
+          accessibilityLabel="Сведения о чате"
+        >
+          <Ionicons name="information-circle-outline" size={24} color={colors.primary} />
+        </Pressable>
+      ),
+    });
+  }, [navigation, title, conversationId, colors.text, colors.primary]);
 
   useEffect(() => {
     setActiveMessengerConversation(conversationId);

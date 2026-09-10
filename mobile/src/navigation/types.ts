@@ -19,6 +19,7 @@ export type RootStackParamList = {
   SongDetail: { songId: number; title: string };
   Events: undefined;
   ChatThread: { conversationId: string; title?: string; isGroup?: boolean };
+  ChatInfo: { conversationId: string; title?: string };
   NewChat: undefined;
   MediaSchedule: undefined;
   MusicSchedule: undefined;

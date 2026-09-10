@@ -402,3 +402,107 @@ export async function forwardMessage(
   }>(`${BASE}/messages/${encodeURIComponent(messageId)}/forward`, { conversationIds });
   return data;
 }
+
+export type ParticipantRole = 'owner' | 'admin' | 'member';
+
+export type EffectivePermissions = Record<string, boolean>;
+
+export type ConversationMeta = {
+  id: string;
+  type: ConversationType;
+  title: string | null;
+  avatar_url: string | null;
+  description?: string | null;
+  updated_at: string;
+  default_permissions?: Record<string, boolean>;
+  settings?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  my_role?: ParticipantRole;
+  my_effective_permissions?: EffectivePermissions;
+  my_last_read_message_id?: string | null;
+};
+
+export type ConversationMember = {
+  member_id: number;
+  role: ParticipantRole;
+  joined_at: string;
+  muted_until: string | null;
+  permissions: Record<string, boolean>;
+  name: string;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url?: string | null;
+  is_online?: boolean;
+  last_seen_at?: string | null;
+};
+
+export type PrivateChatProfile = {
+  id: number;
+  name: string;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+  phone_number: string | null;
+  app_role: string | null;
+  ministry_role: string | null;
+  ministry_direction: string | null;
+  birth_date: string | null;
+  last_seen_at: string | null;
+};
+
+export type PatchMyConversationUiBody = {
+  muted?: boolean;
+  uiPinned?: boolean;
+  uiFolder?: 'personal' | 'ministry' | null;
+};
+
+export async function fetchConversationMeta(conversationId: string): Promise<ConversationMeta> {
+  const { data } = await apiClient.get<ConversationMeta>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/meta`,
+  );
+  return data;
+}
+
+export async function fetchConversationMembers(
+  conversationId: string,
+): Promise<ConversationMember[]> {
+  const { data } = await apiClient.get<ConversationMember[]>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/members`,
+  );
+  return data ?? [];
+}
+
+export async function fetchPrivateChatProfile(
+  conversationId: string,
+): Promise<PrivateChatProfile> {
+  const { data } = await apiClient.get<PrivateChatProfile>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/private-profile`,
+  );
+  return data;
+}
+
+export async function updateConversation(
+  conversationId: string,
+  updates: { title?: string; avatar_url?: string | null; description?: string | null },
+): Promise<void> {
+  await apiClient.patch(`${BASE}/conversations/${encodeURIComponent(conversationId)}`, updates);
+}
+
+export async function patchMyConversationUi(
+  conversationId: string,
+  body: PatchMyConversationUiBody,
+): Promise<void> {
+  await apiClient.patch(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/my-ui`,
+    body,
+  );
+}
+
+export async function removeParticipant(
+  conversationId: string,
+  memberId: number,
+): Promise<void> {
+  await apiClient.delete(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/participants/${memberId}`,
+  );
+}

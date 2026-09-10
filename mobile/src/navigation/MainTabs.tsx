@@ -12,6 +12,7 @@ import { BroadcastScreen } from '../screens/BroadcastScreen';
 import { ComposePostScreen } from '../screens/ComposePostScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { ChatsScreen } from '../screens/ChatsScreen';
+import { ChatInfoScreen } from '../screens/ChatInfoScreen';
 import { ChatThreadScreen } from '../screens/ChatThreadScreen';
 import { EventsScreen } from '../screens/EventsScreen';
 import { FeedPostCommentsScreen } from '../screens/FeedPostCommentsScreen';
@@ -212,6 +213,11 @@ export function MainStack() {
         options={({ route }) => ({
           title: route.params.title ?? 'Чат',
         })}
+      />
+      <Stack.Screen
+        name="ChatInfo"
+        component={ChatInfoScreen}
+        options={{ title: 'О чате' }}
       />
       <Stack.Screen
         name="NewChat"
