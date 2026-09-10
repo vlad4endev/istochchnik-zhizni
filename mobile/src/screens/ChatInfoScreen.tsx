@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import * as Clipboard from 'expo-clipboard';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -20,6 +21,7 @@ import {
   fetchConversationMeta,
   fetchConversations,
   fetchPrivateChatProfile,
+  patchConversationPermissions,
   patchMyConversationUi,
   removeParticipant,
   updateConversation,
@@ -39,6 +41,17 @@ import { useAuthStore } from '../stores/authStore';
 import { useTheme } from '../theme';
 
 type ChatInfoRoute = RouteProp<RootStackParamList, 'ChatInfo'>;
+
+const INVITE_BASE = 'https://app.church-tambov.ru/join';
+
+function randomInviteToken(): string {
+  return Math.random().toString(36).slice(2, 12);
+}
+
+function inviteTokenFromMeta(settings: Record<string, unknown> | undefined): string {
+  const raw = settings?.invite_token;
+  return typeof raw === 'string' ? raw.trim() : '';
+}
 
 function roleLabel(role: ParticipantRole): string {
   if (role === 'owner') return 'создатель';
@@ -68,6 +81,7 @@ export function ChatInfoScreen() {
   const queryClient = useQueryClient();
   const [renameOpen, setRenameOpen] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
+  const inviteBootstrapRef = useRef(false);
 
   const conversationsQuery = useQuery({
     queryKey: ['messenger', 'conversations'],
@@ -125,6 +139,67 @@ export function ChatInfoScreen() {
     },
   });
 
+  const inviteMutation = useMutation({
+    mutationFn: async (token: string) => {
+      const currentSettings =
+        (metaQuery.data?.settings as Record<string, unknown> | undefined) ?? {};
+      await patchConversationPermissions(conversationId, {
+        settings: { ...currentSettings, invite_token: token },
+      });
+      return token;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['messenger', 'meta', conversationId] });
+    },
+    onError: () => {
+      Alert.alert('Ошибка', 'Не удалось обновить ссылку-приглашение');
+    },
+  });
+
+  const canManage = metaQuery.data?.my_effective_permissions?.can_manage_chat === true;
+  const inviteToken = inviteTokenFromMeta(
+    metaQuery.data?.settings as Record<string, unknown> | undefined,
+  );
+  const inviteLink = inviteToken ? `${INVITE_BASE}/${inviteToken}` : '';
+
+  useEffect(() => {
+    if (isPrivate || !canManage || !metaQuery.isSuccess) return;
+    if (inviteToken) {
+      inviteBootstrapRef.current = true;
+      return;
+    }
+    if (inviteBootstrapRef.current || inviteMutation.isPending) return;
+    inviteBootstrapRef.current = true;
+    inviteMutation.mutate(randomInviteToken());
+    // Bootstrap invite token once for managers when missing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPrivate, canManage, metaQuery.isSuccess, inviteToken]);
+
+  const copyInvite = async () => {
+    if (!inviteLink) return;
+    try {
+      await Clipboard.setStringAsync(inviteLink);
+      Alert.alert('Скопировано', 'Ссылка-приглашение скопирована');
+    } catch {
+      Alert.alert('Ошибка', 'Не удалось скопировать ссылку');
+    }
+  };
+
+  const resetInvite = () => {
+    Alert.alert(
+      'Сбросить ссылку?',
+      'Старая ссылка перестанет действовать.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Сбросить',
+          style: 'destructive',
+          onPress: () => inviteMutation.mutate(randomInviteToken()),
+        },
+      ],
+    );
+  };
+
   const leaveMutation = useMutation({
     mutationFn: async () => {
       if (memberId == null) throw new Error('Нет текущего участника');
@@ -163,7 +238,6 @@ export function ChatInfoScreen() {
   }
 
   const meta = metaQuery.data;
-  const canManage = meta?.my_effective_permissions?.can_manage_chat === true;
   const displayTitle =
     (conversation ? getConversationTitle(conversation) : null) ||
     meta?.title ||
@@ -282,6 +356,38 @@ export function ChatInfoScreen() {
             {memberCount > 0 ? ` · ${memberCount} уч.` : ''}
           </Text>
         </View>
+
+        {canManage ? (
+          <>
+            <Text style={styles.sectionLabel}>Приглашение</Text>
+            <View style={styles.card}>
+              <Pressable
+                onPress={() => void copyInvite()}
+                disabled={!inviteLink || inviteMutation.isPending}
+                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+              >
+                <View style={styles.rowIcon}>
+                  <Ionicons name="link-outline" size={20} color={colors.primary} />
+                </View>
+                <View style={styles.inviteTextCol}>
+                  <Text style={styles.rowLabel}>Ссылка-приглашение</Text>
+                  <Text style={styles.inviteUrl} numberOfLines={1}>
+                    {inviteLink || (inviteMutation.isPending ? 'Создаём…' : 'Нет ссылки')}
+                  </Text>
+                </View>
+                <Ionicons name="copy-outline" size={20} color={colors.textMuted} />
+              </Pressable>
+              <Pressable
+                onPress={resetInvite}
+                disabled={inviteMutation.isPending}
+                style={({ pressed }) => [styles.resetInviteRow, pressed && styles.pressed]}
+              >
+                <Ionicons name="refresh-outline" size={18} color="#dc2626" />
+                <Text style={styles.resetInviteText}>Сбросить ссылку</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : null}
 
         <View style={styles.card}>
           <View style={styles.row}>
@@ -525,6 +631,29 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boo
       fontSize: 16,
       fontWeight: '500',
       color: colors.text,
+    },
+    inviteTextCol: {
+      flex: 1,
+      minWidth: 0,
+      gap: 2,
+    },
+    inviteUrl: {
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+    resetInviteRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: border,
+    },
+    resetInviteText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: '#dc2626',
     },
     infoRow: {
       paddingHorizontal: 16,

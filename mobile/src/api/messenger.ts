@@ -237,6 +237,21 @@ export async function createPersonalChat(otherMemberId: number): Promise<{
   return data;
 }
 
+export async function createGroupChat(
+  title: string,
+  type: 'group' | 'channel',
+  memberIds: number[],
+): Promise<{
+  conversationId: string;
+  conversation: ConversationListItem | null;
+}> {
+  const { data } = await apiClient.post<{
+    conversationId: string;
+    conversation: ConversationListItem | null;
+  }>(`${BASE}/conversations/group`, { title, type, memberIds });
+  return data;
+}
+
 export async function searchMembers(q: string): Promise<SearchMember[]> {
   const { data } = await apiClient.get<SearchMember[]>(`${BASE}/members/search`, { params: { q } });
   return data ?? [];
@@ -486,6 +501,30 @@ export async function updateConversation(
   updates: { title?: string; avatar_url?: string | null; description?: string | null },
 ): Promise<void> {
   await apiClient.patch(`${BASE}/conversations/${encodeURIComponent(conversationId)}`, updates);
+}
+
+export async function patchConversationPermissions(
+  conversationId: string,
+  patch: {
+    default_permissions?: Record<string, boolean>;
+    settings?: Record<string, unknown>;
+  },
+): Promise<void> {
+  await apiClient.patch(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/permissions`,
+    patch,
+  );
+}
+
+export async function addParticipant(
+  conversationId: string,
+  memberId: number,
+): Promise<{ ok: boolean; alreadyMember?: boolean }> {
+  const { data } = await apiClient.post<{ ok: boolean; alreadyMember?: boolean }>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/participants`,
+    { memberId },
+  );
+  return data ?? { ok: true };
 }
 
 export async function patchMyConversationUi(
