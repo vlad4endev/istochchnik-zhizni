@@ -1,10 +1,11 @@
 import { Image } from 'expo-image';
-import { useMemo } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { StudioSheetMeta } from '../../api/studio';
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 import { useTheme, type ThemeColors } from '../../theme';
+import { AbcScoreView } from './AbcScoreView';
 
 interface SheetMusicPreviewProps {
   sheetMeta?: StudioSheetMeta | null;
@@ -36,6 +37,8 @@ export function SheetMusicPreview({
 }: SheetMusicPreviewProps) {
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => createStyles(colors, isDark, compact), [colors, isDark, compact]);
+  const [showAbcSource, setShowAbcSource] = useState(false);
+  const [showScan, setShowScan] = useState(false);
 
   const title = sheetMeta?.title?.trim() || songTitle?.trim() || '';
   const composer = sheetMeta?.composer?.trim() || '';
@@ -47,6 +50,7 @@ export function SheetMusicPreview({
   const imageUrl = resolvePublicUrl(sheetMeta?.sourceImageUrl ?? null);
   const fallback = fallbackContent?.trim() || '';
   const notes = sheetMeta?.generalNotes?.trim() || '';
+  const scanVisible = !abc || showScan;
 
   const metaBits = [
     keyLabel ? `Тональность ${keyLabel}` : null,
@@ -69,21 +73,39 @@ export function SheetMusicPreview({
 
       {abc ? (
         <View style={styles.block}>
-          <Text style={styles.blockLabel}>ABC</Text>
-          <Text style={styles.mono} selectable>
-            {abc}
-          </Text>
+          <Text style={styles.blockLabel}>Партитура</Text>
+          <AbcScoreView abcNotation={abc} compact={compact} />
+          <Pressable onPress={() => setShowAbcSource((v) => !v)} hitSlop={8}>
+            <Text style={styles.toggle}>
+              {showAbcSource ? 'Скрыть исходный ABC' : 'Показать исходный ABC'}
+            </Text>
+          </Pressable>
+          {showAbcSource ? (
+            <Text style={styles.mono} selectable>
+              {abc}
+            </Text>
+          ) : null}
         </View>
       ) : null}
 
       {imageUrl ? (
         <View style={styles.block}>
-          <Text style={styles.blockLabel}>Скан / фото</Text>
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.image}
-            contentFit="contain"
-          />
+          {abc ? (
+            <Pressable onPress={() => setShowScan((v) => !v)} hitSlop={8}>
+              <Text style={styles.toggle}>
+                {showScan ? 'Скрыть исходное фото' : 'Исходное фото партитуры'}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.blockLabel}>Скан / фото</Text>
+          )}
+          {scanVisible ? (
+            <Image
+              source={{ uri: imageUrl }}
+              style={styles.image}
+              contentFit="contain"
+            />
+          ) : null}
         </View>
       ) : null}
 
@@ -148,6 +170,12 @@ function createStyles(colors: ThemeColors, isDark: boolean, compact: boolean) {
       color: colors.textMuted,
       textTransform: 'uppercase',
       letterSpacing: 0.4,
+    },
+    toggle: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.primary,
+      marginTop: 4,
     },
     mono: {
       fontSize: compact ? 12 : 13,
