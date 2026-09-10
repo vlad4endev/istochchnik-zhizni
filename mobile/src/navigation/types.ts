@@ -19,10 +19,16 @@ export type RootStackParamList = {
   ChatThread: { conversationId: string; title?: string; isGroup?: boolean };
   NewChat: undefined;
   MediaSchedule: undefined;
+  MusicSchedule: undefined;
+  SundaySchedule: undefined;
   ServicePlanner: undefined;
   ServicePlanDetail: { planId: number; shareToken: string; title?: string };
   Studio: undefined;
   StudioSetlistDetail: { setlistId: number; title: string };
   StudioPerform: { setlistId: number; title?: string };
   PrayerCyclePlan: undefined;
+  Feed: undefined;
+  Broadcast: undefined;
+  MySermons: undefined;
+  SermonNoteDetail: { noteId: string; title: string };
 };

@@ -26,8 +26,10 @@ import { useAuthDisplayName, useAuthStore } from '../stores/authStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { useMediaScheduleAccess } from '../hooks/useMediaScheduleAccess';
+import { useMusicScheduleAccess } from '../hooks/useMusicScheduleAccess';
 import { useServicePlannerAccess } from '../hooks/useServicePlannerAccess';
 import { useStudioAccess } from '../hooks/useStudioAccess';
+import { useSundayScheduleAccess } from '../hooks/useSundayScheduleAccess';
 import { useTheme } from '../theme';
 import type { AppSettings } from '../types';
 
@@ -54,6 +56,8 @@ export function SettingsScreen() {
   const logout = useAuthStore((s) => s.logout);
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
   const { canView: canViewMediaSchedule } = useMediaScheduleAccess();
+  const { canView: canViewMusicSchedule } = useMusicScheduleAccess();
+  const { canView: canViewSundaySchedule } = useSundayScheduleAccess();
   const { canView: canViewServicePlanner } = useServicePlannerAccess();
   const { canView: canViewStudio } = useStudioAccess();
 
@@ -123,6 +127,22 @@ export function SettingsScreen() {
         <SectionLabel title="Разделы" />
         <View style={styles.card}>
           <MenuRow
+            icon="images-outline"
+            label="Лента"
+            subtitle="Новости и посты церкви"
+            onPress={() => navigation.navigate('Feed')}
+            colors={colors}
+          />
+          <Divider />
+          <MenuRow
+            icon="tv-outline"
+            label="Трансляция"
+            subtitle="Прямой эфир и записи"
+            onPress={() => navigation.navigate('Broadcast')}
+            colors={colors}
+          />
+          <Divider />
+          <MenuRow
             icon="calendar-outline"
             label="Мероприятия"
             subtitle="Календарь служений и встреч"
@@ -137,6 +157,14 @@ export function SettingsScreen() {
             onPress={() => navigation.navigate('Sermons')}
             colors={colors}
           />
+          <Divider />
+          <MenuRow
+            icon="document-text-outline"
+            label="Мои проповеди"
+            subtitle="Конспекты проповедника"
+            onPress={() => navigation.navigate('MySermons')}
+            colors={colors}
+          />
           {canViewMediaSchedule ? (
             <>
               <Divider />
@@ -145,6 +173,30 @@ export function SettingsScreen() {
                 label="Расписание медиа"
                 subtitle="Моё расписание и команда"
                 onPress={() => navigation.navigate('MediaSchedule')}
+                colors={colors}
+              />
+            </>
+          ) : null}
+          {canViewMusicSchedule ? (
+            <>
+              <Divider />
+              <MenuRow
+                icon="musical-note-outline"
+                label="Расписание музыки"
+                subtitle="Музыкальное служение"
+                onPress={() => navigation.navigate('MusicSchedule')}
+                colors={colors}
+              />
+            </>
+          ) : null}
+          {canViewSundaySchedule ? (
+            <>
+              <Divider />
+              <MenuRow
+                icon="sunny-outline"
+                label="Воскресное расписание"
+                subtitle="Ведущие и проповедники"
+                onPress={() => navigation.navigate('SundaySchedule')}
                 colors={colors}
               />
             </>

@@ -29,8 +29,10 @@ import { pickFirstUpcomingOccurrence } from '../lib/eventSchedule';
 import { memberRosterName } from '../lib/memberRosterName';
 import { roleLabelRu } from '../lib/roleLabels';
 import { useMediaScheduleAccess } from '../hooks/useMediaScheduleAccess';
+import { useMusicScheduleAccess } from '../hooks/useMusicScheduleAccess';
 import { useServicePlannerAccess } from '../hooks/useServicePlannerAccess';
 import { useStudioAccess } from '../hooks/useStudioAccess';
+import { useSundayScheduleAccess } from '../hooks/useSundayScheduleAccess';
 import type { MainTabParamList, RootStackParamList } from '../navigation/types';
 import { useAuthDisplayName, useAuthStore } from '../stores/authStore';
 import { useTheme, type ThemeColors } from '../theme';
@@ -64,6 +66,8 @@ export function DashboardScreen() {
   const role = useAuthStore((s) => s.role);
   const isParishioner = role === 'parishioner';
   const { canView: canViewMediaSchedule } = useMediaScheduleAccess();
+  const { canView: canViewMusicSchedule } = useMusicScheduleAccess();
+  const { canView: canViewSundaySchedule } = useSundayScheduleAccess();
   const { canView: canViewServicePlanner } = useServicePlannerAccess();
   const { canView: canViewStudio } = useStudioAccess();
   const today = todayIsoUtc();
@@ -113,6 +117,13 @@ export function DashboardScreen() {
   const quickActions = useMemo((): QuickActionDef[] => {
     const items: QuickActionDef[] = [
       {
+        id: 'feed',
+        icon: 'images-outline',
+        label: 'Лента',
+        color: '#db2777',
+        onPress: (nav) => nav.navigate('Feed'),
+      },
+      {
         id: 'events',
         icon: 'calendar-outline',
         label: 'Расписание',
@@ -133,6 +144,13 @@ export function DashboardScreen() {
         label: 'Проповеди',
         color: '#0A5A4C',
         onPress: (nav) => nav.navigate('Sermons'),
+      },
+      {
+        id: 'broadcast',
+        icon: 'tv-outline',
+        label: 'Эфир',
+        color: '#b91c1c',
+        onPress: (nav) => nav.navigate('Broadcast'),
       },
       {
         id: 'chats',
@@ -169,6 +187,24 @@ export function DashboardScreen() {
         onPress: (nav) => nav.navigate('MediaSchedule'),
       });
     }
+    if (canViewMusicSchedule) {
+      items.push({
+        id: 'music',
+        icon: 'musical-note-outline',
+        label: 'Музыка',
+        color: '#0891b2',
+        onPress: (nav) => nav.navigate('MusicSchedule'),
+      });
+    }
+    if (canViewSundaySchedule) {
+      items.push({
+        id: 'sunday',
+        icon: 'sunny-outline',
+        label: 'Воскресенье',
+        color: '#ca8a04',
+        onPress: (nav) => nav.navigate('SundaySchedule'),
+      });
+    }
     if (canViewStudio) {
       items.push({
         id: 'studio',
@@ -178,12 +214,21 @@ export function DashboardScreen() {
         onPress: (nav) => nav.navigate('Studio'),
       });
     }
+    items.push({
+      id: 'my-sermons',
+      icon: 'document-text-outline',
+      label: 'Конспекты',
+      color: '#0f766e',
+      onPress: (nav) => nav.navigate('MySermons'),
+    });
 
     return items.filter((a) => !a.hidden);
   }, [
     canViewMediaSchedule,
+    canViewMusicSchedule,
     canViewServicePlanner,
     canViewStudio,
+    canViewSundaySchedule,
     colors.primary,
     isParishioner,
     unreadCount,

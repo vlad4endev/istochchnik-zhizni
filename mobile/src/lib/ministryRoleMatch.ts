@@ -42,3 +42,40 @@ export function hasMediaMinistryDirection(ministryDirection: unknown): boolean {
     .map((s) => normalizeMinistryToken(s))
     .some((s) => s === target || s.includes('медиа'));
 }
+
+const MUSIC_LEADER_ROLE_ALIASES = [
+  'Музыкальный лидер',
+  'Лидер Прославления',
+  'Лидер поклонения',
+] as const;
+
+export function isMusicLeader(ministryRole: unknown): boolean {
+  return MUSIC_LEADER_ROLE_ALIASES.some((alias) => memberHasMinistryRole(ministryRole, alias));
+}
+
+export function hasMusicMinistryDirection(ministryDirection: unknown): boolean {
+  const v = normalizeMinistryToken(ministryDirection);
+  if (!v) return false;
+  const target = normalizeMinistryToken('Музыкальное служение');
+  return v
+    .split(/[;,]/)
+    .map((s) => normalizeMinistryToken(s))
+    .some((s) => s === target || s.includes('музык') || target.includes(s));
+}
+
+export function hasSundayMinistryDirection(ministryDirection: unknown): boolean {
+  const parts = String(ministryDirection ?? '')
+    .split(/[;,]/)
+    .map((s) => normalizeMinistryToken(s))
+    .filter(Boolean);
+  return parts.some((s) => {
+    return s.includes('воскресн') || s.includes('богослужен') || s.includes('ведущ');
+  });
+}
+
+export function hasSundayMinistryRole(ministryRole: unknown): boolean {
+  return (
+    memberHasMinistryRole(ministryRole, 'Ведущий') ||
+    memberHasMinistryRole(ministryRole, 'Проповедник')
+  );
+}

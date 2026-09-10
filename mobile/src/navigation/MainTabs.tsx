@@ -8,20 +8,26 @@ import { Platform, Text, View } from 'react-native';
 import { SermonPlayerBar } from '../components/SermonPlayerBar';
 import { SermonPlayerProvider } from '../contexts/SermonPlayerContext';
 import { fetchUnreadCount } from '../api/messenger';
+import { BroadcastScreen } from '../screens/BroadcastScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { ChatsScreen } from '../screens/ChatsScreen';
 import { ChatThreadScreen } from '../screens/ChatThreadScreen';
 import { EventsScreen } from '../screens/EventsScreen';
+import { FeedScreen } from '../screens/FeedScreen';
 import { MediaScheduleScreen } from '../screens/MediaScheduleScreen';
+import { MusicScheduleScreen } from '../screens/MusicScheduleScreen';
+import { MySermonsScreen } from '../screens/MySermonsScreen';
 import { NewChatScreen } from '../screens/NewChatScreen';
 import { PrayerCyclePlanScreen } from '../screens/PrayerCyclePlanScreen';
 import { PrayerScreen } from '../screens/PrayerScreen';
+import { SermonNoteDetailScreen } from '../screens/SermonNoteDetailScreen';
 import { SermonsScreen } from '../screens/SermonsScreen';
 import { ServicePlannerScreen } from '../screens/ServicePlannerScreen';
 import { ServicePlanDetailScreen } from '../screens/ServicePlanDetailScreen';
 import { StudioPerformScreen } from '../screens/StudioPerformScreen';
 import { StudioScreen } from '../screens/StudioScreen';
 import { StudioSetlistDetailScreen } from '../screens/StudioSetlistDetailScreen';
+import { SundayScheduleScreen } from '../screens/SundayScheduleScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SongDetailScreen } from '../screens/SongDetailScreen';
 import { SongbookScreen } from '../screens/SongbookScreen';
@@ -212,6 +218,16 @@ export function MainStack() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="MusicSchedule"
+        component={MusicScheduleScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SundaySchedule"
+        component={SundayScheduleScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
         name="ServicePlanner"
         component={ServicePlannerScreen}
         options={{ headerShown: false }}
@@ -244,6 +260,28 @@ export function MainStack() {
         name="PrayerCyclePlan"
         component={PrayerCyclePlanScreen}
         options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="Feed"
+        component={FeedScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="Broadcast"
+        component={BroadcastScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="MySermons"
+        component={MySermonsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SermonNoteDetail"
+        component={SermonNoteDetailScreen}
+        options={({ route }) => ({
+          title: route.params.title,
+        })}
       />
     </Stack.Navigator>
   );
