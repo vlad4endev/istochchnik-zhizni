@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { fetchPerformance } from '../api/studio';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
+import { musicianNotesCount, notesFromItem } from '../lib/performNotes';
 import type { RootStackParamList } from '../navigation/types';
 import { useTheme, type ThemeColors } from '../theme';
 
@@ -133,12 +134,34 @@ export function StudioPerformScreen() {
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         renderItem={({ item }) => {
           const body = item.effective_content?.trim() || item.song.content?.trim() || '';
+          const notes = notesFromItem(item.musician_notes);
+          const hasNotes = musicianNotesCount(item.musician_notes) > 0;
+          const lineComments = Object.entries(notes.lineComments ?? {})
+            .map(([k, text]) => ({ line: Number(k), text }))
+            .filter((r) => Number.isInteger(r.line) && r.text.trim())
+            .sort((a, b) => a.line - b.line);
+          const blocks = (notes.blockComments ?? []).filter((b) => b.text?.trim());
           return (
             <ScrollView
               style={{ width }}
               contentContainerStyle={styles.lyricsScroll}
               showsVerticalScrollIndicator
             >
+              {hasNotes ? (
+                <View style={styles.notesPanel}>
+                  <Text style={styles.notesTitle}>Заметки</Text>
+                  {lineComments.map((r) => (
+                    <Text key={`ln-${r.line}`} style={styles.notesLine}>
+                      Стр. {r.line + 1}: {r.text}
+                    </Text>
+                  ))}
+                  {blocks.map((b, i) => (
+                    <Text key={`bl-${i}`} style={styles.notesLine}>
+                      Стр. {b.from + 1}–{b.to + 1}: {b.text}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
               <Text style={styles.lyrics} selectable>
                 {body || 'Текст не добавлен'}
               </Text>
@@ -224,6 +247,28 @@ function createStyles(colors: ThemeColors) {
       paddingHorizontal: 20,
       paddingBottom: 40,
       paddingTop: 8,
+    },
+    notesPanel: {
+      marginBottom: 16,
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: 'rgba(125,54,64,0.2)',
+      gap: 6,
+    },
+    notesTitle: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.primary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+      marginBottom: 2,
+    },
+    notesLine: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: colors.textSecondary,
     },
     lyrics: {
       fontSize: 17,

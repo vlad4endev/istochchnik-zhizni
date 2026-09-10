@@ -29,6 +29,8 @@ import {
 } from '../api/studio';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
+import { SetlistMusicianNotesEditor } from '../components/studio/SetlistMusicianNotesEditor';
+import { musicianNotesCount } from '../lib/performNotes';
 import type { RootStackParamList } from '../navigation/types';
 import { useTheme, type ThemeColors } from '../theme';
 
@@ -44,6 +46,7 @@ export function StudioSetlistDetailScreen() {
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [songSearch, setSongSearch] = useState('');
+  const [notesItem, setNotesItem] = useState<SetlistItemRow | null>(null);
 
   const itemsQuery = useQuery({
     queryKey: ['studio', 'setlist', setlistId, 'items'],
@@ -183,50 +186,69 @@ export function StudioSetlistDetailScreen() {
             </Pressable>
           </View>
         }
-        renderItem={({ item, index }) => (
-          <Pressable
-            onLongPress={() => confirmRemove(item)}
-            style={({ pressed }) => [styles.itemRow, pressed && { opacity: 0.92 }]}
-          >
-            <Text style={styles.itemPos}>{index + 1}</Text>
-            <View style={styles.itemBody}>
-              <Text style={styles.itemTitle} numberOfLines={1}>
-                {item.song.title}
-              </Text>
-              <Text style={styles.itemSub}>
-                {[item.effective_key, item.studio_version_id ? 'моя версия' : null]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </Text>
-            </View>
-            <View style={styles.reorderCol}>
+        renderItem={({ item, index }) => {
+          const notesCount = musicianNotesCount(item.musician_notes);
+          return (
+            <Pressable
+              onLongPress={() => confirmRemove(item)}
+              style={({ pressed }) => [styles.itemRow, pressed && { opacity: 0.92 }]}
+            >
+              <Text style={styles.itemPos}>{index + 1}</Text>
+              <View style={styles.itemBody}>
+                <Text style={styles.itemTitle} numberOfLines={1}>
+                  {item.song.title}
+                </Text>
+                <Text style={styles.itemSub}>
+                  {[
+                    item.effective_key,
+                    item.studio_version_id ? 'моя версия' : null,
+                    notesCount > 0 ? `заметки · ${notesCount}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              </View>
               <Pressable
-                onPress={() => moveItem(index, -1)}
-                disabled={index === 0 || reorderMut.isPending}
+                onPress={() => setNotesItem(item)}
                 hitSlop={8}
-                style={({ pressed }) => [
-                  styles.reorderBtn,
-                  (index === 0 || reorderMut.isPending) && { opacity: 0.35 },
-                  pressed && { opacity: 0.7 },
-                ]}
+                style={({ pressed }) => [styles.notesBtn, pressed && { opacity: 0.7 }]}
+                accessibilityLabel="Заметки музыканта"
               >
-                <Ionicons name="chevron-up" size={18} color={colors.text} />
+                <Ionicons
+                  name={notesCount > 0 ? 'document-text' : 'document-text-outline'}
+                  size={20}
+                  color={notesCount > 0 ? colors.primary : colors.textMuted}
+                />
               </Pressable>
-              <Pressable
-                onPress={() => moveItem(index, 1)}
-                disabled={index === items.length - 1 || reorderMut.isPending}
-                hitSlop={8}
-                style={({ pressed }) => [
-                  styles.reorderBtn,
-                  (index === items.length - 1 || reorderMut.isPending) && { opacity: 0.35 },
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <Ionicons name="chevron-down" size={18} color={colors.text} />
-              </Pressable>
-            </View>
-          </Pressable>
-        )}
+              <View style={styles.reorderCol}>
+                <Pressable
+                  onPress={() => moveItem(index, -1)}
+                  disabled={index === 0 || reorderMut.isPending}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.reorderBtn,
+                    (index === 0 || reorderMut.isPending) && { opacity: 0.35 },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Ionicons name="chevron-up" size={18} color={colors.text} />
+                </Pressable>
+                <Pressable
+                  onPress={() => moveItem(index, 1)}
+                  disabled={index === items.length - 1 || reorderMut.isPending}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.reorderBtn,
+                    (index === items.length - 1 || reorderMut.isPending) && { opacity: 0.35 },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Ionicons name="chevron-down" size={18} color={colors.text} />
+                </Pressable>
+              </View>
+            </Pressable>
+          );
+        }}
         ListEmptyComponent={
           !itemsQuery.isLoading ? (
             <Text style={styles.empty}>Добавьте песни в сетлист</Text>
@@ -276,6 +298,13 @@ export function StudioSetlistDetailScreen() {
           />
         </SafeAreaView>
       </Modal>
+
+      <SetlistMusicianNotesEditor
+        visible={notesItem != null}
+        setlistId={setlistId}
+        item={notesItem}
+        onClose={() => setNotesItem(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -364,6 +393,14 @@ function createStyles(colors: ThemeColors) {
       fontSize: 12,
       color: colors.textMuted,
       marginTop: 2,
+    },
+    notesBtn: {
+      width: 36,
+      height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 10,
+      backgroundColor: colors.surface,
     },
     reorderCol: {
       gap: 2,
