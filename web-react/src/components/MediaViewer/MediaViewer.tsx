@@ -13,6 +13,7 @@ import { useMediaQuery } from '@mantine/hooks';
 import { IconChevronLeft, IconChevronRight, IconDownload, IconShare, IconX } from '@tabler/icons-react';
 
 import { useAuthenticatedApiBlobSrc } from '../../lib/useAuthenticatedApiBlobSrc';
+import { syncViewportHeightVars } from '../../lib/nativeShellViewport';
 import { MediaStrip } from './MediaStrip';
 import classes from './MediaViewer.module.css';
 import { useMediaViewer } from './useMediaViewer';
@@ -76,6 +77,23 @@ export function MediaViewer() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [open, navigate, closeViewer]);
+
+  /**
+   * iOS PWA: fullscreen Modal + RemoveScroll дёргают visualViewport.
+   * После close vv ещё кадр-два «короткий» на top-inset — форсируем sync сразу
+   * и после settle, чтобы --viewport-height не залипал укороченным.
+   */
+  useEffect(() => {
+    syncViewportHeightVars();
+    const t1 = window.setTimeout(() => syncViewportHeightVars(), 120);
+    const t2 = window.setTimeout(() => syncViewportHeightVars(), 320);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      syncViewportHeightVars();
+      window.setTimeout(() => syncViewportHeightVars(), 120);
+    };
+  }, [open]);
 
   const onTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
     touchStartX.current = event.touches[0].clientX;
@@ -316,6 +334,9 @@ export function MediaViewer() {
       fullScreen
       withCloseButton={false}
       padding={0}
+      // iOS: без noRelative RemoveScroll ставит body { position:relative },
+      // и fixed-таббар привязывается к укороченному body вместо viewport.
+      removeScrollProps={{ noRelative: true }}
       styles={{
         body: {
           background: '#0e0e0e',

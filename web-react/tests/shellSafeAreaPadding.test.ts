@@ -18,14 +18,17 @@ import { describe, expect, it } from 'vitest';
  * 3. Inline `style="min-height:100dvh;min-height:-webkit-fill-available"` на `#root`
  *    в index.html перекрывал `#root { min-height: 0 }` и на iOS standalone снова
  *    растягивал корень выше рассчитанной viewport-высоты.
+ * 4. При `data-chat-open` sync всё ещё брал Math.min — open/close fullscreen фото
+ *    в чате дёргал visualViewport, и укороченная высота залипала после закрытия.
  *
  * Инварианты: верхний inset — через #root::before (flex-item), не padding;
  * body.padding-top не использует safe-area-inset-top; у #root в index.html нет
- * inline min-height / -webkit-fill-available.
+ * inline min-height / -webkit-fill-available; Math.min только при клавиатуре.
  */
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const INDEX_CSS = path.resolve(DIR, '../src/index.css');
 const INDEX_HTML = path.resolve(DIR, '../index.html');
+const NATIVE_SHELL_VIEWPORT = path.resolve(DIR, '../src/lib/nativeShellViewport.ts');
 
 function extractRule(css: string, selector: string): string | null {
   const re = new RegExp(
@@ -75,5 +78,17 @@ describe('index.html: #root без inline min-height (iOS fill-available)', () =
 
   it('не содержит -webkit-fill-available на #root', () => {
     expect(rootOpenTag).not.toMatch(/-webkit-fill-available/i);
+  });
+});
+
+describe('nativeShellViewport: Math.min только при клавиатуре (фото в чате)', () => {
+  const src = readFileSync(NATIVE_SHELL_VIEWPORT, 'utf8');
+
+  it('не выбирает высоту через Math.min из-за одного data-chat-open', () => {
+    expect(src).not.toMatch(/if\s*\(\s*narrowMobileChat\s*\|\|\s*keyboardOpen\s*\)/);
+  });
+
+  it('Math.min-ветка завязана только на keyboardOpen', () => {
+    expect(src).toMatch(/if\s*\(\s*keyboardOpen\s*\)\s*\{[\s\S]*?Math\.min/);
   });
 });

@@ -132,18 +132,18 @@ export function syncViewportHeightVars() {
   /**
    * Высота оболочки.
    *
-   * Клавиатура / узкий чат: минимум из метрик — иначе остаётся «пол экрана» пустоты
-   * над клавиатурой (vv ещё полный, inner уже сжат).
+   * Только при открытой клавиатуре: минимум из метрик — иначе остаётся «пол экрана»
+   * пустоты над клавиатурой (vv ещё полный, inner уже сжат).
    *
-   * Без клавиатуры: МАКСИМУМ, не минимум. На iOS Safari/PWA `visualViewport.height`
-   * иногда короче `innerHeight` ровно на `safe-area-inset-top` (~47pt). Старый
-   * `Math.min(visual, layout)` записывал эту укороченную высоту в --viewport-height →
-   * html/body/#root не добивали до низа экрана, а `position:fixed; bottom:0` таббар
-   * садился на низ укороченного visual viewport — под ним оставалась кремовая полоса
-   * высотой ровно top-inset (подтверждено пиксельным разбором скрина 1170×2532).
+   * Без клавиатуры (включая открытый чат): МАКСИМУМ, не минимум. На iOS Safari/PWA
+   * `visualViewport.height` иногда короче `innerHeight` ровно на `safe-area-inset-top`
+   * (~47pt). Старый `Math.min` при `data-chat-open` записывал эту укороченную высоту
+   * в --viewport-height — особенно при open/close fullscreen MediaViewer (vv resize).
+   * Таббар с `bottom:0` садился на низ укороченного viewport → кремовая полоса
+   * высотой top-inset (подтверждено пиксельным разбором скрина 1170×2532).
    */
   let chosen: number;
-  if (narrowMobileChat || keyboardOpen) {
+  if (keyboardOpen) {
     const pool = [fromVisual, fromLayout, clientDocH].filter((x) => x > 0);
     chosen = pool.length > 0 ? Math.min(...pool) : 0;
     if (fromLayout > 0 && fromVisual > fromLayout + 4) {
