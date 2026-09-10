@@ -3,6 +3,16 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "//browserslist": "Порог iOS/Safari 15.4 — первая версия, где появились :has(), dialog и обновлённый env(). Без явного списка Autoprefixer брал дефолтный запрос и целился только в ios_saf 18.5+/26.x, то есть на iPhone с iOS 15-17 CSS уезжал без -webkit-префиксов. Android-порог держим на Chrome 90 под Capacitor-сборку.",
+  "browserslist": [
+    "> 0.5%",
+    "last 2 versions",
+    "Firefox ESR",
+    "not dead",
+    "iOS >= 15.4",
+    "Safari >= 15.4",
+    "Chrome >= 90"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
