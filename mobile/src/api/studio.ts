@@ -103,3 +103,12 @@ export async function addSetlistItem(
 export async function removeSetlistItem(setlistId: number, itemId: number): Promise<void> {
   await apiClient.delete(`${STUDIO}/setlists/${setlistId}/items/${itemId}`);
 }
+
+export async function reorderSetlistItems(
+  setlistId: number,
+  orderedItemIds: number[],
+): Promise<void> {
+  await apiClient.post(`${STUDIO}/setlists/${setlistId}/reorder`, {
+    ordered_item_ids: orderedItemIds,
+  });
+}

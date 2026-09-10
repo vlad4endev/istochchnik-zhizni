@@ -24,6 +24,7 @@ interface MessageContextMenuProps {
   onReply: (message: MessageWithSender) => void;
   onReact: (messageId: string, emoji: string) => void;
   onDelete: (messageId: string) => void;
+  onPinToggle?: (message: MessageWithSender, nextPinned: boolean) => void;
 }
 
 export function MessageContextMenu({
@@ -34,13 +35,17 @@ export function MessageContextMenu({
   onReply,
   onReact,
   onDelete,
+  onPinToggle,
 }: MessageContextMenuProps) {
   const styles = useMemo(() => createStyles(), []);
 
   if (!message) return null;
 
   const messageId = message.id;
-  const canCopy = message.payload_type === 'text' && String(message.content ?? '').trim().length > 0;
+  const canCopy =
+    (message.payload_type === 'text' || message.payload_type === 'poll') &&
+    String(message.content ?? '').trim().length > 0;
+  const isPinned = Boolean(message.is_pinned);
 
   const handleCopy = async () => {
     try {
@@ -53,7 +58,12 @@ export function MessageContextMenu({
   };
 
   const handlePin = () => {
-    Alert.alert('Скоро', 'Закрепление сообщений появится в следующем обновлении');
+    if (!onPinToggle) {
+      Alert.alert('Скоро', 'Закрепление сообщений появится в следующем обновлении');
+      onClose();
+      return;
+    }
+    onPinToggle(message, !isPinned);
     onClose();
   };
 
@@ -94,7 +104,12 @@ export function MessageContextMenu({
           {canCopy ? (
             <MenuItem styles={styles} emoji="📋" label="Копировать" onPress={() => void handleCopy()} />
           ) : null}
-          <MenuItem styles={styles} emoji="📌" label="Закрепить" onPress={handlePin} />
+          <MenuItem
+            styles={styles}
+            emoji={isPinned ? '📍' : '📌'}
+            label={isPinned ? 'Открепить' : 'Закрепить'}
+            onPress={handlePin}
+          />
           <MenuItem
             styles={styles}
             emoji="😀"

@@ -24,6 +24,7 @@ import {
   fetchMyVersions,
   fetchSetlistItems,
   removeSetlistItem,
+  reorderSetlistItems,
   type SetlistItemRow,
 } from '../api/studio';
 import { ErrorView } from '../components/ErrorView';
@@ -84,6 +85,16 @@ export function StudioSetlistDetailScreen() {
     },
   });
 
+  const reorderMut = useMutation({
+    mutationFn: (orderedItemIds: number[]) => reorderSetlistItems(setlistId, orderedItemIds),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['studio', 'setlist', setlistId] });
+    },
+    onError: (err: unknown) => {
+      Alert.alert('Ошибка', err instanceof Error ? err.message : 'Не удалось изменить порядок');
+    },
+  });
+
   const deleteMut = useMutation({
     mutationFn: () => deleteSetlist(setlistId),
     onSuccess: () => {
@@ -97,6 +108,17 @@ export function StudioSetlistDetailScreen() {
 
   const items = itemsQuery.data ?? [];
   const canPerform = items.length > 0;
+
+  const moveItem = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= items.length) return;
+    const next = [...items];
+    const tmp = next[index]!;
+    next[index] = next[nextIndex]!;
+    next[nextIndex] = tmp;
+    qc.setQueryData<SetlistItemRow[]>(['studio', 'setlist', setlistId, 'items'], next);
+    void reorderMut.mutateAsync(next.map((row) => Number(row.id)));
+  };
 
   const confirmDelete = () => {
     Alert.alert('Удалить сетлист?', title, [
@@ -176,6 +198,32 @@ export function StudioSetlistDetailScreen() {
                   .filter(Boolean)
                   .join(' · ')}
               </Text>
+            </View>
+            <View style={styles.reorderCol}>
+              <Pressable
+                onPress={() => moveItem(index, -1)}
+                disabled={index === 0 || reorderMut.isPending}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.reorderBtn,
+                  (index === 0 || reorderMut.isPending) && { opacity: 0.35 },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Ionicons name="chevron-up" size={18} color={colors.text} />
+              </Pressable>
+              <Pressable
+                onPress={() => moveItem(index, 1)}
+                disabled={index === items.length - 1 || reorderMut.isPending}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.reorderBtn,
+                  (index === items.length - 1 || reorderMut.isPending) && { opacity: 0.35 },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Ionicons name="chevron-down" size={18} color={colors.text} />
+              </Pressable>
             </View>
           </Pressable>
         )}
@@ -316,6 +364,17 @@ function createStyles(colors: ThemeColors) {
       fontSize: 12,
       color: colors.textMuted,
       marginTop: 2,
+    },
+    reorderCol: {
+      gap: 2,
+    },
+    reorderBtn: {
+      width: 32,
+      height: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 8,
+      backgroundColor: colors.surface,
     },
     empty: {
       textAlign: 'center',

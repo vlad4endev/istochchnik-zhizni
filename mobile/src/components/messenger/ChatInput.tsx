@@ -16,9 +16,15 @@ interface ChatInputProps {
   onSend: (text: string) => Promise<void>;
   disabled?: boolean;
   conversationId?: string;
+  onOpenPoll?: () => void;
 }
 
-export function ChatInput({ onSend, disabled = false, conversationId }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  disabled = false,
+  conversationId,
+  onOpenPoll,
+}: ChatInputProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [text, setText] = useState('');
@@ -81,6 +87,17 @@ export function ChatInput({ onSend, disabled = false, conversationId }: ChatInpu
 
   return (
     <View style={styles.bar}>
+      {onOpenPoll ? (
+        <Pressable
+          onPress={onOpenPoll}
+          disabled={disabled || sending}
+          android_ripple={androidRipple}
+          hitSlop={8}
+          style={({ pressed }) => [styles.toolBtn, pressed && { opacity: 0.7 }]}
+        >
+          <Ionicons name="stats-chart-outline" size={22} color={colors.primary} />
+        </Pressable>
+      ) : null}
       <TextInput
         style={styles.input}
         value={text}
@@ -125,6 +142,12 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: 'rgba(28,25,23,0.1)',
       backgroundColor: colors.surfaceElevated,
+    },
+    toolBtn: {
+      width: 36,
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     input: {
       flex: 1,

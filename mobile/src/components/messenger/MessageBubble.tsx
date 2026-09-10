@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   PanResponder,
   Platform,
+  Pressable,
   StyleSheet,
   Vibration,
   View,
@@ -35,6 +36,8 @@ interface MessageBubbleProps {
   showSenderName: boolean;
   onLongPress?: (message: MessageWithSender) => void;
   onSwipeReply?: (message: MessageWithSender) => void;
+  onVotePoll?: (messageId: string, optionIndexes: number[]) => Promise<void> | void;
+  onToggleReaction?: (messageId: string, emoji: string) => void;
 }
 
 export function MessageBubble({
@@ -43,6 +46,8 @@ export function MessageBubble({
   showSenderName,
   onLongPress,
   onSwipeReply,
+  onVotePoll,
+  onToggleReaction,
 }: MessageBubbleProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors, isOwn), [colors, isOwn]);
@@ -55,6 +60,7 @@ export function MessageBubble({
   const isError = message.status === 'error';
   const payloadType = message.payload_type ?? 'text';
   const showImage = payloadType === 'image' && !message.is_deleted;
+  const showPoll = payloadType === 'poll' && !message.is_deleted;
 
   const imageUri = useMemo(() => {
     if (!showImage) return null;
@@ -68,9 +74,11 @@ export function MessageBubble({
 
   const bodyText = message.is_deleted
     ? 'Сообщение удалено'
-    : payloadType === 'text'
-      ? String(message.content ?? '')
-      : messagePreviewText(message);
+    : showPoll
+      ? ''
+      : payloadType === 'text'
+        ? String(message.content ?? '')
+        : messagePreviewText(message);
 
   const clearLongPressTimer = () => {
     if (longPressTimer.current) {
@@ -145,12 +153,27 @@ export function MessageBubble({
     transform: [{ scale: 0.85 + replyOpacity.value * 0.15 }],
   }));
 
+  const reactions = message.reactions ?? [];
+
   const bubble = (
     <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
       {showSenderName && !isOwn ? (
         <MessengerText numberOfLines={1} style={styles.senderName}>
           {message.sender_name || message.sender_first_name || 'Участник'}
         </MessengerText>
+      ) : null}
+
+      {message.is_pinned && !message.is_deleted ? (
+        <View style={styles.pinRow}>
+          <Ionicons
+            name="pin"
+            size={12}
+            color={isOwn ? 'rgba(255,255,255,0.85)' : colors.primary}
+          />
+          <MessengerText bidiSafe={false} style={styles.pinLabel}>
+            Закреплено
+          </MessengerText>
+        </View>
       ) : null}
 
       {message.reply_preview && !message.is_deleted ? (
@@ -170,9 +193,42 @@ export function MessageBubble({
         <Image source={imageUri} style={styles.image} contentFit="cover" />
       ) : null}
 
-      <MessengerText style={[styles.text, message.is_deleted && styles.deletedText]}>
-        {bodyText}
-      </MessengerText>
+      {showPoll ? (
+        <PollInsideBubble
+          message={message}
+          isOwn={isOwn}
+          styles={styles}
+          onVotePoll={onVotePoll}
+        />
+      ) : bodyText ? (
+        <MessengerText style={[styles.text, message.is_deleted && styles.deletedText]}>
+          {bodyText}
+        </MessengerText>
+      ) : null}
+
+      {reactions.length > 0 && !message.is_deleted ? (
+        <View style={styles.reactionRow}>
+          {reactions.map((r) => (
+            <Pressable
+              key={r.emoji}
+              onPress={() => onToggleReaction?.(message.id, r.emoji)}
+              style={[
+                styles.reactionChip,
+                r.reacted_by_me ? styles.reactionChipMine : null,
+              ]}
+            >
+              <MessengerText bidiSafe={false} style={styles.reactionEmoji}>
+                {r.emoji}
+              </MessengerText>
+              {r.count > 1 ? (
+                <MessengerText bidiSafe={false} style={styles.reactionCount}>
+                  {r.count}
+                </MessengerText>
+              ) : null}
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       <View style={styles.meta}>
         {message.is_edited && !message.is_deleted ? (
@@ -223,6 +279,170 @@ export function MessageBubble({
   );
 }
 
+function PollInsideBubble({
+  message,
+  isOwn,
+  styles,
+  onVotePoll,
+}: {
+  message: MessageWithSender;
+  isOwn: boolean;
+  styles: ReturnType<typeof createStyles>;
+  onVotePoll?: (messageId: string, optionIndexes: number[]) => Promise<void> | void;
+}) {
+  const payload = (message.payload ?? {}) as Record<string, unknown>;
+  const options = Array.isArray(payload.options)
+    ? payload.options.map((x) => String(x ?? ''))
+    : [];
+  const allowsMultiple = Boolean(payload.allows_multiple);
+  const tallies =
+    message.poll_tallies?.length === options.length
+      ? message.poll_tallies
+      : options.map(() => 0);
+  const myVotes = message.poll_my_options ?? [];
+  const mySet = useMemo(() => new Set(myVotes), [myVotes]);
+  const total = tallies.reduce((a, b) => a + b, 0);
+  const hasMyVote = mySet.size > 0;
+  const isOptimistic = message.status === 'sending' || String(message.id).startsWith('temp-');
+  const [multiPick, setMultiPick] = useState<Set<number>>(() => new Set());
+  const [multiEdit, setMultiEdit] = useState(false);
+  const [voting, setVoting] = useState(false);
+
+  const showMultiPicker = !isOptimistic && allowsMultiple && (!hasMyVote || multiEdit);
+  const showSinglePicker = !isOptimistic && !allowsMultiple && !hasMyVote;
+  const showResults = !isOptimistic && !showSinglePicker && !showMultiPicker;
+
+  const runVote = async (indexes: number[]) => {
+    if (!onVotePoll || voting || isOptimistic) return;
+    setVoting(true);
+    try {
+      await onVotePoll(message.id, indexes);
+      setMultiEdit(false);
+    } finally {
+      setVoting(false);
+    }
+  };
+
+  if (!options.length) {
+    return (
+      <MessengerText style={styles.text}>Опрос недоступен</MessengerText>
+    );
+  }
+
+  return (
+    <View style={styles.pollWrap}>
+      <MessengerText style={styles.pollQuestion}>{message.content || 'Опрос'}</MessengerText>
+      {options.map((label, i) => {
+        const count = tallies[i] ?? 0;
+        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+        const picked = mySet.has(i);
+        const optionLabel = label || `Вариант ${i + 1}`;
+
+        if (isOptimistic || showSinglePicker || showMultiPicker) {
+          const checked = showMultiPicker ? multiPick.has(i) : false;
+          return (
+            <Pressable
+              key={i}
+              disabled={isOptimistic || voting}
+              onPress={() => {
+                if (isOptimistic) return;
+                if (showMultiPicker) {
+                  setMultiPick((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(i)) next.delete(i);
+                    else next.add(i);
+                    return next;
+                  });
+                } else {
+                  void runVote([i]);
+                }
+              }}
+              style={styles.pollOption}
+            >
+              <View
+                style={[
+                  allowsMultiple ? styles.pollCheck : styles.pollRadio,
+                  (showMultiPicker ? checked : false) && styles.pollCheckOn,
+                ]}
+              >
+                {(showMultiPicker ? checked : false) ? (
+                  <Ionicons
+                    name="checkmark"
+                    size={12}
+                    color={isOwn ? MESSENGER_BRAND : '#fff'}
+                  />
+                ) : null}
+              </View>
+              <MessengerText style={styles.pollOptionText}>{optionLabel}</MessengerText>
+            </Pressable>
+          );
+        }
+
+        return (
+          <View key={i} style={styles.pollResultRow}>
+            <View
+              style={[
+                styles.pollBar,
+                { width: `${pct}%` as `${number}%` },
+                picked ? styles.pollBarPicked : null,
+              ]}
+            />
+            <View style={styles.pollResultContent}>
+              <MessengerText style={styles.pollOptionText} numberOfLines={2}>
+                {optionLabel}
+              </MessengerText>
+              <MessengerText bidiSafe={false} style={styles.pollPct}>
+                {pct}%
+              </MessengerText>
+            </View>
+          </View>
+        );
+      })}
+
+      {showMultiPicker ? (
+        <Pressable
+          disabled={voting || multiPick.size === 0}
+          onPress={() => void runVote([...multiPick].sort((a, b) => a - b))}
+          style={[styles.pollSubmit, multiPick.size === 0 && { opacity: 0.45 }]}
+        >
+          <MessengerText bidiSafe={false} style={styles.pollSubmitText}>
+            {voting ? '…' : 'Голосовать'}
+          </MessengerText>
+        </Pressable>
+      ) : null}
+
+      {showResults && allowsMultiple ? (
+        <Pressable
+          onPress={() => {
+            setMultiPick(new Set(myVotes));
+            setMultiEdit(true);
+          }}
+          style={styles.pollRevote}
+        >
+          <MessengerText bidiSafe={false} style={styles.pollRevoteText}>
+            Изменить голос
+          </MessengerText>
+        </Pressable>
+      ) : null}
+
+      {showResults ? (
+        <MessengerText bidiSafe={false} style={styles.pollTotal}>
+          {total} {pluralVotes(total)}
+        </MessengerText>
+      ) : null}
+    </View>
+  );
+}
+
+function pluralVotes(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return 'голосов';
+  if (mod10 === 1) return 'голос';
+  if (mod10 >= 2 && mod10 <= 4) return 'голоса';
+  return 'голосов';
+}
+
 function createStyles(colors: ReturnType<typeof useTheme>['colors'], isOwn: boolean) {
   return StyleSheet.create({
     row: {
@@ -264,6 +484,7 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isOwn: bool
     },
     bubble: {
       maxWidth: '100%',
+      minWidth: 160,
       borderRadius: 16,
       paddingHorizontal: 12,
       paddingVertical: 8,
@@ -288,6 +509,17 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isOwn: bool
       fontWeight: '700',
       color: isOwn ? colors.textOnPrimary : colors.primary,
       opacity: isOwn ? 0.9 : 1,
+    },
+    pinRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginBottom: 2,
+    },
+    pinLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: isOwn ? 'rgba(255,255,255,0.85)' : colors.primary,
     },
     reply: {
       borderLeftWidth: 3,
@@ -320,6 +552,135 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isOwn: bool
     deletedText: {
       fontStyle: 'italic',
       opacity: 0.7,
+    },
+    reactionRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 4,
+      marginTop: 4,
+    },
+    reactionChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 10,
+      backgroundColor: isOwn ? 'rgba(255,255,255,0.18)' : 'rgba(28,25,23,0.06)',
+    },
+    reactionChipMine: {
+      borderWidth: 1,
+      borderColor: isOwn ? 'rgba(255,255,255,0.55)' : colors.primary,
+    },
+    reactionEmoji: {
+      fontSize: 13,
+    },
+    reactionCount: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: isOwn ? colors.textOnPrimary : colors.textSecondary,
+    },
+    pollWrap: {
+      gap: 6,
+      minWidth: 200,
+    },
+    pollQuestion: {
+      fontSize: 15,
+      fontWeight: '700',
+      lineHeight: 20,
+      color: isOwn ? colors.textOnPrimary : colors.text,
+      marginBottom: 2,
+    },
+    pollOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 8,
+      paddingHorizontal: 4,
+    },
+    pollRadio: {
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      borderWidth: 2,
+      borderColor: isOwn ? 'rgba(255,255,255,0.55)' : 'rgba(28,25,23,0.25)',
+    },
+    pollCheck: {
+      width: 18,
+      height: 18,
+      borderRadius: 5,
+      borderWidth: 2,
+      borderColor: isOwn ? 'rgba(255,255,255,0.55)' : 'rgba(28,25,23,0.25)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    pollCheckOn: {
+      backgroundColor: isOwn ? '#fff' : colors.primary,
+      borderColor: isOwn ? '#fff' : colors.primary,
+    },
+    pollOptionText: {
+      flex: 1,
+      fontSize: 14,
+      lineHeight: 18,
+      color: isOwn ? colors.textOnPrimary : colors.text,
+    },
+    pollResultRow: {
+      position: 'relative',
+      overflow: 'hidden',
+      borderRadius: 8,
+      marginBottom: 2,
+      minHeight: 36,
+      justifyContent: 'center',
+    },
+    pollBar: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      backgroundColor: isOwn ? 'rgba(255,255,255,0.22)' : 'rgba(139,26,26,0.12)',
+      borderRadius: 8,
+    },
+    pollBarPicked: {
+      backgroundColor: isOwn ? 'rgba(255,255,255,0.36)' : 'rgba(139,26,26,0.22)',
+    },
+    pollResultContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 8,
+      zIndex: 1,
+    },
+    pollPct: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: isOwn ? colors.textOnPrimary : colors.primary,
+    },
+    pollSubmit: {
+      marginTop: 4,
+      alignSelf: 'flex-start',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 10,
+      backgroundColor: isOwn ? 'rgba(255,255,255,0.22)' : colors.primary,
+    },
+    pollSubmitText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: isOwn ? colors.textOnPrimary : colors.textOnPrimary,
+    },
+    pollRevote: {
+      paddingVertical: 4,
+    },
+    pollRevoteText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: isOwn ? 'rgba(255,255,255,0.8)' : colors.primary,
+    },
+    pollTotal: {
+      fontSize: 11,
+      color: isOwn ? 'rgba(255,255,255,0.7)' : colors.textMuted,
+      marginTop: 2,
     },
     meta: {
       flexDirection: 'row',

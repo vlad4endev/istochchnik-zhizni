@@ -69,6 +69,7 @@ export interface MessageWithSender {
   reactions: { emoji: string; count: number; reacted_by_me: boolean }[];
   poll_tallies?: number[];
   poll_my_options?: number[];
+  is_pinned?: boolean;
   status?: 'sending' | 'sent' | 'delivered' | 'error';
 }
 
@@ -127,12 +128,76 @@ export async function sendMessage(
   content: string,
   clientMsgId?: string,
   replyToMessageId?: string | null,
+  options?: {
+    payloadType?: MessagePayloadType;
+    payload?: Record<string, unknown>;
+  },
 ): Promise<MessageWithSender> {
   const { data } = await apiClient.post<MessageWithSender>(
     `${BASE}/conversations/${encodeURIComponent(conversationId)}/messages`,
-    { content, clientMsgId, replyToMessageId: replyToMessageId ?? null, payloadType: 'text' },
+    {
+      content,
+      clientMsgId,
+      replyToMessageId: replyToMessageId ?? null,
+      payloadType: options?.payloadType ?? 'text',
+      payload: options?.payload ?? undefined,
+    },
   );
   return data;
+}
+
+export async function sendPollMessage(
+  conversationId: string,
+  input: {
+    question: string;
+    options: string[];
+    allowsMultiple?: boolean;
+    anonymous?: boolean;
+    clientMsgId?: string;
+  },
+): Promise<MessageWithSender> {
+  return sendMessage(conversationId, input.question.trim(), input.clientMsgId, null, {
+    payloadType: 'poll',
+    payload: {
+      options: input.options.map((text) => text.trim()).filter(Boolean),
+      allows_multiple: Boolean(input.allowsMultiple),
+      anonymous: Boolean(input.anonymous),
+    },
+  });
+}
+
+export async function votePoll(
+  messageId: string,
+  optionIndexes: number[],
+): Promise<{ tallies: number[]; my_options: number[] }> {
+  const { data } = await apiClient.post<{ tallies: number[]; my_options: number[] }>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/poll-vote`,
+    { optionIndexes },
+  );
+  return data;
+}
+
+export async function fetchPinnedMessages(
+  conversationId: string,
+  limit = 15,
+): Promise<MessageWithSender[]> {
+  const { data } = await apiClient.get<MessageWithSender[]>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/pinned-messages`,
+    { params: { limit } },
+  );
+  return data ?? [];
+}
+
+export async function pinChatMessage(conversationId: string, messageId: string): Promise<void> {
+  await apiClient.post(`${BASE}/conversations/${encodeURIComponent(conversationId)}/pins`, {
+    messageId,
+  });
+}
+
+export async function unpinChatMessage(conversationId: string, messageId: string): Promise<void> {
+  await apiClient.delete(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/pins/${encodeURIComponent(messageId)}`,
+  );
 }
 
 export async function markConversationRead(conversationId: string, messageId: string): Promise<void> {
