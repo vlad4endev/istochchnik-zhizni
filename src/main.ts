@@ -16,6 +16,7 @@ import { ensurePrayerCycleAnchor } from './config/prayerCycleAnchor';
 import { ensureMediaScheduleSchema } from './services/mediaScheduleMigrations';
 import { ensureMusicScheduleSchema } from './services/musicScheduleMigrations';
 import { ensureTelegramSendLogsSchema } from './services/telegramSendLogService';
+import { ensureAppReleasesSchema } from './services/appReleasesService';
 import { resolveAuthSession } from './middleware/authSession';
 import { enforceRoleAccess, resolveUserRole } from './middleware/roleAccess';
 import routes from './routes';
@@ -535,6 +536,12 @@ async function start(): Promise<void> {
         console.log('[telegram-send-log] schema ensured');
       } catch (e) {
         console.warn('[telegram-send-log] ensureTelegramSendLogsSchema failed:', e);
+      }
+      try {
+        await ensureAppReleasesSchema();
+        console.log('[app-releases] schema ensured');
+      } catch (e) {
+        console.warn('[app-releases] ensureAppReleasesSchema failed:', e);
       }
     }
   }

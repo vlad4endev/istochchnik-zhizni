@@ -1,8 +1,39 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { pool } from '../config/db';
+import { pool, query } from '../config/db';
 import { getAppReleasesDir, getUploadsRoot } from '../config/uploadsRoot';
+
+let schemaReady = false;
+
+/**
+ * Self-heal: таблица могла не появиться, если деплой API обошёл initDb
+ * (SKIP_DB_INIT_ON_START / Portainer). Без FK — у части ролей нет REFERENCES.
+ */
+export async function ensureAppReleasesSchema(): Promise<void> {
+  if (schemaReady) return;
+  await query(`
+    CREATE TABLE IF NOT EXISTS app_releases (
+      id BIGSERIAL PRIMARY KEY,
+      version_name VARCHAR(64) NOT NULL DEFAULT '',
+      version_code INTEGER,
+      title VARCHAR(255) NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      download_url TEXT NOT NULL DEFAULT '',
+      file_name VARCHAR(512),
+      file_size_bytes BIGINT,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_by INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_app_releases_active_created
+      ON app_releases (is_active, created_at DESC)
+  `);
+  schemaReady = true;
+}
 
 export type AppRelease = {
   id: number;
@@ -125,6 +156,7 @@ function tryUnlinkLocalRelease(downloadUrl: string): void {
 }
 
 export async function listAppReleases(): Promise<AppRelease[]> {
+  await ensureAppReleasesSchema();
   const db = requirePool();
   const { rows } = await db.query<ReleaseRow>(
     `SELECT id, version_name, version_code, title, notes, download_url, file_name,
@@ -137,6 +169,7 @@ export async function listAppReleases(): Promise<AppRelease[]> {
 
 /** Latest active release that has a non-empty download URL. */
 export async function getLatestActiveAppRelease(): Promise<AppReleasePublic | null> {
+  await ensureAppReleasesSchema();
   const db = requirePool();
   const { rows } = await db.query<ReleaseRow>(
     `SELECT id, version_name, version_code, title, notes, download_url, file_name,
@@ -165,6 +198,7 @@ export type CreateAppReleaseInput = {
 };
 
 export async function createAppRelease(input: CreateAppReleaseInput): Promise<AppRelease> {
+  await ensureAppReleasesSchema();
   const db = requirePool();
   const downloadUrl = (input.download_url ?? '').trim();
   if (!downloadUrl) {
@@ -204,6 +238,7 @@ export type PatchAppReleaseInput = {
 };
 
 export async function patchAppRelease(id: number, input: PatchAppReleaseInput): Promise<AppRelease> {
+  await ensureAppReleasesSchema();
   const db = requirePool();
   const { rows: existingRows } = await db.query<ReleaseRow>(
     `SELECT id, version_name, version_code, title, notes, download_url, file_name,
@@ -262,6 +297,7 @@ export async function patchAppRelease(id: number, input: PatchAppReleaseInput): 
 }
 
 export async function deleteAppRelease(id: number): Promise<void> {
+  await ensureAppReleasesSchema();
   const db = requirePool();
   const { rows } = await db.query<ReleaseRow>(
     `DELETE FROM app_releases WHERE id = $1

@@ -66,7 +66,8 @@ export async function getLatestReleaseHandler(_req: Request, res: Response): Pro
     res.json({ release: latest });
   } catch (e) {
     console.error('[releases] latest', e);
-    res.status(500).json({ error: 'Не удалось загрузить релиз' });
+    // Виджет на главной не должен ломать страницу: нет таблицы/БД → нет релиза.
+    res.json({ release: null });
   }
 }
 
