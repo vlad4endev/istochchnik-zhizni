@@ -28,3 +28,18 @@ export function syncBottomNavMeasuredHeight(
   root.style.setProperty(BOTTOM_NAV_MEASURED_VAR, `${height}px`);
   return height;
 }
+
+/**
+ * `position:fixed; bottom:0` на iOS привязан к низу html/layout, а не visual viewport.
+ * Safari chrome тогда оказывается под панелью; если html короче экрана — панель посредине.
+ * `insetPx` — зазор layout − visual (уже урезанный layoutBottomInsetPx).
+ */
+export function pinBottomNavToLayoutInset(
+  insetPx: number,
+  nav: HTMLElement | null = typeof document === 'undefined'
+    ? null
+    : document.querySelector<HTMLElement>(BOTTOM_NAV_SELECTOR),
+): void {
+  if (!nav) return;
+  nav.style.bottom = `${Math.max(0, Math.round(insetPx))}px`;
+}

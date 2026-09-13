@@ -1250,7 +1250,7 @@ function DashboardMain() {
   }
 
   return (
-    <div className="dashboard-adaptive flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--surface)]">
+    <div className="dashboard-adaptive flex min-h-0 flex-1 flex-col overflow-x-hidden bg-[var(--surface)]">
       <div className={sectionHeroStickyClassNested}>
         <PageHeader title="Главная" />
       </div>

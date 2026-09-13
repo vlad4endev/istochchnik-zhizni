@@ -1,11 +1,15 @@
-import { syncBottomNavMeasuredHeight } from './bottomNavInset';
+import { pinBottomNavToLayoutInset, syncBottomNavMeasuredHeight } from './bottomNavInset';
 import { isAppleMobileWeb, isInstalledPwa } from '../features/pwa/utils/pwaEnvironment';
 import {
   chooseViewportHeightPx,
   computeKeyboardInset,
   computeKeyboardOpen,
+  IOS_IDLE_VIEWPORT_CSS,
+  iosNeedsLvhIdleShell,
   isSoftwareKeyboardTarget,
   isTextInputFocused,
+  layoutBottomInsetPx,
+  shouldUseCssViewportOnIosIdle,
   VIEWPORT_HEIGHT_FLOOR_PX,
 } from './viewportHeight';
 
@@ -142,14 +146,30 @@ export function syncViewportHeightVars() {
   }
   const viewportHeightPx = Math.max(VIEWPORT_HEIGHT_FLOOR_PX, chosen > 0 ? chosen : 568);
   const vhPx = `${viewportHeightPx}px`;
+  const iosLvhShell = iosWebKit && iosNeedsLvhIdleShell(navigator.userAgent || '');
+  const iosIdleCss = shouldUseCssViewportOnIosIdle({ iosWebKit, keyboardOpen, iosLvhShell });
+  const layoutInset = layoutBottomInsetPx({ keyboardInset, keyboardOpen, iosWebKit, iosLvhShell });
+  root.classList.toggle('app-ios-lvh-shell', iosLvhShell);
 
-  root.style.setProperty('--viewport-height', vhPx);
+  /**
+   * iOS 17.5+ без клавиатуры: пиксельная --viewport-height становится containing block для
+   * position:fixed. Если visualViewport/100dvh короче настоящего webview, таббар
+   * садится посреди экрана, под ним серый холст Safari. 100lvh — большой вьюпорт.
+   */
+  if (iosIdleCss) {
+    root.style.setProperty('--viewport-height', IOS_IDLE_VIEWPORT_CSS);
+    root.style.setProperty('--vh', IOS_IDLE_VIEWPORT_CSS);
+  } else {
+    root.style.setProperty('--viewport-height', vhPx);
+    root.style.setProperty('--vh', vhPx);
+  }
 
   /**
    * Мобильный чат: одной CSS var мало — WebKit оставляет цепочку html/body/#root выше видимой области.
    * Фиксируем ту же высоту inline (как px), при выходе из чата или на широком экране снимаем.
+   * На iOS idle px-клетку не ставим: тот же half-height баг, что у оболочки.
    */
-  if (narrowMobileChat && viewportHeightPx > 0) {
+  if (narrowMobileChat && viewportHeightPx > 0 && !iosIdleCss) {
     root.style.setProperty('height', vhPx, 'important');
     root.style.setProperty('max-height', vhPx, 'important');
     document.body?.style.setProperty('height', vhPx, 'important');
@@ -168,11 +188,11 @@ export function syncViewportHeightVars() {
     clearMobileMessengerViewportInline(root);
   }
   /** Старый паттерн `calc(var(--vh, 1vh) * 100)` / совместимость с гайдами. */
-  root.style.setProperty('--vh', vhPx);
   root.style.setProperty('--visual-viewport-height', vhPx);
   root.style.setProperty('--visual-viewport-offset', `${Math.round(offsetTop)}px`);
-  root.style.setProperty('--app-keyboard-inset', `${keyboardInset}px`);
+  root.style.setProperty('--app-keyboard-inset', `${layoutInset}px`);
   root.classList.toggle('app-keyboard-open', keyboardOpen);
+  pinBottomNavToLayoutInset(layoutInset);
 
   /**
    * Не задаём `html`/`body` через inline `height`/`max-height`: они перебивают `100dvh` в CSS

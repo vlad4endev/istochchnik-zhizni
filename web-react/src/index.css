@@ -74,7 +74,7 @@ textarea {
     --app-bottom-nav-measured-height,
     calc(var(--app-bottom-nav-main-gutter) + var(--app-safe-bottom, 0px))
   );
-  /* До первого кадра JS — fallback; nativeShellViewport перезаписывает px из visualViewport. */
+  /* До первого кадра JS — fallback. На iOS idle nativeShellViewport ставит 100lvh, не px. */
   --viewport-height: 100dvh;
   --vh: 100dvh;
   --app-keyboard-inset: 0px;
@@ -355,7 +355,7 @@ html.app-native-shell {
   touch-action: pan-x pan-y pinch-zoom;
   scrollbar-gutter: auto;
   /*
-   * height + max-height: JS (nativeShellViewport) пишет inline-стиль напрямую, поэтому CSS-значение здесь —
+   * height + max-height: JS (nativeShellViewport) пишет --viewport-height, поэтому CSS-значение здесь —
    * только fallback до первого JS-кадра. Важно: НЕ overflow:hidden — обрежет тосты/модалки вне #root.
    */
   height: var(--viewport-height, 100dvh);
@@ -363,6 +363,29 @@ html.app-native-shell {
   /* min-height убираем — иначе html «распухает» снизу когда var() ещё не задан (0px) */
   min-height: 0;
   overflow: hidden;
+}
+
+/*
+ * iOS 17.5+: не сажать html/body/#root в пиксельную клетку visualViewport/100dvh.
+ * С Safari 17.4 visual viewport стал «динамическим»; на 17.5+ эти метрики на части
+ * iPhone ~половины webview → html становится containing block для position:fixed,
+ * таббар с bottom:0 оказывается посреди экрана, ниже — серый Safari.
+ * Класс .app-ios-lvh-shell ставит JS (и ранний скрипт в index.html) только на 17.5+.
+ * 100lvh — большой вьюпорт. Таббар поднимается на --app-keyboard-inset (хром Safari).
+ */
+@supports (-webkit-touch-callout: none) {
+  html.app-native-shell.app-ios-lvh-shell:not(.app-keyboard-open) {
+    height: 100lvh;
+    min-height: 100lvh;
+    max-height: 100lvh;
+  }
+
+  html.app-native-shell.app-ios-lvh-shell:not(.app-keyboard-open) body,
+  html.app-native-shell.app-ios-lvh-shell:not(.app-keyboard-open) #root {
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+  }
 }
 
 /* PWA с экрана «Домой» / iOS navigator.standalone — фон до края, без скачка кегля при повороте */
@@ -1132,14 +1155,19 @@ nav.app-bottom-nav .app-bottom-nav__label {
 
   .app-bottom-nav-spacer {
     flex-shrink: 0;
-    height: calc(var(--app-bottom-nav-total-height) + var(--app-bottom-nav-content-gap, 16px));
+    height: calc(
+      var(--app-bottom-nav-total-height) + var(--app-keyboard-inset, 0px) +
+        var(--app-bottom-nav-content-gap, 16px)
+    );
   }
 
   nav.app-bottom-nav.bottom-nav {
+    position: fixed !important;
     width: 100% !important;
     max-width: none !important;
     left: 0 !important;
     right: 0 !important;
+    bottom: var(--app-keyboard-inset, 0px);
     margin-left: 0 !important;
     margin-right: 0 !important;
     box-sizing: border-box;
@@ -1179,7 +1207,9 @@ nav.app-bottom-nav .app-bottom-nav__label {
  */
 @supports (-webkit-touch-callout: none) {
   .page-enter {
-    animation: none;
+    animation: none !important;
+    opacity: 1 !important;
+    visibility: visible !important;
   }
 }
 

@@ -4,7 +4,13 @@ import {
   chooseViewportHeightPx,
   computeKeyboardInset,
   computeKeyboardOpen,
+  IOS_BROWSER_CHROME_MAX_PX,
+  IOS_IDLE_VIEWPORT_CSS,
+  iosNeedsLvhIdleShell,
   KEYBOARD_INSET_MIN_PX,
+  layoutBottomInsetPx,
+  parseIosVersion,
+  shouldUseCssViewportOnIosIdle,
   VIEWPORT_HEIGHT_FLOOR_PX,
 } from '../src/lib/viewportHeight';
 import { lockedViewportContent, VIEWPORT_ANDROID, VIEWPORT_BASE } from '../src/lib/nativeShellViewport';
@@ -77,6 +83,99 @@ describe('computeKeyboardOpen', () => {
         textInputFocused: true,
         iosWebKit: true,
       }),
+    ).toBe(false);
+  });
+});
+
+describe('parseIosVersion / iosNeedsLvhIdleShell', () => {
+  it('parses iPhone OS 17_5 and treats 17.5+ as the broken Safari viewport range', () => {
+    expect(parseIosVersion('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X)')).toEqual({
+      major: 17,
+      minor: 5,
+    });
+    expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X)')).toBe(true);
+    expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)')).toBe(true);
+    expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)')).toBe(true);
+  });
+
+  it('leaves iOS 17.4 and older on the pixel shell that still worked', () => {
+    expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X)')).toBe(false);
+    expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 16_7 like Mac OS X)')).toBe(false);
+  });
+
+  it('parses iPad CPU OS tokens', () => {
+    expect(parseIosVersion('Mozilla/5.0 (iPad; CPU OS 17_5_1 like Mac OS X)')).toEqual({
+      major: 17,
+      minor: 5,
+    });
+    expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPad; CPU OS 17_5_1 like Mac OS X)')).toBe(true);
+  });
+});
+
+describe('layoutBottomInsetPx', () => {
+  it('keeps Safari chrome inset on iOS 17.5+ so the tab bar sits above the browser UI', () => {
+    expect(
+      layoutBottomInsetPx({
+        keyboardInset: 124,
+        keyboardOpen: false,
+        iosWebKit: true,
+        iosLvhShell: true,
+      }),
+    ).toBe(124);
+  });
+
+  it('does not pin the tab bar to a half-screen visualViewport on iOS 17.5+ idle', () => {
+    expect(
+      layoutBottomInsetPx({
+        keyboardInset: 344,
+        keyboardOpen: false,
+        iosWebKit: true,
+        iosLvhShell: true,
+      }),
+    ).toBe(0);
+    expect(344).toBeGreaterThan(IOS_BROWSER_CHROME_MAX_PX);
+  });
+
+  it('does not lift the tab bar on iOS 17.4 and older (shell is already visual height)', () => {
+    expect(
+      layoutBottomInsetPx({
+        keyboardInset: 124,
+        keyboardOpen: false,
+        iosWebKit: true,
+        iosLvhShell: false,
+      }),
+    ).toBe(0);
+  });
+
+  it('keeps a real keyboard inset on iOS when a field is focused', () => {
+    expect(
+      layoutBottomInsetPx({
+        keyboardInset: 336,
+        keyboardOpen: true,
+        iosWebKit: true,
+        iosLvhShell: true,
+      }),
+    ).toBe(336);
+  });
+});
+
+describe('shouldUseCssViewportOnIosIdle', () => {
+  it('uses 100lvh on iOS 17.5+ when the keyboard is closed', () => {
+    expect(
+      shouldUseCssViewportOnIosIdle({ iosWebKit: true, keyboardOpen: false, iosLvhShell: true }),
+    ).toBe(true);
+    expect(IOS_IDLE_VIEWPORT_CSS).toBe('100lvh');
+  });
+
+  it('locks pixels when the keyboard is open, on Android, or on iOS before 17.5', () => {
+    expect(
+      shouldUseCssViewportOnIosIdle({ iosWebKit: true, keyboardOpen: true, iosLvhShell: true }),
+    ).toBe(false);
+    expect(
+      shouldUseCssViewportOnIosIdle({ iosWebKit: false, keyboardOpen: false, iosLvhShell: false }),
+    ).toBe(false);
+    expect(
+      shouldUseCssViewportOnIosIdle({ iosWebKit: true, keyboardOpen: false, iosLvhShell: false }),
     ).toBe(false);
   });
 });

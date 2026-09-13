@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { measuredBottomNavHeightPx } from '../src/lib/bottomNavInset';
+import { measuredBottomNavHeightPx, pinBottomNavToLayoutInset } from '../src/lib/bottomNavInset';
 
 const originalGetComputedStyle = globalThis.getComputedStyle;
 
@@ -46,5 +46,17 @@ describe('measuredBottomNavHeightPx', () => {
 
   it('returns null when the node is missing', () => {
     expect(measuredBottomNavHeightPx(null)).toBeNull();
+  });
+});
+
+describe('pinBottomNavToLayoutInset', () => {
+  it('writes the chrome gap onto style.bottom', () => {
+    const nav = { style: { bottom: '' } } as HTMLElement;
+    pinBottomNavToLayoutInset(124, nav);
+    expect(nav.style.bottom).toBe('124px');
+  });
+
+  it('is a no-op when the tab bar is not mounted', () => {
+    expect(() => pinBottomNavToLayoutInset(80, null)).not.toThrow();
   });
 });

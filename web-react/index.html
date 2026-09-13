@@ -27,6 +27,21 @@
               });
             }
           }
+          /* iOS 17.5+: 100lvh-оболочка до первого кадра React (иначе dvh/px даёт таббар посредине). */
+          var ua = navigator.userAgent || '';
+          var apple =
+            /iPad|iPhone|iPod/i.test(ua) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+          if (apple) {
+            var ios = ua.match(/(?:iPhone )?OS (\d+)[._](\d+)/);
+            var lvhShell = true;
+            if (ios) {
+              var major = Number(ios[1]);
+              var minor = Number(ios[2]);
+              lvhShell = major > 17 || (major === 17 && minor >= 5);
+            }
+            document.documentElement.classList.toggle('app-ios-lvh-shell', lvhShell);
+          }
         } catch {
           /* ignore */
         }

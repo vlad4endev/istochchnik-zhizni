@@ -6,6 +6,64 @@
 export const VIEWPORT_HEIGHT_FLOOR_PX = 120;
 /** Ниже этого inset — шум (скролл тулбара, safe-area), не клавиатура. */
 export const KEYBOARD_INSET_MIN_PX = 48;
+/**
+ * Safari chrome + home indicator обычно < 160px. Больший gap без фокуса в поле —
+ * сломанный visualViewport (~половина экрана), а не клавиатура и не хром.
+ */
+export const IOS_BROWSER_CHROME_MAX_PX = 160;
+/** На iOS 17.5+ без клавиатуры не записываем пиксельную клетку — visualViewport/100dvh бывают вдвое короче webview. */
+export const IOS_IDLE_VIEWPORT_CSS = '100lvh';
+/** С 17.5 Safari иначе считает visual viewport; на 17.4 и ниже пиксельный max(visual, dvh) ещё ок. */
+export const IOS_LVH_SHELL_MIN_MAJOR = 17;
+export const IOS_LVH_SHELL_MIN_MINOR = 5;
+
+export type IosVersion = { major: number; minor: number };
+
+/** `CPU iPhone OS 17_5` / `CPU OS 18_0` (iPad). Desktop-UA iPad (`Mac OS X 10_15`) → null. */
+export function parseIosVersion(userAgent: string): IosVersion | null {
+  const m = userAgent.match(/(?:iPhone )?OS (\d+)[._](\d+)/);
+  if (!m) return null;
+  const major = Number(m[1]);
+  const minor = Number(m[2]);
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) return null;
+  return { major, minor };
+}
+
+/** iOS 17.5, 18, 26… Нужен 100lvh-shell. Неизвестная версия (iPad desktop UA) — тоже, баг как раз на новых. */
+export function iosNeedsLvhIdleShell(userAgent: string): boolean {
+  const v = parseIosVersion(userAgent);
+  if (!v) return true;
+  return (
+    v.major > IOS_LVH_SHELL_MIN_MAJOR ||
+    (v.major === IOS_LVH_SHELL_MIN_MAJOR && v.minor >= IOS_LVH_SHELL_MIN_MINOR)
+  );
+}
+
+/**
+ * На сколько поднять fixed-таббар от низа layout viewport.
+ * На iOS 17.5+ без клавиатуры огромный inset игнорируем: иначе bottom: 50vh — таббар посреди экрана.
+ * На более старых iOS оболочка уже по visual viewport — inset не поднимаем.
+ */
+export function layoutBottomInsetPx(input: {
+  keyboardInset: number;
+  keyboardOpen: boolean;
+  iosWebKit: boolean;
+  iosLvhShell: boolean;
+}): number {
+  const inset = Math.max(0, Math.round(input.keyboardInset));
+  if (input.keyboardOpen) return inset;
+  if (!input.iosWebKit || !input.iosLvhShell) return 0;
+  if (inset > IOS_BROWSER_CHROME_MAX_PX) return 0;
+  return inset;
+}
+
+export function shouldUseCssViewportOnIosIdle(input: {
+  iosWebKit: boolean;
+  keyboardOpen: boolean;
+  iosLvhShell: boolean;
+}): boolean {
+  return input.iosWebKit && input.iosLvhShell && !input.keyboardOpen;
+}
 
 const NO_SOFTWARE_KEYBOARD_INPUT_TYPES = new Set([
   'button',

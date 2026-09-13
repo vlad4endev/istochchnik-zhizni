@@ -1281,6 +1281,8 @@ export function Layout() {
         containing block для position:fixed короче экрана на top-inset — таббар с
         bottom:0 садится выше низа, снизу кремовая полоса --surface. Вне #root
         fixed привязан к body/viewport полной высоты.
+        На iOS idle оболочка — 100lvh, а bottom панели — --app-keyboard-inset
+        (хром Safari), чтобы панель не оказалась посреди экрана и не уехала под хром.
       */}
       {typeof document !== 'undefined'
         ? createPortal(

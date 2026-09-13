@@ -87,6 +87,11 @@ describe('index.html: viewport без interactive-widget на iOS', () => {
   it('interactive-widget добавляется только по UA Android', () => {
     expect(html).toMatch(/Android[\s\S]{0,400}interactive-widget=resizes-content/);
   });
+
+  it('до React ставит app-ios-lvh-shell на iOS 17.5+', () => {
+    expect(html).toMatch(/app-ios-lvh-shell/);
+    expect(html).toMatch(/major > 17 \|\| \(major === 17 && minor >= 5\)/);
+  });
 });
 
 describe('index.css: page-enter не залипает на iOS', () => {
@@ -134,6 +139,33 @@ describe('nativeShellViewport: Math.min только при клавиатуре
 
   it('Math.min-ветка в viewportHeight завязана только на keyboardOpen', () => {
     expect(heightSrc).toMatch(/if\s*\(\s*input\.keyboardOpen\s*\)\s*\{[\s\S]*?Math\.min/);
+  });
+});
+
+describe('nativeShellViewport: iOS idle не сажает оболочку в пиксели', () => {
+  const src = readFileSync(NATIVE_SHELL_VIEWPORT, 'utf8');
+
+  it('на iOS 17.5+ без клавиатуры пишет 100lvh, а не px-клетку', () => {
+    expect(src).toMatch(/IOS_IDLE_VIEWPORT_CSS/);
+    expect(src).toMatch(/iosNeedsLvhIdleShell/);
+    expect(src).toMatch(/shouldUseCssViewportOnIosIdle/);
+    expect(src).toMatch(/layoutBottomInsetPx/);
+    expect(src).toMatch(/pinBottomNavToLayoutInset/);
+    expect(src).toMatch(/app-ios-lvh-shell/);
+  });
+});
+
+describe('index.css: iOS idle оболочка на 100lvh', () => {
+  const css = readFileSync(INDEX_CSS, 'utf8');
+
+  it('WebKit idle использует 100lvh и не max-height из короткого --viewport-height', () => {
+    expect(css).toMatch(
+      /@supports\s*\(\s*-webkit-touch-callout\s*:\s*none\s*\)[\s\S]*?html\.app-native-shell\.app-ios-lvh-shell:not\(\.app-keyboard-open\)[\s\S]*?height:\s*100lvh/,
+    );
+  });
+
+  it('таббар на мобилке сидит на --app-keyboard-inset, а не только bottom:0', () => {
+    expect(css).toMatch(/nav\.app-bottom-nav\.bottom-nav[\s\S]*?bottom:\s*var\(--app-keyboard-inset/);
   });
 });
 
