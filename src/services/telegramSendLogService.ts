@@ -6,6 +6,7 @@ export type TelegramSendChannel =
   | 'prayer_need_submission'
   | 'service_plan_mailing'
   | 'service_plan_published'
+  | 'music_schedule_mailing'
   | 'coordinator_scenario'
   | 'manual'
   | 'password_reset';
@@ -265,6 +266,7 @@ function parseChannel(raw: unknown): TelegramSendChannel | null {
     raw === 'prayer_need_submission' ||
     raw === 'service_plan_mailing' ||
     raw === 'service_plan_published' ||
+    raw === 'music_schedule_mailing' ||
     raw === 'coordinator_scenario' ||
     raw === 'manual' ||
     raw === 'password_reset'

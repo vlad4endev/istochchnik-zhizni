@@ -27,6 +27,14 @@ import type {
 } from '../types/coordinatorTelegramScenarios';
 import { DEFAULT_COORDINATOR_TG_SCENARIOS } from '../types/coordinatorTelegramScenarios';
 import {
+  getMusicScheduleMailingSettingsPublic,
+  loadMusicScheduleMailingSettings,
+  patchMusicScheduleMailingSettings,
+  previewMusicScheduleMailing,
+  runMusicScheduleMailing,
+} from '../services/musicScheduleMailingService';
+import type { MusicScheduleMailingSettings } from '../types/musicScheduleMailing';
+import {
   getServicePlanMailingSchedule,
   updateServicePlanMailingSchedule,
 } from '../services/servicePlanMondayMailingService';
@@ -892,6 +900,169 @@ export async function postCoordinatorTelegramScenarioRunNowHandler(
     res.json(result);
   } catch (error) {
     console.error('[telegram] run coordinator scenario failed:', error);
+    const mapped = errorToStatus(error);
+    res.status(mapped.status).json({ error: mapped.message });
+  }
+}
+
+export async function getMusicScheduleMailingSettingsHandler(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    const doc = await loadMusicScheduleMailingSettings();
+    res.json(getMusicScheduleMailingSettingsPublic(doc));
+  } catch (error) {
+    console.error('[telegram] get music schedule mailing failed:', error);
+    res.status(500).json({ error: 'Не удалось загрузить настройки рассылки музыкального служения' });
+  }
+}
+
+export async function patchMusicScheduleMailingSettingsHandler(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const body = (req.body ?? {}) as Partial<MusicScheduleMailingSettings>;
+
+  if (body.enabled !== undefined && typeof body.enabled !== 'boolean') {
+    res.status(400).json({ error: 'Поле "enabled" должно быть boolean' });
+    return;
+  }
+  if (body.weekday !== undefined) {
+    const wd = Number(body.weekday);
+    if (!Number.isInteger(wd) || wd < 0 || wd > 6) {
+      res.status(400).json({ error: 'Поле "weekday" должно быть 0–6' });
+      return;
+    }
+  }
+  if (
+    body.time_hhmm !== undefined &&
+    body.time_hhmm !== null &&
+    (typeof body.time_hhmm !== 'string' ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.time_hhmm).trim()))
+  ) {
+    res.status(400).json({ error: 'Поле "time_hhmm" должно быть HH:MM' });
+    return;
+  }
+  if (body.timezone !== undefined && body.timezone !== null && typeof body.timezone !== 'string') {
+    res.status(400).json({ error: 'Поле "timezone" должно быть строкой' });
+    return;
+  }
+  if (body.chat_id !== undefined && body.chat_id !== null && typeof body.chat_id !== 'string') {
+    res.status(400).json({ error: 'Поле "chat_id" должно быть строкой или null' });
+    return;
+  }
+  if (body.template !== undefined && typeof body.template !== 'string') {
+    res.status(400).json({ error: 'Поле "template" должно быть строкой' });
+    return;
+  }
+  if (body.line_template !== undefined && typeof body.line_template !== 'string') {
+    res.status(400).json({ error: 'Поле "line_template" должно быть строкой' });
+    return;
+  }
+  if (body.target !== undefined && body.target !== 'upcoming' && body.target !== 'next_sunday') {
+    res.status(400).json({ error: 'Поле "target" должно быть upcoming | next_sunday' });
+    return;
+  }
+  if (body.include_vacant !== undefined && typeof body.include_vacant !== 'boolean') {
+    res.status(400).json({ error: 'Поле "include_vacant" должно быть boolean' });
+    return;
+  }
+  if (body.skip_if_empty !== undefined && typeof body.skip_if_empty !== 'boolean') {
+    res.status(400).json({ error: 'Поле "skip_if_empty" должно быть boolean' });
+    return;
+  }
+
+  const patch: Partial<MusicScheduleMailingSettings> = {};
+  if (typeof body.enabled === 'boolean') patch.enabled = body.enabled;
+  if (body.weekday !== undefined) patch.weekday = Number(body.weekday);
+  if (typeof body.time_hhmm === 'string') patch.time_hhmm = body.time_hhmm.trim();
+  if (typeof body.timezone === 'string') patch.timezone = body.timezone.trim();
+  if (body.chat_id !== undefined) {
+    patch.chat_id = body.chat_id === null ? null : String(body.chat_id).trim() || null;
+  }
+  if (typeof body.template === 'string') patch.template = body.template;
+  if (typeof body.line_template === 'string') patch.line_template = body.line_template;
+  if (body.target === 'upcoming' || body.target === 'next_sunday') patch.target = body.target;
+  if (typeof body.include_vacant === 'boolean') patch.include_vacant = body.include_vacant;
+  if (typeof body.skip_if_empty === 'boolean') patch.skip_if_empty = body.skip_if_empty;
+
+  try {
+    const doc = await patchMusicScheduleMailingSettings(patch);
+    notifyRealtime(['admin']);
+    res.json(getMusicScheduleMailingSettingsPublic(doc));
+  } catch (error) {
+    console.error('[telegram] patch music schedule mailing failed:', error);
+    res.status(500).json({ error: 'Не удалось сохранить настройки рассылки музыкального служения' });
+  }
+}
+
+export async function postMusicScheduleMailingPreviewHandler(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const body = (req.body ?? {}) as {
+    template?: unknown;
+    line_template?: unknown;
+  };
+  try {
+    const preview = await previewMusicScheduleMailing({
+      templateOverride: typeof body.template === 'string' ? body.template : undefined,
+      lineTemplateOverride:
+        typeof body.line_template === 'string' ? body.line_template : undefined,
+    });
+    res.json(preview);
+  } catch (error) {
+    console.error('[telegram] preview music schedule mailing failed:', error);
+    res.status(500).json({ error: 'Не удалось построить предпросмотр рассылки' });
+  }
+}
+
+export async function postMusicScheduleMailingRunNowHandler(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const body = (req.body ?? {}) as {
+    force?: unknown;
+    template?: unknown;
+    line_template?: unknown;
+  };
+  try {
+    const result = await runMusicScheduleMailing({
+      force: body.force === true,
+      trigger: 'run_now',
+      templateOverride: typeof body.template === 'string' ? body.template : undefined,
+      lineTemplateOverride:
+        typeof body.line_template === 'string' ? body.line_template : undefined,
+    });
+    if (!result.ok && result.reason === 'missing_chat_id') {
+      res.status(409).json({
+        error: 'Не выбран Telegram-чат. Прикрепите чат в настройках рассылки.',
+        ...result,
+      });
+      return;
+    }
+    if (!result.ok && result.reason === 'no_upcoming_service') {
+      res.status(409).json({
+        error: 'Нет ближайшего служения в расписании.',
+        ...result,
+      });
+      return;
+    }
+    if (!result.ok && result.reason === 'no_assignments') {
+      res.status(409).json({
+        error: 'На ближайшее служение нет назначений музыкальной команды.',
+        ...result,
+      });
+      return;
+    }
+    res.json(result);
+  } catch (error) {
+    console.error('[telegram] run music schedule mailing failed:', error);
     const mapped = errorToStatus(error);
     res.status(mapped.status).json({ error: mapped.message });
   }

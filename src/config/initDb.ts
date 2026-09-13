@@ -127,7 +127,8 @@ CREATE TABLE IF NOT EXISTS global_settings (
   telegram_dispatch_target VARCHAR(16) NOT NULL DEFAULT 'all',
   telegram_dispatch_member_ids INTEGER[] NOT NULL DEFAULT ARRAY[]::INTEGER[],
   telegram_dispatch_last_sent_at TIMESTAMPTZ,
-  telegram_coordinator_scenarios_json JSONB
+  telegram_coordinator_scenarios_json JSONB,
+  telegram_music_schedule_mailing_json JSONB
 );
 
 CREATE TABLE IF NOT EXISTS broadcasts (
@@ -423,6 +424,7 @@ ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_last_sent
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_chat_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_published_chat_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_coordinator_scenarios_json JSONB;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_music_schedule_mailing_json JSONB;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS notification_settings_json TEXT;
 
 CREATE TABLE IF NOT EXISTS telegram_chats (

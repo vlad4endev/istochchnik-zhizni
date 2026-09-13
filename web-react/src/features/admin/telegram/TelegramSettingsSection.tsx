@@ -9,6 +9,7 @@ import {
   LuClock,
   LuHeart,
   LuMessagesSquare,
+  LuMusic2,
   LuSend,
   LuUsers,
   LuZap,
@@ -20,6 +21,7 @@ import {
   addTelegramChat,
   deleteTelegramChat,
   fetchCoordinatorTelegramScenarios,
+  fetchMusicScheduleMailingSettings,
   fetchTelegramChats,
   fetchTelegramDispatchRecipients,
   fetchTelegramDispatchSettings,
@@ -27,10 +29,13 @@ import {
   fetchTelegramSettings,
   humanizeTelegramError,
   patchCoordinatorTelegramScenarios,
+  patchMusicScheduleMailingSettings,
   patchTelegramDispatchSettings,
   patchTelegramSettings,
+  previewMusicScheduleMailing,
   refreshTelegramChat,
   runCoordinatorTelegramScenarioNow,
+  runMusicScheduleMailingNow,
   runServicePlanMondayMailing,
   runTelegramDispatchNow,
   sendTelegramMessage,
@@ -39,6 +44,8 @@ import {
   testTelegramProxy,
   type CoordinatorTelegramScenario,
   type CoordinatorTelegramScenarioId,
+  type MusicScheduleMailingSettings,
+  type MusicScheduleMailingTarget,
   type TelegramDispatchRecipient,
   type TelegramDispatchSettingsResponse,
   type TelegramSettingsResponse,
@@ -48,6 +55,8 @@ import {
   PRAYER_TEMPLATE_FIELD_GROUPS,
   PROGRAM_TEMPLATE_FIELD_GROUPS,
   COORDINATOR_TEMPLATE_FIELD_GROUPS,
+  MUSIC_SCHEDULE_MAILING_FIELD_GROUPS,
+  MUSIC_SCHEDULE_LINE_FIELD_GROUPS,
 } from '../TemplateFieldInserter';
 import { chatTypeBadge, chatLabel, ChatSelect, MailingDestinationsEditor } from './chatControls';
 import {
@@ -57,6 +66,7 @@ import {
   Q_TG_MAILING_CHATS,
   Q_TG_CHATS,
   Q_TG_COORD_SCENARIOS,
+  Q_TG_MUSIC_MAILING,
   TG_SECTIONS,
   PROGRAM_PANELS,
   WEEKDAY_OPTIONS,
@@ -68,6 +78,8 @@ import {
   DEFAULT_PROGRAM_MAILING_TEMPLATE,
   DEFAULT_PROGRAM_PUBLISHED_TEMPLATE,
   DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT,
+  DEFAULT_MUSIC_MAILING_TEMPLATE,
+  DEFAULT_MUSIC_MAILING_LINE_TEMPLATE,
   emptyDestinations,
   normalizeDestinations,
   parseTgSection,
@@ -116,6 +128,7 @@ const SECTION_ICONS: Record<TgSection, typeof LuZap> = {
   prayer: LuHeart,
   coordinators: LuClipboardList,
   program: LuCalendarDays,
+  music: LuMusic2,
 };
 
 function formatSyncedAt(iso: string | null): string | null {
@@ -157,11 +170,30 @@ export function TelegramSettingsSection() {
     queryKey: Q_TG_COORD_SCENARIOS,
     queryFn: fetchCoordinatorTelegramScenarios,
   });
+  const musicMailingQ = useQuery({
+    queryKey: Q_TG_MUSIC_MAILING,
+    queryFn: fetchMusicScheduleMailingSettings,
+  });
 
   const [newChatId, setNewChatId] = useState('');
   const [coordTimezone, setCoordTimezone] = useState('Europe/Moscow');
   const [coordScenarios, setCoordScenarios] = useState<CoordinatorTelegramScenario[]>([]);
   const [prayerPanel, setPrayerPanel] = useState<PrayerPanel>('template');
+  const [musicForm, setMusicForm] = useState<MusicScheduleMailingSettings>({
+    version: 1,
+    enabled: false,
+    weekday: 4,
+    time_hhmm: '10:00',
+    timezone: 'Europe/Moscow',
+    chat_id: null,
+    template: DEFAULT_MUSIC_MAILING_TEMPLATE,
+    line_template: DEFAULT_MUSIC_MAILING_LINE_TEMPLATE,
+    target: 'upcoming',
+    include_vacant: false,
+    skip_if_empty: true,
+  });
+  const [musicPreview, setMusicPreview] = useState<string | null>(null);
+  const musicTemplateRef = useRef<HTMLTextAreaElement | null>(null);
   const [form, setForm] = useState({
     enabled: false,
     bot_token: '',
@@ -286,6 +318,18 @@ export function TelegramSettingsSection() {
       }),
     );
   }, [coordScenariosQ.data]);
+
+  useEffect(() => {
+    if (!musicMailingQ.data) return;
+    setMusicForm({
+      ...musicMailingQ.data,
+      template: musicMailingQ.data.template?.trim() || DEFAULT_MUSIC_MAILING_TEMPLATE,
+      line_template: musicMailingQ.data.line_template?.trim() || DEFAULT_MUSIC_MAILING_LINE_TEMPLATE,
+      time_hhmm: musicMailingQ.data.time_hhmm?.trim() || '10:00',
+      timezone: musicMailingQ.data.timezone?.trim() || 'Europe/Moscow',
+    });
+    setMusicPreview(null);
+  }, [musicMailingQ.data]);
 
   function goToSection(next: TgSection) {
     setNote(null);
@@ -743,11 +787,95 @@ export function TelegramSettingsSection() {
           },
         }));
         setCustomChatId((prev) => (prev === removed ? '' : prev));
+        setMusicForm((s) => ({
+          ...s,
+          chat_id: s.chat_id === removed ? null : s.chat_id,
+        }));
       }
       setNote({ type: 'ok', text: 'Чат удалён из реестра.' });
       void qc.invalidateQueries({ queryKey: Q_TG_CHATS });
     },
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось удалить чат.') }),
+  });
+
+  const saveMusicMailingMut = useMutation({
+    mutationFn: () =>
+      patchMusicScheduleMailingSettings({
+        enabled: musicForm.enabled,
+        weekday: musicForm.weekday,
+        time_hhmm: musicForm.time_hhmm,
+        timezone: musicForm.timezone,
+        chat_id: musicForm.chat_id,
+        template: musicForm.template,
+        line_template: musicForm.line_template,
+        target: musicForm.target,
+        include_vacant: musicForm.include_vacant,
+        skip_if_empty: musicForm.skip_if_empty,
+      }),
+    onSuccess: (next) => {
+      setNote({ type: 'ok', text: 'Рассылка музыкального служения сохранена.' });
+      qc.setQueryData(Q_TG_MUSIC_MAILING, next);
+      setMusicForm({
+        ...next,
+        template: next.template?.trim() || DEFAULT_MUSIC_MAILING_TEMPLATE,
+        line_template: next.line_template?.trim() || DEFAULT_MUSIC_MAILING_LINE_TEMPLATE,
+      });
+    },
+    onError: (e) =>
+      setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить рассылку музыки.') }),
+  });
+
+  const musicPreviewMut = useMutation({
+    mutationFn: () =>
+      previewMusicScheduleMailing({
+        template: musicForm.template,
+        line_template: musicForm.line_template,
+      }),
+    onSuccess: (r) => {
+      if (!r.ok || !r.text) {
+        setMusicPreview(null);
+        const reason =
+          r.reason === 'no_upcoming_service'
+            ? 'Нет ближайшего служения в расписании.'
+            : r.reason === 'no_assignments'
+              ? 'На ближайшее служение нет назначений.'
+              : `Не удалось построить предпросмотр (${r.reason ?? 'ошибка'}).`;
+        setNote({ type: 'err', text: reason });
+        return;
+      }
+      setMusicPreview(r.text);
+      setNote({
+        type: 'ok',
+        text: `Предпросмотр: ${r.service_title ?? 'служение'} · ${r.service_date ?? '—'} · ${r.assignment_count} назнач.`,
+      });
+    },
+    onError: (e) =>
+      setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось построить предпросмотр.') }),
+  });
+
+  const musicRunNowMut = useMutation({
+    mutationFn: () =>
+      runMusicScheduleMailingNow({
+        force: true,
+        template: musicForm.template,
+        line_template: musicForm.line_template,
+      }),
+    onSuccess: (r) => {
+      if (!r.ok) {
+        setNote({
+          type: 'err',
+          text: r.error || `Не удалось отправить (${r.reason ?? 'ошибка'}).`,
+        });
+        return;
+      }
+      setNote({
+        type: 'ok',
+        text: `Отправлено в Telegram · ${r.service_date ?? '—'} · план #${r.plan_id ?? '—'}`,
+      });
+      if (r.text) setMusicPreview(r.text);
+    },
+    onError: (e) =>
+      setNote({ type: 'err', text: humanizeTelegramError(e, 'Не удалось отправить рассылку.') }),
   });
 
   const registryChats = chatsQ.data ?? [];
@@ -764,6 +892,13 @@ export function TelegramSettingsSection() {
     form.service_plan_mailing_time,
     form.service_plan_mailing_timezone,
   ]);
+
+  const musicScheduleLabel = useMemo(() => {
+    const day =
+      WEEKDAY_OPTIONS.find((d) => d.value === musicForm.weekday)?.label ?? `день ${musicForm.weekday}`;
+    if (!musicForm.enabled) return `выключена · было: ${day} ${musicForm.time_hhmm}`;
+    return `${day} в ${musicForm.time_hhmm} (${musicForm.timezone})`;
+  }, [musicForm.enabled, musicForm.weekday, musicForm.time_hhmm, musicForm.timezone]);
 
   const lastDispatchLabel = useMemo(() => {
     if (dispatchForm.last_sent_label) return dispatchForm.last_sent_label;
@@ -858,6 +993,7 @@ export function TelegramSettingsSection() {
     form.service_plan_mailing_enabled &&
     (form.service_plan_mailing_destinations.telegram_chat_ids.length > 0 ||
       form.service_plan_mailing_destinations.messenger_conversation_ids.length > 0);
+  const musicConfigured = Boolean(musicForm.chat_id?.trim()) && musicForm.enabled;
 
   const setupSteps = [
     tokenReady,
@@ -866,12 +1002,17 @@ export function TelegramSettingsSection() {
     prayerConfigured,
     coordinatorsConfigured,
     programConfigured,
+    musicConfigured,
   ];
   const setupDoneCount = setupSteps.filter(Boolean).length;
   const setupTotal = setupSteps.length;
 
   return (
-    <div className={`mx-auto space-y-5 ${section === 'program' ? 'max-w-5xl' : 'max-w-4xl'}`}>
+    <div
+      className={`mx-auto space-y-5 ${
+        section === 'program' || section === 'music' ? 'max-w-5xl' : 'max-w-4xl'
+      }`}
+    >
       <StatusNote note={note} />
 
       <header className="space-y-3">
@@ -885,7 +1026,7 @@ export function TelegramSettingsSection() {
           <div className="min-w-0">
             <h2 className="text-xl font-bold tracking-tight text-stone-900">Telegram</h2>
             <p className="mt-0.5 text-sm text-stone-500">
-              Бот, чаты, молитва, координаторы и авторассылки программы
+              Бот, чаты, молитва, координаторы, программа и музыкальное служение
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <StatusChip ok={form.enabled} okLabel="Включён" badLabel="Выключен" />
@@ -1027,6 +1168,14 @@ export function TelegramSettingsSection() {
                   hint="Плановая рассылка по расписанию"
                   actionLabel="Настроить программу"
                   onAction={() => goToSection('program')}
+                />
+                <SetupStepRow
+                  step={7}
+                  done={musicConfigured}
+                  title="Рассылка музыкальной команды"
+                  hint="Назначения позиций в Telegram-чат (по умолчанию четверг)"
+                  actionLabel="Настроить музыку"
+                  onAction={() => goToSection('music')}
                 />
               </div>
             </div>
@@ -2655,6 +2804,282 @@ export function TelegramSettingsSection() {
                 </div>
               </div>
             ) : null}
+          </div>
+        ) : null}
+
+        {section === 'music' ? (
+          <div className="space-y-5">
+            <PanelIntro title="Авторассылка музыкального служения">
+              <p>
+                Раз в неделю бот отправляет в выбранный Telegram-чат список назначений:{' '}
+                <span className="font-medium text-stone-700">Позиция — Участник</span>. По умолчанию —
+                каждый четверг. Назначения берутся из расписания музыкального служения.
+              </p>
+            </PanelIntro>
+
+            <StepBlock
+              n={1}
+              title="Куда отправлять"
+              hint="Прикрепите чат из реестра. Сначала добавьте группу в разделе «Чаты» и добавьте бота в группу."
+            >
+              <ChatSelect
+                label="Чат музыкальной команды"
+                hint="Сюда уйдёт список назначений"
+                chats={registryChats}
+                value={musicForm.chat_id ?? ''}
+                onChange={(chat_id) =>
+                  setMusicForm((s) => ({ ...s, chat_id: chat_id.trim() || null }))
+                }
+              />
+            </StepBlock>
+
+            <StepBlock
+              n={2}
+              title="Когда отправлять"
+              hint="Автоотправка раз в неделю. Вручную — кнопкой «Отправить сейчас»."
+            >
+              <Toggle
+                checked={musicForm.enabled}
+                onChange={(enabled) => setMusicForm((s) => ({ ...s, enabled }))}
+                label="Включить авторассылку"
+                hint={
+                  musicForm.enabled
+                    ? `Сейчас: ${musicScheduleLabel}`
+                    : 'Выключено — только ручная отправка'
+                }
+              />
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">
+                    День недели
+                  </label>
+                  <select
+                    className={fieldClass()}
+                    value={musicForm.weekday}
+                    onChange={(e) =>
+                      setMusicForm((s) => ({ ...s, weekday: Number(e.target.value) }))
+                    }
+                  >
+                    {WEEKDAY_OPTIONS.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+                  <input
+                    type="time"
+                    className={fieldClass()}
+                    value={musicForm.time_hhmm}
+                    onChange={(e) =>
+                      setMusicForm((s) => ({
+                        ...s,
+                        time_hhmm: e.target.value || '10:00',
+                      }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">
+                    Часовой пояс
+                  </label>
+                  <select
+                    className={fieldClass()}
+                    value={musicForm.timezone}
+                    onChange={(e) =>
+                      setMusicForm((s) => ({ ...s, timezone: e.target.value }))
+                    }
+                  >
+                    <option value="Europe/Moscow">Europe/Moscow</option>
+                    <option value="Europe/Samara">Europe/Samara</option>
+                    <option value="Asia/Yekaterinburg">Asia/Yekaterinburg</option>
+                    <option value="UTC">UTC</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">
+                    Какое служение
+                  </label>
+                  <select
+                    className={fieldClass()}
+                    value={musicForm.target}
+                    onChange={(e) =>
+                      setMusicForm((s) => ({
+                        ...s,
+                        target: e.target.value as MusicScheduleMailingTarget,
+                      }))
+                    }
+                  >
+                    <option value="upcoming">Ближайшее предстоящее</option>
+                    <option value="next_sunday">Следующее воскресенье</option>
+                  </select>
+                </div>
+                <div className="space-y-2 pt-1">
+                  <Toggle
+                    checked={musicForm.include_vacant}
+                    onChange={(include_vacant) => setMusicForm((s) => ({ ...s, include_vacant }))}
+                    label="Показывать пустые позиции"
+                    hint="Строка «Позиция — (не назначен)»"
+                  />
+                  <Toggle
+                    checked={musicForm.skip_if_empty}
+                    onChange={(skip_if_empty) => setMusicForm((s) => ({ ...s, skip_if_empty }))}
+                    label="Не слать, если нет назначений"
+                    hint="Пропуск, когда команда ещё не собрана"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-stone-500">
+                Повторно на ту же дату служения авторассылка не уйдёт (ручная «Отправить сейчас»
+                всегда принудительная).
+              </p>
+            </StepBlock>
+
+            <StepBlock
+              n={3}
+              title="Текст сообщения"
+              hint="Список назначений подставляется в {{assignments}}. Формат строки — отдельно."
+            >
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                      Шаблон сообщения
+                    </label>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-stone-600 underline-offset-2 hover:underline"
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            'Сбросить шаблон к стандартному тексту? Несохранённые правки пропадут.',
+                          )
+                        ) {
+                          return;
+                        }
+                        setMusicForm((s) => ({
+                          ...s,
+                          template: DEFAULT_MUSIC_MAILING_TEMPLATE,
+                          line_template: DEFAULT_MUSIC_MAILING_LINE_TEMPLATE,
+                        }));
+                        setMusicPreview(null);
+                      }}
+                    >
+                      Сбросить к стандартному
+                    </button>
+                  </div>
+                  <textarea
+                    ref={musicTemplateRef}
+                    className="min-h-[200px] w-full resize-y rounded-xl border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    value={musicForm.template}
+                    onChange={(e) => {
+                      setMusicForm((s) => ({ ...s, template: e.target.value }));
+                      setMusicPreview(null);
+                    }}
+                  />
+                  <TemplateFieldInserter
+                    groups={MUSIC_SCHEDULE_MAILING_FIELD_GROUPS}
+                    onInsert={(token) => {
+                      insertAtCursor(
+                        musicTemplateRef.current,
+                        token,
+                        musicForm.template,
+                        (next) => {
+                          setMusicForm((s) => ({ ...s, template: next }));
+                          setMusicPreview(null);
+                        },
+                      );
+                    }}
+                  />
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">
+                      Строка назначения
+                    </label>
+                    <input
+                      className={`${fieldClass()} font-mono text-[13px]`}
+                      value={musicForm.line_template}
+                      onChange={(e) => {
+                        setMusicForm((s) => ({ ...s, line_template: e.target.value }));
+                        setMusicPreview(null);
+                      }}
+                    />
+                    <div className="mt-2">
+                      <TemplateFieldInserter
+                        groups={MUSIC_SCHEDULE_LINE_FIELD_GROUPS}
+                        onInsert={(token) => {
+                          setMusicForm((s) => ({
+                            ...s,
+                            line_template: `${s.line_template}${token}`,
+                          }));
+                          setMusicPreview(null);
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                    Предпросмотр
+                  </label>
+                  <div className="min-h-[280px] whitespace-pre-wrap rounded-xl border border-stone-200 bg-stone-50/80 px-3 py-3 text-sm leading-relaxed text-stone-800">
+                    {musicPreview ? (
+                      musicPreview
+                    ) : (
+                      <span className="text-stone-400">
+                        Нажмите «Предпросмотр», чтобы увидеть текст по ближайшему служению.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </StepBlock>
+
+            <div className="flex flex-wrap items-center gap-2 border-t border-stone-100 pt-4">
+              <button
+                type="button"
+                className={btnSecondary()}
+                disabled={musicPreviewMut.isPending}
+                onClick={() => {
+                  setNote(null);
+                  musicPreviewMut.mutate();
+                }}
+              >
+                {musicPreviewMut.isPending ? 'Собираем…' : 'Предпросмотр'}
+              </button>
+              <button
+                type="button"
+                className={btnSecondary()}
+                disabled={musicRunNowMut.isPending || !musicForm.chat_id}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      'Отправить список назначений в выбранный Telegram-чат прямо сейчас?',
+                    )
+                  ) {
+                    return;
+                  }
+                  setNote(null);
+                  musicRunNowMut.mutate();
+                }}
+              >
+                {musicRunNowMut.isPending ? 'Отправка…' : 'Отправить сейчас'}
+              </button>
+              <button
+                type="button"
+                className={btnPrimary()}
+                disabled={saveMusicMailingMut.isPending}
+                onClick={() => {
+                  setNote(null);
+                  saveMusicMailingMut.mutate();
+                }}
+              >
+                {saveMusicMailingMut.isPending ? 'Сохранение…' : 'Сохранить'}
+              </button>
+            </div>
           </div>
         ) : null}
       </section>

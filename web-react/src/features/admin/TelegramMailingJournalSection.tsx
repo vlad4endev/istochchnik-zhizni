@@ -29,6 +29,8 @@ function channelLabel(channel: TelegramSendLogChannel): string {
       return 'Плановая рассылка программы';
     case 'service_plan_published':
       return 'Публикация программы';
+    case 'music_schedule_mailing':
+      return 'Музыкальная команда';
     case 'coordinator_scenario':
       return 'Сценарий координаторов';
     case 'manual':
@@ -163,6 +165,7 @@ export function TelegramMailingJournalSection() {
               <option value="prayer_need_submission">Нужда от участника</option>
               <option value="service_plan_mailing">Плановая рассылка программы</option>
               <option value="service_plan_published">Публикация программы</option>
+              <option value="music_schedule_mailing">Музыкальная команда</option>
               <option value="coordinator_scenario">Сценарии координаторов</option>
             </select>
             <select

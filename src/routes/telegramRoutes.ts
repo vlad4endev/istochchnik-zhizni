@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   deleteTelegramChatHandler,
   getCoordinatorTelegramScenariosHandler,
+  getMusicScheduleMailingSettingsHandler,
   getTelegramChatsHandler,
   getTelegramDispatchPreviewPrayerHandler,
   getTelegramDispatchRecipientsHandler,
@@ -9,9 +10,12 @@ import {
   getTelegramMailingMessengerChatsHandler,
   getTelegramSettingsHandler,
   patchCoordinatorTelegramScenariosHandler,
+  patchMusicScheduleMailingSettingsHandler,
   patchTelegramDispatchSettingsHandler,
   patchTelegramSettingsHandler,
   postCoordinatorTelegramScenarioRunNowHandler,
+  postMusicScheduleMailingPreviewHandler,
+  postMusicScheduleMailingRunNowHandler,
   postTelegramChatHandler,
   postTelegramChatRefreshHandler,
   postTelegramDispatchRunNowHandler,
@@ -37,6 +41,10 @@ router.post('/dispatch/run-now', postTelegramDispatchRunNowHandler);
 router.get('/coordinator-scenarios', getCoordinatorTelegramScenariosHandler);
 router.patch('/coordinator-scenarios', patchCoordinatorTelegramScenariosHandler);
 router.post('/coordinator-scenarios/run-now', postCoordinatorTelegramScenarioRunNowHandler);
+router.get('/music-schedule-mailing', getMusicScheduleMailingSettingsHandler);
+router.patch('/music-schedule-mailing', patchMusicScheduleMailingSettingsHandler);
+router.post('/music-schedule-mailing/preview', postMusicScheduleMailingPreviewHandler);
+router.post('/music-schedule-mailing/run-now', postMusicScheduleMailingRunNowHandler);
 router.post('/test-connection', postTelegramTestConnectionHandler);
 router.post('/test-proxy', postTelegramTestProxyHandler);
 router.post('/send', postTelegramSendHandler);

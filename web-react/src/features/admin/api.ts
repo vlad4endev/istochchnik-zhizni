@@ -616,6 +616,7 @@ export type TelegramSendLogChannel =
   | 'prayer_need_submission'
   | 'service_plan_mailing'
   | 'service_plan_published'
+  | 'music_schedule_mailing'
   | 'coordinator_scenario'
   | 'manual'
   | 'password_reset';
@@ -887,6 +888,80 @@ export async function runCoordinatorTelegramScenarioNow(body: {
     '/api/telegram/coordinator-scenarios/run-now',
     body,
   );
+  return data;
+}
+
+export type MusicScheduleMailingTarget = 'upcoming' | 'next_sunday';
+
+export interface MusicScheduleMailingSettings {
+  version: 1;
+  enabled: boolean;
+  weekday: number;
+  time_hhmm: string;
+  timezone: string;
+  chat_id: string | null;
+  template: string;
+  line_template: string;
+  target: MusicScheduleMailingTarget;
+  include_vacant: boolean;
+  skip_if_empty: boolean;
+}
+
+export interface MusicScheduleMailingPreview {
+  ok: boolean;
+  reason?: string;
+  plan_id: number | null;
+  service_date: string | null;
+  service_title: string | null;
+  service_time: string | null;
+  assignment_count: number;
+  text: string | null;
+  chat_id: string | null;
+}
+
+export async function fetchMusicScheduleMailingSettings(): Promise<MusicScheduleMailingSettings> {
+  const { data } = await apiClient.get<MusicScheduleMailingSettings>(
+    '/api/telegram/music-schedule-mailing',
+  );
+  return data;
+}
+
+export async function patchMusicScheduleMailingSettings(
+  body: Partial<MusicScheduleMailingSettings>,
+): Promise<MusicScheduleMailingSettings> {
+  const { data } = await apiClient.patch<MusicScheduleMailingSettings>(
+    '/api/telegram/music-schedule-mailing',
+    body,
+  );
+  return data;
+}
+
+export async function previewMusicScheduleMailing(body?: {
+  template?: string;
+  line_template?: string;
+}): Promise<MusicScheduleMailingPreview> {
+  const { data } = await apiClient.post<MusicScheduleMailingPreview>(
+    '/api/telegram/music-schedule-mailing/preview',
+    body ?? {},
+  );
+  return data;
+}
+
+export async function runMusicScheduleMailingNow(body?: {
+  force?: boolean;
+  template?: string;
+  line_template?: string;
+}): Promise<{
+  ok: boolean;
+  skipped?: boolean;
+  reason?: string;
+  plan_id?: number | null;
+  service_date?: string | null;
+  telegram_ok?: boolean;
+  text?: string | null;
+  error?: string;
+}> {
+  const { data } = await apiClient.post('/api/telegram/music-schedule-mailing/run-now', body ?? {});
   return data;
 }
 
