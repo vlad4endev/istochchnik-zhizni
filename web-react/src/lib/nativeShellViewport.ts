@@ -1,13 +1,25 @@
 import { syncBottomNavMeasuredHeight } from './bottomNavInset';
+import { isAppleMobileWeb, isInstalledPwa } from '../features/pwa/utils/pwaEnvironment';
+import {
+  chooseViewportHeightPx,
+  computeKeyboardInset,
+  computeKeyboardOpen,
+  isSoftwareKeyboardTarget,
+  isTextInputFocused,
+  VIEWPORT_HEIGHT_FLOOR_PX,
+} from './viewportHeight';
 
 /**
- * Совпадает с web-react/index.html.
- * `interactive-widget=resizes-content` (Chrome 108+, Android WebView): при клавиатуре layout viewport
- * сжимается — лучше стык с `visualViewport` / полями ввода. Старые движки не знают ключа — игнорируют.
- * Риск на редких iOS: если увидите «белый экран» при старте PWA — откатить только эту опцию.
+ * Базовый viewport. `interactive-widget=resizes-content` добавляем только на Android:
+ * на iOS Safari этот ключ даёт белый экран / сжатую оболочку (таббар посреди экрана).
  */
-const LOCKED_VIEWPORT =
-  'width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content';
+export const VIEWPORT_BASE =
+  'width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover';
+export const VIEWPORT_ANDROID = `${VIEWPORT_BASE}, interactive-widget=resizes-content`;
+
+export function lockedViewportContent(userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent): string {
+  return /Android/i.test(userAgent) ? VIEWPORT_ANDROID : VIEWPORT_BASE;
+}
 
 let viewportWatchAttached = false;
 let syncAfterPaintRaf = 0;
@@ -97,27 +109,14 @@ export function syncViewportHeightVars() {
   const layoutHeight = window.innerHeight || 0;
   const visualHeight = vv?.height ?? layoutHeight;
   const offsetTop = vv?.offsetTop ?? 0;
-  /** Нижний «второй» слой (клавиатура / системные полосы): layout минус видимый прямоугольник. */
-  let keyboardInset = Math.max(0, Math.round(layoutHeight - offsetTop - visualHeight));
-  /**
-   * iOS PWA: на кадр-два `visualViewport.height` ещё «полный», а `window.innerHeight` уже сжат под клавиатуру.
-   * Тогда формула выше даёт inset≈0 и --viewport-height остаётся огромным → пол экрана пустоты.
-   * Добираем inset из разницы «устаревший vv vs актуальный layout».
-   */
-  if (vv && layoutHeight > 0 && visualHeight > layoutHeight + 2) {
-    keyboardInset = Math.max(keyboardInset, Math.round(visualHeight - layoutHeight));
-  }
-  /**
-   * Раньше порог 110px — на части iPhone / компактной клавиатуре inset ~60–90px и класс не включался:
-   * таббар оставался «в потоке» отступов, safe-area дублировался, появлялись белые полосы.
-   */
-  const keyboardOpen = keyboardInset >= 48;
+  const keyboardInset = computeKeyboardInset(layoutHeight, visualHeight, offsetTop);
+  const iosBrowserChrome = isAppleMobileWeb() && !isInstalledPwa();
+  const keyboardOpen = computeKeyboardOpen({
+    keyboardInset,
+    textInputFocused: isTextInputFocused(document),
+    iosBrowserChrome,
+  });
 
-  /**
-   * Видимая область: в первую очередь `visualViewport` (iOS PWA + клавиатура).
-   * Не используем `min(inner, visual)`: в редких кадрах WebKit отдаёт 0 — PWA схлопывается в ноль.
-   * Нижняя граница, чтобы никогда не писать `--viewport-height: 0px` в оболочку.
-   */
   const fromVisual = Math.round(visualHeight);
   const fromDvhProbe = getDvhPx();
   const fromLayout = Math.round(layoutHeight);
@@ -129,34 +128,18 @@ export function syncViewportHeightVars() {
     window.matchMedia('(max-width: 768px)').matches &&
     root.dataset.chatOpen === '1';
 
-  /**
-   * Высота оболочки.
-   *
-   * Только при открытой клавиатуре: минимум из метрик — иначе остаётся «пол экрана»
-   * пустоты над клавиатурой (vv ещё полный, inner уже сжат).
-   *
-   * Без клавиатуры (включая открытый чат): МАКСИМУМ, не минимум. На iOS Safari/PWA
-   * `visualViewport.height` иногда короче `innerHeight` ровно на `safe-area-inset-top`
-   * (~47pt). Старый `Math.min` при `data-chat-open` записывал эту укороченную высоту
-   * в --viewport-height — особенно при open/close fullscreen MediaViewer (vv resize).
-   * Таббар с `bottom:0` садился на низ укороченного viewport → кремовая полоса
-   * высотой top-inset (подтверждено пиксельным разбором скрина 1170×2532).
-   */
-  let chosen: number;
-  if (keyboardOpen) {
-    const pool = [fromVisual, fromLayout, clientDocH].filter((x) => x > 0);
-    chosen = pool.length > 0 ? Math.min(...pool) : 0;
-    if (fromLayout > 0 && fromVisual > fromLayout + 4) {
-      chosen = Math.min(chosen > 0 ? chosen : fromLayout, fromLayout);
-    }
-  } else {
-    const pool = [fromVisual, fromLayout, fromDvhProbe, clientDocH].filter((x) => x > 0);
-    chosen = pool.length > 0 ? Math.max(...pool) : 0;
-  }
+  let chosen = chooseViewportHeightPx({
+    visualHeight: fromVisual,
+    layoutHeight: fromLayout,
+    dvhPx: fromDvhProbe,
+    clientDocH,
+    keyboardOpen,
+    iosBrowserChrome,
+  });
   if (chosen <= 0 && typeof window.screen?.height === 'number' && window.screen.height > 0) {
     chosen = Math.round(window.screen.height);
   }
-  const viewportHeightPx = Math.max(120, chosen > 0 ? chosen : 568);
+  const viewportHeightPx = Math.max(VIEWPORT_HEIGHT_FLOOR_PX, chosen > 0 ? chosen : 568);
   const vhPx = `${viewportHeightPx}px`;
 
   root.style.setProperty('--viewport-height', vhPx);
@@ -220,20 +203,15 @@ function attachViewportWatchers() {
     invalidateViewportProbeCaches();
     scheduleSyncViewportHeightVars();
   });
+  window.addEventListener('pageshow', () => {
+    invalidateViewportProbeCaches();
+    scheduleSyncViewportHeightVars();
+  });
   /** Часть WebView/Android отдаёт visual viewport с задержкой; фокус на поле — типичный триггер клавиатуры. */
   document.addEventListener(
     'focusin',
     (e) => {
-      const target = e.target;
-      if (!(target instanceof HTMLElement)) return;
-      const tag = target.tagName;
-      const triggersKeyboard =
-        tag === 'INPUT' ||
-        tag === 'TEXTAREA' ||
-        tag === 'SELECT' ||
-        target.isContentEditable ||
-        target.getAttribute('contenteditable') === 'true';
-      if (!triggersKeyboard) return;
+      if (!isSoftwareKeyboardTarget(e.target)) return;
       queueMicrotask(scheduleSyncViewportHeightVars);
       scheduleViewportSyncAfterInputFocus();
     },
@@ -255,14 +233,15 @@ function attachViewportWatchers() {
 }
 
 /**
- * Применяет viewport-meta как в index.html (масштаб не блокируется) и синхронизирует visual viewport / safe-area.
+ * Применяет viewport-meta (масштаб не блокируется) и синхронизирует visual viewport / safe-area.
+ * `interactive-widget` — только Android.
  */
 export function applyNativeShellViewportLock(): boolean {
   if (typeof document === 'undefined') return false;
 
   const meta = document.querySelector('meta[name="viewport"]');
   if (meta) {
-    meta.setAttribute('content', LOCKED_VIEWPORT);
+    meta.setAttribute('content', lockedViewportContent());
   }
   document.documentElement.classList.add('app-native-shell');
   attachViewportWatchers();

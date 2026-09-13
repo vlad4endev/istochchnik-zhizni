@@ -342,7 +342,7 @@ html[data-a11y-large-cursor='true'] body summary {
 /*
  * PWA: скролл по обеим осям + жест масштабирования.
  *
- * `pinch-zoom` в списке обязателен. LOCKED_VIEWPORT в nativeShellViewport.ts намеренно
+ * `pinch-zoom` в списке обязателен. VIEWPORT_BASE в nativeShellViewport.ts намеренно
  * не ставит `maximum-scale`/`user-scalable=no`, то есть зум разрешён на уровне viewport,
  * но `touch-action: pan-x pan-y` всё равно гасил его на уровне композитора. Пользователи
  * со слабым зрением не могли увеличить ни текст, ни фотографии — это нарушение
@@ -1167,14 +1167,25 @@ nav.app-bottom-nav .app-bottom-nav__label {
 /* Не min-height: 100% — иначе перебивает Tailwind min-h-0 у flex-ребёнка и раздувает колонку + лишний скролл/низ. */
 .page-enter {
   min-height: 0;
+  opacity: 1;
   animation: pageEnter 0.18s ease;
   /* Sticky headers внутри страниц (PWA) ломаются при layout/paint containment. */
   contain: none;
 }
 
+/*
+ * iOS WebKit: анимация с from { opacity: 0 } иногда залипает — контент страницы
+ * невидим, таббар (портал в body) остаётся. На iPhone отключаем fade.
+ */
+@supports (-webkit-touch-callout: none) {
+  .page-enter {
+    animation: none;
+  }
+}
+
 @keyframes pageEnter {
   from {
-    opacity: 0;
+    opacity: 0.01;
   }
   to {
     opacity: 1;

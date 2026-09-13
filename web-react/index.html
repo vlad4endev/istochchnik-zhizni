@@ -34,8 +34,20 @@
     </script>
     <meta charset="UTF-8" />
     <!-- Без ручного pinch/double-tap zoom: размер — из ОС и панели доступности (CSS), не из зума страницы. -->
-    <!-- interactive-widget=resizes-content: Android Chrome/WebView — layout viewport при клавиатуре; см. nativeShellViewport.ts LOCKED_VIEWPORT. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <!-- interactive-widget=resizes-content только на Android: на iOS Safari сжимает оболочку (белый экран, таббар посредине). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover" />
+    <script>
+      (function () {
+        if (!/Android/i.test(navigator.userAgent)) return;
+        var meta = document.querySelector('meta[name="viewport"]');
+        if (meta) {
+          meta.setAttribute(
+            'content',
+            'width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content',
+          );
+        }
+      })();
+    </script>
     <meta name="color-scheme" content="light dark" />
     <meta name="application-name" content="Моя церковь" />
     <!--

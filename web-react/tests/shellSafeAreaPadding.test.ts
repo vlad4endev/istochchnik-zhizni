@@ -34,6 +34,7 @@ const DIR = path.dirname(fileURLToPath(import.meta.url));
 const INDEX_CSS = path.resolve(DIR, '../src/index.css');
 const INDEX_HTML = path.resolve(DIR, '../index.html');
 const NATIVE_SHELL_VIEWPORT = path.resolve(DIR, '../src/lib/nativeShellViewport.ts');
+const VIEWPORT_HEIGHT = path.resolve(DIR, '../src/lib/viewportHeight.ts');
 const LAYOUT_TSX = path.resolve(DIR, '../src/app/Layout.tsx');
 
 function extractRule(css: string, selector: string): string | null {
@@ -74,6 +75,32 @@ describe('index.css: safe-area на оболочке без сдвига fixed-�
   });
 });
 
+describe('index.html: viewport без interactive-widget на iOS', () => {
+  const html = readFileSync(INDEX_HTML, 'utf8');
+
+  it('статический meta viewport не включает interactive-widget', () => {
+    const viewport = html.match(/<meta\s+name=["']viewport["']\s+content=["']([^"']+)["']/i);
+    expect(viewport?.[1]).toBeTruthy();
+    expect(viewport![1]).not.toMatch(/interactive-widget/);
+  });
+
+  it('interactive-widget добавляется только по UA Android', () => {
+    expect(html).toMatch(/Android[\s\S]{0,400}interactive-widget=resizes-content/);
+  });
+});
+
+describe('index.css: page-enter не залипает на iOS', () => {
+  const css = readFileSync(INDEX_CSS, 'utf8');
+
+  it('page-enter имеет opacity 1 и отключает анимацию на WebKit touch', () => {
+    const block = extractRule(css, '.page-enter');
+    expect(block).toMatch(/opacity\s*:\s*1/);
+    expect(css).toMatch(
+      /@supports\s*\(\s*-webkit-touch-callout\s*:\s*none\s*\)[\s\S]*?\.page-enter[\s\S]*?animation\s*:\s*none/,
+    );
+  });
+});
+
 describe('index.html: #root без inline min-height (iOS fill-available)', () => {
   const html = readFileSync(INDEX_HTML, 'utf8');
   const rootOpenTag = html.match(/<div\s+id=["']root["']([^>]*)>/i)?.[0] ?? '';
@@ -94,13 +121,19 @@ describe('index.html: #root без inline min-height (iOS fill-available)', () =
 
 describe('nativeShellViewport: Math.min только при клавиатуре (фото в чате)', () => {
   const src = readFileSync(NATIVE_SHELL_VIEWPORT, 'utf8');
+  const heightSrc = readFileSync(VIEWPORT_HEIGHT, 'utf8');
 
   it('не выбирает высоту через Math.min из-за одного data-chat-open', () => {
     expect(src).not.toMatch(/if\s*\(\s*narrowMobileChat\s*\|\|\s*keyboardOpen\s*\)/);
   });
 
-  it('Math.min-ветка завязана только на keyboardOpen', () => {
-    expect(src).toMatch(/if\s*\(\s*keyboardOpen\s*\)\s*\{[\s\S]*?Math\.min/);
+  it('высоту считает через chooseViewportHeightPx, а не локальный Math.min', () => {
+    expect(src).toMatch(/chooseViewportHeightPx/);
+    expect(src).not.toMatch(/if\s*\(\s*keyboardOpen\s*\)\s*\{[\s\S]*?Math\.min/);
+  });
+
+  it('Math.min-ветка в viewportHeight завязана только на keyboardOpen', () => {
+    expect(heightSrc).toMatch(/if\s*\(\s*input\.keyboardOpen\s*\)\s*\{[\s\S]*?Math\.min/);
   });
 });
 
