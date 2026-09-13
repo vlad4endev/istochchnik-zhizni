@@ -915,6 +915,7 @@ export interface MusicScheduleMailingPreview {
   service_title: string | null;
   service_time: string | null;
   assignment_count: number;
+  song_count: number;
   text: string | null;
   chat_id: string | null;
 }
