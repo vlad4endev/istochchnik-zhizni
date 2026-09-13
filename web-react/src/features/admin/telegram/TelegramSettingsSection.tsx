@@ -846,7 +846,7 @@ export function TelegramSettingsSection() {
       setMusicPreview(r.text);
       setNote({
         type: 'ok',
-        text: `Предпросмотр: ${r.service_title ?? 'служение'} · ${r.service_date ?? '—'} · ${r.assignment_count} назнач.`,
+        text: `Предпросмотр: ${r.service_title ?? 'служение'} · ${r.service_date ?? '—'} · ${r.assignment_count} назнач. · ${r.song_count ?? 0} песен`,
       });
     },
     onError: (e) =>
@@ -2942,7 +2942,7 @@ export function TelegramSettingsSection() {
             <StepBlock
               n={3}
               title="Текст сообщения"
-              hint="Список назначений подставляется в {{assignments}}. Формат строки — отдельно."
+              hint="Назначения — {{assignments}}, песни из программы собрания — {{songs_block}} / {{songs_list}}."
             >
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-3">

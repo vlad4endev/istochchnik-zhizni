@@ -19,7 +19,8 @@ export interface MusicScheduleMailingSettings {
   /**
    * Шаблон сообщения.
    * Плейсхолдеры: {{service_date}}, {{service_date_long}}, {{service_title}},
-   * {{service_time}}, {{assignments}}, {{assignment_count}}
+   * {{service_time}}, {{service_time_block}}, {{assignments}}, {{assignment_count}},
+   * {{songs_list}}, {{songs_inline}}, {{songs_count}}, {{songs_block}}
    */
   template: string;
   /**
@@ -46,6 +47,7 @@ export const DEFAULT_MUSIC_SCHEDULE_MAILING_TEMPLATE = [
   '{{service_title}}{{service_time_block}}',
   '',
   '{{assignments}}',
+  '{{songs_block}}',
 ].join('\n');
 
 export const DEFAULT_MUSIC_SCHEDULE_MAILING_SETTINGS: MusicScheduleMailingSettings = {

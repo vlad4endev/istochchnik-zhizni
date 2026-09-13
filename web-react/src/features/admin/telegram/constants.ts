@@ -241,6 +241,7 @@ export const DEFAULT_MUSIC_MAILING_TEMPLATE = [
   '{{service_title}}{{service_time_block}}',
   '',
   '{{assignments}}',
+  '{{songs_block}}',
 ].join('\n');
 
 export const DEFAULT_MUSIC_MAILING_LINE_TEMPLATE = '{{role}} — {{member}}';

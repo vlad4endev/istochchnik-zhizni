@@ -182,6 +182,28 @@ export const MUSIC_SCHEDULE_MAILING_FIELD_GROUPS: TemplateFieldGroup[] = [
       { token: '{{assignment_count}}', label: 'Число назначений', example: '5' },
     ],
   },
+  {
+    id: 'songs',
+    title: 'Песни из программы',
+    items: [
+      {
+        token: '{{songs_list}}',
+        label: 'Список песен',
+        example: '1. Великий Бог\n2. Свят Господь',
+      },
+      {
+        token: '{{songs_inline}}',
+        label: 'Песни через запятую',
+        example: 'Великий Бог, Свят Господь',
+      },
+      { token: '{{songs_count}}', label: 'Число песен', example: '2' },
+      {
+        token: '{{songs_block}}',
+        label: 'Блок «Песни: …»',
+        example: 'скрывается, если песен нет',
+      },
+    ],
+  },
 ];
 
 export const MUSIC_SCHEDULE_LINE_FIELD_GROUPS: TemplateFieldGroup[] = [

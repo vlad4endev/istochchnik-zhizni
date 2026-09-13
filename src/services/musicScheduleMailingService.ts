@@ -33,6 +33,7 @@ export type MusicScheduleMailingPreview = {
   service_title: string | null;
   service_time: string | null;
   assignment_count: number;
+  song_count: number;
   text: string | null;
   chat_id: string | null;
 };
@@ -256,6 +257,56 @@ async function loadAssignmentLines(
   return lines;
 }
 
+/**
+ * Песни из блоков ближайшей программы служения (каталог songs + блоки типа song).
+ * Порядок как в программе.
+ */
+export async function loadSongTitlesForPlan(planId: number): Promise<string[]> {
+  const res = await query(
+    `SELECT
+       COALESCE(
+         NULLIF(TRIM(s.title), ''),
+         NULLIF(TRIM(b.title), '')
+       ) AS song_title
+     FROM public.service_blocks b
+     LEFT JOIN public.block_types bt ON bt.id = b.block_type_id
+     LEFT JOIN public.songs s ON s.id = b.song_id
+     WHERE b.service_plan_id = $1
+       AND (
+         LOWER(COALESCE(bt.code, '')) = 'song'
+         OR b.song_id IS NOT NULL
+       )
+     ORDER BY b.order_index ASC, b.id ASC`,
+    [planId],
+  );
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of res.rows as Array<{ song_title?: unknown }>) {
+    const title = String(raw.song_title ?? '').trim();
+    if (!title) continue;
+    const key = title.toLocaleLowerCase('ru');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(title);
+  }
+  return out;
+}
+
+function formatSongsList(songs: string[]): string {
+  if (songs.length === 0) return '';
+  return songs.map((s, i) => `${i + 1}. ${s}`).join('\n');
+}
+
+function formatSongsInline(songs: string[]): string {
+  return songs.join(', ');
+}
+
+function formatSongsBlock(songs: string[]): string {
+  if (songs.length === 0) return '';
+  return `\n\nПесни:\n${formatSongsList(songs)}`;
+}
+
 function statusLabelRu(status: string): string {
   switch (status) {
     case 'confirmed':
@@ -279,6 +330,8 @@ export function buildMusicScheduleMailingText(input: {
   serviceTime: string | null;
   timeZone: string;
   lines: MusicScheduleMailingAssignmentLine[];
+  /** Названия песен из программы служения (уже в нужном порядке). */
+  songs?: string[];
 }): string {
   const assignmentLines = input.lines.map((line) =>
     renderTemplate(input.lineTemplate, {
@@ -289,6 +342,7 @@ export function buildMusicScheduleMailingText(input: {
   );
   const assignments = assignmentLines.join('\n');
   const timeBlock = input.serviceTime ? `\nВремя: ${input.serviceTime}` : '';
+  const songs = (input.songs ?? []).map((s) => s.trim()).filter(Boolean);
   return renderTemplate(input.template, {
     service_date: input.serviceDate,
     service_date_long: formatDateLongRu(input.serviceDate, input.timeZone),
@@ -297,6 +351,11 @@ export function buildMusicScheduleMailingText(input: {
     service_time_block: timeBlock,
     assignments,
     assignment_count: String(input.lines.filter((l) => !l.vacant).length),
+    songs_list: formatSongsList(songs) || 'песни не указаны',
+    songs_inline: formatSongsInline(songs) || 'песни не указаны',
+    songs_count: String(songs.length),
+    /** Готовый блок «Песни: …» — пустая строка, если песен нет. */
+    songs_block: formatSongsBlock(songs),
   }).trim();
 }
 
@@ -324,12 +383,16 @@ export async function previewMusicScheduleMailing(options?: {
       service_title: null,
       service_time: null,
       assignment_count: 0,
+      song_count: 0,
       text: null,
       chat_id: settings.chat_id,
     };
   }
 
-  const lines = await loadAssignmentLines(plan.id, settings.include_vacant);
+  const [lines, songs] = await Promise.all([
+    loadAssignmentLines(plan.id, settings.include_vacant),
+    loadSongTitlesForPlan(plan.id),
+  ]);
   const filled = lines.filter((l) => !l.vacant).length;
   if (settings.skip_if_empty && filled === 0) {
     return {
@@ -340,6 +403,7 @@ export async function previewMusicScheduleMailing(options?: {
       service_title: plan.title,
       service_time: plan.start_time,
       assignment_count: 0,
+      song_count: songs.length,
       text: null,
       chat_id: settings.chat_id,
     };
@@ -362,6 +426,7 @@ export async function previewMusicScheduleMailing(options?: {
     serviceTime: plan.start_time,
     timeZone: settings.timezone,
     lines,
+    songs,
   });
 
   return {
@@ -371,6 +436,7 @@ export async function previewMusicScheduleMailing(options?: {
     service_title: plan.title,
     service_time: plan.start_time,
     assignment_count: filled,
+    song_count: songs.length,
     text,
     chat_id: settings.chat_id,
   };
