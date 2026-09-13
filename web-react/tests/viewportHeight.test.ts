@@ -25,27 +25,47 @@ describe('computeKeyboardOpen', () => {
       computeKeyboardOpen({
         keyboardInset: 124,
         textInputFocused: false,
-        iosBrowserChrome: true,
+        iosWebKit: true,
       }),
     ).toBe(false);
   });
 
-  it('treats a focused field in iOS Safari as a keyboard', () => {
+  it('does not treat iOS PWA safe-area gap as a keyboard', () => {
+    expect(
+      computeKeyboardOpen({
+        keyboardInset: 59,
+        textInputFocused: false,
+        iosWebKit: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('does not shrink iOS PWA when visualViewport is half-screen without focus', () => {
+    expect(
+      computeKeyboardOpen({
+        keyboardInset: 344,
+        textInputFocused: false,
+        iosWebKit: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('treats a focused field on iOS as a keyboard', () => {
     expect(
       computeKeyboardOpen({
         keyboardInset: 60,
         textInputFocused: true,
-        iosBrowserChrome: true,
+        iosWebKit: true,
       }),
     ).toBe(true);
   });
 
-  it('keeps PWA/Android inset threshold without requiring focus', () => {
+  it('keeps Android inset threshold without requiring focus', () => {
     expect(
       computeKeyboardOpen({
         keyboardInset: KEYBOARD_INSET_MIN_PX,
         textInputFocused: false,
-        iosBrowserChrome: false,
+        iosWebKit: false,
       }),
     ).toBe(true);
   });
@@ -55,7 +75,7 @@ describe('computeKeyboardOpen', () => {
       computeKeyboardOpen({
         keyboardInset: 24,
         textInputFocused: true,
-        iosBrowserChrome: true,
+        iosWebKit: true,
       }),
     ).toBe(false);
   });
@@ -108,6 +128,19 @@ describe('chooseViewportHeightPx', () => {
         layoutHeight: 844,
         dvhPx: 844,
         clientDocH: 844,
+        keyboardOpen: false,
+        iosBrowserChrome: false,
+      }),
+    ).toBe(844);
+  });
+
+  it('recovers iOS PWA from a half-height visualViewport when the keyboard is not open', () => {
+    expect(
+      chooseViewportHeightPx({
+        visualHeight: 420,
+        layoutHeight: 844,
+        dvhPx: 844,
+        clientDocH: 420,
         keyboardOpen: false,
         iosBrowserChrome: false,
       }),

@@ -110,11 +110,12 @@ export function syncViewportHeightVars() {
   const visualHeight = vv?.height ?? layoutHeight;
   const offsetTop = vv?.offsetTop ?? 0;
   const keyboardInset = computeKeyboardInset(layoutHeight, visualHeight, offsetTop);
-  const iosBrowserChrome = isAppleMobileWeb() && !isInstalledPwa();
+  const iosWebKit = isAppleMobileWeb();
+  const iosBrowserChrome = iosWebKit && !isInstalledPwa();
   const keyboardOpen = computeKeyboardOpen({
     keyboardInset,
     textInputFocused: isTextInputFocused(document),
-    iosBrowserChrome,
+    iosWebKit,
   });
 
   const fromVisual = Math.round(visualHeight);

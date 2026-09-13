@@ -1,6 +1,6 @@
 /**
  * Чистый расчёт высоты оболочки. Нужен отдельно от DOM, чтобы покрыть
- * iOS Safari unit-тестами: хром браузера там часто выглядит как «клавиатура».
+ * iOS Safari/PWA unit-тестами: хром браузера и safe-area там часто выглядят как «клавиатура».
  */
 
 export const VIEWPORT_HEIGHT_FLOOR_PX = 120;
@@ -54,18 +54,18 @@ export function isTextInputFocused(doc: Document | null | undefined = typeof doc
 export function computeKeyboardOpen(input: {
   keyboardInset: number;
   textInputFocused: boolean;
-  /** iPhone/iPad в Safari/WebKit, не установленная PWA — снизу живёт хром браузера. */
-  iosBrowserChrome: boolean;
+  /** iPhone/iPad WebKit: Safari-вкладка и установленная PWA. */
+  iosWebKit: boolean;
 }): boolean {
   if (input.keyboardInset < KEYBOARD_INSET_MIN_PX) return false;
   /**
-   * В Safari (не PWA) разница innerHeight − visualViewport ≈ 50–140px — это
-   * адресная строка и нижняя панель, не клавиатура. Старый порог 48px включал
-   * `app-keyboard-open` у всех таких iPhone: оболочка сжималась, таббар
-   * садился посреди экрана, главная оставалась белой.
-   * Без фокуса в поле ввода на iOS-браузере клавиатуру не считаем.
+   * На iOS inset ≥ 48px часто не клавиатура:
+   * — Safari: адресная строка и нижняя панель (~50–140px);
+   * — PWA: visualViewport короче innerHeight на safe-area-inset-top (~47–59px, Dynamic Island).
+   * Старый порог включал `app-keyboard-open` → оболочка сжималась, таббар посреди экрана.
+   * Без фокуса в поле ввода на iOS клавиатуру не считаем (ни в вкладке, ни в PWA).
    */
-  if (input.iosBrowserChrome) return input.textInputFocused;
+  if (input.iosWebKit) return input.textInputFocused;
   return true;
 }
 
