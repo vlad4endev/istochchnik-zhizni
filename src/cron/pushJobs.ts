@@ -13,6 +13,7 @@ import {
   notifyCoordinatorTelegramAssignment,
   processCoordinatorTelegramScenariosDue,
 } from '../services/coordinatorTelegramScenariosService';
+import { processMusicScheduleMailingDue } from '../services/musicScheduleMailingService';
 
 type CuratorWeekKind = 'current' | 'next';
 
@@ -104,6 +105,23 @@ export function initPushCronJobs() {
         }
       } catch (e) {
         console.error('[CRON] coordinator telegram scenarios tick', e);
+      }
+      try {
+        const musicMailing = await processMusicScheduleMailingDue();
+        if (musicMailing.triggered && musicMailing.result) {
+          const r = musicMailing.result;
+          if (r.skipped) {
+            console.log(
+              `[CRON] music schedule mailing skipped: ${r.reason ?? 'unknown'} (service ${r.service_date ?? '—'})`,
+            );
+          } else {
+            console.log(
+              `[CRON] music schedule mailing: ok=${r.ok} telegram=${r.telegram_ok ?? false} plan=${r.plan_id ?? '—'} date=${r.service_date ?? '—'}`,
+            );
+          }
+        }
+      } catch (e) {
+        console.error('[CRON] music schedule mailing tick', e);
       }
     },
     { timezone: 'UTC' },

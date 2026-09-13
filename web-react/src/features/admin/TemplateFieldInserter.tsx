@@ -149,6 +149,53 @@ export const PROGRAM_TEMPLATE_FIELD_GROUPS: TemplateFieldGroup[] = [
   },
 ];
 
+/** Поля шаблона авторассылки музыкального служения. */
+export const MUSIC_SCHEDULE_MAILING_FIELD_GROUPS: TemplateFieldGroup[] = [
+  {
+    id: 'service',
+    title: 'Служение',
+    items: [
+      { token: '{{service_date}}', label: 'Дата (ГГГГ-ММ-ДД)', example: '2026-09-20' },
+      {
+        token: '{{service_date_long}}',
+        label: 'Дата словами',
+        example: '20 сентября 2026',
+      },
+      { token: '{{service_title}}', label: 'Название служения', example: 'Воскресное служение' },
+      { token: '{{service_time}}', label: 'Время', example: '10:00' },
+      {
+        token: '{{service_time_block}}',
+        label: 'Строка «Время: …»',
+        example: 'скрывается, если время пусто',
+      },
+    ],
+  },
+  {
+    id: 'team',
+    title: 'Команда',
+    items: [
+      {
+        token: '{{assignments}}',
+        label: 'Список назначений',
+        example: 'Лидер — Иван\nКлавиши — Мария',
+      },
+      { token: '{{assignment_count}}', label: 'Число назначений', example: '5' },
+    ],
+  },
+];
+
+export const MUSIC_SCHEDULE_LINE_FIELD_GROUPS: TemplateFieldGroup[] = [
+  {
+    id: 'line',
+    title: 'Строка назначения',
+    items: [
+      { token: '{{role}}', label: 'Позиция', example: 'Клавиши' },
+      { token: '{{member}}', label: 'Участник', example: 'Иван Иванов' },
+      { token: '{{status}}', label: 'Статус', example: 'назначено' },
+    ],
+  },
+];
+
 /** Поля для сценариев Telegram-рассылки координаторам сбора нужд. */
 export const COORDINATOR_TEMPLATE_FIELD_GROUPS: TemplateFieldGroup[] = [
   {

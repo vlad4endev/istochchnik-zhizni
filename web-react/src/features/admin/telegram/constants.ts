@@ -6,9 +6,17 @@ export const Q_TG_RECIPIENTS = ['admin', 'telegram', 'recipients'] as const;
 export const Q_TG_MAILING_CHATS = ['admin', 'telegram', 'mailing-messenger-chats'] as const;
 export const Q_TG_CHATS = ['admin', 'telegram', 'chats'] as const;
 export const Q_TG_COORD_SCENARIOS = ['admin', 'telegram', 'coordinator-scenarios'] as const;
+export const Q_TG_MUSIC_MAILING = ['admin', 'telegram', 'music-schedule-mailing'] as const;
 
 /** Sub-section within `/admin?tab=telegram`. */
-export type TgSection = 'overview' | 'bot' | 'chats' | 'prayer' | 'coordinators' | 'program';
+export type TgSection =
+  | 'overview'
+  | 'bot'
+  | 'chats'
+  | 'prayer'
+  | 'coordinators'
+  | 'program'
+  | 'music';
 
 export type ProgramPanel = 'mailing' | 'published';
 
@@ -23,6 +31,7 @@ export const TG_SECTIONS: Array<{
   { id: 'prayer', label: 'Молитва', hint: 'Текст и личная рассылка' },
   { id: 'coordinators', label: 'Координаторы', hint: 'Сценарии сбора нужд' },
   { id: 'program', label: 'Программа', hint: 'Авторассылки служения' },
+  { id: 'music', label: 'Музыка', hint: 'Назначения команды в чат' },
 ];
 
 export type CoordinatorTelegramScenarioId =
@@ -226,6 +235,16 @@ export const DEFAULT_PROGRAM_PUBLISHED_TEMPLATE = [
 
 export const DEFAULT_PROGRAM_PUBLISHED_BUTTON_TEXT = 'Открыть программу';
 
+/** Совпадает с DEFAULT_MUSIC_SCHEDULE_MAILING_TEMPLATE на бэкенде. */
+export const DEFAULT_MUSIC_MAILING_TEMPLATE = [
+  '🎵 Музыкальная команда на {{service_date_long}}',
+  '{{service_title}}{{service_time_block}}',
+  '',
+  '{{assignments}}',
+].join('\n');
+
+export const DEFAULT_MUSIC_MAILING_LINE_TEMPLATE = '{{role}} — {{member}}';
+
 export function emptyDestinations(): ServicePlanMailingDestinations {
   return { telegram_chat_ids: [], messenger_conversation_ids: [] };
 }
@@ -251,7 +270,8 @@ export function parseTgSection(value: string | null | undefined): TgSection {
     value === 'chats' ||
     value === 'prayer' ||
     value === 'coordinators' ||
-    value === 'program'
+    value === 'program' ||
+    value === 'music'
   ) {
     return value;
   }
