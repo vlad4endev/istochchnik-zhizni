@@ -26,6 +26,30 @@ function testNormalizePatch(): void {
   assert.strictEqual(next.weekday, 3);
   assert.strictEqual(next.chat_id, '-100123');
   assert.strictEqual(next.time_hhmm, '09:30');
+  assert.deepStrictEqual(next.targets, [{ chat_id: '-100123' }]);
+}
+
+function testNormalizeTargetsWithTopic(): void {
+  const next = mergeMusicScheduleMailingPatch(DEFAULT_MUSIC_SCHEDULE_MAILING_SETTINGS, {
+    chat_id: '-100999',
+    topic_id: 42,
+  });
+  assert.strictEqual(next.chat_id, '-100999');
+  assert.deepStrictEqual(next.targets, [{ chat_id: '-100999', topic_id: 42 }]);
+
+  const fromArray = normalizeMusicScheduleMailingSettings({
+    targets: [
+      { chat_id: '-1001234567890', topic_id: 7 },
+      { chat_id: '-1001234567890', topic_id: 7 },
+      { chat_id: 'bad' },
+      { chat_id: '-1009876543210' },
+    ],
+  });
+  assert.deepStrictEqual(fromArray.targets, [
+    { chat_id: '-1001234567890', topic_id: 7 },
+    { chat_id: '-1009876543210' },
+  ]);
+  assert.strictEqual(fromArray.chat_id, '-1001234567890');
 }
 
 function testBuildTextWithSongs(): void {
@@ -69,6 +93,7 @@ function testSongsBlockEmptyWhenNoSongs(): void {
 
 testNormalizeDefaults();
 testNormalizePatch();
+testNormalizeTargetsWithTopic();
 testBuildTextWithSongs();
 testSongsBlockEmptyWhenNoSongs();
 console.log('musicScheduleMailing types/service smoke tests: ok');

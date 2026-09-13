@@ -893,13 +893,21 @@ export async function runCoordinatorTelegramScenarioNow(body: {
 
 export type MusicScheduleMailingTarget = 'upcoming' | 'next_sunday';
 
+/** Получатель: чат и опционально тема форума (message_thread_id). */
+export type MusicScheduleMailingChatTarget = {
+  chat_id: string;
+  topic_id?: number | null;
+};
+
 export interface MusicScheduleMailingSettings {
   version: 1;
   enabled: boolean;
   weekday: number;
   time_hhmm: string;
   timezone: string;
+  /** @deprecated Используйте targets */
   chat_id: string | null;
+  targets: MusicScheduleMailingChatTarget[];
   template: string;
   line_template: string;
   target: MusicScheduleMailingTarget;
@@ -918,6 +926,7 @@ export interface MusicScheduleMailingPreview {
   song_count: number;
   text: string | null;
   chat_id: string | null;
+  targets?: MusicScheduleMailingChatTarget[];
 }
 
 export async function fetchMusicScheduleMailingSettings(): Promise<MusicScheduleMailingSettings> {

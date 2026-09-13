@@ -1110,6 +1110,7 @@ async function sendTelegramMessageRaw(
   chatId: string,
   text: string,
   replyMarkup?: Record<string, unknown> | null,
+  messageThreadId?: number | null,
 ): Promise<{
   ok: boolean;
   status: number;
@@ -1131,6 +1132,13 @@ async function sendTelegramMessageRaw(
       text,
       disable_web_page_preview: true,
     };
+    if (
+      typeof messageThreadId === 'number' &&
+      Number.isInteger(messageThreadId) &&
+      messageThreadId > 0
+    ) {
+      payload.message_thread_id = messageThreadId;
+    }
     if (replyMarkup && typeof replyMarkup === 'object') {
       payload.reply_markup = replyMarkup;
     }
@@ -1173,6 +1181,7 @@ async function sendTelegramMessageRawSequence(
   chatId: string,
   text: string,
   replyMarkup?: Record<string, unknown> | null,
+  messageThreadId?: number | null,
 ): Promise<{
   ok: boolean;
   status: number;
@@ -1194,7 +1203,7 @@ async function sendTelegramMessageRawSequence(
     }
     // Inline-кнопку вешаем только на последнюю часть длинного текста.
     const markup = i === parts.length - 1 ? replyMarkup : null;
-    last = await sendTelegramMessageRaw(botToken, chatId, part, markup);
+    last = await sendTelegramMessageRaw(botToken, chatId, part, markup, messageThreadId);
     if (!last.ok) {
       return last;
     }
@@ -2247,6 +2256,8 @@ export async function sendTelegramToChat(args: {
   chatId: string;
   text: string;
   inlineUrlButton?: { text: string; url: string } | null;
+  /** ID темы форума (message_thread_id) */
+  messageThreadId?: number | null;
   log?: TelegramOutgoingLogOpts;
 }): Promise<{ chat_id: string; status: number }> {
   const cfg = await resolveTelegramConfig();
@@ -2272,7 +2283,19 @@ export async function sendTelegramToChat(args: {
           inline_keyboard: [[{ text: buttonText, url: buttonUrl }]],
         }
       : null;
-  const sent = await sendTelegramMessageRawSequence(cfg.botToken, chatId, text, replyMarkup);
+  const threadId =
+    typeof args.messageThreadId === 'number' &&
+    Number.isInteger(args.messageThreadId) &&
+    args.messageThreadId > 0
+      ? args.messageThreadId
+      : null;
+  const sent = await sendTelegramMessageRawSequence(
+    cfg.botToken,
+    chatId,
+    text,
+    replyMarkup,
+    threadId,
+  );
   if (!sent.ok) {
     const description =
       typeof sent.body?.description === 'string' ? sent.body.description.trim() : '';

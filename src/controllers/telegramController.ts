@@ -954,6 +954,20 @@ export async function patchMusicScheduleMailingSettingsHandler(
     res.status(400).json({ error: 'Поле "chat_id" должно быть строкой или null' });
     return;
   }
+  if (body.targets !== undefined && !Array.isArray(body.targets)) {
+    res.status(400).json({ error: 'Поле "targets" должно быть массивом { chat_id, topic_id? }' });
+    return;
+  }
+  if (
+    (body as { topic_id?: unknown }).topic_id !== undefined &&
+    (body as { topic_id?: unknown }).topic_id !== null &&
+    (typeof (body as { topic_id?: unknown }).topic_id !== 'number' ||
+      !Number.isInteger((body as { topic_id?: number }).topic_id) ||
+      ((body as { topic_id?: number }).topic_id as number) <= 0)
+  ) {
+    res.status(400).json({ error: 'Поле "topic_id" должно быть положительным целым или null' });
+    return;
+  }
   if (body.template !== undefined && typeof body.template !== 'string') {
     res.status(400).json({ error: 'Поле "template" должно быть строкой' });
     return;
@@ -975,13 +989,28 @@ export async function patchMusicScheduleMailingSettingsHandler(
     return;
   }
 
-  const patch: Partial<MusicScheduleMailingSettings> = {};
+  const patch: Partial<MusicScheduleMailingSettings> & {
+    topic_id?: number | null;
+  } = {};
   if (typeof body.enabled === 'boolean') patch.enabled = body.enabled;
   if (body.weekday !== undefined) patch.weekday = Number(body.weekday);
   if (typeof body.time_hhmm === 'string') patch.time_hhmm = body.time_hhmm.trim();
   if (typeof body.timezone === 'string') patch.timezone = body.timezone.trim();
-  if (body.chat_id !== undefined) {
+  if (body.targets !== undefined) {
+    patch.targets = body.targets;
+  } else if (body.chat_id !== undefined) {
     patch.chat_id = body.chat_id === null ? null : String(body.chat_id).trim() || null;
+    if ((body as { topic_id?: unknown }).topic_id !== undefined) {
+      patch.topic_id =
+        (body as { topic_id?: number | null }).topic_id === null
+          ? null
+          : Number((body as { topic_id?: number }).topic_id);
+    }
+  } else if ((body as { topic_id?: unknown }).topic_id !== undefined) {
+    patch.topic_id =
+      (body as { topic_id?: number | null }).topic_id === null
+        ? null
+        : Number((body as { topic_id?: number }).topic_id);
   }
   if (typeof body.template === 'string') patch.template = body.template;
   if (typeof body.line_template === 'string') patch.line_template = body.line_template;

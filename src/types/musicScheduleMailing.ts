@@ -5,6 +5,17 @@
 
 export type MusicScheduleMailingTarget = 'upcoming' | 'next_sunday';
 
+/** Получатель рассылки: чат и опционально тема форума. */
+export type MusicScheduleMailingChatTarget = {
+  /** Telegram chat id, напр. -1001234567890 */
+  chat_id: string;
+  /**
+   * ID темы форума (message_thread_id) в супергруппе.
+   * null/undefined — обычное сообщение в чат без темы.
+   */
+  topic_id?: number | null;
+};
+
 export interface MusicScheduleMailingSettings {
   version: 1;
   /** Включена ли автоотправка по расписанию */
@@ -14,8 +25,12 @@ export interface MusicScheduleMailingSettings {
   /** HH:mm в timezone */
   time_hhmm: string;
   timezone: string;
-  /** Telegram chat id (группа/канал из реестра) */
+  /**
+   * @deprecated Используйте `targets`. Первый chat_id из targets (для совместимости).
+   */
   chat_id: string | null;
+  /** Куда слать: один или несколько чатов (и тем форума). */
+  targets: MusicScheduleMailingChatTarget[];
   /**
    * Шаблон сообщения.
    * Плейсхолдеры: {{service_date}}, {{service_date_long}}, {{service_title}},
@@ -57,6 +72,7 @@ export const DEFAULT_MUSIC_SCHEDULE_MAILING_SETTINGS: MusicScheduleMailingSettin
   time_hhmm: '10:00',
   timezone: DEFAULT_MUSIC_SCHEDULE_MAILING_TIMEZONE,
   chat_id: null,
+  targets: [],
   template: DEFAULT_MUSIC_SCHEDULE_MAILING_TEMPLATE,
   line_template: DEFAULT_MUSIC_SCHEDULE_MAILING_LINE_TEMPLATE,
   target: 'upcoming',
@@ -98,6 +114,71 @@ function normalizeTarget(raw: unknown, fallback: MusicScheduleMailingTarget): Mu
   return fallback;
 }
 
+/** Допускает числовые id (в т.ч. отрицательные для групп) и @username. */
+export function normalizeTelegramChatId(raw: unknown): string | null {
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return String(Math.trunc(raw));
+  }
+  if (typeof raw !== 'string') return null;
+  const t = raw.trim();
+  if (!t) return null;
+  if (/^-?\d{5,20}$/.test(t)) return t;
+  if (/^@?[A-Za-z][A-Za-z0-9_]{4,31}$/.test(t)) {
+    return t.startsWith('@') ? t : `@${t}`;
+  }
+  return null;
+}
+
+export function normalizeTopicId(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const n = typeof raw === 'number' ? raw : Number(String(raw).trim());
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return n;
+}
+
+export function normalizeMusicScheduleMailingChatTarget(
+  raw: unknown,
+): MusicScheduleMailingChatTarget | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const chatId = normalizeTelegramChatId(o.chat_id);
+  if (!chatId) return null;
+  const topicId = normalizeTopicId(o.topic_id);
+  return topicId != null ? { chat_id: chatId, topic_id: topicId } : { chat_id: chatId };
+}
+
+export function normalizeMusicScheduleMailingTargets(raw: unknown): MusicScheduleMailingChatTarget[] {
+  if (!Array.isArray(raw)) return [];
+  const out: MusicScheduleMailingChatTarget[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const t = normalizeMusicScheduleMailingChatTarget(item);
+    if (!t) continue;
+    const key = `${t.chat_id}#${t.topic_id ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+function resolveTargetsFromLegacy(o: Record<string, unknown>): MusicScheduleMailingChatTarget[] {
+  if (Array.isArray(o.targets)) {
+    return normalizeMusicScheduleMailingTargets(o.targets);
+  }
+  if (Array.isArray(o.chat_ids)) {
+    return normalizeMusicScheduleMailingTargets(
+      o.chat_ids.map((id) => ({ chat_id: id, topic_id: null })),
+    );
+  }
+  const single = normalizeTelegramChatId(o.chat_id);
+  if (single) {
+    const topic = normalizeTopicId(o.topic_id);
+    return topic != null ? [{ chat_id: single, topic_id: topic }] : [{ chat_id: single }];
+  }
+  return [];
+}
+
 /** Публичный вид без runtime-ключа дедупа. */
 export function publicMusicScheduleMailingSettings(
   doc: MusicScheduleMailingSettings,
@@ -109,6 +190,7 @@ export function publicMusicScheduleMailingSettings(
     time_hhmm: doc.time_hhmm,
     timezone: doc.timezone,
     chat_id: doc.chat_id,
+    targets: doc.targets,
     template: doc.template,
     line_template: doc.line_template,
     target: doc.target,
@@ -125,13 +207,15 @@ export function normalizeMusicScheduleMailingSettings(
     return { ...base };
   }
   const o = raw as Record<string, unknown>;
+  const targets = resolveTargetsFromLegacy(o);
   return {
     version: 1,
     enabled: typeof o.enabled === 'boolean' ? o.enabled : base.enabled,
     weekday: clampInt(Number(o.weekday), 0, 6, base.weekday),
     time_hhmm: normalizeTimeHhmm(o.time_hhmm, base.time_hhmm),
     timezone: normalizeTimezone(o.timezone, base.timezone),
-    chat_id: o.chat_id !== undefined ? normalizeOptionalString(o.chat_id) : base.chat_id,
+    chat_id: targets[0]?.chat_id ?? null,
+    targets,
     template:
       typeof o.template === 'string' && o.template.trim()
         ? o.template
@@ -154,14 +238,40 @@ export function normalizeMusicScheduleMailingSettings(
 
 export function mergeMusicScheduleMailingPatch(
   current: MusicScheduleMailingSettings,
-  patch: Partial<MusicScheduleMailingSettings>,
+  patch: Partial<MusicScheduleMailingSettings> & {
+    chat_ids?: string[] | null;
+    topic_id?: number | null;
+  },
 ): MusicScheduleMailingSettings {
-  return normalizeMusicScheduleMailingSettings({
+  const merged: Record<string, unknown> = {
     ...current,
     ...patch,
     version: 1,
-    // Preserve runtime dedupe key unless explicitly patched
     last_mailed_key:
       patch.last_mailed_key !== undefined ? patch.last_mailed_key : current.last_mailed_key,
-  });
+  };
+
+  if (patch.targets !== undefined) {
+    merged.targets = patch.targets;
+  } else if (patch.chat_ids !== undefined) {
+    merged.targets = (patch.chat_ids ?? []).map((id) => ({ chat_id: id }));
+  } else if (patch.chat_id !== undefined && patch.topic_id === undefined) {
+    const id = normalizeTelegramChatId(patch.chat_id);
+    merged.targets = id ? [{ chat_id: id }] : [];
+  } else if (patch.chat_id !== undefined || patch.topic_id !== undefined) {
+    const id = normalizeTelegramChatId(
+      patch.chat_id !== undefined ? patch.chat_id : current.chat_id,
+    );
+    const topic =
+      patch.topic_id !== undefined
+        ? normalizeTopicId(patch.topic_id)
+        : current.targets[0]?.topic_id ?? null;
+    merged.targets = id
+      ? topic != null
+        ? [{ chat_id: id, topic_id: topic }]
+        : [{ chat_id: id }]
+      : [];
+  }
+
+  return normalizeMusicScheduleMailingSettings(merged);
 }
