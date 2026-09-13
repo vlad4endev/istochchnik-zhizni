@@ -4,6 +4,7 @@ import {
   mergeMusicScheduleMailingPatch,
   normalizeMusicScheduleMailingSettings,
   publicMusicScheduleMailingSettings,
+  type MusicScheduleMailingChatTarget,
   type MusicScheduleMailingSettings,
   type MusicScheduleMailingTarget,
 } from '../types/musicScheduleMailing';
@@ -36,7 +37,16 @@ export type MusicScheduleMailingPreview = {
   song_count: number;
   text: string | null;
   chat_id: string | null;
+  targets: MusicScheduleMailingChatTarget[];
 };
+
+function resolveMusicScheduleMailingTargets(
+  settings: MusicScheduleMailingSettings,
+): MusicScheduleMailingChatTarget[] {
+  if (settings.targets.length > 0) return settings.targets;
+  if (settings.chat_id) return [{ chat_id: settings.chat_id }];
+  return [];
+}
 
 export type MusicScheduleMailingResult = {
   ok: boolean;
@@ -91,7 +101,10 @@ async function saveMusicScheduleMailingSettings(
 }
 
 export async function patchMusicScheduleMailingSettings(
-  patch: Partial<MusicScheduleMailingSettings>,
+  patch: Partial<MusicScheduleMailingSettings> & {
+    chat_ids?: string[] | null;
+    topic_id?: number | null;
+  },
 ): Promise<MusicScheduleMailingSettings> {
   const current = await loadMusicScheduleMailingSettings();
   const next = mergeMusicScheduleMailingPatch(current, patch);
@@ -374,6 +387,8 @@ export async function previewMusicScheduleMailing(options?: {
     timeZone: settings.timezone,
     now,
   });
+  const targets = resolveMusicScheduleMailingTargets(settings);
+
   if (!plan) {
     return {
       ok: false,
@@ -386,6 +401,7 @@ export async function previewMusicScheduleMailing(options?: {
       song_count: 0,
       text: null,
       chat_id: settings.chat_id,
+      targets,
     };
   }
 
@@ -406,6 +422,7 @@ export async function previewMusicScheduleMailing(options?: {
       song_count: songs.length,
       text: null,
       chat_id: settings.chat_id,
+      targets,
     };
   }
 
@@ -439,6 +456,7 @@ export async function previewMusicScheduleMailing(options?: {
     song_count: songs.length,
     text,
     chat_id: settings.chat_id,
+    targets,
   };
 }
 
@@ -452,8 +470,9 @@ export async function runMusicScheduleMailing(options?: {
   const settings = await loadMusicScheduleMailingSettings();
   const now = options?.now ?? new Date();
   const trigger = options?.trigger ?? 'run_now';
+  const targets = resolveMusicScheduleMailingTargets(settings);
 
-  if (!settings.chat_id) {
+  if (targets.length === 0) {
     return { ok: false, skipped: true, reason: 'missing_chat_id' };
   }
 
@@ -488,21 +507,25 @@ export async function runMusicScheduleMailing(options?: {
 
   const batchId = newTelegramSendBatchId();
   try {
-    await sendTelegramToChat({
-      chatId: settings.chat_id,
-      text: preview.text,
-      log: {
-        channel: 'music_schedule_mailing',
-        trigger,
-        batchId,
-        kind: 'music_assignments',
-        recipientType: 'telegram_chat',
-        meta: {
-          plan_id: preview.plan_id,
-          service_date: preview.service_date,
+    for (const target of targets) {
+      await sendTelegramToChat({
+        chatId: target.chat_id,
+        text: preview.text,
+        messageThreadId: target.topic_id ?? null,
+        log: {
+          channel: 'music_schedule_mailing',
+          trigger,
+          batchId,
+          kind: 'music_assignments',
+          recipientType: 'telegram_chat',
+          meta: {
+            plan_id: preview.plan_id,
+            service_date: preview.service_date,
+            topic_id: target.topic_id ?? null,
+          },
         },
-      },
-    });
+      });
+    }
   } catch (err) {
     console.error('[music-schedule-mailing] telegram send failed:', err);
     return {

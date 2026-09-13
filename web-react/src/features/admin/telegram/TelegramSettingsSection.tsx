@@ -44,6 +44,7 @@ import {
   testTelegramProxy,
   type CoordinatorTelegramScenario,
   type CoordinatorTelegramScenarioId,
+  type MusicScheduleMailingChatTarget,
   type MusicScheduleMailingSettings,
   type MusicScheduleMailingTarget,
   type TelegramDispatchRecipient,
@@ -186,12 +187,14 @@ export function TelegramSettingsSection() {
     time_hhmm: '10:00',
     timezone: 'Europe/Moscow',
     chat_id: null,
+    targets: [],
     template: DEFAULT_MUSIC_MAILING_TEMPLATE,
     line_template: DEFAULT_MUSIC_MAILING_LINE_TEMPLATE,
     target: 'upcoming',
     include_vacant: false,
     skip_if_empty: true,
   });
+  const [musicTopicIdDraft, setMusicTopicIdDraft] = useState('');
   const [musicPreview, setMusicPreview] = useState<string | null>(null);
   const musicTemplateRef = useRef<HTMLTextAreaElement | null>(null);
   const [form, setForm] = useState({
@@ -321,15 +324,48 @@ export function TelegramSettingsSection() {
 
   useEffect(() => {
     if (!musicMailingQ.data) return;
+    const targets =
+      Array.isArray(musicMailingQ.data.targets) && musicMailingQ.data.targets.length > 0
+        ? musicMailingQ.data.targets
+        : musicMailingQ.data.chat_id
+          ? [{ chat_id: musicMailingQ.data.chat_id }]
+          : [];
     setMusicForm({
       ...musicMailingQ.data,
+      targets,
+      chat_id: targets[0]?.chat_id ?? musicMailingQ.data.chat_id ?? null,
       template: musicMailingQ.data.template?.trim() || DEFAULT_MUSIC_MAILING_TEMPLATE,
       line_template: musicMailingQ.data.line_template?.trim() || DEFAULT_MUSIC_MAILING_LINE_TEMPLATE,
       time_hhmm: musicMailingQ.data.time_hhmm?.trim() || '10:00',
       timezone: musicMailingQ.data.timezone?.trim() || 'Europe/Moscow',
     });
+    setMusicTopicIdDraft(
+      targets[0]?.topic_id != null && targets[0].topic_id > 0 ? String(targets[0].topic_id) : '',
+    );
     setMusicPreview(null);
   }, [musicMailingQ.data]);
+
+  function setMusicDestination(chatId: string | null, topicId: number | null) {
+    const id = chatId?.trim() || null;
+    const targets: MusicScheduleMailingChatTarget[] = id
+      ? topicId != null && topicId > 0
+        ? [{ chat_id: id, topic_id: topicId }]
+        : [{ chat_id: id }]
+      : [];
+    setMusicForm((s) => ({
+      ...s,
+      chat_id: id,
+      targets,
+    }));
+  }
+
+  function parseMusicTopicIdDraft(raw: string): number | null {
+    const t = raw.trim();
+    if (!t) return null;
+    const n = Number(t);
+    if (!Number.isInteger(n) || n <= 0) return null;
+    return n;
+  }
 
   function goToSection(next: TgSection) {
     setNote(null);
@@ -787,10 +823,11 @@ export function TelegramSettingsSection() {
           },
         }));
         setCustomChatId((prev) => (prev === removed ? '' : prev));
-        setMusicForm((s) => ({
-          ...s,
-          chat_id: s.chat_id === removed ? null : s.chat_id,
-        }));
+        setMusicForm((s) => {
+          if (s.chat_id !== removed) return s;
+          return { ...s, chat_id: null, targets: [] };
+        });
+        setMusicTopicIdDraft('');
       }
       setNote({ type: 'ok', text: 'Чат удалён из реестра.' });
       void qc.invalidateQueries({ queryKey: Q_TG_CHATS });
@@ -799,27 +836,49 @@ export function TelegramSettingsSection() {
   });
 
   const saveMusicMailingMut = useMutation({
-    mutationFn: () =>
-      patchMusicScheduleMailingSettings({
+    mutationFn: () => {
+      const topicId = parseMusicTopicIdDraft(musicTopicIdDraft);
+      const chatId = musicForm.chat_id?.trim() || null;
+      const targets: MusicScheduleMailingChatTarget[] = chatId
+        ? topicId != null
+          ? [{ chat_id: chatId, topic_id: topicId }]
+          : [{ chat_id: chatId }]
+        : [];
+      return patchMusicScheduleMailingSettings({
         enabled: musicForm.enabled,
         weekday: musicForm.weekday,
         time_hhmm: musicForm.time_hhmm,
         timezone: musicForm.timezone,
-        chat_id: musicForm.chat_id,
+        chat_id: chatId,
+        targets,
         template: musicForm.template,
         line_template: musicForm.line_template,
         target: musicForm.target,
         include_vacant: musicForm.include_vacant,
         skip_if_empty: musicForm.skip_if_empty,
-      }),
+      });
+    },
     onSuccess: (next) => {
       setNote({ type: 'ok', text: 'Рассылка музыкального служения сохранена.' });
       qc.setQueryData(Q_TG_MUSIC_MAILING, next);
+      const targets =
+        Array.isArray(next.targets) && next.targets.length > 0
+          ? next.targets
+          : next.chat_id
+            ? [{ chat_id: next.chat_id }]
+            : [];
       setMusicForm({
         ...next,
+        targets,
+        chat_id: targets[0]?.chat_id ?? next.chat_id ?? null,
         template: next.template?.trim() || DEFAULT_MUSIC_MAILING_TEMPLATE,
         line_template: next.line_template?.trim() || DEFAULT_MUSIC_MAILING_LINE_TEMPLATE,
       });
+      setMusicTopicIdDraft(
+        targets[0]?.topic_id != null && targets[0].topic_id > 0
+          ? String(targets[0].topic_id)
+          : '',
+      );
     },
     onError: (e) =>
       setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить рассылку музыки.') }),
@@ -993,7 +1052,9 @@ export function TelegramSettingsSection() {
     form.service_plan_mailing_enabled &&
     (form.service_plan_mailing_destinations.telegram_chat_ids.length > 0 ||
       form.service_plan_mailing_destinations.messenger_conversation_ids.length > 0);
-  const musicConfigured = Boolean(musicForm.chat_id?.trim()) && musicForm.enabled;
+  const musicConfigured =
+    Boolean(musicForm.chat_id?.trim() || musicForm.targets?.[0]?.chat_id?.trim()) &&
+    musicForm.enabled;
 
   const setupSteps = [
     tokenReady,
@@ -2820,7 +2881,7 @@ export function TelegramSettingsSection() {
             <StepBlock
               n={1}
               title="Куда отправлять"
-              hint="Прикрепите чат из реестра. Сначала добавьте группу в разделе «Чаты» и добавьте бота в группу."
+              hint="Выберите чат из реестра или введите chat id вручную. Для форум-тем укажите ID темы (message_thread_id)."
             >
               <ChatSelect
                 label="Чат музыкальной команды"
@@ -2828,9 +2889,46 @@ export function TelegramSettingsSection() {
                 chats={registryChats}
                 value={musicForm.chat_id ?? ''}
                 onChange={(chat_id) =>
-                  setMusicForm((s) => ({ ...s, chat_id: chat_id.trim() || null }))
+                  setMusicDestination(chat_id.trim() || null, parseMusicTopicIdDraft(musicTopicIdDraft))
                 }
               />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">
+                    Chat ID вручную
+                  </label>
+                  <input
+                    className={`${fieldClass()} font-mono text-[13px]`}
+                    placeholder="-1001234567890"
+                    value={musicForm.chat_id ?? ''}
+                    onChange={(e) =>
+                      setMusicDestination(e.target.value, parseMusicTopicIdDraft(musicTopicIdDraft))
+                    }
+                  />
+                  <p className="mt-1 text-[11px] text-stone-500">
+                    Можно ввести id группы/канала, даже если его нет в реестре.
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">
+                    ID темы форума
+                  </label>
+                  <input
+                    className={`${fieldClass()} font-mono text-[13px]`}
+                    inputMode="numeric"
+                    placeholder="например 42"
+                    value={musicTopicIdDraft}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^\d]/g, '');
+                      setMusicTopicIdDraft(raw);
+                      setMusicDestination(musicForm.chat_id, parseMusicTopicIdDraft(raw));
+                    }}
+                  />
+                  <p className="mt-1 text-[11px] text-stone-500">
+                    Опционально: message_thread_id темы в супергруппе. Пусто — в общий чат.
+                  </p>
+                </div>
+              </div>
             </StepBlock>
 
             <StepBlock
