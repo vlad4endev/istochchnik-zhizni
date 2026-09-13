@@ -11,11 +11,12 @@ export const KEYBOARD_INSET_MIN_PX = 48;
  * сломанный visualViewport (~половина экрана), а не клавиатура и не хром.
  */
 export const IOS_BROWSER_CHROME_MAX_PX = 160;
-/** На iOS 17.5+ без клавиатуры не записываем пиксельную клетку — visualViewport/100dvh бывают вдвое короче webview. */
+/** Предпочтительно 100lvh (Safari 15.4+). На более старых WebKit — 100vh, см. iosIdleViewportCss(). */
 export const IOS_IDLE_VIEWPORT_CSS = '100lvh';
-/** С 17.5 Safari иначе считает visual viewport; на 17.4 и ниже пиксельный max(visual, dvh) ещё ок. */
-export const IOS_LVH_SHELL_MIN_MAJOR = 17;
-export const IOS_LVH_SHELL_MIN_MINOR = 5;
+export const IOS_IDLE_VIEWPORT_CSS_FALLBACK = '100vh';
+/** iPhone OS 3+ / любой современный iOS. Ниже в природе не встречается, но порог явный. */
+export const IOS_LVH_SHELL_MIN_MAJOR = 3;
+export const IOS_LVH_SHELL_MIN_MINOR = 0;
 
 export type IosVersion = { major: number; minor: number };
 
@@ -29,7 +30,7 @@ export function parseIosVersion(userAgent: string): IosVersion | null {
   return { major, minor };
 }
 
-/** iOS 17.5, 18, 26… Нужен 100lvh-shell. Неизвестная версия (iPad desktop UA) — тоже, баг как раз на новых. */
+/** iOS 3+ (и неизвестный iPad desktop UA). Пиксельная клетка visualViewport ломает fixed-таббар. */
 export function iosNeedsLvhIdleShell(userAgent: string): boolean {
   const v = parseIosVersion(userAgent);
   if (!v) return true;
@@ -39,10 +40,18 @@ export function iosNeedsLvhIdleShell(userAgent: string): boolean {
   );
 }
 
+/** `100lvh` с Safari 15.4; до этого единица неизвестна и var(--viewport-height: 100lvh) сбрасывает height. */
+export function iosIdleViewportCss(
+  supportsLvh: boolean = typeof CSS !== 'undefined' && typeof CSS.supports === 'function'
+    ? CSS.supports('height', '100lvh')
+    : true,
+): string {
+  return supportsLvh ? IOS_IDLE_VIEWPORT_CSS : IOS_IDLE_VIEWPORT_CSS_FALLBACK;
+}
+
 /**
  * На сколько поднять fixed-таббар от низа layout viewport.
- * На iOS 17.5+ без клавиатуры огромный inset игнорируем: иначе bottom: 50vh — таббар посреди экрана.
- * На более старых iOS оболочка уже по visual viewport — inset не поднимаем.
+ * Без клавиатуры огромный inset игнорируем: иначе bottom: 50vh — таббар посреди экрана.
  */
 export function layoutBottomInsetPx(input: {
   keyboardInset: number;

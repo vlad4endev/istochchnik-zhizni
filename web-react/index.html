@@ -27,7 +27,7 @@
               });
             }
           }
-          /* iOS 17.5+: 100lvh-оболочка до первого кадра React (иначе dvh/px даёт таббар посредине). */
+          /* iOS 3+: оболочка 100vh/100lvh до первого кадра React (иначе dvh/px даёт таббар посредине). */
           var ua = navigator.userAgent || '';
           var apple =
             /iPad|iPhone|iPod/i.test(ua) ||
@@ -38,7 +38,7 @@
             if (ios) {
               var major = Number(ios[1]);
               var minor = Number(ios[2]);
-              lvhShell = major > 17 || (major === 17 && minor >= 5);
+              lvhShell = major > 3 || (major === 3 && minor >= 0);
             }
             document.documentElement.classList.toggle('app-ios-lvh-shell', lvhShell);
           }

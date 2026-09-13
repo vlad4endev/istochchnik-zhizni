@@ -6,6 +6,7 @@ import {
   computeKeyboardOpen,
   IOS_BROWSER_CHROME_MAX_PX,
   IOS_IDLE_VIEWPORT_CSS,
+  iosIdleViewportCss,
   iosNeedsLvhIdleShell,
   KEYBOARD_INSET_MIN_PX,
   layoutBottomInsetPx,
@@ -88,19 +89,21 @@ describe('computeKeyboardOpen', () => {
 });
 
 describe('parseIosVersion / iosNeedsLvhIdleShell', () => {
-  it('parses iPhone OS 17_5 and treats 17.5+ as the broken Safari viewport range', () => {
-    expect(parseIosVersion('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X)')).toEqual({
-      major: 17,
-      minor: 5,
+  it('parses iPhone OS and enables the CSS shell from iOS 3 up', () => {
+    expect(parseIosVersion('Mozilla/5.0 (iPhone; CPU iPhone OS 3_1_3 like Mac OS X)')).toEqual({
+      major: 3,
+      minor: 1,
     });
+    expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 3_1_3 like Mac OS X)')).toBe(true);
+    expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 16_7 like Mac OS X)')).toBe(true);
+    expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X)')).toBe(true);
     expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X)')).toBe(true);
     expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)')).toBe(true);
     expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)')).toBe(true);
   });
 
-  it('leaves iOS 17.4 and older on the pixel shell that still worked', () => {
-    expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X)')).toBe(false);
-    expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 16_7 like Mac OS X)')).toBe(false);
+  it('does not enable the CSS shell below iOS 3', () => {
+    expect(iosNeedsLvhIdleShell('Mozilla/5.0 (iPhone; CPU iPhone OS 2_2_1 like Mac OS X)')).toBe(false);
   });
 
   it('parses iPad CPU OS tokens', () => {
@@ -113,7 +116,7 @@ describe('parseIosVersion / iosNeedsLvhIdleShell', () => {
 });
 
 describe('layoutBottomInsetPx', () => {
-  it('keeps Safari chrome inset on iOS 17.5+ so the tab bar sits above the browser UI', () => {
+  it('keeps Safari chrome inset on the iOS CSS shell so the tab bar sits above the browser UI', () => {
     expect(
       layoutBottomInsetPx({
         keyboardInset: 124,
@@ -124,7 +127,7 @@ describe('layoutBottomInsetPx', () => {
     ).toBe(124);
   });
 
-  it('does not pin the tab bar to a half-screen visualViewport on iOS 17.5+ idle', () => {
+  it('does not pin the tab bar to a half-screen visualViewport on iOS idle', () => {
     expect(
       layoutBottomInsetPx({
         keyboardInset: 344,
@@ -136,7 +139,7 @@ describe('layoutBottomInsetPx', () => {
     expect(344).toBeGreaterThan(IOS_BROWSER_CHROME_MAX_PX);
   });
 
-  it('does not lift the tab bar on iOS 17.4 and older (shell is already visual height)', () => {
+  it('does not lift the tab bar when the CSS shell is off', () => {
     expect(
       layoutBottomInsetPx({
         keyboardInset: 124,
@@ -160,14 +163,14 @@ describe('layoutBottomInsetPx', () => {
 });
 
 describe('shouldUseCssViewportOnIosIdle', () => {
-  it('uses 100lvh on iOS 17.5+ when the keyboard is closed', () => {
+  it('uses CSS viewport on iOS when the keyboard is closed', () => {
     expect(
       shouldUseCssViewportOnIosIdle({ iosWebKit: true, keyboardOpen: false, iosLvhShell: true }),
     ).toBe(true);
     expect(IOS_IDLE_VIEWPORT_CSS).toBe('100lvh');
   });
 
-  it('locks pixels when the keyboard is open, on Android, or on iOS before 17.5', () => {
+  it('locks pixels when the keyboard is open, on Android, or when the CSS shell is off', () => {
     expect(
       shouldUseCssViewportOnIosIdle({ iosWebKit: true, keyboardOpen: true, iosLvhShell: true }),
     ).toBe(false);
@@ -177,6 +180,13 @@ describe('shouldUseCssViewportOnIosIdle', () => {
     expect(
       shouldUseCssViewportOnIosIdle({ iosWebKit: true, keyboardOpen: false, iosLvhShell: false }),
     ).toBe(false);
+  });
+});
+
+describe('iosIdleViewportCss', () => {
+  it('uses 100lvh when the unit is supported and 100vh on older WebKit', () => {
+    expect(iosIdleViewportCss(true)).toBe('100lvh');
+    expect(iosIdleViewportCss(false)).toBe('100vh');
   });
 });
 

@@ -4,7 +4,7 @@ import {
   chooseViewportHeightPx,
   computeKeyboardInset,
   computeKeyboardOpen,
-  IOS_IDLE_VIEWPORT_CSS,
+  iosIdleViewportCss,
   iosNeedsLvhIdleShell,
   isSoftwareKeyboardTarget,
   isTextInputFocused,
@@ -152,13 +152,14 @@ export function syncViewportHeightVars() {
   root.classList.toggle('app-ios-lvh-shell', iosLvhShell);
 
   /**
-   * iOS 17.5+ без клавиатуры: пиксельная --viewport-height становится containing block для
+   * iOS 3+ без клавиатуры: пиксельная --viewport-height становится containing block для
    * position:fixed. Если visualViewport/100dvh короче настоящего webview, таббар
-   * садится посреди экрана, под ним серый холст Safari. 100lvh — большой вьюпорт.
+   * садится посреди экрана, под ним серый холст Safari. 100lvh/100vh — большой вьюпорт.
    */
   if (iosIdleCss) {
-    root.style.setProperty('--viewport-height', IOS_IDLE_VIEWPORT_CSS);
-    root.style.setProperty('--vh', IOS_IDLE_VIEWPORT_CSS);
+    const idleCss = iosIdleViewportCss();
+    root.style.setProperty('--viewport-height', idleCss);
+    root.style.setProperty('--vh', idleCss);
   } else {
     root.style.setProperty('--viewport-height', vhPx);
     root.style.setProperty('--vh', vhPx);

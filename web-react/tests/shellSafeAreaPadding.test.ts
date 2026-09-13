@@ -88,9 +88,9 @@ describe('index.html: viewport без interactive-widget на iOS', () => {
     expect(html).toMatch(/Android[\s\S]{0,400}interactive-widget=resizes-content/);
   });
 
-  it('до React ставит app-ios-lvh-shell на iOS 17.5+', () => {
+  it('до React ставит app-ios-lvh-shell на iOS 3+', () => {
     expect(html).toMatch(/app-ios-lvh-shell/);
-    expect(html).toMatch(/major > 17 \|\| \(major === 17 && minor >= 5\)/);
+    expect(html).toMatch(/major > 3 \|\| \(major === 3 && minor >= 0\)/);
   });
 });
 
@@ -145,8 +145,8 @@ describe('nativeShellViewport: Math.min только при клавиатуре
 describe('nativeShellViewport: iOS idle не сажает оболочку в пиксели', () => {
   const src = readFileSync(NATIVE_SHELL_VIEWPORT, 'utf8');
 
-  it('на iOS 17.5+ без клавиатуры пишет 100lvh, а не px-клетку', () => {
-    expect(src).toMatch(/IOS_IDLE_VIEWPORT_CSS/);
+  it('на iOS 3+ без клавиатуры пишет 100lvh/100vh, а не px-клетку', () => {
+    expect(src).toMatch(/iosIdleViewportCss/);
     expect(src).toMatch(/iosNeedsLvhIdleShell/);
     expect(src).toMatch(/shouldUseCssViewportOnIosIdle/);
     expect(src).toMatch(/layoutBottomInsetPx/);
@@ -158,9 +158,9 @@ describe('nativeShellViewport: iOS idle не сажает оболочку в п
 describe('index.css: iOS idle оболочка на 100lvh', () => {
   const css = readFileSync(INDEX_CSS, 'utf8');
 
-  it('WebKit idle использует 100lvh и не max-height из короткого --viewport-height', () => {
+  it('WebKit idle использует 100vh затем 100lvh', () => {
     expect(css).toMatch(
-      /@supports\s*\(\s*-webkit-touch-callout\s*:\s*none\s*\)[\s\S]*?html\.app-native-shell\.app-ios-lvh-shell:not\(\.app-keyboard-open\)[\s\S]*?height:\s*100lvh/,
+      /@supports\s*\(\s*-webkit-touch-callout\s*:\s*none\s*\)[\s\S]*?html\.app-native-shell\.app-ios-lvh-shell:not\(\.app-keyboard-open\)[\s\S]*?height:\s*100vh[\s\S]*?height:\s*100lvh/,
     );
   });
 

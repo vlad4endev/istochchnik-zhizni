@@ -647,7 +647,7 @@ export function LoginPage() {
     'absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary';
 
   return (
-    <div className="relative min-h-dvh w-full max-w-[100vw] overflow-y-auto bg-[var(--surface)] [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
+    <div className="app-auth-screen relative min-h-dvh w-full max-w-[100vw] overflow-y-auto bg-[var(--surface)] [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-[42vh] bg-gradient-to-b from-primary/[0.12] via-primary/[0.04] to-transparent"
         aria-hidden
@@ -662,7 +662,7 @@ export function LoginPage() {
         </Link>
 
         <div className="flex flex-1 flex-col justify-start pb-4 sm:justify-center">
-          <div className="mx-auto w-full max-w-[min(100%,480px)] overflow-hidden rounded-[1.5rem] bg-[var(--surface-elevated)]/95 p-5 shadow-[0_18px_50px_rgba(28,25,23,0.08)] ring-1 ring-stone-900/[0.06] backdrop-blur-sm sm:rounded-[1.75rem] sm:p-7">
+          <div className="app-auth-card mx-auto w-full max-w-[min(100%,480px)] overflow-hidden rounded-[1.5rem] bg-[var(--surface-elevated)]/95 p-5 shadow-[0_18px_50px_rgba(28,25,23,0.08)] ring-1 ring-stone-900/[0.06] backdrop-blur-sm sm:rounded-[1.75rem] sm:p-7">
             <div className="flex items-center gap-3.5">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 p-2.5 ring-1 ring-primary/15">
                 <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain" />

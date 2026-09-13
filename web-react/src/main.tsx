@@ -43,6 +43,7 @@ import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 import './index.css';
 import './styles/mobile.css';
+import './styles/compactIphone.css';
 
 const CLIENT_BUILD_VERSION = '2026-06-18-compact-chat-search';
 const CLIENT_BUILD_VERSION_KEY = 'app:client-build-version';

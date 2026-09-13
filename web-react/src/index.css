@@ -74,7 +74,7 @@ textarea {
     --app-bottom-nav-measured-height,
     calc(var(--app-bottom-nav-main-gutter) + var(--app-safe-bottom, 0px))
   );
-  /* До первого кадра JS — fallback. На iOS idle nativeShellViewport ставит 100lvh, не px. */
+  /* До первого кадра JS — fallback. На iOS idle nativeShellViewport ставит 100lvh или 100vh, не px. */
   --viewport-height: 100dvh;
   --vh: 100dvh;
   --app-keyboard-inset: 0px;
@@ -366,15 +366,17 @@ html.app-native-shell {
 }
 
 /*
- * iOS 17.5+: не сажать html/body/#root в пиксельную клетку visualViewport/100dvh.
- * С Safari 17.4 visual viewport стал «динамическим»; на 17.5+ эти метрики на части
- * iPhone ~половины webview → html становится containing block для position:fixed,
- * таббар с bottom:0 оказывается посреди экрана, ниже — серый Safari.
- * Класс .app-ios-lvh-shell ставит JS (и ранний скрипт в index.html) только на 17.5+.
- * 100lvh — большой вьюпорт. Таббар поднимается на --app-keyboard-inset (хром Safari).
+ * iOS 3+: не сажать html/body/#root в пиксельную клетку visualViewport/100dvh.
+ * Короткие метрики → html становится containing block для position:fixed,
+ * таббар с bottom:0 оказывается посреди экрана. Класс .app-ios-lvh-shell ставит
+ * ранний скрипт и JS на iPhone OS 3+. 100vh — до Safari 15.4, 100lvh — после.
+ * Таббар поднимается на --app-keyboard-inset (хром Safari).
  */
 @supports (-webkit-touch-callout: none) {
   html.app-native-shell.app-ios-lvh-shell:not(.app-keyboard-open) {
+    height: 100vh;
+    min-height: 100vh;
+    max-height: 100vh;
     height: 100lvh;
     min-height: 100lvh;
     max-height: 100lvh;
