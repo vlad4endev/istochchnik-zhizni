@@ -24,10 +24,14 @@ import {
   fetchMyVersions,
   fetchSetlistItems,
   removeSetlistItem,
+  reorderSetlistItems,
   type SetlistItemRow,
 } from '../api/studio';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
+import { SetlistMusicianNotesEditor } from '../components/studio/SetlistMusicianNotesEditor';
+import { hasSheetMusic } from '../components/studio/SheetMusicPreview';
+import { musicianNotesCount } from '../lib/performNotes';
 import type { RootStackParamList } from '../navigation/types';
 import { useTheme, type ThemeColors } from '../theme';
 
@@ -43,6 +47,7 @@ export function StudioSetlistDetailScreen() {
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [songSearch, setSongSearch] = useState('');
+  const [notesItem, setNotesItem] = useState<SetlistItemRow | null>(null);
 
   const itemsQuery = useQuery({
     queryKey: ['studio', 'setlist', setlistId, 'items'],
@@ -84,6 +89,16 @@ export function StudioSetlistDetailScreen() {
     },
   });
 
+  const reorderMut = useMutation({
+    mutationFn: (orderedItemIds: number[]) => reorderSetlistItems(setlistId, orderedItemIds),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['studio', 'setlist', setlistId] });
+    },
+    onError: (err: unknown) => {
+      Alert.alert('Ошибка', err instanceof Error ? err.message : 'Не удалось изменить порядок');
+    },
+  });
+
   const deleteMut = useMutation({
     mutationFn: () => deleteSetlist(setlistId),
     onSuccess: () => {
@@ -97,6 +112,17 @@ export function StudioSetlistDetailScreen() {
 
   const items = itemsQuery.data ?? [];
   const canPerform = items.length > 0;
+
+  const moveItem = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= items.length) return;
+    const next = [...items];
+    const tmp = next[index]!;
+    next[index] = next[nextIndex]!;
+    next[nextIndex] = tmp;
+    qc.setQueryData<SetlistItemRow[]>(['studio', 'setlist', setlistId, 'items'], next);
+    void reorderMut.mutateAsync(next.map((row) => Number(row.id)));
+  };
 
   const confirmDelete = () => {
     Alert.alert('Удалить сетлист?', title, [
@@ -161,24 +187,71 @@ export function StudioSetlistDetailScreen() {
             </Pressable>
           </View>
         }
-        renderItem={({ item, index }) => (
-          <Pressable
-            onLongPress={() => confirmRemove(item)}
-            style={({ pressed }) => [styles.itemRow, pressed && { opacity: 0.92 }]}
-          >
-            <Text style={styles.itemPos}>{index + 1}</Text>
-            <View style={styles.itemBody}>
-              <Text style={styles.itemTitle} numberOfLines={1}>
-                {item.song.title}
-              </Text>
-              <Text style={styles.itemSub}>
-                {[item.effective_key, item.studio_version_id ? 'моя версия' : null]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </Text>
-            </View>
-          </Pressable>
-        )}
+        renderItem={({ item, index }) => {
+          const notesCount = musicianNotesCount(item.musician_notes);
+          const hasSheet = hasSheetMusic(item);
+          return (
+            <Pressable
+              onLongPress={() => confirmRemove(item)}
+              style={({ pressed }) => [styles.itemRow, pressed && { opacity: 0.92 }]}
+            >
+              <Text style={styles.itemPos}>{index + 1}</Text>
+              <View style={styles.itemBody}>
+                <Text style={styles.itemTitle} numberOfLines={1}>
+                  {item.song.title}
+                </Text>
+                <Text style={styles.itemSub}>
+                  {[
+                    item.effective_key,
+                    item.studio_version_id ? 'моя версия' : null,
+                    hasSheet ? 'ноты' : null,
+                    notesCount > 0 ? `заметки · ${notesCount}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setNotesItem(item)}
+                hitSlop={8}
+                style={({ pressed }) => [styles.notesBtn, pressed && { opacity: 0.7 }]}
+                accessibilityLabel="Заметки музыканта"
+              >
+                <Ionicons
+                  name={notesCount > 0 ? 'document-text' : 'document-text-outline'}
+                  size={20}
+                  color={notesCount > 0 ? colors.primary : colors.textMuted}
+                />
+              </Pressable>
+              <View style={styles.reorderCol}>
+                <Pressable
+                  onPress={() => moveItem(index, -1)}
+                  disabled={index === 0 || reorderMut.isPending}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.reorderBtn,
+                    (index === 0 || reorderMut.isPending) && { opacity: 0.35 },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Ionicons name="chevron-up" size={18} color={colors.text} />
+                </Pressable>
+                <Pressable
+                  onPress={() => moveItem(index, 1)}
+                  disabled={index === items.length - 1 || reorderMut.isPending}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.reorderBtn,
+                    (index === items.length - 1 || reorderMut.isPending) && { opacity: 0.35 },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Ionicons name="chevron-down" size={18} color={colors.text} />
+                </Pressable>
+              </View>
+            </Pressable>
+          );
+        }}
         ListEmptyComponent={
           !itemsQuery.isLoading ? (
             <Text style={styles.empty}>Добавьте песни в сетлист</Text>
@@ -228,6 +301,13 @@ export function StudioSetlistDetailScreen() {
           />
         </SafeAreaView>
       </Modal>
+
+      <SetlistMusicianNotesEditor
+        visible={notesItem != null}
+        setlistId={setlistId}
+        item={notesItem}
+        onClose={() => setNotesItem(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -316,6 +396,25 @@ function createStyles(colors: ThemeColors) {
       fontSize: 12,
       color: colors.textMuted,
       marginTop: 2,
+    },
+    notesBtn: {
+      width: 36,
+      height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 10,
+      backgroundColor: colors.surface,
+    },
+    reorderCol: {
+      gap: 2,
+    },
+    reorderBtn: {
+      width: 32,
+      height: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 8,
+      backgroundColor: colors.surface,
     },
     empty: {
       textAlign: 'center',

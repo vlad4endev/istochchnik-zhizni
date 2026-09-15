@@ -8,20 +8,34 @@ import { Platform, Text, View } from 'react-native';
 import { SermonPlayerBar } from '../components/SermonPlayerBar';
 import { SermonPlayerProvider } from '../contexts/SermonPlayerContext';
 import { fetchUnreadCount } from '../api/messenger';
+import { BroadcastScreen } from '../screens/BroadcastScreen';
+import { ComposePostScreen } from '../screens/ComposePostScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { ChatsScreen } from '../screens/ChatsScreen';
+import { ChatInfoScreen } from '../screens/ChatInfoScreen';
 import { ChatThreadScreen } from '../screens/ChatThreadScreen';
 import { EventsScreen } from '../screens/EventsScreen';
+import { FeedPostCommentsScreen } from '../screens/FeedPostCommentsScreen';
+import { FeedScreen } from '../screens/FeedScreen';
+import { JoinInviteScreen } from '../screens/JoinInviteScreen';
 import { MediaScheduleScreen } from '../screens/MediaScheduleScreen';
+import { MusicScheduleScreen } from '../screens/MusicScheduleScreen';
+import { MySermonsScreen } from '../screens/MySermonsScreen';
 import { NewChatScreen } from '../screens/NewChatScreen';
 import { PrayerCyclePlanScreen } from '../screens/PrayerCyclePlanScreen';
 import { PrayerScreen } from '../screens/PrayerScreen';
+import { ProfileEditScreen } from '../screens/ProfileEditScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
+import { SermonNoteDetailScreen } from '../screens/SermonNoteDetailScreen';
 import { SermonsScreen } from '../screens/SermonsScreen';
 import { ServicePlannerScreen } from '../screens/ServicePlannerScreen';
 import { ServicePlanDetailScreen } from '../screens/ServicePlanDetailScreen';
+import { StoryViewerScreen } from '../screens/StoryViewerScreen';
 import { StudioPerformScreen } from '../screens/StudioPerformScreen';
 import { StudioScreen } from '../screens/StudioScreen';
 import { StudioSetlistDetailScreen } from '../screens/StudioSetlistDetailScreen';
+import { StudioSongEditScreen } from '../screens/StudioSongEditScreen';
+import { SundayScheduleScreen } from '../screens/SundayScheduleScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SongDetailScreen } from '../screens/SongDetailScreen';
 import { SongbookScreen } from '../screens/SongbookScreen';
@@ -202,6 +216,11 @@ export function MainStack() {
         })}
       />
       <Stack.Screen
+        name="ChatInfo"
+        component={ChatInfoScreen}
+        options={{ title: 'О чате' }}
+      />
+      <Stack.Screen
         name="NewChat"
         component={NewChatScreen}
         options={{ title: 'Новый чат' }}
@@ -209,6 +228,16 @@ export function MainStack() {
       <Stack.Screen
         name="MediaSchedule"
         component={MediaScheduleScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="MusicSchedule"
+        component={MusicScheduleScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SundaySchedule"
+        component={SundayScheduleScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen
@@ -241,9 +270,66 @@ export function MainStack() {
         options={{ headerShown: false, gestureEnabled: false }}
       />
       <Stack.Screen
+        name="StudioSongEdit"
+        component={StudioSongEditScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
         name="PrayerCyclePlan"
         component={PrayerCyclePlanScreen}
         options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="Feed"
+        component={FeedScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="Broadcast"
+        component={BroadcastScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="MySermons"
+        component={MySermonsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SermonNoteDetail"
+        component={SermonNoteDetailScreen}
+        options={({ route }) => ({
+          title: route.params.title,
+        })}
+      />
+      <Stack.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="ProfileEdit"
+        component={ProfileEditScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="ComposePost"
+        component={ComposePostScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="FeedPostComments"
+        component={FeedPostCommentsScreen}
+        options={{ title: 'Комментарии' }}
+      />
+      <Stack.Screen
+        name="StoryViewer"
+        component={StoryViewerScreen}
+        options={{ headerShown: false, presentation: 'fullScreenModal' }}
+      />
+      <Stack.Screen
+        name="JoinInvite"
+        component={JoinInviteScreen}
+        options={{ headerShown: false, presentation: 'modal' }}
       />
     </Stack.Navigator>
   );

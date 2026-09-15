@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchMe } from '../api/profile';
-import { resolveApiOrigin } from '../lib/config';
+import { getDefaultApiOrigin, resolveApiOrigin } from '../lib/config';
 import { roleLabelRu } from '../lib/roleLabels';
 import { getApiBaseUrl, setApiBaseUrl } from '../lib/storage';
 import type { MainTabParamList, RootStackParamList } from '../navigation/types';
@@ -26,8 +26,11 @@ import { useAuthDisplayName, useAuthStore } from '../stores/authStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { useMediaScheduleAccess } from '../hooks/useMediaScheduleAccess';
+import { useMusicScheduleAccess } from '../hooks/useMusicScheduleAccess';
 import { useServicePlannerAccess } from '../hooks/useServicePlannerAccess';
 import { useStudioAccess } from '../hooks/useStudioAccess';
+import { useSundayScheduleAccess } from '../hooks/useSundayScheduleAccess';
+import { pushStatusLabel, usePushStatusStore } from '../stores/pushStatusStore';
 import { useTheme } from '../theme';
 import type { AppSettings } from '../types';
 
@@ -43,6 +46,9 @@ const SCHEME_OPTIONS: { value: AppSettings['colorScheme']; label: string; icon: 
 ];
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
+const HAS_GOOGLE_SERVICES = Boolean(
+  (Constants.expoConfig?.extra as { hasGoogleServices?: boolean } | undefined)?.hasGoogleServices,
+);
 
 export function SettingsScreen() {
   const { colors, isDark } = useTheme();
@@ -52,10 +58,12 @@ export function SettingsScreen() {
   const role = useAuthStore((s) => s.role);
   const username = useAuthStore((s) => s.username);
   const logout = useAuthStore((s) => s.logout);
-  const refreshProfile = useAuthStore((s) => s.refreshProfile);
   const { canView: canViewMediaSchedule } = useMediaScheduleAccess();
+  const { canView: canViewMusicSchedule } = useMusicScheduleAccess();
+  const { canView: canViewSundaySchedule } = useSundayScheduleAccess();
   const { canView: canViewServicePlanner } = useServicePlannerAccess();
   const { canView: canViewStudio } = useStudioAccess();
+  const pushStatus = usePushStatusStore((s) => s.status);
 
   const meQuery = useQuery({
     queryKey: ['me'],
@@ -75,6 +83,13 @@ export function SettingsScreen() {
     setTimeout(() => setApiSaved(false), 2000);
   };
 
+  const resetApiUrl = () => {
+    setApiUrl('');
+    setApiBaseUrl('');
+    setApiSaved(true);
+    setTimeout(() => setApiSaved(false), 2000);
+  };
+
   const onLogout = () => {
     Alert.alert('Выход', 'Выйти из аккаунта?', [
       { text: 'Отмена', style: 'cancel' },
@@ -84,11 +99,6 @@ export function SettingsScreen() {
         onPress: () => void logout(),
       },
     ]);
-  };
-
-  const refreshAll = () => {
-    void refreshProfile();
-    void meQuery.refetch();
   };
 
   const initials = useMemo(() => {
@@ -105,7 +115,7 @@ export function SettingsScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <Pressable
-          onPress={refreshAll}
+          onPress={() => navigation.navigate('Profile')}
           style={({ pressed }) => [styles.profileCard, pressed && { opacity: 0.92 }]}
         >
           <View style={styles.avatar}>
@@ -117,11 +127,27 @@ export function SettingsScreen() {
             {username ? <Text style={styles.profileSub}>@{username}</Text> : null}
             {phone ? <Text style={styles.profileSub}>{phone}</Text> : null}
           </View>
-          <Ionicons name="refresh-outline" size={20} color={colors.textMuted} />
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </Pressable>
 
         <SectionLabel title="Разделы" />
         <View style={styles.card}>
+          <MenuRow
+            icon="images-outline"
+            label="Лента"
+            subtitle="Новости и посты церкви"
+            onPress={() => navigation.navigate('Feed')}
+            colors={colors}
+          />
+          <Divider />
+          <MenuRow
+            icon="tv-outline"
+            label="Трансляция"
+            subtitle="Прямой эфир и записи"
+            onPress={() => navigation.navigate('Broadcast')}
+            colors={colors}
+          />
+          <Divider />
           <MenuRow
             icon="calendar-outline"
             label="Мероприятия"
@@ -137,6 +163,14 @@ export function SettingsScreen() {
             onPress={() => navigation.navigate('Sermons')}
             colors={colors}
           />
+          <Divider />
+          <MenuRow
+            icon="document-text-outline"
+            label="Мои проповеди"
+            subtitle="Конспекты проповедника"
+            onPress={() => navigation.navigate('MySermons')}
+            colors={colors}
+          />
           {canViewMediaSchedule ? (
             <>
               <Divider />
@@ -145,6 +179,30 @@ export function SettingsScreen() {
                 label="Расписание медиа"
                 subtitle="Моё расписание и команда"
                 onPress={() => navigation.navigate('MediaSchedule')}
+                colors={colors}
+              />
+            </>
+          ) : null}
+          {canViewMusicSchedule ? (
+            <>
+              <Divider />
+              <MenuRow
+                icon="musical-note-outline"
+                label="Расписание музыки"
+                subtitle="Музыкальное служение"
+                onPress={() => navigation.navigate('MusicSchedule')}
+                colors={colors}
+              />
+            </>
+          ) : null}
+          {canViewSundaySchedule ? (
+            <>
+              <Divider />
+              <MenuRow
+                icon="sunny-outline"
+                label="Воскресное расписание"
+                subtitle="Ведущие и проповедники"
+                onPress={() => navigation.navigate('SundaySchedule')}
                 colors={colors}
               />
             </>
@@ -177,12 +235,22 @@ export function SettingsScreen() {
 
         <SectionLabel title="Подключение" />
         <View style={styles.card}>
+          <View style={{ paddingVertical: 10, marginBottom: 8 }}>
+            <Text style={styles.fieldLabel}>Push-уведомления</Text>
+            <Text style={styles.hint}>{pushStatusLabel(pushStatus)}</Text>
+            <Text style={styles.hint}>
+              FCM config:{' '}
+              {HAS_GOOGLE_SERVICES
+                ? 'google-services.json подключён'
+                : 'нет файла — нужен для нативного FCM в release'}
+            </Text>
+          </View>
           <Text style={styles.fieldLabel}>Адрес API</Text>
           <TextInput
             style={styles.input}
             value={apiUrl}
             onChangeText={setApiUrl}
-            placeholder={resolveApiOrigin()}
+            placeholder={getDefaultApiOrigin()}
             placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
@@ -193,8 +261,12 @@ export function SettingsScreen() {
             <Text style={styles.hintMono}>{resolveApiOrigin()}</Text>
           </Text>
           <Text style={styles.hint}>
-            На реальном устройстве укажите IP компьютера в локальной сети, например
-            {' '}http://192.168.1.5:40978
+            По умолчанию сборки:{' '}
+            <Text style={styles.hintMono}>{getDefaultApiOrigin()}</Text>
+          </Text>
+          <Text style={styles.hint}>
+            Preview/production APK ходят на прод. Для локального API на устройстве укажите LAN IP,
+            например http://192.168.1.5:40978. Пустое поле = дефолт сборки.
           </Text>
           <Pressable
             onPress={saveApiUrl}
@@ -204,6 +276,14 @@ export function SettingsScreen() {
               {apiSaved ? 'Сохранено ✓' : 'Сохранить адрес'}
             </Text>
           </Pressable>
+          {getApiBaseUrl().trim() ? (
+            <Pressable
+              onPress={resetApiUrl}
+              style={({ pressed }) => [styles.inlineResetBtn, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={styles.inlineResetText}>Сбросить на дефолт сборки</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <SectionLabel title="Оформление" />
@@ -238,7 +318,7 @@ export function SettingsScreen() {
         </Pressable>
 
         <Text style={styles.version}>
-          Источник жизни · v{APP_VERSION} · {isDark ? 'тёмная' : 'светлая'} тема
+          Моя Церковь · v{APP_VERSION} · {isDark ? 'тёмная' : 'светлая'} тема
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -418,6 +498,17 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boo
       color: colors.textOnPrimary,
       fontWeight: '700',
       fontSize: 14,
+    },
+    inlineResetBtn: {
+      alignSelf: 'flex-start',
+      marginTop: 8,
+      paddingHorizontal: 4,
+      paddingVertical: 6,
+    },
+    inlineResetText: {
+      color: colors.primary,
+      fontWeight: '600',
+      fontSize: 13,
     },
     schemeRow: {
       flexDirection: 'row',

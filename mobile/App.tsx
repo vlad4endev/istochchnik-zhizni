@@ -5,6 +5,7 @@ import { Platform, UIManager } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { MessengerWsProvider } from './src/contexts/MessengerWsContext';
+import { usePushRegistration } from './src/hooks/usePushRegistration';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { useSettingsStore } from './src/stores/settingsStore';
 import { useTheme } from './src/theme';
@@ -25,6 +26,7 @@ const queryClient = new QueryClient({
 function AppInner() {
   const { isDark } = useTheme();
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
+  usePushRegistration();
 
   useEffect(() => {
     hydrateSettings();

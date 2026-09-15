@@ -737,6 +737,76 @@ router.post('/conversations/personal', async (req: Request, res: Response) => {
   }
 });
 
+/** GET /api/messenger/join/:token — превью чата по invite-ссылке (без вступления). */
+router.get('/join/:token', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const token = String(req.params.token ?? '').trim();
+  if (token.length < 4 || token.length > 64) {
+    res.status(400).json({ error: 'Некорректный токен приглашения' });
+    return;
+  }
+  try {
+    const preview = await svc.findConversationByInviteToken(token);
+    if (!preview) {
+      res.status(404).json({ error: 'Ссылка-приглашение недействительна или устарела' });
+      return;
+    }
+    const alreadyMember = await svc.isMemberInConversation(preview.id, userId);
+    res.json({
+      conversationId: preview.id,
+      type: preview.type,
+      title: preview.title,
+      avatar_url: preview.avatar_url,
+      alreadyMember,
+    });
+  } catch (e) {
+    console.error('[messenger] join preview error:', e);
+    res.status(500).json({ error: 'Не удалось проверить приглашение' });
+  }
+});
+
+/** POST /api/messenger/join { token } — вступить в группу/канал по invite-токену. */
+router.post('/join', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const token = String((req.body ?? {}).token ?? '').trim();
+  if (token.length < 4 || token.length > 64) {
+    res.status(400).json({ error: 'Некорректный токен приглашения' });
+    return;
+  }
+  try {
+    const preview = await svc.findConversationByInviteToken(token);
+    if (!preview) {
+      res.status(404).json({ error: 'Ссылка-приглашение недействительна или устарела' });
+      return;
+    }
+
+    const alreadyMember = await svc.isMemberInConversation(preview.id, userId);
+    if (!alreadyMember) {
+      await svc.addParticipant(preview.id, userId);
+      ensureMemberInRoom(userId, preview.id);
+      sendToRoomAll(preview.id, { type: 'conv:updated', conversationId: preview.id });
+    }
+
+    const conversation = await getConversationListItemForMember(userId, preview.id);
+    if (conversation) {
+      sendToMember(userId, { type: 'conv:created', conversation });
+    }
+
+    res.json({
+      ok: true,
+      alreadyMember,
+      conversationId: preview.id,
+      type: preview.type,
+      title: preview.title,
+      avatar_url: preview.avatar_url,
+      conversation: conversation ?? null,
+    });
+  } catch (e) {
+    console.error('[messenger] join by invite error:', e);
+    res.status(500).json({ error: 'Не удалось вступить в чат' });
+  }
+});
+
 /** POST /api/messenger/conversations/group { title, type, memberIds } */
 router.post('/conversations/group', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;

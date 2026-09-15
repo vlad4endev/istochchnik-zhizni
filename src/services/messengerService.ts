@@ -1167,6 +1167,49 @@ export async function isMemberInConversation(
   return result.rows.length > 0;
 }
 
+export type InviteConversationPreview = {
+  id: string;
+  type: ConversationType;
+  title: string | null;
+  avatar_url: string | null;
+};
+
+/** Найти группу/канал по `settings.invite_token` (ссылка-приглашение). */
+export async function findConversationByInviteToken(
+  token: string,
+): Promise<InviteConversationPreview | null> {
+  const clean = String(token ?? '').trim();
+  if (clean.length < 4 || clean.length > 64) return null;
+  try {
+    const result = await dbQuery(
+      `SELECT id, type, title, avatar_url
+       FROM conversations
+       WHERE type IN ('group', 'channel')
+         AND settings IS NOT NULL
+         AND TRIM(COALESCE(settings->>'invite_token', '')) = $1
+       LIMIT 1`,
+      [clean],
+    );
+    const row = result.rows[0] as
+      | { id: unknown; type: unknown; title: unknown; avatar_url: unknown }
+      | undefined;
+    if (!row) return null;
+    const type = row.type === 'channel' ? 'channel' : row.type === 'group' ? 'group' : null;
+    if (!type) return null;
+    return {
+      id: bigint(row.id),
+      type,
+      title: (row.title as string | null) ?? null,
+      avatar_url: rewriteMessengerPublicUrl(
+        typeof row.avatar_url === 'string' ? row.avatar_url : null,
+      ),
+    };
+  } catch (e) {
+    if (pgErrorCode(e) === '42703') return null;
+    throw e;
+  }
+}
+
 /**
  * Глобальная роль в приложении (`members.app_role`): администратор может управлять группами/каналами
  * даже без персонального флага «управление чатом» у участника.

@@ -25,3 +25,32 @@ export async function fetchSong(id: number): Promise<SongListItem> {
   const { data } = await apiClient.get<SongListItem>(`/api/songs/${id}`);
   return data;
 }
+
+export type {
+  RecognizedSong,
+  RecognizedSection,
+  RecognizedSectionType,
+} from '../lib/sheetMusicTypes';
+
+/** Распознать партитуру с фото (до ~3 мин). Поле формы: photo. */
+export async function aiRecognizeSheetMusic(asset: {
+  uri: string;
+  name: string;
+  type: string;
+}): Promise<import('../lib/sheetMusicTypes').RecognizedSong> {
+  const form = new FormData();
+  form.append('photo', {
+    uri: asset.uri,
+    name: asset.name,
+    type: asset.type,
+  } as unknown as Blob);
+  const { data } = await apiClient.post<import('../lib/sheetMusicTypes').RecognizedSong>(
+    '/api/songs/ai/recognize-sheet',
+    form,
+    {
+      timeout: 180_000,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    },
+  );
+  return data;
+}

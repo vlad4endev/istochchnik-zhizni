@@ -157,7 +157,7 @@ export function ManageChatHomePage() {
     }
   };
 
-  const inviteLink = `https://app.church-tambov.ru/join/${inviteToken}`;
+  const inviteLink = `${typeof window !== 'undefined' ? window.location.origin : 'https://app.church-tambov.ru'}/join/${inviteToken}`;
   const mediaHintCount = Number((meta?.settings as { media_count?: unknown } | undefined)?.media_count ?? 0);
 
   if (isPrivate) {

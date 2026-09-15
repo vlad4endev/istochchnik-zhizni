@@ -101,6 +101,13 @@ export function StudioScreen() {
     });
   };
 
+  const openEditor = (song: SongListItem | { id: string; title: string }) => {
+    navigation.navigate('StudioSongEdit', {
+      songId: Number(song.id),
+      title: song.title || 'Песня',
+    });
+  };
+
   const refreshing =
     (tab === 'catalog' && catalogQuery.isFetching) ||
     (tab === 'mine' && (versionsQuery.isFetching || recentQuery.isFetching)) ||
@@ -224,10 +231,12 @@ export function StudioScreen() {
               subtitle={[
                 item.song_number != null ? `№ ${item.song_number}` : null,
                 item.default_key,
+                item.has_studio_version ? 'моя версия' : null,
               ]
                 .filter(Boolean)
                 .join(' · ')}
               onPress={() => openSong(item)}
+              onLongPress={() => openEditor(item)}
               colors={colors}
             />
           )}
@@ -261,7 +270,7 @@ export function StudioScreen() {
                 <VersionRow
                   version={item.v}
                   onPress={() =>
-                    openSong({ id: item.v.song_id, title: item.v.song_title })
+                    openEditor({ id: item.v.song_id, title: item.v.song_title })
                   }
                   colors={colors}
                 />
@@ -270,8 +279,8 @@ export function StudioScreen() {
             return (
               <SongRow
                 title={item.s.title}
-                subtitle="Недавняя"
-                onPress={() => openSong(item.s)}
+                subtitle="Недавняя · открыть редактор"
+                onPress={() => openEditor(item.s)}
                 colors={colors}
               />
             );
@@ -317,16 +326,22 @@ function SongRow({
   title,
   subtitle,
   onPress,
+  onLongPress,
   colors,
 }: {
   title: string;
   subtitle: string;
   onPress: () => void;
+  onLongPress?: () => void;
   colors: ThemeColors;
 }) {
   const styles = useMemo(() => createRowStyles(colors), [colors]);
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && { opacity: 0.9 }]}>
+    <Pressable
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={({ pressed }) => [styles.row, pressed && { opacity: 0.9 }]}
+    >
       <View style={styles.rowBody}>
         <Text style={styles.rowTitle} numberOfLines={1}>
           {title || 'Без названия'}

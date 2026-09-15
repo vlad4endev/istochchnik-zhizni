@@ -19,6 +19,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { fetchPerformance } from '../api/studio';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
+import { SheetMusicPreview, hasSheetMusic } from '../components/studio/SheetMusicPreview';
+import { musicianNotesCount, notesFromItem } from '../lib/performNotes';
 import type { RootStackParamList } from '../navigation/types';
 import { useTheme, type ThemeColors } from '../theme';
 
@@ -33,6 +35,7 @@ export function StudioPerformScreen() {
   const width = Dimensions.get('window').width;
 
   const [index, setIndex] = useState(0);
+  const [showSheet, setShowSheet] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   const perfQuery = useQuery({
@@ -45,8 +48,13 @@ export function StudioPerformScreen() {
 
   useEffect(() => {
     setIndex(0);
+    setShowSheet(false);
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, [setlistId]);
+
+  useEffect(() => {
+    setShowSheet(false);
+  }, [index]);
 
   const onMomentumEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -95,6 +103,7 @@ export function StudioPerformScreen() {
   }
 
   const current = items[index];
+  const currentHasSheet = current ? hasSheetMusic(current) : false;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -110,14 +119,31 @@ export function StudioPerformScreen() {
             {index + 1} / {items.length}
           </Text>
         </View>
-        <View style={styles.iconBtn} />
+        {currentHasSheet ? (
+          <Pressable
+            onPress={() => setShowSheet((v) => !v)}
+            hitSlop={12}
+            style={styles.iconBtn}
+            accessibilityLabel={showSheet ? 'Показать текст' : 'Показать ноты'}
+          >
+            <Ionicons
+              name={showSheet ? 'text-outline' : 'musical-notes-outline'}
+              size={22}
+              color={colors.primary}
+            />
+          </Pressable>
+        ) : (
+          <View style={styles.iconBtn} />
+        )}
       </View>
 
       {current ? (
         <View style={styles.songHeader}>
           <Text style={styles.songTitle}>{current.song.title}</Text>
-          {current.effective_key ? (
-            <Text style={styles.songKey}>{current.effective_key}</Text>
+          {current.effective_key || (showSheet && current.sheet_key) ? (
+            <Text style={styles.songKey}>
+              {showSheet && current.sheet_key ? current.sheet_key : current.effective_key}
+            </Text>
           ) : null}
         </View>
       ) : null}
@@ -133,15 +159,49 @@ export function StudioPerformScreen() {
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         renderItem={({ item }) => {
           const body = item.effective_content?.trim() || item.song.content?.trim() || '';
+          const notes = notesFromItem(item.musician_notes);
+          const hasNotes = musicianNotesCount(item.musician_notes) > 0;
+          const lineComments = Object.entries(notes.lineComments ?? {})
+            .map(([k, text]) => ({ line: Number(k), text }))
+            .filter((r) => Number.isInteger(r.line) && r.text.trim())
+            .sort((a, b) => a.line - b.line);
+          const blocks = (notes.blockComments ?? []).filter((b) => b.text?.trim());
+          const itemHasSheet = hasSheetMusic(item);
           return (
             <ScrollView
               style={{ width }}
               contentContainerStyle={styles.lyricsScroll}
               showsVerticalScrollIndicator
             >
-              <Text style={styles.lyrics} selectable>
-                {body || 'Текст не добавлен'}
-              </Text>
+              {showSheet && itemHasSheet ? (
+                <SheetMusicPreview
+                  sheetMeta={item.sheet_meta}
+                  sheetKey={item.sheet_key}
+                  songTitle={item.song.title}
+                  fallbackContent={item.sheet_content}
+                />
+              ) : (
+                <>
+                  {hasNotes ? (
+                    <View style={styles.notesPanel}>
+                      <Text style={styles.notesTitle}>Заметки</Text>
+                      {lineComments.map((r) => (
+                        <Text key={`ln-${r.line}`} style={styles.notesLine}>
+                          Стр. {r.line + 1}: {r.text}
+                        </Text>
+                      ))}
+                      {blocks.map((b, i) => (
+                        <Text key={`bl-${i}`} style={styles.notesLine}>
+                          Стр. {b.from + 1}–{b.to + 1}: {b.text}
+                        </Text>
+                      ))}
+                    </View>
+                  ) : null}
+                  <Text style={styles.lyrics} selectable>
+                    {body || 'Текст не добавлен'}
+                  </Text>
+                </>
+              )}
             </ScrollView>
           );
         }}
@@ -224,6 +284,28 @@ function createStyles(colors: ThemeColors) {
       paddingHorizontal: 20,
       paddingBottom: 40,
       paddingTop: 8,
+    },
+    notesPanel: {
+      marginBottom: 16,
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: 'rgba(125,54,64,0.2)',
+      gap: 6,
+    },
+    notesTitle: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.primary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+      marginBottom: 2,
+    },
+    notesLine: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: colors.textSecondary,
     },
     lyrics: {
       fontSize: 17,

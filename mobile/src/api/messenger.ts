@@ -69,8 +69,24 @@ export interface MessageWithSender {
   reactions: { emoji: string; count: number; reacted_by_me: boolean }[];
   poll_tallies?: number[];
   poll_my_options?: number[];
+  is_pinned?: boolean;
+  forwarded_from?: unknown;
   status?: 'sending' | 'sent' | 'delivered' | 'error';
 }
+
+export type UploadedMessengerFile = {
+  url: string;
+  name: string;
+  objectPath?: string;
+  mimeType: string;
+  size: number;
+};
+
+export type LocalMessengerAsset = {
+  uri: string;
+  name: string;
+  type: string;
+};
 
 export interface SearchMember {
   id: number;
@@ -127,12 +143,76 @@ export async function sendMessage(
   content: string,
   clientMsgId?: string,
   replyToMessageId?: string | null,
+  options?: {
+    payloadType?: MessagePayloadType;
+    payload?: Record<string, unknown>;
+  },
 ): Promise<MessageWithSender> {
   const { data } = await apiClient.post<MessageWithSender>(
     `${BASE}/conversations/${encodeURIComponent(conversationId)}/messages`,
-    { content, clientMsgId, replyToMessageId: replyToMessageId ?? null, payloadType: 'text' },
+    {
+      content,
+      clientMsgId,
+      replyToMessageId: replyToMessageId ?? null,
+      payloadType: options?.payloadType ?? 'text',
+      payload: options?.payload ?? undefined,
+    },
   );
   return data;
+}
+
+export async function sendPollMessage(
+  conversationId: string,
+  input: {
+    question: string;
+    options: string[];
+    allowsMultiple?: boolean;
+    anonymous?: boolean;
+    clientMsgId?: string;
+  },
+): Promise<MessageWithSender> {
+  return sendMessage(conversationId, input.question.trim(), input.clientMsgId, null, {
+    payloadType: 'poll',
+    payload: {
+      options: input.options.map((text) => text.trim()).filter(Boolean),
+      allows_multiple: Boolean(input.allowsMultiple),
+      anonymous: Boolean(input.anonymous),
+    },
+  });
+}
+
+export async function votePoll(
+  messageId: string,
+  optionIndexes: number[],
+): Promise<{ tallies: number[]; my_options: number[] }> {
+  const { data } = await apiClient.post<{ tallies: number[]; my_options: number[] }>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/poll-vote`,
+    { optionIndexes },
+  );
+  return data;
+}
+
+export async function fetchPinnedMessages(
+  conversationId: string,
+  limit = 15,
+): Promise<MessageWithSender[]> {
+  const { data } = await apiClient.get<MessageWithSender[]>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/pinned-messages`,
+    { params: { limit } },
+  );
+  return data ?? [];
+}
+
+export async function pinChatMessage(conversationId: string, messageId: string): Promise<void> {
+  await apiClient.post(`${BASE}/conversations/${encodeURIComponent(conversationId)}/pins`, {
+    messageId,
+  });
+}
+
+export async function unpinChatMessage(conversationId: string, messageId: string): Promise<void> {
+  await apiClient.delete(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/pins/${encodeURIComponent(messageId)}`,
+  );
 }
 
 export async function markConversationRead(conversationId: string, messageId: string): Promise<void> {
@@ -154,6 +234,21 @@ export async function createPersonalChat(otherMemberId: number): Promise<{
     conversationId: string;
     conversation: ConversationListItem | null;
   }>(`${BASE}/conversations/personal`, { otherMemberId });
+  return data;
+}
+
+export async function createGroupChat(
+  title: string,
+  type: 'group' | 'channel',
+  memberIds: number[],
+): Promise<{
+  conversationId: string;
+  conversation: ConversationListItem | null;
+}> {
+  const { data } = await apiClient.post<{
+    conversationId: string;
+    conversation: ConversationListItem | null;
+  }>(`${BASE}/conversations/group`, { title, type, memberIds });
   return data;
 }
 
@@ -187,4 +282,332 @@ export async function removeReaction(messageId: string, emoji: string): Promise<
   await apiClient.delete(
     `${BASE}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`,
   );
+}
+
+export async function uploadMessengerFile(
+  asset: LocalMessengerAsset,
+  opts?: { conversationId?: string },
+): Promise<UploadedMessengerFile> {
+  const form = new FormData();
+  form.append('file', {
+    uri: asset.uri,
+    name: asset.name,
+    type: asset.type,
+  } as unknown as Blob);
+  if (asset.name) form.append('originalFileName', asset.name);
+  const conv = opts?.conversationId?.trim();
+  if (conv) form.append('conversationId', conv);
+
+  const { data } = await apiClient.post<UploadedMessengerFile>(`${BASE}/upload`, form, {
+    timeout: 180_000,
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export async function sendImageMessage(
+  conversationId: string,
+  input: {
+    caption?: string;
+    uploaded: UploadedMessengerFile | UploadedMessengerFile[];
+    clientMsgId?: string;
+    replyToMessageId?: string | null;
+  },
+): Promise<MessageWithSender> {
+  const list = Array.isArray(input.uploaded) ? input.uploaded : [input.uploaded];
+  const first = list[0];
+  if (!first?.url) {
+    throw new Error('Нет загруженного изображения');
+  }
+  return sendMessage(
+    conversationId,
+    (input.caption ?? '').trim(),
+    input.clientMsgId,
+    input.replyToMessageId ?? null,
+    {
+      payloadType: 'image',
+      payload: {
+        url: first.url,
+        name: first.name ?? '',
+        objectPath: first.objectPath,
+        mimeType: first.mimeType ?? '',
+        size: first.size ?? 0,
+        images: list.map((u) => ({
+          url: u.url,
+          name: u.name,
+          objectPath: u.objectPath,
+          mimeType: u.mimeType,
+          size: u.size,
+        })),
+      },
+    },
+  );
+}
+
+export async function sendAudioMessage(
+  conversationId: string,
+  input: {
+    uploaded: UploadedMessengerFile;
+    durationSec?: number;
+    clientMsgId?: string;
+    replyToMessageId?: string | null;
+  },
+): Promise<MessageWithSender> {
+  const u = input.uploaded;
+  if (!u?.url) {
+    throw new Error('Нет загруженного аудио');
+  }
+  return sendMessage(conversationId, '', input.clientMsgId, input.replyToMessageId ?? null, {
+    payloadType: 'audio',
+    payload: {
+      url: u.url,
+      name: u.name ?? 'voice.m4a',
+      objectPath: u.objectPath,
+      mimeType: u.mimeType || 'audio/mp4',
+      size: u.size ?? 0,
+      durationSec: input.durationSec ?? null,
+      kind: 'voice',
+    },
+  });
+}
+
+export async function sendFileMessage(
+  conversationId: string,
+  input: {
+    caption?: string;
+    uploaded: UploadedMessengerFile;
+    clientName?: string;
+    clientMsgId?: string;
+    replyToMessageId?: string | null;
+  },
+): Promise<MessageWithSender> {
+  const u = input.uploaded;
+  if (!u?.url) {
+    throw new Error('Нет загруженного файла');
+  }
+  const name = (input.clientName || u.name || 'file').trim() || 'file';
+  return sendMessage(
+    conversationId,
+    (input.caption ?? '').trim(),
+    input.clientMsgId,
+    input.replyToMessageId ?? null,
+    {
+      payloadType: 'file',
+      payload: {
+        url: u.url,
+        name,
+        objectPath: u.objectPath,
+        mimeType: u.mimeType || 'application/octet-stream',
+        size: u.size ?? 0,
+      },
+    },
+  );
+}
+
+export async function forwardMessage(
+  messageId: string,
+  conversationIds: string[],
+): Promise<{
+  ok: boolean;
+  forwarded: Array<{ conversationId: string; message: MessageWithSender }>;
+}> {
+  const { data } = await apiClient.post<{
+    ok: boolean;
+    forwarded: Array<{ conversationId: string; message: MessageWithSender }>;
+  }>(`${BASE}/messages/${encodeURIComponent(messageId)}/forward`, { conversationIds });
+  return data;
+}
+
+export type ParticipantRole = 'owner' | 'admin' | 'member';
+
+export type EffectivePermissions = Record<string, boolean>;
+
+export type ConversationMeta = {
+  id: string;
+  type: ConversationType;
+  title: string | null;
+  avatar_url: string | null;
+  description?: string | null;
+  updated_at: string;
+  default_permissions?: Record<string, boolean>;
+  settings?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  my_role?: ParticipantRole;
+  my_effective_permissions?: EffectivePermissions;
+  my_last_read_message_id?: string | null;
+};
+
+export type ConversationMember = {
+  member_id: number;
+  role: ParticipantRole;
+  joined_at: string;
+  muted_until: string | null;
+  permissions: Record<string, boolean>;
+  name: string;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url?: string | null;
+  is_online?: boolean;
+  last_seen_at?: string | null;
+};
+
+export type PrivateChatProfile = {
+  id: number;
+  name: string;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+  phone_number: string | null;
+  app_role: string | null;
+  ministry_role: string | null;
+  ministry_direction: string | null;
+  birth_date: string | null;
+  last_seen_at: string | null;
+};
+
+export type PatchMyConversationUiBody = {
+  muted?: boolean;
+  uiPinned?: boolean;
+  uiFolder?: 'personal' | 'ministry' | null;
+};
+
+export type ChatPermissionKey =
+  | 'can_send_messages'
+  | 'can_send_media'
+  | 'can_add_users'
+  | 'can_pin_messages'
+  | 'can_manage_chat';
+
+export const DEFAULT_CHAT_PERMISSIONS: Record<ChatPermissionKey, boolean> = {
+  can_send_messages: true,
+  can_send_media: true,
+  can_add_users: false,
+  can_pin_messages: false,
+  can_manage_chat: false,
+};
+
+export function mergeDefaultChatPermissions(
+  raw: Record<string, boolean> | undefined | null,
+): Record<ChatPermissionKey, boolean> {
+  return {
+    ...DEFAULT_CHAT_PERMISSIONS,
+    ...(raw ?? {}),
+  };
+}
+
+export async function fetchConversationMeta(conversationId: string): Promise<ConversationMeta> {
+  const { data } = await apiClient.get<ConversationMeta>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/meta`,
+  );
+  return data;
+}
+
+export async function fetchConversationMembers(
+  conversationId: string,
+): Promise<ConversationMember[]> {
+  const { data } = await apiClient.get<ConversationMember[]>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/members`,
+  );
+  return data ?? [];
+}
+
+export async function fetchPrivateChatProfile(
+  conversationId: string,
+): Promise<PrivateChatProfile> {
+  const { data } = await apiClient.get<PrivateChatProfile>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/private-profile`,
+  );
+  return data;
+}
+
+export async function updateConversation(
+  conversationId: string,
+  updates: { title?: string; avatar_url?: string | null; description?: string | null },
+): Promise<void> {
+  await apiClient.patch(`${BASE}/conversations/${encodeURIComponent(conversationId)}`, updates);
+}
+
+export async function patchConversationPermissions(
+  conversationId: string,
+  patch: {
+    default_permissions?: Record<string, boolean>;
+    settings?: Record<string, unknown>;
+  },
+): Promise<void> {
+  await apiClient.patch(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/permissions`,
+    patch,
+  );
+}
+
+export async function addParticipant(
+  conversationId: string,
+  memberId: number,
+): Promise<{ ok: boolean; alreadyMember?: boolean }> {
+  const { data } = await apiClient.post<{ ok: boolean; alreadyMember?: boolean }>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/participants`,
+    { memberId },
+  );
+  return data ?? { ok: true };
+}
+
+export async function patchConversationMember(
+  conversationId: string,
+  memberId: number,
+  patch: {
+    role?: ParticipantRole;
+    permissions?: Record<string, boolean>;
+    muted_until?: string | null;
+  },
+): Promise<void> {
+  await apiClient.patch(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/members/${memberId}`,
+    patch,
+  );
+}
+
+export async function patchMyConversationUi(
+  conversationId: string,
+  body: PatchMyConversationUiBody,
+): Promise<void> {
+  await apiClient.patch(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/my-ui`,
+    body,
+  );
+}
+
+export async function removeParticipant(
+  conversationId: string,
+  memberId: number,
+): Promise<void> {
+  await apiClient.delete(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/participants/${memberId}`,
+  );
+}
+
+export type InviteJoinPreview = {
+  conversationId: string;
+  type: ConversationType;
+  title: string | null;
+  avatar_url: string | null;
+  alreadyMember: boolean;
+};
+
+export type InviteJoinResult = InviteJoinPreview & {
+  ok: true;
+  conversation: ConversationListItem | null;
+};
+
+export async function previewInviteJoin(token: string): Promise<InviteJoinPreview> {
+  const { data } = await apiClient.get<InviteJoinPreview>(
+    `${BASE}/join/${encodeURIComponent(token.trim())}`,
+  );
+  return data;
+}
+
+export async function joinByInviteToken(token: string): Promise<InviteJoinResult> {
+  const { data } = await apiClient.post<InviteJoinResult>(`${BASE}/join`, {
+    token: token.trim(),
+  });
+  return data;
 }

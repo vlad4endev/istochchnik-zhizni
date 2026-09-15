@@ -4,11 +4,12 @@
 
 ### Overview
 
-Church management platform ("Источник жизни" / Source of Life). Monorepo with two packages:
+Church management platform ("Источник жизни" / Source of Life). Monorepo packages:
 - **Backend API** (Express/TypeScript) in `/src/` — entry point `src/main.ts`, runs on port 40978
 - **Frontend SPA** (React/Vite) in `/web-react/` — separate `package.json`, dev server on port 5173
+- **React Native (Expo)** in `/mobile/` — Android client; own `package.json` / lockfile. Not part of root lint/build/Docker.
 
-Package manager: **npm** (lockfiles: `package-lock.json` in root and `web-react/`).
+Package manager: **npm** (lockfiles: `package-lock.json` in root, `web-react/`, and `mobile/`).
 
 ### Prerequisites
 
@@ -35,6 +36,8 @@ Copy `.env.local.example` to `.env` before starting. The `.env.local.example` ha
 | Backend build | `npm run build` | Outputs to `dist/` |
 | Frontend tests | `cd web-react && npx vitest run` | 1 pre-existing test failure in `chordLineRender.test.tsx` |
 | Frontend build | `cd web-react && npm run build` | Vite build to `web-react/dist/` |
+| Expo mobile typecheck | `npm run expo:typecheck` | Isolated; does not affect web/API |
+| Expo Android APK | `npm run expo:build:apk` | EAS preview profile in `mobile/` |
 
 ### Gotchas
 
@@ -42,3 +45,4 @@ Copy `.env.local.example` to `.env` before starting. The `.env.local.example` ha
 - The `npm run db:up` command expects a `db` service in the compose stack, but the main `docker-compose.yml` doesn't define one (it's in `docker-compose.prod.yml`). For local dev, run PostgreSQL as a standalone Docker container instead.
 - Vite dev server on port 5173 proxies `/api`, `/uploads`, and `/health` to the API on port 40978 — no need for CORS config in dev.
 - Redis, Supabase Storage, SMS.ru, Telegram, and Firebase are all optional for core functionality.
+- Native Android RN work belongs in `mobile/` (Expo). Do not import `web-react` into Metro. Capacitor (`web-react`) and bare `android-app/` are separate tracks — prefer extending `mobile/` for full feature parity.

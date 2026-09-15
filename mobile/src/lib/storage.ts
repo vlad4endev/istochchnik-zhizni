@@ -95,3 +95,29 @@ export function readAuthProfile(): {
     memberId: Number.isFinite(memberId) ? memberId : null,
   };
 }
+
+const LS_DEVICE_ID = 'fcm_push_device_id';
+
+export function getOrCreateDeviceId(): string {
+  const existing = storage.getString(LS_DEVICE_ID)?.trim();
+  if (existing) return existing;
+  const id = `rn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  storage.set(LS_DEVICE_ID, id);
+  return id;
+}
+
+const LS_PENDING_INVITE = 'pending_invite_token';
+
+export function setPendingInviteToken(token: string): void {
+  const t = token.trim();
+  if (t.length < 4) return;
+  storage.set(LS_PENDING_INVITE, t);
+}
+
+/** Считывает и очищает отложенный invite-токен (после логина). */
+export function takePendingInviteToken(): string | null {
+  const t = storage.getString(LS_PENDING_INVITE)?.trim() ?? '';
+  if (!t) return null;
+  storage.remove(LS_PENDING_INVITE);
+  return t;
+}

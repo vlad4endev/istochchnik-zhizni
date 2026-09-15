@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase / FCM (не коммитить реальные ключи)
+google-services.json
+GoogleService-Info.plist
