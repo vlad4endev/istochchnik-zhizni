@@ -25,6 +25,7 @@ import { requestCallNotificationsFromUserGesture } from '../../calls/incomingCal
 import { sendRealtimeJson } from '../../../lib/realtimeWsClient';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { useAuthStore } from '../../auth/authStore';
+import { randomUuid } from '../../../lib/randomId';
 import {
   clearChatScrollAnchor,
   readChatScrollAnchor,
@@ -955,7 +956,7 @@ export function ChatWindow({
         return;
       }
       requestCallNotificationsFromUserGesture();
-      const callId = crypto.randomUUID();
+      const callId = randomUuid();
       const sent = sendRealtimeJson({
         type: 'call:initiate',
         callId,

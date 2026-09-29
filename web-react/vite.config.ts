@@ -385,7 +385,8 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       assetsDir: 'assets',
-      sourcemap: true,
+      /* hidden: карты собираются, но без ссылки sourceMappingURL — DevTools посетителей не подтягивает исходники. */
+      sourcemap: 'hidden',
       rollupOptions: {
         output: {
           manualChunks: {

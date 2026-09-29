@@ -32,7 +32,8 @@ import { useAuthSessionReady } from './hooks/useAuthSessionReady';
 import { useFCM } from './hooks/useFCM';
 import { useBackgroundDataSync } from './hooks/useBackgroundDataSync';
 import { ImpersonationBanner } from './features/admin/components/ImpersonationBanner';
-import { initAuthCrossTabLocalStorageSync } from './features/auth/authStore';
+import { initAuthCrossTabLocalStorageSync, useAuthStore } from './features/auth/authStore';
+import { installSessionCacheCleanup } from './lib/sessionCacheCleanup';
 import { useViewportHeight } from './hooks/useViewportHeight';
 import { useAppUpdate } from './hooks/useAppUpdate';
 import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
@@ -314,6 +315,7 @@ const queryClient = new QueryClient({
 
 if (typeof window !== 'undefined') {
   initAuthCrossTabLocalStorageSync();
+  installSessionCacheCleanup(useAuthStore, queryClient);
   const pwaStore = usePwaStore.getState();
 
   window.addEventListener('beforeinstallprompt', (event) => {
