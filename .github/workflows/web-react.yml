@@ -6,15 +6,11 @@ on:
     branches: [main, master]
     paths:
       - 'web-react/**'
-      - 'vercel.json'
-      - 'scripts/vercel-build.sh'
       - '.github/workflows/web-react.yml'
   pull_request:
     branches: [main, master]
     paths:
       - 'web-react/**'
-      - 'vercel.json'
-      - 'scripts/vercel-build.sh'
       - '.github/workflows/web-react.yml'
 
 jobs:

@@ -23,8 +23,6 @@
 - `npm run dev:start` — то же в фоне (лог `.run/dev-bg.log`).
 - `npm run go:start` — API + Vite + при необходимости `db:up` (см. `scripts/project.sh`).
 
-Для деплоя фронта на Vercel задайте **`VITE_API_BASE_URL`** или **`API_BASE_URL`** (см. ниже).
-
 Если API не стартует — проверьте **`DATABASE_URL`** в **`.env`** и доступность базы.
 
 ### Готовая статика без сборки Node в Docker на сервере
@@ -157,7 +155,7 @@ npm run server:update
    ```
    **Последующие обновления** с GitHub: `npm run server:update` (или `USE_PROD_OVERLAY=1 npm run server:update`).
    Локально / без ограничения API на loopback: `npm run prod:start` или `docker compose up -d --build`. Остановка этого режима: `npm run prod:stop`. Остановка после `prod:deploy`: `npm run prod:deploy:down`.
-   **Только Postgres + API** (SPA на Vercel/Netlify): `cp .env.production .env`, задайте `POSTGRES_PASSWORD` и `DATABASE_URL` с хостом `db`, затем `npm run prod:vps:up` (`docker-compose.prod.yml`). Остановка: `npm run prod:vps:down`.
+   **Только Postgres + API** (SPA на отдельном хостинге): `cp .env.production .env`, задайте `POSTGRES_PASSWORD` и `DATABASE_URL` с хостом `db`, затем `npm run prod:vps:up` (`docker-compose.prod.yml`). Остановка: `npm run prod:vps:down`.
 4. **Проверка:** `http://<IP>:<WEB_PORT>/` — приложение; `http://<IP>:<WEB_PORT>/health` — health.
 5. **HTTPS:** поставьте на хосте Caddy / Traefik / nginx с TLS и прокси на `127.0.0.1:<WEB_PORT>` (не публикуйте API напрямую в интернет).
 6. **Переменная `PORT` в `.env`** — это порт **на хосте**, который пробрасывается **в** контейнер на **40978**. Внутри контейнера Node всегда слушает **40978** (так устроен прокси в `docker/nginx-web.unified.conf`).
@@ -289,30 +287,7 @@ VITE_API_BASE_URL=https://your-api-domain.com npm run build
 
 Из корня: передайте переменную в окружении перед `npm run web:build`.
 
-### Деплой фронтенда на Vercel
-
-Публикуется статика **`web-react/dist`**. **Node API** должен быть развёрнут отдельно (Docker, Railway, Render, VPS и т.д.) и доступен по HTTPS.
-
-**Важно:** точка входа API в репозитории — `src/main.ts`, не `src/index.ts`. Vercel автоматически подключает Express, если найден `src/index.ts`, и тогда вместо статики отдаётся serverless API.
-
-1. Подключите репозиторий к [Vercel](https://vercel.com).
-2. В **Settings → Environment Variables** добавьте **`API_BASE_URL`** или сразу **`VITE_API_BASE_URL`** (полный URL API без слэша в конце). Отметьте **Production** и **Preview**.
-3. Сборка: `vercel.json` → `npm ci --prefix web-react`, затем `scripts/vercel-build.sh` (`npm run build` в `web-react`).
-4. После деплоя проверьте сайт; в прод-сборке не должно остаться обращений к `localhost` вместо реального API.
-
-**CORS:** API использует открытый `cors()` — запросы с домена Vercel обычно проходят. Если ограничите CORS на бэкенде, добавьте origin вида `https://<проект>.vercel.app`.
-
-**Чеклист:**
-
-1. В браузере приложение — домен **Vercel**; ответ `{"message":"Server is running"}` на URL API — это только бэкенд.
-2. Локальная проверка сборки как на Vercel:
-   ```bash
-   export API_BASE_URL=https://ваш-реальный-api
-   bash scripts/vercel-build.sh
-   ```
-3. **HTTPS:** со страницы Vercel (https) браузер блокирует запросы к **http**-API без прокси/TLS.
-
-4. GitHub Actions (`.github/workflows/web-react.yml`) проверяет сборку `web-react` на `main`.
+GitHub Actions (`.github/workflows/web-react.yml`) проверяет сборку `web-react` на `main`.
 
 ## Локальный запуск всех сервисов в фоне
 
