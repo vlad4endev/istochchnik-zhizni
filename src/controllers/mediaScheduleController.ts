@@ -298,7 +298,6 @@ export async function getRolesHandler(req: Request, res: Response): Promise<void
 }
 
 export async function createRoleHandler(req: Request, res: Response): Promise<void> {
-  const r = req as AuthReq;
   if (!(await ensureAuth(req, res))) return;
   if (!isAdminSession(req)) {
     res.status(403).json({ error: 'Недостаточно прав для управления ролями' });
@@ -321,7 +320,6 @@ export async function createRoleHandler(req: Request, res: Response): Promise<vo
 }
 
 export async function updateRoleHandler(req: Request, res: Response): Promise<void> {
-  const r = req as AuthReq;
   if (!(await ensureAuth(req, res))) return;
   if (!isAdminSession(req)) {
     res.status(403).json({ error: 'Недостаточно прав для управления ролями' });
@@ -349,7 +347,6 @@ export async function updateRoleHandler(req: Request, res: Response): Promise<vo
 }
 
 export async function deleteRoleHandler(req: Request, res: Response): Promise<void> {
-  const r = req as AuthReq;
   if (!(await ensureAuth(req, res))) return;
   if (!isAdminSession(req)) {
     res.status(403).json({ error: 'Недостаточно прав для управления ролями' });
@@ -369,7 +366,6 @@ export async function deleteRoleHandler(req: Request, res: Response): Promise<vo
 }
 
 export async function reorderRolesHandler(req: Request, res: Response): Promise<void> {
-  const r = req as AuthReq;
   if (!(await ensureAuth(req, res))) return;
   if (!isAdminSession(req)) {
     res.status(403).json({ error: 'Недостаточно прав для управления ролями' });

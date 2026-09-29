@@ -1,4 +1,4 @@
-import { normalizeMinistryToken, parseMinistryRoles, memberHasMinistryRole, hasMediaMinistryDirection, hasMusicMinistryDirection, isMusicLeader } from './ministryRoleMatch';
+import { normalizeMinistryToken, memberHasMinistryRole, hasMediaMinistryDirection, hasMusicMinistryDirection, isMusicLeader } from './ministryRoleMatch';
 
 export type ScheduleMinistryKey = 'media' | 'music' | 'sunday';
 

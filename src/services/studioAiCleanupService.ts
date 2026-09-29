@@ -70,7 +70,7 @@ function stripNonLyricLinesServer(text: string): string {
     /https?:\/\//i,
     /^www\./i,
     /holychords|kgmusic|worshiptogether/i,
-    /^[🎵♪🎶]/,
+    /^[🎵♪🎶]/u,
   ];
   return normalizeNewlines(text)
     .split('\n')

@@ -78,8 +78,6 @@ export async function resolveAuthSession(
       const impersonation = await resolveImpersonationPrincipal(
         token,
         resolution.principal.userId,
-        resolution.principal.role,
-        resolution.principal.roles,
       );
       if (impersonation?.isImpersonating) {
         authReq.authUserId = impersonation.userId;

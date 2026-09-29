@@ -30,7 +30,8 @@ Copy `.env.local.example` to `.env` before starting. The `.env.local.example` ha
 
 | Check | Command | Notes |
 |-------|---------|-------|
-| Backend lint | `npm run lint` | 1 pre-existing unused-var warning in `telegramService.ts` |
+| Backend lint | `npm run lint` | Clean |
+| Backend tests | `npm test` | Runs all `src/**/*.test.ts` via ts-node |
 | Backend type-check | `npx tsc --noEmit` | Clean |
 | Backend build | `npm run build` | Outputs to `dist/` |
 | Frontend tests | `cd web-react && npx vitest run` | 1 pre-existing test failure in `chordLineRender.test.tsx` |

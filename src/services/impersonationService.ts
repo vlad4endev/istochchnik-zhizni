@@ -241,8 +241,6 @@ export async function startImpersonation(input: {
 export async function resolveImpersonationPrincipal(
   accessToken: string,
   sessionMemberId: number,
-  sessionRole: AppRole,
-  sessionRoles: AppRole[],
 ): Promise<{
   userId: number;
   role: AppRole;

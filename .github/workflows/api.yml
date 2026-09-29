@@ -1,0 +1,24 @@
+# Проверка бэкенда (src/): линт, типы, сборка, тесты.
+name: api
+
+on:
+  push:
+    branches: [main, master]
+    paths: ['src/**', 'scripts/run-tests.mjs', 'package.json', 'package-lock.json', 'tsconfig.json', '.eslintrc.json', '.github/workflows/api.yml']
+  pull_request:
+    branches: [main, master]
+    paths: ['src/**', 'scripts/run-tests.mjs', 'package.json', 'package-lock.json', 'tsconfig.json', '.eslintrc.json', '.github/workflows/api.yml']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm test
