@@ -633,7 +633,7 @@ export function EditableServicePlanPage() {
         : members;
 
   return (
-    <div className="share-plan-scroll-root min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--viewport-height,100dvh)] max-lg:[scroll-padding-bottom:calc(var(--app-bottom-nav-total-height)+5.5rem)]">
+    <div className="share-plan-scroll-root min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--app-content-height,100dvh)] max-lg:[scroll-padding-bottom:calc(var(--app-bottom-nav-total-height)+5.5rem)]">
       <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 sm:space-y-6 sm:px-4 sm:py-8">
         <SharePlanBackBar />
         <header className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">

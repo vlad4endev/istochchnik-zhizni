@@ -214,7 +214,7 @@ function MemberAppRoleBadges({
           <button
             key={role}
             type="button"
-            className={className}
+            className={`${className} tap-compact`}
             title={`Показать всех с ролью «${appRoleLabel(role)}»`}
             onClick={(e) => {
               e.stopPropagation();

@@ -19,8 +19,10 @@
     font-size: max(16px, 1rem);
   }
 
-  /* Не трогаем main.tg-main — иначе чаты «сужаются» и ломается вёрстка поверх таб-бара. */
-  main:not(.tg-main),
+  /* Не трогаем main.tg-main — иначе чаты «сужаются» и ломается вёрстка поверх таб-бара.
+     main.studio-main тоже исключён: у него собственные px-4/md:px-8, а обнуление прижимало весь
+     контент студии (текст, кнопки, поля) вплотную к краям экрана. */
+  main:not(.tg-main):not(.studio-main),
   [class*='main-content'],
   .page-wrapper,
   .app-main-content,
@@ -473,8 +475,25 @@
     width: 100% !important;
     min-height: 44px !important;
     font-size: 16px !important;
-    padding: 10px 12px !important;
     box-sizing: border-box !important;
+  }
+  /*
+   * Отступы полей — значение по умолчанию, а не !important. Специфичность (0,0,1), как у
+   * `input { padding: 0 }` из Tailwind preflight (мы грузимся позже и побеждаем его), но ниже любого
+   * класса: утилиты pl-9 (иконка поиска), pr-9 (кнопка «очистить»), px-* снова работают. Раньше
+   * `padding: 10px 12px !important` затирал их, и иконка внутри поля налезала на текст.
+   * Исключения типов вынесены в :where(), чтобы не поднять специфичность до класса.
+   */
+  input:where(
+      :not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not(
+          [type='file']
+        ):not([type='hidden']):not([type='button']):not([type='submit']):not([type='reset']):not(
+          [type='image']
+        )
+    ),
+  textarea,
+  select {
+    padding: 10px 12px;
   }
   textarea {
     min-height: 100px !important;
@@ -500,14 +519,30 @@
     font-size: 16px !important;
   }
   /* Tap-target ≥44px, но не раздуваем узкие icon-кнопки с явным w-*/h-*. */
-  button:not([class*='w-']):not([class*='h-']),
+  button:not([class*='w-']):not([class*='h-']):not(.tap-compact),
   .btn {
     min-height: 44px !important;
     min-width: 44px !important;
   }
-  button[class*='w-'],
-  button[class*='h-'] {
+  button[class*='w-']:not(.tap-compact),
+  button[class*='h-']:not(.tap-compact) {
     min-height: 44px !important;
+  }
+  /* Раздутая до 44px flex-кнопка без items-center прижимала текст к верху. Утилиты items-* сильнее. */
+  :where(button.inline-flex, button.flex, a.inline-flex) {
+    align-items: center;
+  }
+  /*
+   * Компактные плашки-кнопки (бейджи ролей, мелкие чипы) — исключение из 44px: иначе они превращаются
+   * в высокие «капсулы» посреди строки текста. Нажимаемая зона расширяется псевдоэлементом.
+   */
+  button.tap-compact {
+    position: relative;
+  }
+  button.tap-compact::after {
+    content: '';
+    position: absolute;
+    inset: -8px -4px;
   }
   .card,
   [class*='section-card'],

@@ -77,6 +77,12 @@ textarea {
   /* До первого кадра JS — fallback. На iOS idle nativeShellViewport ставит 100lvh или 100vh, не px. */
   --viewport-height: 100dvh;
   --vh: 100dvh;
+  /*
+   * Высота области под контент. #root — flex-колонка с overflow:hidden и распоркой #root::before на
+   * safe-area-inset-top, поэтому потомок высотой во весь --viewport-height вылезал за низ на величину
+   * выреза (59px на iPhone с островом, ~24px на Android) и обрезался: низ страницы уходил под таббар.
+   */
+  --app-content-height: calc(var(--viewport-height, 100dvh) - env(safe-area-inset-top, 0px));
   --app-keyboard-inset: 0px;
 
   /* === Студия: навигация/сайдбар === */
@@ -979,12 +985,26 @@ html.dark [class*='text-amber-800'] {
   color: var(--text-secondary) !important;
 }
 
-/* Мобильная типографика в тёмной теме: длинные слова/заголовки не вылезают за край */
+/*
+ * Мобильная типографика во ВСЕХ темах: длинные слова, e-mail, URL и заголовки переносятся, а не
+ * вылезают за край карточки. Раньше правило стояло только под html.dark, и в светлой теме любая
+ * длинная строка без пробелов уходила за поля. `anywhere` (в отличие от break-word) учитывается
+ * при расчёте min-content, поэтому flex/grid-дети без min-w-0 тоже сжимаются, а не распирают ряд.
+ */
 @media (max-width: 767px) {
-  html.dark #root,
-  html.dark main.app-main-content {
+  #root,
+  main.app-main-content {
     overflow-wrap: anywhere;
-    word-break: break-word;
+  }
+
+  /* Не ломаем то, что должно скроллиться или держать колонки: код, таблицы, аккорды, поля ввода. */
+  main.app-main-content pre,
+  main.app-main-content code,
+  main.app-main-content table,
+  main.app-main-content .chord-line,
+  main.app-main-content input,
+  main.app-main-content textarea {
+    overflow-wrap: normal;
   }
 }
 
@@ -1017,7 +1037,10 @@ nav.app-bottom-nav .app-bottom-nav__row {
   display: grid;
   grid-template-columns: repeat(var(--app-bottom-nav-cols, 5), minmax(0, 1fr));
   align-items: stretch;
-  width: 100%;
+  /* width:auto, не 100%: при content-box боковой padding иначе выталкивает ряд за край экрана
+     (+8 px), и крайняя вкладка «Ещё» обрезается. */
+  width: auto;
+  max-width: 100%;
   min-width: 0;
   /* content-box: pt ряда суммируется с min-height → совпадает с --app-bottom-nav-main-gutter */
   box-sizing: content-box;
@@ -1683,8 +1706,12 @@ nav[aria-label='Основная навигация'] svg {
 }
 
 @media (max-width: 1023px) {
-  .dashboard-grid,
-  [class*='grid-cols-2'] {
+  /*
+   * Раньше здесь был и `[class*='grid-cols-2']`: подстрока ловила `sm:grid-cols-2`/`md:grid-cols-2` и
+   * принудительно сводила их в одну колонку до 1023px — планшеты и крупные телефоны в ландшафте теряли
+   * задуманные Tailwind две колонки. Узкие телефоны (<640) уже обрабатывает mobile.css.
+   */
+  .dashboard-grid {
     grid-template-columns: 1fr !important;
   }
 
