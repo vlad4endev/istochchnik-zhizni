@@ -44,8 +44,8 @@ type SermonPlaybackContextValue = {
 const SermonPlaybackContext = createContext<SermonPlaybackContextValue | null>(null);
 
 export function SermonPlaybackProvider({ children }: { children: ReactNode }) {
-  const token = useAuthStore((s) => s.token);
-  const storageKey = useMemo(() => sermonStorageKey(token), [token]);
+  const memberId = useAuthStore((s) => s.memberId);
+  const storageKey = useMemo(() => sermonStorageKey(memberId), [memberId]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [session, setSession] = useState<SermonPlaybackSession | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);

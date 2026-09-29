@@ -10,9 +10,9 @@ export type SermonAudioState = {
   listened: Record<string, true>;
 };
 
-export function sermonStorageKey(token: string | null | undefined): string {
-  const suffix = (token ?? 'anon').slice(-12);
-  return `sermons_audio_v1:${suffix}`;
+/** Ключ по id участника: токен сессии ненадёжен (меняется при refresh, в cookie-режиме общий для всех). */
+export function sermonStorageKey(memberId: number | null | undefined): string {
+  return `sermons_audio_v2:${typeof memberId === 'number' ? `u${memberId}` : 'anon'}`;
 }
 
 export function loadSermonAudioState(storageKey: string): SermonAudioState {
