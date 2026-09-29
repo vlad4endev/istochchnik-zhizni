@@ -125,7 +125,6 @@ export default defineConfig(({ mode }) => {
           theme_color: '#7d3640',
           background_color: '#f4f1ed',
           display: 'standalone',
-          orientation: 'portrait',
           /* Не задаём display_override: на iOS WebKit это часто игнорируется или ведёт себя иначе, чем один display. */
           prefer_related_applications: false,
           start_url: pwaStartUrl,
@@ -162,7 +161,7 @@ export default defineConfig(({ mode }) => {
               src: 'assets/maskable-icon-512x512.png',
               sizes: '512x512',
               type: 'image/png',
-              purpose: 'maskable any',
+              purpose: 'maskable',
             },
           ],
           shortcuts: [
