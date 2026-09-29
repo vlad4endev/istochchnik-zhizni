@@ -5,6 +5,12 @@ import { createJSONStorage, persist, type StateStorage } from 'zustand/middlewar
 import { AUTH_API_PREFIX, resolveAxiosBaseURL } from '../../lib/config';
 import { performAuthRefresh } from '../../lib/authRefresh';
 import { COOKIE_ONLY_SESSION_TOKEN, isCookieOnlySessionToken } from '../../lib/authSessionConstants';
+import {
+  isCookieSessionEligible,
+  isCookieSessionEnabled,
+  probeCookieSession,
+  setCookieSessionEnabled,
+} from '../../lib/cookieSessionMode';
 
 /** Те же ключи, что в Flutter AuthTokenStore — можно читать сессию с того же origin. */
 const LS_TOKEN = 'auth_access_token';
@@ -40,7 +46,11 @@ export interface AuthProfile {
 interface AuthState extends AuthProfile {
   token: string | null;
   /** Установить сессию после login/register и записать в localStorage (через persist). */
-  setSession: (session: { token: string } & AuthProfile) => void;
+  setSession: (
+    session: { token: string } & AuthProfile,
+    /** `freshLogin` — новая аутентификация (логин/регистрация): сбросить cookie-режим и заново проверить. */
+    opts?: { freshLogin?: boolean },
+  ) => void;
   /**
    * Обновить имя и роль из GET /api/auth/me (токен не меняется).
    */
@@ -56,6 +66,11 @@ interface AuthState extends AuthProfile {
   logout: () => Promise<void>;
   /** Если в localStorage нет токена, пробуем GET /api/auth/me с HttpOnly cookie (поддомены). */
   bootstrapSessionFromHttpCookie: () => Promise<void>;
+  /**
+   * Web (обычная вкладка): если cookie-сессия работает без Bearer, заменяет JWT в localStorage
+   * маркером COOKIE_ONLY_SESSION_TOKEN. В нативных оболочках и PWA ничего не делает.
+   */
+  adoptCookieSession: () => Promise<void>;
 }
 
 function normalizeRole(raw: string | undefined): AuthRole {
@@ -169,13 +184,19 @@ export const useAuthStore = create<AuthState>()(
       username: '',
       memberId: null,
 
-      setSession: ({ token, firstName, lastName, role, roles, registrationStatus, username, memberId }) => {
+      setSession: (
+        { token, firstName, lastName, role, roles, registrationStatus, username, memberId },
+        opts,
+      ) => {
+        // Новый вход начинается с Bearer; cookie-режим включится только после проверки (adoptCookieSession).
+        if (opts?.freshLogin) setCookieSessionEnabled(false);
         const normalizedRole = normalizeRole(role);
         const normalizedRoles = Array.isArray(roles) && roles.length > 0
           ? Array.from(new Set(roles.map((r) => normalizeRole(String(r)))))
           : [normalizedRole];
         set({
-          token,
+          // Cookie-режим подтверждён для этого браузера — JWT в localStorage не пишем.
+          token: isCookieSessionEnabled() ? COOKIE_ONLY_SESSION_TOKEN : token,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           role: normalizedRole,
@@ -184,6 +205,7 @@ export const useAuthStore = create<AuthState>()(
           username: (username ?? '').trim(),
           memberId: memberId ?? null,
         });
+        if (opts?.freshLogin) void get().adoptCookieSession();
       },
 
       applyServerProfile: ({
@@ -272,7 +294,7 @@ export const useAuthStore = create<AuthState>()(
             registrationStatus: normalizeRegistrationStatus(user.registration_status),
             username: (user.username ?? '').trim(),
             memberId: typeof user.id === 'number' ? user.id : null,
-          });
+          }, { freshLogin: true });
 
           return { ok: true };
         } catch (e) {
@@ -308,6 +330,32 @@ export const useAuthStore = create<AuthState>()(
         } finally {
           get().clearSession();
         }
+      },
+
+      adoptCookieSession: async () => {
+        if (!isCookieSessionEligible()) return;
+        const auth = get();
+        if (!auth.token || isCookieOnlySessionToken(auth.token)) return;
+        const origin =
+          resolveAxiosBaseURL() ||
+          (typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '');
+        if (!origin) return;
+        const ok = await probeCookieSession(AUTH_API_PREFIX, origin);
+        // За время проверки пользователь мог выйти или войти заново — не трогаем чужую сессию.
+        const now = get();
+        if (!ok || !now.token || isCookieOnlySessionToken(now.token)) return;
+        if (now.memberId !== auth.memberId) return;
+        setCookieSessionEnabled(true);
+        now.setSession({
+          token: COOKIE_ONLY_SESSION_TOKEN,
+          firstName: now.firstName,
+          lastName: now.lastName,
+          role: now.role,
+          roles: now.roles,
+          registrationStatus: now.registrationStatus,
+          username: now.username,
+          memberId: now.memberId,
+        });
       },
 
       bootstrapSessionFromHttpCookie: async () => {
@@ -418,6 +466,8 @@ export const useAuthStore = create<AuthState>()(
             }
           } finally {
             window.clearTimeout(t);
+            // Перевод старых сессий (JWT в localStorage) на cookie-режим; finally срабатывает и при ранних return.
+            void get().adoptCookieSession();
           }
         } catch {
           /* сеть / CORS / abort */

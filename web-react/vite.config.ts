@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { defineConfig, loadEnv, type Plugin } from 'vite';
@@ -21,6 +21,42 @@ function inlineAppSplashCss(): Plugin {
           '<link rel="stylesheet" href="/app-splash.css" />',
           `<style id="app-splash-critical">${css}</style>`,
         );
+      },
+    },
+  };
+}
+
+/**
+ * Карты исходников (`sourcemap: 'hidden'`) не должны попадать в deploy: Dockerfile.web*, rsync в
+ * release/web и Vercel копируют весь `dist/`. После сборки (в том числе после генерации sw.js
+ * плагином PWA) переносим все `*.map` в соседний каталог `dist-sourcemaps/` — для отладки и
+ * загрузки в трекер ошибок они остаются, но в раздачу не попадают.
+ */
+function moveSourcemapsOutOfDist(outDirName: string): Plugin {
+  return {
+    name: 'move-sourcemaps-out-of-dist',
+    apply: 'build',
+    closeBundle: {
+      order: 'post',
+      sequential: true,
+      handler() {
+        const outDir = path.resolve(__dirname, outDirName);
+        if (!existsSync(outDir)) return;
+        const target = path.resolve(__dirname, `${outDirName}-sourcemaps`);
+        rmSync(target, { recursive: true, force: true });
+        const walk = (dir: string): void => {
+          for (const name of readdirSync(dir)) {
+            const full = path.join(dir, name);
+            if (statSync(full).isDirectory()) {
+              walk(full);
+            } else if (name.endsWith('.map')) {
+              const dest = path.join(target, path.relative(outDir, full));
+              mkdirSync(path.dirname(dest), { recursive: true });
+              renameSync(full, dest);
+            }
+          }
+        };
+        walk(outDir);
       },
     },
   };
@@ -106,6 +142,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       inlineAppSplashCss(),
+      moveSourcemapsOutOfDist('dist'),
       VitePWA({
         registerType: 'prompt',
         injectRegister: false,
@@ -385,7 +422,8 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       assetsDir: 'assets',
-      sourcemap: true,
+      /* hidden: карты собираются, но без ссылки sourceMappingURL — DevTools посетителей не подтягивает исходники. */
+      sourcemap: 'hidden',
       rollupOptions: {
         output: {
           manualChunks: {

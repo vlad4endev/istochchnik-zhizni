@@ -2,6 +2,7 @@
 .run/
 node_modules
 dist
+dist-sourcemaps
 .env
 .env.local
 .env.production

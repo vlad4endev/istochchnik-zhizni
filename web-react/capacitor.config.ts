@@ -51,16 +51,13 @@ const config: CapacitorConfig = {
       layoutName: 'launch_screen',
       useDialog: true,
     },
-    StatusBar: {
-      style: 'Dark',
-      backgroundColor: '#7d3640',
-      overlaysWebView: false,
-    },
-    Keyboard: {
-      resize: 'body',
-      style: 'Dark',
-      resizeOnFullScreen: true,
-    },
+    /*
+     * Настройки StatusBar и Keyboard убраны: пакеты @capacitor/status-bar и @capacitor/keyboard
+     * не установлены ни в package.json, ни в нативных проектах, поэтому блоки ничего не делали.
+     * Цвет статус-бара и подъём интерфейса над клавиатурой обеспечивают CSS/JS оболочки
+     * (theme-color, --app-keyboard-inset, safe-area). Если понадобятся плагины — ставить пакеты
+     * и возвращать конфиг вместе, с проверкой на устройствах: resize: 'body' изменит раскладку.
+     */
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },

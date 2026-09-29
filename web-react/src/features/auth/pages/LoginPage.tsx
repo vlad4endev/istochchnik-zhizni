@@ -246,7 +246,7 @@ export function LoginPage() {
         registrationStatus: normalizeRegistrationStatus(user.registration_status),
         username: ((user as { username?: string }).username ?? '').trim(),
         memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
-      });
+      }, { freshLogin: true });
       navigate(postLoginPath, { replace: true });
     } catch (e) {
       if (axios.isAxiosError(e) && (e.response?.status === 401 || e.response?.status === 403)) {
@@ -356,7 +356,7 @@ export function LoginPage() {
           registrationStatus: normalizeRegistrationStatus(user.registration_status),
           username: ((user as { username?: string }).username ?? '').trim(),
           memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
-        });
+        }, { freshLogin: true });
         navigate(postLoginPath, { replace: true });
         return;
       }
@@ -378,7 +378,7 @@ export function LoginPage() {
             ),
             username: ((user as { username?: string }).username ?? '').trim(),
             memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
-          });
+          }, { freshLogin: true });
           navigate(pendingRegistrationLandingPath(), { replace: true });
           return;
         }

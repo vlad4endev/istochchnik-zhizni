@@ -31,3 +31,4 @@ release
 # Тесты и линт (при необходимости раскомментируйте)
 # coverage
 # **/*.test.ts
+web-react/dist-sourcemaps

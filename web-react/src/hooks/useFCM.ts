@@ -7,6 +7,7 @@ import { isCookieOnlySessionToken } from '../lib/authSessionConstants';
 import { resolveAxiosBaseURL } from '../lib/config';
 import { apiClient } from '../lib/apiClient';
 import { emitAppToast } from '../lib/uiFeedback';
+import { randomUuid } from '../lib/randomId';
 
 const DEVICE_ID_KEY = 'fcm_push_device_id';
 const MESSAGES_CHANNEL_ID = 'messages';
@@ -26,13 +27,11 @@ function looksLikeRawApnsToken(token: string): boolean {
 
 function getOrCreateDeviceId(): string {
   if (typeof localStorage === 'undefined') {
-    return typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return randomUuid();
   }
   let id = localStorage.getItem(DEVICE_ID_KEY);
   if (!id?.trim()) {
-    id = crypto.randomUUID();
+    id = randomUuid();
     localStorage.setItem(DEVICE_ID_KEY, id);
   }
   return id;
