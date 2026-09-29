@@ -1348,7 +1348,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   line-height: 1.5;
   letter-spacing: normal;
   position: relative;
-  word-wrap: break-word;
+  overflow-wrap: anywhere;
   z-index: 1;
   max-width: 100%;
   font-variant-numeric: proportional-nums;
@@ -2112,8 +2112,12 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
 .msg-content,
 .tg-messenger .message-bubble .mention-rich-text {
   white-space: pre-wrap;
-  overflow-wrap: break-word;
-  word-wrap: break-word;
+  /*
+   * anywhere, не break-word: break-word не уменьшает min-content, и flex-обёртка пузыря
+   * (min-width:auto) раздувалась до ширины самого длинного слова. Пузырь был 252px, а текст в нём
+   * 988px и обрезался краем области сообщений (длинные ссылки, e-mail, идентификаторы без пробелов).
+   */
+  overflow-wrap: anywhere;
   word-break: normal;
   letter-spacing: normal;
   font-family: var(--tg-font-family);

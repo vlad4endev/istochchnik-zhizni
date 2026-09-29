@@ -47,4 +47,11 @@ describe('mobile layout invariants', () => {
   it('blanket [class*=grid-cols-2] не сводит sm:/md: варианты в одну колонку до 1023px', () => {
     expect(indexCss).not.toMatch(/\[class\*='grid-cols-2'\]/);
   });
+
+  it('текст сообщений мессенджера переносится через overflow-wrap:anywhere, а не break-word', () => {
+    const css = strip(read('src/features/messenger/components/messenger.css'));
+    const block = css.match(/\.msg-content,\s*\.tg-messenger \.message-bubble \.mention-rich-text\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(block).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(block).not.toMatch(/overflow-wrap:\s*break-word/);
+  });
 });
