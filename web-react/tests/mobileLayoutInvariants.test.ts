@@ -98,4 +98,17 @@ describe('mobile layout invariants', () => {
     expect(mobileCss).not.toMatch(/a:hover[^{]*\{[^}]*background:\s*initial/);
     expect(read('tailwind.config.js')).toMatch(/hoverOnlyWhenSupported:\s*true/);
   });
+  it('переключатель расписания: на узких экранах короткие подписи без переноса слов', () => {
+    const tsx = read('src/features/schedules/components/MinistryScheduleSwitcher.tsx');
+    expect(tsx).toMatch(/SCHEDULE_MINISTRY_SHORT_LABELS/);
+    expect(tsx).toMatch(/whitespace-nowrap/);
+    const access = read('src/features/schedules/ministryScheduleAccess.ts');
+    const short = access.match(/SCHEDULE_MINISTRY_SHORT_LABELS[^{]*\{([^}]*)\}/)?.[1] ?? '';
+    for (const m of short.matchAll(/:\s*'([^']+)'/g)) expect(m[1].length).toBeLessThanOrEqual(11);
+  });
+
+  it('программа служения: на мобильном текст блока занимает всю ширину карточки (а не узкую колонку между иконками)', () => {
+    const tsx = read('src/features/servicePlanner/pages/ServicePlannerPage.tsx');
+    expect(tsx).toMatch(/order-3 min-w-0 flex-1 basis-full/);
+  });
 });

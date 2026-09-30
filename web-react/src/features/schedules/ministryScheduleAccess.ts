@@ -16,6 +16,13 @@ export const SCHEDULE_MINISTRY_LABELS: Record<ScheduleMinistryKey, string> = {
   sunday: 'Воскресное служение',
 };
 
+/** Короткие подписи для узких экранов (иначе слова рвутся посреди: «Музыкал/ьное»). */
+export const SCHEDULE_MINISTRY_SHORT_LABELS: Record<ScheduleMinistryKey, string> = {
+  media: 'Медиа',
+  music: 'Музыка',
+  sunday: 'Воскресное',
+};
+
 function normalizeAppRoleToken(role: unknown): string {
   return String(role ?? '').trim().toLowerCase();
 }
