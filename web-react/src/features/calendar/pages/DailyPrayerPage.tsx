@@ -46,7 +46,6 @@ import { PrayerSkeleton } from '@/components/skeletons/PrayerSkeleton';
 import { sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { memberRosterName } from '../../../lib/memberRosterName';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
-import { patchProfile } from '../../profile/api';
 import { useMe } from '@/hooks/useMe';
 import { keys } from '@/lib/queryKeys';
 import { useCoordinatorNoteEditorRequestStore } from '../../dashboard/coordinatorNoteEditorRequestStore';
@@ -188,43 +187,14 @@ function ruUniqueVisitorsWord(n: number): string {
   return 'человек';
 }
 
+/** Нужды в цикле редактирует только координатор (блок плана недели) — здесь только просмотр. */
 function MemberCard({
   member,
-  currentUserId,
-  onPrayerSaved,
   cardIndex = 0,
-  allowEdit = true,
 }: {
   member: Member;
-  currentUserId: number | null;
-  onPrayerSaved: () => void;
   cardIndex?: number;
-  /** false для прошлых дат — только просмотр из истории */
-  allowEdit?: boolean;
 }) {
-  const isMe = currentUserId != null && member.id === currentUserId;
-  const canEdit = allowEdit && isMe;
-  const [editText, setEditText] = useState(member.prayer_request ?? '');
-  const [saving, setSaving] = useState(false);
-  const [saveErr, setSaveErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    setEditText(member.prayer_request ?? '');
-  }, [member.id, member.prayer_request]);
-
-  async function savePrayer() {
-    setSaving(true);
-    setSaveErr(null);
-    try {
-      await patchProfile({ prayer_request: editText });
-      onPrayerSaved();
-    } catch (e) {
-      setSaveErr(loadErrorDescription(e) ?? 'Не удалось сохранить');
-    } finally {
-      setSaving(false);
-    }
-  }
-
   const hasRequest = member.prayer_request != null && member.prayer_request.trim().length > 0;
 
   return (
@@ -234,33 +204,8 @@ function MemberCard({
       accentVar="var(--member)"
       cardIndex={cardIndex}
     >
-      {canEdit ? (
-        <div className="space-y-3">
-          <label className="block">
-            <span className="text-xs font-extrabold uppercase tracking-[0.1em] text-[var(--text-secondary)]">
-              Ваша молитвенная нужда
-            </span>
-            <textarea
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              rows={5}
-              maxLength={8000}
-              className="mt-2 w-full rounded-xl border border-stone-200 bg-[var(--surface)] px-3 py-2.5 text-base text-[var(--text)] outline-none transition-shadow duration-200 ring-primary/15 focus:border-primary focus:ring-2 focus:ring-primary/25"
-              placeholder="О чём просим молиться…"
-            />
-          </label>
-          {saveErr ? <p className="text-sm text-red-600">{saveErr}</p> : null}
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void savePrayer()}
-            className="min-h-[44px] rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/25 transition hover:bg-primary-dark active:scale-[0.98] disabled:opacity-60 motion-reduce:active:scale-100"
-          >
-            {saving ? 'Сохранение…' : 'Сохранить'}
-          </button>
-        </div>
-      ) : hasRequest ? (
-        <p className="text-base text-[var(--text-secondary)]">{member.prayer_request}</p>
+      {hasRequest ? (
+        <p className="text-base text-[var(--text-secondary)] whitespace-pre-wrap">{member.prayer_request}</p>
       ) : (
         <p className="italic text-[var(--text-muted)]">Нет указанных нужд</p>
       )}
@@ -1091,18 +1036,7 @@ export function DailyPrayerPage() {
                   id={sectionMemberId}
                 />
                 {data.members.map((m, i) => (
-                  <MemberCard
-                    key={m.id}
-                    cardIndex={i}
-                    member={m}
-                    currentUserId={me?.id ?? null}
-                    allowEdit={!isPastDay}
-                    onPrayerSaved={() => {
-                      void qc.invalidateQueries({ queryKey: ['calendar', 'day', dateKey] });
-                      void qc.invalidateQueries({ queryKey: ['calendar', 'week-members'] });
-                      void qc.invalidateQueries({ queryKey: ['calendar', 'cycle', 'collection-claims'] });
-                    }}
-                  />
+                  <MemberCard key={m.id} cardIndex={i} member={m} />
                 ))}
               </section>
             ) : null}
