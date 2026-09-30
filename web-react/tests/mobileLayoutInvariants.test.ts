@@ -111,4 +111,14 @@ describe('mobile layout invariants', () => {
     const tsx = read('src/features/servicePlanner/pages/ServicePlannerPage.tsx');
     expect(tsx).toMatch(/order-3 min-w-0 flex-1 basis-full/);
   });
+  it('шторки расписания и карточка участника рендерятся через BodyPortal (на iOS иначе таб-бар перекрывает низ шторки)', () => {
+    for (const f of [
+      'src/features/mediaSchedule/pages/MediaSchedulePage.tsx',
+      'src/features/musicSchedule/pages/MusicSchedulePage.tsx',
+      'src/features/schedules/pages/SundaySchedulePage.tsx',
+      'src/features/admin/AdminMemberEditSheet.tsx',
+    ]) {
+      expect(read(f), f).toMatch(/<BodyPortal>/);
+    }
+  });
 });

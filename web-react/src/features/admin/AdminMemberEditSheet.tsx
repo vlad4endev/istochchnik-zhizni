@@ -1,3 +1,4 @@
+import { BodyPortal } from '../../components/BodyPortal';
 import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -339,6 +340,7 @@ export function AdminMemberEditSheet({
       : { tone: 'stone' as const, text: 'Вход в приложение ещё не оформлен' };
 
   return (
+    <BodyPortal>
     <div
       className="fixed inset-0 z-[120] flex items-stretch justify-center bg-black/50 p-0 backdrop-blur-[2px] lg:items-center lg:p-4"
       role="presentation"
@@ -504,10 +506,13 @@ export function AdminMemberEditSheet({
                 <button
                   key={id}
                   type="button"
-                  onClick={() => setTab(id)}
+                  onClick={(e) => {
+                    setTab(id);
+                    e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+                  }}
                   aria-current={active ? 'page' : undefined}
                   className={[
-                    'inline-flex min-h-[48px] min-w-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 text-[11px] font-bold leading-none transition sm:min-h-[42px] sm:min-w-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-[13px]',
+                    'inline-flex min-h-[48px] min-w-[4.1rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 text-[11px] font-bold leading-none transition sm:min-h-[42px] sm:min-w-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-[13px]',
                     active ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-500 hover:bg-white hover:text-stone-800',
                   ].join(' ')}
                 >
@@ -879,6 +884,7 @@ export function AdminMemberEditSheet({
         </footer>
       </div>
     </div>
+    </BodyPortal>
   );
 }
 
