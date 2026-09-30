@@ -189,10 +189,7 @@ export interface BirthdayWeekResponse {
  * GET `/api/calendar/next-week/members` — 7 дней (пн–вс) выбранной недели, по члену на день.
  * @param week `current` — текущая календарная неделя, `next` — следующая (по умолчанию).
  */
-export async function getWeekPlanMembers(week: WeekPlanKind = 'next'): Promise<NextWeekMemberDay[]> {
-  const { data } = await apiClient.get<unknown>('/api/calendar/next-week/members', {
-    params: { week },
-  });
+export function parseWeekPlanMembers(data: unknown): NextWeekMemberDay[] {
   if (!isRecord(data) || !Array.isArray(data.days)) {
     throw new Error('Некорректный ответ API: next-week/members');
   }
@@ -205,6 +202,13 @@ export async function getWeekPlanMembers(week: WeekPlanKind = 'next'): Promise<N
     throw new Error('Некорректный ответ API: next-week/members');
   }
   return out;
+}
+
+export async function getWeekPlanMembers(week: WeekPlanKind = 'next'): Promise<NextWeekMemberDay[]> {
+  const { data } = await apiClient.get<unknown>('/api/calendar/next-week/members', {
+    params: { week },
+  });
+  return parseWeekPlanMembers(data);
 }
 
 /** @deprecated используйте getWeekPlanMembers */
@@ -384,6 +388,10 @@ export async function fetchUnreadEventsCount(): Promise<number> {
 
 export async function getWeekBirthdays(): Promise<BirthdayWeekResponse> {
   const { data } = await apiClient.get<unknown>('/api/calendar/birthdays/week');
+  return parseWeekBirthdays(data);
+}
+
+export function parseWeekBirthdays(data: unknown): BirthdayWeekResponse {
   if (!isRecord(data)) {
     return { week_start: '', week_end: '', items: [] };
   }
@@ -427,6 +435,10 @@ function normalizePrayerCycle(raw: unknown): PrayerCycleInfo | null {
     return null;
   }
   return { index, number, member_count, start_date, end_date, day_index };
+}
+
+export function parseCalendarDay(raw: unknown): DayPrayerData {
+  return normalizeDayPrayer(raw);
 }
 
 function normalizeDayPrayer(raw: unknown): DayPrayerData {
@@ -492,6 +504,10 @@ function normalizeClaimRow(raw: unknown): import('./collectionTypes').CycleColle
     claimed_by,
     can_toggle,
   };
+}
+
+export function parseCycleCollectionSnapshot(raw: unknown): CycleCollectionClaimsSnapshot {
+  return normalizeCycleCollectionSnapshot(raw);
 }
 
 function normalizeCycleCollectionSnapshot(raw: unknown): CycleCollectionClaimsSnapshot {
@@ -611,6 +627,10 @@ function normalizeDashboardNote(raw: unknown): DashboardCoordinatorNotePayload |
   if (!start_date || !end_date) return null;
   if (!text.trim()) return null;
   return { text: text.trim(), start_date, end_date };
+}
+
+export function parseDashboardCoordinatorNotes(raw: unknown): DashboardCoordinatorNotesResponse {
+  return normalizeDashboardCoordinatorResponse(raw);
 }
 
 function normalizeDashboardCoordinatorResponse(raw: unknown): DashboardCoordinatorNotesResponse {
