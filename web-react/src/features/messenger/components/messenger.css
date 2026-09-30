@@ -190,8 +190,10 @@ html[data-mantine-color-scheme='dark'] .tg-chatlist-search {
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  scroll-padding-inline: 2px;
-  padding: 1px 2px 2px;
+  /* На всю ширину тулбара: пилюли не обрываются с зазором справа, а уходят под край экрана. */
+  margin-inline: -12px;
+  scroll-padding-inline: 12px;
+  padding: 1px 12px 2px;
   touch-action: pan-x;
 }
 
@@ -653,8 +655,9 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   justify-content: space-between;
   min-height: 56px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--tg-border);
-  background: linear-gradient(180deg, var(--tg-surface-elevated) 0%, var(--tg-surface) 100%);
+  /* Шапка и тулбар поиска — один сплошной блок без «дымки» градиента и двойной линии. */
+  border-bottom: none;
+  background: var(--tg-surface-elevated, #fafaf9);
 }
 
 .tg-compose-btn-sm {
@@ -2802,7 +2805,8 @@ html.dark .msg-quick-reaction:hover {
     bottom: 0;
     width: 100%;
     height: auto;
-    z-index: 130;
+    /* Ниже «Ещё»-листа (60), плашек и модалок (≥100): список чатов не должен их перекрывать. */
+    z-index: 30;
     transform: translateX(-100%);
     transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: transform;
