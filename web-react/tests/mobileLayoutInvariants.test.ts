@@ -65,4 +65,8 @@ describe('mobile layout invariants', () => {
     expect(block).toMatch(/overflow-wrap:\s*normal/);
     expect(block).toMatch(/white-space:\s*nowrap/);
   });
+
+  it('при открытой клавиатуре запас под плавающую «+» на дашборде снимается (нет пустой полосы)', () => {
+    expect(indexCss).toMatch(/html\.app-keyboard-open \.dashboard-scroll-pane\s*\{[^}]*padding-bottom:\s*0\.75rem\s*!important/);
+  });
 });

@@ -707,6 +707,11 @@ html.app-keyboard-open .app-bottom-nav-spacer {
   overflow: hidden;
 }
 
+/* Запас под плавающую «+» (pb-24 / 6rem) нужен только пока видна нижняя панель; с клавиатурой он был бы пустой полосой над ней. */
+html.app-keyboard-open .dashboard-scroll-pane {
+  padding-bottom: 0.75rem !important;
+}
+
 /*
  * Не красим все .rounded-* глобально — ломает пастельные виджеты и градиенты
  * (светлый background-image поверх тёмного background-color + светлый текст = «половина не видно»).
