@@ -10,6 +10,7 @@ import {
   LuChevronDown,
   LuEllipsis,
   LuHeart,
+  LuUsers,
   LuHistory,
   LuPhone,
   LuSend,
@@ -32,6 +33,7 @@ import {
   uploadAdminMemberAvatar,
   type MinistryDirectionTemplate,
 } from './api';
+import { MemberFamilySection } from './MemberFamilySection';
 import { MemberAppRolesPicker } from './MemberAppRolesPicker';
 import { displayMemberAppRoles, formatMemberPhone } from './memberListQuery';
 import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../profile/api';
@@ -51,11 +53,12 @@ export type MemberEditForm = {
   in_prayer_cycle: boolean;
 };
 
-type SheetTab = 'profile' | 'ministry' | 'access' | 'prayer' | 'more';
+type SheetTab = 'profile' | 'ministry' | 'family' | 'access' | 'prayer' | 'more';
 
 const TABS: ReadonlyArray<{ id: SheetTab; label: string; Icon: typeof LuUser }> = [
   { id: 'profile', label: 'Профиль', Icon: LuUser },
   { id: 'ministry', label: 'Служение', Icon: LuSparkles },
+  { id: 'family', label: 'Семья', Icon: LuUsers },
   { id: 'access', label: 'Доступ', Icon: LuShield },
   { id: 'prayer', label: 'Молитва', Icon: LuHeart },
   { id: 'more', label: 'Ещё', Icon: LuEllipsis },
@@ -698,6 +701,13 @@ export function AdminMemberEditSheet({
                 )}
               </SectionCard>
             </div>
+          ) : null}
+
+          {tab === 'family' ? (
+            <MemberFamilySection
+              memberId={editing.id}
+              memberLastName={splitMemberNameParts(editing).last}
+            />
           ) : null}
 
           {tab === 'access' ? (

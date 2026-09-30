@@ -29,6 +29,10 @@ import {
   syncUsersTelegramProfilesHandler,
   uploadMemberAvatarHandler,
   clearMemberAvatarHandler,
+  listFamilyLinksHandler,
+  createFamilyLinkHandler,
+  updateFamilyLinkHandler,
+  deleteFamilyLinkHandler,
 } from '../controllers/userController';
 import { eventPosterUploadMiddleware } from '../middleware/eventPosterUpload';
 
@@ -55,6 +59,10 @@ router.post('/prayer-cycle/start', startPrayerCycleHandler);
 router.get('/:id', getUser);
 router.get('/:id/prayer-requests/history', getPrayerRequestHistoryHandler);
 router.post('/:id/prayer-requests/history', addPrayerRequestHistoryHandler);
+router.get('/:id/family', listFamilyLinksHandler);
+router.post('/:id/family', createFamilyLinkHandler);
+router.patch('/:id/family/:linkId', updateFamilyLinkHandler);
+router.delete('/:id/family/:linkId', deleteFamilyLinkHandler);
 router.post('/', createUserHandler);
 router.patch('/:id', updateUserHandler);
 router.patch('/:id/app-role', setUserAppRoleHandler);

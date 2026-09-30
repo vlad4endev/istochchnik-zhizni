@@ -1548,3 +1548,56 @@ export async function patchAdminAppRelease(
 export async function deleteAdminAppRelease(id: number): Promise<void> {
   await apiClient.delete(`/api/releases/${id}`);
 }
+
+export type FamilyRelation =
+  | 'spouse'
+  | 'parent'
+  | 'child'
+  | 'sibling'
+  | 'grandparent'
+  | 'grandchild'
+  | 'other';
+
+export interface FamilyLink {
+  id: number;
+  /** Кем родственник приходится этому участнику. */
+  relation: FamilyRelation;
+  /** Заполнено, если родственник — участник церкви (связь двусторонняя). */
+  relative_member_id: number | null;
+  relative_name: string;
+  relative_avatar_url: string | null;
+  relative_birth_date: string | null;
+  note: string | null;
+}
+
+export interface FamilyLinkBody {
+  relation: FamilyRelation;
+  relative_member_id?: number | null;
+  relative_name?: string | null;
+  relative_birth_date?: string | null;
+  note?: string | null;
+}
+
+export async function fetchMemberFamily(memberId: number): Promise<FamilyLink[]> {
+  const { data } = await apiClient.get<FamilyLink[]>(`${USERS}/${memberId}/family`);
+  return data;
+}
+
+export async function addMemberFamilyLink(memberId: number, body: FamilyLinkBody): Promise<FamilyLink[]> {
+  const { data } = await apiClient.post<FamilyLink[]>(`${USERS}/${memberId}/family`, body);
+  return data;
+}
+
+export async function updateMemberFamilyLink(
+  memberId: number,
+  linkId: number,
+  body: Partial<FamilyLinkBody>,
+): Promise<FamilyLink[]> {
+  const { data } = await apiClient.patch<FamilyLink[]>(`${USERS}/${memberId}/family/${linkId}`, body);
+  return data;
+}
+
+export async function deleteMemberFamilyLink(memberId: number, linkId: number): Promise<FamilyLink[]> {
+  const { data } = await apiClient.delete<FamilyLink[]>(`${USERS}/${memberId}/family/${linkId}`);
+  return data;
+}

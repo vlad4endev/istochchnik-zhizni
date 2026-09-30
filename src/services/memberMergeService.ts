@@ -129,6 +129,28 @@ export async function mergeMemberInto(keepId: number, dropId: number): Promise<v
     );
     await client.query(`DELETE FROM member_prayer_by_cycle WHERE member_id = $1`, [dropId]);
 
+    // Семейные связи: переносим на оставшуюся карточку, убирая самоссылки и дубли пар.
+    await client.query(
+      `DELETE FROM member_family_links
+       WHERE (member_id = $2 AND relative_member_id = $1) OR (member_id = $1 AND relative_member_id = $2)`,
+      [keepId, dropId]
+    );
+    await client.query(
+      `DELETE FROM member_family_links d
+       USING member_family_links k
+       WHERE d.relative_member_id IS NOT NULL AND k.relative_member_id IS NOT NULL
+         AND ((d.member_id = $2 AND k.member_id = $1 AND d.relative_member_id = k.relative_member_id)
+           OR (d.relative_member_id = $2 AND k.relative_member_id = $1 AND d.member_id = k.member_id)
+           OR (d.member_id = $2 AND k.relative_member_id = $1 AND d.relative_member_id = k.member_id)
+           OR (d.relative_member_id = $2 AND k.member_id = $1 AND d.member_id = k.relative_member_id))`,
+      [keepId, dropId]
+    );
+    await client.query(`UPDATE member_family_links SET member_id = $1 WHERE member_id = $2`, [keepId, dropId]);
+    await client.query(`UPDATE member_family_links SET relative_member_id = $1 WHERE relative_member_id = $2`, [
+      keepId,
+      dropId,
+    ]);
+
     await client.query(`UPDATE member_prayer_request_history SET member_id = $1 WHERE member_id = $2`, [
       keepId,
       dropId,
