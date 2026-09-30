@@ -86,4 +86,11 @@ describe('mobile layout invariants', () => {
     const css = strip(read('src/features/messenger/components/messenger.css'));
     expect(css).toMatch(/\.chat-header__btn[^{]*\{[^}]*min-(width|height):\s*44px/);
   });
+  it('список чатов (мобайл) ниже «Ещё»-листа и модалок: z-index сайдбара < 60', () => {
+    const css = strip(read('src/features/messenger/components/messenger.css'));
+    const blocks = [...css.matchAll(/(?:^|\n)\s*\.tg-sidebar\s*\{([^}]*)\}/g)].map((m) => m[1]);
+    const zs = blocks.map((b) => Number(b.match(/z-index:\s*(\d+)/)?.[1])).filter((n) => Number.isFinite(n));
+    expect(zs.length).toBeGreaterThan(0);
+    for (const z of zs) expect(z).toBeLessThan(60);
+  });
 });
