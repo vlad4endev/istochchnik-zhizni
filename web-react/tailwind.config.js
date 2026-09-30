@@ -1,6 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
+  /** hover:-утилиты только при (hover: hover): на тач-экранах нет «залипшего» hover после тапа. */
+  future: { hoverOnlyWhenSupported: true },
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {

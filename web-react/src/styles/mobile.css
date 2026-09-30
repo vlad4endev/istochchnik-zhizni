@@ -696,14 +696,15 @@
   }
 
   @media (hover: none) {
-    /* Не трогаем бренд-кнопки: sticky :hover после тапа иначе сносит фон (отправка, play, вкладки). */
-    button:hover:not(.tg-smart-tab):not(.tab-filter-button):not(.tg-voice-play):not(.tg-voice-speed):not(.sendBtn):not(.tg-send-btn),
+    /*
+     * Раньше здесь был `button:hover, a:hover { background: initial !important }` — после тапа (sticky :hover
+     * на iOS/Android) это стирало реальный фон у активных вкладок, выбранных чипов и кнопок (белый текст
+     * на белом). Tailwind-овские hover: теперь включаются только при (hover: hover) — см. tailwind.config.js
+     * (future.hoverOnlyWhenSupported), поэтому сброс фона не нужен.
+     */
     .card:hover,
-    .list-item:hover,
-    a:hover {
-      background: initial !important;
+    .list-item:hover {
       transform: none !important;
-      box-shadow: none !important;
     }
   }
 

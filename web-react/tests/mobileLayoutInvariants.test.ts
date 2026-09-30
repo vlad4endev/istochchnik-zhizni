@@ -93,4 +93,9 @@ describe('mobile layout invariants', () => {
     expect(zs.length).toBeGreaterThan(0);
     for (const z of zs) expect(z).toBeLessThan(60);
   });
+  it('на тач-экранах нет глобального сброса фона у :hover (после тапа пропадал фон у активных кнопок/вкладок)', () => {
+    expect(mobileCss).not.toMatch(/button:hover[^{]*\{[^}]*background:\s*initial/);
+    expect(mobileCss).not.toMatch(/a:hover[^{]*\{[^}]*background:\s*initial/);
+    expect(read('tailwind.config.js')).toMatch(/hoverOnlyWhenSupported:\s*true/);
+  });
 });
