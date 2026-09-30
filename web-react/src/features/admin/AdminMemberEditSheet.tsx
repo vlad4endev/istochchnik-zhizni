@@ -353,7 +353,7 @@ export function AdminMemberEditSheet({
         aria-labelledby={titleId}
       >
         <header
-          className="relative shrink-0 border-b border-stone-200/70 px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] lg:px-6 lg:pt-5"
+          className="relative shrink-0 border-b border-stone-200/70 px-4 pb-2.5 pt-[max(10px,env(safe-area-inset-top))] lg:px-6 lg:pb-3 lg:pt-5"
           style={{ background: `linear-gradient(180deg, ${avatar.bg} 0%, #F6F4F2 100%)` }}
         >
           <button
@@ -377,11 +377,18 @@ export function AdminMemberEditSheet({
                 }
                 initialsFallbackText={memberInitials(editing)}
                 initialsColorSeed={displayName}
-                className="flex h-[68px] w-[68px] items-center justify-center overflow-hidden rounded-[22px] shadow-sm sm:h-20 sm:w-20"
+                className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-[18px] shadow-sm sm:h-20 sm:w-20 sm:rounded-[22px]"
                 imgClassName="h-full w-full object-cover"
                 style={avatarUrl ? undefined : { backgroundColor: avatar.bg }}
                 priority
                 alt=""
+              />
+              <button
+                type="button"
+                disabled={avatarBusy}
+                onClick={() => avatarInputRef.current?.click()}
+                className="absolute inset-0 rounded-[18px] sm:hidden"
+                aria-label="Сменить фото участника"
               />
               <input
                 ref={avatarInputRef}
@@ -395,7 +402,7 @@ export function AdminMemberEditSheet({
                 type="button"
                 disabled={avatarBusy}
                 onClick={() => avatarInputRef.current?.click()}
-                className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full bg-white text-stone-700 shadow-md ring-1 ring-stone-200/90 transition hover:bg-stone-50 hover:text-stone-900 disabled:opacity-60"
+                className="absolute -bottom-1 -right-1 hidden h-9 w-9 items-center justify-center rounded-full bg-white text-stone-700 shadow-md ring-1 ring-stone-200/90 transition hover:bg-stone-50 hover:text-stone-900 disabled:opacity-60 sm:flex"
                 title="Назначить фото"
                 aria-label="Назначить фото участника"
               >
@@ -403,11 +410,11 @@ export function AdminMemberEditSheet({
               </button>
             </div>
             <div className="min-w-0 flex-1 pt-0.5">
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-stone-500">Карточка участника</p>
-              <h3 id={titleId} className="mt-0.5 truncate text-[22px] font-extrabold leading-tight tracking-tight text-stone-900 sm:text-[26px]">
+              <p className="hidden text-[11px] font-bold uppercase tracking-[0.16em] text-stone-500 sm:block">Карточка участника</p>
+              <h3 id={titleId} className="line-clamp-2 text-[20px] font-extrabold leading-tight tracking-tight text-stone-900 sm:mt-0.5 sm:text-[26px]">
                 {displayName}
               </h3>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                 <span
                   className={
                     editing.has_registered
@@ -432,12 +439,12 @@ export function AdminMemberEditSheet({
                   {editForm.is_active ? 'Активен' : 'Неактивен'}
                 </span>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2 empty:hidden sm:empty:flex">
                 <button
                   type="button"
                   disabled={avatarBusy}
                   onClick={() => avatarInputRef.current?.click()}
-                  className="inline-flex min-h-[32px] items-center gap-1.5 rounded-full bg-white/85 px-3 text-[12px] font-semibold text-stone-700 ring-1 ring-stone-200/80 transition hover:bg-white disabled:opacity-60"
+                  className="hidden min-h-[32px] items-center gap-1.5 rounded-full bg-white/85 px-3 text-[12px] font-semibold text-stone-700 ring-1 ring-stone-200/80 transition hover:bg-white disabled:opacity-60 sm:inline-flex"
                 >
                   <LuCamera className="h-3.5 w-3.5 text-stone-500" aria-hidden />
                   {avatarBusy ? 'Загрузка…' : avatarUrl ? 'Сменить фото' : 'Назначить фото'}
@@ -456,7 +463,7 @@ export function AdminMemberEditSheet({
             </div>
           </div>
 
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="mt-2.5 flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {editForm.phone_number.trim() ? (
               <button
                 type="button"
@@ -488,7 +495,7 @@ export function AdminMemberEditSheet({
           </div>
 
           <nav
-            className="mt-3.5 flex gap-1 overflow-x-auto rounded-2xl bg-white/70 p-1 ring-1 ring-stone-200/70 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="mt-2.5 flex gap-1 overflow-x-auto rounded-2xl bg-white/70 p-1 ring-1 ring-stone-200/70 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             aria-label="Разделы карточки"
           >
             {TABS.map(({ id, label, Icon }) => {
@@ -500,12 +507,12 @@ export function AdminMemberEditSheet({
                   onClick={() => setTab(id)}
                   aria-current={active ? 'page' : undefined}
                   className={[
-                    'inline-flex min-h-[42px] min-w-[4.6rem] flex-1 items-center justify-center gap-1.5 rounded-xl px-2.5 text-[12px] font-bold transition sm:min-w-0 sm:px-3 sm:text-[13px]',
+                    'inline-flex min-h-[48px] min-w-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 text-[11px] font-bold leading-none transition sm:min-h-[42px] sm:min-w-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-[13px]',
                     active ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-500 hover:bg-white hover:text-stone-800',
                   ].join(' ')}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" strokeWidth={2.2} aria-hidden />
-                  <span>{label}</span>
+                  <span className="whitespace-nowrap [overflow-wrap:normal] [word-break:normal]">{label}</span>
                 </button>
               );
             })}
@@ -849,10 +856,10 @@ export function AdminMemberEditSheet({
         </div>
 
         <footer className="member-sheet__footer shrink-0 border-t border-stone-200/80 bg-white/95 px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))] backdrop-blur-sm lg:px-6 lg:py-4">
-          <div className="flex flex-col gap-2 lg:flex-row-reverse">
+          <div className="flex flex-row-reverse gap-2">
             <button
               type="button"
-              className="inline-flex min-h-[50px] w-full items-center justify-center rounded-2xl bg-primary px-5 text-[15px] font-extrabold text-white shadow-lg shadow-primary/25 transition hover:opacity-95 disabled:opacity-50 sm:min-h-[46px] sm:w-auto sm:min-w-[9.5rem]"
+              className="inline-flex min-h-[48px] min-w-0 flex-1 items-center justify-center rounded-2xl bg-primary px-5 text-[15px] font-extrabold text-white shadow-lg shadow-primary/25 transition hover:opacity-95 disabled:opacity-50 sm:min-h-[46px] sm:flex-none sm:min-w-[9.5rem]"
               disabled={savePending}
               onClick={() => {
                 onClearBanner();
@@ -863,7 +870,7 @@ export function AdminMemberEditSheet({
             </button>
             <button
               type="button"
-              className="inline-flex min-h-[46px] w-full items-center justify-center rounded-2xl border border-stone-200 bg-white px-5 text-[14px] font-semibold text-stone-700 transition hover:bg-stone-50 sm:w-auto"
+              className="inline-flex min-h-[48px] shrink-0 items-center justify-center rounded-2xl border border-stone-200 bg-white px-5 text-[14px] font-semibold text-stone-700 transition hover:bg-stone-50 sm:min-h-[46px]"
               onClick={onClose}
             >
               Отмена
