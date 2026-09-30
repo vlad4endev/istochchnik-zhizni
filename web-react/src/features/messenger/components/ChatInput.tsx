@@ -13,6 +13,7 @@ import {
   LuChartColumn,
   LuMic,
   LuMusic,
+  LuTriangleAlert,
 } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 import Picker from '@emoji-mart/react';
@@ -391,6 +392,9 @@ export function ChatInput({
     });
   }, []);
 
+  /** Когда последний раз показывали подсказку про удержание микрофона (не чаще раза в несколько секунд). */
+  const voiceHintShownAtRef = useRef(0);
+
   const focusComposer = useCallback(() => {
     requestAnimationFrame(() => {
       focusMessengerField(textareaRef.current);
@@ -407,6 +411,15 @@ export function ChatInput({
 
   useEffect(() => {
     contentForVoiceRef.current = content;
+  }, [content]);
+
+  /**
+   * Поле очистилось (отправили/отменили) — возвращаем высоту к одной строке уже ПОСЛЕ коммита React.
+   * Раньше автоподгонка вызывалась в handleSend до setContent(''): rAF успевал прочитать ещё старый текст,
+   * и пустое поле оставалось высотой в несколько строк.
+   */
+  useLayoutEffect(() => {
+    if (!content) scheduleTextareaAutosize(textareaRef.current);
   }, [content]);
 
   useEffect(() => {
@@ -2094,17 +2107,29 @@ export function ChatInput({
       ) : null}
 
       {uploadErr ? (
-        <p className="mb-2 text-sm font-semibold text-red-600">{uploadErr}</p>
+        <p
+          role="alert"
+          className="mb-2 flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2 text-[13px] font-medium leading-snug text-red-700 dark:bg-red-500/10 dark:text-red-300"
+        >
+          <LuTriangleAlert className="mt-px h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden />
+          <span className="min-w-0">{uploadErr}</span>
+        </p>
       ) : null}
       {!uploadsHealthy && !textOnly ? (
-        <p className="mb-2 text-sm font-semibold text-amber-700">
-          Хранилище вложений недоступно. Отправка фото и файлов временно отключена.
-          {uploadsHealthChecking ? ' Проверяем восстановление…' : ''}
+        <p className="mb-2 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[13px] font-medium leading-snug text-amber-800 dark:bg-amber-400/10 dark:text-amber-200">
+          <LuTriangleAlert className="mt-px h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden />
+          <span className="min-w-0">
+            Вложения временно недоступны — фото, файлы и голос отправить нельзя.
+            {uploadsHealthChecking ? ' Проверяем восстановление…' : ''}
+          </span>
         </p>
       ) : null}
       {canSend && !canSendAttachments && !textOnly ? (
-        <p className="mb-2 text-sm font-semibold text-amber-800">
-          В этом чате для вас отключены фото, файлы, голосовые и видеосообщения (настройки группы).
+        <p className="mb-2 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[13px] font-medium leading-snug text-amber-800 dark:bg-amber-400/10 dark:text-amber-200">
+          <LuTriangleAlert className="mt-px h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden />
+          <span className="min-w-0">
+            В этом чате для вас отключены фото, файлы, голосовые и видеосообщения (настройки группы).
+          </span>
         </p>
       ) : null}
 
@@ -2186,7 +2211,7 @@ export function ChatInput({
 
       <div className="relative w-full min-w-0">
         <div
-          className="tg-input-area tg-composer-pill-layout flex w-full min-w-0 gap-1.5 py-1 sm:gap-2 sm:py-1.5"
+          className="tg-input-area tg-composer-pill-layout flex w-full min-w-0 items-end gap-2 py-1"
           onDragOver={(e) => {
             if (!canSendAttachments) return;
             e.preventDefault();
@@ -2264,8 +2289,8 @@ export function ChatInput({
 
           <div
             className={[
-              'tg-input-container tg-composer-pill-layout tg-composer-pill-bubble relative flex min-h-[44px] min-w-0 flex-1 overflow-hidden !gap-0 !rounded-2xl !border-0 !p-0 !shadow-none sm:!rounded-[22px]',
-              'bg-black/[0.04] backdrop-blur-[2px]',
+              'tg-input-container tg-composer-pill-layout tg-composer-pill-bubble relative flex min-h-[44px] min-w-0 flex-1 overflow-hidden !gap-0 !rounded-[22px] !p-0 !shadow-none',
+              'bg-black/[0.04]',
               'transition-[background-color,min-height] duration-200 ease-out',
               'focus-within:bg-black/[0.07]',
               'dark:bg-white/[0.06] dark:focus-within:bg-white/[0.09]',
@@ -2296,8 +2321,8 @@ export function ChatInput({
               ref={textareaRef}
               className={[
                 'tg-input-textarea tg-composer-textarea !min-h-[44px] min-w-0 flex-1 resize-none !self-stretch !bg-transparent',
-                '!max-h-[min(40dvh,200px)] py-2.5 pl-3 text-[16px] !leading-[1.45] text-[var(--text)] placeholder:text-stone-400/90',
-                '!pb-2.5 outline-none transition-[height] duration-200 ease-out dark:placeholder:text-stone-500',
+                '!max-h-[min(40dvh,168px)] text-[16px] text-[var(--text)] placeholder:text-stone-400/90',
+                'outline-none transition-[height] duration-200 ease-out dark:placeholder:text-stone-500',
               ].join(' ')}
               placeholder={
                 pending?.isAudio
@@ -2348,13 +2373,13 @@ export function ChatInput({
 
             <div
               ref={emojiRef}
-              className="pointer-events-none absolute bottom-1.5 right-2 z-[5000] flex items-end"
+              className="pointer-events-none absolute bottom-0 right-0 z-[5000] flex items-end"
             >
               <button
                 ref={emojiBtnRef}
                 type="button"
                 className={[
-                  'pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors',
+                  'pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-colors',
                   'border-transparent text-stone-500 hover:border-white/35 hover:bg-white/35 hover:text-stone-800',
                   'dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white',
                 ].join(' ')}
@@ -2377,7 +2402,7 @@ export function ChatInput({
                 aria-haspopup="dialog"
                 title="Эмодзи"
               >
-                <LuSmile size={21} strokeWidth={2} aria-hidden />
+                <LuSmile size={22} strokeWidth={1.9} aria-hidden />
               </button>
             </div>
           </div>
@@ -2404,6 +2429,14 @@ export function ChatInput({
                   void handleSend();
                 } else {
                   focusMessengerField(textareaRef.current);
+                  // Короткое нажатие на микрофон — подсказка, как записать (раньше просто фокус в поле без объяснений).
+                  if (!textOnly && canSendAttachments && uploadsHealthy) {
+                    const now = Date.now();
+                    if (now - voiceHintShownAtRef.current > 6000) {
+                      voiceHintShownAtRef.current = now;
+                      emitAppToast('Удерживайте микрофон, чтобы записать голосовое сообщение', 'info');
+                    }
+                  }
                 }
               }}
               disabled={

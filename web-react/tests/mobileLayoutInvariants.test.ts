@@ -76,4 +76,14 @@ describe('mobile layout invariants', () => {
       /html\[data-pwa-standalone='1'\]\[data-chat-open="1"\] \.tg-main--visible \.tg-chat-window\s*\{\s*padding-top:\s*env\(safe-area-inset-top,\s*0px\);/,
     );
   });
+  it('композер чата: кнопки выровнены по нижнему краю, а не по центру растущего поля', () => {
+    const css = strip(read('src/features/messenger/components/messenger.css'));
+    expect(css).toMatch(/align-items:\s*flex-end\s*!important/);
+    expect(css).toMatch(/\.tg-send-btn[^{]*\{[^}]*align-self:\s*flex-end\s*!important/);
+  });
+
+  it('шапка чата: кнопки не меньше 44px', () => {
+    const css = strip(read('src/features/messenger/components/messenger.css'));
+    expect(css).toMatch(/\.chat-header__btn[^{]*\{[^}]*min-(width|height):\s*44px/);
+  });
 });
