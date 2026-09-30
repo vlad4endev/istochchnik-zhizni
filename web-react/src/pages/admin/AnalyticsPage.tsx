@@ -238,7 +238,7 @@ export function AnalyticsPage() {
     <div className="space-y-5 pb-6" style={{ color: 'var(--color-text-primary)' }}>
       <SectionHeroChrome title="Аналитика" />
       <div className="mx-auto max-w-[1500px] space-y-5 px-3 md:px-6">
-        <div className={`flex flex-wrap items-center justify-end gap-2 rounded-xl p-4 ${SURFACE_CLASS}`}>
+        <div className={`flex flex-wrap gap-2 rounded-xl p-3 sm:items-center sm:justify-end sm:p-4 ${SURFACE_CLASS}`}>
           {PERIOD_OPTIONS.map((item) => {
             const active = period === item.value;
             return (
@@ -246,7 +246,7 @@ export function AnalyticsPage() {
                 key={item.value}
                 type="button"
                 onClick={() => setPeriod(item.value)}
-                className="rounded-lg px-3 py-1.5 text-sm transition"
+                className="min-w-[30%] flex-1 rounded-lg px-3 py-1.5 text-sm transition sm:min-w-0 sm:flex-none"
                 style={{
                   backgroundColor: active ? '#7a1f2e' : 'var(--color-background-primary)',
                   color: active ? '#fff' : 'var(--color-text-secondary)',
