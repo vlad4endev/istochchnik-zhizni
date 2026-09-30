@@ -1,102 +1,56 @@
-/* Спиннер загрузки главной: бордовый → золотой из палитры приложения (app-splash). */
+/* Спиннер загрузки главной: кольцо с градиентом, цвета из палитры приложения. */
 .dash-spinner {
-  --ds-primary: var(--primary, #7d3640);
-  --ds-gold: #c4854d;
-  --ds-size: 76px;
   display: flex;
   min-height: 60dvh;
   flex: 1 1 auto;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
+  gap: 1.25rem;
   background: var(--surface);
 }
 
-.dash-spinner__orb {
+.dash-spinner__loader {
+  --color-1: color-mix(in srgb, var(--primary, #7d3640) 20%, transparent);
+  --color-2: var(--primary, #7d3640);
+  --color-3: var(--surface);
+  --size: 1px;
+
+  width: calc(48 * var(--size));
+  height: calc(48 * var(--size));
+  border-radius: 50%;
+  display: inline-block;
   position: relative;
-  width: var(--ds-size);
-  height: var(--ds-size);
-  display: grid;
-  place-items: center;
+  background: linear-gradient(0deg, var(--color-1) 33%, var(--color-2) 100%);
+  box-sizing: border-box;
+  animation: dash-spinner-rotation 1s linear infinite;
 }
 
-/* Мягкое свечение, «дышит» */
-.dash-spinner__orb::before {
+.dash-spinner__loader::after {
   content: '';
+  box-sizing: border-box;
   position: absolute;
-  inset: -22%;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(44 * var(--size));
+  height: calc(44 * var(--size));
   border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--ds-gold) 38%, transparent) 0%, transparent 68%);
-  animation: dash-spinner-glow 2.2s ease-in-out infinite;
-}
-
-/* Вращающееся градиентное кольцо */
-.dash-spinner__ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: conic-gradient(from 0deg, transparent 0%, var(--ds-primary) 45%, var(--ds-gold) 92%, transparent 100%);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
-  animation: dash-spinner-rotate 1.15s cubic-bezier(0.55, 0.15, 0.4, 0.85) infinite;
-}
-
-/* Второе, тонкое кольцо в обратную сторону */
-.dash-spinner__ring--inner {
-  inset: 11px;
-  opacity: 0.55;
-  animation-duration: 1.9s;
-  animation-direction: reverse;
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
-}
-
-/* Капля «источника» в центре */
-.dash-spinner__drop {
-  position: relative;
-  width: 22px;
-  height: 22px;
-  color: var(--ds-primary);
-  animation: dash-spinner-drop 2.2s ease-in-out infinite;
+  background: var(--color-3);
 }
 
 .dash-spinner__label {
-  display: flex;
-  align-items: baseline;
-  gap: 1px;
   font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: color-mix(in srgb, var(--ds-primary) 78%, #6a5f57);
+  color: color-mix(in srgb, var(--primary, #7d3640) 78%, #6a5f57);
 }
 
-.dash-spinner__dots span {
-  display: inline-block;
-  animation: dash-spinner-dot 1.2s ease-in-out infinite;
-}
-.dash-spinner__dots span:nth-child(2) { animation-delay: 0.15s; }
-.dash-spinner__dots span:nth-child(3) { animation-delay: 0.3s; }
-
-@keyframes dash-spinner-rotate { to { transform: rotate(360deg); } }
-@keyframes dash-spinner-glow {
-  0%, 100% { opacity: 0.45; transform: scale(0.92); }
-  50% { opacity: 1; transform: scale(1.06); }
-}
-@keyframes dash-spinner-drop {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.14); }
-}
-@keyframes dash-spinner-dot {
-  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
-  30% { opacity: 1; transform: translateY(-2px); }
+@keyframes dash-spinner-rotation {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dash-spinner__ring { animation-duration: 3s; }
-  .dash-spinner__ring--inner,
-  .dash-spinner__orb::before,
-  .dash-spinner__drop,
-  .dash-spinner__dots span { animation: none; }
-  .dash-spinner__dots span { opacity: 0.7; }
+  .dash-spinner__loader { animation-duration: 3s; }
 }
