@@ -50,6 +50,7 @@ import { NextWeekPrayerPlanSection } from '../../calendar/components/NextWeekPra
 import { userCanViewNextWeekPrayerPlan } from '../../calendar/prayerAccess';
 import { fetchRolePermissionsPublic } from '../../settings/rolePermissionsApi';
 import { useMe } from '@/hooks/useMe';
+import { dashboardBundleKey, loadDashboardBundle } from '../dashboardBundle';
 import { fetchProfileByMemberId } from '../../profile/publicProfileApi';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClassNested } from '../../../lib/sectionHeroChrome';
@@ -855,10 +856,19 @@ function DashboardMain() {
   }, [eventOpen]);
 
   const meQ = useMe();
+  /** Один запрос на все данные первого экрана; отдельные запросы ниже стартуют после него и берут данные из кэша. */
+  const bundleQ = useQuery({
+    queryKey: dashboardBundleKey(todayDateKey, weekStartKey),
+    queryFn: () => loadDashboardBundle(qc, todayDateKey, weekStartKey),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const bundleSettled = !bundleQ.isLoading;
   const rolePermissionsQ = useQuery({
     queryKey: keys.rolePermissionsPublic,
     queryFn: fetchRolePermissionsPublic,
     staleTime: 120_000,
+    enabled: bundleSettled,
   });
 
   const profileMemberId = useAuthStore((s) => s.memberId);
@@ -875,36 +885,42 @@ function DashboardMain() {
     queryKey: keys.calendarDay(todayDateKey),
     queryFn: () => getCalendarDay(todayDateKey),
     staleTime: 60_000,
+    enabled: bundleSettled,
   });
 
   const broadcastQ = useQuery({
     queryKey: keys.broadcast,
     queryFn: fetchActiveBroadcast,
     staleTime: 60_000,
+    enabled: bundleSettled,
   });
 
   const sermonsQ = useQuery({
     queryKey: ['resources', 'podcasts', 'dashboard'],
     queryFn: () => fetchPodcastFeed({ limit: 30 }),
     staleTime: 60_000,
+    enabled: bundleSettled,
   });
 
   const eventsQ = useQuery({
     queryKey: keys.events,
     queryFn: getActiveEvents,
     staleTime: 60_000,
+    enabled: bundleSettled,
   });
   const upcomingPlansQ = useQuery({
     queryKey: ['service-plans', 'dashboard-nearest', todayDateKey],
     queryFn: () => fetchServicePlans({ from: todayDateKey }),
     staleTime: 60_000,
+    enabled: bundleSettled,
   });
   const birthdaysQ = useQuery({
     queryKey: ['calendar', 'birthdays', 'week', weekStartKey, todayDateKey],
     queryFn: getWeekBirthdays,
     /** Дни рождения зависят от «сегодня» — не держим устаревший список в кэше. */
-    staleTime: 0,
+    staleTime: 5_000,
     refetchInterval: 60_000,
+    enabled: bundleSettled,
   });
   const needsNextWeekPlan =
     apiBoolean(meQ.data?.is_collection_coordinator) || isAdmin;
@@ -913,33 +929,34 @@ function DashboardMain() {
   const collectionClaimsQ = useQuery({
     queryKey: ['calendar', 'cycle', 'collection-claims', 'next', 'dashboard'],
     queryFn: () => getCycleCollectionClaims('next'),
-    enabled: needsNextWeekPlan,
+    enabled: bundleSettled && (needsNextWeekPlan),
     staleTime: 30_000,
   });
   const collectionClaimsCurrentQ = useQuery({
     queryKey: ['calendar', 'cycle', 'collection-claims', 'current', 'dashboard'],
     queryFn: () => getCycleCollectionClaims('current'),
-    enabled: needsCurrentWeekPlan,
+    enabled: bundleSettled && (needsCurrentWeekPlan),
     staleTime: 30_000,
   });
   const weekMembersQ = useQuery({
     queryKey: ['calendar', 'week-members', 'next', 'dashboard'],
     queryFn: () => getWeekPlanMembers('next'),
-    enabled: needsNextWeekPlan,
+    enabled: bundleSettled && (needsNextWeekPlan),
     staleTime: 30_000,
   });
   const weekMembersCurrentQ = useQuery({
     queryKey: ['calendar', 'week-members', 'current', 'dashboard'],
     queryFn: () => getWeekPlanMembers('current'),
-    enabled: needsCurrentWeekPlan,
+    enabled: bundleSettled && (needsCurrentWeekPlan),
     staleTime: 30_000,
   });
 
   const dashboardNotesQ = useQuery({
     queryKey: keys.dashboardNotes(todayDateKey),
     queryFn: () => fetchDashboardCoordinatorNotes(todayDateKey),
-    /** Срочные нужды и объявления: сразу подтягивать после WS `coordinator-notes` и при заходе на главную. */
-    staleTime: 0,
+    /** Срочные нужды и объявления: подтягиваем после WS `coordinator-notes` и при заходе на главную (данные из bundle свежие). */
+    staleTime: 5_000,
+    enabled: bundleSettled,
   });
 
   const me = meQ.data ?? null;
@@ -975,7 +992,7 @@ function DashboardMain() {
   const nearestPlanDetailsQ = useQuery({
     queryKey: ['service-plan', 'dashboard-nearest', nearestPlan?.plan.id ?? null],
     queryFn: () => fetchServicePlan(nearestPlan!.plan.id),
-    enabled: nearestPlan != null,
+    enabled: bundleSettled && (nearestPlan != null),
     staleTime: 60_000,
   });
   const nearestSermonData = useMemo(
@@ -985,13 +1002,13 @@ function DashboardMain() {
   const preacherProfileQ = useQuery({
     queryKey: ['profile', 'dashboard-preacher', nearestSermonData?.preacherMemberId ?? null],
     queryFn: () => fetchProfileByMemberId(nearestSermonData!.preacherMemberId),
-    enabled: nearestSermonData != null,
+    enabled: bundleSettled && (nearestSermonData != null),
     staleTime: 60_000,
   });
   const hostProfileQ = useQuery({
     queryKey: ['profile', 'dashboard-host', nearestSermonData?.leaderMemberId ?? null],
     queryFn: () => fetchProfileByMemberId(nearestSermonData!.leaderMemberId!),
-    enabled: nearestSermonData?.leaderMemberId != null,
+    enabled: bundleSettled && (nearestSermonData?.leaderMemberId != null),
     staleTime: 60_000,
   });
   const preacherAvatarUrl = resolvePublicUrl(preacherProfileQ.data?.profile.avatar_url ?? null);
@@ -1139,6 +1156,7 @@ function DashboardMain() {
    */
   const firstScreenReady = !(
     meQ.isLoading ||
+    bundleQ.isLoading ||
     prayerQ.isLoading ||
     eventsQ.isLoading ||
     broadcastQ.isLoading ||
