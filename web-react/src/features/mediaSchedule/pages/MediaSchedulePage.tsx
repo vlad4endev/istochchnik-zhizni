@@ -934,8 +934,7 @@ export function MediaSchedulePage() {
                   ) : null}
                   </div>
                   <p className="mt-2 text-xs leading-relaxed text-stone-500">
-                    До {ASSEMBLY_PAGE_SIZE_MOBILE} служений на экране. Листайте стрелками выше — прокручивайте страницу
-                    вниз, горизонтальный скролл не нужен.
+                    До {ASSEMBLY_PAGE_SIZE_MOBILE} служений на экране — переключайте стрелками «‹ ›» над списком.
                   </p>
                 </div>
               </section>
