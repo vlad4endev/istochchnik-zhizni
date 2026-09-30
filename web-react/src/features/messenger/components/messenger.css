@@ -1010,7 +1010,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
 }
 
 .tg-header-back {
-  margin-right: -4px;
+  margin-right: 0;
 }
 
 @media (min-width: 769px) {
@@ -3189,7 +3189,7 @@ html.dark .msg-quick-reaction:hover {
   }
 
   .tg-header-back {
-    margin-left: -6px;
+    margin-left: 0;
   }
 
   .tg-icon-btn {
@@ -3411,21 +3411,26 @@ html.dark .msg-quick-reaction:hover {
   }
 }
 
-/* ChatInput: круги снаружи капсулы — перебиваем мобильные `align-items: flex-end !important`. */
+/*
+ * ChatInput: круги снаружи капсулы. Ряд выровнен по НИЗУ (как в Telegram/iMessage): пока поле растёт
+ * вверх на несколько строк, вложения и отправка остаются на нижней линии. Раньше здесь стояло
+ * `align-items: center !important`, и обе кнопки «плавали» посередине высокого поля.
+ * Все три элемента (вложения, капсула, отправка) — по 44px, поэтому на одну строку они совпадают.
+ */
 .tg-input-area.tg-composer-pill-layout,
 .tg-chat-window .tg-input-area.tg-composer-pill-layout,
 .tg-chat-window__composer .tg-input-area.tg-composer-pill-layout,
 html[data-chat-open='1'] .tg-chat-window .tg-input-area.tg-composer-pill-layout,
 html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-area.tg-composer-pill-layout {
-  align-items: center !important;
+  align-items: flex-end !important;
+  gap: 8px;
 }
 
-/* Базовый .tg-send-btn { align-self: flex-end } ломает ряд pill-layout (микрофон «выше» капсулы). */
 .tg-input-area.tg-composer-pill-layout .tg-send-btn,
 .tg-input-area.tg-composer-pill-layout .sendBtn,
 .tg-chat-window__composer .tg-input-area.tg-composer-pill-layout .tg-send-btn,
 .tg-chat-window__composer .tg-input-area.tg-composer-pill-layout .sendBtn {
-  align-self: center !important;
+  align-self: flex-end !important;
 }
 
 .tg-input-container.tg-composer-pill-layout,
@@ -3437,9 +3442,9 @@ html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-container.t
   flex-direction: row !important;
 }
 
-/* Плоская капсула без рамки — перебиваем базовые `.tg-input-container` и inset-тень. */
+/* Капсула: мягкий фон + тонкая рамка (читается и на светлом, и на тёмном фоне), без тени. */
 .tg-chat-window__composer .tg-input-container.tg-composer-pill-layout {
-  border: none !important;
+  border: 1px solid color-mix(in srgb, var(--tg-text, #1c1917) 10%, transparent) !important;
   box-shadow: none !important;
   background: var(--tg-composer-field) !important;
 }
@@ -3452,6 +3457,7 @@ html[data-color-theme='dark'] .tg-chat-window__composer .tg-input-container.tg-c
 
 .tg-chat-window__composer .tg-input-container.tg-composer-pill-layout:focus-within {
   box-shadow: none !important;
+  border-color: color-mix(in srgb, var(--tg-primary, #7d3640) 38%, transparent) !important;
   background: var(--tg-composer-field-focus) !important;
 }
 
@@ -3471,10 +3477,12 @@ html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-container.t
 }
 
 /* Запас справа под кнопку эмодзи (перебить padding из .tg-input-textarea). */
+/* 44px справа — под кнопку эмодзи; padding 10px + строка 24px = 44px (совпадает с кнопками слева/справа). */
 .tg-input-textarea.tg-composer-textarea {
   box-sizing: border-box !important;
-  padding-right: 3.5rem !important;
+  padding: 10px 44px 10px 14px !important;
   align-self: stretch !important;
+  line-height: 24px !important;
 }
 
 /* ─── Запись видеокружка / голоса: панель как в Telegram (тёмная, без «алертной» рамки) ─── */
@@ -4249,3 +4257,36 @@ html.dark .msg-videonote-circle--placeholder {
     animation: none !important;
   }
 }
+
+/* ─── Шапка чата: воздух по краям, квадратные кнопки 44×44, тонкая нижняя линия ─── */
+.chat-header {
+  border-radius: 0;
+  background: var(--tg-surface, var(--surface-elevated));
+  border-bottom: 1px solid color-mix(in srgb, var(--tg-text, #1c1917) 8%, transparent);
+  box-shadow: 0 1px 10px rgba(28, 25, 23, 0.04);
+}
+
+.chat-header .chat-header__btn,
+.chat-header .tg-icon-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.chat-header .chat-header__btn {
+  color: var(--text-secondary, #57534e);
+}
+
+.chat-header .chat-header__btn:active,
+.chat-header .tg-icon-btn:active {
+  background: color-mix(in srgb, var(--tg-text, #1c1917) 7%, transparent);
+}
+
+.chat-header .chat-back-btn {
+  margin: 0;
+  color: var(--tg-primary, #7d3640);
+}
+

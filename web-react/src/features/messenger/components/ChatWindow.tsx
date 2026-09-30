@@ -8,7 +8,7 @@ import * as api from '../api/messengerApi';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SearchChat } from './SearchChat';
-import { LuBot, LuChevronLeft, LuPhone, LuSearch, LuVideo } from 'react-icons/lu';
+import { LuBot, LuChevronLeft, LuEllipsisVertical, LuPhone, LuSearch, LuVideo } from 'react-icons/lu';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { groupMessages } from '../groupMessages';
@@ -822,6 +822,9 @@ export function ChatWindow({
 
   const virtualListTotalSize = rowVirtualizer.getTotalSize();
 
+  /** Последний «хвост» ленты, который мы видели (чат + id): отличаем новое своё сообщение от первой загрузки. */
+  const tailSeenRef = useRef<{ conversationId: string; id: string | null }>({ conversationId: '', id: null });
+
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -834,6 +837,26 @@ export function ChatWindow({
       return;
     }
 
+    /*
+     * Отправил сообщение — лента должна вернуться вниз, даже если до этого читал историю выше (как в любом
+     * мессенджере). Раньше при nearBottom=false своё новое сообщение появлялось ниже экрана, и казалось,
+     * что отправка не сработала. Первую загрузку чата не трогаем (там работает восстановление позиции).
+     */
+    const lastMsg = messages[messages.length - 1];
+    const lastId = lastMsg ? String(lastMsg.id) : null;
+    const seen = tailSeenRef.current;
+    if (seen.conversationId !== conversationId) {
+      tailSeenRef.current = { conversationId, id: lastId };
+    } else if (lastId !== seen.id) {
+      tailSeenRef.current = { conversationId, id: lastId };
+      const lastIsOwn =
+        lastMsg != null &&
+        currentMemberId != null &&
+        lastMsg.sender_id != null &&
+        Number(lastMsg.sender_id) === Number(currentMemberId);
+      if (seen.id != null && lastIsOwn) nearBottomRef.current = true;
+    }
+
     if (nearBottomRef.current && listCount > 0) {
       rowVirtualizer.scrollToIndex(listCount - 1, { align: 'end', behavior: 'auto' });
       setShowNewBelow(false);
@@ -844,7 +867,28 @@ export function ChatWindow({
       el.scrollTop = el.scrollHeight;
       setShowNewBelow(false);
     }
-  }, [messages, conversationId, listCount, virtualListTotalSize, rowVirtualizer]);
+  }, [messages, conversationId, listCount, virtualListTotalSize, rowVirtualizer, currentMemberId]);
+
+  /**
+   * Лента «прилипает» к низу при изменении высоты области сообщений: открылась экранная клавиатура, поле
+   * ввода выросло на несколько строк или появилась плашка над ним. Раньше высота сжималась, а scrollTop
+   * не менялся — после фокуса в поле пользователь видел старые сообщения, а не последние. Если человек
+   * читал историю выше (не у низа), позицию не трогаем.
+   */
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let prevHeight = el.clientHeight;
+    const ro = new ResizeObserver(() => {
+      const h = el.clientHeight;
+      if (h === prevHeight) return;
+      prevHeight = h;
+      // nearBottomRef меняется только в onScroll, а при сжатии scroll-события нет: флаг ещё «у низа».
+      if (nearBottomRef.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [conversationId]);
 
   useEffect(() => {
     if (!assistantThinking || !nearBottomRef.current) return;
@@ -1039,7 +1083,7 @@ export function ChatWindow({
     <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
       <header className="chat-header sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-[color:var(--tg-border)] bg-[var(--tg-surface,var(--surface-elevated))]">
-        <div className="mx-auto flex min-h-[52px] w-full min-w-0 max-w-full items-center gap-1 px-1 py-1.5 sm:gap-2 sm:px-2 sm:py-2">
+        <div className="chat-header__row mx-auto flex min-h-[56px] w-full min-w-0 max-w-full items-center gap-1.5 py-1.5 pl-[max(0.5rem,env(safe-area-inset-left,0px))] pr-[max(0.5rem,env(safe-area-inset-right,0px))] sm:gap-2 sm:py-2">
           {/* Слева: назад — только мобилка; на ПК список чатов всегда слева. */}
           <div className="flex shrink-0 items-center lg:hidden">
             <button
@@ -1048,7 +1092,7 @@ export function ChatWindow({
               aria-label="Назад к списку чатов"
               className="chat-back-btn tg-header-back tg-icon-btn"
             >
-              <LuChevronLeft size={26} strokeWidth={2.2} aria-hidden />
+              <LuChevronLeft size={28} strokeWidth={2.2} aria-hidden />
             </button>
           </div>
 
@@ -1065,11 +1109,11 @@ export function ChatWindow({
             }}
             aria-label={headerInfoAriaLabel}
             title={interlocutorProfilePath != null ? 'Открыть страницу пользователя' : undefined}
-            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg py-0.5 pl-0.5 pr-1 text-left transition-colors active:bg-[var(--surface)] sm:gap-3 sm:pr-2"
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-xl py-0.5 pr-1 text-left transition-colors active:bg-[var(--surface)] sm:pr-2"
           >
             {showHeaderSkeleton ? (
               <>
-                <div className="tg-chat-header-skeleton tg-chat-header-skeleton--avatar h-9 w-9 shrink-0 rounded-full sm:h-10 sm:w-10" />
+                <div className="tg-chat-header-skeleton tg-chat-header-skeleton--avatar h-10 w-10 shrink-0 rounded-full" />
                 <div className="min-w-0 flex-1 overflow-hidden py-0.5">
                   <div className="tg-chat-header-skeleton tg-chat-header-skeleton--title max-w-[10.5rem] rounded-md" />
                   <div className="tg-chat-header-skeleton tg-chat-header-skeleton--subtitle mt-1 max-w-[8rem] rounded-md" />
@@ -1077,7 +1121,7 @@ export function ChatWindow({
               </>
             ) : (
               <>
-                <div className="relative h-9 w-9 shrink-0 sm:h-10 sm:w-10">
+                <div className="relative h-10 w-10 shrink-0">
                   <div
                     className="grid h-full w-full place-items-center overflow-hidden rounded-full text-sm font-semibold text-white"
                     style={{
@@ -1108,10 +1152,10 @@ export function ChatWindow({
                   ) : null}
                 </div>
                 <div className="min-w-0 flex-1 overflow-hidden">
-                  <div className="truncate text-base font-semibold leading-[1.2] text-[var(--text)] sm:text-lg">{displayName}</div>
+                  <div className="truncate text-[17px] font-semibold leading-[1.2] tracking-[-0.01em] text-[var(--text)] sm:text-lg">{displayName}</div>
                   {typingUsers.length > 0 ? (
                     <div
-                      className={['truncate text-xs leading-tight sm:text-sm', headerStatusClass].join(' ')}
+                      className={['truncate text-[13px] leading-tight sm:text-sm', headerStatusClass].join(' ')}
                       aria-label={`${typingFirstNames.join(', ')} ${typingPresentVerb}`}
                     >
                       <span>{typingFirstNames.join(', ')} {typingPresentVerb}</span>
@@ -1123,7 +1167,7 @@ export function ChatWindow({
                     </div>
                   ) : isAssistantChannel && assistantThinking ? (
                     <div
-                      className={['truncate text-xs leading-tight sm:text-sm', headerStatusClass].join(' ')}
+                      className={['truncate text-[13px] leading-tight sm:text-sm', headerStatusClass].join(' ')}
                       aria-label="ИИ отвечает"
                     >
                       <span>ИИ отвечает</span>
@@ -1134,7 +1178,7 @@ export function ChatWindow({
                       </span>
                     </div>
                   ) : headerSubtitle ? (
-                    <div className={['last-seen user-status truncate text-xs leading-tight sm:text-sm', headerStatusClass].join(' ')}>
+                    <div className={['last-seen user-status truncate text-[13px] leading-tight sm:text-sm', headerStatusClass].join(' ')}>
                       {headerSubtitle}
                     </div>
                   ) : null}
@@ -1144,7 +1188,7 @@ export function ChatWindow({
           </div>
 
           {/* Справа: действия */}
-          <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">
+          <div className="chat-header__actions flex shrink-0 items-center justify-end">
             {showHeaderSkeleton ? (
               <>
                 <span className="tg-chat-header-skeleton tg-chat-header-skeleton--action rounded-full" aria-hidden />
@@ -1158,7 +1202,7 @@ export function ChatWindow({
                     onClick={() => firstUnreadMessageId && jumpToMessage(firstUnreadMessageId)}
                     aria-label="К первому непрочитанному"
                     title="К непрочитанным"
-                    className="inline-flex h-10 min-w-[2rem] items-center justify-center rounded-full px-1.5 text-sm font-extrabold text-primary transition-colors hover:bg-primary/10 active:bg-primary/15"
+                    className="chat-header__btn inline-flex h-11 min-w-11 items-center justify-center rounded-full px-1.5 text-base font-bold text-primary transition-colors hover:bg-primary/10 active:bg-primary/15"
                   >
                     ↓
                   </button>
@@ -1173,13 +1217,13 @@ export function ChatWindow({
                       aria-haspopup="menu"
                       aria-expanded={callHeaderMenuOpen}
                       className={[
-                        'tg-chat-header-call-btn inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all duration-200',
-                        'text-primary ring-2 ring-primary/[0.18] bg-primary/[0.07] shadow-sm',
-                        'hover:bg-primary/[0.13] hover:ring-primary/30 active:scale-[0.96]',
-                        callHeaderMenuOpen ? 'bg-primary/[0.14] ring-primary/35' : '',
+                        'tg-chat-header-call-btn chat-header__btn inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors duration-200',
+                        'text-primary bg-primary/[0.08]',
+                        'hover:bg-primary/[0.14] active:scale-[0.96]',
+                        callHeaderMenuOpen ? 'bg-primary/[0.16]' : '',
                       ].join(' ')}
                     >
-                      <LuPhone className="h-[20px] w-[20px]" strokeWidth={2.35} aria-hidden />
+                      <LuPhone className="h-[21px] w-[21px]" strokeWidth={2.2} aria-hidden />
                     </button>
                     {callHeaderMenuOpen ? (
                       <div
@@ -1237,20 +1281,18 @@ export function ChatWindow({
                     onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
                     aria-label="Управление чатом"
                     title="Управление"
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors active:bg-[var(--surface)]"
+                    className="chat-header__btn inline-flex h-11 w-11 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors active:bg-[var(--surface)]"
                   >
-                    <span className="text-lg font-black leading-none" aria-hidden>
-                      ⋮
-                    </span>
+                    <LuEllipsisVertical size={22} strokeWidth={2.2} aria-hidden />
                   </button>
                 ) : null}
                 <button
                   type="button"
                   onClick={() => setShowSearch(true)}
                   aria-label="Поиск по сообщениям"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors active:bg-[var(--surface)]"
+                  className="chat-header__btn inline-flex h-11 w-11 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors active:bg-[var(--surface)]"
                 >
-                  <LuSearch size={20} strokeWidth={2.25} />
+                  <LuSearch size={22} strokeWidth={2.2} aria-hidden />
                 </button>
               </>
             )}
