@@ -29,6 +29,7 @@ import { isMessengerAudioFilePayload, resolveMessengerAudioFileTitle } from '../
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { ChatVideoAttachmentPreview } from './ChatVideoAttachmentPreview';
+import { LinkPreviews } from './LinkPreviewCard';
 import { MessengerPollCard } from './MessengerPollCard';
 import { MessageReadersSheet } from './MessageReadersSheet';
 import { ForwardMessageSheet } from './ForwardMessageSheet';
@@ -1610,7 +1611,10 @@ function MessageBubbleInner({
     }
 
     return (
-      <MentionRichText text={message.content} namesById={participantLabelById} isMine={isMine} />
+      <>
+        <MentionRichText text={message.content} namesById={participantLabelById} isMine={isMine} />
+        {!isDeleted ? <LinkPreviews text={String(message.content ?? '')} isMine={isMine} /> : null}
+      </>
     );
   };
 

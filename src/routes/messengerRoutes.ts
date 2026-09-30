@@ -13,6 +13,7 @@ import { attachConversationFromMessageIdParam, checkChatPermission } from '../mi
 import { ensureValidRequest, validateSendMessage } from '../middleware/messengerValidation';
 import { messengerUpload } from '../middleware/upload';
 import * as svc from '../services/messengerService';
+import { getLinkPreview } from '../services/linkPreviewService';
 import {
   ensureAssistantConversation,
   replyAsAssistantBot,
@@ -479,6 +480,18 @@ router.get('/uploads/health', async (_req: Request, res: Response) => {
 
 // All messenger routes require authentication
 router.use(requireAuthSession);
+
+/** GET /api/messenger/link-preview?url= — Open Graph превью ссылки для карточки в чате. */
+router.get('/link-preview', async (req: Request, res: Response) => {
+  const url = typeof req.query.url === 'string' ? req.query.url.trim() : '';
+  if (!url || url.length > 2048) {
+    res.status(400).json({ error: 'url is required' });
+    return;
+  }
+  const preview = await getLinkPreview(url);
+  res.set('Cache-Control', 'private, max-age=3600');
+  res.json({ preview });
+});
 
 /** POST /api/messenger/studio/song-chat { songId } — чат обсуждения песни (студия). */
 router.post('/studio/song-chat', async (req: Request, res: Response) => {
