@@ -82,6 +82,12 @@ type SaveSubscriptionRow = {
   user_agent: string | null;
 };
 
+export type PushChannelSummary = { attempted: number; sent: number; removed: number; failed: number };
+export type PushSendSummary = { web: PushChannelSummary; fcm: PushChannelSummary };
+export type WebSendOutcome = 'sent' | 'removed' | 'failed' | 'skipped';
+
+const emptyChannel = (): PushChannelSummary => ({ attempted: 0, sent: 0, removed: 0, failed: 0 });
+
 export type SaveSubscriptionResult = 'created' | 'updated' | 'noop';
 
 function isMissingPushColumnError(err: unknown): boolean {
@@ -274,9 +280,9 @@ function serializeWebPushPayload(payload: unknown): string {
 export async function sendNotificationToSubscription(
   sub: PushSubscriptionData,
   payload: unknown,
-): Promise<void> {
+): Promise<WebSendOutcome> {
   if (!vapidReady) {
-    return;
+    return 'skipped';
   }
   try {
     await webpush.sendNotification(
@@ -292,6 +298,7 @@ export async function sendNotificationToSubscription(
     query(`UPDATE push_subscriptions SET last_used_at = NOW() WHERE endpoint = $1`, [sub.endpoint]).catch(e => {
         console.warn('Failed to update last_used_at on push success', e);
     });
+    return 'sent';
   } catch (err: unknown) {
     const statusCode =
       err && typeof err === 'object' && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
@@ -301,6 +308,7 @@ export async function sendNotificationToSubscription(
       // Subscription has expired or is no longer valid
       console.log('[push] Subscription expired. Removing from DB.', sub.endpoint);
       await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
+      return 'removed';
     } else if (
       statusCode === 403 &&
       (/vapid|UnauthorizedRegistration|InvalidToken|mismatch/i.test(body) ||
@@ -320,6 +328,7 @@ export async function sendNotificationToSubscription(
         body: body.slice(0, 200),
       });
       await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
+      return 'removed';
     } else if (isPushNetworkTimeoutErr(err)) {
       const now = Date.now();
       if (now - lastPushNetworkErrLogMs >= PUSH_NETWORK_ERR_LOG_INTERVAL_MS) {
@@ -344,17 +353,27 @@ export async function sendNotificationToSubscription(
       });
     }
   }
+  return 'failed';
 }
 
-export async function sendNotificationToMember(memberId: number, payload: unknown): Promise<void> {
+export async function sendNotificationToMember(
+  memberId: number,
+  payload: unknown,
+): Promise<PushChannelSummary> {
+  const summary = emptyChannel();
   if (!vapidReady) {
-    return;
+    return summary;
   }
   const subs = await getSubscriptionsForMember(memberId);
-  if (subs.length === 0) {
-    return;
+  const outcomes = await Promise.all(subs.map((sub) => sendNotificationToSubscription(sub, payload)));
+  for (const o of outcomes) {
+    if (o === 'skipped') continue;
+    summary.attempted += 1;
+    if (o === 'sent') summary.sent += 1;
+    else if (o === 'removed') summary.removed += 1;
+    else summary.failed += 1;
   }
-  await Promise.allSettled(subs.map((sub) => sendNotificationToSubscription(sub, payload)));
+  return summary;
 }
 
 const FCM_MULTICAST_CHUNK = 500;
@@ -362,6 +381,8 @@ const FCM_MULTICAST_CHUNK = 500;
 export type SendPushOptions = {
   /** false — только чаты (sendPushNotification), запись в журнал не создаём, чтобы не дублировать счётчик. */
   recordDelivery?: boolean;
+  /** Служебные пуши (тест из профиля): не применять фильтр по роли «прихожанин». */
+  bypassRoleFilter?: boolean;
 };
 
 /**
@@ -420,9 +441,10 @@ export async function sendPush(
   body: string,
   data?: Record<string, string>,
   opts?: SendPushOptions,
-): Promise<void> {
-  if (!(await shouldDeliverPushForMember(memberId, data))) {
-    return;
+): Promise<PushSendSummary> {
+  const summary: PushSendSummary = { web: emptyChannel(), fcm: emptyChannel() };
+  if (!opts?.bypassRoleFilter && !(await shouldDeliverPushForMember(memberId, data))) {
+    return summary;
   }
 
   const recordDelivery = opts?.recordDelivery !== false;
@@ -465,11 +487,14 @@ export async function sendPush(
     sendNotificationToMember(memberId, webPayload),
     sendFcmToMember(memberId, title, body, data, deliveryId, webPayload.badgeCount),
   ]);
+  if (results[0].status === 'fulfilled') summary.web = results[0].value;
+  if (results[1].status === 'fulfilled') summary.fcm = results[1].value;
   for (const r of results) {
     if (r.status === 'rejected') {
       console.warn('[push] delivery channel failed', { memberId, error: r.reason });
     }
   }
+  return summary;
 }
 
 /** FCM data-значения обязаны быть строками; null/undefined отбрасываем. */
@@ -501,15 +526,16 @@ async function sendFcmToMember(
   data: Record<string, string> | undefined,
   deliveryId: number | undefined,
   badgeCount: unknown,
-): Promise<void> {
+): Promise<PushChannelSummary> {
+  const summary = emptyChannel();
   const messaging = getFirebaseMessaging();
   if (!messaging) {
-    return;
+    return summary;
   }
 
   const tokens = await getFcmTokensForMember(memberId);
   if (tokens.length === 0) {
-    return;
+    return summary;
   }
 
   const dataStrings = toFcmDataStrings(title, body, data, deliveryId, badgeCount);
@@ -571,11 +597,17 @@ async function sendFcmToMember(
         memberId,
         message: e instanceof Error ? e.message : String(e),
       });
+      summary.attempted += slice.length;
+      summary.failed += slice.length;
       continue;
     }
+    summary.attempted += slice.length;
     for (let j = 0; j < res.responses.length; j++) {
       const r = res.responses[j];
-      if (r.success) continue;
+      if (r.success) {
+        summary.sent += 1;
+        continue;
+      }
       const t = slice[j];
       const code = r.error?.code;
       const message = r.error?.message;
@@ -585,10 +617,12 @@ async function sendFcmToMember(
           code,
           tokenPrefix: t ? t.slice(0, 12) : null,
         });
+        summary.removed += 1;
         if (t) {
           await deleteFcmToken(t);
         }
       } else {
+        summary.failed += 1;
         console.warn('[push] FCM send failed', {
           memberId,
           code: code ?? 'unknown',
@@ -598,6 +632,7 @@ async function sendFcmToMember(
       }
     }
   }
+  return summary;
 }
 
 /**
@@ -619,4 +654,14 @@ export async function sendPushNotification(memberId: number, payload: unknown): 
     }
   }
   await sendPush(memberId, title, body, data, { recordDelivery: false });
+}
+
+/** Web Push подписки, которые не подтверждались и не получали пуши дольше срока, считаем мёртвыми. */
+export async function pruneStalePushSubscriptions(days = 120): Promise<number> {
+  const result = await query(
+    `DELETE FROM push_subscriptions
+     WHERE COALESCE(last_used_at, created_at) < NOW() - ($1::int * INTERVAL '1 day')`,
+    [days],
+  );
+  return result.rowCount ?? 0;
 }

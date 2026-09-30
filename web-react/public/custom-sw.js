@@ -63,6 +63,8 @@ self.addEventListener('push', function (event) {
             { action: 'decline', title: '✗ Отказать' },
           ]
         : parseJsonStr(data.actions, []),
+    lang: 'ru',
+    timestamp: Date.now(),
     data: {
       url: data.url || '/',
       conversationId: data.conversationId != null ? data.conversationId : null,
@@ -186,22 +188,38 @@ self.addEventListener('notificationclick', function (event) {
     }
   }
 
-  const safeUrl = event.notification?.data?.url || '/';
-  const urlToOpen = new URL(safeUrl, self.location.origin).href;
+  // Открываем только страницы нашего origin — url приходит из payload.
+  let urlToOpen = self.location.origin + '/';
+  try {
+    const candidate = new URL(event.notification?.data?.url || '/', self.location.origin);
+    if (candidate.origin === self.location.origin) urlToOpen = candidate.href;
+  } catch (e) {
+    /* оставляем корень */
+  }
 
   event.waitUntil(
     markDeliveryOpened.then(function () {
       return clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+        // Предпочитаем окно, которое уже в фокусе/видно, иначе первое окно нашего origin.
         let clientToFocus = null;
         for (const client of windowClients) {
-          if (client.url && new URL(client.url).origin === self.location.origin) {
+          if (!client.url || new URL(client.url).origin !== self.location.origin) continue;
+          if (client.focused) {
             clientToFocus = client;
             break;
+          }
+          if (!clientToFocus || (client.visibilityState === 'visible' && clientToFocus.visibilityState !== 'visible')) {
+            clientToFocus = client;
           }
         }
 
         if (clientToFocus) {
-          clientToFocus.focus();
+          try {
+            const p = clientToFocus.focus();
+            if (p && typeof p.catch === 'function') p.catch(function () {});
+          } catch (e) {
+            /* iOS иногда запрещает focus() */
+          }
           try {
             clientToFocus.postMessage({
               type: 'push:navigate',
@@ -217,6 +235,34 @@ self.addEventListener('notificationclick', function (event) {
       });
     }),
   );
+});
+
+// Клиент просит очистить шторку (пользователь открыл приложение / прочитал чат).
+self.addEventListener('message', function (event) {
+  const msg = event.data;
+  if (!msg || typeof msg !== 'object') return;
+  if (msg.type === 'push:clear-all' || msg.type === 'push:clear-tag') {
+    event.waitUntil(
+      (async function () {
+        try {
+          const opts = msg.type === 'push:clear-tag' && msg.tag ? { tag: String(msg.tag) } : {};
+          const list = await self.registration.getNotifications(opts);
+          list.forEach(function (n) {
+            n.close();
+          });
+          if (
+            msg.type === 'push:clear-all' &&
+            self.navigator &&
+            typeof self.navigator.clearAppBadge === 'function'
+          ) {
+            await self.navigator.clearAppBadge();
+          }
+        } catch (e) {
+          /* ignore */
+        }
+      })(),
+    );
+  }
 });
 
 self.addEventListener('notificationclose', function (event) {

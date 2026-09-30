@@ -124,3 +124,31 @@ export async function subscribeToPushApi(subscription: PushSubscription): Promis
 export async function unsubscribeFromPushApi(endpoint: string): Promise<void> {
   await apiClient.post('/api/notifications/unsubscribe', { endpoint });
 }
+
+export type PushStatus = {
+  vapidConfigured: boolean;
+  fcmConfigured: boolean;
+  webSubscriptions: number;
+  nativeDevices: number;
+  currentEndpointRegistered: boolean | null;
+};
+
+export async function fetchPushStatus(endpoint?: string): Promise<PushStatus> {
+  const { data } = await apiClient.get<PushStatus>('/api/notifications/status', {
+    params: endpoint ? { endpoint } : undefined,
+    silentErrorToast: true,
+  });
+  return data;
+}
+
+export type PushTestSummary = {
+  web: { attempted: number; sent: number; removed: number; failed: number };
+  fcm: { attempted: number; sent: number; removed: number; failed: number };
+};
+
+export async function sendTestPush(): Promise<PushTestSummary> {
+  const { data } = await apiClient.post<{ summary: PushTestSummary }>('/api/notifications/test', null, {
+    silentErrorToast: true,
+  });
+  return data.summary;
+}

@@ -791,6 +791,12 @@ export function Layout() {
     if (registrationStatus !== 'active') return;
     try {
       await apiClient.post('/api/notifications/deliveries/open-all');
+      // Пользователь в приложении — убираем накопившиеся уведомления из шторки и сбрасываем бейдж.
+      try {
+        navigator.serviceWorker?.controller?.postMessage({ type: 'push:clear-all' });
+      } catch {
+        /* ignore */
+      }
       void queryClient.invalidateQueries({ queryKey: UNREAD_DELIVERIES_QK });
       window.dispatchEvent(new CustomEvent('app:notification-deliveries-changed'));
     } catch {

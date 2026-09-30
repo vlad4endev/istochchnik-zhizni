@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { FiBell, FiBellOff } from 'react-icons/fi';
-import { unsubscribeFromPushApi } from '../api';
+import { fetchPushStatus, sendTestPush, unsubscribeFromPushApi, type PushStatus } from '../api';
+import { isAppleMobileWeb, isInstalledPwa } from '../../pwa/utils/pwaEnvironment';
 import { useNotificationManager } from '../../pwa';
 import { useAuthStore } from '../../auth/authStore';
 import profileShell from '../profileShell.module.css';
@@ -22,6 +23,49 @@ export function PushSettings() {
   } = useNotificationManager();
   const [localLoading, setLocalLoading] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [serverStatus, setServerStatus] = useState<PushStatus | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  const refreshServerStatus = useCallback(async () => {
+    try {
+      const registration = await navigator.serviceWorker?.ready;
+      const sub = await registration?.pushManager.getSubscription();
+      setServerStatus(await fetchPushStatus(sub?.endpoint));
+    } catch {
+      setServerStatus(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (Capacitor.isNativePlatform() || status === 'unsupported') return;
+    void refreshServerStatus();
+  }, [status, isSubscribed, refreshServerStatus]);
+
+  async function handleTestPush() {
+    setMsg(null);
+    setTesting(true);
+    try {
+      const summary = await sendTestPush();
+      const sent = summary.web.sent + summary.fcm.sent;
+      const attempted = summary.web.attempted + summary.fcm.attempted;
+      if (attempted === 0) {
+        setMsg({ kind: 'err', text: 'На сервере нет ни одной подписки. Включите уведомления переключателем выше.' });
+      } else if (sent === 0) {
+        setMsg({ kind: 'err', text: 'Сервер не смог доставить уведомление. Выключите и включите уведомления заново.' });
+      } else {
+        setMsg({ kind: 'ok', text: `Тест отправлен на устройств: ${sent}. Уведомление должно появиться через несколько секунд.` });
+      }
+      void refreshServerStatus();
+    } catch (e) {
+      const code = (e as { response?: { status?: number } })?.response?.status;
+      setMsg({
+        kind: 'err',
+        text: code === 429 ? 'Подождите несколько секунд перед повторной проверкой.' : 'Не удалось отправить тест.',
+      });
+    } finally {
+      setTesting(false);
+    }
+  }
 
   // Native Capacitor uses FCM via useFCM — this toggle is for browser / PWA only.
   if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
@@ -74,6 +118,7 @@ export function PushSettings() {
           await subscription.unsubscribe();
         }
         await checkStatus();
+        void refreshServerStatus();
         setMsg({ kind: 'ok', text: 'Уведомления отключены.' });
       }
     } catch (error: unknown) {
@@ -93,8 +138,9 @@ export function PushSettings() {
       <div className={profileShell.profileRoot} data-profile-root>
         <div className="mt-4 rounded-xl border border-[color:var(--profile-card-ring)] bg-[color:color-mix(in_srgb,var(--profile-surface-elevated)_70%,var(--profile-surface))] p-4">
           <p className="text-sm text-[color:var(--profile-text-muted)]">
-            Браузер не поддерживает Push-уведомления. На iPhone добавьте сайт на экран «Домой» и откройте
-            ярлык.
+            {isAppleMobileWeb() && !isInstalledPwa()
+              ? 'На iPhone и iPad push работают только в установленном приложении: нажмите «Поделиться» → «На экран „Домой“», затем откройте ярлык и включите уведомления здесь (нужен iOS 16.4 или новее).'
+              : 'Браузер не поддерживает Push-уведомления. На iPhone добавьте сайт на экран «Домой» и откройте ярлык.'}
           </p>
         </div>
       </div>
@@ -155,6 +201,26 @@ export function PushSettings() {
         >
           {msg.text}
         </p>
+      ) : null}
+
+      {isSubscribed && serverStatus ? (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[color:var(--profile-text-muted)]">
+          {!serverStatus.vapidConfigured ? (
+            <span className="text-red-600">Сервер push не настроен (VAPID).</span>
+          ) : serverStatus.currentEndpointRegistered === false ? (
+            <span className="text-amber-600">Это устройство не зарегистрировано на сервере — переключите уведомления.</span>
+          ) : (
+            <span>Устройств с уведомлениями: {serverStatus.webSubscriptions + serverStatus.nativeDevices}</span>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleTestPush()}
+            disabled={testing || loading}
+            className="rounded-lg border border-[color:var(--profile-card-ring)] px-3 py-1.5 text-xs font-semibold text-[color:var(--profile-text-heading)] disabled:opacity-50"
+          >
+            {testing ? 'Отправка…' : 'Отправить тест'}
+          </button>
+        </div>
       ) : null}
 
       {status === 'denied' ? (
