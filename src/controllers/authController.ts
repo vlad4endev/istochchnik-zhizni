@@ -575,7 +575,9 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
     return;
   }
 
-  const body = req.body as Record<string, unknown>;
+  const body = { ...(req.body as Record<string, unknown>) };
+  // Молитвенную нужду участник сам не меняет — только координатор/админ (другие эндпоинты).
+  delete body.prayer_request;
   const hasFirst = body.first_name !== undefined;
   const hasLast = body.last_name !== undefined;
   if (hasFirst !== hasLast) {
