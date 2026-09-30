@@ -179,9 +179,12 @@ async function loadAuthorsForMemberIds(memberIds: number[]): Promise<Map<number,
   const uniq = [...new Set(memberIds)].filter((n) => Number.isInteger(n) && n > 0);
   if (uniq.length === 0) return map;
   const res = await query(
+    // LEFT JOIN от members: строка user_profiles создаётся лениво (при первой публикации/заходе в профиль),
+    // а INNER JOIN отбрасывал тех, кто только комментировал или лайкал, — в комментариях они были «участник».
+    // username по умолчанию совпадает с тем, что создаёт ensureProfile (`member-<id>`).
     `SELECT
-      up.member_id,
-      up.username,
+      m.id AS member_id,
+      COALESCE(up.username, 'member-' || m.id::text) AS username,
       m.first_name,
       m.last_name,
       COALESCE(
@@ -190,9 +193,9 @@ async function loadAuthorsForMemberIds(memberIds: number[]): Promise<Map<number,
         NULLIF(TRIM(m.name), '')
       ) AS display_name,
       COALESCE(up.avatar_url, m.avatar_url) AS avatar_url
-     FROM user_profiles up
-     INNER JOIN members m ON m.id = up.member_id
-     WHERE up.member_id = ANY($1::int[])`,
+     FROM members m
+     LEFT JOIN user_profiles up ON up.member_id = m.id
+     WHERE m.id = ANY($1::int[])`,
     [uniq],
   );
   for (const row of res.rows as Array<{

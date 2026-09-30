@@ -45,7 +45,9 @@ function typeLabel(t: ServiceItemType): { label: string; className: string } {
 
 function GripDots() {
   return (
-    <div className="grid w-4 grid-cols-2 gap-1 text-stone-400">
+    // Не `grid-cols-2`: mobile.css на телефонах сводит любую такую сетку в 1 колонку, и 6 точек
+    // вытягивались столбцом на 96px поверх заголовка карточки.
+    <div className="grid w-4 gap-1 text-stone-400" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
       {Array.from({ length: 6 }).map((_, i) => (
         <span key={i} className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
       ))}
@@ -134,7 +136,8 @@ export function ServiceFlowComponent() {
                                 dragSnapshot.isDragging ? 'shadow-lg ring-2 ring-primary/20' : 'hover:bg-[var(--surface)]',
                               ].join(' ')}
                             >
-                              <div className="flex items-start gap-3 sm:gap-4">
+                              {/* Мобильный: время слева, исполнитель справа, заголовок отдельной строкой на всю ширину (order-last). */}
+                              <div className="flex flex-wrap items-start gap-x-3 gap-y-2 sm:flex-nowrap sm:gap-4">
                                 <div className="flex shrink-0 items-start gap-3">
                                   <button
                                     type="button"
@@ -154,7 +157,7 @@ export function ServiceFlowComponent() {
                                   </div>
                                 </div>
 
-                                <div className="min-w-0 flex-1">
+                                <div className="order-last min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-0">
                                   <div className="flex flex-wrap items-start gap-2">
                                     <h3 className="min-w-0 flex-1 truncate text-base font-extrabold leading-snug text-[var(--text)]">
                                       {item.title}
@@ -168,7 +171,7 @@ export function ServiceFlowComponent() {
                                   </p>
                                 </div>
 
-                                <div className="flex shrink-0 items-start gap-3">
+                                <div className="ml-auto flex shrink-0 items-start gap-3 sm:ml-0">
                                   <div className="text-right">
                                     <div className="text-sm font-extrabold text-[var(--text)]">
                                       {item.durationMinutes} мин

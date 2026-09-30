@@ -32,7 +32,7 @@ function sidebarLinkClass(isActive: boolean): string {
 }
 
 const mobileNavLinkBase =
-  'flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[11px] font-medium transition-colors';
+  'flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-0.5 py-1 text-[10px] font-medium min-[380px]:px-1 min-[380px]:text-[11px] transition-colors';
 
 function mobileNavLinkClass(isActive: boolean): string {
   return isActive
@@ -286,8 +286,8 @@ export function StudioLayout() {
 
   return (
     <div
-      className="studio-layout flex w-full flex-col overscroll-y-none bg-[var(--studio-editor-bg)] text-[var(--studio-editor-text)]"
-      style={{ height: 'var(--viewport-height, 100dvh)' }}
+      className="studio-layout flex min-h-0 w-full flex-1 flex-col overscroll-y-none bg-[var(--studio-editor-bg)] text-[var(--studio-editor-text)]"
+      style={{ maxHeight: 'var(--app-content-height, 100dvh)' }}
     >
       {!fullBleed ? (
         <StudioTopBar

@@ -189,6 +189,47 @@
   letter-spacing: 0.06em;
   color: var(--profile-text-muted);
   line-height: 1.2;
+  /* Подписи не рвём посреди слова («ПУБЛИКАЦ/ИИ»): глобальный overflow-wrap:anywhere сюда не нужен. */
+  overflow-wrap: normal;
+  word-break: keep-all;
+  hyphens: none;
+  white-space: nowrap;
+}
+
+/* Узкие телефоны: аватар оставляет правой колонке ~165px — капслок с разрядкой не влезает, поэтому обычный регистр. */
+@media (max-width: 420px) {
+  .igStatColumns {
+    grid-template-columns: repeat(3, minmax(min-content, 1fr));
+    gap: 0.25rem;
+  }
+
+  .igStatCellLabel {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.6875rem;
+    font-weight: 600;
+  }
+}
+
+/* iPhone SE / 320px: на правую колонку остаётся ~175px, три подписи по 11px не влезают. */
+@media (max-width: 360px) {
+  /* Аватар и зазор чуть меньше — освобождаем ~20px правой колонке под три подписи статистики. */
+  .igAvatarRing .igAvatar {
+    width: 4.5rem;
+    height: 4.5rem;
+  }
+
+  .igProfileMainRow {
+    gap: 0.75rem;
+  }
+
+  .igStatColumns {
+    gap: 0.125rem;
+  }
+
+  .igStatCellLabel {
+    font-size: 0.625rem;
+  }
 }
 
 .igStatCellMuted .igStatCellNum {

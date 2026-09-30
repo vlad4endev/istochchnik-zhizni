@@ -102,7 +102,7 @@ export function PushSettings() {
   }
 
   return (
-    <div className={`${profileShell.profileRoot} mt-0 border-0 pt-0`} data-profile-root>
+    <div className={`${profileShell.profileRoot} mt-0 border-0 pt-0 !bg-transparent`} data-profile-root>
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h3 className="flex items-center gap-2 text-sm font-bold text-[color:var(--profile-text-heading)]">
@@ -125,7 +125,7 @@ export function PushSettings() {
           className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[color:var(--profile-primary)] focus:ring-offset-2 ${
             isSubscribed
               ? 'bg-[color:var(--profile-primary)]'
-              : 'bg-[color:var(--profile-media-placeholder)]'
+              : 'bg-[color:color-mix(in_srgb,var(--profile-text-faint)_45%,transparent)]'
           } ${loading || status === 'denied' ? 'cursor-not-allowed opacity-50' : ''}`}
           role="switch"
           aria-checked={isSubscribed}

@@ -945,7 +945,7 @@ export function LoginPage() {
                   <div className="flex justify-start">
                     <button
                       type="button"
-                      className="text-xs font-semibold text-primary hover:underline"
+                      className="inline-flex min-h-[44px] items-center text-xs font-semibold text-primary hover:underline"
                       onClick={() => {
                         setShowResetForm((v) => !v);
                         setAdminForcedResetMode(false);

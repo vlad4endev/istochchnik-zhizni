@@ -38,7 +38,7 @@ export function AuthLandingPage() {
   }
 
   return (
-      <div className="flex h-full min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-y-auto overscroll-y-none bg-[#5c2830] bg-gradient-to-b from-primary via-primary to-[#5c2830] text-white [min-height:var(--viewport-height,100dvh)] [max-height:var(--viewport-height,100dvh)]">
+      <div className="flex h-full min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-y-auto overscroll-y-none bg-[#5c2830] bg-gradient-to-b from-primary via-primary to-[#5c2830] text-white [min-height:var(--app-content-height,100dvh)] [max-height:var(--app-content-height,100dvh)]">
       <div className="mx-auto flex h-full min-h-0 w-full max-w-lg flex-1 flex-col pt-6 [padding-left:max(1.25rem,env(safe-area-inset-left,0px))] [padding-right:max(1.25rem,env(safe-area-inset-right,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] sm:py-6">
         <div className="flex-[2] min-h-[2rem]" />
 
