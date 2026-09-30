@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LuHeart, LuTrash2, LuUser, LuX } from 'react-icons/lu';
+import { LuArrowUp, LuHeart, LuTrash2, LuUser, LuX } from 'react-icons/lu';
 
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { memberNameFirstLast } from '../../profile/memberDisplayName';
@@ -492,9 +492,10 @@ export function CommentSheet({
                   type="button"
                   className={styles.sendBtn}
                   disabled={sending || !text.trim()}
+                  aria-label="Отправить комментарий"
                   onClick={() => void onSend()}
                 >
-                  Опубл.
+                  <LuArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden />
                 </button>
               </div>
               {sendError ? <p className={styles.errorText}>{sendError}</p> : null}
