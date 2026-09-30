@@ -16,6 +16,7 @@ import {
 import { formatPostDate } from './FeedPostCard';
 
 import styles from './CommentSheet.module.css';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 const COMMENT_MAX = 2000;
 const QUICK_EMOJIS = ['❤️', '🙌', '🔥', '👏', '😢', '😍', '😮', '😂'] as const;
@@ -289,7 +290,7 @@ export function CommentSheet({
   };
 
   return (
-    <div
+    <BodyPortal><div
       className={styles.backdrop}
       role="presentation"
       onClick={(e) => {
@@ -508,6 +509,6 @@ export function CommentSheet({
           </div>
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }

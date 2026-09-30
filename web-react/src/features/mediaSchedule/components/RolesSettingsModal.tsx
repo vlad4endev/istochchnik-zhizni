@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { LuGripVertical, LuLoaderCircle, LuPencil, LuTrash2, LuX } from 'react-icons/lu';
 
 import type { MediaRole } from '../types';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 const COLOR_PRESETS = [
   '#7d3640',
@@ -131,7 +132,7 @@ export function RolesSettingsModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-end justify-center p-0 sm:items-center sm:p-4" role="presentation">
+    <BodyPortal><div className="fixed inset-0 z-[110] flex items-end justify-center p-0 sm:items-center sm:p-4" role="presentation">
       <button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/45" onClick={onClose} />
       <div
         role="dialog"
@@ -286,7 +287,7 @@ export function RolesSettingsModal({
           </button>
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }
 

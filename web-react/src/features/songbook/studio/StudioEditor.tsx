@@ -66,6 +66,7 @@ import {
   getSameTypeBlocks,
   hasAnyChordsInBlock,
 } from './chordPattern';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error' | 'offline';
 
@@ -1325,7 +1326,7 @@ export function StudioEditor() {
       />
 
       {sheetRecognizerOpen ? (
-        <>
+        <BodyPortal>
           <button
             type="button"
             className="fixed inset-0 z-[var(--z-modal-bg)] backdrop-blur-[2px]"
@@ -1358,11 +1359,11 @@ export function StudioEditor() {
             </div>
             <SheetRecognizer onApply={applySheetRecognition} variant="studio" />
           </div>
-        </>
+        </BodyPortal>
       ) : null}
 
       {toolsOpen ? (
-        <>
+        <BodyPortal>
           <button
             type="button"
             className="fixed inset-0 z-[var(--z-modal-bg)] backdrop-blur-[2px]"
@@ -1551,11 +1552,11 @@ export function StudioEditor() {
               </button>
             </div>
           </div>
-        </>
+        </BodyPortal>
       ) : null}
 
       {autoChordModalOpen ? (
-        <>
+        <BodyPortal>
           <button
             type="button"
             className="fixed inset-0 z-[var(--z-modal-bg)] backdrop-blur-[2px]"
@@ -1682,7 +1683,7 @@ export function StudioEditor() {
               </div>
             </div>
           </div>
-        </>
+        </BodyPortal>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2 gap-y-3 max-lg:sticky max-lg:top-0 max-lg:z-[calc(var(--z-sticky)-1)] max-lg:-mx-2 max-lg:border-b max-lg:border-[var(--studio-editor-border)] max-lg:bg-[var(--studio-toolbar-bg)] max-lg:px-2 max-lg:py-2 max-lg:backdrop-blur-sm">

@@ -4,6 +4,7 @@ import { patchProfilePostCaption, type ProfileFeedPost } from '../publicProfileA
 
 import styles from './EditPostModal.module.css';
 import profileShell from '../profileShell.module.css';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 type Props = {
   open: boolean;
@@ -52,7 +53,7 @@ export function EditPostModal({ open, post, onClose, onSaved }: Props) {
   if (!open || !post) return null;
 
   return (
-    <div className={`${styles.overlay} ${profileShell.profileRoot}`} role="dialog" aria-modal="true" aria-labelledby="edit-post-title">
+    <BodyPortal><div className={`${styles.overlay} ${profileShell.profileRoot}`} role="dialog" aria-modal="true" aria-labelledby="edit-post-title">
       <button type="button" className={styles.backdrop} aria-label="Закрыть" onClick={handleClose} />
       <div className={styles.panel}>
         <header className={styles.head}>
@@ -81,6 +82,6 @@ export function EditPostModal({ open, post, onClose, onSaved }: Props) {
           {error ? <p className={styles.err}>{error}</p> : null}
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }

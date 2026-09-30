@@ -5,6 +5,7 @@ import guitarData from '@tombatossals/chords-db/lib/guitar.json';
 
 import { chordNoteNames, lookupGuitarPosition } from '../chordUtils';
 import { PianoMini } from './PianoMini';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 const instrument = {
   strings: guitarData.main.strings,
@@ -23,7 +24,7 @@ export function ChordPopover({ symbol, onClose }: Props) {
   const notes = chordNoteNames(symbol);
 
   return (
-    <div
+    <BodyPortal><div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
       role="dialog"
       aria-modal
@@ -66,6 +67,6 @@ export function ChordPopover({ symbol, onClose }: Props) {
           </div>
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }

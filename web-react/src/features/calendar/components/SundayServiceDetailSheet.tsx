@@ -18,6 +18,7 @@ import { useMe } from '@/hooks/useMe';
 import { resolvePublicUrl } from '@/lib/resolvePublicUrl';
 
 import type { CalendarSundayService } from '../sundayServiceTypes';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 function parseYmdLocal(ymd: string): Date {
   const [y, m, d] = ymd.split('-').map((x) => Number(x));
@@ -83,7 +84,7 @@ export function SundayServiceDetailSheet({
   const sharePath = service.share_token ? `/service-plan/share/${service.share_token}` : null;
 
   return (
-    <div
+    <BodyPortal><div
       className="fixed inset-0 z-[150] flex min-h-[100dvh] flex-col justify-end bg-black/50 sm:items-center sm:justify-center sm:p-4 sm:[padding-left:max(0.75rem,env(safe-area-inset-left,0px))] sm:[padding-right:max(0.75rem,env(safe-area-inset-right,0px))]"
       onClick={onClose}
       role="dialog"
@@ -213,6 +214,6 @@ export function SundayServiceDetailSheet({
           </button>
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }

@@ -4,6 +4,7 @@ import { Notifications } from '@mantine/notifications';
 
 import { AppSplash } from './components/AppSplash';
 import { AppToastHost } from './components/AppToastHost';
+import { BodyPortal } from './components/BodyPortal';
 import { isAxiosError } from 'axios';
 import React, { StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -362,7 +363,9 @@ if (!rootEl) {
                   <AppBootstrapGate>
                     <RootRouter />
                   </AppBootstrapGate>
-                  <AppToastHost />
+                  <BodyPortal>
+                    <AppToastHost />
+                  </BodyPortal>
                   <MediaViewer />
                 </AccessibilityProvider>
               </BrowserRouter>

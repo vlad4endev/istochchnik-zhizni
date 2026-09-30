@@ -29,6 +29,7 @@ import {
   parseSongImportXlsxFile,
   type XlsxImportParsedSong,
 } from '../api';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 export type SmartImportSourceTab = 'text' | 'photo' | 'pdf' | 'url';
 
@@ -813,7 +814,7 @@ export function SmartImportModal({
   );
 
   return (
-    <div
+    <BodyPortal><div
       className="fixed inset-0 z-[var(--z-modal-bg)] flex items-end justify-center p-0 sm:items-center sm:p-4"
       style={{ background: isStudio ? 'rgba(17, 24, 39, 0.55)' : 'rgba(0, 0, 0, 0.5)' }}
       role="dialog"
@@ -1402,6 +1403,6 @@ export function SmartImportModal({
           </div>
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }

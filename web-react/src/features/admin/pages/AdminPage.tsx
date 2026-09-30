@@ -112,6 +112,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useImpersonation } from '../hooks/useImpersonation';
 import { isAppAdministratorSession } from '../../auth/authStore';
 import { APP_ROLE_IDS, appRoleLabel } from '../../settings/sectionVisibilityApi';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 type UpcomingBirthday = {
   nextDate: Date;
@@ -1660,7 +1661,7 @@ function MembersSection({
 
       {/* Add user modal */}
       {showAddUser && (
-        <div
+        <BodyPortal><div
           className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
           role="presentation"
           onMouseDown={(e) => {
@@ -1790,7 +1791,7 @@ function MembersSection({
               </div>
             </form>
           </div>
-        </div>
+        </div></BodyPortal>
       )}
 
       {/* Карточки — мобильные */}
@@ -2723,7 +2724,7 @@ function CalendarPrayerCycleRoster() {
         </div>
 
       {notInQueueOpen ? (
-        <div
+        <BodyPortal><div
           className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
           role="presentation"
           onMouseDown={(e) => {
@@ -2812,7 +2813,7 @@ function CalendarPrayerCycleRoster() {
               </div>
             </div>
           </div>
-        </div>
+        </div></BodyPortal>
       ) : null}
     </div>
   );
@@ -3206,7 +3207,7 @@ function EventsSection() {
       )}
 
       {eventModalMode && (
-        <div
+        <BodyPortal><div
           className="fixed inset-0 z-[130] flex items-center justify-center bg-black/45 p-4"
           role="presentation"
           onMouseDown={(e) => {
@@ -3357,7 +3358,7 @@ function EventsSection() {
               </button>
             </div>
           </div>
-        </div>
+        </div></BodyPortal>
       )}
     </div>
   );
@@ -3585,7 +3586,7 @@ function TemplatesSection() {
       )}
 
       {editingDir ? (
-        <div
+        <BodyPortal><div
           className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
           role="dialog"
           aria-modal="true"
@@ -3670,7 +3671,7 @@ function TemplatesSection() {
               </button>
             </div>
           </div>
-        </div>
+        </div></BodyPortal>
       ) : null}
     </div>
   );

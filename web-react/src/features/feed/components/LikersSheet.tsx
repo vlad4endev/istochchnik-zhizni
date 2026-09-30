@@ -7,6 +7,7 @@ import { memberNameFirstLast } from '../../profile/memberDisplayName';
 import { fetchPostLikers, type PostLiker } from '../feedApi';
 
 import styles from './LikersSheet.module.css';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 function likerName(l: PostLiker): string {
   const uname = (l.username ?? '').trim();
@@ -109,7 +110,7 @@ export function LikersSheet({ open, postId, profileLinkState, onClose }: LikersS
   if (!open || !postId) return null;
 
   return (
-    <div
+    <BodyPortal><div
       className={styles.backdrop}
       role="presentation"
       onClick={(e) => {
@@ -226,6 +227,6 @@ export function LikersSheet({ open, postId, profileLinkState, onClose }: LikersS
           ) : null}
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }
