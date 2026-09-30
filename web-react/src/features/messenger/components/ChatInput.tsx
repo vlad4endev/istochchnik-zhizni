@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import type { MutableRefObject } from 'react';
 import { createPortal } from 'react-dom';
@@ -914,12 +915,19 @@ export function ChatInput({
     if (!input) return;
     filePickerModeRef.current = kind;
     input.multiple = kind === 'image';
+    // Android WebView: при accept="audio/*" система предлагает «Диктофон», который возвращает пустой файл,
+    // и не даёт открыть проводник. `*/*` открывает системные «Файлы» (там есть папки записей); тип проверяем после выбора.
+    const nativeAndroid = Capacitor.getPlatform() === 'android';
     input.accept =
       kind === 'image'
         ? 'image/*,video/*'
         : kind === 'audio'
-          ? CHAT_AUDIO_ACCEPT
-          : 'application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt';
+          ? nativeAndroid
+            ? '*/*'
+            : CHAT_AUDIO_ACCEPT
+          : nativeAndroid
+            ? '*/*'
+            : 'application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt';
     try {
       input.disabled = false;
       input.click();
@@ -935,6 +943,14 @@ export function ChatInput({
     setUploadErr(null);
     const selected = Array.from(files);
     const pickerMode = filePickerModeRef.current;
+
+    if (selected.some((f) => f.size === 0)) {
+      setUploadErr(
+        'Файл пустой или недоступен. Выберите запись через «Файлы»/«Недавние» или запишите голосовое кнопкой микрофона в чате.',
+      );
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
 
     if (pickerMode === 'image') {
       const badType = selected.find((f) => !isChatPhotoOrVideoFile(f));
