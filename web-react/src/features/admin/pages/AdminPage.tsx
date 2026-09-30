@@ -479,8 +479,8 @@ export function AdminPage() {
           </select>
         </label>
 
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+          <div className="min-w-[11rem] flex-1">
             <h2 className="text-base font-medium tracking-tight text-stone-900">{meta.label}</h2>
             <p className="mt-0.5 truncate text-xs text-stone-500">{meta.description}</p>
           </div>
