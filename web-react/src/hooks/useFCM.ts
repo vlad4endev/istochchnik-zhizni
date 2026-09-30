@@ -185,10 +185,8 @@ export function useFCM(): void {
         return;
       }
       if (lastRegisteredFcmToken) {
-        const ok = await saveFcmTokenToServer(lastRegisteredFcmToken, deviceId);
-        if (ok) {
-          emitAppToast('Push-уведомления подключены', 'success');
-        }
+        // Токен уже известен (повторный вход): сохраняем без лишнего тоста — register() ниже всё равно вернёт его.
+        await saveFcmTokenToServer(lastRegisteredFcmToken, deviceId);
       }
       await PushNotifications.register();
     };
@@ -266,8 +264,21 @@ export function useFCM(): void {
     };
     window.addEventListener('app:native-push-permissions-granted', onPermissionsGranted);
 
+    // FCM-токен мог смениться, пока приложение было закрыто (onNewToken без живого WebView теряется),
+    // а пользователь мог включить уведомления в системных настройках — пере-регистрируемся при возврате.
+    let lastResumeSyncMs = Date.now();
+    const onVisible = (): void => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastResumeSyncMs < 10 * 60_000) return;
+      lastResumeSyncMs = now;
+      void registerForPush();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('app:native-push-permissions-granted', onPermissionsGranted);
       for (const remove of removeListeners) {
         remove();

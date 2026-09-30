@@ -40,12 +40,17 @@ function isPushNetworkTimeoutErr(err: unknown): boolean {
   );
 }
 
+let vapidReady = false;
 if (vapidConfigured) {
-  webpush.setVapidDetails(
-    VAPID_SUBJECT!,
-    VAPID_PUBLIC_KEY!,
-    VAPID_PRIVATE_KEY!,
-  );
+  try {
+    // web-push требует subject вида mailto:… или https://…; голый e-mail нормализуем.
+    const rawSubject = VAPID_SUBJECT!.trim();
+    const subject = /^(mailto:|https?:\/\/)/i.test(rawSubject) ? rawSubject : `mailto:${rawSubject}`;
+    webpush.setVapidDetails(subject, VAPID_PUBLIC_KEY!.trim(), VAPID_PRIVATE_KEY!.trim());
+    vapidReady = true;
+  } catch (e) {
+    console.error('[push] Invalid VAPID configuration — Web Push disabled:', e);
+  }
 } else {
   console.warn('VAPID keys are not configured. Web Push will not work.');
 }
@@ -246,11 +251,31 @@ export async function getSubscriptionsForCoordinators(): Promise<{member_id: num
   }));
 }
 
+/** Лимит шифрованного payload Web Push — 4096 байт; безопасно укладываемся в ~3 КБ JSON. */
+const WEB_PUSH_MAX_JSON_BYTES = 3000;
+
+function serializeWebPushPayload(payload: unknown): string {
+  let json = JSON.stringify(payload);
+  if (Buffer.byteLength(json, 'utf8') <= WEB_PUSH_MAX_JSON_BYTES) return json;
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const trimmed: Record<string, unknown> = { ...(payload as Record<string, unknown>) };
+    // Второстепенные и тяжёлые поля (кнопки, картинки) отбрасываем первыми.
+    for (const key of ['actions', 'image', 'icon', 'badge']) delete trimmed[key];
+    json = JSON.stringify(trimmed);
+    if (Buffer.byteLength(json, 'utf8') <= WEB_PUSH_MAX_JSON_BYTES) return json;
+    if (typeof trimmed.body === 'string') {
+      trimmed.body = `${trimmed.body.slice(0, 300)}…`;
+      json = JSON.stringify(trimmed);
+    }
+  }
+  return json;
+}
+
 export async function sendNotificationToSubscription(
   sub: PushSubscriptionData,
   payload: unknown,
 ): Promise<void> {
-  if (!vapidConfigured) {
+  if (!vapidReady) {
     return;
   }
   try {
@@ -259,8 +284,9 @@ export async function sendNotificationToSubscription(
         endpoint: sub.endpoint,
         keys: sub.keys,
       },
-      JSON.stringify(payload),
-      { TTL: 86400, timeout: WEB_PUSH_HTTP_TIMEOUT_MS },
+      serializeWebPushPayload(payload),
+      // urgency high — иначе Android в Doze и iOS откладывают доставку (вплоть до минут/часов).
+      { TTL: 86400, urgency: 'high', timeout: WEB_PUSH_HTTP_TIMEOUT_MS },
     );
     // Mark as used
     query(`UPDATE push_subscriptions SET last_used_at = NOW() WHERE endpoint = $1`, [sub.endpoint]).catch(e => {
@@ -321,7 +347,7 @@ export async function sendNotificationToSubscription(
 }
 
 export async function sendNotificationToMember(memberId: number, payload: unknown): Promise<void> {
-  if (!vapidConfigured) {
+  if (!vapidReady) {
     return;
   }
   const subs = await getSubscriptionsForMember(memberId);
@@ -434,8 +460,48 @@ export async function sendPush(
     console.warn('[push] badge count failed', e);
   }
 
-  await sendNotificationToMember(memberId, webPayload);
+  // Web Push и FCM независимы: медленный/недоступный один канал не должен задерживать другой.
+  const results = await Promise.allSettled([
+    sendNotificationToMember(memberId, webPayload),
+    sendFcmToMember(memberId, title, body, data, deliveryId, webPayload.badgeCount),
+  ]);
+  for (const r of results) {
+    if (r.status === 'rejected') {
+      console.warn('[push] delivery channel failed', { memberId, error: r.reason });
+    }
+  }
+}
 
+/** FCM data-значения обязаны быть строками; null/undefined отбрасываем. */
+function toFcmDataStrings(
+  title: string,
+  body: string,
+  data: Record<string, string> | undefined,
+  deliveryId: number | undefined,
+  badgeCount: unknown,
+): Record<string, string> {
+  const out: Record<string, string> = { title, body };
+  if (data) {
+    for (const [k, v] of Object.entries(data)) {
+      if (v === null || v === undefined) continue;
+      // Ключи на google./gcm. и from зарезервированы FCM — иначе сообщение отклоняется.
+      if (k === 'from' || /^(google|gcm)/i.test(k)) continue;
+      out[k] = typeof v === 'string' ? v : JSON.stringify(v);
+    }
+  }
+  if (deliveryId != null) out.deliveryId = String(deliveryId);
+  if (typeof badgeCount === 'string') out.badgeCount = badgeCount;
+  return out;
+}
+
+async function sendFcmToMember(
+  memberId: number,
+  title: string,
+  body: string,
+  data: Record<string, string> | undefined,
+  deliveryId: number | undefined,
+  badgeCount: unknown,
+): Promise<void> {
   const messaging = getFirebaseMessaging();
   if (!messaging) {
     return;
@@ -446,61 +512,67 @@ export async function sendPush(
     return;
   }
 
-  const dataStrings: Record<string, string> = { title, body };
-  if (data) {
-    for (const [k, v] of Object.entries(data)) {
-      dataStrings[k] = v;
-    }
-  }
-  if (deliveryId != null) {
-    dataStrings.deliveryId = String(deliveryId);
-  }
-  if (typeof webPayload.badgeCount === 'string') {
-    dataStrings.badgeCount = webPayload.badgeCount;
-  }
+  const dataStrings = toFcmDataStrings(title, body, data, deliveryId, badgeCount);
   const isMessengerLikePush =
     (typeof dataStrings.conversationId === 'string' && dataStrings.conversationId.trim().length > 0) ||
     (typeof dataStrings.tag === 'string' && dataStrings.tag.startsWith('chat-'));
   const notificationCount =
-    typeof webPayload.badgeCount === 'string' ? Number.parseInt(webPayload.badgeCount, 10) || 0 : 0;
+    typeof dataStrings.badgeCount === 'string' ? Number.parseInt(dataStrings.badgeCount, 10) || 0 : 0;
   const senderName = typeof dataStrings.senderName === 'string' ? dataStrings.senderName.trim() : '';
+  const channelId = isMessengerLikePush ? 'messages' : 'general';
+  // Срок жизни для оффлайн-устройств: сутки (как у Web Push), дальше уведомление неактуально.
+  const ttlSeconds = 86400;
+  const apnsExpiration = String(Math.floor(Date.now() / 1000) + ttlSeconds);
 
   for (let i = 0; i < tokens.length; i += FCM_MULTICAST_CHUNK) {
     const slice = tokens.slice(i, i + FCM_MULTICAST_CHUNK);
-    const channelId = isMessengerLikePush ? 'messages' : 'general';
-    const res = await messaging.sendEachForMulticast({
-      tokens: slice,
-      notification: { title, body },
-      data: dataStrings,
-      android: {
-        priority: 'high',
-        notification: {
-          channelId,
-          sound: 'default',
+    let res;
+    try {
+      res = await messaging.sendEachForMulticast({
+        tokens: slice,
+        notification: { title, body },
+        data: dataStrings,
+        android: {
           priority: 'high',
-        },
-      },
-      apns: {
-        headers: {
-          'apns-priority': '10',
-          'apns-push-type': 'alert',
-        },
-        payload: {
-          aps: {
-            alert: { title, body },
+          ttl: ttlSeconds * 1000,
+          notification: {
+            channelId,
             sound: 'default',
-            threadId: isMessengerLikePush ? dataStrings.conversationId ?? undefined : undefined,
-            category: isMessengerLikePush ? 'MESSAGE' : 'GENERAL',
-            badge: notificationCount > 0 ? notificationCount : undefined,
-            mutableContent: true,
-            interruptionLevel: isMessengerLikePush ? 'active' : 'passive',
-            relevanceScore: isMessengerLikePush ? 0.8 : 0.3,
-            summaryArg: isMessengerLikePush ? senderName || title : undefined,
-            summaryArgCount: isMessengerLikePush ? 1 : undefined,
+            priority: 'high',
+            defaultVibrateTimings: true,
           },
         },
-      },
-    });
+        apns: {
+          headers: {
+            'apns-priority': '10',
+            'apns-push-type': 'alert',
+            'apns-expiration': apnsExpiration,
+          },
+          payload: {
+            aps: {
+              alert: { title, body },
+              sound: 'default',
+              threadId: isMessengerLikePush ? dataStrings.conversationId ?? undefined : undefined,
+              category: isMessengerLikePush ? 'MESSAGE' : 'GENERAL',
+              badge: notificationCount > 0 ? notificationCount : undefined,
+              mutableContent: true,
+              // 'passive' доставлял уведомление «тихо» (без баннера/экрана блокировки) — часть
+              // пользователей iOS не видела пуши. Всегда 'active'.
+              interruptionLevel: 'active',
+              relevanceScore: isMessengerLikePush ? 0.8 : 0.3,
+              summaryArg: isMessengerLikePush ? senderName || title : undefined,
+              summaryArgCount: isMessengerLikePush ? 1 : undefined,
+            },
+          },
+        },
+      });
+    } catch (e) {
+      console.warn('[push] FCM multicast request failed', {
+        memberId,
+        message: e instanceof Error ? e.message : String(e),
+      });
+      continue;
+    }
     for (let j = 0; j < res.responses.length; j++) {
       const r = res.responses[j];
       if (r.success) continue;

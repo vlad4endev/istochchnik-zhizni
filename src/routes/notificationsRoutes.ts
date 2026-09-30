@@ -1,6 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
-import { saveFcmToken } from '../services/fcmSubscriptionService';
+import { deleteFcmTokenForDevice, saveFcmToken } from '../services/fcmSubscriptionService';
 import {
   getUnreadNotificationDeliveryCount,
   insertMemberNotificationDelivery,
@@ -165,6 +165,11 @@ router.post(
     }
 
     try {
+      try {
+        await ensurePushSchemaOnce();
+      } catch (schemaErr) {
+        console.warn('[notifications] ensurePushSubscriptionsSchema on save-token failed:', schemaErr);
+      }
       await saveFcmToken(memberId, device_id, fcm_token);
       console.info('[notifications] save-token ok', { memberId, deviceId: device_id.slice(0, 12) });
       res.status(201).json({ ok: true });
@@ -174,6 +179,30 @@ router.post(
     }
   },
 );
+
+/**
+ * POST /api/notifications/remove-token
+ * Body: { device_id: string } — выход из аккаунта на нативном устройстве.
+ */
+router.post('/remove-token', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const device_id = typeof req.body?.device_id === 'string' ? req.body.device_id.trim() : '';
+  if (!device_id || device_id.length > 512) {
+    res.status(400).json({ error: 'Field device_id is required' });
+    return;
+  }
+  try {
+    await deleteFcmTokenForDevice(memberId, device_id);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[notifications] remove-token error:', e);
+    res.status(500).json({ error: 'Failed to remove token' });
+  }
+});
 
 /**
  * GET /api/notifications/unread-deliveries-count

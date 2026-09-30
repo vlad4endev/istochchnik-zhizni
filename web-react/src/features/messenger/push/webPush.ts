@@ -121,7 +121,13 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<v
   if (Notification.permission !== 'granted') return;
 
   try {
-    const registration = await navigator.serviceWorker.ready;
+    // ready никогда не резолвится, если SW не зарегистрирован (dev/блокировка) — не вешаем синк навсегда.
+    const registration = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Service worker not ready')), 15_000),
+      ),
+    ]);
 
     const envKey = (import.meta as { env?: { VITE_VAPID_PUBLIC_KEY?: string } }).env
       ?.VITE_VAPID_PUBLIC_KEY;

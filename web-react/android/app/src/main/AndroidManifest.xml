@@ -30,6 +30,14 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Канал по умолчанию, если канал из payload ещё не создан на устройстве -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="general" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
+
         <!-- Один FCM-сервис: показ data-only пушей + Capacitor JS -->
         <service android:name=".AppFirebaseMessagingService" android:exported="false">
             <intent-filter>

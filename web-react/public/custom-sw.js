@@ -54,7 +54,8 @@ self.addEventListener('push', function (event) {
     icon: data.icon || '/assets/pwa-192x192.png',
     badge: data.badge || '/assets/pwa-192x192.png',
     tag: data.tag || undefined,
-    renotify: parseJsonStr(data.renotify, false),
+    // renotify без tag бросает TypeError в showNotification (Chrome) — тогда пуш не показывается.
+    renotify: data.tag ? parseJsonStr(data.renotify, false) === true : false,
     actions:
       data.type === 'media_assignment'
         ? [
@@ -81,11 +82,25 @@ self.addEventListener('push', function (event) {
         : NaN;
   const appBadge = Number.isFinite(parsedBadge) ? Math.min(99, Math.max(0, parsedBadge)) : 0;
 
+  const hasBadgeCount = rawBadge !== undefined && rawBadge !== null && rawBadge !== '';
+
   event.waitUntil(
     (async () => {
-      await self.registration.showNotification(title, options);
+      // userVisibleOnly: на каждый push обязан быть показ уведомления (иначе iOS/Chrome
+      // отзывают подписку). При ошибке опций показываем упрощённое уведомление.
+      try {
+        await self.registration.showNotification(title, options);
+      } catch (e) {
+        await self.registration.showNotification(title, {
+          body: options.body,
+          icon: options.icon,
+          tag: options.tag,
+          data: options.data,
+        });
+      }
       try {
         if (
+          hasBadgeCount &&
           self.navigator &&
           'setAppBadge' in self.navigator &&
           typeof self.navigator.setAppBadge === 'function'
@@ -145,14 +160,14 @@ function markDeliveryDismissedById(deliveryIdRaw) {
 
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
-  const markDeliveryOpened = markDeliveryOpenedById(event.notification?.data?.deliveryId);
-  const markDeliveryDismissed = markDeliveryDismissedById(event.notification?.data?.deliveryId);
-
   // Explicit dismiss action: закрыли без открытия приложения.
   if (event.action === 'dismiss') {
-    event.waitUntil(markDeliveryDismissed);
+    event.waitUntil(markDeliveryDismissedById(event.notification?.data?.deliveryId));
     return;
   }
+
+  // Раньше /dismiss вызывался на каждый клик вместе с /open — доставка помечалась и «закрытой».
+  const markDeliveryOpened = markDeliveryOpenedById(event.notification?.data?.deliveryId);
 
   if (event.action === 'confirm' || event.action === 'decline') {
     const assignmentId = event.notification?.data?.assignmentId;
@@ -208,14 +223,31 @@ self.addEventListener('notificationclose', function (event) {
   event.waitUntil(markDeliveryDismissedById(event.notification?.data?.deliveryId));
 });
 
-// Handle browser rotating VAPID/subscription keys silently
+// Браузер ротировал подписку (истёк срок, смена ключей) — тихо пересоздаём и сохраняем.
 self.addEventListener('pushsubscriptionchange', function (event) {
   event.waitUntil(
     (async function () {
-      const old = event.oldSubscription;
-      if (!old || typeof old.options !== 'object') return;
       try {
-        const newSubscription = await self.registration.pushManager.subscribe(old.options);
+        let newSubscription = event.newSubscription || null;
+        if (!newSubscription) {
+          let options = event.oldSubscription && event.oldSubscription.options;
+          if (!options || !options.applicationServerKey) {
+            // oldSubscription недоступен (Safari/iOS, Firefox) — берём ключ с сервера.
+            const keyRes = await fetch('/api/notifications/vapid-public-key', {
+              credentials: 'include',
+              mode: 'same-origin',
+            });
+            if (!keyRes.ok) return;
+            const { publicKey } = await keyRes.json();
+            if (!publicKey) return;
+            const padding = '='.repeat((4 - (publicKey.length % 4)) % 4);
+            const raw = atob((publicKey + padding).replace(/-/g, '+').replace(/_/g, '/'));
+            const key = new Uint8Array(raw.length);
+            for (let i = 0; i < raw.length; i++) key[i] = raw.charCodeAt(i);
+            options = { userVisibleOnly: true, applicationServerKey: key };
+          }
+          newSubscription = await self.registration.pushManager.subscribe(options);
+        }
         const res = await fetch('/api/notifications/subscribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -224,6 +256,7 @@ self.addEventListener('pushsubscriptionchange', function (event) {
           mode: 'same-origin',
         });
         if (!res.ok) {
+          // Не авторизованы в SW (401) — подписка досохранится при следующем открытии приложения.
           console.warn('[sw] pushsubscriptionchange: subscribe failed', res.status);
         }
       } catch (e) {

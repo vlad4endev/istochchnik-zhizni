@@ -6,7 +6,7 @@ import FirebaseCore
 import FirebaseMessaging
 
 @UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
 
     var window: UIWindow?
     private var pendingPushPayload: [String: String]?
@@ -108,6 +108,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             FirebaseApp.configure()
         }
         firebaseConfigured = FirebaseApp.app() != nil
+        if firebaseConfigured {
+            Messaging.messaging().delegate = self
+        }
+    }
+
+    /// FCM может ротировать токен в любой момент — без этого сервер хранит мёртвый токен и пуши перестают приходить.
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        guard let fcmToken = fcmToken, !fcmToken.isEmpty else { return }
+        NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: fcmToken)
     }
 
     private func configureNotificationCategories() {

@@ -162,6 +162,35 @@ const flutterCompatibleStorage: StateStorage = {
   },
 };
 
+/**
+ * Перед выходом отвязываем push этого устройства от аккаунта, иначе прежний владелец
+ * продолжит получать уведомления (особенно на общих устройствах). Ошибки не критичны.
+ */
+async function detachPushFromAccount(cfg: {
+  validateStatus: (s: number) => boolean;
+  headers?: Record<string, string>;
+}): Promise<void> {
+  try {
+    const deviceId =
+      typeof localStorage !== 'undefined' ? localStorage.getItem('fcm_push_device_id')?.trim() : '';
+    if (deviceId) {
+      await authAxios.post('/api/notifications/remove-token', { device_id: deviceId }, { ...cfg, timeout: 4000 });
+    }
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      const reg = await Promise.race([
+        navigator.serviceWorker.getRegistration(),
+        new Promise<undefined>((r) => setTimeout(() => r(undefined), 2000)),
+      ]);
+      const sub = await reg?.pushManager?.getSubscription();
+      if (sub?.endpoint) {
+        await authAxios.post('/api/notifications/unsubscribe', { endpoint: sub.endpoint }, { ...cfg, timeout: 4000 });
+      }
+    }
+  } catch {
+    /* выход важнее очистки подписок */
+  }
+}
+
 const authAxios = axios.create({
   timeout: 25_000,
   headers: { Accept: 'application/json' },
@@ -323,6 +352,7 @@ export const useAuthStore = create<AuthState>()(
             if (!isCookieOnlySessionToken(token)) {
               cfg.headers = { Authorization: `Bearer ${token}` };
             }
+            await detachPushFromAccount(cfg);
             await authAxios.post(`${AUTH_API_PREFIX}/logout`, null, cfg);
           }
         } catch {
