@@ -136,6 +136,31 @@ export function computeKeyboardOpen(input: {
   return true;
 }
 
+/**
+ * Открыта ли экранная клавиатура, по метрикам viewport.
+ *
+ * Детектор НЕ вычитает offsetTop. На iOS при фокусе в поле браузер панорамирует visual viewport вверх
+ * (offsetTop растёт), чтобы показать поле над клавиатурой; у поля ввода чата, лежащего у самого низа,
+ * сдвиг почти равен высоте клавиатуры. Формула `layout − offsetTop − visual` тогда даёт ~0 (< 48px),
+ * клавиатура считалась закрытой, оболочка оставалась на 100lvh, а полноэкранный чат уходил нижней
+ * частью (с полем ввода) под клавиатуру. Полное сжатие `layout − visual` от панорамирования не зависит.
+ */
+export function isKeyboardOpenFromViewport(input: {
+  layoutHeight: number;
+  visualHeight: number;
+  offsetTop: number;
+  textInputFocused: boolean;
+  iosWebKit: boolean;
+}): boolean {
+  const shiftedInset = computeKeyboardInset(input.layoutHeight, input.visualHeight, input.offsetTop);
+  const totalShrink = Math.max(0, Math.round(input.layoutHeight - input.visualHeight));
+  return computeKeyboardOpen({
+    keyboardInset: Math.max(shiftedInset, totalShrink),
+    textInputFocused: input.textInputFocused,
+    iosWebKit: input.iosWebKit,
+  });
+}
+
 export type ViewportHeightChoiceInput = {
   visualHeight: number;
   layoutHeight: number;

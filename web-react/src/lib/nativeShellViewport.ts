@@ -3,7 +3,7 @@ import { isAppleMobileWeb, isInstalledPwa } from '../features/pwa/utils/pwaEnvir
 import {
   chooseViewportHeightPx,
   computeKeyboardInset,
-  computeKeyboardOpen,
+  isKeyboardOpenFromViewport,
   iosIdleViewportCss,
   iosNeedsLvhIdleShell,
   isSoftwareKeyboardTarget,
@@ -116,8 +116,10 @@ export function syncViewportHeightVars() {
   const keyboardInset = computeKeyboardInset(layoutHeight, visualHeight, offsetTop);
   const iosWebKit = isAppleMobileWeb();
   const iosBrowserChrome = iosWebKit && !isInstalledPwa();
-  const keyboardOpen = computeKeyboardOpen({
-    keyboardInset,
+  const keyboardOpen = isKeyboardOpenFromViewport({
+    layoutHeight,
+    visualHeight,
+    offsetTop,
     textInputFocused: isTextInputFocused(document),
     iosWebKit,
   });

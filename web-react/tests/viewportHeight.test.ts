@@ -4,6 +4,7 @@ import {
   chooseViewportHeightPx,
   computeKeyboardInset,
   computeKeyboardOpen,
+  isKeyboardOpenFromViewport,
   IOS_BROWSER_CHROME_MAX_PX,
   IOS_IDLE_VIEWPORT_CSS,
   iosIdleViewportCss,
@@ -286,3 +287,53 @@ describe('lockedViewportContent', () => {
     ).toBe(VIEWPORT_ANDROID);
   });
 });
+
+/**
+ * iOS (Safari и PWA): при фокусе в поле браузер «сдвигает» visual viewport вверх (offsetTop растёт),
+ * чтобы показать поле над клавиатурой. Поле ввода чата лежит у самого низа, поэтому сдвиг почти равен
+ * высоте клавиатуры, и формула `layout − offsetTop − visual` даёт ~0. Раньше это читалось как
+ * «клавиатура закрыта» → оболочка оставалась на 100lvh, и полноэкранный чат уходил нижней частью
+ * (с полем ввода) под клавиатуру.
+ */
+describe('isKeyboardOpenFromViewport (iOS панорамирование при фокусе)', () => {
+  const layoutHeight = 852;
+  const keyboard = 336;
+  const visualHeight = layoutHeight - keyboard;
+
+  it('старая формула с вычетом offsetTop принимает сдвинутую клавиатуру за закрытую', () => {
+    const inset = computeKeyboardInset(layoutHeight, visualHeight, keyboard - 20);
+    expect(inset).toBeLessThan(KEYBOARD_INSET_MIN_PX);
+    expect(computeKeyboardOpen({ keyboardInset: inset, textInputFocused: true, iosWebKit: true })).toBe(false);
+  });
+
+  it.each([0, 120, 300, keyboard - 20, keyboard])('клавиатура открыта при offsetTop=%i и фокусе в поле', (offsetTop) => {
+    expect(
+      isKeyboardOpenFromViewport({ layoutHeight, visualHeight, offsetTop, textInputFocused: true, iosWebKit: true }),
+    ).toBe(true);
+  });
+
+  it('без фокуса в поле сжатый visual viewport на iOS клавиатурой не считается', () => {
+    expect(
+      isKeyboardOpenFromViewport({ layoutHeight, visualHeight, offsetTop: 300, textInputFocused: false, iosWebKit: true }),
+    ).toBe(false);
+  });
+
+  it('небольшое сжатие (хром Safari, safe-area) с фокусом не достигает порога клавиатуры', () => {
+    expect(
+      isKeyboardOpenFromViewport({
+        layoutHeight,
+        visualHeight: layoutHeight - (KEYBOARD_INSET_MIN_PX - 1),
+        offsetTop: 0,
+        textInputFocused: true,
+        iosWebKit: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('на не-iOS поведение прежнее: по inset без учёта фокуса', () => {
+    expect(
+      isKeyboardOpenFromViewport({ layoutHeight, visualHeight, offsetTop: 0, textInputFocused: false, iosWebKit: false }),
+    ).toBe(true);
+  });
+});
+
