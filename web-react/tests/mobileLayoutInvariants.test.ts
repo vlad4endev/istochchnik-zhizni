@@ -69,4 +69,11 @@ describe('mobile layout invariants', () => {
   it('при открытой клавиатуре запас под плавающую «+» на дашборде снимается (нет пустой полосы)', () => {
     expect(indexCss).toMatch(/html\.app-keyboard-open \.dashboard-scroll-pane\s*\{[^}]*padding-bottom:\s*0\.75rem\s*!important/);
   });
+
+  it('в установленной PWA шапка чата всегда получает отступ под статус-бар (даже при сдвиге visual viewport)', () => {
+    const css = strip(read('src/features/messenger/components/messenger.css'));
+    expect(css).toMatch(
+      /html\[data-pwa-standalone='1'\]\[data-chat-open="1"\] \.tg-main--visible \.tg-chat-window\s*\{\s*padding-top:\s*env\(safe-area-inset-top,\s*0px\);/,
+    );
+  });
 });

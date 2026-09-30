@@ -3001,6 +3001,16 @@ html.dark .msg-quick-reaction:hover {
       padding-right: env(safe-area-inset-right, 0px);
     }
 
+    /*
+     * Установленная PWA (status-bar black-translucent): страница лежит ПОД статус-баром всегда, в том числе
+     * когда iOS сдвинул visual viewport из-за клавиатуры — верх видимой области совпадает с верхом экрана.
+     * Формула выше считает, что при сдвиге «notch уже вне видимой области» (верно для вкладки Safari), и
+     * обнуляла отступ: шапка чата с названием уезжала под часы и Dynamic Island.
+     */
+    html[data-pwa-standalone='1'][data-chat-open="1"] .tg-main--visible .tg-chat-window {
+      padding-top: env(safe-area-inset-top, 0px);
+    }
+
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window > header.chat-header {
       flex: 0 0 auto;
       position: relative !important;

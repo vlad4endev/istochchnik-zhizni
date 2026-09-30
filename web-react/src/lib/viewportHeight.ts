@@ -151,11 +151,19 @@ export function isKeyboardOpenFromViewport(input: {
   offsetTop: number;
   textInputFocused: boolean;
   iosWebKit: boolean;
+  /**
+   * Высота окна, последняя измеренная БЕЗ фокуса в поле ввода. Нужна для случая, когда iOS (PWA) сжимает
+   * и layout, и visual viewport одновременно: тогда `layout − visual` = 0, хотя клавиатура открыта.
+   */
+  baselineHeight?: number;
 }): boolean {
   const shiftedInset = computeKeyboardInset(input.layoutHeight, input.visualHeight, input.offsetTop);
   const totalShrink = Math.max(0, Math.round(input.layoutHeight - input.visualHeight));
+  const baseline = input.baselineHeight ?? 0;
+  const shrinkFromBaseline =
+    baseline > 0 ? Math.max(0, Math.round(baseline - Math.min(input.layoutHeight, input.visualHeight))) : 0;
   return computeKeyboardOpen({
-    keyboardInset: Math.max(shiftedInset, totalShrink),
+    keyboardInset: Math.max(shiftedInset, totalShrink, shrinkFromBaseline),
     textInputFocused: input.textInputFocused,
     iosWebKit: input.iosWebKit,
   });
