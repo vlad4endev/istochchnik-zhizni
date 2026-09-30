@@ -706,3 +706,27 @@ export async function clearConversationHistory(conversationId: string) {
     if (key.startsWith(`${conversationId}:`)) pinnedCache.delete(key);
   }
 }
+
+export type LinkPreviewData = {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  siteName: string | null;
+  favicon: string | null;
+  host: string;
+};
+
+const linkPreviewCache = new Map<string, Promise<LinkPreviewData | null>>();
+
+export function fetchLinkPreview(url: string): Promise<LinkPreviewData | null> {
+  let p = linkPreviewCache.get(url);
+  if (!p) {
+    p = apiClient
+      .get<{ preview: LinkPreviewData | null }>(`${BASE}/link-preview`, { params: { url } })
+      .then((r) => r.data.preview ?? null)
+      .catch(() => null);
+    linkPreviewCache.set(url, p);
+  }
+  return p;
+}
