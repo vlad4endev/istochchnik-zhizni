@@ -174,9 +174,13 @@ export function CommentSheet({
   const myAv = resolvePublicUrl(myAuthor?.avatar_url ?? null);
   const nearLimit = text.length >= COMMENT_MAX - 80;
   const authorLabel = (postAuthorName ?? '').trim();
-  const placeholder = authorLabel
-    ? `Оставьте комментарий для ${authorLabel}…`
-    : 'Оставьте комментарий…';
+  // На узких телефонах длинный плейсхолдер с именем автора занимал 2–3 строки и раздувал поле ввода.
+  const compactPlaceholder = typeof window !== 'undefined' && window.innerWidth <= 430;
+  const placeholder = compactPlaceholder
+    ? 'Комментарий…'
+    : authorLabel
+      ? `Оставьте комментарий для ${authorLabel}…`
+      : 'Оставьте комментарий…';
 
   const appendEmoji = (emoji: string) => {
     setText((prev) => {

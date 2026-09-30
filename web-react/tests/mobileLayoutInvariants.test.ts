@@ -54,4 +54,15 @@ describe('mobile layout invariants', () => {
     expect(block).toMatch(/overflow-wrap:\s*anywhere/);
     expect(block).not.toMatch(/overflow-wrap:\s*break-word/);
   });
+
+  it('переключатели role=switch исключены из принудительных 44px (иначе h-6 w-11 превращается в круг)', () => {
+    expect(mobileCss).toMatch(/button\[class\*='h-'\]:not\(\.tap-compact\):not\(\[role='switch'\]\)/);
+  });
+
+  it('подписи статистики публичного профиля не рвутся посреди слова', () => {
+    const css = strip(read('src/features/profile/pages/PublicProfilePage.module.css'));
+    const block = css.match(/\.igStatCellLabel\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(block).toMatch(/overflow-wrap:\s*normal/);
+    expect(block).toMatch(/white-space:\s*nowrap/);
+  });
 });

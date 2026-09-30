@@ -519,13 +519,13 @@
     font-size: 16px !important;
   }
   /* Tap-target ≥44px, но не раздуваем узкие icon-кнопки с явным w-*/h-*. */
-  button:not([class*='w-']):not([class*='h-']):not(.tap-compact),
+  button:not([class*='w-']):not([class*='h-']):not(.tap-compact):not([role='switch']),
   .btn {
     min-height: 44px !important;
     min-width: 44px !important;
   }
-  button[class*='w-']:not(.tap-compact),
-  button[class*='h-']:not(.tap-compact) {
+  button[class*='w-']:not(.tap-compact):not([role='switch']),
+  button[class*='h-']:not(.tap-compact):not([role='switch']) {
     min-height: 44px !important;
   }
   /* Раздутая до 44px flex-кнопка без items-center прижимала текст к верху. Утилиты items-* сильнее. */
@@ -536,10 +536,13 @@
    * Компактные плашки-кнопки (бейджи ролей, мелкие чипы) — исключение из 44px: иначе они превращаются
    * в высокие «капсулы» посреди строки текста. Нажимаемая зона расширяется псевдоэлементом.
    */
-  button.tap-compact {
+  /* Переключатели (role=switch, h-6 w-11) тоже не раздуваем: 44px-высота превращала «таблетку» в бледный круг. */
+  button.tap-compact,
+  button[role='switch'] {
     position: relative;
   }
-  button.tap-compact::after {
+  button.tap-compact::after,
+  button[role='switch']::after {
     content: '';
     position: absolute;
     inset: -8px -4px;

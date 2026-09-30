@@ -458,6 +458,7 @@ export function FeedPostCard({
           disabled={!canInteract || repostBusy || reposted}
           onClick={() => onRepost(post)}
           title={reposted ? 'Уже в вашей ленте' : 'Поделиться у себя'}
+          aria-label={`${reposted ? 'Уже в вашей ленте' : 'Поделиться у себя'}: ${post.repost_count ?? 0}`}
         >
           <LuRepeat2 className="h-4 w-4" aria-hidden />
           {post.repost_count ?? 0}
@@ -467,6 +468,7 @@ export function FeedPostCard({
           className={styles.actionBtn}
           disabled={!canInteract}
           onClick={() => onOpenComments(post)}
+          aria-label={`Комментарии: ${post.comment_count ?? 0}`}
         >
           <LuMessageCircle className="h-4 w-4" aria-hidden />
           {post.comment_count ?? 0}
