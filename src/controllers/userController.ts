@@ -35,6 +35,14 @@ import {
 } from '../services/userService';
 import { isValidAppRoleString } from '../types/appRole';
 import { notifyRealtime, type RealtimeScope } from '../realtime/notify';
+import {
+  createFamilyLink,
+  deleteFamilyLink,
+  isFamilyRelation,
+  listFamilyLinks,
+  updateFamilyLink,
+  type FamilyLinkInput,
+} from '../services/memberFamilyService';
 import { mergeAllDuplicateMembers } from '../services/memberMergeService';
 import { syncMembersTelegramProfiles } from '../services/telegramService';
 import {
@@ -1263,5 +1271,137 @@ export async function setMinistryDirectionTemplateRolesHandler(
   } catch (error) {
     console.error('Failed to set ministry direction roles', error);
     res.status(500).json({ error: 'Database error' });
+  }
+}
+
+const FAMILY_ERRORS: Record<string, [number, string]> = {
+  relative_required: [400, 'Укажите участника или имя родственника'],
+  self_link: [400, 'Нельзя связать участника с самим собой'],
+  relative_not_found: [404, 'Участник-родственник не найден'],
+  already_linked: [409, 'Эти участники уже связаны'],
+};
+
+function parseFamilyBody(body: Record<string, unknown>, partial: boolean): Partial<FamilyLinkInput> | string {
+  const out: Partial<FamilyLinkInput> = {};
+  if (body.relation !== undefined || !partial) {
+    if (!isFamilyRelation(body.relation)) {
+      return 'Некорректный тип родства';
+    }
+    out.relation = body.relation;
+  }
+  if (body.relative_member_id !== undefined && body.relative_member_id !== null) {
+    const id = Number(body.relative_member_id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return 'Некорректный relative_member_id';
+    }
+    out.relative_member_id = id;
+  }
+  for (const key of ['relative_name', 'note'] as const) {
+    const v = body[key];
+    if (v === undefined) continue;
+    if (v !== null && typeof v !== 'string') {
+      return `Поле ${key} должно быть строкой`;
+    }
+    out[key] = v === null ? null : v.slice(0, key === 'note' ? 2000 : 255);
+  }
+  if (body.relative_birth_date !== undefined) {
+    const v = body.relative_birth_date;
+    if (v !== null && v !== '' && !isValidDateInput(v)) {
+      return 'Некорректная дата рождения';
+    }
+    out.relative_birth_date = (v as string | null) || null;
+  }
+  return out;
+}
+
+function sendFamilyError(res: Response, err: unknown, logLabel: string): void {
+  const msg = err instanceof Error ? err.message : String(err);
+  const known = FAMILY_ERRORS[msg];
+  if (known) {
+    res.status(known[0]).json({ error: known[1] });
+    return;
+  }
+  console.error(logLabel, err);
+  res.status(500).json({ error: 'Database error' });
+}
+
+export async function listFamilyLinksHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const userId = parseUserId(req.params.id);
+  if (!userId) {
+    res.status(400).json({ error: 'Invalid user id' });
+    return;
+  }
+  try {
+    res.json(await listFamilyLinks(userId));
+  } catch (err) {
+    sendFamilyError(res, err, 'Failed to list family links');
+  }
+}
+
+export async function createFamilyLinkHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const userId = parseUserId(req.params.id);
+  if (!userId) {
+    res.status(400).json({ error: 'Invalid user id' });
+    return;
+  }
+  const parsed = parseFamilyBody((req.body ?? {}) as Record<string, unknown>, false);
+  if (typeof parsed === 'string') {
+    res.status(400).json({ error: parsed });
+    return;
+  }
+  try {
+    await createFamilyLink(userId, parsed as FamilyLinkInput);
+    notifyRealtime(['members']);
+    res.status(201).json(await listFamilyLinks(userId));
+  } catch (err) {
+    sendFamilyError(res, err, 'Failed to create family link');
+  }
+}
+
+export async function updateFamilyLinkHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const userId = parseUserId(req.params.id);
+  const linkId = parseUserId(req.params.linkId);
+  if (!userId || !linkId) {
+    res.status(400).json({ error: 'Invalid id' });
+    return;
+  }
+  const parsed = parseFamilyBody((req.body ?? {}) as Record<string, unknown>, true);
+  if (typeof parsed === 'string') {
+    res.status(400).json({ error: parsed });
+    return;
+  }
+  try {
+    const ok = await updateFamilyLink(userId, linkId, parsed);
+    if (!ok) {
+      res.status(404).json({ error: 'Связь не найдена' });
+      return;
+    }
+    notifyRealtime(['members']);
+    res.json(await listFamilyLinks(userId));
+  } catch (err) {
+    sendFamilyError(res, err, 'Failed to update family link');
+  }
+}
+
+export async function deleteFamilyLinkHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const userId = parseUserId(req.params.id);
+  const linkId = parseUserId(req.params.linkId);
+  if (!userId || !linkId) {
+    res.status(400).json({ error: 'Invalid id' });
+    return;
+  }
+  try {
+    if (!(await deleteFamilyLink(userId, linkId))) {
+      res.status(404).json({ error: 'Связь не найдена' });
+      return;
+    }
+    notifyRealtime(['members']);
+    res.json(await listFamilyLinks(userId));
+  } catch (err) {
+    sendFamilyError(res, err, 'Failed to delete family link');
   }
 }
