@@ -66,7 +66,7 @@ import { AndroidAppReleaseWidget } from '../components/AndroidAppReleaseWidget';
 import { MyServiceWeekWidget } from '../components/MyServiceWeekWidget';
 import { NotificationPermissionWidget } from '../components/NotificationPermissionWidget';
 import { PrayerNeedSubmitModal } from '../components/PrayerNeedSubmitModal';
-import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
+import { DashboardSpinner } from '@/components/skeletons/DashboardSpinner';
 import { keys } from '@/lib/queryKeys';
 import { fetchServicePlan, fetchServicePlans, type ServicePlanDetails, type ServicePlanListItem } from '../../servicePlanner/api';
 import { messengerDraftConversationPath } from '../../messenger/chatStore';
@@ -1246,7 +1246,7 @@ function DashboardMain() {
     : 'Воспроизвести';
 
   if (showInitialSkeleton) {
-    return <DashboardSkeleton />;
+    return <DashboardSpinner />;
   }
 
   return (
