@@ -15,6 +15,7 @@ import {
   wasNotificationPromptDismissedThisSession,
   type DeviceNotificationPermission,
 } from '../lib/deviceNotificationPermission';
+import { BodyPortal } from './BodyPortal';
 
 type PermissionStateLike = NativePermissionState;
 
@@ -163,7 +164,7 @@ export function PermissionsRequestModal() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-6" role="presentation">
+    <BodyPortal><div className="fixed inset-0 z-[110] flex items-center justify-center p-6" role="presentation">
       <button
         type="button"
         aria-label="Закрыть окно разрешений"
@@ -208,6 +209,6 @@ export function PermissionsRequestModal() {
           </button>
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }

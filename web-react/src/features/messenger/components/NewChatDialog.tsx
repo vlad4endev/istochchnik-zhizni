@@ -17,6 +17,7 @@ import { getAvatarColor } from '../avatarUtils';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { compressImageForMessengerUpload } from '../compressImageForUpload';
 import { canAddMemberToGroupChat, formatMemberSearchStatusLine } from '../memberPresenceLabel';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 interface NewChatDialogProps {
   onClose: () => void;
@@ -406,7 +407,7 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   };
 
   return (
-    <div className="tg-dialog-overlay" style={overlayVisualViewportStyle} onClick={onClose}>
+    <BodyPortal><div className="tg-dialog-overlay" style={overlayVisualViewportStyle} onClick={onClose}>
       <div className="tg-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="tg-dialog-header">
           <div className="tg-dialog-header-main">
@@ -680,6 +681,6 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
         )}
       </div>
       <style>{DIALOG_STYLES}</style>
-    </div>
+    </div></BodyPortal>
   );
 }

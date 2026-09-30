@@ -33,6 +33,7 @@ import { useWebPushSync } from '../hooks/useWebPushSync';
 import { useRealtimeQuerySync } from '../hooks/useRealtimeQuerySync';
 import { useRealtimeWsConnection } from '../lib/realtimeWsClient';
 import { useSyncServerRole } from '../hooks/useSyncServerRole';
+import { BodyPortal } from '../components/BodyPortal';
 import { IOSInstallBanner } from '../components/IOSInstallBanner';
 import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
 import { PermissionsRequestModal } from '../components/PermissionsRequestModal';
@@ -1359,8 +1360,10 @@ export function Layout() {
         : null}
       </div>
       </div>
-      <IOSInstallBanner />
-      <AndroidInstallBanner />
+      <BodyPortal>
+        <IOSInstallBanner />
+        <AndroidInstallBanner />
+      </BodyPortal>
       <NotificationPrompt />
       <PermissionsRequestModal />
       <IncomingCallToast />

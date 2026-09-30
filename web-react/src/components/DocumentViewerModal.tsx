@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { LuX } from 'react-icons/lu';
 
 import { ensurePdfjsWorker } from '../lib/pdfjsMainThread';
+import { BodyPortal } from './BodyPortal';
 
 /** Встроенный просмотр: PDF (pdf.js) и простой текст. Office-форматы открываются во вкладке/скачиваются. */
 const PREVIEWABLE_EXTENSIONS = new Set(['pdf', 'txt', 'csv']);
@@ -143,7 +144,7 @@ export function DocumentViewerModal({
   if (!open || !fileUrl) return null;
 
   return (
-    <div
+    <BodyPortal><div
       className="fixed inset-0 z-[5200] bg-black/70 p-3 sm:p-4"
       role="dialog"
       aria-modal="true"
@@ -197,6 +198,6 @@ export function DocumentViewerModal({
           <div ref={pagesRef} />
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }

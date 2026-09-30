@@ -4,6 +4,7 @@ import { LuCalendarDays, LuCheck, LuLink2Off, LuSearch, LuX } from 'react-icons/
 
 import { fetchServicePlans, type ServicePlanListItem } from '../../servicePlanner/api';
 import { formatPlanServiceDate } from '../api';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 type Props = {
   value: number | null;
@@ -102,7 +103,7 @@ export function ServicePlanLinkPicker({ value, selectedLabel, onChange, disabled
       </div>
 
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
+        <BodyPortal><div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
           <button
             type="button"
             className="absolute inset-0 cursor-default"
@@ -184,7 +185,7 @@ export function ServicePlanLinkPicker({ value, selectedLabel, onChange, disabled
               )}
             </ul>
           </div>
-        </div>
+        </div></BodyPortal>
       ) : null}
     </div>
   );

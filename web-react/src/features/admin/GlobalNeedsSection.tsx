@@ -27,6 +27,7 @@ import {
   updateGlobalThemeApi,
   updateMinistryApi,
 } from './api';
+import { BodyPortal } from '../../components/BodyPortal';
 
 const Q_GT = ['admin', 'global', 'themes'] as const;
 const Q_GM = ['admin', 'global', 'ministries'] as const;
@@ -701,7 +702,7 @@ function ContentEditorModal(props: {
       : Boolean(editor.draft.title.trim());
 
   return (
-    <div
+    <BodyPortal><div
       className="fixed inset-0 z-[120] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
       role="presentation"
       onClick={onClose}
@@ -855,7 +856,7 @@ function ContentEditorModal(props: {
           </button>
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }
 
@@ -866,7 +867,7 @@ function ConfirmDeleteModal(props: {
   onConfirm: () => void;
 }) {
   return (
-    <div
+    <BodyPortal><div
       className="fixed inset-0 z-[130] flex items-center justify-center bg-black/45 p-4"
       role="presentation"
       onClick={props.onCancel}
@@ -903,6 +904,6 @@ function ConfirmDeleteModal(props: {
           </button>
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }

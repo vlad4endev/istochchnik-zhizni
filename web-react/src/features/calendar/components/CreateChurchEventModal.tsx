@@ -10,6 +10,7 @@ import {
 } from '@/features/admin/api';
 import { CHURCH_EVENT_CATEGORY_OPTIONS_FALLBACK } from '@/features/admin/churchEventCategoryOptions';
 import { nextOccurrenceLocalYmd } from '@/lib/weekdayAnchor';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 const WEEKDAY_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: 'Воскресенье' },
@@ -158,7 +159,7 @@ export function CreateChurchEventModal({ open, onClose, onCreated }: Props) {
   }
 
   return (
-    <div
+    <BodyPortal><div
       className="fixed inset-0 z-[160] flex min-h-[100dvh] flex-col justify-end bg-black/50 sm:items-center sm:justify-center sm:p-4"
       role="presentation"
       onMouseDown={(ev) => {
@@ -389,6 +390,6 @@ export function CreateChurchEventModal({ open, onClose, onCreated }: Props) {
           </div>
         </form>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }

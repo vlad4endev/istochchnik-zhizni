@@ -30,6 +30,7 @@ import { extractChordsFromText, guessKeyFromChords } from '../addSong/keyDetecti
 import { quickChordsForKey } from '../addSong/quickChords';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 const KEY_ROOTS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'] as const;
 
@@ -390,7 +391,7 @@ export function AddSongPage() {
       />
 
       {sheetRecognizerOpen ? (
-        <>
+        <BodyPortal>
           <button
             type="button"
             className="fixed inset-0 z-[var(--z-modal-bg)] backdrop-blur-[2px]"
@@ -423,7 +424,7 @@ export function AddSongPage() {
             </div>
             <SheetRecognizer onApply={applySheetRecognition} variant={isStudio ? 'studio' : 'default'} />
           </div>
-        </>
+        </BodyPortal>
       ) : null}
 
       {!embeddedInStudio ? (

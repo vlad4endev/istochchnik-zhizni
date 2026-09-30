@@ -6,6 +6,7 @@ import { LuLoaderCircle, LuSearch, LuX } from 'react-icons/lu';
 
 import { fetchServicePlans, type ServicePlanListItem } from '../../servicePlanner/api';
 import { formatPlannerEventLabel } from '../types';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 type Props = {
   open: boolean;
@@ -47,7 +48,7 @@ export function PlannerEventPickerModal({ open, onClose, from, to, onSelect }: P
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-end justify-center p-0 sm:items-center sm:p-4" role="presentation">
+    <BodyPortal><div className="fixed inset-0 z-[110] flex items-end justify-center p-0 sm:items-center sm:p-4" role="presentation">
       <button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/45" onClick={onClose} />
       <div
         role="dialog"
@@ -122,6 +123,6 @@ export function PlannerEventPickerModal({ open, onClose, from, to, onSelect }: P
           )}
         </ul>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }

@@ -9,6 +9,7 @@ import {
   updateSermonNoteShare,
   type SermonNote,
 } from '../api';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 type Props = {
   note: SermonNote;
@@ -41,7 +42,7 @@ export function ShareSermonNoteModal({ note, open, onClose, onUpdated }: Props) 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
+    <BodyPortal><div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Закрыть" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md rounded-2xl border border-stone-200 bg-white p-4 shadow-xl sm:p-5">
         <div className="mb-3 flex items-start justify-between gap-3">
@@ -112,6 +113,6 @@ export function ShareSermonNoteModal({ note, open, onClose, onUpdated }: Props) 
           </div>
         ) : null}
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }

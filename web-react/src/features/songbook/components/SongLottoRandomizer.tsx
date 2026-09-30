@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { LuDice5, LuX } from 'react-icons/lu';
 
 import type { SongListItem } from '../api';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 type Props = {
   open: boolean;
@@ -104,7 +105,7 @@ export function SongLottoRandomizer({ open, onOpenChange, songs, title = 'Лот
   const disabled = candidates.length === 0;
 
   return (
-    <>
+    <BodyPortal>
       <button
         type="button"
         className="fixed inset-0 z-[200] bg-black/40 backdrop-blur-[2px]"
@@ -256,7 +257,7 @@ export function SongLottoRandomizer({ open, onOpenChange, songs, title = 'Лот
           Подсказка: учитывает вкладку и фильтры каталога.
         </div>
       </div>
-    </>
+    </BodyPortal>
   );
 }
 

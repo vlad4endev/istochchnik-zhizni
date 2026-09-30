@@ -24,6 +24,7 @@ import {
   type BackupSettings,
   type BackupTelegramTarget,
 } from './api';
+import { BodyPortal } from '../../components/BodyPortal';
 
 const Q_SETTINGS = ['admin', 'backup', 'settings'] as const;
 const Q_LIST = ['admin', 'backup', 'list'] as const;
@@ -533,7 +534,7 @@ export function BackupSettingsSection() {
       </section>
 
       {restoreId && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/40 p-4 sm:items-center">
+        <BodyPortal><div className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/40 p-4 sm:items-center">
           <div
             role="dialog"
             aria-modal="true"
@@ -684,7 +685,7 @@ export function BackupSettingsSection() {
               </button>
             </div>
           </div>
-        </div>
+        </div></BodyPortal>
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -120,5 +120,31 @@ describe('mobile layout invariants', () => {
     ]) {
       expect(read(f), f).toMatch(/<BodyPortal>/);
     }
+  });
+  it('все полноэкранные оверлеи (fixed inset-0) рендерятся вне #root через портал', () => {
+    // Баннеры/тосты порталятся в месте вызова (Layout, main.tsx), плеер и «Исполнение» — намеренно внутри страницы.
+    const allow = new Set([
+      'src/app/Layout.tsx',
+      'src/components/AndroidInstallBanner.tsx',
+      'src/components/IOSInstallBanner.tsx',
+      'src/components/AppToastHost.tsx',
+      'src/features/resources/sermonPlayback/SermonPlayer.tsx',
+      'src/features/studio/pages/PerformPage.tsx',
+    ]);
+    const root = path.resolve(dir, '..');
+    const offenders: string[] = [];
+    const walk = (d: string) => {
+      for (const name of readdirSync(d)) {
+        const full = path.join(d, name);
+        if (statSync(full).isDirectory()) walk(full);
+        else if (full.endsWith('.tsx')) {
+          const rel = path.relative(root, full).split(path.sep).join('/');
+          const src = readFileSync(full, 'utf8');
+          if (src.includes('fixed inset-0') && !/BodyPortal|createPortal/.test(src) && !allow.has(rel)) offenders.push(rel);
+        }
+      }
+    };
+    walk(path.join(root, 'src'));
+    expect(offenders).toEqual([]);
   });
 });

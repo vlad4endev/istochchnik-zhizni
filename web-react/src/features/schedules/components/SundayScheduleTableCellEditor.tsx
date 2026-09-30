@@ -5,6 +5,7 @@ import { LuLoaderCircle, LuX } from 'react-icons/lu';
 
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { sundayDayNumbersInMonth } from '../utils/sundayScheduleTableModel';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 export type SundayScheduleTableCellEdit = {
   memberId: number;
@@ -65,7 +66,7 @@ export function SundayScheduleTableCellEditor({
   const selectedSorted = [...selected].sort((a, b) => a - b);
 
   return (
-    <div
+    <BodyPortal><div
       className="fixed inset-0 z-[110] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
@@ -209,6 +210,6 @@ export function SundayScheduleTableCellEditor({
           )}
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   );
 }

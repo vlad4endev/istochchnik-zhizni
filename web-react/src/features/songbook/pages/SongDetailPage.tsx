@@ -17,6 +17,7 @@ import { LyricsWithChords } from '../components/LyricsWithChords';
 import { useSongbookChrome } from '../SongbookChromeContext';
 import { fetchVersionForSong } from '../../studio/api';
 import { useMe } from '@/hooks/useMe';
+import { BodyPortal } from '../../../components/BodyPortal';
 
 /** Компактный переключатель вместо нативного checkbox (единообразно на iOS/Android). */
 function SheetSwitch({
@@ -166,7 +167,7 @@ export function SongDetailPage() {
       </div>
 
       {settingsOpen ? (
-        <>
+        <BodyPortal>
           <button
             type="button"
             className="fixed inset-0 z-[120] bg-black/35 backdrop-blur-[1px]"
@@ -308,7 +309,7 @@ export function SongDetailPage() {
               </div>
             </div>
           </div>
-        </>
+        </BodyPortal>
       ) : null}
 
       <main className="min-h-0 flex-1 overflow-y-auto px-3 py-3 [webkit-overflow-scrolling:touch] md:px-4">
