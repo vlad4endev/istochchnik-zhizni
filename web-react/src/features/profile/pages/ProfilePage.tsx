@@ -118,7 +118,6 @@ export function ProfilePage() {
     ministry_role: '',
     email: '',
     birth_date: '',
-    prayer_request: '',
   });
 
   const [ministryTemplates, setMinistryTemplates] = useState<MinistryDirectionTemplate[]>([]);
@@ -183,7 +182,6 @@ export function ProfilePage() {
         ministry_role: normalizeMinistryRoles(me.ministry_role ?? ''),
         email: me.email ?? '',
         birth_date: dateInputValueFromApi(me.birth_date),
-        prayer_request: me.prayer_request ?? '',
       };
       setDraft(nextDraft);
       setPhoneNew(nextDraft.phone_number);
@@ -304,7 +302,6 @@ export function ProfilePage() {
           const y = dateInputValueFromApi(draft.birth_date.trim());
           return y.length > 0 ? y : null;
         })(),
-        prayer_request: draft.prayer_request,
       });
       setUser(next);
       setDraft({
@@ -315,7 +312,6 @@ export function ProfilePage() {
         ministry_role: normalizeMinistryRoles(next.ministry_role ?? ''),
         email: next.email ?? '',
         birth_date: dateInputValueFromApi(next.birth_date),
-        prayer_request: next.prayer_request ?? '',
       });
       setPhoneNew(next.phone_number ?? '');
       setEditing(false);
@@ -684,7 +680,6 @@ export function ProfilePage() {
                     ministry_role: normalizeMinistryRoles(user?.ministry_role ?? ''),
                       email: user?.email ?? '',
                       birth_date: dateInputValueFromApi(user?.birth_date),
-                      prayer_request: user?.prayer_request ?? '',
                     });
                     setMsg(null);
                   }}
@@ -781,15 +776,6 @@ export function ProfilePage() {
                   onChange={(apiYmd) => setDraft((d) => ({ ...d, birth_date: apiYmd }))}
                   labelClassName={LABEL}
                   selectClassName={INPUT}
-                />
-              </div>
-              <div>
-                <label className={LABEL}>Молитвенная нужда</label>
-                <textarea
-                  className={`${INPUT} min-h-[120px] resize-y`}
-                  value={draft.prayer_request}
-                  onChange={(e) => setDraft((d) => ({ ...d, prayer_request: e.target.value }))}
-                  maxLength={8000}
                 />
               </div>
             </div>
