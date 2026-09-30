@@ -3,7 +3,7 @@ import { notifyRealtime } from '../realtime/notify';
 import { snapshotPastCyclePrayersToHistory } from '../services/prayerCycleService';
 import { runNotificationRulesTick } from '../services/notificationRulesRunner';
 import { DistributionService } from '../services/DistributionService';
-import { sendPush } from '../services/pushService';
+import { pruneStalePushSubscriptions, sendPush } from '../services/pushService';
 import { dispatchDueSermonFeedbackNotifications } from '../services/sermonFeedbackService';
 import { sendMediaScheduleReminders } from '../services/mediaScheduleService';
 import { sendMusicScheduleReminders } from '../services/musicScheduleService';
@@ -71,6 +71,16 @@ async function pushCuratorAssignmentsForWeek(
  * Здесь минутный тик: при совпадении локального времени церкви с правилом срабатывает отправка.
  */
 export function initPushCronJobs() {
+  // Раз в сутки убираем давно не подтверждавшиеся Web Push подписки.
+  cron.schedule('17 4 * * *', async () => {
+    try {
+      const n = await pruneStalePushSubscriptions();
+      if (n > 0) console.log(`[CRON] pruned ${n} stale web push subscriptions`);
+    } catch (e) {
+      console.error('[CRON] prune stale push subscriptions', e);
+    }
+  });
+
   cron.schedule(
     '* * * * *',
     async () => {

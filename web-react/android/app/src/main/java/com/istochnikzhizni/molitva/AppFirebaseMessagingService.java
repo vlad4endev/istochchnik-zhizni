@@ -111,14 +111,19 @@ public class AppFirebaseMessagingService extends FirebaseMessagingService {
   }
 
   private void createChannels() {
+    createChannels(this);
+  }
+
+  /** Каналы должны существовать до первого пуша, даже если приложение ни разу не открывалось после установки. */
+  static void createChannels(Context context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
-    final NotificationManager manager = getSystemService(NotificationManager.class);
+    final NotificationManager manager = context.getSystemService(NotificationManager.class);
     if (manager == null) return;
 
     final NotificationChannel messages = new NotificationChannel(
       CHANNEL_MESSAGES_ID,
       CHANNEL_MESSAGES_NAME,
-      NotificationManager.IMPORTANCE_HIGH
+      NotificationManager.IMPORTANCE_MAX
     );
     messages.setDescription(CHANNEL_MESSAGES_DESC);
     messages.enableVibration(true);
@@ -128,11 +133,11 @@ public class AppFirebaseMessagingService extends FirebaseMessagingService {
     final NotificationChannel general = new NotificationChannel(
       CHANNEL_GENERAL_ID,
       CHANNEL_GENERAL_NAME,
-      NotificationManager.IMPORTANCE_DEFAULT
+      NotificationManager.IMPORTANCE_HIGH
     );
     general.setDescription(CHANNEL_GENERAL_DESC);
     general.enableVibration(true);
-    general.setLockscreenVisibility(NotificationCompat.VISIBILITY_PRIVATE);
+    general.setLockscreenVisibility(NotificationCompat.VISIBILITY_PUBLIC);
     manager.createNotificationChannel(general);
   }
 

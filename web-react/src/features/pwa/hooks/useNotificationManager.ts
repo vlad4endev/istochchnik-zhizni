@@ -1,20 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchVapidPublicKey, subscribeToPushApi, unsubscribeFromPushApi } from '../../profile/api';
-
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding)
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
-
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
+import { unsubscribeFromPushApi } from '../../profile/api';
+import { enableWebPush } from '../../messenger/push/webPush';
 
 export type NotificationStatus = 'unsupported' | 'default' | 'granted' | 'denied';
 
@@ -59,38 +45,17 @@ export function useNotificationManager() {
     setLoading(true);
     setError(null);
     try {
-      const permission = await Notification.requestPermission();
-      setStatus(permission as NotificationStatus);
-
-      if (permission !== 'granted') {
-        throw new Error('Разрешение на уведомления не предоставлено');
+      const result = await enableWebPush();
+      setStatus(Notification.permission as NotificationStatus);
+      if (result.ok) {
+        setIsSubscribed(true);
+        return { ok: true };
       }
-
-      const vapidPublicKey = await fetchVapidPublicKey();
-      const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
-
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: convertedVapidKey,
-      });
-
-      await subscribeToPushApi(subscription);
-      setIsSubscribed(true);
-      return { ok: true };
+      setError(result.error ?? 'Ошибка при подписке на уведомления');
+      return result;
     } catch (err: unknown) {
       console.error('Push Subscription Error:', err);
-      let message = 'Ошибка при подписке на уведомления';
-      if (err && typeof err === 'object' && 'response' in err) {
-        const data = (err as { response?: { data?: { error?: string }; status?: number } }).response;
-        if (data?.status === 401) {
-          message = 'Войдите снова, чтобы сохранить подписку на уведомления.';
-        } else if (typeof data?.data?.error === 'string' && data.data.error.trim()) {
-          message = data.data.error;
-        }
-      } else if (err instanceof Error && err.message) {
-        message = err.message;
-      }
+      const message = err instanceof Error && err.message ? err.message : 'Ошибка при подписке на уведомления';
       setError(message);
       return { ok: false, error: message };
     } finally {

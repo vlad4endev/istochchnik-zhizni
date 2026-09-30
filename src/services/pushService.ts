@@ -40,12 +40,17 @@ function isPushNetworkTimeoutErr(err: unknown): boolean {
   );
 }
 
+let vapidReady = false;
 if (vapidConfigured) {
-  webpush.setVapidDetails(
-    VAPID_SUBJECT!,
-    VAPID_PUBLIC_KEY!,
-    VAPID_PRIVATE_KEY!,
-  );
+  try {
+    // web-push требует subject вида mailto:… или https://…; голый e-mail нормализуем.
+    const rawSubject = VAPID_SUBJECT!.trim();
+    const subject = /^(mailto:|https?:\/\/)/i.test(rawSubject) ? rawSubject : `mailto:${rawSubject}`;
+    webpush.setVapidDetails(subject, VAPID_PUBLIC_KEY!.trim(), VAPID_PRIVATE_KEY!.trim());
+    vapidReady = true;
+  } catch (e) {
+    console.error('[push] Invalid VAPID configuration — Web Push disabled:', e);
+  }
 } else {
   console.warn('VAPID keys are not configured. Web Push will not work.');
 }
@@ -76,6 +81,12 @@ type SaveSubscriptionRow = {
   keys_auth: string;
   user_agent: string | null;
 };
+
+export type PushChannelSummary = { attempted: number; sent: number; removed: number; failed: number };
+export type PushSendSummary = { web: PushChannelSummary; fcm: PushChannelSummary };
+export type WebSendOutcome = 'sent' | 'removed' | 'failed' | 'skipped';
+
+const emptyChannel = (): PushChannelSummary => ({ attempted: 0, sent: 0, removed: 0, failed: 0 });
 
 export type SaveSubscriptionResult = 'created' | 'updated' | 'noop';
 
@@ -246,12 +257,32 @@ export async function getSubscriptionsForCoordinators(): Promise<{member_id: num
   }));
 }
 
+/** Лимит шифрованного payload Web Push — 4096 байт; безопасно укладываемся в ~3 КБ JSON. */
+const WEB_PUSH_MAX_JSON_BYTES = 3000;
+
+function serializeWebPushPayload(payload: unknown): string {
+  let json = JSON.stringify(payload);
+  if (Buffer.byteLength(json, 'utf8') <= WEB_PUSH_MAX_JSON_BYTES) return json;
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const trimmed: Record<string, unknown> = { ...(payload as Record<string, unknown>) };
+    // Второстепенные и тяжёлые поля (кнопки, картинки) отбрасываем первыми.
+    for (const key of ['actions', 'image', 'icon', 'badge']) delete trimmed[key];
+    json = JSON.stringify(trimmed);
+    if (Buffer.byteLength(json, 'utf8') <= WEB_PUSH_MAX_JSON_BYTES) return json;
+    if (typeof trimmed.body === 'string') {
+      trimmed.body = `${trimmed.body.slice(0, 300)}…`;
+      json = JSON.stringify(trimmed);
+    }
+  }
+  return json;
+}
+
 export async function sendNotificationToSubscription(
   sub: PushSubscriptionData,
   payload: unknown,
-): Promise<void> {
-  if (!vapidConfigured) {
-    return;
+): Promise<WebSendOutcome> {
+  if (!vapidReady) {
+    return 'skipped';
   }
   try {
     await webpush.sendNotification(
@@ -259,13 +290,15 @@ export async function sendNotificationToSubscription(
         endpoint: sub.endpoint,
         keys: sub.keys,
       },
-      JSON.stringify(payload),
-      { TTL: 86400, timeout: WEB_PUSH_HTTP_TIMEOUT_MS },
+      serializeWebPushPayload(payload),
+      // urgency high — иначе Android в Doze и iOS откладывают доставку (вплоть до минут/часов).
+      { TTL: 86400, urgency: 'high', timeout: WEB_PUSH_HTTP_TIMEOUT_MS },
     );
     // Mark as used
     query(`UPDATE push_subscriptions SET last_used_at = NOW() WHERE endpoint = $1`, [sub.endpoint]).catch(e => {
         console.warn('Failed to update last_used_at on push success', e);
     });
+    return 'sent';
   } catch (err: unknown) {
     const statusCode =
       err && typeof err === 'object' && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
@@ -275,6 +308,7 @@ export async function sendNotificationToSubscription(
       // Subscription has expired or is no longer valid
       console.log('[push] Subscription expired. Removing from DB.', sub.endpoint);
       await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
+      return 'removed';
     } else if (
       statusCode === 403 &&
       (/vapid|UnauthorizedRegistration|InvalidToken|mismatch/i.test(body) ||
@@ -294,6 +328,7 @@ export async function sendNotificationToSubscription(
         body: body.slice(0, 200),
       });
       await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
+      return 'removed';
     } else if (isPushNetworkTimeoutErr(err)) {
       const now = Date.now();
       if (now - lastPushNetworkErrLogMs >= PUSH_NETWORK_ERR_LOG_INTERVAL_MS) {
@@ -318,17 +353,27 @@ export async function sendNotificationToSubscription(
       });
     }
   }
+  return 'failed';
 }
 
-export async function sendNotificationToMember(memberId: number, payload: unknown): Promise<void> {
-  if (!vapidConfigured) {
-    return;
+export async function sendNotificationToMember(
+  memberId: number,
+  payload: unknown,
+): Promise<PushChannelSummary> {
+  const summary = emptyChannel();
+  if (!vapidReady) {
+    return summary;
   }
   const subs = await getSubscriptionsForMember(memberId);
-  if (subs.length === 0) {
-    return;
+  const outcomes = await Promise.all(subs.map((sub) => sendNotificationToSubscription(sub, payload)));
+  for (const o of outcomes) {
+    if (o === 'skipped') continue;
+    summary.attempted += 1;
+    if (o === 'sent') summary.sent += 1;
+    else if (o === 'removed') summary.removed += 1;
+    else summary.failed += 1;
   }
-  await Promise.allSettled(subs.map((sub) => sendNotificationToSubscription(sub, payload)));
+  return summary;
 }
 
 const FCM_MULTICAST_CHUNK = 500;
@@ -336,6 +381,8 @@ const FCM_MULTICAST_CHUNK = 500;
 export type SendPushOptions = {
   /** false — только чаты (sendPushNotification), запись в журнал не создаём, чтобы не дублировать счётчик. */
   recordDelivery?: boolean;
+  /** Служебные пуши (тест из профиля): не применять фильтр по роли «прихожанин». */
+  bypassRoleFilter?: boolean;
 };
 
 /**
@@ -394,9 +441,10 @@ export async function sendPush(
   body: string,
   data?: Record<string, string>,
   opts?: SendPushOptions,
-): Promise<void> {
-  if (!(await shouldDeliverPushForMember(memberId, data))) {
-    return;
+): Promise<PushSendSummary> {
+  const summary: PushSendSummary = { web: emptyChannel(), fcm: emptyChannel() };
+  if (!opts?.bypassRoleFilter && !(await shouldDeliverPushForMember(memberId, data))) {
+    return summary;
   }
 
   const recordDelivery = opts?.recordDelivery !== false;
@@ -434,76 +482,132 @@ export async function sendPush(
     console.warn('[push] badge count failed', e);
   }
 
-  await sendNotificationToMember(memberId, webPayload);
+  // Web Push и FCM независимы: медленный/недоступный один канал не должен задерживать другой.
+  const results = await Promise.allSettled([
+    sendNotificationToMember(memberId, webPayload),
+    sendFcmToMember(memberId, title, body, data, deliveryId, webPayload.badgeCount),
+  ]);
+  if (results[0].status === 'fulfilled') summary.web = results[0].value;
+  if (results[1].status === 'fulfilled') summary.fcm = results[1].value;
+  for (const r of results) {
+    if (r.status === 'rejected') {
+      console.warn('[push] delivery channel failed', { memberId, error: r.reason });
+    }
+  }
+  return summary;
+}
 
+/** FCM data-значения обязаны быть строками; null/undefined отбрасываем. */
+function toFcmDataStrings(
+  title: string,
+  body: string,
+  data: Record<string, string> | undefined,
+  deliveryId: number | undefined,
+  badgeCount: unknown,
+): Record<string, string> {
+  const out: Record<string, string> = { title, body };
+  if (data) {
+    for (const [k, v] of Object.entries(data)) {
+      if (v === null || v === undefined) continue;
+      // Ключи на google./gcm. и from зарезервированы FCM — иначе сообщение отклоняется.
+      if (k === 'from' || /^(google|gcm)/i.test(k)) continue;
+      out[k] = typeof v === 'string' ? v : JSON.stringify(v);
+    }
+  }
+  if (deliveryId != null) out.deliveryId = String(deliveryId);
+  if (typeof badgeCount === 'string') out.badgeCount = badgeCount;
+  return out;
+}
+
+async function sendFcmToMember(
+  memberId: number,
+  title: string,
+  body: string,
+  data: Record<string, string> | undefined,
+  deliveryId: number | undefined,
+  badgeCount: unknown,
+): Promise<PushChannelSummary> {
+  const summary = emptyChannel();
   const messaging = getFirebaseMessaging();
   if (!messaging) {
-    return;
+    return summary;
   }
 
   const tokens = await getFcmTokensForMember(memberId);
   if (tokens.length === 0) {
-    return;
+    return summary;
   }
 
-  const dataStrings: Record<string, string> = { title, body };
-  if (data) {
-    for (const [k, v] of Object.entries(data)) {
-      dataStrings[k] = v;
-    }
-  }
-  if (deliveryId != null) {
-    dataStrings.deliveryId = String(deliveryId);
-  }
-  if (typeof webPayload.badgeCount === 'string') {
-    dataStrings.badgeCount = webPayload.badgeCount;
-  }
+  const dataStrings = toFcmDataStrings(title, body, data, deliveryId, badgeCount);
   const isMessengerLikePush =
     (typeof dataStrings.conversationId === 'string' && dataStrings.conversationId.trim().length > 0) ||
     (typeof dataStrings.tag === 'string' && dataStrings.tag.startsWith('chat-'));
   const notificationCount =
-    typeof webPayload.badgeCount === 'string' ? Number.parseInt(webPayload.badgeCount, 10) || 0 : 0;
+    typeof dataStrings.badgeCount === 'string' ? Number.parseInt(dataStrings.badgeCount, 10) || 0 : 0;
   const senderName = typeof dataStrings.senderName === 'string' ? dataStrings.senderName.trim() : '';
+  const channelId = isMessengerLikePush ? 'messages' : 'general';
+  // Срок жизни для оффлайн-устройств: сутки (как у Web Push), дальше уведомление неактуально.
+  const ttlSeconds = 86400;
+  const apnsExpiration = String(Math.floor(Date.now() / 1000) + ttlSeconds);
 
   for (let i = 0; i < tokens.length; i += FCM_MULTICAST_CHUNK) {
     const slice = tokens.slice(i, i + FCM_MULTICAST_CHUNK);
-    const channelId = isMessengerLikePush ? 'messages' : 'general';
-    const res = await messaging.sendEachForMulticast({
-      tokens: slice,
-      notification: { title, body },
-      data: dataStrings,
-      android: {
-        priority: 'high',
-        notification: {
-          channelId,
-          sound: 'default',
+    let res;
+    try {
+      res = await messaging.sendEachForMulticast({
+        tokens: slice,
+        notification: { title, body },
+        data: dataStrings,
+        android: {
           priority: 'high',
-        },
-      },
-      apns: {
-        headers: {
-          'apns-priority': '10',
-          'apns-push-type': 'alert',
-        },
-        payload: {
-          aps: {
-            alert: { title, body },
+          ttl: ttlSeconds * 1000,
+          notification: {
+            channelId,
             sound: 'default',
-            threadId: isMessengerLikePush ? dataStrings.conversationId ?? undefined : undefined,
-            category: isMessengerLikePush ? 'MESSAGE' : 'GENERAL',
-            badge: notificationCount > 0 ? notificationCount : undefined,
-            mutableContent: true,
-            interruptionLevel: isMessengerLikePush ? 'active' : 'passive',
-            relevanceScore: isMessengerLikePush ? 0.8 : 0.3,
-            summaryArg: isMessengerLikePush ? senderName || title : undefined,
-            summaryArgCount: isMessengerLikePush ? 1 : undefined,
+            priority: 'high',
+            defaultVibrateTimings: true,
           },
         },
-      },
-    });
+        apns: {
+          headers: {
+            'apns-priority': '10',
+            'apns-push-type': 'alert',
+            'apns-expiration': apnsExpiration,
+          },
+          payload: {
+            aps: {
+              alert: { title, body },
+              sound: 'default',
+              threadId: isMessengerLikePush ? dataStrings.conversationId ?? undefined : undefined,
+              category: isMessengerLikePush ? 'MESSAGE' : 'GENERAL',
+              badge: notificationCount > 0 ? notificationCount : undefined,
+              mutableContent: true,
+              // 'passive' доставлял уведомление «тихо» (без баннера/экрана блокировки) — часть
+              // пользователей iOS не видела пуши. Всегда 'active'.
+              interruptionLevel: 'active',
+              relevanceScore: isMessengerLikePush ? 0.8 : 0.3,
+              summaryArg: isMessengerLikePush ? senderName || title : undefined,
+              summaryArgCount: isMessengerLikePush ? 1 : undefined,
+            },
+          },
+        },
+      });
+    } catch (e) {
+      console.warn('[push] FCM multicast request failed', {
+        memberId,
+        message: e instanceof Error ? e.message : String(e),
+      });
+      summary.attempted += slice.length;
+      summary.failed += slice.length;
+      continue;
+    }
+    summary.attempted += slice.length;
     for (let j = 0; j < res.responses.length; j++) {
       const r = res.responses[j];
-      if (r.success) continue;
+      if (r.success) {
+        summary.sent += 1;
+        continue;
+      }
       const t = slice[j];
       const code = r.error?.code;
       const message = r.error?.message;
@@ -513,10 +617,12 @@ export async function sendPush(
           code,
           tokenPrefix: t ? t.slice(0, 12) : null,
         });
+        summary.removed += 1;
         if (t) {
           await deleteFcmToken(t);
         }
       } else {
+        summary.failed += 1;
         console.warn('[push] FCM send failed', {
           memberId,
           code: code ?? 'unknown',
@@ -526,6 +632,7 @@ export async function sendPush(
       }
     }
   }
+  return summary;
 }
 
 /**
@@ -547,4 +654,14 @@ export async function sendPushNotification(memberId: number, payload: unknown): 
     }
   }
   await sendPush(memberId, title, body, data, { recordDelivery: false });
+}
+
+/** Web Push подписки, которые не подтверждались и не получали пуши дольше срока, считаем мёртвыми. */
+export async function pruneStalePushSubscriptions(days = 120): Promise<number> {
+  const result = await query(
+    `DELETE FROM push_subscriptions
+     WHERE COALESCE(last_used_at, created_at) < NOW() - ($1::int * INTERVAL '1 day')`,
+    [days],
+  );
+  return result.rowCount ?? 0;
 }

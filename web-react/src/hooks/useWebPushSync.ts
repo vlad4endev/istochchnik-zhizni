@@ -23,8 +23,22 @@ export function useWebPushSync(): void {
     // Один раз после входа / смены токена.
     void initMessengerPushNotifications({ force: true });
 
+    // Подписка может тихо «протухнуть» (iOS вытесняет, сервер удалил по 410): при возврате в приложение
+    // не чаще раза в 6 часов перепроверяем и пересоздаём её.
+    let lastResyncMs = Date.now();
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastResyncMs < 6 * 3600_000) return;
+      lastResyncMs = now;
+      void initMessengerPushNotifications({ force: true });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
     const sw = navigator.serviceWorker;
-    if (!sw?.addEventListener) return;
+    if (!sw?.addEventListener) {
+      return () => document.removeEventListener('visibilitychange', onVisible);
+    }
 
     const resyncAfterSwChange = () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -37,6 +51,7 @@ export function useWebPushSync(): void {
 
     sw.addEventListener('controllerchange', resyncAfterSwChange);
     return () => {
+      document.removeEventListener('visibilitychange', onVisible);
       sw.removeEventListener('controllerchange', resyncAfterSwChange);
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };

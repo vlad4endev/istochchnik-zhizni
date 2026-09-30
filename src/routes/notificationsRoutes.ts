@@ -1,6 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
-import { saveFcmToken } from '../services/fcmSubscriptionService';
+import { deleteFcmTokenForDevice, saveFcmToken } from '../services/fcmSubscriptionService';
 import {
   getUnreadNotificationDeliveryCount,
   insertMemberNotificationDelivery,
@@ -8,7 +8,9 @@ import {
   markNotificationDeliveryDismissed,
   markNotificationDeliveryOpened,
 } from '../services/notificationDeliveryService';
-import { removeSubscription, saveSubscription } from '../services/pushService';
+import { removeSubscription, saveSubscription, sendPush } from '../services/pushService';
+import { getFirebaseMessaging } from '../config/firebaseAdmin';
+import { query } from '../config/db';
 import { ensurePushSubscriptionsSchema } from '../services/pushSubscriptionsSchema';
 
 let pushSchemaEnsurePromise: Promise<void> | null = null;
@@ -165,6 +167,11 @@ router.post(
     }
 
     try {
+      try {
+        await ensurePushSchemaOnce();
+      } catch (schemaErr) {
+        console.warn('[notifications] ensurePushSubscriptionsSchema on save-token failed:', schemaErr);
+      }
       await saveFcmToken(memberId, device_id, fcm_token);
       console.info('[notifications] save-token ok', { memberId, deviceId: device_id.slice(0, 12) });
       res.status(201).json({ ok: true });
@@ -174,6 +181,99 @@ router.post(
     }
   },
 );
+
+/**
+ * GET /api/notifications/status?endpoint=...
+ * Диагностика для экрана «Уведомления»: настроен ли сервер, сколько устройств у участника,
+ * известна ли серверу подписка этого браузера.
+ */
+router.get('/status', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const endpoint = typeof req.query.endpoint === 'string' ? req.query.endpoint.trim() : '';
+  try {
+    const web = await query(
+      `SELECT endpoint FROM push_subscriptions WHERE member_id = $1`,
+      [memberId],
+    );
+    const native = await query(
+      `SELECT COUNT(*)::int AS n FROM user_subscriptions WHERE member_id = $1`,
+      [memberId],
+    );
+    const endpoints = (web.rows as { endpoint: string }[]).map((r) => r.endpoint);
+    res.json({
+      vapidConfigured: Boolean(String(process.env.VAPID_PUBLIC_KEY ?? '').trim()),
+      fcmConfigured: getFirebaseMessaging() != null,
+      webSubscriptions: endpoints.length,
+      nativeDevices: Number((native.rows[0] as { n?: number } | undefined)?.n ?? 0),
+      currentEndpointRegistered: endpoint ? endpoints.includes(endpoint) : null,
+    });
+  } catch (e) {
+    console.error('[notifications] status error:', e);
+    res.status(500).json({ error: 'Failed to load status' });
+  }
+});
+
+const lastTestPushByMember = new Map<number, number>();
+
+/**
+ * POST /api/notifications/test
+ * Отправляет тестовый пуш на все устройства участника и возвращает сводку доставки.
+ */
+router.post('/test', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const now = Date.now();
+  const last = lastTestPushByMember.get(memberId) ?? 0;
+  if (now - last < 10_000) {
+    res.status(429).json({ error: 'Подождите несколько секунд перед повторной проверкой' });
+    return;
+  }
+  lastTestPushByMember.set(memberId, now);
+  try {
+    const summary = await sendPush(
+      memberId,
+      'Проверка уведомлений',
+      'Если вы видите это сообщение — push работает на этом устройстве.',
+      { url: '/profile', type: 'push_test', tag: 'push-test' },
+      { recordDelivery: false, bypassRoleFilter: true },
+    );
+    res.json({ ok: true, summary });
+  } catch (e) {
+    console.error('[notifications] test push error:', e);
+    res.status(500).json({ error: 'Failed to send test push' });
+  }
+});
+
+/**
+ * POST /api/notifications/remove-token
+ * Body: { device_id: string } — выход из аккаунта на нативном устройстве.
+ */
+router.post('/remove-token', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const device_id = typeof req.body?.device_id === 'string' ? req.body.device_id.trim() : '';
+  if (!device_id || device_id.length > 512) {
+    res.status(400).json({ error: 'Field device_id is required' });
+    return;
+  }
+  try {
+    await deleteFcmTokenForDevice(memberId, device_id);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[notifications] remove-token error:', e);
+    res.status(500).json({ error: 'Failed to remove token' });
+  }
+});
 
 /**
  * GET /api/notifications/unread-deliveries-count

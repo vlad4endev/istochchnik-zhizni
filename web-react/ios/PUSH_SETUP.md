@@ -8,6 +8,8 @@ Android уже подключён через `android/app/google-services.json` 
 - В `Podfile` добавлен `FirebaseMessaging`
 - `AppDelegate.swift` инициализирует Firebase (если есть plist) и отдаёт в Capacitor **FCM-токен**, а не сырой APNs
 - В `Info.plist` включён `remote-notification` background mode
+- Добавлен `App/App.entitlements` (`aps-environment`) и подключён в `project.pbxproj` — без него iOS не выдаёт APNs-токен и пуши не приходят вообще
+- `MessagingDelegate` пробрасывает в Capacitor обновлённый FCM-токен при ротации
 - Клиент `useFCM` отклоняет 64-символьные hex-токены на iOS (это APNs, не FCM)
 
 ## Шаги в Firebase / Apple

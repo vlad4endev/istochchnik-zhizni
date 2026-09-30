@@ -24,4 +24,27 @@ export async function ensurePushSubscriptionsSchema(): Promise<void> {
   await query(
     `CREATE INDEX IF NOT EXISTS idx_push_subscriptions_last_used_at ON push_subscriptions (last_used_at DESC NULLS LAST)`,
   );
+  await query(`
+    CREATE TABLE IF NOT EXISTS user_subscriptions (
+      id SERIAL PRIMARY KEY,
+      member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+      device_id TEXT NOT NULL,
+      fcm_token TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (member_id, device_id)
+    )
+  `);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_user_subscriptions_member_id ON user_subscriptions (member_id)`,
+  );
+  // Один FCM-токен — один владелец: убираем исторические дубли (оставляем самую свежую запись).
+  await query(`
+    DELETE FROM user_subscriptions a
+    USING user_subscriptions b
+    WHERE a.fcm_token = b.fcm_token
+      AND (a.updated_at, a.id) < (b.updated_at, b.id)
+  `);
+  await query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_user_subscriptions_fcm_token ON user_subscriptions (fcm_token)`,
+  );
 }

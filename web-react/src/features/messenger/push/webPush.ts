@@ -4,7 +4,8 @@ import { fetchVapidPublicKey } from '../../profile/api';
 
 /** Последний известный публичный VAPID с сервера — чтобы при смене ключей пересоздать подписку. */
 const LS_VAPID_PUBLIC_KEY = 'web_push_vapid_public_key';
-let pushSyncInFlight: Promise<void> | null = null;
+export type WebPushResult = { ok: boolean; error?: string };
+let pushSyncInFlight: Promise<WebPushResult> | null = null;
 /** Endpoint, успешно сохранённый на сервере в этой вкладке. */
 let lastSyncedEndpoint: string | null = null;
 
@@ -92,6 +93,42 @@ export async function initMessengerPushNotifications(opts?: { force?: boolean })
   }
 }
 
+/**
+ * Явное включение push пользователем (жест клика): при необходимости запрашивает разрешение,
+ * создаёт подписку (с учётом смены VAPID-ключа) и сохраняет её на сервере.
+ */
+export async function enableWebPush(): Promise<WebPushResult> {
+  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return { ok: false, error: 'Браузер не поддерживает push-уведомления.' };
+  }
+  if (Notification.permission === 'denied') {
+    return { ok: false, error: 'Уведомления заблокированы в настройках браузера.' };
+  }
+  if (Notification.permission !== 'granted') {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      return { ok: false, error: 'Разрешение на уведомления не предоставлено.' };
+    }
+  }
+  if (pushSyncInFlight) await pushSyncInFlight.catch(() => undefined);
+  pushSyncInFlight = initMessengerPushNotificationsInternal(true);
+  try {
+    return await pushSyncInFlight;
+  } finally {
+    pushSyncInFlight = null;
+  }
+}
+
+/** Сравнение applicationServerKey существующей подписки с текущим VAPID-ключом сервера. */
+function sameApplicationServerKey(sub: PushSubscription, vapid: Uint8Array): boolean {
+  const raw = sub.options?.applicationServerKey;
+  if (!raw) return true; // не можем проверить — доверяем сохранённому ключу
+  const a = new Uint8Array(raw);
+  if (a.length !== vapid.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== vapid[i]) return false;
+  return true;
+}
+
 /** Сбросить кэш успешной синхронизации (после ошибки / возврата во вкладку). */
 export function resetWebPushSyncCache(): void {
   lastSyncedEndpoint = null;
@@ -113,15 +150,21 @@ async function syncSubscriptionWithServer(
   lastSyncedEndpoint = endpoint;
 }
 
-async function initMessengerPushNotificationsInternal(force: boolean): Promise<void> {
-  if (!('serviceWorker' in navigator)) return;
-  if (!('PushManager' in window)) return;
+async function initMessengerPushNotificationsInternal(force: boolean): Promise<WebPushResult> {
+  if (!('serviceWorker' in navigator)) return { ok: false, error: 'Service Worker не поддерживается.' };
+  if (!('PushManager' in window)) return { ok: false, error: 'Push не поддерживается браузером.' };
 
   // Не инициируем системный prompt сами — это должно быть пользовательское действие.
-  if (Notification.permission !== 'granted') return;
+  if (Notification.permission !== 'granted') return { ok: false, error: 'Нет разрешения на уведомления.' };
 
   try {
-    const registration = await navigator.serviceWorker.ready;
+    // ready никогда не резолвится, если SW не зарегистрирован (dev/блокировка) — не вешаем синк навсегда.
+    const registration = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Service worker not ready')), 15_000),
+      ),
+    ]);
 
     const envKey = (import.meta as { env?: { VITE_VAPID_PUBLIC_KEY?: string } }).env
       ?.VITE_VAPID_PUBLIC_KEY;
@@ -134,13 +177,19 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<v
     const vapidPublicKey = serverVapidKey || (envKey && envKey.trim() ? envKey.trim() : '');
     if (!vapidPublicKey) {
       console.warn('[push] VAPID public key is missing, skipping push subscribe.');
-      return;
+      return { ok: false, error: 'Сервер push не настроен (VAPID). Обратитесь к администратору.' };
     }
+    const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
 
     const storedKey = localStorage.getItem(LS_VAPID_PUBLIC_KEY);
     let existing = await registration.pushManager.getSubscription();
 
-    if (existing && storedKey && storedKey !== vapidPublicKey) {
+    // Подписка, созданная под другим VAPID-ключом, не получит ни одного пуша (и subscribe() с новым
+    // ключом бросит InvalidStateError) — пересоздаём.
+    if (
+      existing &&
+      ((storedKey && storedKey !== vapidPublicKey) || !sameApplicationServerKey(existing, convertedVapidKey))
+    ) {
       try {
         await existing.unsubscribe();
       } catch {
@@ -154,6 +203,7 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<v
     if (existing) {
       try {
         await syncSubscriptionWithServer(existing, vapidPublicKey, force);
+        return { ok: true };
       } catch (err) {
         console.error('[push] POST /subscribe (sync existing) failed:', err);
         lastSyncedEndpoint = null;
@@ -162,14 +212,13 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<v
           err && typeof err === 'object' && 'response' in err
             ? (err as { response?: { status?: number } }).response?.status
             : undefined;
+        const message = readPushSubscribeError(err);
         if (status !== 401) {
-          emitAppToast({ message: readPushSubscribeError(err), kind: 'error' });
+          emitAppToast({ message, kind: 'error' });
         }
+        return { ok: false, error: message };
       }
-      return;
     }
-
-    const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
 
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
@@ -178,9 +227,11 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<v
 
     try {
       await syncSubscriptionWithServer(subscription, vapidPublicKey, true);
+      return { ok: true };
     } catch (err) {
       console.error('[push] POST /subscribe (new) failed:', err);
-      emitAppToast({ message: readPushSubscribeError(err), kind: 'error' });
+      const message = readPushSubscribeError(err);
+      emitAppToast({ message, kind: 'error' });
       try {
         await subscription.unsubscribe();
       } catch {
@@ -188,14 +239,14 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<v
       }
       localStorage.removeItem(LS_VAPID_PUBLIC_KEY);
       lastSyncedEndpoint = null;
+      return { ok: false, error: message };
     }
   } catch (err) {
     console.error('[push] initMessengerPushNotifications failed:', err);
     lastSyncedEndpoint = null;
-    emitAppToast({
-      message:
-        'Не удалось включить push в браузере. Проверьте интернет и откройте сайт по HTTPS; на iPhone — ярлык с экрана «Домой».',
-      kind: 'error',
-    });
+    const message =
+      'Не удалось включить push в браузере. Проверьте интернет и откройте сайт по HTTPS; на iPhone — ярлык с экрана «Домой».';
+    emitAppToast({ message, kind: 'error' });
+    return { ok: false, error: message };
   }
 }

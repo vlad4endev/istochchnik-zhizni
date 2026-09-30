@@ -641,6 +641,14 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
 CREATE INDEX IF NOT EXISTS idx_user_subscriptions_member_id
   ON user_subscriptions (member_id);
 
+-- Один FCM-токен — один владелец (дубли после смены аккаунта на устройстве давали чужие пуши)
+DELETE FROM user_subscriptions a
+USING user_subscriptions b
+WHERE a.fcm_token = b.fcm_token
+  AND (a.updated_at, a.id) < (b.updated_at, b.id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_subscriptions_fcm_token
+  ON user_subscriptions (fcm_token);
+
 -- Централизованный журнал приложения (админка -> раздел "Журнал")
 CREATE TABLE IF NOT EXISTS app_logs (
   id BIGSERIAL PRIMARY KEY,
