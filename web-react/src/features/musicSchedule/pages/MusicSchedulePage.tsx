@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
+
+import { BodyPortal } from '../../../components/BodyPortal';
 import {
   addMonths,
   eachDayOfInterval,
@@ -943,6 +945,7 @@ export function MusicSchedulePage() {
         )}
 
         {mobileDayPanel ? (
+          <BodyPortal>
           <div className="fixed inset-0 z-[110] lg:hidden" role="presentation">
             <button
               type="button"
@@ -1045,10 +1048,12 @@ export function MusicSchedulePage() {
               ) : null}
             </div>
           </div>
+          </BodyPortal>
         ) : null}
 
         {contextMenu && canManage ? (
           <>
+            <BodyPortal>
             <div className="fixed inset-0 z-[110] lg:hidden" onClick={() => setContextMenu(null)} role="presentation">
               <button
                 type="button"
@@ -1089,6 +1094,8 @@ export function MusicSchedulePage() {
                 </div>
               </div>
             </div>
+            </BodyPortal>
+            <BodyPortal>
             <div className="fixed inset-0 z-[72] hidden lg:block" onClick={() => setContextMenu(null)} role="presentation">
               <div
                 className="absolute left-1/2 top-1/2 w-[min(90vw,300px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
@@ -1122,6 +1129,7 @@ export function MusicSchedulePage() {
                 </div>
               </div>
             </div>
+            </BodyPortal>
           </>
         ) : null}
 

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+
+import { BodyPortal } from '../../../components/BodyPortal';
 import {
   addMonths,
   eachDayOfInterval,
@@ -639,6 +641,7 @@ export function SundaySchedulePage() {
         )}
 
         {selectedPlan ? (
+          <BodyPortal>
           <div
             className="fixed inset-0 z-[110] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
             role="dialog"
@@ -825,6 +828,7 @@ export function SundaySchedulePage() {
               </div>
             </div>
           </div>
+          </BodyPortal>
         ) : null}
 
         <SundayScheduleTableCellEditor

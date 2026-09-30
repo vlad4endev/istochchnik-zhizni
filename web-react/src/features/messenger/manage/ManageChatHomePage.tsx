@@ -221,7 +221,7 @@ export function ManageChatHomePage() {
     <ManageScreenShell>
       <ManageSettingsGroup className="mt-4 overflow-hidden">
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => void updateAvatar(e.target.files?.[0] ?? null)} />
-        <div className="px-4 pb-5 pt-6 text-center">
+        <div className="flex flex-col items-center px-4 pb-5 pt-6 text-center">
           <button type="button" onClick={() => fileRef.current?.click()} className="group relative mx-auto h-[6.5rem] w-[6.5rem] overflow-hidden rounded-full bg-gradient-to-br from-primary/15 to-primary/5 shadow-md ring-2 ring-white">
             <AppAvatar
               src={resolvePublicUrl(conv?.avatar_url ?? meta?.avatar_url ?? null)}
@@ -236,7 +236,7 @@ export function ManageChatHomePage() {
             onClick={() => setShowTitleEditor(true)}
             className="mt-3 inline-flex max-w-full items-center gap-1 text-2xl font-bold text-[var(--text)]"
           >
-            <span className="truncate">{title}</span>
+            <span className="line-clamp-2 break-words">{title}</span>
             <LuPencil size={14} className="shrink-0 text-[var(--text-muted)]" />
           </button>
           <button
