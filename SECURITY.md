@@ -18,11 +18,11 @@
 
 ## Бэклог (приоритет)
 
-1. /api/version — ограничить доступ в production
+1. ~~/api/version — ограничить доступ в production~~ (готово: только авторизованные, без node_env/server_time)
 2. AiAgentError bodySnippet — не отдавать не-админам
-3. /api/auth/register — добавить rate limit
+3. ~~/api/auth/register — добавить rate limit~~ (готово: 10 запросов/час на IP)
 4. CSP unsafe-inline — поэтапный план через nonce
-5. express.json({ limit: '100kb' }) — явный лимит body
+5. ~~express.json({ limit: '100kb' })~~ (готово: явный лимит, переопределяется JSON_BODY_LIMIT)
 
 ## Оценка безопасности
 

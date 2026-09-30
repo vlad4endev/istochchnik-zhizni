@@ -176,10 +176,6 @@ export function defaultRolePermissionsSettings(): RolePermissionsSettingsDocumen
   return { roles };
 }
 
-function isPermissionId(raw: unknown): raw is AppPermissionId {
-  return typeof raw === 'string' && (APP_PERMISSION_IDS as readonly string[]).includes(raw);
-}
-
 export function normalizeRolePermissionsSettings(raw: unknown): RolePermissionsSettingsDocument {
   const defaults = defaultRolePermissionsSettings();
   if (!raw || typeof raw !== 'object') {

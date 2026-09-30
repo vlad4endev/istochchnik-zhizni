@@ -63,6 +63,13 @@ const upload = multer({
   fileFilter: avatarFileFilter,
 });
 
+const authRegisterRateLimit = createIpRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  maxRequests: 10,
+  keyPrefix: 'auth-register',
+  message: 'Too many registration attempts. Please try again later.',
+});
+
 const authLoginRateLimit = createIpRateLimiter({
   windowMs: 15 * 60 * 1000,
   maxRequests: 12,
@@ -153,7 +160,7 @@ function avatarUploadMiddleware(req: Request, res: Response, next: NextFunction)
 }
 
 router.get('/session-hints', sessionHintsHandler);
-router.post('/register', registerHandler);
+router.post('/register', authRegisterRateLimit, registerHandler);
 router.post('/login', authLoginRateLimit, loginHandler);
 router.post('/refresh', authRefreshRateLimit, refreshHandler);
 router.post('/forgot-password-request', authResetRateLimit, forgotPasswordRequestHandler);

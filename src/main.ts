@@ -17,7 +17,7 @@ import { ensureMediaScheduleSchema } from './services/mediaScheduleMigrations';
 import { ensureMusicScheduleSchema } from './services/musicScheduleMigrations';
 import { ensureTelegramSendLogsSchema } from './services/telegramSendLogService';
 import { ensureAppReleasesSchema } from './services/appReleasesService';
-import { resolveAuthSession } from './middleware/authSession';
+import { requireAuthSession, resolveAuthSession } from './middleware/authSession';
 import { enforceRoleAccess, resolveUserRole } from './middleware/roleAccess';
 import routes from './routes';
 import authRoutes from './routes/authRoutes';
@@ -266,7 +266,8 @@ app.use((req, res, next) => {
   );
   next();
 });
-app.use(express.json());
+// 100kb — дефолт express, задаём явно; при необходимости JSON_BODY_LIMIT (например '1mb').
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '100kb' }));
 app.use(resolveAuthSession);
 app.use(analyticsMiddleware);
 
@@ -390,12 +391,13 @@ app.use('/api/backup', backupRoutes);
 app.use('/api/releases', appReleasesRoutes);
 
 // Debug/version endpoint (helps verify that deploy updated)
-app.get('/api/version', (_req, res) => {
+// В production — только для авторизованных и без node_env/server_time (фронт читает лишь stamp/commit).
+const isProduction = process.env.NODE_ENV === 'production';
+app.get('/api/version', ...(isProduction ? [requireAuthSession] : []), (_req, res) => {
   res.json({
     api_build_stamp: process.env.BUILD_STAMP ?? null,
     api_commit: process.env.GIT_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null,
-    node_env: process.env.NODE_ENV ?? null,
-    server_time: new Date().toISOString(),
+    ...(isProduction ? {} : { node_env: process.env.NODE_ENV ?? null, server_time: new Date().toISOString() }),
   });
 });
 
