@@ -734,6 +734,8 @@ function DashboardQuickActionsStrip({
             className={[
               /* База — нейтральная «капсула» под общую палитру проекта */
               'group relative flex w-full min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-full',
+              /* Телефон: иконка над подписью, подпись в 2 строки — вместо «Меропри…»/«Отправит…» */
+              'max-sm:flex-col max-sm:gap-1 max-sm:rounded-2xl max-sm:px-1 max-sm:py-1.5',
               'border border-stone-200/70 bg-[var(--surface-elevated)] text-[var(--text)] max-lg:shadow-none lg:shadow-[var(--shadow-card)]',
               'dark:border-white/[0.08] dark:bg-[var(--surface-elevated)]',
               /* Поведение */
@@ -768,10 +770,10 @@ function DashboardQuickActionsStrip({
             <span
               className={[
                 'min-w-0 max-w-full font-semibold leading-tight tracking-tight',
-                /* Мобильный: 11 px, одна строка с многоточием на крайне узких экранах */
-                'truncate text-[11px]',
-                /* sm+: чуть крупнее */
-                'sm:text-[12.5px] sm:leading-none',
+                /* Мобильный: 11 px, до двух строк по центру (без обрезки многоточием) */
+                'line-clamp-2 break-words text-center text-[11px]',
+                /* sm+: одна строка с многоточием, чуть крупнее */
+                'sm:truncate sm:text-[12.5px] sm:leading-none',
                 'lg:text-[13.5px]',
               ].join(' ')}
             >
@@ -1255,7 +1257,7 @@ function DashboardMain() {
         <PageHeader title="Главная" />
       </div>
       <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-3 sm:px-4 shell:px-6 md:px-8 xl:px-10 2xl:max-w-[1480px]">
-        <div className="dashboard-scroll-pane min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pt-2 max-lg:pb-4 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
+        <div className="dashboard-scroll-pane min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pt-2 max-lg:pb-24 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
         <AndroidAppReleaseWidget />
         <NotificationPermissionWidget />
         <DashboardQuickActionsStrip

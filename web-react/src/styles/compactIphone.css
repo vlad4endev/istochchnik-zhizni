@@ -68,7 +68,8 @@
 
   .dashboard-scroll-pane {
     padding-top: 0.35rem;
-    padding-bottom: 0.75rem;
+    /* Запас под плавающую «+» (≈56px + отступ), иначе она перекрывает последний блок в конце прокрутки. */
+    padding-bottom: 6rem;
     -webkit-overflow-scrolling: touch;
   }
 
