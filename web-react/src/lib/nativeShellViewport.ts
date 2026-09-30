@@ -29,6 +29,8 @@ let viewportWatchAttached = false;
 let syncAfterPaintRaf = 0;
 /** После focus на поле ввода WebKit обновляет vv с задержкой — несколько коротких повторов sync. */
 let keyboardFocusKickTimers: number[] = [];
+/** Высота окна (px) при последней синхронизации без фокуса в поле ввода. */
+let idleWindowHeightPx = 0;
 
 function scheduleViewportSyncAfterInputFocus() {
   for (const t of keyboardFocusKickTimers) clearTimeout(t);
@@ -116,12 +118,16 @@ export function syncViewportHeightVars() {
   const keyboardInset = computeKeyboardInset(layoutHeight, visualHeight, offsetTop);
   const iosWebKit = isAppleMobileWeb();
   const iosBrowserChrome = iosWebKit && !isInstalledPwa();
+  const textInputFocused = isTextInputFocused(document);
+  /** Пока в поле ввода нет фокуса, клавиатуры нет: запоминаем «обычную» высоту окна как базу для сравнения. */
+  if (!textInputFocused) idleWindowHeightPx = Math.max(layoutHeight, visualHeight);
   const keyboardOpen = isKeyboardOpenFromViewport({
     layoutHeight,
     visualHeight,
     offsetTop,
-    textInputFocused: isTextInputFocused(document),
+    textInputFocused,
     iosWebKit,
+    baselineHeight: idleWindowHeightPx,
   });
 
   const fromVisual = Math.round(visualHeight);

@@ -337,3 +337,50 @@ describe('isKeyboardOpenFromViewport (iOS панорамирование при 
   });
 });
 
+describe('isKeyboardOpenFromViewport: layout и visual viewport сжались одновременно (iOS PWA)', () => {
+  it('без базы разница layout−visual равна нулю и клавиатура не находится', () => {
+    expect(
+      isKeyboardOpenFromViewport({ layoutHeight: 516, visualHeight: 516, offsetTop: 0, textInputFocused: true, iosWebKit: true }),
+    ).toBe(false);
+  });
+
+  it('с базой (высота без фокуса 852) клавиатура определяется по сравнению с ней', () => {
+    expect(
+      isKeyboardOpenFromViewport({
+        layoutHeight: 516,
+        visualHeight: 516,
+        offsetTop: 0,
+        textInputFocused: true,
+        iosWebKit: true,
+        baselineHeight: 852,
+      }),
+    ).toBe(true);
+  });
+
+  it('с базой, но без фокуса в поле клавиатурой не считается', () => {
+    expect(
+      isKeyboardOpenFromViewport({
+        layoutHeight: 516,
+        visualHeight: 516,
+        offsetTop: 0,
+        textInputFocused: false,
+        iosWebKit: true,
+        baselineHeight: 852,
+      }),
+    ).toBe(false);
+  });
+
+  it('с базой и без сжатия (окно той же высоты) не даёт ложного срабатывания', () => {
+    expect(
+      isKeyboardOpenFromViewport({
+        layoutHeight: 852,
+        visualHeight: 852,
+        offsetTop: 0,
+        textInputFocused: true,
+        iosWebKit: true,
+        baselineHeight: 852,
+      }),
+    ).toBe(false);
+  });
+});
+
