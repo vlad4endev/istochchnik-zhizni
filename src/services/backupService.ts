@@ -775,12 +775,19 @@ export async function restoreFullBackup(
 
 export async function getBackupSettingsAdminView(): Promise<BackupSettingsAdminView> {
   const doc = await loadBackupSettingsDocument();
-  const tg = await getTelegramSettings();
+  // Telegram settings must not block the backup admin panel (restore depends on it).
+  let telegramBotReady = false;
+  try {
+    const tg = await getTelegramSettings();
+    telegramBotReady = Boolean(tg.enabled && tg.has_bot_token);
+  } catch (err) {
+    console.warn('[backup] getTelegramSettings failed; continuing without Telegram readiness', err);
+  }
   return {
     ...doc,
     backups_dir: backupsRoot(),
     max_retention_days: BACKUP_RETENTION_DAYS_MAX,
-    telegram_bot_ready: Boolean(tg.enabled && tg.has_bot_token),
+    telegram_bot_ready: telegramBotReady,
   };
 }
 

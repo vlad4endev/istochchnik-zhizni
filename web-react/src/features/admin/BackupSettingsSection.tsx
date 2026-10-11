@@ -114,18 +114,22 @@ export function BackupSettingsSection() {
     }
   }, [settingsQ.data]);
 
+  // Если запрос успешен, а draft ещё не успел синхронизироваться — не блокируем UI.
+  const viewSettings = draft ?? settingsQ.data?.settings ?? null;
+
   const saveMut = useMutation({
     mutationFn: () => {
-      if (!draft) throw new Error('no draft');
+      const src = draft ?? settingsQ.data?.settings;
+      if (!src) throw new Error('no draft');
       return patchBackupSettings({
-        auto_enabled: draft.auto_enabled,
-        schedule_time: draft.schedule_time,
-        schedule_kind: draft.schedule_kind,
-        schedule_weekdays: draft.schedule_weekdays,
-        timezone: draft.timezone,
-        telegram_send: draft.telegram_send,
-        telegram_target: draft.telegram_target,
-        retention_days: draft.retention_days,
+        auto_enabled: src.auto_enabled,
+        schedule_time: src.schedule_time,
+        schedule_kind: src.schedule_kind,
+        schedule_weekdays: src.schedule_weekdays,
+        timezone: src.timezone,
+        telegram_send: src.telegram_send,
+        telegram_target: src.telegram_target,
+        retention_days: src.retention_days,
       });
     },
     onSuccess: () => {
@@ -162,7 +166,9 @@ export function BackupSettingsSection() {
 
   const sendMut = useMutation({
     mutationFn: (id: string) =>
-      sendBackupTelegram(id, { telegram_target: draft?.telegram_target ?? 'admins' }),
+      sendBackupTelegram(id, {
+        telegram_target: (draft ?? settingsQ.data?.settings)?.telegram_target ?? 'admins',
+      }),
     onSuccess: (data) => {
       setNote({ type: data.ok ? 'ok' : 'err', text: data.message });
       void qc.invalidateQueries({ queryKey: Q_SETTINGS });
@@ -211,7 +217,7 @@ export function BackupSettingsSection() {
   const running = Boolean(
     settingsQ.data?.running || listQ.data?.running || createMut.isPending || restoreMut.isPending,
   );
-  const maxDays = draft?.max_retention_days ?? 30;
+  const maxDays = viewSettings?.max_retention_days ?? 30;
 
   function openRestore(id: string) {
     setRestoreId(id);
@@ -226,15 +232,36 @@ export function BackupSettingsSection() {
   }
 
   function toggleWeekday(day: number) {
-    if (!draft) return;
-    const set = new Set(draft.schedule_weekdays);
+    if (!viewSettings) return;
+    const set = new Set(viewSettings.schedule_weekdays);
     if (set.has(day)) set.delete(day);
     else set.add(day);
     const next = [...set].sort((a, b) => a - b);
-    setDraft({ ...draft, schedule_weekdays: next.length ? next : [1] });
+    setDraft({ ...viewSettings, schedule_weekdays: next.length ? next : [1] });
   }
 
-  if (settingsQ.isLoading || !draft) {
+  // Ошибку показываем раньше loading/!draft: иначе при падении API draft остаётся null
+  // и экран навсегда зависает на «Загрузка…» (ошибка до пользователя не доходит).
+  if (settingsQ.isError) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-800">
+        <p>{apiErrorMessage(settingsQ.error, 'Не удалось загрузить настройки бекапа.')}</p>
+        <button
+          type="button"
+          className={`${btnSecondary()} mt-3`}
+          onClick={() => {
+            void settingsQ.refetch();
+            void listQ.refetch();
+          }}
+        >
+          <LuRefreshCw className="h-4 w-4" />
+          Повторить
+        </button>
+      </div>
+    );
+  }
+
+  if (settingsQ.isLoading || !viewSettings) {
     return (
       <div className="rounded-2xl border border-stone-200/80 bg-white p-6 text-sm text-stone-600">
         Загрузка раздела резервных копий…
@@ -242,13 +269,8 @@ export function BackupSettingsSection() {
     );
   }
 
-  if (settingsQ.error) {
-    return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-800">
-        {apiErrorMessage(settingsQ.error, 'Не удалось загрузить настройки бекапа.')}
-      </div>
-    );
-  }
+  // Дальше в JSX используем viewSettings (синхронизированный draft или ответ API).
+  const settings = viewSettings;
 
   return (
     <div className="space-y-6">
@@ -293,11 +315,11 @@ export function BackupSettingsSection() {
           />
           Сразу отправить архив в Telegram после создания
         </label>
-        {draft.last_run_at && (
+        {settings.last_run_at && (
           <p className="mt-3 text-xs text-stone-500">
-            Последний запуск: {formatRuDate(draft.last_run_at)}
-            {draft.last_run_status ? ` · ${draft.last_run_status}` : ''}
-            {draft.last_run_message ? ` — ${draft.last_run_message}` : ''}
+            Последний запуск: {formatRuDate(settings.last_run_at)}
+            {settings.last_run_status ? ` · ${settings.last_run_status}` : ''}
+            {settings.last_run_message ? ` — ${settings.last_run_message}` : ''}
           </p>
         )}
       </section>
@@ -314,8 +336,8 @@ export function BackupSettingsSection() {
             <input
               type="checkbox"
               className="h-4 w-4 rounded border-stone-300 text-primary"
-              checked={draft.auto_enabled}
-              onChange={(e) => setDraft({ ...draft, auto_enabled: e.target.checked })}
+              checked={settings.auto_enabled}
+              onChange={(e) => setDraft({ ...settings, auto_enabled: e.target.checked })}
             />
             Включить автоматический бекап
           </label>
@@ -323,8 +345,8 @@ export function BackupSettingsSection() {
             <input
               type="checkbox"
               className="h-4 w-4 rounded border-stone-300 text-primary"
-              checked={draft.telegram_send}
-              onChange={(e) => setDraft({ ...draft, telegram_send: e.target.checked })}
+              checked={settings.telegram_send}
+              onChange={(e) => setDraft({ ...settings, telegram_send: e.target.checked })}
             />
             Отправлять автобекап в Telegram
           </label>
@@ -334,8 +356,8 @@ export function BackupSettingsSection() {
             <input
               type="time"
               className={fieldClass()}
-              value={draft.schedule_time}
-              onChange={(e) => setDraft({ ...draft, schedule_time: e.target.value })}
+              value={settings.schedule_time}
+              onChange={(e) => setDraft({ ...settings, schedule_time: e.target.value })}
             />
           </label>
 
@@ -343,8 +365,8 @@ export function BackupSettingsSection() {
             <span className="mb-1 block font-medium text-stone-700">Часовой пояс</span>
             <input
               className={fieldClass()}
-              value={draft.timezone}
-              onChange={(e) => setDraft({ ...draft, timezone: e.target.value })}
+              value={settings.timezone}
+              onChange={(e) => setDraft({ ...settings, timezone: e.target.value })}
               placeholder="Europe/Moscow"
             />
           </label>
@@ -353,9 +375,9 @@ export function BackupSettingsSection() {
             <span className="mb-1 block font-medium text-stone-700">Периодичность</span>
             <select
               className={fieldClass()}
-              value={draft.schedule_kind}
+              value={settings.schedule_kind}
               onChange={(e) =>
-                setDraft({ ...draft, schedule_kind: e.target.value as BackupScheduleKind })
+                setDraft({ ...settings, schedule_kind: e.target.value as BackupScheduleKind })
               }
             >
               <option value="daily">Ежедневно</option>
@@ -372,10 +394,10 @@ export function BackupSettingsSection() {
               min={1}
               max={maxDays}
               className={fieldClass()}
-              value={draft.retention_days}
+              value={settings.retention_days}
               onChange={(e) =>
                 setDraft({
-                  ...draft,
+                  ...settings,
                   retention_days: Math.min(maxDays, Math.max(1, Number(e.target.value) || 1)),
                 })
               }
@@ -386,28 +408,28 @@ export function BackupSettingsSection() {
             <span className="mb-1 block font-medium text-stone-700">Куда слать в Telegram</span>
             <select
               className={fieldClass()}
-              value={draft.telegram_target}
+              value={settings.telegram_target}
               onChange={(e) =>
-                setDraft({ ...draft, telegram_target: e.target.value as BackupTelegramTarget })
+                setDraft({ ...settings, telegram_target: e.target.value as BackupTelegramTarget })
               }
             >
               <option value="admins">Личные чаты администраторов (telegram_chat_id)</option>
               <option value="default_chat">Default chat из настроек Telegram</option>
               <option value="both">Админы и default chat</option>
             </select>
-            {!draft.telegram_bot_ready && (
+            {!settings.telegram_bot_ready && (
               <span className="mt-1 block text-xs text-amber-700">
                 Бот не готов: включите Telegram и укажите токен в разделе «Telegram».
               </span>
             )}
           </label>
 
-          {draft.schedule_kind === 'weekly' && (
+          {settings.schedule_kind === 'weekly' && (
             <div className="sm:col-span-2">
               <span className="mb-2 block text-sm font-medium text-stone-700">Дни недели</span>
               <div className="flex flex-wrap gap-2">
                 {WEEK_DAYS.map((d) => {
-                  const on = draft.schedule_weekdays.includes(d.id);
+                  const on = settings.schedule_weekdays.includes(d.id);
                   return (
                     <button
                       key={d.id}
@@ -437,9 +459,9 @@ export function BackupSettingsSection() {
           </button>
         </div>
 
-        {draft.last_telegram_message && (
+        {settings.last_telegram_message && (
           <p className="mt-3 text-xs text-stone-500">
-            Telegram: {formatRuDate(draft.last_telegram_at)} — {draft.last_telegram_message}
+            Telegram: {formatRuDate(settings.last_telegram_at)} — {settings.last_telegram_message}
           </p>
         )}
       </section>
@@ -504,10 +526,10 @@ export function BackupSettingsSection() {
                   <button
                     type="button"
                     className={btnSecondary()}
-                    disabled={sendMut.isPending || !draft.telegram_bot_ready}
+                    disabled={sendMut.isPending || !settings.telegram_bot_ready}
                     onClick={() => sendMut.mutate(item.id)}
                     title={
-                      draft.telegram_bot_ready ? 'Отправить в Telegram' : 'Сначала настройте Telegram'
+                      settings.telegram_bot_ready ? 'Отправить в Telegram' : 'Сначала настройте Telegram'
                     }
                   >
                     <LuSend className="h-4 w-4" />
