@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   LuDownload,
   LuHardDrive,
@@ -7,6 +7,7 @@ import {
   LuRotateCcw,
   LuSend,
   LuTrash2,
+  LuUpload,
   LuX,
 } from 'react-icons/lu';
 
@@ -20,6 +21,7 @@ import {
   patchBackupSettings,
   restoreBackup,
   sendBackupTelegram,
+  uploadBackupArchive,
   type BackupScheduleKind,
   type BackupSettings,
   type BackupTelegramTarget,
@@ -104,6 +106,7 @@ export function BackupSettingsSection() {
   const [restorePassphrase, setRestorePassphrase] = useState('');
   const [restoreLog, setRestoreLog] = useState<string | null>(null);
   const [dryRunOk, setDryRunOk] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const confirmPhrase = settingsQ.data?.restore_confirm_phrase || DEFAULT_CONFIRM;
 
@@ -180,6 +183,18 @@ export function BackupSettingsSection() {
     mutationFn: (id: string) => downloadBackupArchive(id),
     onSuccess: () => setNote({ type: 'ok', text: 'Скачивание началось.' }),
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось скачать архив.') }),
+  });
+
+  const uploadMut = useMutation({
+    mutationFn: (file: File) => uploadBackupArchive(file),
+    onSuccess: (data) => {
+      setNote({ type: 'ok', text: data.message });
+      void qc.invalidateQueries({ queryKey: Q_LIST });
+      void qc.invalidateQueries({ queryKey: Q_SETTINGS });
+      openRestore(data.item.id);
+    },
+    onError: (e) =>
+      setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось загрузить архив бекапа.') }),
   });
 
   const restoreMut = useMutation({
@@ -469,17 +484,45 @@ export function BackupSettingsSection() {
       <section className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-bold text-stone-900">Сохранённые копии</h2>
-          <button
-            type="button"
-            className={btnSecondary()}
-            onClick={() => {
-              void qc.invalidateQueries({ queryKey: Q_LIST });
-              void qc.invalidateQueries({ queryKey: Q_SETTINGS });
-            }}
-          >
-            Обновить список
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept=".tar.gz,application/gzip,application/x-gzip"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (file) uploadMut.mutate(file);
+              }}
+            />
+            <button
+              type="button"
+              className={btnSecondary('border-primary/40 text-primary')}
+              disabled={running || uploadMut.isPending}
+              onClick={() => uploadInputRef.current?.click()}
+              title="Например istochnik-backup-20261009-222241.tar.gz из папки Загрузки"
+            >
+              <LuUpload className={`h-4 w-4 ${uploadMut.isPending ? 'animate-pulse' : ''}`} />
+              {uploadMut.isPending ? 'Загрузка файла…' : 'Загрузить с компьютера'}
+            </button>
+            <button
+              type="button"
+              className={btnSecondary()}
+              onClick={() => {
+                void qc.invalidateQueries({ queryKey: Q_LIST });
+                void qc.invalidateQueries({ queryKey: Q_SETTINGS });
+              }}
+            >
+              Обновить список
+            </button>
+          </div>
         </div>
+        <p className="mt-2 text-xs text-stone-500">
+          Есть архив в «Загрузках»? Нажмите «Загрузить с компьютера» и выберите{' '}
+          <span className="font-semibold">istochnik-backup-….tar.gz</span> — затем откроется
+          восстановление.
+        </p>
 
         {listQ.isLoading ? (
           <p className="mt-4 text-sm text-stone-500">Загрузка…</p>
@@ -488,7 +531,9 @@ export function BackupSettingsSection() {
             {apiErrorMessage(listQ.error, 'Не удалось загрузить список.')}
           </p>
         ) : (listQ.data?.items.length ?? 0) === 0 ? (
-          <p className="mt-4 text-sm text-stone-500">Пока нет бекапов. Создайте первый архив выше.</p>
+          <p className="mt-4 text-sm text-stone-500">
+            Пока нет бекапов на сервере. Создайте архив выше или загрузите файл с компьютера.
+          </p>
         ) : (
           <ul className="mt-4 divide-y divide-stone-100">
             {listQ.data!.items.map((item) => (
