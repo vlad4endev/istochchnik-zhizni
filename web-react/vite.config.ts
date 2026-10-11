@@ -321,6 +321,15 @@ export default defineConfig(({ mode }) => {
               handler: 'NetworkOnly',
             },
             {
+              /**
+               * Админ-список участников и план молитвенной недели: ответ может быть >15 с
+               * (много строк + нужда цикла). NetworkFirst с networkTimeoutSeconds=15 обрывает
+               * fetch → в UI «Network Error», хотя API ещё считает.
+               */
+              urlPattern: /\/api\/(?:users(?:\/|$|\?)|calendar\/next-week\/)/,
+              handler: 'NetworkOnly',
+            },
+            {
               urlPattern: /\/api\//,
               handler: 'NetworkFirst',
               options: {
@@ -330,7 +339,8 @@ export default defineConfig(({ mode }) => {
                   maxEntries: 100,
                   maxAgeSeconds: 60 * 5,
                 },
-                cacheableResponse: { statuses: [0, 200] },
+                // Не кэшировать opaque/failed (status 0) — иначе SW отдаёт «пустой» промах сети.
+                cacheableResponse: { statuses: [200] },
               },
             },
             {

@@ -284,7 +284,12 @@ async function appendPrayerRequestHistory(
 
 export async function listUsers(): Promise<AppUser[]> {
   const ci = await getCurrentCycleIndexForUpsert();
-  const mpcPick = buildCyclePrayerMpcPickSql('$1');
+  /**
+   * LEFT JOIN LATERAL вместо коррелированного подзапроса в SELECT:
+   * один проход по members + index lookup PK (member_id, cycle_index).
+   * Иначе при сотнях участников список в админке/очереди молитвы легко уходит
+   * за 15 с — Workbox NetworkFirst обрывает запрос как Network Error.
+   */
   const result = await query(
     `SELECT
       m.id,
@@ -300,7 +305,7 @@ export async function listUsers(): Promise<AppUser[]> {
       m.telegram_delivery_blocked_at,
       m.ministry_role,
       m.ministry_direction,
-      ${mpcPick.prayerRequest} AS prayer_request,
+      mpc_pick.prayer_request AS prayer_request,
       m.birth_date,
       m.email,
       m.account_provider,
@@ -315,6 +320,19 @@ export async function listUsers(): Promise<AppUser[]> {
       m.created_at,
       m.updated_at
     FROM members m
+    LEFT JOIN LATERAL (
+      SELECT NULLIF(TRIM(mpc_sel.prayer_request), '') AS prayer_request
+      FROM member_prayer_by_cycle mpc_sel
+      WHERE mpc_sel.member_id = m.id
+        AND mpc_sel.cycle_index BETWEEN $1::bigint AND $1::bigint + 2
+        AND NULLIF(TRIM(mpc_sel.prayer_request), '') IS NOT NULL
+      ORDER BY
+        CASE WHEN mpc_sel.cycle_index = $1::bigint THEN 0 ELSE 1 END,
+        CASE WHEN mpc_sel.cycle_index > $1::bigint THEN 0 ELSE 1 END,
+        ABS(mpc_sel.cycle_index - $1::bigint),
+        mpc_sel.updated_at DESC
+      LIMIT 1
+    ) mpc_pick ON TRUE
     ORDER BY m.id DESC`,
     [ci]
   );
