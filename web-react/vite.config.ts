@@ -322,26 +322,12 @@ export default defineConfig(({ mode }) => {
             },
             {
               /**
-               * Админ-список участников и план молитвенной недели: ответ может быть >15 с
-               * (много строк + нужда цикла). NetworkFirst с networkTimeoutSeconds=15 обрывает
-               * fetch → в UI «Network Error», хотя API ещё считает.
+               * Все /api/* — только сеть. NetworkFirst + networkTimeoutSeconds=15 обрывал
+               * долгие админ-списки (users, молитвенный план) как Network Error; плюс кэш
+               * API с cookie/Authorization опасен между сессиями. SW не должен трогать API.
                */
-              urlPattern: /\/api\/(?:users(?:\/|$|\?)|calendar\/next-week\/)/,
-              handler: 'NetworkOnly',
-            },
-            {
               urlPattern: /\/api\//,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: `api-cache-${runtimeCacheSuffix}`,
-                networkTimeoutSeconds: 15,
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 5,
-                },
-                // Не кэшировать opaque/failed (status 0) — иначе SW отдаёт «пустой» промах сети.
-                cacheableResponse: { statuses: [200] },
-              },
+              handler: 'NetworkOnly',
             },
             {
               urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\//,
