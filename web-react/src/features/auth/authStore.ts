@@ -11,6 +11,7 @@ import {
   probeCookieSession,
   setCookieSessionEnabled,
 } from '../../lib/cookieSessionMode';
+import { beginSessionTeardown, endSessionTeardown } from '../../lib/sessionTeardown';
 
 /** Те же ключи, что в Flutter AuthTokenStore — можно читать сессию с того же origin. */
 const LS_TOKEN = 'auth_access_token';
@@ -341,6 +342,9 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         const token = get().token;
         syncAuthAxiosBaseUrl();
+        // Пока идут detach/logout на сервер, фоновые apiClient-запросы могут
+        // упасть с ERR_NETWORK/401 — не показываем «Нет связи с сервером».
+        beginSessionTeardown();
         try {
           if (token) {
             const cfg: {
@@ -359,6 +363,8 @@ export const useAuthStore = create<AuthState>()(
           /* как во Flutter — всё равно чистим локально */
         } finally {
           get().clearSession();
+          // Держим флаг ещё пару секунд: хвост in-flight запросов после clearSession.
+          endSessionTeardown();
         }
       },
 
@@ -563,7 +569,11 @@ export function initAuthCrossTabLocalStorageSync(): void {
     const next = e.newValue;
     const prev = useAuthStore.getState();
     if (!next || next.trim() === '') {
-      if (prev.token) prev.clearSession();
+      if (prev.token) {
+        beginSessionTeardown();
+        prev.clearSession();
+        endSessionTeardown();
+      }
       return;
     }
     if (next === prev.token) return;

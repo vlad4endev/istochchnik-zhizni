@@ -5,6 +5,7 @@ import { useAuthStore } from '../features/auth/authStore';
 import { performAuthRefresh } from './authRefresh';
 import { COOKIE_ONLY_SESSION_TOKEN, isCookieOnlySessionToken } from './authSessionConstants';
 import { resolveAxiosBaseURL } from './config';
+import { isSessionTeardownActive } from './sessionTeardown';
 import { emitAppToast } from './uiFeedback';
 
 declare module 'axios' {
@@ -150,6 +151,27 @@ function isTransientNetworkError(error: AxiosError): boolean {
   );
 }
 
+/** Реальный обрыв связи (не таймаут, не отмена, не offline-бар Layout). */
+function isConnectivityFailure(error: AxiosError): boolean {
+  if (error.response) return false;
+  const code = String(error.code ?? '');
+  if (code === 'ECONNABORTED' || code === 'ETIMEDOUT' || code === 'ERR_CANCELED') return false;
+  if (/timeout/i.test(String(error.message ?? ''))) return false;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+  return (
+    code === 'ERR_NETWORK' ||
+    /network error|failed to fetch/i.test(String(error.message ?? ''))
+  );
+}
+
+function hasActiveAuthSession(): boolean {
+  try {
+    return Boolean(useAuthStore.getState().token);
+  } catch {
+    return false;
+  }
+}
+
 function applyBaseURL(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
   config.baseURL = resolveAxiosBaseURL();
   return config;
@@ -186,18 +208,24 @@ apiClient.interceptors.response.use(
     const url = cfg?.url ?? '';
     const status = error.response?.status;
     const bodyMsg = readResponseErrorMessage(error.response?.data);
+    const tearingDown = isSessionTeardownActive();
 
     // Краткий обрыв (рестарт контейнера / proxy): один повтор до toast.
-    if (cfg && !cfg._retryNetworkOnce && isTransientNetworkError(error)) {
+    // Во время logout не ретраим — сессия уже снимается.
+    if (!tearingDown && cfg && !cfg._retryNetworkOnce && isTransientNetworkError(error)) {
       cfg._retryNetworkOnce = true;
       await new Promise<void>((resolve) => {
         globalThis.setTimeout(resolve, TRANSIENT_NETWORK_RETRY_DELAY_MS);
       });
+      // За время ожидания мог начаться logout — не поднимаем мёртвую сессию.
+      if (isSessionTeardownActive() || !hasActiveAuthSession()) {
+        return Promise.reject(error);
+      }
       return apiClient.request(cfg);
     }
 
     if (status === 401) {
-      if (shouldSkip401Handling(url)) {
+      if (shouldSkip401Handling(url) || tearingDown || !hasActiveAuthSession()) {
         return Promise.reject(error);
       }
 
@@ -206,6 +234,9 @@ apiClient.interceptors.response.use(
         retryCfg._retryAfterRefresh = true;
         try {
           const refreshResult = await performAuthRefresh();
+          if (isSessionTeardownActive() || !hasActiveAuthSession()) {
+            return Promise.reject(error);
+          }
           if (refreshResult.status === 'refreshed') {
             const auth = useAuthStore.getState();
             auth.setSession({
@@ -259,6 +290,10 @@ apiClient.interceptors.response.use(
         return Promise.reject(error);
       }
 
+      if (isSessionTeardownActive() || !hasActiveAuthSession()) {
+        return Promise.reject(error);
+      }
+
       try {
         useAuthStore.getState().clearSession();
       } catch {
@@ -266,9 +301,13 @@ apiClient.interceptors.response.use(
       }
       emitAppToast({ message: bodyMsg ?? 'Сессия недействительна или истекла. Войдите снова.', kind: 'error' });
       return Promise.reject(error);
-    } else if (!cfg?.silentErrorToast && !isDocumentHidden()) {
+    } else if (!tearingDown && !cfg?.silentErrorToast && !isDocumentHidden() && hasActiveAuthSession()) {
       if (!error.response) {
-        if (shouldEmitCooldownToast(lastNetworkToastAt, NETWORK_TOAST_COOLDOWN_MS)) {
+        // Только реальный ERR_NETWORK — таймауты и offline не маскируем под «нет связи с API».
+        if (
+          isConnectivityFailure(error) &&
+          shouldEmitCooldownToast(lastNetworkToastAt, NETWORK_TOAST_COOLDOWN_MS)
+        ) {
           markCooldownToast('network');
           emitAppToast({
             message: 'Нет связи с сервером. Проверьте интернет и доступность API.',
