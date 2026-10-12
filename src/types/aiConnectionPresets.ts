@@ -1,5 +1,11 @@
-/** Выбранный «шлюз» API: три готовых + свой URL. */
-export type AiConnectionPresetId = 'openai' | 'deepseek' | 'openrouter' | 'gptunnel' | 'custom';
+/** Выбранный «шлюз» API: готовые пресеты + свой URL. */
+export type AiConnectionPresetId =
+  | 'openai'
+  | 'deepseek'
+  | 'openrouter'
+  | 'gptunnel'
+  | 'aitunnel'
+  | 'custom';
 
 /** Группа моделей в выпадающем списке (чат / рассуждение / зрение). */
 export type AiModelGroupId = 'chat' | 'reasoning' | 'vision' | 'other';
@@ -92,6 +98,26 @@ export const AI_PRESET_CATALOG: readonly AiPresetCatalogEntry[] = [
       { id: 'deepseek-reasoner', label: 'DeepSeek R1', group: 'reasoning' },
     ],
   },
+  {
+    id: 'aitunnel',
+    label: 'AITUNNEL',
+    description:
+      'Российский OpenAI-совместимый шлюз (GPT, Claude, Gemini, DeepSeek). Оплата в ₽, без VPN. Зеркало: ru-api.aitunnel.ru',
+    base_url: 'https://api.aitunnel.ru/v1',
+    default_model: 'gpt-4o-mini',
+    key_hint: 'aitunnel.ru → Панель → API-ключи (sk-aitunnel-…)',
+    model_options: [
+      { id: 'auto', label: 'auto (подбор модели)', group: 'chat' },
+      { id: 'gpt-4o-mini', label: 'GPT-4o mini', group: 'chat' },
+      { id: 'gpt-4o', label: 'GPT-4o (текст и зрение)', group: 'chat' },
+      { id: 'gpt-6-luna', label: 'GPT-6 Luna', group: 'chat' },
+      { id: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6', group: 'chat' },
+      { id: 'deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash', group: 'chat' },
+      { id: 'kimi-k2.6', label: 'Kimi K2.6', group: 'chat' },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', group: 'vision' },
+      { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', group: 'vision' },
+    ],
+  },
 ];
 
 const PRESET_BASES = new Map(
@@ -102,12 +128,17 @@ function normalizeBase(u: string): string {
   return u.trim().replace(/\/+$/, '');
 }
 
+const NAMED_PRESET_IDS = new Set(
+  AI_PRESET_CATALOG.map((p) => p.id),
+) as ReadonlySet<Exclude<AiConnectionPresetId, 'custom'>>;
+
 export function inferConnectionPresetFromBaseUrl(baseUrl: string): AiConnectionPresetId {
   const n = normalizeBase(baseUrl);
   const id = PRESET_BASES.get(n);
-  if (id === 'openai' || id === 'deepseek' || id === 'openrouter' || id === 'gptunnel') {
+  if (id && NAMED_PRESET_IDS.has(id)) {
     return id;
   }
+  if (/aitunnel\.ru/i.test(n)) return 'aitunnel';
   if (/gptunnel\.ru/i.test(n)) return 'gptunnel';
   return 'custom';
 }
@@ -125,6 +156,7 @@ export function isConnectionPresetId(s: unknown): s is AiConnectionPresetId {
     s === 'deepseek' ||
     s === 'openrouter' ||
     s === 'gptunnel' ||
+    s === 'aitunnel' ||
     s === 'custom'
   );
 }

@@ -66,7 +66,9 @@ export async function patchAiSettingsHandler(req: Request, res: Response): Promi
   }
   if (body.connection_preset !== undefined) {
     if (body.connection_preset !== null && typeof body.connection_preset !== 'string') {
-      res.status(400).json({ error: 'Поле connection_preset: строка (openai|deepseek|openrouter|gptunnel|custom) или null' });
+      res.status(400).json({
+        error: 'Поле connection_preset: строка (openai|deepseek|openrouter|gptunnel|aitunnel|custom) или null',
+      });
       return;
     }
     if (body.connection_preset !== null && !isConnectionPresetId(body.connection_preset)) {

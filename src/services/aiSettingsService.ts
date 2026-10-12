@@ -22,6 +22,9 @@ async function ensureColumn(): Promise<void> {
 }
 
 function envApiKey(): string | null {
+  const at =
+    typeof process.env.AITUNNEL_API_KEY === 'string' ? process.env.AITUNNEL_API_KEY.trim() : '';
+  if (at) return at;
   const g =
     typeof process.env.GPTUNNEL_API_KEY === 'string' ? process.env.GPTUNNEL_API_KEY.trim() : '';
   if (g) return g;
@@ -310,9 +313,34 @@ export type ProviderModelListItem = {
   owned_by?: string | null;
 };
 
+function isAitunnelBaseUrl(baseUrl: string): boolean {
+  return /aitunnel\.ru/i.test(baseUrl);
+}
+
+/** Публичный каталог chat-моделей AITUNNEL (без ключа). */
+async function listAitunnelPublicChatModels(): Promise<ProviderModelListItem[] | null> {
+  try {
+    const res = await fetch('https://api.aitunnel.ru/public/aitunnel/models', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { chat?: Record<string, unknown> };
+    const chat = json.chat;
+    if (!chat || typeof chat !== 'object') return null;
+    const models = Object.keys(chat)
+      .map((id) => ({ id, label: id, owned_by: null as string | null }))
+      .sort((a, b) => a.id.localeCompare(b.id, 'en'));
+    return models.length > 0 ? models : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Список моделей у OpenAI-совместимого провайдера (`GET {base_url}/models`).
  * При ошибке возвращает каталог пресета как запасной вариант.
+ * Для AITUNNEL дополнительно пробует публичный каталог без ключа.
  */
 export async function listProviderModels(): Promise<{
   source: 'provider' | 'catalog';
@@ -330,8 +358,17 @@ export async function listProviderModels(): Promise<{
     label: o.label,
     owned_by: null,
   }));
+  const baseUrl = cfg.base_url.replace(/\/+$/, '');
+  const aitunnel =
+    doc.connection_preset === 'aitunnel' || isAitunnelBaseUrl(baseUrl);
 
   if (!cfg.api_key) {
+    if (aitunnel) {
+      const publicModels = await listAitunnelPublicChatModels();
+      if (publicModels) {
+        return { source: 'provider', models: publicModels };
+      }
+    }
     return {
       source: 'catalog',
       models: catalogModels,
@@ -339,7 +376,6 @@ export async function listProviderModels(): Promise<{
     };
   }
 
-  const baseUrl = cfg.base_url.replace(/\/+$/, '');
   const url = `${baseUrl}/models`;
   try {
     const res = await fetch(url, {
@@ -351,6 +387,16 @@ export async function listProviderModels(): Promise<{
     });
     const rawText = await res.text();
     if (!res.ok) {
+      if (aitunnel) {
+        const publicModels = await listAitunnelPublicChatModels();
+        if (publicModels) {
+          return {
+            source: 'provider',
+            models: publicModels,
+            error: `GET /models → ${res.status}; загружен публичный каталог AITUNNEL.`,
+          };
+        }
+      }
       return {
         source: 'catalog',
         models: catalogModels,
@@ -399,6 +445,16 @@ export async function listProviderModels(): Promise<{
     return { source: 'provider', models };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    if (aitunnel) {
+      const publicModels = await listAitunnelPublicChatModels();
+      if (publicModels) {
+        return {
+          source: 'provider',
+          models: publicModels,
+          error: `Не удалось загрузить /models (${msg}); загружен публичный каталог AITUNNEL.`,
+        };
+      }
+    }
     return {
       source: 'catalog',
       models: catalogModels,
