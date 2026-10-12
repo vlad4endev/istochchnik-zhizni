@@ -18,19 +18,52 @@ export function isLiveKitConfigured(): boolean {
   return Boolean(trimEnv('LIVEKIT_API_KEY') && trimEnv('LIVEKIT_API_SECRET') && trimEnv('LIVEKIT_URL'));
 }
 
-export function getLiveKitPublicUrl(): string {
-  const pub = trimEnv('LIVEKIT_PUBLIC_URL');
-  if (pub) {
-    const cleaned = pub.replace(/\/$/, '');
-    // Не отдаём клиенту docker-internal hostname
-    if (!/livekit:|127\.0\.0\.1|localhost/i.test(cleaned)) {
-      return cleaned;
-    }
-    console.warn('[livekit] LIVEKIT_PUBLIC_URL looks internal, falling back to PUBLIC_WEB_ORIGIN/lk');
+function originHost(url: string): string {
+  try {
+    return new URL(url.replace(/^ws/i, 'http')).host.toLowerCase();
+  } catch {
+    return '';
   }
-  const web = trimEnv('PUBLIC_WEB_ORIGIN').replace(/\/$/, '');
+}
+
+function publicUrlFromWebOrigin(webOrigin: string): string | null {
+  const web = webOrigin.replace(/\/$/, '');
   if (web.startsWith('https://')) return `${web.replace(/^https/, 'wss')}/lk`;
   if (web.startsWith('http://')) return `${web.replace(/^http/, 'ws')}/lk`;
+  return null;
+}
+
+/**
+ * URL для браузера (LiveKitRoom serverUrl).
+ * Предпочитаем same-origin `/lk` на PUBLIC_WEB_ORIGIN — отдельный call.* часто не настроен.
+ */
+export function getLiveKitPublicUrl(): string {
+  const web = trimEnv('PUBLIC_WEB_ORIGIN');
+  const fromWeb = web ? publicUrlFromWebOrigin(web) : null;
+  const pub = trimEnv('LIVEKIT_PUBLIC_URL').replace(/\/$/, '');
+
+  if (pub) {
+    const internal = /livekit:|127\.0\.0\.1|localhost/i.test(pub);
+    if (internal) {
+      console.warn('[livekit] LIVEKIT_PUBLIC_URL looks internal, falling back to PUBLIC_WEB_ORIGIN/lk');
+    } else if (fromWeb) {
+      const pubHost = originHost(pub);
+      const webHost = originHost(web);
+      // wss://app…/lk — ок; wss://call… при PUBLIC_WEB_ORIGIN=https://app… — игнорируем call.*
+      if (pubHost && webHost && pubHost !== webHost) {
+        console.warn(
+          `[livekit] LIVEKIT_PUBLIC_URL host (${pubHost}) != PUBLIC_WEB_ORIGIN (${webHost}); using ${fromWeb}`,
+        );
+        return fromWeb;
+      }
+      return pub;
+    } else {
+      return pub;
+    }
+  }
+
+  if (fromWeb) return fromWeb;
+
   // Last resort — never return bare docker DNS to browsers
   const internal = trimEnv('LIVEKIT_URL');
   if (internal.startsWith('https://')) return internal.replace(/^https/, 'wss');
