@@ -1,25 +1,42 @@
-# LiveKit Server — «Источник жизни»
-# Рекомендуемый режим: network_mode: host (см. docker-compose.livekit-addon.yml).
+# LiveKit Server — «Источник жизни» (режим максимальной стабильности за NAT)
+# network_mode: host — см. docker-compose.livekit-addon.yml
 # Docs: https://docs.livekit.io/transport/self-hosting/
 
 port: 7880
-# 0.0.0.0 нужен, чтобы api/web (Docker) достучались через host.docker.internal.
-# На роутере НЕ пробрасывайте 7880 наружу — только TCP 7881 и UDP 7882.
-# Браузер ходит на WSS /lk (nginx → host:7880).
+# api/web → host.docker.internal:7880. На роутере 7880 НЕ пробрасывать.
 bind_addresses:
   - "0.0.0.0"
 
 rtc:
-  # Один UDP mux + TCP ICE (проброс на роутере: UDP 7882, TCP 7881)
   udp_port: 7882
   tcp_port: 7881
-  # STUN → белый IP; advertise_internal_ip → 192.168.x для клиентов в той же Wi‑Fi
-  # (без hairpin NAT звонок LAN↔LAN через публичный IP нестабилен).
   use_external_ip: true
   advertise_internal_ip: true
   skip_external_ip_validation: true
   stun_servers:
     - stun.l.google.com:19302
+  congestion_control:
+    enabled: true
+    allow_pause: true
+
+# Встроенный TURN: если прямой UDP/TCP ICE рвётся, клиент идёт через relay.
+# Роутер → хост: UDP 3478 + UDP 50100–50119
+turn:
+  enabled: true
+  domain: app.church-tambov.ru
+  udp_port: 3478
+  relay_range_start: 50100
+  relay_range_end: 50119
+  # Без TLS-сертификата для TURN — только UDP TURN (достаточно для домашнего NAT).
+  # TURN/TLS (443) можно добавить позже с отдельным доменом turn.* и cert/key.
+
+room:
+  empty_timeout: 900
+  departure_timeout: 180
+  enabled_codecs:
+    - mime: audio/opus
+    - mime: audio/red
+    - mime: video/vp8
 
 logging:
   level: info
