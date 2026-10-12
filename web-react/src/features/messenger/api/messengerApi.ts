@@ -253,6 +253,7 @@ export async function createGroupChat(title: string, type: ConversationType, mem
   const { data } = await apiClient.post<{
     conversationId: string;
     conversation: ConversationListItem | null;
+    addedMemberIds?: number[];
   }>(`${BASE}/conversations/group`, { title, type, memberIds });
   return data;
 }

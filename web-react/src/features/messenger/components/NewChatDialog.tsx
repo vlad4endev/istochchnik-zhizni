@@ -351,11 +351,30 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
     const avatarToUpload = avatarDraft;
     try {
       const convMode = mode === 'group' ? 'group' : 'channel';
-      const memberIds = Object.keys(groupPick)
-        .map(Number)
-        .filter((id) => currentMemberId == null || id !== currentMemberId);
+      const memberIds = Object.values(groupPick)
+        .map((m) => Number(m.id))
+        .filter(
+          (id) =>
+            Number.isFinite(id) &&
+            id >= 1 &&
+            (currentMemberId == null || id !== currentMemberId),
+        );
+      if (memberIds.length === 0) {
+        emitAppToast('Выберите хотя бы одного участника', 'error');
+        setGroupWizardStep('members');
+        return;
+      }
       const result = await api.createGroupChat(trimmed, convMode, memberIds);
       const convId = result.conversationId;
+      const addedCount = Array.isArray(result.addedMemberIds) ? result.addedMemberIds.length : memberIds.length;
+      if (addedCount < memberIds.length) {
+        emitAppToast(
+          addedCount === 0
+            ? 'Чат создан, но никого не удалось добавить. Проверьте, что участники активны.'
+            : `Чат создан. Добавлено ${addedCount} из ${memberIds.length} участников.`,
+          'info',
+        );
+      }
       if (result.conversation) {
         handleConvCreated(result.conversation);
       } else {

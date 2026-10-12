@@ -1098,9 +1098,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
     ) {
       return;
     }
+    // Snapshot ids before fetch: if a group is created (or WS conv:created) while the
+    // request is in flight, a naive replace would wipe that chat from the UI.
+    const idsAtFetchStart = new Set(
+      (get().conversations || []).map((c) => String(c.id)),
+    );
     set({ conversationsLoading: true });
     try {
-      const conversations = filterConversationsForAssistantAccess(await api.fetchConversations());
+      const serverList = filterConversationsForAssistantAccess(await api.fetchConversations());
+      const serverIds = new Set(serverList.map((c) => String(c.id)));
+      const localExtras = (get().conversations || []).filter((c) => {
+        const id = String(c.id);
+        if (isDraftPrivateConversationId(id)) return false;
+        if (serverIds.has(id)) return false;
+        // Keep only chats that appeared locally during this fetch (create / WS).
+        return !idsAtFetchStart.has(id);
+      });
+      const conversations = filterConversationsForAssistantAccess([
+        ...localExtras,
+        ...serverList,
+      ]);
       const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0);
       const prevSeen = get().memberLastSeenAt;
       const memberLastSeenAt = { ...prevSeen };
@@ -1288,10 +1305,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.error('[chatStore] loadMessages error:', e);
       // Чат из deep-link / устаревшего кэша, к которому больше нет доступа.
       if (axios.isAxiosError(e) && e.response?.status === 403) {
+        const goneId = String(conversationId);
         set((s) => ({
-          conversations: (s.conversations || []).filter((c) => c.id !== conversationId),
+          conversations: (s.conversations || []).filter((c) => String(c.id) !== goneId),
           activeConversationId:
-            s.activeConversationId === conversationId ? null : s.activeConversationId,
+            s.activeConversationId != null && String(s.activeConversationId) === goneId
+              ? null
+              : s.activeConversationId,
         }));
         emitAppToast({
           message: 'Нет доступа к этому чату.',
@@ -2608,6 +2628,9 @@ function classifyConversation(conv: ConversationListItem): Exclude<ChatTab, 'all
   if (conv.my_ui_folder === 'personal') return 'personal';
   if (conv.my_ui_folder === 'ministry') return 'services';
   if (conv.type === 'private') return 'personal';
+  // User-created groups belong with people chats; channels stay under notifications.
+  // (Previously every group landed in «Служения», so invitees often thought the chat vanished.)
+  if (conv.type === 'group') return 'personal';
   if (conv.type === 'channel') return 'notifications';
   return 'services';
 }
