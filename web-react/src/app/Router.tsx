@@ -101,6 +101,16 @@ const MessengerRoutes = lazy(async () => {
   return { default: m.MessengerRoutes };
 });
 
+const CallPage = lazy(async () => {
+  const m = await import('../features/calls/CallPage');
+  return { default: m.CallPage };
+});
+
+const CallJoinPage = lazy(async () => {
+  const m = await import('../features/calls/CallJoinPage');
+  return { default: m.CallJoinPage };
+});
+
 const AdminPage = lazy(async () => {
   const m = await import('../features/admin/pages/AdminPage');
   return { default: m.AdminPage };
@@ -252,6 +262,14 @@ export function AppRouter() {
       <Route path="/offline" element={<OfflinePage />} />
       <Route path={LOGIN_PATH} element={<AuthLandingPage />} />
       <Route path={`${LOGIN_PATH}/form`} element={<LoginPage />} />
+      <Route
+        path="/call/join/:inviteToken"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <CallJoinPage />
+          </Suspense>
+        }
+      />
 
       <Route
         path="/setlist-share/:token"
@@ -436,6 +454,14 @@ export function AppRouter() {
                 </Suspense>
               </RequireSectionAccess>
             </RequireMessengerAccess>
+          }
+        />
+        <Route
+          path="call/:callId"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <CallPage />
+            </Suspense>
           }
         />
         <Route

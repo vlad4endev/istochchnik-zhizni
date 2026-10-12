@@ -54,6 +54,8 @@ import {
 import { initPushCronJobs } from './cron/pushJobs';
 import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
 import { initBackupJob } from './cron/backupJob';
+import { initCallsCleanupJob } from './cron/callsCleanup';
+import callsRoutes, { callInvitationsRouter } from './routes/callsRoutes';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel, ensureMediykaMessengerChannel, ensureServicePlanPlanningMessengerChannel } from './services/messengerService';
 import { ensurePushSubscriptionsSchema } from './services/pushSubscriptionsSchema';
@@ -377,6 +379,8 @@ app.use('/api/calendar', calendarRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/messenger', messengerRoutes);
+app.use('/api/calls', callsRoutes);
+app.use('/api/call-invitations', callInvitationsRouter);
 app.use('/api/media-schedule', mediaScheduleRoutes);
 app.use('/api/music-schedule', musicScheduleRoutes);
 app.use('/api/sunday-schedule', sundayScheduleRoutes);
@@ -580,6 +584,7 @@ async function start(): Promise<void> {
   initPushCronJobs();
   initTelegramDispatchJob();
   initBackupJob();
+  initCallsCleanupJob();
   startAnalyticsMaintenance();
 
   const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;

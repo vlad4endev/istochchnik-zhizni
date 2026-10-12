@@ -24,7 +24,12 @@ export function IncomingCallToast() {
   };
 
   useEffect(() => {
-    const onNotifClick = () => {
+    const onNotifClick = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ callId?: string }>).detail;
+      if (detail?.callId) {
+        void navigate(`/call/${detail.callId}`);
+        return;
+      }
       void navigate('/messenger');
     };
     window.addEventListener('calls:incoming-notification-click', onNotifClick);

@@ -901,6 +901,50 @@ function MessageBubbleInner({
       );
     }
 
+    if (payloadType === 'text' && String(payload.kind ?? '') === 'call_event') {
+      const status = String(payload.status ?? '').trim();
+      const media = String(payload.media_type ?? '').trim() === 'video' ? 'video' : 'audio';
+      const callTypeLabel = media === 'video' ? 'Видеозвонок' : 'Аудиозвонок';
+      const dur = payload.duration_seconds != null ? Number(payload.duration_seconds) : null;
+      let title = String(message.content ?? '').trim() || callTypeLabel;
+      if (!title) {
+        if (status === 'missed') title = 'Пропущенный вызов';
+        else if (status === 'declined') title = 'Вызов отклонён';
+        else if (status === 'cancelled') title = 'Вызов отменён';
+        else if (status === 'ended' && dur != null && dur > 0) {
+          const m = Math.floor(dur / 60);
+          const s = dur % 60;
+          title = `${callTypeLabel} · ${m}:${String(s).padStart(2, '0')}`;
+        } else if (status === 'ended') title = 'Вызов завершён';
+        else if (status === 'waiting') title = media === 'video' ? 'Видеоконференция' : 'Аудиоконференция';
+        else title = callTypeLabel;
+      }
+      const invitePath = String(payload.invite_path ?? '').trim();
+      return (
+        <div
+          className={[
+            'flex max-w-[min(78vw,18rem)] items-center gap-2 rounded-2xl px-3 py-2 text-sm',
+            isMine ? 'bg-white/10 text-white/95' : 'bg-[var(--surface)] text-[var(--text)]',
+          ].join(' ')}
+        >
+          <div className="min-w-0">
+            <div className="font-semibold leading-tight">{title}</div>
+            {invitePath.startsWith('/call/join/') ? (
+              <a
+                href={invitePath}
+                className={[
+                  'mt-1 inline-block text-xs font-semibold underline',
+                  isMine ? 'text-white/85' : 'text-primary',
+                ].join(' ')}
+              >
+                Присоединиться
+              </a>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
     if (payloadType === 'story_reply') {
       const storyUrl = resolvePublicUrl(
         String(payload.story_media_url ?? payload.media_url ?? '').trim(),

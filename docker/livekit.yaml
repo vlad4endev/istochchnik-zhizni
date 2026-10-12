@@ -1,0 +1,30 @@
+# LiveKit Server config for «Источник жизни».
+# Keys and secrets come from environment / docker-compose (do not commit real secrets).
+# Docs: https://docs.livekit.io/transport/self-hosting/
+
+port: 7880
+bind_addresses:
+  - ""
+
+rtc:
+  # Host must publish UDP in this range (see docker-compose.livekit-addon.yml).
+  port_range_start: 50000
+  port_range_end: 50100
+  tcp_port: 7881
+  use_external_ip: true
+  # Set via LIVEKIT_RTC_NODE_IP if auto-detect fails behind NAT.
+  # node_ip: 203.0.113.10
+
+# Redis optional — leave empty for single-node.
+# redis:
+#   address: redis:6379
+
+keys:
+  # Overridden by LIVEKIT_KEYS env in compose (API_KEY: API_SECRET).
+  # Placeholder so the file is valid if keys are injected only via env:
+  # LIVEKIT_KEYS=APIxxxxxxxx:secretyyyyy
+
+logging:
+  level: info
+
+# Do not expose RoomService / admin APIs publicly; API talks to livekit:7880 on the Docker network.

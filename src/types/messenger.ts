@@ -219,7 +219,7 @@ export type WsMessengerEvent =
       servicePlanId: number;
       peers: Array<{ memberId: number; memberName: string }>;
     }
-  /** WebRTC звонки 1:1 (сигнализация через тот же WS, что и мессенджер). */
+  /** Звонки LiveKit (события жизненного цикла через тот же WS, что и мессенджер). */
   | {
       type: 'call:incoming';
       callId: string;
@@ -238,9 +238,20 @@ export type WsMessengerEvent =
   | { type: 'call:rejected'; callId: string; reason?: string }
   | { type: 'call:cancelled'; callId: string }
   | { type: 'call:ended'; callId: string; reason?: string; duration?: number }
+  /** @deprecated P2P signaling removed — media goes through LiveKit */
   | { type: 'call:signal'; callId: string; data: unknown }
   | { type: 'call:peer_video'; callId: string; userId: number; enabled: boolean }
   | { type: 'call:peer_audio'; callId: string; userId: number; enabled: boolean }
   | { type: 'call:peer_screen'; callId: string; enabled: boolean }
+  | {
+      type: 'group_call_started';
+      callId: string;
+      conversationId: string;
+      mediaType: 'audio' | 'video';
+      initiatedBy: number;
+      initiatorName: string;
+    }
+  | { type: 'call:participant_joined'; callId: string; userId: number }
+  | { type: 'call:participant_left'; callId: string; userId: number }
   /** Количество уникальных зрителей, смотрящих трансляцию прямо сейчас. */
   | { type: 'broadcast:viewer_count'; count: number };

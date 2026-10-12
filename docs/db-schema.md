@@ -37,6 +37,16 @@ ADMIN_URL=postgres://postgres:postgres@localhost:5432 bash scripts/schema-drift.
 
 (Замер с заглушками ролей и схем `auth`/`storage`; на настоящем Supabase часть ошибок про `auth`/`storage` исчезнет.)
 
+## Звонки (LiveKit)
+
+Миграция `supabase/migrations/20261012210000_calls_livekit.sql` (+ зеркало в `initDb.ts`):
+
+- `calls`
+- `call_participants`
+- `call_invitations`
+
+Подробности: [calls-livekit.md](./calls-livekit.md).
+
 ## Дальше
 
 1. Базовая миграция, доводящая migrations до полного набора таблиц и колонок (идемпотентная, `IF NOT EXISTS`, на проде — no-op).

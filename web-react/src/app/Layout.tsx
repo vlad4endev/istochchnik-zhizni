@@ -940,6 +940,25 @@ export function Layout() {
         return;
       }
 
+      const targetUrl = String(payload.url ?? '').trim();
+      if (targetUrl) {
+        try {
+          const parsed = new URL(targetUrl, window.location.origin);
+          const nextPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+          // Входящий звонок / join: не перетираем маршрутом чата по conversationId.
+          if (nextPath.startsWith('/call/')) {
+            navigate(nextPath);
+            return;
+          }
+          if (nextPath && nextPath !== '/' && !payload.conversationId) {
+            navigate(nextPath);
+            return;
+          }
+        } catch {
+          /* ignore malformed URLs from SW */
+        }
+      }
+
       const conversationId = String(payload.conversationId ?? '').trim();
       if (conversationId) {
         // Не вызываем setActiveConversation для draft:* — иначе залипает чужой/пустой peer.
@@ -950,7 +969,6 @@ export function Layout() {
         return;
       }
 
-      const targetUrl = String(payload.url ?? '').trim();
       if (!targetUrl) return;
 
       try {
