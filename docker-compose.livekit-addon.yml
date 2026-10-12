@@ -21,8 +21,6 @@ services:
     environment:
       # Формат: key: secret  (пробел после двоеточия допустим)
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
-      # Опционально: публичный IP ноды для ICE (если задан — прокидываем в yaml через node_ip ниже нельзя из env;
-      # для node_ip используйте override или раскомментируйте в livekit.yaml)
       LIVEKIT_RTC_NODE_IP: "${LIVEKIT_RTC_NODE_IP:-}"
     volumes:
       - ./docker/livekit.yaml:/etc/livekit.yaml:ro
@@ -30,6 +28,8 @@ services:
       - "127.0.0.1:7880:7880"
       - "7881:7881"
       - "50000-50100:50000-50100/udp"
+    networks:
+      - default
     # Образ distroless/minimal — wget/curl часто отсутствуют; проверяем TCP-порт процессом.
     healthcheck:
       test: ["CMD", "/livekit-server", "--version"]
@@ -53,8 +53,11 @@ services:
       CALL_INVITE_TTL_HOURS: ${CALL_INVITE_TTL_HOURS:-24}
       CALL_MAX_GROUP_PARTICIPANTS: ${CALL_MAX_GROUP_PARTICIPANTS:-50}
 
-  # web проксирует /lk/ → livekit; без общей сети hostname livekit не резолвится
+  # web проксирует /lk/ → livekit (upstream livekit_signal).
+  # ВАЖНО: всегда с обоими compose-файлами, иначе hostname livekit не резолвится → 500/502 на /lk/.
   web:
     depends_on:
       livekit:
         condition: service_started
+    networks:
+      - default
