@@ -15,9 +15,7 @@ function trimEnv(name: string): string {
 }
 
 /**
- * Внутренний URL Room Service.
- * В compose (bridge): http://livekit:7880 — Docker DNS.
- * host.docker.internal оставляем как есть (локальные/особые схемы).
+ * Внутренний URL Room Service (host-network LiveKit → http://host.docker.internal:7880).
  */
 export function getLiveKitInternalUrl(): string {
   return trimEnv('LIVEKIT_URL').replace(/\/$/, '');
@@ -48,9 +46,9 @@ export function logLiveKitBootDiagnostics(): void {
     );
     return;
   }
-  if (/host\.docker\.internal/i.test(rawUrl)) {
+  if (/\/\/livekit[:/]/i.test(rawUrl)) {
     console.warn(
-      `[livekit] LIVEKIT_URL=${rawUrl} — для bridge-стека лучше http://livekit:7880`,
+      `[livekit] LIVEKIT_URL=${rawUrl} — для host-network лучше http://host.docker.internal:7880`,
     );
   }
   if (/call\./i.test(pub)) {
