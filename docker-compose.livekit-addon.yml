@@ -52,3 +52,9 @@ services:
       CALL_TOKEN_TTL_SEC: ${CALL_TOKEN_TTL_SEC:-900}
       CALL_INVITE_TTL_HOURS: ${CALL_INVITE_TTL_HOURS:-24}
       CALL_MAX_GROUP_PARTICIPANTS: ${CALL_MAX_GROUP_PARTICIPANTS:-50}
+
+  # web проксирует /lk/ → livekit; без общей сети hostname livekit не резолвится
+  web:
+    depends_on:
+      livekit:
+        condition: service_started
