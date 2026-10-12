@@ -8,31 +8,36 @@
 #   LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk
 #   PUBLIC_WEB_ORIGIN=https://app.church-tambov.ru
 #   CALLS_ENABLED=true
-#   # НЕ используйте call.church-tambov.ru, если DNS/nginx для него не настроены.
-#   # публичный IP сервера для ICE (обязательно за NAT/домашним роутером):
-#   LIVEKIT_RTC_NODE_IP=203.0.113.10
+#   # Белый IP WAN (не 192.168.x!) — обязателен для стабильного ICE:
+#   LIVEKIT_RTC_NODE_IP=77.93.125.36
 #
-# UDP 50000-50100 и TCP 7881 — с интернета (или TURN).
-# 7880 только на loopback; снаружи — nginx WSS.
+# На роутере проброс на хост Docker (например 192.168.1.203):
+#   TCP 7881 → 7881
+#   UDP 50000–50019 → 50000–50019  (каждый порт в порт, НЕ 50000→50100)
+# 7880 только на loopback; снаружи — nginx WSS /lk.
 
 services:
   livekit:
     image: livekit/livekit-server:v1.8.4
     restart: always
-    command: ["--config", "/etc/livekit.yaml"]
+    # --node-ip обязателен за NAT: иначе ICE-кандидаты с docker-IP → «Переподключение…»
+    command:
+      - --config
+      - /etc/livekit.yaml
+      - --node-ip
+      - ${LIVEKIT_RTC_NODE_IP:?Set LIVEKIT_RTC_NODE_IP to your public WAN IP}
     environment:
       # Формат: key: secret  (пробел после двоеточия допустим)
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
-      LIVEKIT_RTC_NODE_IP: "${LIVEKIT_RTC_NODE_IP:-}"
+      LIVEKIT_RTC_NODE_IP: "${LIVEKIT_RTC_NODE_IP:?Set LIVEKIT_RTC_NODE_IP to your public WAN IP}"
     volumes:
       - ./docker/livekit.yaml:/etc/livekit.yaml:ro
     ports:
       - "127.0.0.1:7880:7880"
       - "7881:7881"
-      - "50000-50100:50000-50100/udp"
+      - "50000-50019:50000-50019/udp"
     networks:
       - default
-    # Образ distroless/minimal — wget/curl часто отсутствуют; проверяем TCP-порт процессом.
     healthcheck:
       test: ["CMD", "/livekit-server", "--version"]
       interval: 10s
@@ -55,8 +60,6 @@ services:
       CALL_INVITE_TTL_HOURS: ${CALL_INVITE_TTL_HOURS:-24}
       CALL_MAX_GROUP_PARTICIPANTS: ${CALL_MAX_GROUP_PARTICIPANTS:-50}
 
-  # web проксирует /lk/ → livekit (upstream livekit_signal).
-  # ВАЖНО: всегда с обоими compose-файлами, иначе hostname livekit не резолвится → 500/502 на /lk/.
   web:
     depends_on:
       livekit:

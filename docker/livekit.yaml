@@ -1,5 +1,6 @@
 # LiveKit Server config for «Источник жизни».
 # Keys: env LIVEKIT_KEYS (см. docker-compose.livekit-addon.yml).
+# Публичный IP для ICE: CLI --node-ip из LIVEKIT_RTC_NODE_IP (обязателен за NAT).
 # Docs: https://docs.livekit.io/transport/self-hosting/
 
 port: 7880
@@ -7,13 +8,12 @@ bind_addresses:
   - "0.0.0.0"
 
 rtc:
+  # Узкий диапазон — проще пробросить на домашнем роутере (1:1, UDP).
   port_range_start: 50000
-  port_range_end: 50100
+  port_range_end: 50019
   tcp_port: 7881
-  # STUN-обнаружение публичного IP для ICE. Если сервер за NAT и STUN врёт —
-  # задайте явный IP: раскомментируйте node_ip ниже (публичный IP VPS).
-  use_external_ip: true
-  # node_ip: 203.0.113.10
+  # node_ip задаётся флагом --node-ip (см. compose), не STUN из Docker (часто врёт).
+  use_external_ip: false
   stun_servers:
     - stun.l.google.com:19302
 

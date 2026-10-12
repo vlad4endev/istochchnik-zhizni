@@ -52,11 +52,15 @@ WSS на том же домене SPA: location `/lk/` в `docker/nginx-web.unif
 ### Сеть и DNS
 
 1. Браузер получает `LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk` → nginx web → `livekit:7880`.
-2. **UDP 50000–50100** и **TCP 7881** должны быть доступны из интернета для WebRTC (не через nginx HTTP).
-3. В `docker/livekit.yaml` включён `use_external_ip: true` (STUN). При необходимости задайте явный `node_ip`.
-4. Если сервер за **CGNAT**, проброс UDP с домашнего роутера не сработает — нужен VPS с белым IP, туннель или внешний TURN.
+2. В `.env` обязателен **`LIVEKIT_RTC_NODE_IP=<белый WAN IP>`** (не `192.168.x`). Узнать: `curl -4 -s ifconfig.me`.
+3. На роутере, на хост Docker:
+   - **TCP 7881 → 7881**
+   - **UDP 50000–50019 → 50000–50019** (каждый порт сам в себя; нельзя `50000→50100`)
+4. Если сервер за **CGNAT**, проброс UDP не сработает — нужен VPS с белым IP или внешний TURN.
 5. Порт 7880 только на loopback; снаружи — WSS через `/lk/`.
-6. В Permissions-Policy на edge должны быть `camera=(self), microphone=(self)` — иначе getUserMedia блокируется.
+6. Permissions-Policy: `camera=(self), microphone=(self)`.
+
+Симптом «соединилось → через пару секунд Переподключение…» при верном `/lk` почти всегда = сломан ICE (нет `LIVEKIT_RTC_NODE_IP` или кривой UDP-проброс).
 
 ### Проверка, что `/lk` — это LiveKit, а не SPA
 
@@ -76,7 +80,7 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs li
 
 - `500`/`502` на `/lk/` → web не видит контейнер `livekit` (поднимите стек с **обоими** `-f` и `up -d --build --force-recreate web livekit`).
 - `text/html` ~29KB → старый образ web без location `/lk/`.
-- WSS ок, но нет звука/видео → UDP 50000–50100 на роутере (диапазон, порт в порт, не 50000→50100).
+- WSS ок, но «Переподключение…» / нет медиа → `LIVEKIT_RTC_NODE_IP` + UDP 50000–50019 и TCP 7881 на роутере.
 
 ## API (кратко)
 

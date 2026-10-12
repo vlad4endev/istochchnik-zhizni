@@ -182,8 +182,9 @@ function RoomStage({
   if (connectError) statusLabel = connectError;
   else if (connectionState === ConnectionState.Connected) statusLabel = formatDuration(elapsed);
   else if (connectionState === ConnectionState.Connecting) statusLabel = 'Подключение к серверу…';
-  else if (connectionState === ConnectionState.Reconnecting) statusLabel = 'Переподключение…';
-  else if (connectionState === ConnectionState.Disconnected) {
+  else if (connectionState === ConnectionState.Reconnecting) {
+    statusLabel = 'Переподключение… Проверьте UDP 50000–50019 и TCP 7881 на роутере';
+  } else if (connectionState === ConnectionState.Disconnected) {
     statusLabel = 'Нет соединения с сервером звонков';
   }
 
