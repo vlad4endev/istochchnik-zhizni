@@ -16,8 +16,8 @@
 ## Переменные окружения
 
 ```bash
-# LiveKit в host network — API/web ходят на шлюз Docker (не docker DNS livekit:7880):
-LIVEKIT_URL=http://host.docker.internal:7880
+# LiveKit в bridge-сети compose — Docker DNS:
+LIVEKIT_URL=http://livekit:7880
 # Публичный WSS для браузера — тот же origin SPA + /lk (прокси в nginx-web.unified.conf):
 LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk
 LIVEKIT_API_KEY=...
@@ -58,27 +58,16 @@ WSS на том же домене SPA: location `/lk/` в `docker/nginx-web.unif
 
 LiveKit в addon работает в **`network_mode: host`** (рекомендация LiveKit для Docker/NAT): UDP не идёт через docker-proxy, в ICE есть и белый IP, и LAN `192.168.x` (звонки в одной Wi‑Fi без hairpin).
 
-1. Браузер: `LIVEKIT_PUBLIC_URL=wss://app…/lk` → nginx web → `host.docker.internal:7880`.
-2. На роутере → LAN IP хоста (напр. `192.168.1.203`), **все порт→порт**:
+1. Браузер: `LIVEKIT_PUBLIC_URL=wss://app…/lk` → nginx web → `livekit:7880` (Docker DNS).
+2. На роутере → LAN IP хоста (напр. `192.168.1.203`):
    | Порт | Протокол | Назначение |
    |------|----------|------------|
    | 7881 | TCP | ICE/TCP |
    | 7882 | UDP | ICE/UDP mux |
-   | 3478 | UDP | TURN |
-   | 50100 | UDP | TURN relay (один порт, без диапазона) |
    | 7880 | — | **не открывать** |
 3. Хост: `"userland-proxy": false` + `deploy/sysctl-livekit.conf` → `/etc/sysctl.d/` + `sysctl --system`.
-4. Белый IP: `LIVEKIT_RTC_NODE_IP` → `NODE_IP` (в v1.8.4 **не** используем `use_external_ip` за NAT — без `skip_external_ip_validation` процесс не поднимает :7880).
-5. TURN в `docker/livekit.yaml` по умолчанию **выключен**, пока не стабилен сигнал (`curl :7880` = OK). Включить:
-   ```yaml
-   turn:
-     enabled: true
-     domain: app.church-tambov.ru
-     udp_port: 3478
-     relay_range_start: 50100
-     relay_range_end: 50100
-   ```
-   + правила роутера UDP 3478 и 50100.
+4. Белый IP: `LIVEKIT_RTC_NODE_IP` → `NODE_IP` (`use_external_ip: false` в v1.8.4).
+5. TURN по умолчанию выключен в `docker/livekit.yaml`.
 6. CGNAT без белого IP → VPS или внешний TURN.
 7. Permissions-Policy: `camera=(self), microphone=(self)`.
 
@@ -89,14 +78,10 @@ LiveKit в addon работает в **`network_mode: host`** (рекоменд�
 curl -sI https://app.church-tambov.ru/lk/ | head -20
 curl -s https://app.church-tambov.ru/lk/; echo
 
-# LiveKit слушает на хосте (host network):
-ss -lntp | grep -E '7880|7881|7882|3478|50100' || netstat -lntp | grep -E '7880|7881|7882'
+# LiveKit на localhost (проброс 127.0.0.1:7880) и в Docker DNS:
 curl -sS http://127.0.0.1:7880/; echo
-
-# Из web/api (host.docker.internal, НЕ livekit:7880):
-docker exec istochnik-web wget -qO- http://host.docker.internal:7880/; echo
-docker exec istochnik-api wget -qO- http://host.docker.internal:7880/ 2>/dev/null || \
-  docker exec istochnik-api node -e "fetch('http://host.docker.internal:7880/').then(r=>r.text()).then(console.log).catch(e=>{console.error(e);process.exit(1)})"
+docker exec istochnik-web wget -qO- -T 3 http://livekit:7880/; echo
+docker exec istochnik-api node -e "fetch('http://livekit:7880/').then(r=>r.text()).then(console.log)"
 
 docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml ps
 docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs livekit --tail 80
