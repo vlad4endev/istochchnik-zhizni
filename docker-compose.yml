@@ -48,6 +48,16 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/app/secrets/firebase-sa.json}
       # Хост RSS-фида для DNS healthcheck подкастов.
       PODCAST_RSS_HEALTH_HOST: ${PODCAST_RSS_HEALTH_HOST:-rss.castbox.fm}
+      # LiveKit / звонки (секреты только на api; см. docker-compose.livekit-addon.yml)
+      CALLS_ENABLED: ${CALLS_ENABLED:-false}
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      CALL_RING_TIMEOUT_SEC: ${CALL_RING_TIMEOUT_SEC:-60}
+      CALL_TOKEN_TTL_SEC: ${CALL_TOKEN_TTL_SEC:-900}
+      CALL_INVITE_TTL_HOURS: ${CALL_INVITE_TTL_HOURS:-24}
+      CALL_MAX_GROUP_PARTICIPANTS: ${CALL_MAX_GROUP_PARTICIPANTS:-50}
     networks:
       - default
       - supabase_network
