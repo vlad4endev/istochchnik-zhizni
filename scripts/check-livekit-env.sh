@@ -61,8 +61,8 @@ if [[ -n "$VITE_CALLS_ENABLED" && "$VITE_CALLS_ENABLED" != "true" ]]; then
   echo "WARN: VITE_CALLS_ENABLED=$VITE_CALLS_ENABLED (для UI лучше true; нужен rebuild web)"
 fi
 
-if [[ "$LIVEKIT_URL" == *"host.docker.internal"* ]]; then
-  echo "WARN: LIVEKIT_URL=$LIVEKIT_URL — для bridge лучше http://livekit:7880"
+if [[ "$LIVEKIT_URL" == *"livekit:7880"* ]]; then
+  echo "WARN: LIVEKIT_URL=$LIVEKIT_URL — для host-network лучше http://host.docker.internal:7880"
 fi
 if [[ "$LIVEKIT_PUBLIC_URL" == *"call."* ]]; then
   echo "WARN: LIVEKIT_PUBLIC_URL=$LIVEKIT_PUBLIC_URL — лучше wss://app…/lk"

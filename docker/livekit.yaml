@@ -1,23 +1,33 @@
-# LiveKit Server — «Источник жизни» (bridge + ports, livekit-server v1.8.4)
+# LiveKit Server — «Источник жизни» (host network, livekit-server v1.13.9)
 # Docs: https://docs.livekit.io/transport/self-hosting/
-# Сеть: docker-compose.livekit-addon.yml (api/web → http://livekit:7880)
+# network_mode: host — ICE видит белый IP и LAN (без hairpin-ломалки).
 
 port: 7880
-# На роутере 7880 НЕ пробрасывать (только 7881/TCP и 7882/UDP).
+# api/web → host.docker.internal:7880. На роутере 7880 НЕ пробрасывать.
 bind_addresses:
   - "0.0.0.0"
 
 rtc:
   udp_port: 7882
   tcp_port: 7881
-  # НЕ use_external_ip: за домашним NAT STUN/self-check часто валит старт.
-  # В v1.8.4 нет skip_external_ip_validation — задаём белый IP через NODE_IP (compose).
-  use_external_ip: false
+  use_external_ip: true
+  # v1.13+: оба кандидата (WAN + LAN) + без self-ping за NAT
+  advertise_internal_ip: true
+  skip_external_ip_validation: true
+  stun_servers:
+    - stun.l.google.com:19302
+  congestion_control:
+    enabled: true
+    allow_pause: true
 
-# TURN временно выключен: bind :3478 часто роняет процесс, пока не поднят :7880.
-# Когда curl http://127.0.0.1:7880/ = OK — можно включить обратно (см. docs/calls-livekit.md).
+# TURN relay — один порт (роутеры без диапазонов).
+# Роутер: UDP 3478 → 3478, UDP 50100 → 50100
 turn:
-  enabled: false
+  enabled: true
+  domain: app.church-tambov.ru
+  udp_port: 3478
+  relay_range_start: 50100
+  relay_range_end: 50100
 
 room:
   empty_timeout: 900

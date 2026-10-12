@@ -1,33 +1,34 @@
-# LiveKit для аудио/видеозвонков.
+# LiveKit для аудио/видеозвонков (host network — стабильный ICE за домашним NAT).
 #
 #   bash scripts/repair-livekit.sh
-#   docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build
 #
-# .env (ОДИН блок, ключи обязательны):
+# .env (ОДИН блок):
 #   LIVEKIT_API_KEY=APIxxxxxxxx
-#   LIVEKIT_API_SECRET=xxxxxxxx  # ≥32 символов
+#   LIVEKIT_API_SECRET=xxxxxxxx
+#   LIVEKIT_URL=http://host.docker.internal:7880
 #   LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk
 #   PUBLIC_WEB_ORIGIN=https://app.church-tambov.ru
 #   CALLS_ENABLED=true
 #   VITE_CALLS_ENABLED=true
 #   LIVEKIT_RTC_NODE_IP=77.93.125.36
 #
-# Роутер → LAN IP хоста:
+# Роутер → LAN IP хоста (отдельные правила, без диапазонов):
 #   TCP 7881 → 7881
 #   UDP 7882 → 7882
-#   (TURN выключен в livekit.yaml; когда включите: UDP 3478, UDP 50100)
+#   UDP 3478 → 3478
+#   UDP 50100 → 50100
 #   7880 наружу НЕ открывать
 #
 # Рекомендуется: /etc/docker/daemon.json → { "userland-proxy": false }
 # sysctl: см. deploy/sysctl-livekit.conf
 #
-# Сеть: bridge (не host). Signal доступен как livekit:7880 из api/web —
-# host.docker.internal с host-network часто недоступен из bridge (UFW/iptables) → /lk 504.
+# Signal: web/api → host.docker.internal:7880 (repair открывает UFW/iptables с docker-сетей).
 
 services:
   livekit:
-    image: livekit/livekit-server:v1.8.4
+    image: livekit/livekit-server:v1.13.9
     restart: always
+    network_mode: host
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     environment:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY in .env}
@@ -36,11 +37,6 @@ services:
     volumes:
       - ./docker/livekit.yaml:/etc/livekit.yaml:ro
       - ./docker/livekit-entrypoint.sh:/entrypoint.sh:ro
-    ports:
-      # Signal только в Docker-сеть + localhost (web/api → livekit:7880)
-      - "127.0.0.1:7880:7880"
-      - "7881:7881"
-      - "7882:7882/udp"
     healthcheck:
       test: ["CMD", "/livekit-server", "--version"]
       interval: 10s
@@ -53,8 +49,7 @@ services:
       livekit:
         condition: service_started
     environment:
-      # Docker DNS имя сервиса (bridge), не host.docker.internal
-      LIVEKIT_URL: http://livekit:7880
+      LIVEKIT_URL: http://host.docker.internal:7880
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-wss://app.church-tambov.ru/lk}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY in .env}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET in .env}
