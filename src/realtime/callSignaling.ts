@@ -39,6 +39,7 @@ function isCallsFeatureEnabled(): boolean {
 
 /** No in-memory call map — busy state lives in PostgreSQL. */
 export function handleCallMemberOffline(_memberId: number): void {
+  void _memberId;
   // LiveKit + cron handle disconnects; intentional no-op for REST-managed calls.
 }
 
