@@ -1,27 +1,28 @@
 # Опциональный LiveKit Server для аудио/видеозвонков.
 # Запуск (пример с основным стеком):
 #   docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d
-# Или с prod Postgres-стеком:
-#   docker compose -f docker-compose.prod.yml -f docker-compose.livekit-addon.yml up -d
 #
 # В .env задайте:
 #   LIVEKIT_API_KEY=...
 #   LIVEKIT_API_SECRET=...
 #   LIVEKIT_PUBLIC_URL=wss://call.church-tambov.ru
 #   CALLS_ENABLED=true
-#   # опционально публичный IP для RTC:
+#   # при белом IP и пробросе UDP:
 #   LIVEKIT_RTC_NODE_IP=203.0.113.10
 #
-# UDP 50000-50100 и TCP 7881 должны быть доступны с интернета (или через TURN).
-# Админский HTTP LiveKit (7880) публикуем только на loopback — наружу идёт nginx WSS.
+# UDP 50000-50100 и TCP 7881 — с интернета (или TURN).
+# 7880 только на loopback; снаружи — nginx WSS.
 
 services:
   livekit:
     image: livekit/livekit-server:v1.8.4
     restart: always
-    command: ["--config", "/etc/livekit.yaml", "--bind", "0.0.0.0"]
+    command: ["--config", "/etc/livekit.yaml"]
     environment:
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}"
+      # Формат: key: secret  (пробел после двоеточия допустим)
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      # Опционально: публичный IP ноды для ICE (если задан — прокидываем в yaml через node_ip ниже нельзя из env;
+      # для node_ip используйте override или раскомментируйте в livekit.yaml)
       LIVEKIT_RTC_NODE_IP: "${LIVEKIT_RTC_NODE_IP:-}"
     volumes:
       - ./docker/livekit.yaml:/etc/livekit.yaml:ro
@@ -29,17 +30,18 @@ services:
       - "127.0.0.1:7880:7880"
       - "7881:7881"
       - "50000-50100:50000-50100/udp"
+    # Образ distroless/minimal — wget/curl часто отсутствуют; проверяем TCP-порт процессом.
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7880/ || exit 1"]
+      test: ["CMD", "/livekit-server", "--version"]
       interval: 10s
       timeout: 5s
       retries: 6
-      start_period: 15s
+      start_period: 20s
 
   api:
     depends_on:
       livekit:
-        condition: service_healthy
+        condition: service_started
     environment:
       LIVEKIT_URL: http://livekit:7880
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-wss://call.church-tambov.ru}
