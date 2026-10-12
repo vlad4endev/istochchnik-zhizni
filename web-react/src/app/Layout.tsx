@@ -43,7 +43,7 @@ import { ScrollRestoration } from '../components/ScrollRestoration';
 import { isDraftPrivateConversationId, useChatStore } from '../features/messenger/chatStore';
 import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
 import { CallWindow } from '../features/calls/CallWindow';
-import { IncomingCallToast } from '../features/calls/IncomingCallToast';
+import { IncomingCallOverlay } from '../features/calls/IncomingCallOverlay';
 import { SermonPlaybackProvider } from '../features/resources/sermonPlayback/SermonPlaybackContext';
 import { SermonPlayer } from '../features/resources/sermonPlayback/SermonPlayer';
 import { useBrowserNotificationScheduler } from '../features/notifications/useBrowserNotificationScheduler';
@@ -1390,7 +1390,7 @@ export function Layout() {
       </BodyPortal>
       <NotificationPrompt />
       <PermissionsRequestModal />
-      <IncomingCallToast />
+      <IncomingCallOverlay />
       <CallWindow />
       <SermonPlayer />
     </div>

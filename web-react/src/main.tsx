@@ -31,6 +31,7 @@ import { SessionKeepAlive } from './hooks/SessionKeepAlive';
 import { useAuthHydrated } from './hooks/useAuthHydrated';
 import { useAuthSessionReady } from './hooks/useAuthSessionReady';
 import { useFCM } from './hooks/useFCM';
+import { useVoipTokenSync } from './hooks/useVoipTokenSync';
 import { useBackgroundDataSync } from './hooks/useBackgroundDataSync';
 import { ImpersonationBanner } from './features/admin/components/ImpersonationBanner';
 import { initAuthCrossTabLocalStorageSync, useAuthStore } from './features/auth/authStore';
@@ -282,6 +283,7 @@ function BackgroundDataSyncBridge() {
 
 function NativePushBridge() {
   useFCM();
+  useVoipTokenSync();
   return null;
 }
 

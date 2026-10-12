@@ -4,6 +4,8 @@ import Capacitor
 import UserNotifications
 import FirebaseCore
 import FirebaseMessaging
+import CallKit
+import PushKit
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
@@ -19,6 +21,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         configureFirebaseIfPossible()
         configureNotificationCategories()
         UNUserNotificationCenter.current().delegate = self
+        CallKitManager.shared.start()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleNativeCallOpenUrl(_:)),
+            name: Notification.Name("NativeCallOpenUrl"),
+            object: nil
+        )
 
         if let remote = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
             pendingPushPayload = extractPushPayload(from: remote)
@@ -84,6 +94,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        let userInfo = notification.request.content.userInfo
+        let type = String(describing: userInfo["type"] ?? "")
+        if type == "incoming_call" {
+            // CallKit / overlay обрабатывают входящий — не дублируем баннер
+            completionHandler([])
+            return
+        }
         completionHandler([.banner, .list, .badge, .sound])
     }
 
@@ -132,7 +149,24 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
-        UNUserNotificationCenter.current().setNotificationCategories([messageCategory, generalCategory])
+        let callCategory = UNNotificationCategory(
+            identifier: "INCOMING_CALL",
+            actions: [],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([messageCategory, generalCategory, callCategory])
+    }
+
+    @objc private func handleNativeCallOpenUrl(_ note: Notification) {
+        guard let info = note.userInfo else { return }
+        let url = String(describing: info["url"] ?? "")
+        let conversationId = String(describing: info["conversationId"] ?? "")
+        pendingPushPayload = [
+            "url": url == "nil" ? "" : url,
+            "conversationId": conversationId == "nil" ? "" : conversationId,
+        ]
+        flushPendingPushNavigation()
     }
 
     private func flushPendingPushNavigation() {

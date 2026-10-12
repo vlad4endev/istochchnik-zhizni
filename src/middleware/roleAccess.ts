@@ -118,7 +118,7 @@ const COORDINATOR_DASHBOARD_NOTES_DELETE =
 
 /** Web Push / FCM: мутации привязаны к member_id из сессии (requireAuthSession в роутере). */
 const MEMBER_NOTIFICATIONS_POST =
-  /^\/api\/notifications\/(?:subscribe|unsubscribe|save-token|deliveries\/\d+\/open|deliveries\/\d+\/dismiss|deliveries\/open-all|deliveries\/local-reminder)\/?$/;
+  /^\/api\/notifications\/(?:subscribe|unsubscribe|save-token|save-voip-token|deliveries\/\d+\/open|deliveries\/\d+\/dismiss|deliveries\/open-all|deliveries\/local-reminder)\/?$/;
 
 /** Профиль / лента: мутации только своего контента (проверка в контроллере по сессии). */
 function isMemberProfileMutation(method: string, path: string): boolean {

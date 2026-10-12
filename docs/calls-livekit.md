@@ -137,17 +137,43 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs li
 
 Системные сообщения: `sender_id = NULL`, `payload.kind = 'call_event'`.
 
-## Ограничения Web Push / PWA
+## Входящий звонок: Capacitor vs PWA
+
+| Клиент | Как выглядит входящий |
+|--------|------------------------|
+| **Capacitor Android** | Data-only FCM → системный **CallStyle** + full-screen intent (как телефонный вызов). Foreground — полноэкранный overlay в WebView. |
+| **Capacitor iOS** | **PushKit VoIP** → **CallKit** (нужны `APNS_*` ключи на сервере + VoIP capability). Foreground — overlay в WebView. |
+| **PWA / браузер** | Web Push + toast/overlay; на iOS PWA нет «телефонного» звонка в фоне |
+
+Сервер: `sendIncomingCallWake` (TTL ≈ `CALL_RING_TIMEOUT_SEC`). При cancel / miss уходит `call_ended` data-push, чтобы снять системный UI.
+
+VoIP-токены: таблица `device_voip_tokens`, клиент `POST /api/notifications/save-voip-token`.
+
+APNs VoIP (сервер):
+
+```bash
+APNS_KEY_ID=...
+APNS_TEAM_ID=...
+APNS_P8_KEY="-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----"
+APNS_BUNDLE_ID=com.istochnikzhizni.molitva
+APNS_PRODUCTION=true   # false для sandbox
+```
+
+Push **не** содержит LiveKit token. Успешная отправка ≠ доставка или принятие.
+
+### Ограничения PWA
 
 | Платформа | Ожидание |
 |-----------|----------|
 | Android (установленная PWA) | Web Push обычно доставляет входящий; фон ограничен Doze/оптимизацией батареи |
-| iPhone (PWA на Home Screen, iOS 16.4+) | Web Push возможен после разрешения; фоновое выполнение и авто-ответ — **нет**; нет «телефонного» звонка в фоне |
-| Desktop Chrome/Edge/Firefox | Web Push при открытой ОС и разрешении; зависит от настроек браузера |
-
-Push **не** содержит LiveKit token. Успешная отправка ≠ доставка или принятие.
+| iPhone (PWA на Home Screen, iOS 16.4+) | Web Push возможен после разрешения; фоновое ringtone и авто-ответ — **нет** |
+| Desktop Chrome/Edge/Firefox | Web Push при открытой ОС и разрешении |
 
 Демонстрация экрана: desktop через LiveKit; на iOS/Android в фоне — не поддерживается браузерами.
+
+На Android OEM с агрессивной оптимизацией батареи CallStyle может задерживаться — исключите приложение из оптимизации.
 
 ## Проверка вручную
 

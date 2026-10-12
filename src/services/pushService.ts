@@ -11,6 +11,8 @@ import {
   insertMemberNotificationDelivery,
 } from './notificationDeliveryService';
 import { isParishionerAllowedPushKindOrType } from '../lib/parishionerPushAllowlist';
+import { sendApnsVoipPush, isApnsVoipConfigured } from './apnsVoipPush';
+import { deleteVoipToken, getVoipTokensForMember } from './voipTokenService';
 
 const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
 
@@ -664,4 +666,175 @@ export async function pruneStalePushSubscriptions(days = 120): Promise<number> {
     [days],
   );
   return result.rowCount ?? 0;
+}
+
+export type IncomingCallWakeInput = {
+  callId: string;
+  conversationId: string;
+  callType: 'audio' | 'video';
+  callerId: number | string;
+  callerName: string;
+  callerAvatar?: string | null;
+  url: string;
+  /** TTL в секундах (обычно = CALL_RING_TIMEOUT_SEC). */
+  ttlSec?: number;
+};
+
+/**
+ * Wake для входящего звонка:
+ * - Android Capacitor: data-only FCM high priority → native CallStyle
+ * - iOS: PushKit VoIP (APNs), если настроены ключи и есть voip token
+ * - Web/PWA: обычный Web Push с actions (через sendPushNotification)
+ */
+export async function sendIncomingCallWake(
+  memberId: number,
+  input: IncomingCallWakeInput,
+): Promise<void> {
+  const title = input.callType === 'video' ? 'Входящий видеозвонок' : 'Входящий звонок';
+  const body = input.callerName || 'Собеседник';
+  const ttlSec = Math.max(15, Math.min(180, input.ttlSec ?? 60));
+  const data: Record<string, string> = {
+    type: 'incoming_call',
+    callId: input.callId,
+    conversationId: input.conversationId,
+    callType: input.callType,
+    callerId: String(input.callerId),
+    callerName: body,
+    callerAvatar: input.callerAvatar ?? '',
+    url: input.url,
+    tag: `call-${input.callId}`,
+    renotify: 'true',
+    requireInteraction: 'true',
+  };
+
+  // PWA / Web Push only (без FCM alert — иначе дубль с CallStyle data-only)
+  void sendNotificationToMember(memberId, {
+    title,
+    body,
+    ...data,
+    actions: [
+      { action: 'call_accept', title: 'Принять' },
+      { action: 'call_decline', title: 'Отклонить' },
+    ],
+  }).catch((e) => console.warn('[calls] web push wake failed:', e instanceof Error ? e.message : e));
+
+  // Android Capacitor: data-only FCM → AppFirebaseMessagingService CallStyle
+  void sendFcmCallDataOnly(memberId, title, body, data, ttlSec).catch((e) =>
+    console.warn('[calls] fcm call wake failed:', e instanceof Error ? e.message : e),
+  );
+
+  // iOS PushKit VoIP
+  if (isApnsVoipConfigured()) {
+    const voipTokens = await getVoipTokensForMember(memberId);
+    for (const token of voipTokens) {
+      const outcome = await sendApnsVoipPush(
+        token,
+        {
+          callId: input.callId,
+          callerName: body,
+          callerAvatar: input.callerAvatar,
+          callType: input.callType,
+          conversationId: input.conversationId,
+          callerId: String(input.callerId),
+          url: input.url,
+        },
+        ttlSec,
+      );
+      if (outcome === 'invalid') {
+        await deleteVoipToken(token).catch(() => undefined);
+      }
+    }
+  }
+}
+
+/** Снять системный UI входящего на native (cancel / end / miss). */
+export async function dismissIncomingCallNative(
+  memberId: number,
+  callId: string,
+): Promise<void> {
+  const data: Record<string, string> = {
+    type: 'call_ended',
+    callId,
+    tag: `call-${callId}`,
+  };
+  void sendFcmCallDataOnly(memberId, '', '', data, 30).catch(() => undefined);
+}
+
+async function sendFcmCallDataOnly(
+  memberId: number,
+  title: string,
+  body: string,
+  data: Record<string, string>,
+  ttlSec: number,
+): Promise<PushChannelSummary> {
+  const summary = emptyChannel();
+  const messaging = getFirebaseMessaging();
+  if (!messaging) return summary;
+
+  const tokens = await getFcmTokensForMember(memberId);
+  if (tokens.length === 0) return summary;
+
+  const dataStrings = toFcmDataStrings(title, body, data, undefined, undefined);
+  dataStrings.type = data.type || dataStrings.type || 'incoming_call';
+
+  for (let i = 0; i < tokens.length; i += FCM_MULTICAST_CHUNK) {
+    const slice = tokens.slice(i, i + FCM_MULTICAST_CHUNK);
+    let res;
+    try {
+      res = await messaging.sendEachForMulticast({
+        tokens: slice,
+        // data-only: без notification — чтобы native сервис показал CallStyle
+        data: dataStrings,
+        android: {
+          priority: 'high',
+          ttl: ttlSec * 1000,
+        },
+        apns: {
+          headers: {
+            'apns-priority': '10',
+            'apns-push-type': 'alert',
+            'apns-expiration': String(Math.floor(Date.now() / 1000) + ttlSec),
+          },
+          payload: {
+            aps: {
+              // content-available помогает разбудить; CallKit на iOS идёт через VoIP отдельно
+              contentAvailable: true,
+              sound: dataStrings.type === 'incoming_call' ? 'default' : undefined,
+              alert:
+                dataStrings.type === 'incoming_call' && title
+                  ? { title, body }
+                  : undefined,
+              category: dataStrings.type === 'incoming_call' ? 'INCOMING_CALL' : undefined,
+              interruptionLevel: 'time-sensitive',
+            },
+          },
+        },
+      });
+    } catch (e) {
+      console.warn('[push] FCM call data-only failed', {
+        memberId,
+        message: e instanceof Error ? e.message : String(e),
+      });
+      summary.attempted += slice.length;
+      summary.failed += slice.length;
+      continue;
+    }
+    summary.attempted += slice.length;
+    for (let j = 0; j < res.responses.length; j++) {
+      const r = res.responses[j];
+      if (r.success) {
+        summary.sent += 1;
+        continue;
+      }
+      const t = slice[j];
+      const code = r.error?.code;
+      if (isUnrecoverableFcmErrorCode(code)) {
+        summary.removed += 1;
+        if (t) await deleteFcmToken(t);
+      } else {
+        summary.failed += 1;
+      }
+    }
+  }
+  return summary;
 }

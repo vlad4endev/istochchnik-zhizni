@@ -18,8 +18,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Единый FCM-сервис: показывает уведомление для data-only пушей (фон)
- * и передаёт событие в Capacitor PushNotifications (JS listeners, токен).
+ * Единый FCM-сервис: CallStyle для входящих звонков, обычные уведомления для чата,
+ * и передача события в Capacitor PushNotifications.
  */
 public class AppFirebaseMessagingService extends FirebaseMessagingService {
   private static final String CHANNEL_MESSAGES_ID = "messages";
@@ -38,12 +38,28 @@ public class AppFirebaseMessagingService extends FirebaseMessagingService {
   public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
     PushNotificationsPlugin.sendRemoteMessage(remoteMessage);
 
+    final Map<String, String> data = remoteMessage.getData();
+    if (data != null && !data.isEmpty()) {
+      final String type = valueOrEmpty(data.get("type"));
+      if ("incoming_call".equals(type)) {
+        // В foreground — WebView overlay; CallStyle нужен в фоне / на lock screen
+        if (!isAppInForeground()) {
+          CallNotificationHelper.showIncomingCall(this, data);
+        }
+        return;
+      }
+      if ("call_ended".equals(type) || "call_cancelled".equals(type)) {
+        final String callId = valueOrEmpty(data.get("callId"));
+        CallNotificationHelper.cancelIncomingCall(this, callId);
+        return;
+      }
+    }
+
     // notification payload — Android показывает сам в фоне; дублировать не нужно
     if (remoteMessage.getNotification() != null) {
       return;
     }
 
-    final Map<String, String> data = remoteMessage.getData();
     if (data == null || data.isEmpty()) {
       return;
     }
@@ -139,6 +155,8 @@ public class AppFirebaseMessagingService extends FirebaseMessagingService {
     general.enableVibration(true);
     general.setLockscreenVisibility(NotificationCompat.VISIBILITY_PUBLIC);
     manager.createNotificationChannel(general);
+
+    CallNotificationHelper.ensureCallChannel(context);
   }
 
   private boolean isAppInForeground() {

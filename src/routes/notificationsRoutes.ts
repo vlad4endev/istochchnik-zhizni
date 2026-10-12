@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
 import { deleteFcmTokenForDevice, saveFcmToken } from '../services/fcmSubscriptionService';
+import { saveVoipToken } from '../services/voipTokenService';
 import {
   getUnreadNotificationDeliveryCount,
   insertMemberNotificationDelivery,
@@ -181,6 +182,38 @@ router.post(
     }
   },
 );
+
+/**
+ * POST /api/notifications/save-voip-token
+ * Body: { voip_token: string, device_id: string, platform?: 'ios' } — PushKit для CallKit.
+ */
+router.post('/save-voip-token', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const voip_token = typeof req.body?.voip_token === 'string' ? req.body.voip_token.trim() : '';
+  const device_id = typeof req.body?.device_id === 'string' ? req.body.device_id.trim() : '';
+  const platform = typeof req.body?.platform === 'string' ? req.body.platform.trim() : 'ios';
+  if (!voip_token || !device_id) {
+    res.status(400).json({ error: 'Fields voip_token and device_id are required' });
+    return;
+  }
+  if (voip_token.length > 4096 || device_id.length > 512) {
+    res.status(400).json({ error: 'Invalid field length' });
+    return;
+  }
+
+  try {
+    await saveVoipToken(memberId, device_id, voip_token, platform || 'ios');
+    res.status(201).json({ ok: true });
+  } catch (e) {
+    console.error('[notifications] save-voip-token error:', e);
+    res.status(500).json({ error: 'Failed to save voip token' });
+  }
+});
 
 /**
  * GET /api/notifications/status?endpoint=...
