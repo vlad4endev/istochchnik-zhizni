@@ -41,10 +41,14 @@ VITE_CALLS_ENABLED=true
 ## Docker
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build
+bash scripts/check-livekit-env.sh   # ключи в .env обязательны
+bash scripts/repair-livekit.sh      # recreate + curl :7880 и /lk
+# или:
+docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build --force-recreate livekit api web
 ```
 
-Образ зафиксирован: `livekit/livekit-server:v1.8.4` (см. `docker-compose.livekit-addon.yml`).
+Образ зафиксирован: `livekit/livekit-server:v1.8.4` (см. `docker-compose.livekit-addon.yml`).  
+Entrypoint: `docker/livekit-entrypoint.sh` (собирает `LIVEKIT_KEYS` с пробелом после `:`).
 
 Конфиг: `docker/livekit.yaml`.  
 WSS на том же домене SPA: location `/lk/` в `docker/nginx-web.unified.conf`.  
