@@ -70,6 +70,34 @@ function shuffledCopy<T>(source: readonly T[]): T[] {
   return arr;
 }
 
+/**
+ * Пул кураторов для участника: сначала без родственников (и без себя),
+ * при нехватке слотов — перегрузка несемейных, семья — только если других нет.
+ */
+export function resolveCuratorCandidatePool(input: {
+  participantId: number;
+  curatorIds: readonly number[];
+  curatorsWithSlots: readonly number[];
+  familyBlockedCuratorIds: ReadonlySet<number>;
+}): number[] {
+  const { participantId, curatorIds, curatorsWithSlots, familyBlockedCuratorIds } = input;
+  const isBlocked = (curatorId: number): boolean =>
+    curatorId === participantId || familyBlockedCuratorIds.has(curatorId);
+
+  const nonFamilyWithSlots = curatorsWithSlots.filter((id) => !isBlocked(id));
+  if (nonFamilyWithSlots.length > 0) {
+    return [...nonFamilyWithSlots];
+  }
+
+  const nonFamilyAny = curatorIds.filter((id) => !isBlocked(id));
+  if (nonFamilyAny.length > 0) {
+    return [...nonFamilyAny];
+  }
+
+  // Крайний случай: все доступные кураторы — родственники (или сам участник).
+  return [...curatorsWithSlots];
+}
+
 function resolveAssignmentsTable(): string {
   const raw = process.env.MENTOR_ASSIGNMENTS_TABLE?.trim() || DEFAULT_ASSIGNMENTS_TABLE;
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(raw)) {
@@ -145,6 +173,8 @@ export class DistributionService {
     week: WeekRef;
     participants?: DistributionParticipant[];
     curators?: DistributionCurator[];
+    /** Для тестов: заранее заданные блокировки по семье (иначе читаем member_family_links). */
+    familyBlockedByParticipant?: Map<number, Set<number>>;
   }): Promise<ParticipantAssignment[]> {
     await this.ensureAssignmentsTableExists();
     assertWeekRef(input.week);
@@ -161,6 +191,9 @@ export class DistributionService {
     const participantIds = participants.map((p) => p.id);
     const curatorIds = curators.map((c) => c.id);
     const statsByParticipant = await this.getParticipantHistoryStats(participantIds, curatorIds);
+    const familyBlockedByParticipant =
+      input.familyBlockedByParticipant ??
+      (await this.getFamilyBlockedCurators(participantIds, curatorIds));
 
     const perCuratorBase = Math.floor(participants.length / curators.length);
     const extraSlots = participants.length % curators.length;
@@ -190,7 +223,19 @@ export class DistributionService {
         throw new Error('Distribution failed: no curator slots left');
       }
 
-      const allowedByConsecutiveRule = curatorsWithSlots.filter(
+      const familyBlocked =
+        familyBlockedByParticipant.get(participant.id) ?? new Set<number>();
+      const candidatePool = resolveCuratorCandidatePool({
+        participantId: participant.id,
+        curatorIds,
+        curatorsWithSlots,
+        familyBlockedCuratorIds: familyBlocked,
+      });
+      if (candidatePool.length === 0) {
+        throw new Error('Distribution failed: no curator candidates left');
+      }
+
+      const allowedByConsecutiveRule = candidatePool.filter(
         (curatorId) => !participantStats.blockedCuratorIds.has(curatorId),
       );
 
@@ -203,12 +248,12 @@ export class DistributionService {
         );
         if (allCuratorsBlocked) {
           selectedCuratorId = this.selectCuratorByLeastHistory(
-            curatorsWithSlots,
+            candidatePool,
             participantStats.totalByCurator,
             currentLoad,
           );
         } else {
-          selectedCuratorId = this.selectBestCurator(curatorsWithSlots, currentLoad);
+          selectedCuratorId = this.selectBestCurator(candidatePool, currentLoad);
         }
       }
 
@@ -487,6 +532,51 @@ export class DistributionService {
         }
         return (currentLoad.get(a) ?? 0) - (currentLoad.get(b) ?? 0);
       })[0];
+  }
+
+  /**
+   * Кураторы, связанные с участником через раздел «Семья» (member_family_links).
+   * Связь двусторонняя: запись в карточке куратора или участника одинаково блокирует пару.
+   */
+  private async getFamilyBlockedCurators(
+    participantIds: number[],
+    curatorIds: number[],
+  ): Promise<Map<number, Set<number>>> {
+    const blocked = new Map<number, Set<number>>();
+    for (const participantId of participantIds) {
+      blocked.set(participantId, new Set<number>());
+    }
+    if (participantIds.length === 0 || curatorIds.length === 0) {
+      return blocked;
+    }
+
+    const result = await query(
+      `SELECT member_id, relative_member_id
+       FROM member_family_links
+       WHERE relative_member_id IS NOT NULL
+         AND (
+           (member_id = ANY($1::int[]) AND relative_member_id = ANY($2::int[]))
+           OR (member_id = ANY($2::int[]) AND relative_member_id = ANY($1::int[]))
+         )`,
+      [participantIds, curatorIds],
+    );
+
+    const curatorSet = new Set(curatorIds);
+    for (const row of result.rows) {
+      const a = Number(row.member_id);
+      const b = Number(row.relative_member_id);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) {
+        continue;
+      }
+      if (blocked.has(a) && curatorSet.has(b)) {
+        blocked.get(a)!.add(b);
+      }
+      if (blocked.has(b) && curatorSet.has(a)) {
+        blocked.get(b)!.add(a);
+      }
+    }
+
+    return blocked;
   }
 
   private async getParticipantHistoryStats(
