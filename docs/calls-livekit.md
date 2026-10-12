@@ -88,7 +88,10 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml ps
 docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs livekit --tail 80
 ```
 
-- `502` на `/lk/` → LiveKit не слушает `:7880` **или** у `web` нет `extra_hosts: host.docker.internal`.  
+- `502` на `/lk/` / `curl 127.0.0.1:7880` connection refused → LiveKit не запустился. Частые причины:
+  1. `LIVEKIT_KEYS` без пробела после `:` (нужно `KEY: SECRET`) — смотрите `docker compose … logs livekit`
+  2. Пустые `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` в `.env`
+  3. Стек поднят без `docker-compose.livekit-addon.yml`  
   Поднять с **обоими** `-f`:  
   `docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build --force-recreate livekit api web`
 - Сообщение UI «Сервис звонков временно недоступен» = API не смог `createRoom` (тот же 502 / LiveKit down / неверные ключи).

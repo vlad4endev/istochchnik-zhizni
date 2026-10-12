@@ -30,8 +30,11 @@ services:
       - --config
       - /etc/livekit.yaml
     environment:
-      # Без пробела после «:» — иначе секрет может не совпасть с LIVEKIT_API_SECRET в api
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}"
+      # ОБЯЗАТЕЛЬНО пробел после «:» — LiveKit парсит YAML map ("key: secret").
+      # Без пробела сервер не стартует (7880 закрыт, /lk → 502).
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      # Опционально белый IP (если задан LIVEKIT_RTC_NODE_IP в .env). Пустое значение не задавайте.
+      NODE_IP: ${LIVEKIT_RTC_NODE_IP:-}
     volumes:
       - ./docker/livekit.yaml:/etc/livekit.yaml:ro
     healthcheck:
