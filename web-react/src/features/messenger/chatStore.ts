@@ -336,6 +336,10 @@ let onlineRetryBound = false;
 let retryInFlight = false;
 let outboxRetryTimer: number | null = null;
 let inMemoryOutbox: OutboxItem[] = [];
+/** If force reload was requested while another load was in flight, run it after. */
+let pendingForceConversationsReload = false;
+/** Keep local-only chats (e.g. just created) this long if a stale server list omits them. */
+const LOCAL_CONV_GRACE_MS = 120_000;
 
 type OutboxItem = {
   queueId: string;
@@ -1089,7 +1093,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadConversations: async (opts) => {
     const force = opts?.force === true;
-    if (get().conversationsLoading) return;
+    if (get().conversationsLoading) {
+      // Create-group fallback and WS reconnect must not be dropped while a fetch is in flight.
+      if (force) pendingForceConversationsReload = true;
+      return;
+    }
     // Guard against rapid refetch loops (WS flaps / repeated events).
     // Skip cooldown after reconnect (`force`) so список чатов не «залипает» после восстановления WS.
     if (
@@ -1103,6 +1111,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const idsAtFetchStart = new Set(
       (get().conversations || []).map((c) => String(c.id)),
     );
+    const fetchStartedAt = Date.now();
+    const activeAtStart = get().activeConversationId;
     set({ conversationsLoading: true });
     try {
       const serverList = filterConversationsForAssistantAccess(await api.fetchConversations());
@@ -1111,8 +1121,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const id = String(c.id);
         if (isDraftPrivateConversationId(id)) return false;
         if (serverIds.has(id)) return false;
-        // Keep only chats that appeared locally during this fetch (create / WS).
-        return !idsAtFetchStart.has(id);
+        // Appeared while this fetch was in flight (create / WS).
+        if (!idsAtFetchStart.has(id)) return true;
+        // Keep the open chat even if a stale response omitted it.
+        if (activeAtStart != null && String(activeAtStart) === id) return true;
+        // Recently created/updated local row — server list can lag a moment after create.
+        const updatedMs = Date.parse(String(c.updated_at ?? ''));
+        return Number.isFinite(updatedMs) && fetchStartedAt - updatedMs < LOCAL_CONV_GRACE_MS;
       });
       const conversations = filterConversationsForAssistantAccess([
         ...localExtras,
@@ -1149,8 +1164,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return;
       }
       const wasLoaded = get().conversationsLoaded;
-      // Offline/backend down: use cached snapshot.
+      const inMemory = get().conversations || [];
+      // Offline/backend down: use cached snapshot, but keep in-memory chats cache lacks
+      // (e.g. a group just created via handleConvCreated before snapshot was written).
       hydrateFromCacheIntoStore(set, get);
+      const hydratedIds = new Set((get().conversations || []).map((c) => String(c.id)));
+      const missingFromCache = inMemory.filter((c) => !hydratedIds.has(String(c.id)));
+      if (missingFromCache.length > 0) {
+        set((s) => ({
+          conversations: filterConversationsForAssistantAccess([
+            ...missingFromCache,
+            ...(s.conversations || []),
+          ]),
+          conversationsLoaded: true,
+        }));
+        saveSnapshot(get());
+      }
       if (!wasLoaded) {
         emitAppToast({
           message: 'Нет соединения. Показываем кэшированные данные.',
@@ -1160,6 +1189,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     } finally {
       set({ conversationsLoading: false });
+      if (pendingForceConversationsReload) {
+        pendingForceConversationsReload = false;
+        void get().loadConversations({ force: true });
+      }
     }
   },
 
@@ -2257,8 +2290,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const ls = om?.last_seen_at;
       const memberLastSeenAt =
         om && ls ? { ...s.memberLastSeenAt, [om.id]: ls } : s.memberLastSeenAt;
-      return { conversations, memberLastSeenAt };
+      // Prefer «Все»/«Личные» so a new group is not hidden under another tab filter.
+      const nextTab =
+        s.activeTab === 'services' || s.activeTab === 'notifications' ? 'all' : s.activeTab;
+      return { conversations, memberLastSeenAt, activeTab: nextTab };
     });
+    saveSnapshot(get());
   },
 
   handleConvUpdated: (convId, patch) => {

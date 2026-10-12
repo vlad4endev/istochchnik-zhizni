@@ -365,7 +365,10 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
         return;
       }
       const result = await api.createGroupChat(trimmed, convMode, memberIds);
-      const convId = result.conversationId;
+      const convId = String(result.conversationId ?? '').trim();
+      if (!convId) {
+        throw new Error('missing conversationId');
+      }
       const addedCount = Array.isArray(result.addedMemberIds) ? result.addedMemberIds.length : memberIds.length;
       if (addedCount < memberIds.length) {
         emitAppToast(
@@ -375,11 +378,21 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
           'info',
         );
       }
-      if (result.conversation) {
-        handleConvCreated(result.conversation);
-      } else {
-        await loadConversations({ force: true });
-      }
+      // Always put the chat in the sidebar immediately — even if the list-item payload is null
+      // or a parallel loadConversations would otherwise race-wipe it.
+      handleConvCreated(
+        result.conversation ?? {
+          id: convId,
+          type: convMode,
+          title: trimmed,
+          avatar_url: null,
+          updated_at: new Date().toISOString(),
+          last_message: null,
+          unread_count: 0,
+          other_member: null,
+        },
+      );
+      void loadConversations({ force: true });
 
       if (avatarToUpload) {
         try {
