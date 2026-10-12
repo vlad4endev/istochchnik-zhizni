@@ -30,10 +30,12 @@ services:
       - --config
       - /etc/livekit.yaml
     environment:
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      # Без пробела после «:» — иначе секрет может не совпасть с LIVEKIT_API_SECRET в api
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}"
     volumes:
       - ./docker/livekit.yaml:/etc/livekit.yaml:ro
     healthcheck:
+      # Образ minimal — без wget/curl. Живость порта: curl с хоста / из api|web.
       test: ["CMD", "/livekit-server", "--version"]
       interval: 10s
       timeout: 5s
@@ -44,8 +46,6 @@ services:
     depends_on:
       livekit:
         condition: service_started
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
       # LiveKit на host network → API ходит на шлюз Docker (= хост)
       LIVEKIT_URL: http://host.docker.internal:7880
@@ -62,5 +62,3 @@ services:
     depends_on:
       livekit:
         condition: service_started
-    extra_hosts:
-      - "host.docker.internal:host-gateway"

@@ -16,7 +16,8 @@
 ## Переменные окружения
 
 ```bash
-LIVEKIT_URL=http://livekit:7880          # внутренний URL для API (docker DNS)
+# LiveKit в host network — API/web ходят на шлюз Docker (не docker DNS livekit:7880):
+LIVEKIT_URL=http://host.docker.internal:7880
 # Публичный WSS для браузера — тот же origin SPA + /lk (прокси в nginx-web.unified.conf):
 LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk
 LIVEKIT_API_KEY=...
@@ -70,23 +71,29 @@ LiveKit в addon работает в **`network_mode: host`** (рекоменд�
 ### Проверка, что `/lk` — это LiveKit, а не SPA
 
 ```bash
-# Ожидание: HTTP 200, короткое тело (OK), НЕ 500 и НЕ index.html ~29KB.
+# Ожидание: HTTP 200, короткое тело (OK), НЕ 500/502 и НЕ index.html ~29KB.
 curl -sI https://app.church-tambov.ru/lk/ | head -20
 curl -s https://app.church-tambov.ru/lk/; echo
 
-# LiveKit доступен из web по docker DNS (если пусто/ошибка — сеть compose разъехалась):
-docker exec istochnik-web wget -qO- http://livekit:7880/ || docker exec istochnik-web ping -c1 livekit
-docker exec istochnik-web grep -A3 'livekit_signal\|location ^~ /lk/' /etc/nginx/conf.d/default.conf
+# LiveKit слушает на хосте (host network):
+ss -lntp | grep -E '7880|7881|7882|3478|50100' || netstat -lntp | grep -E '7880|7881|7882'
+curl -sS http://127.0.0.1:7880/; echo
 
-# Логи прокси:
-docker logs istochnik-web --tail 50
-docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs livekit --tail 50
+# Из web/api (host.docker.internal, НЕ livekit:7880):
+docker exec istochnik-web wget -qO- http://host.docker.internal:7880/; echo
+docker exec istochnik-api wget -qO- http://host.docker.internal:7880/ 2>/dev/null || \
+  docker exec istochnik-api node -e "fetch('http://host.docker.internal:7880/').then(r=>r.text()).then(console.log).catch(e=>{console.error(e);process.exit(1)})"
+
+docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml ps
+docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs livekit --tail 80
 ```
 
-- `500`/`502` на `/lk/` → web не видит контейнер `livekit` (поднимите стек с **обоими** `-f` и `up -d --build --force-recreate web livekit`).
+- `502` на `/lk/` → LiveKit не слушает `:7880` **или** у `web` нет `extra_hosts: host.docker.internal`.  
+  Поднять с **обоими** `-f`:  
+  `docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build --force-recreate livekit api web`
+- Сообщение UI «Сервис звонков временно недоступен» = API не смог `createRoom` (тот же 502 / LiveKit down / неверные ключи).
 - `text/html` ~29KB → старый образ web без location `/lk/`.
-- WSS ок, но «Переподключение…» / нет медиа → host network + UDP **7882** + TCP **7881** + `userland-proxy: false`.
-- После смены addon: `up -d --build --force-recreate livekit api web` (web нужен из‑за nginx upstream).
+- WSS ок, но «Переподключение…» / нет медиа → UDP **7882** + TCP **7881** + UDP **3478** + UDP **50100** на роутере + `userland-proxy: false`.
 
 ## API (кратко)
 
