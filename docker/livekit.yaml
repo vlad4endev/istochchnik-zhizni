@@ -1,6 +1,6 @@
-# LiveKit Server — «Источник жизни» (режим максимальной стабильности за NAT)
-# network_mode: host — см. docker-compose.livekit-addon.yml
+# LiveKit Server — «Источник жизни» (host network, livekit-server v1.8.4)
 # Docs: https://docs.livekit.io/transport/self-hosting/
+# network_mode: host — см. docker-compose.livekit-addon.yml
 
 port: 7880
 # api/web → host.docker.internal:7880. На роутере 7880 НЕ пробрасывать.
@@ -10,26 +10,14 @@ bind_addresses:
 rtc:
   udp_port: 7882
   tcp_port: 7881
-  use_external_ip: true
-  advertise_internal_ip: true
-  skip_external_ip_validation: true
-  stun_servers:
-    - stun.l.google.com:19302
-  congestion_control:
-    enabled: true
-    allow_pause: true
+  # НЕ use_external_ip: за домашним NAT STUN/self-check часто валит старт.
+  # В v1.8.4 нет skip_external_ip_validation — задаём белый IP через NODE_IP (compose).
+  use_external_ip: false
 
-# Встроенный TURN: если прямой UDP/TCP ICE рвётся, клиент идёт через relay.
-# Роутер (по одному правилу, без диапазонов):
-#   UDP 3478 → 3478, UDP 50100 → 50100
+# TURN временно выключен: bind :3478 часто роняет процесс, пока не поднят :7880.
+# Когда curl http://127.0.0.1:7880/ = OK — можно включить обратно (см. docs/calls-livekit.md).
 turn:
-  enabled: true
-  domain: app.church-tambov.ru
-  udp_port: 3478
-  # Один порт — роутеры без «диапазона» принимают только так.
-  relay_range_start: 50100
-  relay_range_end: 50100
-  # Без TLS — только UDP TURN (для домашнего NAT достаточно).
+  enabled: false
 
 room:
   empty_timeout: 900

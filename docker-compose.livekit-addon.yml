@@ -1,20 +1,21 @@
 # LiveKit для аудио/видеозвонков (host network — стабильный ICE за домашним NAT).
 #
 #   docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build
+#   bash scripts/repair-livekit.sh
 #
-# .env:
-#   LIVEKIT_API_KEY=...
-#   LIVEKIT_API_SECRET=...
+# .env (ОДИН блок, ключи обязательны):
+#   LIVEKIT_API_KEY=APIxxxxxxxx
+#   LIVEKIT_API_SECRET=xxxxxxxx  # ≥32 символов
 #   LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk
 #   PUBLIC_WEB_ORIGIN=https://app.church-tambov.ru
 #   CALLS_ENABLED=true
-#   # опционально, если STUN врёт: LIVEKIT_RTC_NODE_IP=77.93.125.36
+#   VITE_CALLS_ENABLED=true
+#   LIVEKIT_RTC_NODE_IP=77.93.125.36
 #
-# Роутер → LAN IP хоста (напр. 192.168.1.203) — отдельные правила, без диапазонов:
+# Роутер → LAN IP хоста (напр. 192.168.1.203) — отдельные правила:
 #   TCP 7881 → 7881
 #   UDP 7882 → 7882
-#   UDP 3478 → 3478
-#   UDP 50100 → 50100
+#   (TURN сейчас выключен в livekit.yaml; когда включите: UDP 3478, UDP 50100)
 #   7880 наружу НЕ открывать
 #
 # Рекомендуется: /etc/docker/daemon.json → { "userland-proxy": false }
@@ -26,16 +27,18 @@ services:
     restart: always
     network_mode: host
     # host network: порты 7880/7881/7882 на хосте напрямую (без docker-proxy).
-    command:
-      - --config
-      - /etc/livekit.yaml
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     environment:
-      # Без пробела после «:» — иначе секрет может не совпасть с LIVEKIT_API_SECRET в api
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}"
+      # :? — compose упадёт сразу, если ключей нет в .env (не поднимаем «пустой» LiveKit)
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY in .env}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET in .env}
+      # Белый IP для ICE/TURN
+      NODE_IP: ${LIVEKIT_RTC_NODE_IP:-77.93.125.36}
     volumes:
       - ./docker/livekit.yaml:/etc/livekit.yaml:ro
+      - ./docker/livekit-entrypoint.sh:/entrypoint.sh:ro
     healthcheck:
-      # Образ minimal — без wget/curl. Живость порта: curl с хоста / из api|web.
+      # Образ minimal — без wget/curl. Живость порта: curl с хоста / scripts/repair-livekit.sh
       test: ["CMD", "/livekit-server", "--version"]
       interval: 10s
       timeout: 5s
@@ -50,8 +53,8 @@ services:
       # LiveKit на host network → API ходит на шлюз Docker (= хост)
       LIVEKIT_URL: http://host.docker.internal:7880
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-wss://app.church-tambov.ru/lk}
-      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
-      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY in .env}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET in .env}
       CALLS_ENABLED: ${CALLS_ENABLED:-true}
       CALL_RING_TIMEOUT_SEC: ${CALL_RING_TIMEOUT_SEC:-60}
       CALL_TOKEN_TTL_SEC: ${CALL_TOKEN_TTL_SEC:-900}

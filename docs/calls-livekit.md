@@ -41,10 +41,14 @@ VITE_CALLS_ENABLED=true
 ## Docker
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build
+bash scripts/check-livekit-env.sh   # ключи в .env обязательны
+bash scripts/repair-livekit.sh      # recreate + curl :7880 и /lk
+# или:
+docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build --force-recreate livekit api web
 ```
 
-Образ зафиксирован: `livekit/livekit-server:v1.8.4` (см. `docker-compose.livekit-addon.yml`).
+Образ зафиксирован: `livekit/livekit-server:v1.8.4` (см. `docker-compose.livekit-addon.yml`).  
+Entrypoint: `docker/livekit-entrypoint.sh` (собирает `LIVEKIT_KEYS` с пробелом после `:`).
 
 Конфиг: `docker/livekit.yaml`.  
 WSS на том же домене SPA: location `/lk/` в `docker/nginx-web.unified.conf`.  
@@ -64,9 +68,19 @@ LiveKit в addon работает в **`network_mode: host`** (рекоменд�
    | 50100 | UDP | TURN relay (один порт, без диапазона) |
    | 7880 | — | **не открывать** |
 3. Хост: `"userland-proxy": false` + `deploy/sysctl-livekit.conf` → `/etc/sysctl.d/` + `sysctl --system`.
-4. Встроенный TURN (`turn.enabled` в `docker/livekit.yaml`, domain=`app.church-tambov.ru`).
-5. CGNAT без белого IP → VPS или внешний TURN.
-6. Permissions-Policy: `camera=(self), microphone=(self)`.
+4. Белый IP: `LIVEKIT_RTC_NODE_IP` → `NODE_IP` (в v1.8.4 **не** используем `use_external_ip` за NAT — без `skip_external_ip_validation` процесс не поднимает :7880).
+5. TURN в `docker/livekit.yaml` по умолчанию **выключен**, пока не стабилен сигнал (`curl :7880` = OK). Включить:
+   ```yaml
+   turn:
+     enabled: true
+     domain: app.church-tambov.ru
+     udp_port: 3478
+     relay_range_start: 50100
+     relay_range_end: 50100
+   ```
+   + правила роутера UDP 3478 и 50100.
+6. CGNAT без белого IP → VPS или внешний TURN.
+7. Permissions-Policy: `camera=(self), microphone=(self)`.
 
 ### Проверка, что `/lk` — это LiveKit, а не SPA
 
@@ -88,9 +102,13 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml ps
 docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs livekit --tail 80
 ```
 
-- `502` на `/lk/` → LiveKit не слушает `:7880` **или** у `web` нет `extra_hosts: host.docker.internal`.  
+- `502`/`504` на `/lk/` / `curl 127.0.0.1:7880` connection refused → LiveKit не запустился. Частые причины:
+  1. В `docker/livekit.yaml` поля не из v1.8.4 (`advertise_internal_ip` / `skip_external_ip_validation`) → `could not parse config`
+  2. `LIVEKIT_KEYS` без пробела после `:` (нужно `KEY: SECRET`)
+  3. Пустые `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` в `.env` — `bash scripts/check-livekit-env.sh`
+  4. Стек без `docker-compose.livekit-addon.yml`  
   Поднять с **обоими** `-f`:  
-  `docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build --force-recreate livekit api web`
+  `docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --force-recreate livekit`
 - Сообщение UI «Сервис звонков временно недоступен» = API не смог `createRoom` (тот же 502 / LiveKit down / неверные ключи).
 - `text/html` ~29KB → старый образ web без location `/lk/`.
 - WSS ок, но «Переподключение…» / нет медиа → UDP **7882** + TCP **7881** + UDP **3478** + UDP **50100** на роутере + `userland-proxy: false`.
