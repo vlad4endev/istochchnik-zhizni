@@ -30,7 +30,7 @@ async function main(): Promise<void> {
   process.env.LIVEKIT_API_SECRET = 'secret';
   process.env.LIVEKIT_URL = 'http://livekit:7880';
   assert.equal(isLiveKitConfigured(), true);
-  assert.equal(getLiveKitInternalUrl(), 'http://host.docker.internal:7880');
+  assert.equal(getLiveKitInternalUrl(), 'http://livekit:7880');
 
   process.env.LIVEKIT_URL = 'http://host.docker.internal:7880';
   assert.equal(getLiveKitInternalUrl(), 'http://host.docker.internal:7880');

@@ -1,9 +1,9 @@
-# LiveKit Server — «Источник жизни» (host network, livekit-server v1.8.4)
+# LiveKit Server — «Источник жизни» (bridge + ports, livekit-server v1.8.4)
 # Docs: https://docs.livekit.io/transport/self-hosting/
-# network_mode: host — см. docker-compose.livekit-addon.yml
+# Сеть: docker-compose.livekit-addon.yml (api/web → http://livekit:7880)
 
 port: 7880
-# api/web → host.docker.internal:7880. На роутере 7880 НЕ пробрасывать.
+# На роутере 7880 НЕ пробрасывать (только 7881/TCP и 7882/UDP).
 bind_addresses:
   - "0.0.0.0"
 
