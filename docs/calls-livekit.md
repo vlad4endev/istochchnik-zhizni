@@ -61,17 +61,22 @@ WSS на том же домене SPA: location `/lk/` в `docker/nginx-web.unif
 ### Проверка, что `/lk` — это LiveKit, а не SPA
 
 ```bash
-# Должно быть НЕ text/html и НЕ ~29KB index.html.
-# LiveKit на / обычно отвечает коротко (OK / JSON), не страницей React.
+# Ожидание: HTTP 200, короткое тело (OK), НЕ 500 и НЕ index.html ~29KB.
 curl -sI https://app.church-tambov.ru/lk/ | head -20
-curl -sI https://app.church-tambov.ru/lk/rtc | head -20
+curl -s https://app.church-tambov.ru/lk/; echo
 
-# Из контейнера web → livekit по docker DNS:
-docker exec istochnik-web wget -qO- http://livekit:7880/ || true
-docker exec istochnik-web grep -A6 'location ^~ /lk/' /etc/nginx/conf.d/default.conf
+# LiveKit доступен из web по docker DNS (если пусто/ошибка — сеть compose разъехалась):
+docker exec istochnik-web wget -qO- http://livekit:7880/ || docker exec istochnik-web ping -c1 livekit
+docker exec istochnik-web grep -A3 'livekit_signal\|location ^~ /lk/' /etc/nginx/conf.d/default.conf
+
+# Логи прокси:
+docker logs istochnik-web --tail 50
+docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs livekit --tail 50
 ```
 
-Если снаружи снова `content-type: text/html` и большой `content-length` — образ `web` не пересобран или наружный OpenResty не проксирует в контейнер `web`.
+- `500`/`502` на `/lk/` → web не видит контейнер `livekit` (поднимите стек с **обоими** `-f` и `up -d --build --force-recreate web livekit`).
+- `text/html` ~29KB → старый образ web без location `/lk/`.
+- WSS ок, но нет звука/видео → UDP 50000–50100 на роутере (диапазон, порт в порт, не 50000→50100).
 
 ## API (кратко)
 
