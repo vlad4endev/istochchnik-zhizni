@@ -1,33 +1,33 @@
 # Опциональный LiveKit Server для аудио/видеозвонков.
-# Запуск (пример с основным стеком):
+# Запуск:
 #   docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d
 #
-# В .env задайте:
+# В .env:
 #   LIVEKIT_API_KEY=...
 #   LIVEKIT_API_SECRET=...
 #   LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk
 #   PUBLIC_WEB_ORIGIN=https://app.church-tambov.ru
 #   CALLS_ENABLED=true
-#   # Белый IP WAN (не 192.168.x!) — обязателен для стабильного ICE:
-#   LIVEKIT_RTC_NODE_IP=77.93.125.36
+#   LIVEKIT_RTC_NODE_IP=77.93.125.36   # белый WAN IP (curl -4 -s ifconfig.me)
 #
-# На роутере проброс на хост Docker (например 192.168.1.203):
+# Роутер → LAN IP Docker-хоста (напр. 192.168.1.203):
 #   TCP 7881 → 7881
-#   UDP 50000–50019 → 50000–50019  (каждый порт в порт, НЕ 50000→50100)
-# 7880 только на loopback; снаружи — nginx WSS /lk.
+#   UDP 7882 → 7882
+# (диапазон 50000+ больше не нужен)
+#
+# Рекомендуется на хосте Docker: "userland-proxy": false в /etc/docker/daemon.json
+# (иначе UDP медиа через -p часто ломается → reconnect loop).
 
 services:
   livekit:
     image: livekit/livekit-server:v1.8.4
     restart: always
-    # --node-ip обязателен за NAT: иначе ICE-кандидаты с docker-IP → «Переподключение…»
     command:
       - --config
       - /etc/livekit.yaml
       - --node-ip
       - ${LIVEKIT_RTC_NODE_IP:?Set LIVEKIT_RTC_NODE_IP to your public WAN IP}
     environment:
-      # Формат: key: secret  (пробел после двоеточия допустим)
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
       LIVEKIT_RTC_NODE_IP: "${LIVEKIT_RTC_NODE_IP:?Set LIVEKIT_RTC_NODE_IP to your public WAN IP}"
     volumes:
@@ -35,7 +35,7 @@ services:
     ports:
       - "127.0.0.1:7880:7880"
       - "7881:7881"
-      - "50000-50019:50000-50019/udp"
+      - "7882:7882/udp"
     networks:
       - default
     healthcheck:

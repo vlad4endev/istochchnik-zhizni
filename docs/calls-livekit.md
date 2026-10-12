@@ -52,15 +52,16 @@ WSS на том же домене SPA: location `/lk/` в `docker/nginx-web.unif
 ### Сеть и DNS
 
 1. Браузер получает `LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk` → nginx web → `livekit:7880`.
-2. В `.env` обязателен **`LIVEKIT_RTC_NODE_IP=<белый WAN IP>`** (не `192.168.x`). Узнать: `curl -4 -s ifconfig.me`.
-3. На роутере, на хост Docker:
+2. В `.env` обязателен **`LIVEKIT_RTC_NODE_IP=<белый WAN IP>`** (не `192.168.x`). Узнать: `curl -4 -s ifconfig.me` **на сервере**.
+3. На роутере, на хост Docker (например `192.168.1.203`):
    - **TCP 7881 → 7881**
-   - **UDP 50000–50019 → 50000–50019** (каждый порт сам в себя; нельзя `50000→50100`)
-4. Если сервер за **CGNAT**, проброс UDP не сработает — нужен VPS с белым IP или внешний TURN.
-5. Порт 7880 только на loopback; снаружи — WSS через `/lk/`.
-6. Permissions-Policy: `camera=(self), microphone=(self)`.
+   - **UDP 7882 → 7882** (один mux-порт; диапазон 50000+ больше не нужен)
+4. На хосте Docker рекомендуется `"userland-proxy": false` в `/etc/docker/daemon.json`, затем `sudo systemctl restart docker` — иначе UDP через publish часто даёт reconnect loop 3–10 с.
+5. Если сервер за **CGNAT**, проброс UDP не сработает — нужен VPS с белым IP или внешний TURN.
+6. Порт 7880 только на loopback; снаружи — WSS через `/lk/`.
+7. Permissions-Policy: `camera=(self), microphone=(self)`.
 
-Симптом «соединилось → через пару секунд Переподключение…» при верном `/lk` почти всегда = сломан ICE (нет `LIVEKIT_RTC_NODE_IP` или кривой UDP-проброс).
+Симптом «соединилось → через 3–10 с Переподключение…» при верном `/lk` = сломан ICE (`LIVEKIT_RTC_NODE_IP` / UDP 7882 / userland-proxy).
 
 ### Проверка, что `/lk` — это LiveKit, а не SPA
 
@@ -80,7 +81,7 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs li
 
 - `500`/`502` на `/lk/` → web не видит контейнер `livekit` (поднимите стек с **обоими** `-f` и `up -d --build --force-recreate web livekit`).
 - `text/html` ~29KB → старый образ web без location `/lk/`.
-- WSS ок, но «Переподключение…» / нет медиа → `LIVEKIT_RTC_NODE_IP` + UDP 50000–50019 и TCP 7881 на роутере.
+- WSS ок, но «Переподключение…» / нет медиа → `LIVEKIT_RTC_NODE_IP` + UDP **7882** + TCP **7881** + `userland-proxy: false`.
 
 ## API (кратко)
 

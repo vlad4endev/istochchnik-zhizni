@@ -8,11 +8,12 @@ bind_addresses:
   - "0.0.0.0"
 
 rtc:
-  # Узкий диапазон — проще пробросить на домашнем роутере (1:1, UDP).
-  port_range_start: 50000
-  port_range_end: 50019
+  # Один UDP mux-порт вместо диапазона — проще проброс на роутере и меньше
+  # проблем с Docker userland-proxy (иначе звонок «живёт» 3–10 с и переподключается).
+  # Не задавайте port_range_* вместе с udp_port.
+  udp_port: 7882
   tcp_port: 7881
-  # node_ip задаётся флагом --node-ip (см. compose), не STUN из Docker (часто врёт).
+  # node_ip задаётся флагом --node-ip (см. compose).
   use_external_ip: false
   stun_servers:
     - stun.l.google.com:19302
