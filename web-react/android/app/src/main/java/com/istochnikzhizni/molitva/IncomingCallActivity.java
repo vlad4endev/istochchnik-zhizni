@@ -3,14 +3,20 @@ package com.istochnikzhizni.molitva;
 import android.app.Activity;
 import android.app.KeyguardManager;
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/** Полноэкранный входящий на locked screen (full-screen intent). */
+/** Полноэкранный входящий на locked screen (full-screen intent), стиль как в макете. */
 public class IncomingCallActivity extends Activity {
   private String callId = "";
   private String callerName = "";
@@ -57,75 +63,126 @@ public class IncomingCallActivity extends Activity {
     }
   }
 
+  private int dp(int value) {
+    return (int) TypedValue.applyDimension(
+      TypedValue.COMPLEX_UNIT_DIP,
+      value,
+      getResources().getDisplayMetrics()
+    );
+  }
+
+  private GradientDrawable circle(int color) {
+    final GradientDrawable d = new GradientDrawable();
+    d.setShape(GradientDrawable.OVAL);
+    d.setColor(color);
+    return d;
+  }
+
   private View buildContentView() {
-    // Программный layout — без отдельного XML, чтобы не править ресурсы.
-    final android.widget.LinearLayout root = new android.widget.LinearLayout(this);
-    root.setOrientation(android.widget.LinearLayout.VERTICAL);
-    root.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-    root.setBackgroundColor(0xFF12121C);
-    final int pad = (int) (24 * getResources().getDisplayMetrics().density);
-    root.setPadding(pad, pad * 3, pad, pad * 2);
+    final LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setGravity(Gravity.CENTER_HORIZONTAL);
+    root.setBackgroundColor(Color.parseColor("#0A0C14"));
+    root.setPadding(dp(28), dp(72), dp(28), dp(40));
 
     final TextView label = new TextView(this);
-    label.setId(View.generateViewId());
     label.setTag("label");
-    label.setTextColor(0x99FFFFFF);
-    label.setTextSize(14);
-    label.setGravity(android.view.Gravity.CENTER);
+    label.setTextColor(Color.parseColor("#C8FFFFFF"));
+    label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+    label.setGravity(Gravity.CENTER);
     root.addView(label);
 
+    final TextView avatar = new TextView(this);
+    avatar.setTag("avatar");
+    avatar.setGravity(Gravity.CENTER);
+    avatar.setTextColor(Color.WHITE);
+    avatar.setTextSize(TypedValue.COMPLEX_UNIT_SP, 42);
+    avatar.setTypeface(Typeface.DEFAULT_BOLD);
+    final LinearLayout.LayoutParams avatarLp = new LinearLayout.LayoutParams(dp(160), dp(160));
+    avatarLp.topMargin = dp(36);
+    avatarLp.bottomMargin = dp(20);
+    avatarLp.gravity = Gravity.CENTER_HORIZONTAL;
+    avatar.setLayoutParams(avatarLp);
+    avatar.setBackground(circle(Color.parseColor("#3B82F6")));
+    root.addView(avatar);
+
     final TextView name = new TextView(this);
-    name.setId(View.generateViewId());
     name.setTag("name");
-    name.setTextColor(0xFFFFFFFF);
-    name.setTextSize(28);
-    name.setPadding(0, pad, 0, pad / 2);
-    name.setGravity(android.view.Gravity.CENTER);
+    name.setTextColor(Color.WHITE);
+    name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
+    name.setTypeface(Typeface.DEFAULT_BOLD);
+    name.setGravity(Gravity.CENTER);
     root.addView(name);
 
     final TextView hint = new TextView(this);
-    hint.setId(View.generateViewId());
     hint.setTag("hint");
-    hint.setTextColor(0xB3FFFFFF);
-    hint.setTextSize(16);
-    hint.setGravity(android.view.Gravity.CENTER);
+    hint.setTextColor(Color.parseColor("#C8FFFFFF"));
+    hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+    hint.setGravity(Gravity.CENTER);
+    final LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(
+      LinearLayout.LayoutParams.MATCH_PARENT,
+      LinearLayout.LayoutParams.WRAP_CONTENT
+    );
+    hintLp.topMargin = dp(8);
+    hint.setLayoutParams(hintLp);
     root.addView(hint);
 
-    final android.widget.LinearLayout actions = new android.widget.LinearLayout(this);
-    actions.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-    actions.setGravity(android.view.Gravity.CENTER);
-    final android.widget.LinearLayout.LayoutParams actionsLp =
-      new android.widget.LinearLayout.LayoutParams(
-        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-      );
-    actionsLp.topMargin = pad * 4;
+    final View spacer = new View(this);
+    final LinearLayout.LayoutParams spacerLp = new LinearLayout.LayoutParams(
+      LinearLayout.LayoutParams.MATCH_PARENT,
+      0,
+      1f
+    );
+    spacer.setLayoutParams(spacerLp);
+    root.addView(spacer);
+
+    final LinearLayout actions = new LinearLayout(this);
+    actions.setOrientation(LinearLayout.HORIZONTAL);
+    actions.setGravity(Gravity.CENTER);
+    final LinearLayout.LayoutParams actionsLp = new LinearLayout.LayoutParams(
+      LinearLayout.LayoutParams.MATCH_PARENT,
+      LinearLayout.LayoutParams.WRAP_CONTENT
+    );
     actions.setLayoutParams(actionsLp);
 
-    final Button decline = new Button(this);
-    decline.setTag("decline");
-    decline.setText("Отклонить");
-    decline.setBackgroundColor(0xFFEF4444);
-    decline.setTextColor(0xFFFFFFFF);
-    final android.widget.LinearLayout.LayoutParams btnLp =
-      new android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-    btnLp.setMarginEnd(pad / 2);
-    decline.setLayoutParams(btnLp);
-    actions.addView(decline);
-
-    final Button accept = new Button(this);
-    accept.setTag("accept");
-    accept.setText("Принять");
-    accept.setBackgroundColor(0xFF22C55E);
-    accept.setTextColor(0xFFFFFFFF);
-    final android.widget.LinearLayout.LayoutParams acceptLp =
-      new android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-    acceptLp.setMarginStart(pad / 2);
-    accept.setLayoutParams(acceptLp);
-    actions.addView(accept);
-
+    final LinearLayout declineCol = actionColumn("decline", "Отклонить", Color.parseColor("#FF3B30"));
+    final LinearLayout acceptCol = actionColumn("accept", "Ответить", Color.parseColor("#4CD964"));
+    final LinearLayout.LayoutParams colLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+    declineCol.setLayoutParams(colLp);
+    acceptCol.setLayoutParams(colLp);
+    actions.addView(declineCol);
+    actions.addView(acceptCol);
     root.addView(actions);
+
     return root;
+  }
+
+  private LinearLayout actionColumn(String tag, String label, int color) {
+    final LinearLayout col = new LinearLayout(this);
+    col.setOrientation(LinearLayout.VERTICAL);
+    col.setGravity(Gravity.CENTER_HORIZONTAL);
+
+    final Button btn = new Button(this);
+    btn.setTag(tag);
+    btn.setText("");
+    btn.setBackground(circle(color));
+    final LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(dp(76), dp(76));
+    btn.setLayoutParams(btnLp);
+    col.addView(btn);
+
+    final TextView text = new TextView(this);
+    text.setText(label);
+    text.setTextColor(Color.WHITE);
+    text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+    text.setGravity(Gravity.CENTER);
+    final LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(
+      LinearLayout.LayoutParams.WRAP_CONTENT,
+      LinearLayout.LayoutParams.WRAP_CONTENT
+    );
+    textLp.topMargin = dp(12);
+    text.setLayoutParams(textLp);
+    col.addView(text);
+    return col;
   }
 
   private void readExtras(Intent intent) {
@@ -145,6 +202,7 @@ public class IncomingCallActivity extends Activity {
   private void bindUi() {
     final View root = findViewById(android.R.id.content);
     final TextView label = root.findViewWithTag("label");
+    final TextView avatar = root.findViewWithTag("avatar");
     final TextView name = root.findViewWithTag("name");
     final TextView hint = root.findViewWithTag("hint");
     final Button decline = root.findViewWithTag("decline");
@@ -153,8 +211,13 @@ public class IncomingCallActivity extends Activity {
     if (label != null) {
       label.setText("video".equalsIgnoreCase(callType) ? "Входящий видеозвонок" : "Входящий звонок");
     }
+    final String displayName = callerName.isEmpty() ? "Собеседник" : callerName;
     if (name != null) {
-      name.setText(callerName.isEmpty() ? "Собеседник" : callerName);
+      name.setText(displayName);
+    }
+    if (avatar != null) {
+      final String initial = displayName.substring(0, 1).toUpperCase();
+      avatar.setText(initial);
     }
     if (hint != null) {
       hint.setText("video".equalsIgnoreCase(callType) ? "Видеозвонок" : "Аудиозвонок");

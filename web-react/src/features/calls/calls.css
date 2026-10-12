@@ -1,5 +1,7 @@
-/* Полноэкранный входящий звонок (foreground) */
+/* Полноэкранный входящий — макет CallKit-style */
 .incoming-call-overlay {
+  --call-accept: #4cd964;
+  --call-decline: #ff3b30;
   position: fixed;
   inset: 0;
   z-index: 10050;
@@ -8,22 +10,88 @@
   align-items: center;
   justify-content: space-between;
   padding:
-    max(48px, calc(24px + env(safe-area-inset-top, 0px)))
-    24px
-    max(40px, calc(28px + env(safe-area-inset-bottom, 0px)));
+    max(56px, calc(36px + env(safe-area-inset-top, 0px)))
+    28px
+    max(36px, calc(32px + env(safe-area-inset-bottom, 0px)));
   box-sizing: border-box;
-  background:
-    radial-gradient(ellipse 120% 80% at 50% 0%, rgba(125, 54, 64, 0.55), transparent 55%),
-    linear-gradient(165deg, #1a1520 0%, #0e0c12 45%, #12181f 100%);
+  background: #0a0c14;
   color: #fff;
-  animation: incoming-call-fade 0.35s ease;
+  overflow: hidden;
+  animation: incoming-call-fade 0.4s ease;
 }
 
-.incoming-call-overlay__glow {
+.incoming-call-overlay__photo-bg {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  transform: scale(1.04);
+  filter: saturate(1.05);
+}
+
+.incoming-call-overlay__wave-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 35%, rgba(56, 98, 210, 0.45), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 20% 80%, rgba(124, 58, 237, 0.35), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 85% 20%, rgba(14, 165, 233, 0.28), transparent 50%),
+    linear-gradient(180deg, #0b1020 0%, #06080f 100%);
+  overflow: hidden;
+}
+
+.incoming-call-overlay__wave {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 140%;
+  height: 55%;
+  transform: translate(-50%, -40%);
+  border-radius: 45% 55% 50% 50%;
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.18), transparent 70%);
+  filter: blur(8px);
+  animation: incoming-call-wave 8s ease-in-out infinite;
+}
+
+.incoming-call-overlay__wave--2 {
+  top: 48%;
+  width: 160%;
+  opacity: 0.7;
+  animation-delay: -2.5s;
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.2), transparent 75%);
+}
+
+.incoming-call-overlay__wave--3 {
+  top: 55%;
+  width: 180%;
+  opacity: 0.5;
+  animation-delay: -5s;
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.16), transparent 80%);
+}
+
+@keyframes incoming-call-wave {
+  0%,
+  100% {
+    transform: translate(-50%, -40%) scaleX(1);
+  }
+  50% {
+    transform: translate(-52%, -38%) scaleX(1.06);
+  }
+}
+
+.incoming-call-overlay__scrim {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.06), transparent 42%);
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, transparent 28%, transparent 55%, rgba(0, 0, 0, 0.72) 100%);
+}
+
+.incoming-call-overlay--video .incoming-call-overlay__scrim {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.15) 35%, rgba(0, 0, 0, 0.35) 60%, rgba(0, 0, 0, 0.78) 100%);
+  backdrop-filter: blur(0px);
 }
 
 @keyframes incoming-call-fade {
@@ -42,46 +110,44 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 12px;
-  margin-top: min(8vh, 64px);
+  gap: 10px;
+  margin-top: min(10vh, 72px);
   width: 100%;
   max-width: 22rem;
 }
 
-.incoming-call-overlay__label {
-  margin: 0;
-  font-size: 0.95rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.62);
-  font-weight: 500;
+.incoming-call-overlay--video .incoming-call-overlay__body {
+  margin-top: min(18vh, 140px);
 }
 
 .incoming-call-overlay__avatar-wrap {
   position: relative;
-  width: min(168px, 42vw);
-  height: min(168px, 42vw);
-  margin: 20px 0 8px;
+  width: min(176px, 46vw);
+  height: min(176px, 46vw);
+  margin: 8px 0 18px;
   display: grid;
   place-items: center;
 }
 
 .incoming-call-overlay__pulse {
   position: absolute;
-  inset: 0;
+  inset: -6px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.28);
-  animation: incoming-call-pulse 2.4s ease-out infinite;
+  border: 2px solid rgba(76, 217, 100, 0.35);
+  box-shadow: 0 0 24px rgba(76, 217, 100, 0.25);
+  animation: incoming-call-pulse 2.6s ease-out infinite;
 }
 
 .incoming-call-overlay__pulse--delayed {
-  animation-delay: 1.2s;
+  animation-delay: 1.3s;
+  border-color: rgba(96, 165, 250, 0.35);
+  box-shadow: 0 0 24px rgba(96, 165, 250, 0.2);
 }
 
 @keyframes incoming-call-pulse {
   0% {
     transform: scale(1);
-    opacity: 0.7;
+    opacity: 0.85;
   }
   100% {
     transform: scale(1.55);
@@ -94,9 +160,9 @@
     animation: none;
   }
   .incoming-call-overlay__pulse,
-  .incoming-call-overlay__pulse--delayed {
+  .incoming-call-overlay__pulse--delayed,
+  .incoming-call-overlay__wave {
     animation: none;
-    opacity: 0.35;
   }
 }
 
@@ -107,49 +173,96 @@
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid rgba(255, 255, 255, 0.35);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  border: 3px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 0 0 6px rgba(255, 255, 255, 0.08),
+    0 16px 48px rgba(0, 0, 0, 0.45),
+    0 0 40px rgba(76, 217, 100, 0.2);
 }
 
 .incoming-call-overlay__avatar--placeholder {
   display: grid;
   place-items: center;
-  background: linear-gradient(145deg, #7d3640, #4a2430);
+  background: linear-gradient(145deg, #3b82f6, #7c3aed);
   font-size: clamp(2.5rem, 10vw, 3.5rem);
   font-weight: 650;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .incoming-call-overlay__name {
   margin: 0;
-  font-size: clamp(1.5rem, 5.5vw, 2rem);
-  font-weight: 650;
-  line-height: 1.2;
+  font-size: clamp(1.7rem, 6vw, 2.15rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
   word-break: break-word;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.45);
 }
 
 .incoming-call-overlay__hint {
   margin: 0;
   font-size: 1.05rem;
-  color: rgba(255, 255, 255, 0.72);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.78);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.4);
+}
+
+.incoming-call-overlay__footer {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 26rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+.incoming-call-overlay__secondary {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+}
+
+.incoming-call-overlay__secondary-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.incoming-call-overlay__secondary-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 
 .incoming-call-overlay__actions {
-  position: relative;
-  z-index: 1;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  gap: clamp(48px, 16vw, 88px);
+  gap: clamp(56px, 18vw, 96px);
   width: 100%;
-  padding-bottom: 8px;
 }
 
 .incoming-call-overlay__btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 0;
   border: none;
   background: transparent;
@@ -159,12 +272,12 @@
 }
 
 .incoming-call-overlay__btn-icon {
-  width: 72px;
-  height: 72px;
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .incoming-call-overlay__btn:active .incoming-call-overlay__btn-icon {
@@ -172,19 +285,24 @@
 }
 
 .incoming-call-overlay__btn--reject .incoming-call-overlay__btn-icon {
-  background: #ef4444;
-  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.4);
+  background: var(--call-decline);
+  box-shadow:
+    0 0 0 4px rgba(255, 59, 48, 0.22),
+    0 10px 32px rgba(255, 59, 48, 0.55);
 }
 
 .incoming-call-overlay__btn--accept .incoming-call-overlay__btn-icon {
-  background: #22c55e;
-  box-shadow: 0 8px 24px rgba(34, 197, 94, 0.4);
+  background: var(--call-accept);
+  box-shadow:
+    0 0 0 4px rgba(76, 217, 100, 0.22),
+    0 10px 32px rgba(76, 217, 100, 0.55);
 }
 
 .incoming-call-overlay__btn-label {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
 }
 
 /* Call route accept/decline (deep link) */
@@ -335,20 +453,27 @@
 
 .call-controls {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: 50%;
+  right: auto;
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
   z-index: 10045;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  width: 100%;
+  gap: 12px;
+  flex-wrap: nowrap;
+  width: auto;
+  max-width: calc(100% - 24px);
   margin: 0;
-  padding: 16px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  padding: 12px 16px;
   box-sizing: border-box;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.65), transparent);
+  transform: translateX(-50%);
+  background: rgba(20, 22, 30, 0.55);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
   pointer-events: none;
 }
 
@@ -357,16 +482,17 @@
 }
 
 .call-ctrl-btn {
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   border: none;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.14);
   color: #fff;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
 }
 
 .call-ctrl-btn--off {
@@ -379,9 +505,10 @@
 }
 
 .call-ctrl-btn--hangup {
-  background: #ef4444;
-  width: 64px;
-  height: 64px;
+  background: #ff3b30;
+  width: 58px;
+  height: 58px;
+  box-shadow: 0 6px 20px rgba(255, 59, 48, 0.45);
 }
 
 .call-invite-copy {
