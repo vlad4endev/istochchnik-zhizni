@@ -288,4 +288,96 @@ describe('messenger chatStore last message preview', () => {
     expect(ids).toContain('999');
     expect(ids).toContain('group-1');
   });
+
+  it('keeps a just-created group when a later stale fetch omits it', async () => {
+    const recentIso = new Date().toISOString();
+    useChatStore.setState((s) => ({
+      ...s,
+      activeTab: 'services',
+      conversations: [
+        {
+          id: '999',
+          type: 'group',
+          title: 'Новая группа',
+          avatar_url: null,
+          updated_at: recentIso,
+          last_message: null,
+          unread_count: 0,
+          other_member: null,
+        },
+      ],
+      conversationsLoaded: true,
+      conversationsLoading: false,
+      conversationsLastLoadedAt: 0,
+      activeConversationId: '999',
+    }));
+
+    vi.mocked(messengerApi.fetchConversations).mockResolvedValue([
+      {
+        id: 'group-1',
+        type: 'group',
+        title: 'Старый чат',
+        avatar_url: null,
+        updated_at: '2026-05-07T12:00:00.000Z',
+        last_message: null,
+        unread_count: 0,
+        other_member: null,
+      },
+    ] as never);
+
+    await useChatStore.getState().loadConversations({ force: true });
+
+    const ids = useChatStore.getState().conversations.map((c) => String(c.id));
+    expect(ids).toContain('999');
+    expect(ids).toContain('group-1');
+    expect(useChatStore.getState().activeConversationId).toBe('999');
+  });
+
+  it('queues force reload when loadConversations is already in flight', async () => {
+    let resolveFirst: ((value: unknown) => void) | null = null;
+    let fetchCount = 0;
+    vi.mocked(messengerApi.fetchConversations).mockImplementation(() => {
+      fetchCount += 1;
+      if (fetchCount === 1) {
+        return new Promise((resolve) => {
+          resolveFirst = resolve;
+        }) as never;
+      }
+      return Promise.resolve([
+        {
+          id: 'after-queue',
+          type: 'group',
+          title: 'После очереди',
+          avatar_url: null,
+          updated_at: new Date().toISOString(),
+          last_message: null,
+          unread_count: 0,
+          other_member: null,
+        },
+      ]) as never;
+    });
+
+    useChatStore.setState((s) => ({
+      ...s,
+      conversations: [],
+      conversationsLoaded: true,
+      conversationsLoading: false,
+      conversationsLastLoadedAt: 0,
+    }));
+
+    const first = useChatStore.getState().loadConversations({ force: true });
+    const second = useChatStore.getState().loadConversations({ force: true });
+    await second;
+
+    resolveFirst?.([]);
+    await first;
+    // Allow queued force reload to finish.
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(fetchCount).toBeGreaterThanOrEqual(2);
+    expect(useChatStore.getState().conversations.some((c) => String(c.id) === 'after-queue')).toBe(
+      true,
+    );
+  });
 });

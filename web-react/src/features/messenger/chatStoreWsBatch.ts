@@ -737,6 +737,8 @@ export function applyWsEvent(s: ChatState, msg: WsInboundMessage, effects: WsBat
       const ls = om?.last_seen_at;
       const memberLastSeenAt =
         om && ls ? { ...s.memberLastSeenAt, [om.id]: ls } : s.memberLastSeenAt;
+      // Persist so a later failed/stale loadConversations hydrate cannot drop the new chat.
+      effects.push({ type: 'save_snapshot' });
       return { ...s, conversations, memberLastSeenAt };
     }
 
