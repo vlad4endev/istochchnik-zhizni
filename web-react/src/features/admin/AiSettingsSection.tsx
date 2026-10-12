@@ -333,7 +333,7 @@ export function AiSettingsSection() {
           <span className="rounded-full bg-[var(--surface)] px-3 py-1.5 text-[var(--text-secondary)]">3 · Сохранить</span>
         </div>
 
-        <div className="mt-5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="mt-5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
           {settings.preset_catalog.map((entry) => {
             const active = form.connection_preset === entry.id;
             return (
@@ -418,6 +418,7 @@ export function AiSettingsSection() {
             />
             <p className="mt-1 text-xs text-[var(--text-secondary)]">
               Оставьте пустым при сохранении, если ключ не меняется. Для сервера можно задать{' '}
+              <code className="rounded bg-[var(--surface)] px-1">AITUNNEL_API_KEY</code>,{' '}
               <code className="rounded bg-[var(--surface)] px-1">GPTUNNEL_API_KEY</code>,{' '}
               <code className="rounded bg-[var(--surface)] px-1">AI_API_KEY</code> или{' '}
               <code className="rounded bg-[var(--surface)] px-1">OPENAI_API_KEY</code>.

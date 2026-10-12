@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { resolveModelForSection, type ResolvedLlmConfig } from '../services/aiSettingsService';
 import {
+  getPresetDefaults,
+  inferConnectionPresetFromBaseUrl,
+  isConnectionPresetId,
+} from './aiConnectionPresets';
+import {
   buildSectionModelsAdminView,
   normalizeAiSettingsDocument,
 } from './aiSettings';
@@ -54,6 +59,13 @@ function run(): void {
   assert.equal(resolveModelForSection(cfg, 'messenger'), 'gpt-4o-mini');
   assert.equal(resolveModelForSection(cfg, undefined), 'gpt-4o-mini');
   assert.equal(resolveModelForSection(cfg, 'not-a-scope'), 'gpt-4o-mini');
+
+  assert.equal(isConnectionPresetId('aitunnel'), true);
+  assert.equal(inferConnectionPresetFromBaseUrl('https://api.aitunnel.ru/v1'), 'aitunnel');
+  assert.equal(inferConnectionPresetFromBaseUrl('https://ru-api.aitunnel.ru/v1/'), 'aitunnel');
+  const aitunnelDefaults = getPresetDefaults('aitunnel');
+  assert.equal(aitunnelDefaults.base_url, 'https://api.aitunnel.ru/v1');
+  assert.ok(aitunnelDefaults.default_model.length > 0);
 
   console.log('aiSettings.test.ts: OK');
 }

@@ -1120,12 +1120,18 @@ export interface AiPromptScopeOption {
   label: string;
 }
 
-export type AiConnectionPresetId = 'openai' | 'deepseek' | 'openrouter' | 'gptunnel' | 'custom';
+export type AiConnectionPresetId =
+  | 'openai'
+  | 'deepseek'
+  | 'openrouter'
+  | 'gptunnel'
+  | 'aitunnel'
+  | 'custom';
 
 export type AiModelGroupId = 'chat' | 'reasoning' | 'vision' | 'other';
 
 export interface AiPresetCatalogEntry {
-  id: 'openai' | 'deepseek' | 'openrouter' | 'gptunnel';
+  id: 'openai' | 'deepseek' | 'openrouter' | 'gptunnel' | 'aitunnel';
   label: string;
   description: string;
   base_url: string;
