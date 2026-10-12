@@ -1,13 +1,20 @@
 /**
  * Рингтон / гудки через Web Audio API.
  * Не зависит от /public/sounds/*.mp3 (на проде файла не было).
+ *
+ * На Capacitor для входящего дополнительно играет нативный RingtoneManager /
+ * AVAudioEngine — Web Audio часто остаётся silent без жеста пользователя.
  */
+
+import { isCapacitorNative } from '../../lib/nativeApp';
+import { NativeCall } from '../../plugins/nativeCall';
 
 type RingKind = 'ringtone' | 'ringback';
 
 let sharedCtx: AudioContext | null = null;
 let activeStop: (() => void) | null = null;
 let unlocked = false;
+let nativeRingtoneActive = false;
 
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -31,6 +38,21 @@ export function unlockCallAudio(): void {
   }
 }
 
+function stopNativeRingtone(): void {
+  if (!nativeRingtoneActive) return;
+  nativeRingtoneActive = false;
+  if (!isCapacitorNative()) return;
+  void NativeCall.stopRingtone().catch(() => undefined);
+}
+
+function startNativeRingtone(): void {
+  if (!isCapacitorNative()) return;
+  nativeRingtoneActive = true;
+  void NativeCall.playRingtone().catch(() => {
+    nativeRingtoneActive = false;
+  });
+}
+
 function stopActive(): void {
   if (activeStop) {
     try {
@@ -40,6 +62,7 @@ function stopActive(): void {
     }
     activeStop = null;
   }
+  stopNativeRingtone();
 }
 
 /**
@@ -135,6 +158,8 @@ export function startCallRing(kind: RingKind = 'ringtone'): () => void {
   };
 
   if (kind === 'ringtone') {
+    // Натив обходит autoplay; Web Audio — запасной канал / браузер
+    startNativeRingtone();
     scheduleRingtoneBurst();
   } else {
     scheduleRingback();
