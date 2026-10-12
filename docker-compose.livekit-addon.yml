@@ -6,7 +6,9 @@
 #   LIVEKIT_API_KEY=...
 #   LIVEKIT_API_SECRET=...
 #   LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk
+#   PUBLIC_WEB_ORIGIN=https://app.church-tambov.ru
 #   CALLS_ENABLED=true
+#   # НЕ используйте call.church-tambov.ru, если DNS/nginx для него не настроены.
 #   # публичный IP сервера для ICE (обязательно за NAT/домашним роутером):
 #   LIVEKIT_RTC_NODE_IP=203.0.113.10
 #
