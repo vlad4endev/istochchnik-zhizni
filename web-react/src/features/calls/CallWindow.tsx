@@ -7,7 +7,7 @@ import {
   useConnectionState,
 } from '@livekit/components-react';
 import { ConnectionState, Track } from 'livekit-client';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { LuMic, LuMicOff, LuMonitorUp, LuPhoneOff, LuVideo, LuVideoOff } from 'react-icons/lu';
 
 import { emitAppToast } from '../../lib/uiFeedback';
@@ -23,12 +23,24 @@ import {
 } from './callsApi';
 import { useCallStore, type ActiveCallState } from './callStore';
 import './calls.css';
-import '@livekit/components-styles';
 
 function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function isMobileUa(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
+function hostLabel(url: string): string {
+  try {
+    return new URL(url).host + new URL(url).pathname.replace(/\/$/, '');
+  } catch {
+    return url;
+  }
 }
 
 function CallControls({
@@ -45,6 +57,7 @@ function CallControls({
   const setMuted = useCallStore((s) => s.setMuted);
   const setVideoOff = useCallStore((s) => s.setVideoOff);
   const setScreenSharing = useCallStore((s) => s.setScreenSharing);
+  const showScreenShare = !isMobileUa();
 
   const toggleMic = useCallback(async () => {
     try {
@@ -68,8 +81,7 @@ function CallControls({
   }, [isVideoOff, localParticipant, setVideoOff, videoEnabled]);
 
   const toggleScreen = useCallback(async () => {
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile) {
+    if (!showScreenShare) {
       emitAppToast('Демонстрация экрана недоступна на этом устройстве', 'info');
       return;
     }
@@ -85,21 +97,38 @@ function CallControls({
       emitAppToast(mapDeviceError(e), 'error');
       setScreenSharing(false);
     }
-  }, [isScreenSharing, localParticipant, setScreenSharing]);
+  }, [isScreenSharing, localParticipant, setScreenSharing, showScreenShare]);
 
   return (
     <div className="call-controls">
-      <button type="button" className="call-ctrl-btn" onClick={() => void toggleMic()} aria-label={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}>
+      <button
+        type="button"
+        className={['call-ctrl-btn', isMuted ? 'call-ctrl-btn--off' : ''].join(' ')}
+        onClick={() => void toggleMic()}
+        aria-label={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
+      >
         {isMuted ? <LuMicOff size={22} /> : <LuMic size={22} />}
       </button>
       {videoEnabled ? (
-        <button type="button" className="call-ctrl-btn" onClick={() => void toggleCam()} aria-label={isVideoOff ? 'Включить камеру' : 'Выключить камеру'}>
+        <button
+          type="button"
+          className={['call-ctrl-btn', isVideoOff ? 'call-ctrl-btn--off' : ''].join(' ')}
+          onClick={() => void toggleCam()}
+          aria-label={isVideoOff ? 'Включить камеру' : 'Выключить камеру'}
+        >
           {isVideoOff ? <LuVideoOff size={22} /> : <LuVideo size={22} />}
         </button>
       ) : null}
-      <button type="button" className="call-ctrl-btn" onClick={() => void toggleScreen()} aria-label="Демонстрация экрана">
-        <LuMonitorUp size={22} />
-      </button>
+      {showScreenShare ? (
+        <button
+          type="button"
+          className={['call-ctrl-btn', isScreenSharing ? 'call-ctrl-btn--active' : ''].join(' ')}
+          onClick={() => void toggleScreen()}
+          aria-label="Демонстрация экрана"
+        >
+          <LuMonitorUp size={22} />
+        </button>
+      ) : null}
       <button type="button" className="call-ctrl-btn call-ctrl-btn--hangup" onClick={onHangup} aria-label="Завершить">
         <LuPhoneOff size={22} />
       </button>
@@ -107,7 +136,15 @@ function CallControls({
   );
 }
 
-function RoomStage({ callType }: { callType: 'audio' | 'video' }) {
+function RoomStage({
+  callType,
+  serverUrl,
+  connectError,
+}: {
+  callType: 'audio' | 'video';
+  serverUrl: string;
+  connectError: string | null;
+}) {
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
@@ -119,28 +156,36 @@ function RoomStage({ callType }: { callType: 'audio' | 'video' }) {
   const peerName = useCallStore((s) => s.activeCall?.peerName ?? 'Собеседник');
   const peerAvatar = useCallStore((s) => s.activeCall?.peerAvatar ?? '');
   const [elapsed, setElapsed] = useState(0);
+  const connected = connectionState === ConnectionState.Connected;
 
   useEffect(() => {
+    if (!connected) {
+      setElapsed(0);
+      return;
+    }
     const t = window.setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => window.clearInterval(t);
-  }, []);
+  }, [connected]);
 
   const remoteVideo = tracks.find(
-    (t) => !t.participant.isLocal && t.publication?.kind === Track.Kind.Video && t.publication?.isSubscribed,
+    (t) =>
+      !t.participant.isLocal &&
+      t.publication?.kind === Track.Kind.Video &&
+      t.publication?.isSubscribed,
   );
   const localVideo = tracks.find(
     (t) => t.participant.isLocal && t.source === Track.Source.Camera && t.publication,
   );
 
   const avatarSrc = peerAvatar ? resolvePublicUrl(peerAvatar) : undefined;
-  const statusLabel =
-    connectionState === ConnectionState.Connected
-      ? formatDuration(elapsed)
-      : connectionState === ConnectionState.Connecting
-        ? 'Подключение…'
-        : connectionState === ConnectionState.Reconnecting
-          ? 'Переподключение…'
-          : 'Соединение…';
+  let statusLabel = 'Соединение…';
+  if (connectError) statusLabel = connectError;
+  else if (connectionState === ConnectionState.Connected) statusLabel = formatDuration(elapsed);
+  else if (connectionState === ConnectionState.Connecting) statusLabel = 'Подключение к серверу…';
+  else if (connectionState === ConnectionState.Reconnecting) statusLabel = 'Переподключение…';
+  else if (connectionState === ConnectionState.Disconnected) {
+    statusLabel = 'Нет соединения с сервером звонков';
+  }
 
   return (
     <div className="call-stage">
@@ -155,6 +200,10 @@ function RoomStage({ callType }: { callType: 'audio' | 'video' }) {
               <div className="call-stage__avatar call-stage__avatar--placeholder" aria-hidden />
             )}
             <p className="call-stage__name">{peerName}</p>
+            <p className="call-stage__status">{statusLabel}</p>
+            {!connected ? (
+              <p className="call-stage__hint">Сервер: {hostLabel(serverUrl)}</p>
+            ) : null}
           </div>
         )}
         {callType === 'video' && localVideo?.publication ? (
@@ -163,7 +212,9 @@ function RoomStage({ callType }: { callType: 'audio' | 'video' }) {
           </div>
         ) : null}
       </div>
-      <p className="call-stage__status">{statusLabel}</p>
+      {callType === 'video' && remoteVideo?.publication ? (
+        <p className="call-stage__status call-stage__status--bar">{statusLabel}</p>
+      ) : null}
       <RoomAudioRenderer />
     </div>
   );
@@ -173,33 +224,65 @@ function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; o
   const avatarSrc = activeCall.peerAvatar ? resolvePublicUrl(activeCall.peerAvatar) : undefined;
   return (
     <div className="call-window call-window--ringing" role="dialog" aria-label="Исходящий звонок">
-      <div className="call-stage__avatar-block">
-        {avatarSrc ? (
-          <img src={avatarSrc} alt="" className="call-stage__avatar" />
-        ) : (
-          <div className="call-stage__avatar call-stage__avatar--placeholder" aria-hidden />
-        )}
-        <p className="call-stage__name">{activeCall.peerName}</p>
-        <p className="call-stage__status">
-          {activeCall.callType === 'video' ? 'Видеозвонок…' : 'Вызов…'}
-        </p>
+      <div className="call-stage">
+        <div className="call-stage__main">
+          <div className="call-stage__avatar-block">
+            {avatarSrc ? (
+              <img src={avatarSrc} alt="" className="call-stage__avatar" />
+            ) : (
+              <div className="call-stage__avatar call-stage__avatar--placeholder" aria-hidden />
+            )}
+            <p className="call-stage__name">{activeCall.peerName}</p>
+            <p className="call-stage__status">
+              {activeCall.callType === 'video' ? 'Видеозвонок…' : 'Вызов…'}
+            </p>
+            {activeCall.inviteUrl ? (
+              <button
+                type="button"
+                className="call-invite-copy"
+                onClick={() => {
+                  void navigator.clipboard.writeText(activeCall.inviteUrl!).then(
+                    () => emitAppToast('Ссылка скопирована', 'success'),
+                    () => emitAppToast('Не удалось скопировать ссылку', 'error'),
+                  );
+                }}
+              >
+                Скопировать ссылку-приглашение
+              </button>
+            ) : null}
+          </div>
+        </div>
       </div>
-      {activeCall.inviteUrl ? (
-        <button
-          type="button"
-          className="call-invite-copy"
-          onClick={() => {
-            void navigator.clipboard.writeText(activeCall.inviteUrl!).then(
-              () => emitAppToast('Ссылка скопирована', 'success'),
-              () => emitAppToast('Не удалось скопировать ссылку', 'error'),
-            );
-          }}
-        >
-          Скопировать ссылку-приглашение
-        </button>
-      ) : null}
       <div className="call-controls">
         <button type="button" className="call-ctrl-btn call-ctrl-btn--hangup" onClick={onCancel} aria-label="Отменить">
+          <LuPhoneOff size={22} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CallShell({
+  children,
+  onHangup,
+  status,
+}: {
+  children: ReactNode;
+  onHangup: () => void;
+  status: string;
+}) {
+  return (
+    <div className="call-window" role="dialog">
+      <div className="call-stage">
+        <div className="call-stage__main">
+          <div className="call-stage__avatar-block">
+            <p className="call-stage__status">{status}</p>
+            {children}
+          </div>
+        </div>
+      </div>
+      <div className="call-controls">
+        <button type="button" className="call-ctrl-btn call-ctrl-btn--hangup" onClick={onHangup} aria-label="Завершить">
           <LuPhoneOff size={22} />
         </button>
       </div>
@@ -222,6 +305,8 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
       : null,
   );
   const [tokenError, setTokenError] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [lkConnected, setLkConnected] = useState(false);
 
   const videoEnabled = activeCall.callType === 'video';
 
@@ -284,7 +369,6 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     };
   }, [activeCall.callId, activeCall.callKind, activeCall.status, creds?.token, setLiveKitCreds, setStatus]);
 
-  // Initiator of direct call: fetch token early so room is ready when accepted
   useEffect(() => {
     if (activeCall.callKind !== 'direct' || !activeCall.isInitiator || activeCall.status !== 'calling') {
       return;
@@ -306,6 +390,17 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     };
   }, [activeCall.callId, activeCall.callKind, activeCall.isInitiator, activeCall.status, creds?.token, setLiveKitCreds]);
 
+  // Timeout if stuck connecting (signal WSS)
+  useEffect(() => {
+    if (!creds?.token || !creds.url || connectError || lkConnected) return;
+    const t = window.setTimeout(() => {
+      setConnectError(
+        'Не удалось подключиться к серверу звонков. Проверьте LiveKit (WSS /lk и UDP-порты).',
+      );
+    }, 18_000);
+    return () => window.clearTimeout(t);
+  }, [creds?.token, creds?.url, connectError, lkConnected]);
+
   const roomOptions = useMemo(
     () => ({
       adaptiveStream: true,
@@ -320,27 +415,17 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
 
   if (tokenError) {
     return (
-      <div className="call-window" role="dialog">
-        <p className="call-stage__status">{tokenError}</p>
-        <div className="call-controls">
-          <button type="button" className="call-ctrl-btn call-ctrl-btn--hangup" onClick={() => void hangup()}>
-            <LuPhoneOff size={22} />
-          </button>
-        </div>
-      </div>
+      <CallShell onHangup={() => void hangup()} status={tokenError}>
+        {null}
+      </CallShell>
     );
   }
 
   if (!creds?.token || !creds.url) {
     return (
-      <div className="call-window" role="dialog">
-        <p className="call-stage__status">Подключение к комнате…</p>
-        <div className="call-controls">
-          <button type="button" className="call-ctrl-btn call-ctrl-btn--hangup" onClick={() => void hangup()}>
-            <LuPhoneOff size={22} />
-          </button>
-        </div>
-      </div>
+      <CallShell onHangup={() => void hangup()} status="Получение доступа к комнате…">
+        {null}
+      </CallShell>
     );
   }
 
@@ -353,14 +438,22 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         audio
         video={videoEnabled}
         options={roomOptions}
-        onError={(e) => emitAppToast(mapDeviceError(e), 'error')}
-        onDisconnected={() => {
-          /* hangup via button preferred; avoid auto-end on brief blips */
+        connectOptions={{ autoSubscribe: true }}
+        onError={(e) => {
+          const msg = mapDeviceError(e);
+          setConnectError(msg);
+          emitAppToast(msg, 'error');
         }}
-        data-lk-theme="default"
-        style={{ height: '100%', width: '100%' }}
+        onConnected={() => {
+          setLkConnected(true);
+          setConnectError(null);
+        }}
+        onDisconnected={() => {
+          setLkConnected(false);
+        }}
+        className="call-lk-room"
       >
-        <RoomStage callType={activeCall.callType} />
+        <RoomStage callType={activeCall.callType} serverUrl={creds.url} connectError={connectError} />
         <CallControls videoEnabled={videoEnabled} onHangup={() => void hangup()} />
       </LiveKitRoom>
     </div>

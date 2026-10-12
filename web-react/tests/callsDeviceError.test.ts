@@ -13,7 +13,11 @@ describe('mapDeviceError', () => {
     expect(mapDeviceError(err)).toMatch(/не найдено/i);
   });
 
-  it('maps unknown', () => {
-    expect(mapDeviceError(new Error('boom'))).toMatch(/Не удалось получить доступ/);
+  it('maps connection failures', () => {
+    expect(mapDeviceError(new Error('websocket connection failed'))).toMatch(/Нет связи с сервером/);
+  });
+
+  it('maps unknown message as-is', () => {
+    expect(mapDeviceError(new Error('boom'))).toBe('boom');
   });
 });

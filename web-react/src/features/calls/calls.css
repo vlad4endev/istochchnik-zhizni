@@ -1,8 +1,10 @@
-/* Глобальные оверлеи звонков (вне темы Tailwind в отдельных блоках). */
+/* Глобальные оверлеи звонков */
 .incoming-call-toast {
   position: fixed;
   top: max(24px, env(safe-area-inset-top, 0px));
-  right: max(24px, env(safe-area-inset-right, 0px));
+  right: max(16px, env(safe-area-inset-right, 0px));
+  left: max(16px, env(safe-area-inset-left, 0px));
+  margin-left: auto;
   z-index: 10050;
   background: var(--surface-elevated, #fff);
   border: 1px solid rgba(0, 0, 0, 0.08);
@@ -18,11 +20,11 @@
 
 @keyframes incoming-call-slide {
   from {
-    transform: translateX(110%);
+    transform: translateY(-12px);
     opacity: 0;
   }
   to {
-    transform: translateX(0);
+    transform: translateY(0);
     opacity: 1;
   }
 }
@@ -56,251 +58,73 @@
   gap: 10px;
 }
 
-.incoming-call-toast .btn-reject {
+.incoming-call-toast .btn-reject,
+.incoming-call-toast .btn-accept,
+.call-route-page .btn-reject,
+.call-route-page .btn-accept {
   flex: 1;
-  padding: 10px;
-  border-radius: 10px;
+  padding: 12px;
+  border-radius: 12px;
   border: none;
-  background: #ef4444;
   color: white;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
 }
 
-.incoming-call-toast .btn-accept {
-  flex: 1;
-  padding: 10px;
-  border-radius: 10px;
-  border: none;
+.incoming-call-toast .btn-reject,
+.call-route-page .btn-reject {
+  background: #ef4444;
+}
+
+.incoming-call-toast .btn-accept,
+.call-route-page .btn-accept {
   background: #22c55e;
-  color: white;
-  font-weight: 500;
-  cursor: pointer;
 }
 
 .call-window {
   position: fixed;
   inset: 0;
   z-index: 10040;
-  background: #1a1a2e;
+  background: #12121c;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.call-window .call-connection-banner {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: 6px 12px;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 500;
-  z-index: 10;
-  transition: opacity 0.3s;
-}
-
-.call-window .call-connection-connecting {
-  background: rgba(0, 0, 0, 0.5);
   color: #fff;
+  overflow: hidden;
 }
 
-.call-window .call-connection-reconnecting {
-  background: rgba(255, 165, 0, 0.85);
-  color: #fff;
-}
-
-.call-window .call-connection-failed {
-  background: rgba(220, 38, 38, 0.9);
-  color: #fff;
-}
-
-.call-window .remote-video-wrap {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  flex: 1;
+.call-lk-room {
+  flex: 1 1 auto;
   min-height: 0;
-}
-
-.call-window .remote-video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-}
-
-.call-window .local-video {
-  position: absolute;
-  bottom: 100px;
-  right: 20px;
-  width: 160px;
-  height: 90px;
-  border-radius: 12px;
-  object-fit: cover;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-}
-
-.call-window .audio-call-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  color: white;
-  padding: 24px;
-  text-align: center;
-}
-
-.call-window .peer-avatar-large {
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-}
-
-.call-window .peer-name {
-  font-size: 24px;
-  font-weight: 600;
-  color: white;
-}
-
-.call-window .call-status {
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.call-window .call-duration {
-  position: absolute;
-  top: max(20px, env(safe-area-inset-top, 0px));
-  left: 50%;
-  transform: translateX(-50%);
-  color: white;
-  font-size: 14px;
-  background: rgba(0, 0, 0, 0.4);
-  padding: 4px 12px;
-  border-radius: 20px;
-}
-
-.call-window .call-controls {
-  position: absolute;
-  bottom: max(40px, env(safe-area-inset-bottom, 0px));
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  padding: 0 16px;
-}
-
-.call-window .ctrl-btn {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255, 255, 255, 0.15);
-  font-size: 22px;
-  cursor: pointer;
-  transition: background 0.2s;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.call-window .ctrl-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-.call-window .ctrl-btn--off {
-  background: rgba(255, 255, 255, 0.08);
-  opacity: 0.5;
-}
-
-.call-window .ctrl-btn--active {
-  background: rgba(59, 130, 246, 0.5);
-}
-
-.call-window .ctrl-btn--end {
-  background: #ef4444;
-  width: 64px;
-  height: 64px;
-  font-size: 26px;
-}
-
-.call-window .ctrl-btn--end:hover {
-  background: #dc2626;
-}
-
-.call-window .video-off-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  background: rgba(0, 0, 0, 0.55);
-  color: white;
-  font-weight: 500;
-}
-
-.call-window .mute-indicator {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.75);
-}
-
-.call-controls {
-  position: absolute;
-  bottom: max(40px, env(safe-area-inset-bottom, 0px));
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  padding: 0 16px;
-  z-index: 5;
-}
-
-.call-ctrl-btn {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.call-ctrl-btn--hangup {
-  background: #ef4444;
-  width: 64px;
-  height: 64px;
+  display: flex !important;
+  flex-direction: column !important;
+  position: relative;
+  background: #12121c;
+  overflow: hidden;
 }
 
 .call-stage {
-  flex: 1;
-  width: 100%;
+  flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
   position: relative;
 }
 
 .call-stage__main {
-  position: relative;
-  flex: 1;
-  width: 100%;
+  flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  padding: 24px 16px calc(120px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
 }
 
 .call-stage__remote-video,
@@ -310,54 +134,133 @@
   object-fit: cover;
 }
 
+.call-stage__remote-video {
+  position: absolute;
+  inset: 0;
+}
+
 .call-stage__local-pip {
   position: absolute;
-  bottom: 120px;
-  right: 16px;
-  width: min(160px, 36vw);
-  height: min(90px, 20vw);
-  border-radius: 12px;
+  bottom: calc(110px + env(safe-area-inset-bottom, 0px));
+  right: max(16px, env(safe-area-inset-right, 0px));
+  width: min(132px, 34vw);
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
   overflow: hidden;
   border: 2px solid rgba(255, 255, 255, 0.35);
   z-index: 3;
+  background: #000;
 }
 
 .call-stage__avatar-block {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 24px;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
   text-align: center;
+  max-width: 28rem;
 }
 
 .call-stage__avatar {
-  width: 120px;
-  height: 120px;
+  width: min(140px, 36vw);
+  height: min(140px, 36vw);
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid rgba(255, 255, 255, 0.3);
+  border: 3px solid rgba(255, 255, 255, 0.28);
 }
 
 .call-stage__avatar--placeholder {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .call-stage__name {
-  font-size: 24px;
-  font-weight: 600;
+  margin: 0;
+  font-size: clamp(1.25rem, 4vw, 1.75rem);
+  font-weight: 650;
   color: #fff;
 }
 
 .call-stage__status {
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.75);
-  margin-top: 8px;
+  margin: 0;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.call-stage__status--bar {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+}
+
+.call-stage__hint {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.45);
+  word-break: break-all;
+}
+
+.call-controls {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10045;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  width: 100%;
+  margin: 0;
+  padding: 16px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.65), transparent);
+  pointer-events: none;
+}
+
+.call-controls > * {
+  pointer-events: auto;
+}
+
+.call-ctrl-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.call-ctrl-btn--off {
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 0.65;
+}
+
+.call-ctrl-btn--active {
+  background: rgba(59, 130, 246, 0.55);
+}
+
+.call-ctrl-btn--hangup {
+  background: #ef4444;
+  width: 64px;
+  height: 64px;
 }
 
 .call-invite-copy {
-  margin: 12px 0;
-  padding: 10px 16px;
+  margin-top: 8px;
+  padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: rgba(255, 255, 255, 0.08);
@@ -388,5 +291,5 @@
 }
 
 .call-window--ringing {
-  background: #1a1a2e;
+  background: #12121c;
 }

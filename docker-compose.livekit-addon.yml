@@ -5,9 +5,9 @@
 # В .env задайте:
 #   LIVEKIT_API_KEY=...
 #   LIVEKIT_API_SECRET=...
-#   LIVEKIT_PUBLIC_URL=wss://call.church-tambov.ru
+#   LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk
 #   CALLS_ENABLED=true
-#   # при белом IP и пробросе UDP:
+#   # публичный IP сервера для ICE (обязательно за NAT/домашним роутером):
 #   LIVEKIT_RTC_NODE_IP=203.0.113.10
 #
 # UDP 50000-50100 и TCP 7881 — с интернета (или TURN).
@@ -44,7 +44,7 @@ services:
         condition: service_started
     environment:
       LIVEKIT_URL: http://livekit:7880
-      LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-wss://call.church-tambov.ru}
+      LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-wss://app.church-tambov.ru/lk}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
       CALLS_ENABLED: ${CALLS_ENABLED:-true}
