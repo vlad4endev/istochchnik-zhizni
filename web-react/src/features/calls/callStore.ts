@@ -76,23 +76,29 @@ export const useCallStore = create<CallStore>((set) => ({
     }),
 
   hydrateFromPublic: (call, extras) =>
-    set({
-      activeCall: {
-        callId: call.id,
-        conversationId: call.conversationId,
-        peerId: extras.peerId ?? 0,
-        peerName: extras.peerName ?? 'Участник',
-        peerAvatar: extras.peerAvatar ?? '',
-        callType: call.mediaType,
-        isInitiator: extras.isInitiator ?? false,
-        status: extras.status ?? (call.status === 'active' || call.status === 'waiting' ? 'active' : 'calling'),
-        callKind: call.type,
-        inviteUrl: call.inviteUrl ?? extras.inviteUrl ?? null,
-        livekitUrl: extras.livekitUrl ?? null,
-        livekitToken: extras.livekitToken ?? null,
-      },
-      isMuted: false,
-      isVideoOff: call.mediaType === 'audio',
-      isScreenSharing: false,
+    set((s) => {
+      const sameCall = s.activeCall?.callId === call.id;
+      return {
+        activeCall: {
+          callId: call.id,
+          conversationId: call.conversationId,
+          peerId: extras.peerId ?? s.activeCall?.peerId ?? 0,
+          peerName: extras.peerName ?? s.activeCall?.peerName ?? 'Участник',
+          peerAvatar: extras.peerAvatar ?? s.activeCall?.peerAvatar ?? '',
+          callType: call.mediaType,
+          isInitiator: extras.isInitiator ?? s.activeCall?.isInitiator ?? false,
+          status:
+            extras.status ??
+            (call.status === 'active' || call.status === 'waiting' ? 'active' : 'calling'),
+          callKind: call.type,
+          inviteUrl: call.inviteUrl ?? extras.inviteUrl ?? s.activeCall?.inviteUrl ?? null,
+          // Не затирать уже выданный токен при navigate на /call/:id
+          livekitUrl: extras.livekitUrl ?? (sameCall ? s.activeCall?.livekitUrl ?? null : null),
+          livekitToken: extras.livekitToken ?? (sameCall ? s.activeCall?.livekitToken ?? null : null),
+        },
+        isMuted: sameCall ? s.isMuted : false,
+        isVideoOff: sameCall ? s.isVideoOff : call.mediaType === 'audio',
+        isScreenSharing: sameCall ? s.isScreenSharing : false,
+      };
     }),
 }));
