@@ -25,6 +25,7 @@
     "dev:status": "bash ./scripts/dev-status.sh",
     "dev:logs": "bash ./scripts/dev-logs.sh",
     "prod:start": "docker compose up -d --build",
+    "prod:wire-supabase-media": "bash scripts/wire-local-supabase-media.sh",
     "prod:deploy": "docker compose -f docker-compose.yml -f docker-compose.prod.overlay.yml up -d --build",
     "prod:deploy:prebuilt": "docker compose -f docker-compose.yml -f docker-compose.prod.overlay.yml -f docker-compose.web-prebuilt.yml up -d --build",
     "prod:deploy:down": "docker compose -f docker-compose.yml -f docker-compose.prod.overlay.yml down",

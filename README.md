@@ -160,6 +160,13 @@ npm run server:update
 5. **HTTPS:** поставьте на хосте Caddy / Traefik / nginx с TLS и прокси на `127.0.0.1:<WEB_PORT>` (не публикуйте API напрямую в интернет).
 6. **Переменная `PORT` в `.env`** — это порт **на хосте**, который пробрасывается **в** контейнер на **40978**. Внутри контейнера Node всегда слушает **40978** (так устроен прокси в `docker/nginx-web.unified.conf`).
 7. **Portainer, одна БД снаружи (Supabase):** файл **`docker-compose.portainer.stack.yml`** — стек **API + веб** без Postgres; задайте `DATABASE_URL` и `WEB_PORT` в UI.
+8. **Медиа «Фото недоступно» (мессенджер / лента)** при self-hosted Supabase (Kong на `:8085`) на том же VPS:
+   ```bash
+   # Найдёт SERVICE_ROLE_KEY, пропишет SUPABASE_* / PUBLIC_WEB_ORIGIN, пересоздаст api+web
+   npm run prod:wire-supabase-media
+   ```
+   В Nginx Proxy Manager для `app.…` — только forward на `WEB_PORT` (8080), **без** Custom Locations `/api` `/uploads` `/sw.js`.  
+   Legacy-файлы с диска: если `uploads/` пуст — `CONFIRM_RESTORE=YES RESTORE_DB=0 RESTORE_SECRETS=0 bash scripts/restore.sh backups/<stamp>` (нужен `uploads.tar.gz`).
 
 ### 1) Подготовка переменных окружения
 
