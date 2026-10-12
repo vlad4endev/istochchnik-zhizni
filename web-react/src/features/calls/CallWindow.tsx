@@ -7,7 +7,7 @@ import {
   useConnectionState,
 } from '@livekit/components-react';
 import { ConnectionState, Track } from 'livekit-client';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { LuMic, LuMicOff, LuMonitorUp, LuPhoneOff, LuVideo, LuVideoOff } from 'react-icons/lu';
 
 import { emitAppToast } from '../../lib/uiFeedback';
@@ -183,7 +183,7 @@ function RoomStage({
   else if (connectionState === ConnectionState.Connected) statusLabel = formatDuration(elapsed);
   else if (connectionState === ConnectionState.Connecting) statusLabel = 'Подключение к серверу…';
   else if (connectionState === ConnectionState.Reconnecting) {
-    statusLabel = 'Переподключение… Проверьте UDP 7882, TCP 7881 и LIVEKIT_RTC_NODE_IP';
+    statusLabel = 'Переподключение…';
   } else if (connectionState === ConnectionState.Disconnected) {
     statusLabel = 'Нет соединения с сервером звонков';
   }
@@ -295,7 +295,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const closeCall = useCallStore((s) => s.closeCall);
   const setStatus = useCallStore((s) => s.setStatus);
   const setLiveKitCreds = useCallStore((s) => s.setLiveKitCreds);
-  const [creds, setCreds] = useState<CallTokenResponse | null>(
+  const [creds, setCreds] = useState<CallTokenResponse | null>(() =>
     activeCall.livekitToken && activeCall.livekitUrl
       ? {
           token: activeCall.livekitToken,
@@ -308,8 +308,19 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [lkConnected, setLkConnected] = useState(false);
+  const tokenInflight = useRef(false);
+  /** Стабильные props для LiveKitRoom — смена JWT иначе делает leave/rejoin. */
+  const roomTokenRef = useRef<string | null>(
+    activeCall.livekitToken && activeCall.livekitUrl ? activeCall.livekitToken : null,
+  );
+  const roomUrlRef = useRef<string | null>(
+    activeCall.livekitToken && activeCall.livekitUrl ? activeCall.livekitUrl : null,
+  );
 
   const videoEnabled = activeCall.callType === 'video';
+  const needsLiveKit =
+    activeCall.status === 'active' ||
+    (activeCall.callKind === 'group' && activeCall.status === 'calling');
 
   const hangup = useCallback(async () => {
     try {
@@ -347,49 +358,47 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     });
   }, [activeCall.callId, closeCall, setStatus]);
 
+  // Один запрос токена на звонок — без prefetch во время гудков (гонка → leave/rejoin).
   useEffect(() => {
-    if (activeCall.status !== 'active' && !(activeCall.callKind === 'group' && activeCall.status === 'calling')) {
+    if (!needsLiveKit) return;
+    if (roomTokenRef.current && roomUrlRef.current) {
+      setCreds((prev) =>
+        prev?.token
+          ? prev
+          : {
+              token: roomTokenRef.current!,
+              url: roomUrlRef.current!,
+              identity: '',
+              call: null as unknown as CallTokenResponse['call'],
+            },
+      );
       return;
     }
-    if (creds?.token) return;
+    if (tokenInflight.current) return;
+    tokenInflight.current = true;
     let cancelled = false;
     void (async () => {
       try {
         const t = await fetchCallToken(activeCall.callId);
         if (cancelled) return;
+        // Зафиксировать первый успешный JWT — повторный setCreds ломает LiveKitRoom.
+        if (roomTokenRef.current && roomUrlRef.current) return;
+        roomTokenRef.current = t.token;
+        roomUrlRef.current = t.url;
         setCreds(t);
         setLiveKitCreds(t.url, t.token);
-        setStatus('active');
+        if (activeCall.status !== 'active') setStatus('active');
       } catch (e) {
         if (cancelled) return;
         setTokenError(e instanceof Error ? e.message : 'Ошибка подключения');
+      } finally {
+        tokenInflight.current = false;
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [activeCall.callId, activeCall.callKind, activeCall.status, creds?.token, setLiveKitCreds, setStatus]);
-
-  useEffect(() => {
-    if (activeCall.callKind !== 'direct' || !activeCall.isInitiator || activeCall.status !== 'calling') {
-      return;
-    }
-    if (creds?.token) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const t = await fetchCallToken(activeCall.callId);
-        if (cancelled) return;
-        setCreds(t);
-        setLiveKitCreds(t.url, t.token);
-      } catch {
-        /* token on accept is enough */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeCall.callId, activeCall.callKind, activeCall.isInitiator, activeCall.status, creds?.token, setLiveKitCreds]);
+  }, [activeCall.callId, activeCall.status, needsLiveKit, setLiveKitCreds, setStatus]);
 
   // Timeout if stuck connecting (signal WSS)
   useEffect(() => {
@@ -406,6 +415,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     () => ({
       adaptiveStream: true,
       dynacast: true,
+      disconnectOnPageLeave: false,
     }),
     [],
   );
@@ -422,7 +432,9 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     );
   }
 
-  if (!creds?.token || !creds.url) {
+  const roomToken = roomTokenRef.current;
+  const roomUrl = roomUrlRef.current;
+  if (!roomToken || !roomUrl) {
     return (
       <CallShell onHangup={() => void hangup()} status="Получение доступа к комнате…">
         {null}
@@ -433,13 +445,14 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   return (
     <div className="call-window" role="dialog" aria-label="Активный звонок">
       <LiveKitRoom
-        token={creds.token}
-        serverUrl={creds.url}
+        key={activeCall.callId}
+        token={roomToken}
+        serverUrl={roomUrl}
         connect
         audio
         video={videoEnabled}
         options={roomOptions}
-        connectOptions={{ autoSubscribe: true }}
+        connectOptions={{ autoSubscribe: true, maxRetries: 3 }}
         onError={(e) => {
           const msg = mapDeviceError(e);
           setConnectError(msg);
@@ -454,7 +467,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         }}
         className="call-lk-room"
       >
-        <RoomStage callType={activeCall.callType} serverUrl={creds.url} connectError={connectError} />
+        <RoomStage callType={activeCall.callType} serverUrl={roomUrl} connectError={connectError} />
         <CallControls videoEnabled={videoEnabled} onHangup={() => void hangup()} />
       </LiveKitRoom>
     </div>
