@@ -184,11 +184,21 @@ export function mapDeviceError(err: unknown): string {
   if (name === 'NotAllowedError' || /permission|denied|NotAllowed/i.test(msg)) {
     return 'Нет доступа к микрофону или камере. Разрешите доступ в настройках браузера.';
   }
-  if (name === 'NotFoundError' || /not found|NotFound/i.test(msg)) {
+  if (name === 'NotFoundError' || /Device not found|NotFoundError/i.test(msg)) {
     return 'Устройство не найдено. Проверьте подключение микрофона или камеры.';
   }
   if (name === 'NotReadableError' || /in use|NotReadable/i.test(msg)) {
     return 'Устройство занято другим приложением.';
   }
-  return 'Не удалось получить доступ к устройствам.';
+  if (
+    /websocket|timed?\s*out|connection.*(fail|refus|reset|closed)|network|failed to fetch|503|502|504|ECONN|ENOTFOUND|server.*unreachable|could not establish/i.test(
+      msg,
+    )
+  ) {
+    return 'Нет связи с сервером звонков. Проверьте LiveKit (WSS /lk) и UDP-порты.';
+  }
+  if (/room|token|unauthorized|forbidden|401|403/i.test(msg)) {
+    return 'Нет доступа к комнате звонка. Попробуйте перезвонить.';
+  }
+  return msg.trim() ? msg : 'Не удалось подключиться к звонку.';
 }

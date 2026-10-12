@@ -31,7 +31,15 @@ async function main(): Promise<void> {
   assert.equal(getLiveKitPublicUrl(), 'wss://call.example.ru');
 
   delete process.env.LIVEKIT_PUBLIC_URL;
-  assert.equal(getLiveKitPublicUrl(), 'ws://livekit:7880');
+  process.env.PUBLIC_WEB_ORIGIN = 'https://app.example.ru';
+  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk');
+  delete process.env.PUBLIC_WEB_ORIGIN;
+
+  process.env.LIVEKIT_PUBLIC_URL = 'ws://livekit:7880';
+  process.env.PUBLIC_WEB_ORIGIN = 'https://app.example.ru';
+  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk');
+  delete process.env.LIVEKIT_PUBLIC_URL;
+  delete process.env.PUBLIC_WEB_ORIGIN;
 
   // restore
   for (const [k, v] of Object.entries(prev)) {

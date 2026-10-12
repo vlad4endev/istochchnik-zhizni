@@ -16,8 +16,9 @@
 ## Переменные окружения
 
 ```bash
-LIVEKIT_URL=http://livekit:7880          # внутренний URL для API
-LIVEKIT_PUBLIC_URL=wss://call.church-tambov.ru
+LIVEKIT_URL=http://livekit:7880          # внутренний URL для API (docker DNS)
+# Публичный WSS для браузера — тот же origin SPA + /lk (прокси в nginx-web.unified.conf):
+LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk
 LIVEKIT_API_KEY=...
 LIVEKIT_API_SECRET=...                   # только сервер
 CALLS_ENABLED=true
@@ -25,10 +26,10 @@ CALL_RING_TIMEOUT_SEC=60
 CALL_TOKEN_TTL_SEC=900
 CALL_INVITE_TTL_HOURS=24
 CALL_MAX_GROUP_PARTICIPANTS=50
-PUBLIC_WEB_ORIGIN=https://app.church-tambov.ru   # для абсолютных invite URL
+PUBLIC_WEB_ORIGIN=https://app.church-tambov.ru   # invite URL + fallback для LIVEKIT_PUBLIC_URL
 ```
 
-Frontend:
+Frontend (build-arg / `.env` при сборке образа `web`):
 
 ```bash
 VITE_CALLS_ENABLED=true
@@ -39,21 +40,23 @@ VITE_CALLS_ENABLED=true
 ## Docker
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build
 ```
 
 Образ зафиксирован: `livekit/livekit-server:v1.8.4` (см. `docker-compose.livekit-addon.yml`).
 
 Конфиг: `docker/livekit.yaml`.  
-Пример nginx WSS: `deploy/nginx-call.church-tambov.ru.example.conf`.
+WSS на том же домене SPA: location `/lk/` в `docker/nginx-web.unified.conf`.  
+Опционально отдельный хост: `deploy/nginx-call.church-tambov.ru.example.conf`.
 
 ### Сеть и DNS
 
-1. DNS: `call.church-tambov.ru` → IP сервера.
-2. HTTPS/WSS на 443 → `127.0.0.1:7880` (LiveKit signal).
-3. **UDP 50000–50100** и **TCP 7881** должны быть доступны из интернета для WebRTC.
+1. Браузер получает `LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk` → nginx web → `livekit:7880`.
+2. **UDP 50000–50100** и **TCP 7881** должны быть доступны из интернета для WebRTC (не через nginx HTTP).
+3. В `docker/livekit.yaml` включён `use_external_ip: true` (STUN). При необходимости задайте явный `node_ip`.
 4. Если сервер за **CGNAT**, проброс UDP с домашнего роутера не сработает — нужен VPS с белым IP, туннель или внешний TURN.
-5. Админский API LiveKit не выставляйте в интернет напрямую (порт 7880 на loopback).
+5. Порт 7880 только на loopback; снаружи — WSS через `/lk/`.
+6. В Permissions-Policy на edge должны быть `camera=(self), microphone=(self)` — иначе getUserMedia блокируется.
 
 ## API (кратко)
 

@@ -20,11 +20,21 @@ export function isLiveKitConfigured(): boolean {
 
 export function getLiveKitPublicUrl(): string {
   const pub = trimEnv('LIVEKIT_PUBLIC_URL');
-  if (pub) return pub.replace(/\/$/, '');
-  // Dev fallback: same host as internal URL with ws scheme
+  if (pub) {
+    const cleaned = pub.replace(/\/$/, '');
+    // Не отдаём клиенту docker-internal hostname
+    if (!/livekit:|127\.0\.0\.1|localhost/i.test(cleaned)) {
+      return cleaned;
+    }
+    console.warn('[livekit] LIVEKIT_PUBLIC_URL looks internal, falling back to PUBLIC_WEB_ORIGIN/lk');
+  }
+  const web = trimEnv('PUBLIC_WEB_ORIGIN').replace(/\/$/, '');
+  if (web.startsWith('https://')) return `${web.replace(/^https/, 'wss')}/lk`;
+  if (web.startsWith('http://')) return `${web.replace(/^http/, 'ws')}/lk`;
+  // Last resort — never return bare docker DNS to browsers
   const internal = trimEnv('LIVEKIT_URL');
-  if (internal.startsWith('http://')) return internal.replace(/^http/, 'ws');
   if (internal.startsWith('https://')) return internal.replace(/^https/, 'wss');
+  if (internal.startsWith('http://')) return internal.replace(/^http/, 'ws');
   return internal;
 }
 
