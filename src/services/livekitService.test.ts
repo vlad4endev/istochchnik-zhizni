@@ -51,9 +51,14 @@ async function main(): Promise<void> {
   delete process.env.LIVEKIT_PUBLIC_URL;
   delete process.env.PUBLIC_WEB_ORIGIN;
 
-  // Without PUBLIC_WEB_ORIGIN, keep external LIVEKIT_PUBLIC_URL
+  // Without PUBLIC_WEB_ORIGIN, rewrite legacy call.* → app.*/lk
   process.env.LIVEKIT_PUBLIC_URL = 'wss://call.example.ru';
-  assert.equal(getLiveKitPublicUrl(), 'wss://call.example.ru');
+  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk');
+  delete process.env.LIVEKIT_PUBLIC_URL;
+
+  // Non-call external host kept when no PUBLIC_WEB_ORIGIN
+  process.env.LIVEKIT_PUBLIC_URL = 'wss://lk.example.ru';
+  assert.equal(getLiveKitPublicUrl(), 'wss://lk.example.ru');
   delete process.env.LIVEKIT_PUBLIC_URL;
 
   // restore

@@ -33,6 +33,21 @@ function publicUrlFromWebOrigin(webOrigin: string): string | null {
   return null;
 }
 
+/** wss://call.example.ru → wss://app.example.ru/lk (отдельный call.* часто без DNS/nginx). */
+function rewriteLegacyCallHost(url: string): string | null {
+  try {
+    const httpish = url.replace(/^wss:/i, 'https:').replace(/^ws:/i, 'http:');
+    const u = new URL(httpish);
+    const host = u.hostname.toLowerCase();
+    if (!host.startsWith('call.')) return null;
+    const appHost = `app.${host.slice('call.'.length)}`;
+    const isSecure = /^wss:/i.test(url) || /^https:/i.test(url);
+    return `${isSecure ? 'wss' : 'ws'}://${appHost}/lk`;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * URL для браузера (LiveKitRoom serverUrl).
  * Предпочитаем same-origin `/lk` на PUBLIC_WEB_ORIGIN — отдельный call.* часто не настроен.
@@ -43,13 +58,19 @@ export function getLiveKitPublicUrl(): string {
   const pub = trimEnv('LIVEKIT_PUBLIC_URL').replace(/\/$/, '');
 
   if (pub) {
+    const rewrittenCall = rewriteLegacyCallHost(pub);
+    if (rewrittenCall) {
+      console.warn(`[livekit] rewriting legacy LIVEKIT_PUBLIC_URL ${pub} → ${rewrittenCall}`);
+      return fromWeb ?? rewrittenCall;
+    }
+
     const internal = /livekit:|127\.0\.0\.1|localhost/i.test(pub);
     if (internal) {
       console.warn('[livekit] LIVEKIT_PUBLIC_URL looks internal, falling back to PUBLIC_WEB_ORIGIN/lk');
     } else if (fromWeb) {
       const pubHost = originHost(pub);
       const webHost = originHost(web);
-      // wss://app…/lk — ок; wss://call… при PUBLIC_WEB_ORIGIN=https://app… — игнорируем call.*
+      // wss://app…/lk — ок; другой хост при заданном PUBLIC_WEB_ORIGIN — берём /lk
       if (pubHost && webHost && pubHost !== webHost) {
         console.warn(
           `[livekit] LIVEKIT_PUBLIC_URL host (${pubHost}) != PUBLIC_WEB_ORIGIN (${webHost}); using ${fromWeb}`,
