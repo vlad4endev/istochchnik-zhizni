@@ -58,6 +58,21 @@ WSS на том же домене SPA: location `/lk/` в `docker/nginx-web.unif
 5. Порт 7880 только на loopback; снаружи — WSS через `/lk/`.
 6. В Permissions-Policy на edge должны быть `camera=(self), microphone=(self)` — иначе getUserMedia блокируется.
 
+### Проверка, что `/lk` — это LiveKit, а не SPA
+
+```bash
+# Должно быть НЕ text/html и НЕ ~29KB index.html.
+# LiveKit на / обычно отвечает коротко (OK / JSON), не страницей React.
+curl -sI https://app.church-tambov.ru/lk/ | head -20
+curl -sI https://app.church-tambov.ru/lk/rtc | head -20
+
+# Из контейнера web → livekit по docker DNS:
+docker exec istochnik-web wget -qO- http://livekit:7880/ || true
+docker exec istochnik-web grep -A6 'location ^~ /lk/' /etc/nginx/conf.d/default.conf
+```
+
+Если снаружи снова `content-type: text/html` и большой `content-length` — образ `web` не пересобран или наружный OpenResty не проксирует в контейнер `web`.
+
 ## API (кратко)
 
 - `POST /api/calls` — `{ type: 'direct'|'group', mediaType, conversationId, recipientId? }`
