@@ -37,13 +37,17 @@ async function resolvePhotoVisionConfig(): Promise<{ base_url: string; api_key: 
     );
   }
   const base_url = cfg.base_url.replace(/\/+$/, '');
-  const models = buildPhotoModelCandidates(cfg.default_model);
+  const sectionModel =
+    typeof cfg.section_models.songbook === 'string' ? cfg.section_models.songbook.trim() : '';
+  const preferred = sectionModel || cfg.default_model;
+  const models = buildPhotoModelCandidates(preferred);
   if (process.env.AI_DEBUG === '1') {
     console.info('[songPhotoAi] vision config', {
       enabled: doc.enabled,
       connection_preset: doc.connection_preset,
       base_url,
       default_model: cfg.default_model,
+      section_model: sectionModel || null,
       models,
       has_api_key: Boolean(api_key),
     });

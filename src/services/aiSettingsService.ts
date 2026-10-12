@@ -7,9 +7,11 @@ import {
 } from '../types/aiConnectionPresets';
 import { AI_PROMPT_SCOPE_LIST, isAiPromptScopeId, type AiPromptScopeId } from '../types/aiPromptScopes';
 import {
+  type AiSectionModels,
   type AiSectionPrompts,
   type AiSettingsAdminView,
   type AiSettingsDocument,
+  buildSectionModelsAdminView,
   buildSectionPromptsAdminView,
   maskApiKey,
   normalizeAiSettingsDocument,
@@ -96,6 +98,7 @@ export async function getAiSettingsAdmin(): Promise<AiSettingsAdminView> {
     system_prompt: doc.system_prompt,
     prompt_scopes: AI_PROMPT_SCOPE_LIST.map((s) => ({ id: s.id, label: s.label })),
     section_prompts: buildSectionPromptsAdminView(doc),
+    section_models: buildSectionModelsAdminView(doc),
     temperature: doc.temperature,
     max_tokens: doc.max_tokens,
     gptunnel_assistant_code: assistantCode,
@@ -112,6 +115,8 @@ export interface AiSettingsPatch {
   system_prompt?: string | null;
   /** Частичное обновление промптов по разделам: ключ — id раздела, null/пустая строка — удалить */
   section_prompts?: Partial<Record<AiPromptScopeId, string | null>>;
+  /** Частичное обновление моделей по разделам: null/пустая строка — сбросить на default_model */
+  section_models?: Partial<Record<AiPromptScopeId, string | null>>;
   temperature?: number | null;
   max_tokens?: number | null;
   /** Код ассистента GPTunnel; null — сбросить */
@@ -185,6 +190,24 @@ export async function updateAiSettings(patch: AiSettingsPatch): Promise<AiSettin
     }
     next.section_prompts = merged;
   }
+  if (patch.section_models !== undefined && typeof patch.section_models === 'object') {
+    const merged: AiSectionModels = { ...next.section_models };
+    for (const key of Object.keys(patch.section_models) as AiPromptScopeId[]) {
+      const val = patch.section_models[key];
+      if (val === undefined) continue;
+      if (val === null) {
+        delete merged[key];
+      } else if (typeof val === 'string') {
+        const t = val.trim();
+        if (t.length > 0) {
+          merged[key] = t;
+        } else {
+          delete merged[key];
+        }
+      }
+    }
+    next.section_models = merged;
+  }
   if (patch.temperature !== undefined) {
     if (patch.temperature !== null && typeof patch.temperature === 'number') {
       next.temperature = patch.temperature;
@@ -217,6 +240,7 @@ export interface ResolvedLlmConfig {
   default_model: string;
   system_prompt: string | null;
   section_prompts: AiSectionPrompts;
+  section_models: AiSectionModels;
   temperature: number;
   max_tokens: number;
   gptunnel_assistant_code: string | null;
@@ -234,6 +258,23 @@ export function resolveEffectiveSystemPrompt(
     }
   }
   return cfg.system_prompt;
+}
+
+/**
+ * Модель для раздела: section_models[section] → иначе default_model.
+ * Глобальный AI_MODEL уже учтён в cfg.default_model.
+ */
+export function resolveModelForSection(
+  cfg: ResolvedLlmConfig,
+  section: string | undefined,
+): string {
+  if (section && isAiPromptScopeId(section)) {
+    const m = cfg.section_models[section];
+    if (typeof m === 'string' && m.trim().length > 0) {
+      return m.trim();
+    }
+  }
+  return cfg.default_model;
 }
 
 export async function resolveLlmRuntimeConfig(): Promise<ResolvedLlmConfig> {
@@ -256,8 +297,112 @@ export async function resolveLlmRuntimeConfig(): Promise<ResolvedLlmConfig> {
     default_model: modelFromEnv ?? doc.default_model,
     system_prompt: doc.system_prompt,
     section_prompts: doc.section_prompts,
+    section_models: doc.section_models,
     temperature: doc.temperature,
     max_tokens: doc.max_tokens,
     gptunnel_assistant_code: doc.gptunnel_assistant_code ?? envAssistantCode(),
   };
+}
+
+export type ProviderModelListItem = {
+  id: string;
+  label: string;
+  owned_by?: string | null;
+};
+
+/**
+ * Список моделей у OpenAI-совместимого провайдера (`GET {base_url}/models`).
+ * При ошибке возвращает каталог пресета как запасной вариант.
+ */
+export async function listProviderModels(): Promise<{
+  source: 'provider' | 'catalog';
+  models: ProviderModelListItem[];
+  error?: string;
+}> {
+  const cfg = await resolveLlmRuntimeConfig();
+  const doc = await loadAiSettingsDocument();
+  const catalogEntry =
+    doc.connection_preset !== 'custom'
+      ? AI_PRESET_CATALOG.find((p) => p.id === doc.connection_preset)
+      : undefined;
+  const catalogModels: ProviderModelListItem[] = (catalogEntry?.model_options ?? []).map((o) => ({
+    id: o.id,
+    label: o.label,
+    owned_by: null,
+  }));
+
+  if (!cfg.api_key) {
+    return {
+      source: 'catalog',
+      models: catalogModels,
+      error: 'Нет API-ключа — показаны модели из каталога пресета.',
+    };
+  }
+
+  const baseUrl = cfg.base_url.replace(/\/+$/, '');
+  const url = `${baseUrl}/models`;
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${cfg.api_key}`,
+      },
+    });
+    const rawText = await res.text();
+    if (!res.ok) {
+      return {
+        source: 'catalog',
+        models: catalogModels,
+        error: `Провайдер ответил ${res.status}. Показан каталог пресета.`,
+      };
+    }
+    let json: unknown;
+    try {
+      json = JSON.parse(rawText) as unknown;
+    } catch {
+      return {
+        source: 'catalog',
+        models: catalogModels,
+        error: 'Ответ /models не JSON — показан каталог пресета.',
+      };
+    }
+    const data = (json as { data?: unknown }).data;
+    if (!Array.isArray(data)) {
+      return {
+        source: 'catalog',
+        models: catalogModels,
+        error: 'Неожиданный формат /models — показан каталог пресета.',
+      };
+    }
+    const models: ProviderModelListItem[] = [];
+    const seen = new Set<string>();
+    for (const row of data) {
+      if (!row || typeof row !== 'object') continue;
+      const id = typeof (row as { id?: unknown }).id === 'string' ? (row as { id: string }).id.trim() : '';
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      const owned =
+        typeof (row as { owned_by?: unknown }).owned_by === 'string'
+          ? (row as { owned_by: string }).owned_by
+          : null;
+      models.push({ id, label: id, owned_by: owned });
+    }
+    models.sort((a, b) => a.id.localeCompare(b.id, 'en'));
+    if (models.length === 0) {
+      return {
+        source: 'catalog',
+        models: catalogModels,
+        error: 'Провайдер вернул пустой список — показан каталог пресета.',
+      };
+    }
+    return { source: 'provider', models };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      source: 'catalog',
+      models: catalogModels,
+      error: `Не удалось загрузить /models (${msg}). Показан каталог пресета.`,
+    };
+  }
 }
