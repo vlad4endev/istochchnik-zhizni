@@ -88,12 +88,13 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml ps
 docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs livekit --tail 80
 ```
 
-- `502` на `/lk/` / `curl 127.0.0.1:7880` connection refused → LiveKit не запустился. Частые причины:
-  1. `LIVEKIT_KEYS` без пробела после `:` (нужно `KEY: SECRET`) — смотрите `docker compose … logs livekit`
-  2. Пустые `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` в `.env`
-  3. Стек поднят без `docker-compose.livekit-addon.yml`  
+- `502`/`504` на `/lk/` / `curl 127.0.0.1:7880` connection refused → LiveKit не запустился. Частые причины:
+  1. В `docker/livekit.yaml` поля не из v1.8.4 (`advertise_internal_ip` / `skip_external_ip_validation`) → `could not parse config`
+  2. `LIVEKIT_KEYS` без пробела после `:` (нужно `KEY: SECRET`)
+  3. Пустые `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` в `.env` — `bash scripts/check-livekit-env.sh`
+  4. Стек без `docker-compose.livekit-addon.yml`  
   Поднять с **обоими** `-f`:  
-  `docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build --force-recreate livekit api web`
+  `docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --force-recreate livekit`
 - Сообщение UI «Сервис звонков временно недоступен» = API не смог `createRoom` (тот же 502 / LiveKit down / неверные ключи).
 - `text/html` ~29KB → старый образ web без location `/lk/`.
 - WSS ок, но «Переподключение…» / нет медиа → UDP **7882** + TCP **7881** + UDP **3478** + UDP **50100** на роутере + `userland-proxy: false`.
