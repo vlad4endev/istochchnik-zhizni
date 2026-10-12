@@ -50,8 +50,8 @@ services:
       PODCAST_RSS_HEALTH_HOST: ${PODCAST_RSS_HEALTH_HOST:-rss.castbox.fm}
       # LiveKit / звонки (секреты только на api; см. docker-compose.livekit-addon.yml)
       CALLS_ENABLED: ${CALLS_ENABLED:-false}
-      # bridge LiveKit (addon) → Docker DNS; см. docker-compose.livekit-addon.yml
-      LIVEKIT_URL: ${LIVEKIT_URL:-http://livekit:7880}
+      # host-network LiveKit → шлюз Docker; см. docker-compose.livekit-addon.yml
+      LIVEKIT_URL: ${LIVEKIT_URL:-http://host.docker.internal:7880}
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}

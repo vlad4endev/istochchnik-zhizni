@@ -16,8 +16,8 @@
 ## Переменные окружения
 
 ```bash
-# LiveKit в bridge-сети compose — Docker DNS:
-LIVEKIT_URL=http://livekit:7880
+# LiveKit host network — API/web через шлюз Docker:
+LIVEKIT_URL=http://host.docker.internal:7880
 # Публичный WSS для браузера — тот же origin SPA + /lk (прокси в nginx-web.unified.conf):
 LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk
 LIVEKIT_API_KEY=...
@@ -47,29 +47,27 @@ bash scripts/repair-livekit.sh      # recreate + curl :7880 и /lk
 docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build --force-recreate livekit api web
 ```
 
-Образ зафиксирован: `livekit/livekit-server:v1.8.4` (см. `docker-compose.livekit-addon.yml`).  
-Entrypoint: `docker/livekit-entrypoint.sh` (собирает `LIVEKIT_KEYS` с пробелом после `:`).
+Образ: `livekit/livekit-server:v1.13.9` (**host network**).  
+Entrypoint: `docker/livekit-entrypoint.sh`.
 
-Конфиг: `docker/livekit.yaml`.  
-WSS на том же домене SPA: location `/lk/` в `docker/nginx-web.unified.conf`.  
-Опционально отдельный хост: `deploy/nginx-call.church-tambov.ru.example.conf`.
+Конфиг: `docker/livekit.yaml`. WSS: `/lk/` в `nginx-web.unified.conf`.
 
 ### Сеть и DNS
 
-LiveKit в addon работает в **`network_mode: host`** (рекомендация LiveKit для Docker/NAT): UDP не идёт через docker-proxy, в ICE есть и белый IP, и LAN `192.168.x` (звонки в одной Wi‑Fi без hairpin).
+Host network + `advertise_internal_ip` / `skip_external_ip_validation`: ICE отдаёт белый IP и LAN. Signal: `host.docker.internal:7880` (repair открывает UFW с docker-сетей).
 
-1. Браузер: `LIVEKIT_PUBLIC_URL=wss://app…/lk` → nginx web → `livekit:7880` (Docker DNS).
-2. На роутере → LAN IP хоста (напр. `192.168.1.203`):
+1. Браузер: `wss://app…/lk` → nginx web → host `:7880`.
+2. Роутер → LAN хоста:
    | Порт | Протокол | Назначение |
    |------|----------|------------|
    | 7881 | TCP | ICE/TCP |
    | 7882 | UDP | ICE/UDP mux |
+   | 3478 | UDP | TURN |
+   | 50100 | UDP | TURN relay |
    | 7880 | — | **не открывать** |
-3. Хост: `"userland-proxy": false` + `deploy/sysctl-livekit.conf` → `/etc/sysctl.d/` + `sysctl --system`.
-4. Белый IP: `LIVEKIT_RTC_NODE_IP` → `NODE_IP` (`use_external_ip: false` в v1.8.4).
-5. TURN по умолчанию выключен в `docker/livekit.yaml`.
-6. CGNAT без белого IP → VPS или внешний TURN.
-7. Permissions-Policy: `camera=(self), microphone=(self)`.
+3. `"userland-proxy": false` + `deploy/sysctl-livekit.conf`.
+4. `LIVEKIT_RTC_NODE_IP` = белый IP.
+5. Permissions-Policy: `camera=(self), microphone=(self)`.
 
 ### Проверка, что `/lk` — это LiveKit, а не SPA
 
@@ -78,10 +76,9 @@ LiveKit в addon работает в **`network_mode: host`** (рекоменд�
 curl -sI https://app.church-tambov.ru/lk/ | head -20
 curl -s https://app.church-tambov.ru/lk/; echo
 
-# LiveKit на localhost (проброс 127.0.0.1:7880) и в Docker DNS:
 curl -sS http://127.0.0.1:7880/; echo
-docker exec istochnik-web wget -qO- -T 3 http://livekit:7880/; echo
-docker exec istochnik-api node -e "fetch('http://livekit:7880/').then(r=>r.text()).then(console.log)"
+docker exec istochnik-web wget -qO- -T 3 http://host.docker.internal:7880/; echo
+docker exec istochnik-api node -e "fetch('http://host.docker.internal:7880/').then(r=>r.text()).then(console.log)"
 
 docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml ps
 docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs livekit --tail 80

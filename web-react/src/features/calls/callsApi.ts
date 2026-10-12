@@ -195,7 +195,7 @@ export function mapDeviceError(err: unknown): string {
       msg,
     )
   ) {
-    return 'Нет связи с сервером звонков. Проверьте LiveKit (WSS /lk) и UDP-порты.';
+    return 'Нет связи с сервером звонков. Проверьте WSS /lk и на роутере TCP 7881, UDP 7882, UDP 3478, UDP 50100.';
   }
   if (/room|token|unauthorized|forbidden|401|403/i.test(msg)) {
     return 'Нет доступа к комнате звонка. Попробуйте перезвонить.';

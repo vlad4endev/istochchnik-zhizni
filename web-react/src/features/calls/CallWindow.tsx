@@ -407,14 +407,14 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     };
   }, [activeCall.callId, activeCall.status, needsLiveKit, setLiveKitCreds, setStatus]);
 
-  // Timeout if stuck connecting (signal WSS)
+  // LiveKit Room.connect ждёт и signal, и первый ICE (waitForPCInitialConnection).
   useEffect(() => {
     if (!creds?.token || !creds.url || connectError || lkConnected) return;
     const t = window.setTimeout(() => {
       setConnectError(
-        'Не удалось подключиться к серверу звонков. Проверьте LiveKit (WSS /lk и UDP-порты).',
+        'Нет медиа-связи (ICE). Проверьте на роутере TCP 7881, UDP 7882, UDP 3478, UDP 50100 и WSS /lk.',
       );
-    }, 18_000);
+    }, 32_000);
     return () => window.clearTimeout(t);
   }, [creds?.token, creds?.url, connectError, lkConnected]);
 
