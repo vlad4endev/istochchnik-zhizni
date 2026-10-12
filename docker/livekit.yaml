@@ -20,15 +20,16 @@ rtc:
     allow_pause: true
 
 # Встроенный TURN: если прямой UDP/TCP ICE рвётся, клиент идёт через relay.
-# Роутер → хост: UDP 3478 + UDP 50100–50119
+# Роутер (по одному правилу, без диапазонов):
+#   UDP 3478 → 3478, UDP 50100 → 50100
 turn:
   enabled: true
   domain: app.church-tambov.ru
   udp_port: 3478
+  # Один порт — роутеры без «диапазона» принимают только так.
   relay_range_start: 50100
-  relay_range_end: 50119
-  # Без TLS-сертификата для TURN — только UDP TURN (достаточно для домашнего NAT).
-  # TURN/TLS (443) можно добавить позже с отдельным доменом turn.* и cert/key.
+  relay_range_end: 50100
+  # Без TLS — только UDP TURN (для домашнего NAT достаточно).
 
 room:
   empty_timeout: 900

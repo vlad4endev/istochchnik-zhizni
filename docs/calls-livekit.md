@@ -60,7 +60,7 @@ LiveKit в addon работает в **`network_mode: host`** (рекоменд�
    | 7881 | TCP | ICE/TCP |
    | 7882 | UDP | ICE/UDP mux |
    | 3478 | UDP | TURN |
-   | 50100–50119 | UDP | TURN relay |
+   | 50100 | UDP | TURN relay (один порт, без диапазона) |
    | 7880 | — | **не открывать** |
 3. Хост: `"userland-proxy": false` + `deploy/sysctl-livekit.conf` → `/etc/sysctl.d/` + `sysctl --system`.
 4. Встроенный TURN (`turn.enabled` в `docker/livekit.yaml`, domain=`app.church-tambov.ru`).
