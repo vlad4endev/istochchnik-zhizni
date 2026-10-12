@@ -79,6 +79,18 @@ npm run prod:deploy:prebuilt
 npm run push:vapid
 ```
 
+### Аудио/видеозвонки (LiveKit)
+
+Self-hosted LiveKit + API жизненного цикла. Подробно: [`docs/calls-livekit.md`](docs/calls-livekit.md).
+
+```bash
+# В .env: LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_PUBLIC_URL, CALLS_ENABLED=true
+# Frontend: VITE_CALLS_ENABLED=true
+docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d
+```
+
+Нужны DNS `call.church-tambov.ru` (WSS), открытые **UDP 50000–50100** и TCP **7881**. За CGNAT медиа из интернета не заработает без внешнего TURN/VPS. Секреты `LIVEKIT_API_*` только на сервере.
+
 Альтернатива:
 
 ```bash

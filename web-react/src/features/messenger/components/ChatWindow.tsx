@@ -19,13 +19,10 @@ import {
   isAssistantBotMessage,
   isAssistantMessengerChannel,
 } from '../messengerChannelKinds';
-import { isAppAdministratorRole } from '../manage/messengerManageAccess';
 import { useCallStore } from '../../calls/callStore';
 import { requestCallNotificationsFromUserGesture } from '../../calls/incomingCallBackground';
-import { sendRealtimeJson } from '../../../lib/realtimeWsClient';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { useAuthStore } from '../../auth/authStore';
-import { randomUuid } from '../../../lib/randomId';
 import {
   clearChatScrollAnchor,
   readChatScrollAnchor,
@@ -160,8 +157,7 @@ export function ChatWindow({
     [chatMeta?.metadata, conv?.metadata],
   );
 
-  /** Пока звонки разрешены только администратору приложения — кнопка только в личке с admin. */
-  const canShowPrivateCallToAdmin = useMemo(() => {
+  const canShowDirectCall = useMemo(() => {
     if (!CALLS_FEATURE_ENABLED) return false;
     if (
       isDraft ||
@@ -173,8 +169,13 @@ export function ChatWindow({
     ) {
       return false;
     }
-    const om = conv.other_member;
-    return isAppAdministratorRole(om.app_role ?? null, om.app_roles ?? null);
+    return true;
+  }, [conv, isAccessRequestsChannel, isAssistantChannel, isDraft]);
+
+  const canShowGroupCall = useMemo(() => {
+    if (!CALLS_FEATURE_ENABLED) return false;
+    if (isDraft || !conv || isAccessRequestsChannel || isAssistantChannel) return false;
+    return conv.type === 'group' || conv.type === 'channel';
   }, [conv, isAccessRequestsChannel, isAssistantChannel, isDraft]);
 
   useEffect(() => {
@@ -995,36 +996,66 @@ export function ChatWindow({
         return;
       }
       if (isDraft || isAccessRequestsChannel) return;
-      if (conv?.type !== 'private' || !conv.other_member) return;
-      if (!isAppAdministratorRole(conv.other_member.app_role ?? null, conv.other_member.app_roles ?? null)) {
-        return;
-      }
       requestCallNotificationsFromUserGesture();
-      const callId = randomUuid();
-      const sent = sendRealtimeJson({
-        type: 'call:initiate',
-        callId,
-        receiverId: conv.other_member.id,
-        conversationId,
-        callType,
-      });
-      if (!sent) {
-        emitAppToast('Нет подключения к серверу. Повторите звонок через пару секунд.', 'error');
-        return;
-      }
-      const fn = conv.other_member.first_name || '';
-      const ln = conv.other_member.last_name || '';
-      const peerName = `${fn} ${ln}`.trim() || conv.other_member.name;
-      const peerAvatar = conv.other_member.avatar_url ?? '';
-      useCallStore.getState().openCall({
-        callId,
-        conversationId,
-        peerId: conv.other_member.id,
-        peerName,
-        peerAvatar,
-        callType,
-        isInitiator: true,
-      });
+
+      void (async () => {
+        try {
+          if (conv?.type === 'private' && conv.other_member) {
+            const { createDirectCall } = await import('../../calls/callsApi');
+            const call = await createDirectCall({
+              conversationId,
+              recipientId: conv.other_member.id,
+              mediaType: callType,
+            });
+            const fn = conv.other_member.first_name || '';
+            const ln = conv.other_member.last_name || '';
+            const peerName = `${fn} ${ln}`.trim() || conv.other_member.name;
+            const peerAvatar = conv.other_member.avatar_url ?? '';
+            useCallStore.getState().openCall({
+              callId: call.id,
+              conversationId,
+              peerId: conv.other_member.id,
+              peerName,
+              peerAvatar,
+              callType,
+              isInitiator: true,
+              status: 'calling',
+              callKind: 'direct',
+            });
+            return;
+          }
+          if (conv && (conv.type === 'group' || conv.type === 'channel')) {
+            const { createGroupCall } = await import('../../calls/callsApi');
+            const call = await createGroupCall({
+              conversationId,
+              mediaType: callType,
+              accessMode: 'closed',
+            });
+            useCallStore.getState().openCall({
+              callId: call.id,
+              conversationId,
+              peerId: 0,
+              peerName: conv.title?.trim() || 'Конференция',
+              peerAvatar: conv.avatar_url ?? '',
+              callType,
+              isInitiator: true,
+              status: 'active',
+              callKind: 'group',
+              inviteUrl: call.inviteUrl,
+            });
+            if (call.inviteUrl) {
+              try {
+                await navigator.clipboard.writeText(call.inviteUrl);
+                emitAppToast('Ссылка-приглашение скопирована', 'success');
+              } catch {
+                emitAppToast('Конференция создана. Скопируйте ссылку в окне звонка.', 'info');
+              }
+            }
+          }
+        } catch (e) {
+          emitAppToast(e instanceof Error ? e.message : 'Не удалось начать звонок', 'error');
+        }
+      })();
     },
     [conversationId, conv, isAccessRequestsChannel, isDraft],
   );
@@ -1207,13 +1238,13 @@ export function ChatWindow({
                     ↓
                   </button>
                 ) : null}
-                {!isDraft && canShowPrivateCallToAdmin ? (
+                {!isDraft && (canShowDirectCall || canShowGroupCall) ? (
                   <div className="relative" ref={callHeaderMenuRef}>
                     <button
                       type="button"
                       onClick={() => setCallHeaderMenuOpen((v) => !v)}
-                      aria-label="Позвонить"
-                      title="Позвонить"
+                      aria-label={canShowGroupCall ? 'Начать звонок' : 'Позвонить'}
+                      title={canShowGroupCall ? 'Начать звонок' : 'Позвонить'}
                       aria-haspopup="menu"
                       aria-expanded={callHeaderMenuOpen}
                       className={[
@@ -1230,9 +1261,6 @@ export function ChatWindow({
                         role="menu"
                         className="tg-chat-header-call-menu absolute right-0 top-[calc(100%+6px)] z-[220] min-w-[12.5rem] overflow-hidden rounded-2xl border border-stone-200/90 bg-[var(--surface-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.12)] dark:border-white/[0.1] dark:shadow-[0_16px_48px_rgba(0,0,0,0.45)]"
                       >
-                        <p className="px-3.5 pb-1.5 pt-0.5 text-[11px] font-medium leading-snug text-[var(--text-secondary)]">
-                          Звонок доступен только администратору церкви.
-                        </p>
                         <button
                           type="button"
                           role="menuitem"
@@ -1246,7 +1274,9 @@ export function ChatWindow({
                             <LuPhone className="h-[18px] w-[18px]" strokeWidth={2.25} aria-hidden />
                           </span>
                           <span className="min-w-0">
-                            <span className="block leading-tight">Аудиозвонок</span>
+                            <span className="block leading-tight">
+                              {canShowGroupCall ? 'Начать аудиозвонок' : 'Аудиозвонок'}
+                            </span>
                             <span className="mt-0.5 block text-xs font-medium text-[var(--text-secondary)]">
                               Только голос
                             </span>
@@ -1265,7 +1295,9 @@ export function ChatWindow({
                             <LuVideo className="h-[18px] w-[18px]" strokeWidth={2.25} aria-hidden />
                           </span>
                           <span className="min-w-0">
-                            <span className="block leading-tight">Видеозвонок</span>
+                            <span className="block leading-tight">
+                              {canShowGroupCall ? 'Начать видеозвонок' : 'Видеозвонок'}
+                            </span>
                             <span className="mt-0.5 block text-xs font-medium text-[var(--text-secondary)]">
                               С камерой
                             </span>

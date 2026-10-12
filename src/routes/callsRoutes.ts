@@ -1,6 +1,21 @@
 import { Router, type Request, type Response } from 'express';
 
 import { requireAuthSession } from '../middleware/authSession';
+import { createMemberIdRateLimiter } from '../middleware/rateLimit';
+import {
+  acceptCallHandler,
+  callHistoryHandler,
+  callTokenHandler,
+  cancelCallHandler,
+  createCallHandler,
+  createInvitationHandler,
+  declineCallHandler,
+  endCallHandler,
+  getCallHandler,
+  invitationJoinHandler,
+  invitationPreviewHandler,
+  revokeInvitationHandler,
+} from '../controllers/callsController';
 
 const router = Router();
 
@@ -34,7 +49,18 @@ async function fetchMeteredIceServers(domain: string, apiKey: string): Promise<I
   }
 }
 
-// GET /api/calls/ice-servers
+const createCallLimiter = createMemberIdRateLimiter({
+  windowMs: 60_000,
+  maxRequests: 10,
+  keyPrefix: 'calls-create',
+  message: 'Слишком много звонков. Подождите немного.',
+  resolveMemberId: (req) => {
+    const id = (req as Request & { authUserId?: number }).authUserId;
+    return typeof id === 'number' && Number.isFinite(id) ? id : null;
+  },
+});
+
+// Legacy ICE helper (optional Metered TURN) — not required for LiveKit media path.
 router.get('/ice-servers', requireAuthSession, async (_req: Request, res: Response) => {
   try {
     const apiKey = String(process.env.METERED_API_KEY ?? '').trim();
@@ -53,5 +79,20 @@ router.get('/ice-servers', requireAuthSession, async (_req: Request, res: Respon
     res.json({ iceServers: FALLBACK_ICE_SERVERS });
   }
 });
+
+router.get('/history', requireAuthSession, callHistoryHandler);
+router.post('/', requireAuthSession, createCallLimiter, createCallHandler);
+router.get('/:callId', requireAuthSession, getCallHandler);
+router.post('/:callId/accept', requireAuthSession, acceptCallHandler);
+router.post('/:callId/decline', requireAuthSession, declineCallHandler);
+router.post('/:callId/cancel', requireAuthSession, cancelCallHandler);
+router.post('/:callId/end', requireAuthSession, endCallHandler);
+router.post('/:callId/token', requireAuthSession, callTokenHandler);
+router.post('/:callId/invitations', requireAuthSession, createInvitationHandler);
+router.delete('/:callId/invitations/:invitationId', requireAuthSession, revokeInvitationHandler);
+
+export const callInvitationsRouter = Router();
+callInvitationsRouter.get('/:token', invitationPreviewHandler);
+callInvitationsRouter.post('/:token/join', requireAuthSession, invitationJoinHandler);
 
 export default router;

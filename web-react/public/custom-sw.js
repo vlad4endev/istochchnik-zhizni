@@ -68,12 +68,24 @@ self.addEventListener('push', function (event) {
     data: {
       url: data.url || '/',
       conversationId: data.conversationId != null ? data.conversationId : null,
+      callId: data.callId != null && data.callId !== '' ? String(data.callId) : null,
       deliveryId: data.deliveryId != null && data.deliveryId !== '' ? String(data.deliveryId) : null,
       assignmentId: data.assignmentId != null && data.assignmentId !== '' ? String(data.assignmentId) : null,
       pushType: data.type || null,
     },
-    vibrate: [200, 100, 200],
+    vibrate:
+      data.type === 'incoming_call'
+        ? [200, 100, 200, 100, 200, 100, 400]
+        : [200, 100, 200],
+    requireInteraction: data.type === 'incoming_call' ? true : undefined,
   };
+
+  if (data.type === 'incoming_call' && (!options.actions || !options.actions.length)) {
+    options.actions = [
+      { action: 'call_accept', title: 'Принять' },
+      { action: 'call_decline', title: 'Отклонить' },
+    ];
+  }
 
   const rawBadge = data.badgeCount;
   const parsedBadge =
@@ -185,6 +197,26 @@ self.addEventListener('notificationclick', function (event) {
         }).catch(function () {}),
       );
       return;
+    }
+  }
+
+  // Входящий звонок: действия открывают экран звонка (mic/cam запрашиваются уже в UI).
+  if (event.action === 'call_accept' || event.action === 'call_decline' || event.notification?.data?.pushType === 'incoming_call') {
+    const callId = event.notification?.data?.callId;
+    if (callId) {
+      const callPath =
+        event.action === 'call_decline'
+          ? '/call/' + encodeURIComponent(callId) + '?decline=1'
+          : '/call/' + encodeURIComponent(callId);
+      try {
+        const candidate = new URL(callPath, self.location.origin);
+        if (candidate.origin === self.location.origin) {
+          event.notification.data = event.notification.data || {};
+          event.notification.data.url = candidate.pathname + candidate.search;
+        }
+      } catch (e) {
+        /* ignore */
+      }
     }
   }
 

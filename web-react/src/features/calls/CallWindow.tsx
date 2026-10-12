@@ -1,386 +1,368 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { LuMic, LuMicOff, LuMonitor, LuPhoneOff, LuVideo, LuVideoOff } from 'react-icons/lu';
+import {
+  LiveKitRoom,
+  RoomAudioRenderer,
+  useTracks,
+  VideoTrack,
+  useLocalParticipant,
+  useConnectionState,
+} from '@livekit/components-react';
+import { ConnectionState, Track } from 'livekit-client';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { LuMic, LuMicOff, LuMonitorUp, LuPhoneOff, LuVideo, LuVideoOff } from 'react-icons/lu';
 
-import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
-import { sendRealtimeJson, subscribeRealtimeMessages } from '../../lib/realtimeWsClient';
 import { emitAppToast } from '../../lib/uiFeedback';
+import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
+import { subscribeRealtimeMessages } from '../../lib/realtimeWsClient';
 
+import {
+  cancelCall,
+  endCall,
+  fetchCallToken,
+  mapDeviceError,
+  type CallTokenResponse,
+} from './callsApi';
 import { useCallStore, type ActiveCallState } from './callStore';
-import { useWebRTC } from './useWebRTC';
 import './calls.css';
+import '@livekit/components-styles';
 
-function formatDuration(s: number): string {
-  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+function formatDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function CallControls({
+  videoEnabled,
+  onHangup,
+}: {
+  videoEnabled: boolean;
+  onHangup: () => void;
+}) {
+  const { localParticipant } = useLocalParticipant();
+  const isMuted = useCallStore((s) => s.isMuted);
+  const isVideoOff = useCallStore((s) => s.isVideoOff);
+  const isScreenSharing = useCallStore((s) => s.isScreenSharing);
+  const setMuted = useCallStore((s) => s.setMuted);
+  const setVideoOff = useCallStore((s) => s.setVideoOff);
+  const setScreenSharing = useCallStore((s) => s.setScreenSharing);
+
+  const toggleMic = useCallback(async () => {
+    try {
+      const next = !isMuted;
+      await localParticipant.setMicrophoneEnabled(!next);
+      setMuted(next);
+    } catch (e) {
+      emitAppToast(mapDeviceError(e), 'error');
+    }
+  }, [isMuted, localParticipant, setMuted]);
+
+  const toggleCam = useCallback(async () => {
+    if (!videoEnabled) return;
+    try {
+      const next = !isVideoOff;
+      await localParticipant.setCameraEnabled(!next);
+      setVideoOff(next);
+    } catch (e) {
+      emitAppToast(mapDeviceError(e), 'error');
+    }
+  }, [isVideoOff, localParticipant, setVideoOff, videoEnabled]);
+
+  const toggleScreen = useCallback(async () => {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      emitAppToast('Демонстрация экрана недоступна на этом устройстве', 'info');
+      return;
+    }
+    try {
+      if (isScreenSharing) {
+        await localParticipant.setScreenShareEnabled(false);
+        setScreenSharing(false);
+      } else {
+        await localParticipant.setScreenShareEnabled(true);
+        setScreenSharing(true);
+      }
+    } catch (e) {
+      emitAppToast(mapDeviceError(e), 'error');
+      setScreenSharing(false);
+    }
+  }, [isScreenSharing, localParticipant, setScreenSharing]);
+
+  return (
+    <div className="call-controls">
+      <button type="button" className="call-ctrl-btn" onClick={() => void toggleMic()} aria-label={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}>
+        {isMuted ? <LuMicOff size={22} /> : <LuMic size={22} />}
+      </button>
+      {videoEnabled ? (
+        <button type="button" className="call-ctrl-btn" onClick={() => void toggleCam()} aria-label={isVideoOff ? 'Включить камеру' : 'Выключить камеру'}>
+          {isVideoOff ? <LuVideoOff size={22} /> : <LuVideo size={22} />}
+        </button>
+      ) : null}
+      <button type="button" className="call-ctrl-btn" onClick={() => void toggleScreen()} aria-label="Демонстрация экрана">
+        <LuMonitorUp size={22} />
+      </button>
+      <button type="button" className="call-ctrl-btn call-ctrl-btn--hangup" onClick={onHangup} aria-label="Завершить">
+        <LuPhoneOff size={22} />
+      </button>
+    </div>
+  );
+}
+
+function RoomStage({ callType }: { callType: 'audio' | 'video' }) {
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { onlySubscribed: false },
+  );
+  const connectionState = useConnectionState();
+  const peerName = useCallStore((s) => s.activeCall?.peerName ?? 'Собеседник');
+  const peerAvatar = useCallStore((s) => s.activeCall?.peerAvatar ?? '');
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const t = window.setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  const remoteVideo = tracks.find(
+    (t) => !t.participant.isLocal && t.publication?.kind === Track.Kind.Video && t.publication?.isSubscribed,
+  );
+  const localVideo = tracks.find(
+    (t) => t.participant.isLocal && t.source === Track.Source.Camera && t.publication,
+  );
+
+  const avatarSrc = peerAvatar ? resolvePublicUrl(peerAvatar) : undefined;
+  const statusLabel =
+    connectionState === ConnectionState.Connected
+      ? formatDuration(elapsed)
+      : connectionState === ConnectionState.Connecting
+        ? 'Подключение…'
+        : connectionState === ConnectionState.Reconnecting
+          ? 'Переподключение…'
+          : 'Соединение…';
+
+  return (
+    <div className="call-stage">
+      <div className="call-stage__main">
+        {callType === 'video' && remoteVideo?.publication ? (
+          <VideoTrack trackRef={remoteVideo} className="call-stage__remote-video" />
+        ) : (
+          <div className="call-stage__avatar-block">
+            {avatarSrc ? (
+              <img src={avatarSrc} alt="" className="call-stage__avatar" />
+            ) : (
+              <div className="call-stage__avatar call-stage__avatar--placeholder" aria-hidden />
+            )}
+            <p className="call-stage__name">{peerName}</p>
+          </div>
+        )}
+        {callType === 'video' && localVideo?.publication ? (
+          <div className="call-stage__local-pip">
+            <VideoTrack trackRef={localVideo} className="call-stage__local-video" />
+          </div>
+        ) : null}
+      </div>
+      <p className="call-stage__status">{statusLabel}</p>
+      <RoomAudioRenderer />
+    </div>
+  );
+}
+
+function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; onCancel: () => void }) {
+  const avatarSrc = activeCall.peerAvatar ? resolvePublicUrl(activeCall.peerAvatar) : undefined;
+  return (
+    <div className="call-window call-window--ringing" role="dialog" aria-label="Исходящий звонок">
+      <div className="call-stage__avatar-block">
+        {avatarSrc ? (
+          <img src={avatarSrc} alt="" className="call-stage__avatar" />
+        ) : (
+          <div className="call-stage__avatar call-stage__avatar--placeholder" aria-hidden />
+        )}
+        <p className="call-stage__name">{activeCall.peerName}</p>
+        <p className="call-stage__status">
+          {activeCall.callType === 'video' ? 'Видеозвонок…' : 'Вызов…'}
+        </p>
+      </div>
+      {activeCall.inviteUrl ? (
+        <button
+          type="button"
+          className="call-invite-copy"
+          onClick={() => {
+            void navigator.clipboard.writeText(activeCall.inviteUrl!).then(
+              () => emitAppToast('Ссылка скопирована', 'success'),
+              () => emitAppToast('Не удалось скопировать ссылку', 'error'),
+            );
+          }}
+        >
+          Скопировать ссылку-приглашение
+        </button>
+      ) : null}
+      <div className="call-controls">
+        <button type="button" className="call-ctrl-btn call-ctrl-btn--hangup" onClick={onCancel} aria-label="Отменить">
+          <LuPhoneOff size={22} />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const closeCall = useCallStore((s) => s.closeCall);
   const setStatus = useCallStore((s) => s.setStatus);
-  const isMuted = useCallStore((s) => s.isMuted);
-  const isVideoOff = useCallStore((s) => s.isVideoOff);
-  const isScreenSharing = useCallStore((s) => s.isScreenSharing);
-  const isPeerVideoOff = useCallStore((s) => s.isPeerVideoOff);
-  const isPeerMuted = useCallStore((s) => s.isPeerMuted);
-  const setMuted = useCallStore((s) => s.setMuted);
-  const setVideoOff = useCallStore((s) => s.setVideoOff);
-  const setScreenSharing = useCallStore((s) => s.setScreenSharing);
-  const setPeerVideoOff = useCallStore((s) => s.setPeerVideoOff);
-  const setPeerMuted = useCallStore((s) => s.setPeerMuted);
-
-  const [duration, setDuration] = useState(0);
-  const [connectionState, setConnectionState] = useState<
-    'connecting' | 'connected' | 'reconnecting' | 'failed'
-  >('connecting');
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement>(null);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const reconnectFailTimerRef = useRef<number | null>(null);
-  const connectionStateRef = useRef(connectionState);
-  const iceFailureHandledRef = useRef(false);
-
-  useEffect(() => {
-    connectionStateRef.current = connectionState;
-  }, [connectionState]);
-
-  useEffect(() => {
-    setConnectionState('connecting');
-    connectionStateRef.current = 'connecting';
-    iceFailureHandledRef.current = false;
-    if (reconnectFailTimerRef.current != null) {
-      window.clearTimeout(reconnectFailTimerRef.current);
-      reconnectFailTimerRef.current = null;
-    }
-  }, [activeCall.callId]);
-
-  useEffect(() => {
-    return () => {
-      if (reconnectFailTimerRef.current != null) {
-        window.clearTimeout(reconnectFailTimerRef.current);
-        reconnectFailTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  const onCallEnded = useCallback(() => {
-    closeCall();
-  }, [closeCall]);
-
-  const markIceFailedAndClose = useCallback(
-    (message: string) => {
-      if (iceFailureHandledRef.current) return;
-      iceFailureHandledRef.current = true;
-      setConnectionState('failed');
-      connectionStateRef.current = 'failed';
-      emitAppToast(message, 'error');
-      sendRealtimeJson({ type: 'call:end', callId: activeCall.callId, reason: 'ice_failed' });
-      closeCall();
-    },
-    [activeCall.callId, closeCall],
+  const setLiveKitCreds = useCallStore((s) => s.setLiveKitCreds);
+  const [creds, setCreds] = useState<CallTokenResponse | null>(
+    activeCall.livekitToken && activeCall.livekitUrl
+      ? {
+          token: activeCall.livekitToken,
+          url: activeCall.livekitUrl,
+          identity: '',
+          call: null as unknown as CallTokenResponse['call'],
+        }
+      : null,
   );
+  const [tokenError, setTokenError] = useState<string | null>(null);
 
-  const { start, toggleAudio, toggleVideo, startScreenShare, stopScreenShare, endCall, cleanupLocal, localStreamRef } =
-    useWebRTC({
-      callId: activeCall.callId,
-      isInitiator: activeCall.isInitiator,
-      callType: activeCall.callType,
-      onRemoteStream: (stream) => {
-        const videoEl = remoteVideoRef.current;
-        const audioEl = remoteAudioRef.current;
-        if (activeCall.callType === 'video') {
-          if (videoEl) videoEl.srcObject = stream;
-          if (audioEl) audioEl.srcObject = null;
-        } else {
-          if (audioEl) audioEl.srcObject = stream;
-          if (videoEl) videoEl.srcObject = null;
-        }
-        setStatus('active');
-      },
-      onCallEnded,
-      onIceStateChange: (state) => {
-        if (state === 'connected' || state === 'completed') {
-          if (reconnectFailTimerRef.current != null) {
-            window.clearTimeout(reconnectFailTimerRef.current);
-            reconnectFailTimerRef.current = null;
-          }
-          setConnectionState('connected');
-          connectionStateRef.current = 'connected';
-          return;
-        }
+  const videoEnabled = activeCall.callType === 'video';
 
-        if (state === 'disconnected') {
-          setConnectionState('reconnecting');
-          connectionStateRef.current = 'reconnecting';
-          if (reconnectFailTimerRef.current != null) {
-            window.clearTimeout(reconnectFailTimerRef.current);
-          }
-          reconnectFailTimerRef.current = window.setTimeout(() => {
-            reconnectFailTimerRef.current = null;
-            if (connectionStateRef.current !== 'connected') {
-              setConnectionState('failed');
-              connectionStateRef.current = 'failed';
-              emitAppToast('Соединение прервано', 'error');
-            }
-          }, 3000);
-          return;
-        }
-
-        if (state === 'failed') {
-          if (reconnectFailTimerRef.current != null) {
-            window.clearTimeout(reconnectFailTimerRef.current);
-            reconnectFailTimerRef.current = null;
-          }
-          markIceFailedAndClose('Не удалось установить соединение. Попробуйте снова.');
-          return;
-        }
-
-        if (state === 'checking' || state === 'new') {
-          setConnectionState('connecting');
-          connectionStateRef.current = 'connecting';
-        }
-      },
-    });
-
-  const { callId, isInitiator, callType } = activeCall;
+  const hangup = useCallback(async () => {
+    try {
+      if (activeCall.status === 'calling' && activeCall.isInitiator) {
+        await cancelCall(activeCall.callId);
+      } else {
+        await endCall(activeCall.callId);
+      }
+    } catch {
+      /* ignore */
+    }
+    closeCall();
+  }, [activeCall.callId, activeCall.isInitiator, activeCall.status, closeCall]);
 
   useEffect(() => {
-    const attachLocal = (): void => {
-      const stream = localStreamRef.current;
-      if (callType === 'video' && localVideoRef.current && stream) {
-        localVideoRef.current.srcObject = stream;
+    return subscribeRealtimeMessages((raw) => {
+      const m = raw as { type?: string; callId?: string; reason?: string };
+      if (String(m.callId ?? '') !== activeCall.callId) return;
+      if (m.type === 'call:accepted') {
+        setStatus('active');
       }
-    };
-
-    const startCallMedia = async () => {
-      try {
-        await start();
-        attachLocal();
-      } catch {
-        emitAppToast('Не удалось получить доступ к камере/микрофону', 'error');
-        cleanupLocal();
-        sendRealtimeJson({ type: 'call:end', callId, reason: 'media_error' });
+      if (
+        m.type === 'call:ended' ||
+        m.type === 'call:rejected' ||
+        m.type === 'call:cancelled' ||
+        m.type === 'call:error'
+      ) {
+        if (m.type === 'call:rejected') emitAppToast('Звонок отклонён', 'info');
+        if (m.type === 'call:cancelled') emitAppToast('Звонок отменён', 'info');
+        if (m.type === 'call:ended' && m.reason === 'no_answer') {
+          emitAppToast('Абонент не ответил', 'info');
+        }
         closeCall();
       }
-    };
+    });
+  }, [activeCall.callId, closeCall, setStatus]);
 
-    if (!isInitiator) {
-      void startCallMedia();
+  useEffect(() => {
+    if (activeCall.status !== 'active' && !(activeCall.callKind === 'group' && activeCall.status === 'calling')) {
       return;
     }
-
-    const unsub = subscribeRealtimeMessages((raw) => {
-      const m = raw as { type?: string; callId?: string };
-      if (m.type === 'call:accepted' && m.callId === callId) {
-        void startCallMedia();
-        unsub();
-      }
-    });
-    return unsub;
-  }, [callId, isInitiator, callType, start, localStreamRef, cleanupLocal, closeCall]);
-
-  useEffect(() => {
-    if (activeCall.status !== 'active') return;
-    const id = window.setInterval(() => setDuration((d) => d + 1), 1000);
-    return () => window.clearInterval(id);
-  }, [activeCall.status]);
-
-  useEffect(() => {
-    const cid = activeCall.callId;
-    const unsub = subscribeRealtimeMessages((raw) => {
-      const m = raw as Record<string, unknown>;
-      if (m.callId !== cid) return;
-      switch (m.type) {
-        case 'call:peer_video':
-          setPeerVideoOff(!Boolean(m.enabled));
-          break;
-        case 'call:peer_audio':
-          setPeerMuted(!Boolean(m.enabled));
-          break;
-        case 'call:peer_screen':
-          break;
-        case 'call:ended':
-        case 'call:rejected':
-        case 'call:error':
-        case 'call:cancelled':
-          cleanupLocal();
-          closeCall();
-          break;
-        default:
-          break;
-      }
-    });
-    return unsub;
-  }, [activeCall.callId, cleanupLocal, closeCall, setPeerMuted, setPeerVideoOff]);
-
-  useEffect(() => {
-    setDuration(0);
-  }, [activeCall.callId]);
-
-  useEffect(() => {
-    let wakeLock: WakeLockSentinel | null = null;
-
-    const releaseWakeLock = async () => {
-      if (!wakeLock) return;
+    if (creds?.token) return;
+    let cancelled = false;
+    void (async () => {
       try {
-        await wakeLock.release();
-      } catch {
-        /* ignore */
-      } finally {
-        wakeLock = null;
+        const t = await fetchCallToken(activeCall.callId);
+        if (cancelled) return;
+        setCreds(t);
+        setLiveKitCreds(t.url, t.token);
+        setStatus('active');
+      } catch (e) {
+        if (cancelled) return;
+        setTokenError(e instanceof Error ? e.message : 'Ошибка подключения');
       }
-    };
-
-    const acquireWakeLock = async () => {
-      if (!('wakeLock' in navigator) || typeof navigator.wakeLock?.request !== 'function') return;
-      await releaseWakeLock();
-      try {
-        wakeLock = await navigator.wakeLock.request('screen');
-      } catch {
-        /* wake lock is optional */
-      }
-    };
-
-    void acquireWakeLock();
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        void acquireWakeLock();
-      }
-    };
-
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
+    })();
     return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      void releaseWakeLock();
+      cancelled = true;
     };
-  }, []);
+  }, [activeCall.callId, activeCall.callKind, activeCall.status, creds?.token, setLiveKitCreds, setStatus]);
 
-  const peerAvatarSrc = activeCall.peerAvatar ? resolvePublicUrl(activeCall.peerAvatar) : undefined;
-
-  const handleEnd = () => {
-    endCall();
-    closeCall();
-  };
-
-  const handleToggleAudio = () => {
-    const nextMuted = !isMuted;
-    toggleAudio(!nextMuted);
-    setMuted(nextMuted);
-  };
-
-  const handleToggleVideo = () => {
-    const nextOff = !isVideoOff;
-    toggleVideo(!nextOff);
-    setVideoOff(nextOff);
-  };
-
-  const handleScreenShare = async () => {
-    if (isScreenSharing) {
-      await stopScreenShare();
-      setScreenSharing(false);
-    } else {
-      await startScreenShare();
-      setScreenSharing(true);
+  // Initiator of direct call: fetch token early so room is ready when accepted
+  useEffect(() => {
+    if (activeCall.callKind !== 'direct' || !activeCall.isInitiator || activeCall.status !== 'calling') {
+      return;
     }
-  };
+    if (creds?.token) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const t = await fetchCallToken(activeCall.callId);
+        if (cancelled) return;
+        setCreds(t);
+        setLiveKitCreds(t.url, t.token);
+      } catch {
+        /* token on accept is enough */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCall.callId, activeCall.callKind, activeCall.isInitiator, activeCall.status, creds?.token, setLiveKitCreds]);
+
+  const roomOptions = useMemo(
+    () => ({
+      adaptiveStream: true,
+      dynacast: true,
+    }),
+    [],
+  );
+
+  if (activeCall.status === 'calling' && activeCall.isInitiator && activeCall.callKind === 'direct') {
+    return <OutgoingRing activeCall={activeCall} onCancel={() => void hangup()} />;
+  }
+
+  if (tokenError) {
+    return (
+      <div className="call-window" role="dialog">
+        <p className="call-stage__status">{tokenError}</p>
+        <div className="call-controls">
+          <button type="button" className="call-ctrl-btn call-ctrl-btn--hangup" onClick={() => void hangup()}>
+            <LuPhoneOff size={22} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!creds?.token || !creds.url) {
+    return (
+      <div className="call-window" role="dialog">
+        <p className="call-stage__status">Подключение к комнате…</p>
+        <div className="call-controls">
+          <button type="button" className="call-ctrl-btn call-ctrl-btn--hangup" onClick={() => void hangup()}>
+            <LuPhoneOff size={22} />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="call-window">
-      <audio ref={remoteAudioRef} autoPlay playsInline />
-      {connectionState !== 'connected' ? (
-        <div className={`call-connection-banner call-connection-${connectionState}`}>
-          {connectionState === 'connecting' ? 'Устанавливаем соединение...' : null}
-          {connectionState === 'reconnecting' ? 'Переподключение...' : null}
-          {connectionState === 'failed' ? 'Соединение потеряно' : null}
-        </div>
-      ) : null}
-      {activeCall.callType === 'video' ? (
-        <div className="remote-video-wrap">
-          <video ref={remoteVideoRef} autoPlay playsInline className="remote-video" />
-          {isPeerVideoOff ? (
-            <div className="video-off-overlay">
-              {peerAvatarSrc ? (
-                <img src={peerAvatarSrc} alt="" className="peer-avatar-large" />
-              ) : (
-                <div className="peer-avatar-large bg-stone-600" aria-hidden />
-              )}
-              <p>Камера выключена</p>
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="audio-call-center">
-          {peerAvatarSrc ? (
-            <img src={peerAvatarSrc} alt="" className="peer-avatar-large" />
-          ) : (
-            <div className="peer-avatar-large bg-stone-600" aria-hidden />
-          )}
-          <p className="peer-name">{activeCall.peerName}</p>
-          <p className="call-status">
-            {activeCall.status === 'calling' ? 'Звоним…' : formatDuration(duration)}
-          </p>
-          {isPeerMuted ? <p className="mute-indicator">Собеседник выключил микрофон</p> : null}
-        </div>
-      )}
-
-      {activeCall.callType === 'video' ? (
-        <video ref={localVideoRef} autoPlay playsInline muted className="local-video" />
-      ) : null}
-
-      {activeCall.callType === 'video' ? (
-        <div className="call-duration">
-          {activeCall.status === 'active' ? formatDuration(duration) : 'Звоним…'}
-        </div>
-      ) : null}
-
-      <div className="call-controls">
-        <button
-          type="button"
-          className={['ctrl-btn', isMuted ? 'ctrl-btn--off' : ''].join(' ')}
-          onClick={handleToggleAudio}
-          title={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
-          aria-label={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
-        >
-          {isMuted ? <LuMicOff size={22} strokeWidth={2.25} /> : <LuMic size={22} strokeWidth={2.25} />}
-        </button>
-
-        {activeCall.callType === 'video' ? (
-          <>
-            <button
-              type="button"
-              className={['ctrl-btn', isVideoOff ? 'ctrl-btn--off' : ''].join(' ')}
-              onClick={handleToggleVideo}
-              title={isVideoOff ? 'Включить камеру' : 'Выключить камеру'}
-              aria-label={isVideoOff ? 'Включить камеру' : 'Выключить камеру'}
-            >
-              {isVideoOff ? (
-                <LuVideoOff size={22} strokeWidth={2.25} />
-              ) : (
-                <LuVideo size={22} strokeWidth={2.25} />
-              )}
-            </button>
-            <button
-              type="button"
-              className={['ctrl-btn', isScreenSharing ? 'ctrl-btn--active' : ''].join(' ')}
-              onClick={() => void handleScreenShare()}
-              title="Демонстрация экрана"
-              aria-label="Демонстрация экрана"
-            >
-              <LuMonitor size={22} strokeWidth={2.25} />
-            </button>
-          </>
-        ) : null}
-
-        <button
-          type="button"
-          className="ctrl-btn ctrl-btn--end"
-          onClick={handleEnd}
-          title="Завершить звонок"
-          aria-label="Завершить звонок"
-        >
-          <LuPhoneOff size={24} strokeWidth={2.25} />
-        </button>
-      </div>
+    <div className="call-window" role="dialog" aria-label="Активный звонок">
+      <LiveKitRoom
+        token={creds.token}
+        serverUrl={creds.url}
+        connect
+        audio
+        video={videoEnabled}
+        options={roomOptions}
+        onError={(e) => emitAppToast(mapDeviceError(e), 'error')}
+        onDisconnected={() => {
+          /* hangup via button preferred; avoid auto-end on brief blips */
+        }}
+        data-lk-theme="default"
+        style={{ height: '100%', width: '100%' }}
+      >
+        <RoomStage callType={activeCall.callType} />
+        <CallControls videoEnabled={videoEnabled} onHangup={() => void hangup()} />
+      </LiveKitRoom>
     </div>
   );
 }
