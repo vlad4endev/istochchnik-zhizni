@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'crypto';
 
 import { pool, query } from '../config/db';
 import { encryptMessageText } from '../lib/messageCrypto';
-import type { WsMessengerEvent } from '../types/messenger';
+import type { MessageWithSender, WsMessengerEvent } from '../types/messenger';
 import {
   getConversationMemberIds,
   getConversationMeta,
@@ -554,21 +554,30 @@ export async function createGroupCall(input: {
 }): Promise<CallPublic> {
   if (!isCallsEnabled()) throw new CallsError('disabled', 'Звонки отключены');
 
+  const accessMode: CallAccessMode = input.accessMode === 'link' ? 'link' : 'closed';
   const convType = await getConversationType(input.conversationId);
-  if (convType !== 'group' && convType !== 'channel') {
+  // closed — только группа/канал; link (как Телемост/Zoom) — любой чат, включая личный.
+  if (accessMode === 'closed' && convType !== 'group' && convType !== 'channel') {
     throw new CallsError('forbidden', 'Групповой звонок доступен только в группе');
+  }
+  if (
+    accessMode === 'link' &&
+    convType !== 'group' &&
+    convType !== 'channel' &&
+    convType !== 'private'
+  ) {
+    throw new CallsError('forbidden', 'Нет доступа к чату');
   }
   const membership = await getParticipantRoleInConversation(
     input.conversationId,
     input.initiatorId,
   );
-  if (!membership) throw new CallsError('forbidden', 'Нет доступа к группе');
+  if (!membership) throw new CallsError('forbidden', 'Нет доступа к чату');
 
   if (await isMemberBusyInCall(input.initiatorId)) {
     throw new CallsError('already_in_call', 'Вы уже участвуете в другом звонке');
   }
 
-  const accessMode: CallAccessMode = input.accessMode === 'link' ? 'link' : 'closed';
   const callId = randomUUID();
   const roomName = `group_${callId.replace(/-/g, '')}`;
 
@@ -612,6 +621,7 @@ export async function createGroupCall(input: {
   }
 
   const inviteUrl = inviteUrlFromToken(invite.rawToken);
+  const invitePath = `/call/join/${invite.rawToken}`;
   const meta = await getConversationMeta(input.conversationId);
   const memberIds = await getConversationMemberIds(input.conversationId);
   const initiatorProfile = await loadMemberProfile(input.initiatorId);
@@ -629,21 +639,21 @@ export async function createGroupCall(input: {
     await sendWs(mid, startedEvt);
     void sendPushNotification(mid, {
       title: input.mediaType === 'video' ? 'Видеоконференция' : 'Аудиоконференция',
-      body: `${initiatorProfile.name} · ${meta?.title?.trim() || 'Группа'}`,
+      body: `${initiatorProfile.name} · ${meta?.title?.trim() || (convType === 'private' ? 'Чат' : 'Группа')}`,
       type: 'group_call_started',
       callId: call.id,
       conversationId: input.conversationId,
-      url: `/call/${call.id}`,
+      url: invitePath,
       tag: `group-call-${call.id}`,
     }).catch(() => undefined);
   }
 
-  // System message with invite link for closed/link modes
+  // Системное сообщение со ссылкой + live fan-out msg:new (чтобы чат обновился сразу).
   try {
     const content =
       input.mediaType === 'video'
-        ? `Начата видеоконференция`
-        : `Начата аудиоконференция`;
+        ? 'Создана видеоконференция'
+        : 'Создана аудиоконференция';
     const contentForDb = encryptMessageText(content);
     const payload = {
       kind: 'call_event',
@@ -651,17 +661,54 @@ export async function createGroupCall(input: {
       call_type: 'group',
       media_type: input.mediaType,
       status: 'waiting',
-      invite_path: `/call/join/${invite.rawToken}`,
+      access_mode: accessMode,
+      invite_path: invitePath,
+      invite_url: inviteUrl,
       initiated_by: input.initiatorId,
     };
     await query(`UPDATE conversations SET updated_at = NOW() WHERE id = $1::bigint`, [
       input.conversationId,
     ]);
-    await query(
+    const ins = await query(
       `INSERT INTO messages (conversation_id, sender_id, content, payload_type, payload)
-       VALUES ($1::bigint, NULL, $2, 'text'::message_payload_type, $3::jsonb)`,
+       VALUES ($1::bigint, NULL, $2, 'text'::message_payload_type, $3::jsonb)
+       RETURNING id, created_at, updated_at`,
       [input.conversationId, contentForDb, JSON.stringify(payload)],
     );
+    const row = ins.rows[0] as { id?: unknown; created_at?: unknown; updated_at?: unknown } | undefined;
+    if (row?.id != null) {
+      const createdAt = String(row.created_at ?? new Date().toISOString());
+      const updatedAt = String(row.updated_at ?? createdAt);
+      const message: MessageWithSender = {
+        id: String(row.id),
+        conversation_id: input.conversationId,
+        sender_id: null,
+        client_msg_id: null,
+        content,
+        encrypted_payload: null,
+        is_e2ee: false,
+        payload_type: 'text',
+        payload,
+        interaction_count: 0,
+        reply_to_message_id: null,
+        is_edited: false,
+        is_deleted: false,
+        is_pinned: false,
+        created_at: createdAt,
+        updated_at: updatedAt,
+        sender_name: null,
+        sender_first_name: null,
+        sender_last_name: null,
+        reply_preview: null,
+        reactions: [],
+        is_read: false,
+      };
+      await sendWsRoom(input.conversationId, {
+        type: 'msg:new',
+        conversationId: input.conversationId,
+        message,
+      });
+    }
     await sendWsRoom(input.conversationId, {
       type: 'conv:updated',
       conversationId: input.conversationId,

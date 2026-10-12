@@ -23,6 +23,7 @@ import { subscribeRealtimeMessages } from '../../lib/realtimeWsClient';
 
 import {
   cancelCall,
+  createCallInvitation,
   endCall,
   fetchCallToken,
   mapDeviceError,
@@ -31,6 +32,18 @@ import {
 import { startCallRing, stopCallRing, unlockCallAudio } from './callRingtone';
 import { useCallStore, type ActiveCallState } from './callStore';
 import './calls.css';
+
+function absoluteInviteUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (typeof window === 'undefined') return trimmed;
+  try {
+    return new URL(trimmed, window.location.origin).toString();
+  } catch {
+    return trimmed;
+  }
+}
 
 function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -225,6 +238,90 @@ function RoomStage({
         <p className="call-stage__status call-stage__status--bar">{statusLabel}</p>
       ) : null}
       <RoomAudioRenderer />
+    </div>
+  );
+}
+
+/** Панель ссылки конференции (Телемост/Zoom): копировать / ждать участников. */
+function MeetingInviteBar({ callId }: { callId: string }) {
+  const inviteUrl = useCallStore((s) => s.activeCall?.inviteUrl ?? null);
+  const setInviteUrl = useCallStore((s) => s.setInviteUrl);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (inviteUrl) return;
+    let cancelled = false;
+    setBusy(true);
+    void createCallInvitation(callId)
+      .then((inv) => {
+        if (!cancelled) setInviteUrl(inv.inviteUrl);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [callId, inviteUrl, setInviteUrl]);
+
+  const displayUrl = inviteUrl ? absoluteInviteUrl(inviteUrl) : '';
+
+  const copy = useCallback(() => {
+    if (!displayUrl) return;
+    void navigator.clipboard.writeText(displayUrl).then(
+      () => emitAppToast('Ссылка скопирована — отправьте в чат', 'success'),
+      () => emitAppToast('Не удалось скопировать ссылку', 'error'),
+    );
+  }, [displayUrl]);
+
+  const share = useCallback(async () => {
+    if (!displayUrl) return;
+    const nav = navigator as Navigator & {
+      share?: (data: { title?: string; text?: string; url?: string }) => Promise<void>;
+    };
+    if (typeof nav.share === 'function') {
+      try {
+        await nav.share({
+          title: 'Приглашение на звонок',
+          text: 'Подключитесь к конференции',
+          url: displayUrl,
+        });
+        return;
+      } catch {
+        /* user cancelled or share failed — fall through to copy */
+      }
+    }
+    copy();
+  }, [copy, displayUrl]);
+
+  return (
+    <div className="call-invite-bar">
+      <p className="call-invite-bar__title">Ссылка для подключения</p>
+      <p className="call-invite-bar__hint">
+        Отправьте в чат или мессенджер — участники зайдут по ссылке
+      </p>
+      <code className="call-invite-bar__url" title={displayUrl || undefined}>
+        {busy && !displayUrl ? 'Получаем ссылку…' : displayUrl || 'Ссылка недоступна'}
+      </code>
+      <div className="call-invite-bar__actions">
+        <button
+          type="button"
+          className="call-invite-copy"
+          disabled={!displayUrl}
+          onClick={copy}
+        >
+          Скопировать
+        </button>
+        <button
+          type="button"
+          className="call-invite-copy call-invite-copy--primary"
+          disabled={!displayUrl}
+          onClick={() => void share()}
+        >
+          Поделиться
+        </button>
+      </div>
     </div>
   );
 }
@@ -535,6 +632,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         className="call-lk-room"
       >
         <RoomStage callType={activeCall.callType} serverUrl={roomUrl} connectError={connectError} />
+        {activeCall.callKind === 'group' ? <MeetingInviteBar callId={activeCall.callId} /> : null}
         <CallControls videoEnabled={videoEnabled} onHangup={() => void hangup()} />
       </LiveKitRoom>
     </div>

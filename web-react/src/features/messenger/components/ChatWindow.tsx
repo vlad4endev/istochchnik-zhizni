@@ -1026,32 +1026,13 @@ export function ChatWindow({
             return;
           }
           if (conv && (conv.type === 'group' || conv.type === 'channel')) {
-            const { createGroupCall } = await import('../../calls/callsApi');
-            const call = await createGroupCall({
+            const { startMeetingCall } = await import('../../calls/startMeetingCall');
+            await startMeetingCall({
               conversationId,
               mediaType: callType,
-              accessMode: 'closed',
-            });
-            useCallStore.getState().openCall({
-              callId: call.id,
-              conversationId,
-              peerId: 0,
               peerName: conv.title?.trim() || 'Конференция',
               peerAvatar: conv.avatar_url ?? '',
-              callType,
-              isInitiator: true,
-              status: 'active',
-              callKind: 'group',
-              inviteUrl: call.inviteUrl,
             });
-            if (call.inviteUrl) {
-              try {
-                await navigator.clipboard.writeText(call.inviteUrl);
-                emitAppToast('Ссылка-приглашение скопирована', 'success');
-              } catch {
-                emitAppToast('Конференция создана. Скопируйте ссылку в окне звонка.', 'info');
-              }
-            }
           }
         } catch (e) {
           emitAppToast(e instanceof Error ? e.message : 'Не удалось начать звонок', 'error');
