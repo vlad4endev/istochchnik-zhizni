@@ -423,13 +423,22 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
       adaptiveStream: true,
       dynacast: true,
       disconnectOnPageLeave: false,
-      // Меньше слоёв simulcast — стабильнее на домашнем Wi‑Fi / LTE.
+      // Стабильность > качество: 540p, один слой (без тяжёлого simulcast).
       videoCaptureDefaults: {
-        resolution: VideoPresets.h720.resolution,
+        resolution: VideoPresets.h540.resolution,
+        facingMode: 'user',
+      },
+      audioCaptureDefaults: {
+        autoGainControl: true,
+        echoCancellation: true,
+        noiseSuppression: true,
       },
       publishDefaults: {
-        videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360],
+        videoSimulcastLayers: [VideoPresets.h216],
+        videoCodec: 'vp8',
         stopMicTrackOnMute: true,
+        dtx: true,
+        red: true,
       },
     }),
     [],
@@ -438,8 +447,8 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const connectOptions = useMemo<RoomConnectOptions>(
     () => ({
       autoSubscribe: true,
-      maxRetries: 5,
-      peerConnectionTimeout: 20_000,
+      maxRetries: 8,
+      peerConnectionTimeout: 30_000,
     }),
     [],
   );
