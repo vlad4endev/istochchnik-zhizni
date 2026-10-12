@@ -68,9 +68,19 @@ LiveKit в addon работает в **`network_mode: host`** (рекоменд�
    | 50100 | UDP | TURN relay (один порт, без диапазона) |
    | 7880 | — | **не открывать** |
 3. Хост: `"userland-proxy": false` + `deploy/sysctl-livekit.conf` → `/etc/sysctl.d/` + `sysctl --system`.
-4. Встроенный TURN (`turn.enabled` в `docker/livekit.yaml`, domain=`app.church-tambov.ru`).
-5. CGNAT без белого IP → VPS или внешний TURN.
-6. Permissions-Policy: `camera=(self), microphone=(self)`.
+4. Белый IP: `LIVEKIT_RTC_NODE_IP` → `NODE_IP` (в v1.8.4 **не** используем `use_external_ip` за NAT — без `skip_external_ip_validation` процесс не поднимает :7880).
+5. TURN в `docker/livekit.yaml` по умолчанию **выключен**, пока не стабилен сигнал (`curl :7880` = OK). Включить:
+   ```yaml
+   turn:
+     enabled: true
+     domain: app.church-tambov.ru
+     udp_port: 3478
+     relay_range_start: 50100
+     relay_range_end: 50100
+   ```
+   + правила роутера UDP 3478 и 50100.
+6. CGNAT без белого IP → VPS или внешний TURN.
+7. Permissions-Policy: `camera=(self), microphone=(self)`.
 
 ### Проверка, что `/lk` — это LiveKit, а не SPA
 
