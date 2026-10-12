@@ -1,65 +1,193 @@
-/* Глобальные оверлеи звонков */
-.incoming-call-toast {
+/* Полноэкранный входящий звонок (foreground) */
+.incoming-call-overlay {
   position: fixed;
-  top: max(24px, env(safe-area-inset-top, 0px));
-  right: max(16px, env(safe-area-inset-right, 0px));
-  left: max(16px, env(safe-area-inset-left, 0px));
-  margin-left: auto;
+  inset: 0;
   z-index: 10050;
-  background: var(--surface-elevated, #fff);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  padding: 16px 20px;
-  width: min(320px, calc(100vw - 32px));
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-  animation: incoming-call-slide 0.3s ease;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding:
+    max(48px, calc(24px + env(safe-area-inset-top, 0px)))
+    24px
+    max(40px, calc(28px + env(safe-area-inset-bottom, 0px)));
+  box-sizing: border-box;
+  background:
+    radial-gradient(ellipse 120% 80% at 50% 0%, rgba(125, 54, 64, 0.55), transparent 55%),
+    linear-gradient(165deg, #1a1520 0%, #0e0c12 45%, #12181f 100%);
+  color: #fff;
+  animation: incoming-call-fade 0.35s ease;
 }
 
-@keyframes incoming-call-slide {
+.incoming-call-overlay__glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.06), transparent 42%);
+}
+
+@keyframes incoming-call-fade {
   from {
-    transform: translateY(-12px);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
     opacity: 1;
   }
 }
 
-.incoming-call-toast .caller-info {
+.incoming-call-overlay__body {
+  position: relative;
+  z-index: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
+  text-align: center;
   gap: 12px;
+  margin-top: min(8vh, 64px);
+  width: 100%;
+  max-width: 22rem;
 }
 
-.incoming-call-toast .caller-avatar {
-  width: 48px;
-  height: 48px;
+.incoming-call-overlay__label {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
+  font-weight: 500;
+}
+
+.incoming-call-overlay__avatar-wrap {
+  position: relative;
+  width: min(168px, 42vw);
+  height: min(168px, 42vw);
+  margin: 20px 0 8px;
+  display: grid;
+  place-items: center;
+}
+
+.incoming-call-overlay__pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  animation: incoming-call-pulse 2.4s ease-out infinite;
+}
+
+.incoming-call-overlay__pulse--delayed {
+  animation-delay: 1.2s;
+}
+
+@keyframes incoming-call-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.55);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .incoming-call-overlay {
+    animation: none;
+  }
+  .incoming-call-overlay__pulse,
+  .incoming-call-overlay__pulse--delayed {
+    animation: none;
+    opacity: 0.35;
+  }
+}
+
+.incoming-call-overlay__avatar {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   object-fit: cover;
+  border: 3px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
 }
 
-.incoming-call-toast .caller-name {
-  font-weight: 600;
-  font-size: 16px;
-  color: var(--text, #1c1917);
+.incoming-call-overlay__avatar--placeholder {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #7d3640, #4a2430);
+  font-size: clamp(2.5rem, 10vw, 3.5rem);
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.92);
 }
 
-.incoming-call-toast .call-type {
-  font-size: 13px;
-  color: var(--text-secondary, #78716c);
+.incoming-call-overlay__name {
+  margin: 0;
+  font-size: clamp(1.5rem, 5.5vw, 2rem);
+  font-weight: 650;
+  line-height: 1.2;
+  word-break: break-word;
 }
 
-.incoming-call-toast .call-actions {
+.incoming-call-overlay__hint {
+  margin: 0;
+  font-size: 1.05rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.incoming-call-overlay__actions {
+  position: relative;
+  z-index: 1;
   display: flex;
-  gap: 10px;
+  align-items: flex-start;
+  justify-content: center;
+  gap: clamp(48px, 16vw, 88px);
+  width: 100%;
+  padding-bottom: 8px;
 }
 
-.incoming-call-toast .btn-reject,
-.incoming-call-toast .btn-accept,
+.incoming-call-overlay__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.incoming-call-overlay__btn-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  transition: transform 0.15s ease;
+}
+
+.incoming-call-overlay__btn:active .incoming-call-overlay__btn-icon {
+  transform: scale(0.94);
+}
+
+.incoming-call-overlay__btn--reject .incoming-call-overlay__btn-icon {
+  background: #ef4444;
+  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.4);
+}
+
+.incoming-call-overlay__btn--accept .incoming-call-overlay__btn-icon {
+  background: #22c55e;
+  box-shadow: 0 8px 24px rgba(34, 197, 94, 0.4);
+}
+
+.incoming-call-overlay__btn-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Call route accept/decline (deep link) */
 .call-route-page .btn-reject,
 .call-route-page .btn-accept {
   flex: 1;
@@ -71,12 +199,10 @@
   cursor: pointer;
 }
 
-.incoming-call-toast .btn-reject,
 .call-route-page .btn-reject {
   background: #ef4444;
 }
 
-.incoming-call-toast .btn-accept,
 .call-route-page .btn-accept {
   background: #22c55e;
 }

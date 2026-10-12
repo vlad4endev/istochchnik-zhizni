@@ -32,3 +32,31 @@ npx cap open ios
 8. В Xcode: Signing & Capabilities → добавить **Push Notifications** (и Background Modes → Remote notifications, если ещё нет)
 
 Секретный `GoogleService-Info.plist` в git не коммитьте (см. `ios/.gitignore`). Шаблон полей — `App/GoogleService-Info.plist.example`.
+
+## CallKit + PushKit (входящий как системный звонок)
+
+В коде уже есть:
+
+- `CallKitManager.swift` / `NativeCallPlugin.swift` — PushKit → CallKit
+- Background mode `voip` в `Info.plist`
+- Клиент шлёт VoIP-токен на `POST /api/notifications/save-voip-token`
+- Сервер шлёт VoIP push через APNs (`src/services/apnsVoipPush.ts`), если заданы ключи
+
+### Что настроить в Apple Developer
+
+1. Identifiers → App ID `com.istochnikzhizni.molitva` → включить **Push Notifications**.
+2. Создать **VoIP Services Certificate** (или использовать тот же APNs Auth Key `.p8` с topic `{bundleId}.voip`).
+3. В Xcode: Background Modes → **Voice over IP** + **Remote notifications**.
+4. На сервере API задать:
+
+```bash
+APNS_KEY_ID=<Key ID из Apple>
+APNS_TEAM_ID=<Team ID>
+APNS_P8_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+APNS_BUNDLE_ID=com.istochnikzhizni.molitva
+APNS_PRODUCTION=true
+```
+
+Без этих переменных CallKit-клиент работает, но VoIP wake с сервера не уйдёт (останется обычный FCM alert / foreground WS).
+
+**Важно для App Review:** VoIP push можно использовать только для реальных входящих звонков; на каждый VoIP push нужно сразу вызывать `reportNewIncomingCall` (так и сделано в `CallKitManager`).

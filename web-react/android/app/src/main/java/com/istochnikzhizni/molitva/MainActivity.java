@@ -16,6 +16,7 @@ public class MainActivity extends BridgeActivity {
 
   @Override
   public void onCreate(Bundle savedInstanceState) {
+    registerPlugin(NativeCallPlugin.class);
     super.onCreate(savedInstanceState);
     AppFirebaseMessagingService.createChannels(this);
     dispatchPushNavigationFromIntent(getIntent(), 0);

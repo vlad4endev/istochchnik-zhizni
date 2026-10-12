@@ -9,7 +9,11 @@ import {
   getConversationType,
   isMemberInConversation,
 } from './messengerService';
-import { sendPushNotification } from './pushService';
+import {
+  dismissIncomingCallNative,
+  sendIncomingCallWake,
+  sendPushNotification,
+} from './pushService';
 import {
   endLiveKitRoom,
   ensureLiveKitRoom,
@@ -528,25 +532,16 @@ export async function createDirectCall(input: {
   };
   await sendWs(input.recipientId, incoming);
 
-  const title = input.mediaType === 'video' ? 'Входящий видеозвонок' : 'Входящий звонок';
-  void sendPushNotification(input.recipientId, {
-    title,
-    body: profile.name,
-    type: 'incoming_call',
+  void sendIncomingCallWake(input.recipientId, {
     callId: call.id,
     conversationId: input.conversationId,
     callType: input.mediaType,
-    callerId: String(input.initiatorId),
+    callerId: input.initiatorId,
     callerName: profile.name,
+    callerAvatar: profile.avatarUrl,
     url: `/call/${call.id}`,
-    tag: `call-${call.id}`,
-    renotify: true,
-    requireInteraction: true,
-    actions: [
-      { action: 'call_accept', title: 'Принять' },
-      { action: 'call_decline', title: 'Отклонить' },
-    ],
-  }).catch((e) => console.warn('[calls] push failed:', e instanceof Error ? e.message : e));
+    ttlSec: ringTimeoutSec(),
+  }).catch((e) => console.warn('[calls] wake failed:', e instanceof Error ? e.message : e));
 
   return toPublicCall(call);
 }
@@ -750,6 +745,8 @@ export async function acceptCall(callId: string, memberId: number): Promise<Call
   });
 
   await sendWs(updated.initiated_by, { type: 'call:accepted', callId: updated.id });
+  // Снять CallStyle/CallKit на других устройствах принявшего
+  void dismissIncomingCallNative(memberId, updated.id).catch(() => undefined);
   return toPublicCall(updated);
 }
 
@@ -783,6 +780,7 @@ export async function declineCall(callId: string, memberId: number): Promise<Cal
     callId: updated.id,
     reason: 'declined',
   });
+  void dismissIncomingCallNative(memberId, updated.id).catch(() => undefined);
   void sendPushNotification(updated.initiated_by, {
     title: 'Звонок отклонён',
     body: 'Абонент отклонил вызов',
@@ -833,6 +831,7 @@ export async function cancelCall(callId: string, memberId: number): Promise<Call
 
   for (const rid of recipientIds) {
     await sendWs(rid, { type: 'call:cancelled', callId: updated.id });
+    void dismissIncomingCallNative(rid, updated.id).catch(() => undefined);
     void sendPushNotification(rid, {
       title: 'Звонок отменён',
       body: 'Вызов отменён',
@@ -1415,6 +1414,7 @@ export async function cleanupStaleCalls(): Promise<{ missed: number; endedEmpty:
       // Missed push to callee
       const callee = parts.rows.find((p) => Number(p.user_id) !== done.initiated_by);
       if (callee) {
+        void dismissIncomingCallNative(Number(callee.user_id), done.id).catch(() => undefined);
         void sendPushNotification(Number(callee.user_id), {
           title: 'Пропущенный вызов',
           body: done.media_type === 'video' ? 'Видеозвонок' : 'Аудиозвонок',
