@@ -497,7 +497,8 @@ export async function createDirectCall(input: {
   try {
     await ensureLiveKitRoom({
       roomName,
-      emptyTimeoutSec: ringTimeoutSec() + 120,
+      // Не рвать комнату при кратком reconnect клиента (иначе DeleteRoom mid-call).
+      emptyTimeoutSec: Math.max(900, ringTimeoutSec() + 600),
       maxParticipants: 2,
       metadata: JSON.stringify({ callId: call.id, type: 'direct' }),
     });

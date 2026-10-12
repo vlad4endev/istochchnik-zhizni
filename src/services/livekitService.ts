@@ -120,8 +120,9 @@ export async function ensureLiveKitRoom(input: {
   try {
     await svc.createRoom({
       name: input.roomName,
-      emptyTimeout: input.emptyTimeoutSec ?? 300,
-      departureTimeout: 60,
+      emptyTimeout: input.emptyTimeoutSec ?? 900,
+      // Дать клиенту время на LiveKit reconnect, не считая комнату пустой.
+      departureTimeout: 180,
       maxParticipants: input.maxParticipants,
       metadata: input.metadata,
     });
