@@ -14,8 +14,63 @@ function trimEnv(name: string): string {
   return String(process.env[name] ?? '').trim();
 }
 
+/**
+ * Внутренний URL Room Service.
+ * При host network имя `livekit` в Docker DNS не резолвится → host.docker.internal.
+ */
+export function getLiveKitInternalUrl(): string {
+  const raw = trimEnv('LIVEKIT_URL').replace(/\/$/, '');
+  if (!raw) return '';
+  try {
+    const u = new URL(raw);
+    // host-network LiveKit не в bridge DNS compose
+    if (u.hostname.toLowerCase() === 'livekit') {
+      return 'http://host.docker.internal:7880';
+    }
+  } catch {
+    /* keep raw */
+  }
+  return raw;
+}
+
 export function isLiveKitConfigured(): boolean {
-  return Boolean(trimEnv('LIVEKIT_API_KEY') && trimEnv('LIVEKIT_API_SECRET') && trimEnv('LIVEKIT_URL'));
+  return Boolean(trimEnv('LIVEKIT_API_KEY') && trimEnv('LIVEKIT_API_SECRET') && getLiveKitInternalUrl());
+}
+
+/** Логи при старте API: явные ошибки .env (дубликаты call.*, livekit DNS). */
+export function logLiveKitBootDiagnostics(): void {
+  const callsOn = process.env.CALLS_ENABLED === 'true';
+  const key = trimEnv('LIVEKIT_API_KEY');
+  const secret = trimEnv('LIVEKIT_API_SECRET');
+  const rawUrl = trimEnv('LIVEKIT_URL');
+  const pub = trimEnv('LIVEKIT_PUBLIC_URL');
+  const web = trimEnv('PUBLIC_WEB_ORIGIN');
+  const internal = getLiveKitInternalUrl();
+  const publicUrl = key && secret && internal ? getLiveKitPublicUrl() : '';
+
+  if (!callsOn) {
+    console.info('[livekit] CALLS_ENABLED is not true — call API disabled');
+    return;
+  }
+  if (!key || !secret || !rawUrl) {
+    console.error(
+      '[livekit] CALLS_ENABLED=true but LIVEKIT_API_KEY / LIVEKIT_API_SECRET / LIVEKIT_URL incomplete',
+    );
+    return;
+  }
+  if (/\/\/livekit[:/]/i.test(rawUrl) && internal !== rawUrl.replace(/\/$/, '')) {
+    console.warn(
+      `[livekit] LIVEKIT_URL=${rawUrl} (docker DNS) → roomService uses ${internal}`,
+    );
+  }
+  if (/call\./i.test(pub)) {
+    console.warn(
+      `[livekit] LIVEKIT_PUBLIC_URL=${pub} (legacy call.*) → browser uses ${publicUrl || 'PUBLIC_WEB_ORIGIN/lk'}`,
+    );
+  }
+  console.info(
+    `[livekit] calls ready: roomService=${internal} browser=${publicUrl || '(unset)'} key=${key.slice(0, 8)}… origin=${web || '(unset)'}`,
+  );
 }
 
 function originHost(url: string): string {
@@ -86,14 +141,14 @@ export function getLiveKitPublicUrl(): string {
   if (fromWeb) return fromWeb;
 
   // Last resort — never return bare docker DNS to browsers
-  const internal = trimEnv('LIVEKIT_URL');
+  const internal = getLiveKitInternalUrl();
   if (internal.startsWith('https://')) return internal.replace(/^https/, 'wss');
   if (internal.startsWith('http://')) return internal.replace(/^http/, 'ws');
   return internal;
 }
 
 function getRoomService(): RoomServiceClient {
-  const url = trimEnv('LIVEKIT_URL');
+  const url = getLiveKitInternalUrl();
   const apiKey = trimEnv('LIVEKIT_API_KEY');
   const apiSecret = trimEnv('LIVEKIT_API_SECRET');
   if (!url || !apiKey || !apiSecret) {

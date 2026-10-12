@@ -55,6 +55,7 @@ import { initPushCronJobs } from './cron/pushJobs';
 import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
 import { initBackupJob } from './cron/backupJob';
 import { initCallsCleanupJob } from './cron/callsCleanup';
+import { logLiveKitBootDiagnostics } from './services/livekitService';
 import callsRoutes, { callInvitationsRouter } from './routes/callsRoutes';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel, ensureMediykaMessengerChannel, ensureServicePlanPlanningMessengerChannel } from './services/messengerService';
@@ -587,6 +588,7 @@ async function start(): Promise<void> {
   initBackupJob();
   initCallsCleanupJob();
   startAnalyticsMaintenance();
+  logLiveKitBootDiagnostics();
 
   const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
   void cleanupExpiredSessions().catch((e) => console.warn('[auth] cleanupExpiredSessions (boot):', e));
