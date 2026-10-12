@@ -50,7 +50,8 @@ services:
       PODCAST_RSS_HEALTH_HOST: ${PODCAST_RSS_HEALTH_HOST:-rss.castbox.fm}
       # LiveKit / звонки (секреты только на api; см. docker-compose.livekit-addon.yml)
       CALLS_ENABLED: ${CALLS_ENABLED:-false}
-      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      # host network LiveKit → шлюз Docker; без addon тоже нужен extra_hosts ниже
+      LIVEKIT_URL: ${LIVEKIT_URL:-http://host.docker.internal:7880}
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
@@ -58,6 +59,9 @@ services:
       CALL_TOKEN_TTL_SEC: ${CALL_TOKEN_TTL_SEC:-900}
       CALL_INVITE_TTL_HOURS: ${CALL_INVITE_TTL_HOURS:-24}
       CALL_MAX_GROUP_PARTICIPANTS: ${CALL_MAX_GROUP_PARTICIPANTS:-50}
+    # nginx /lk и Room Service API → LiveKit на хосте (network_mode: host)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - default
       - supabase_network
@@ -91,6 +95,9 @@ services:
         GITHUB_SHA: ${GITHUB_SHA:-}
     container_name: istochnik-web
     restart: unless-stopped
+    # upstream livekit_signal → host.docker.internal:7880 (см. nginx-web.unified.conf)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${WEB_PORT:-8080}:80"
     healthcheck:
