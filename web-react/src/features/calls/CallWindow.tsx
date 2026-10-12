@@ -6,7 +6,14 @@ import {
   useLocalParticipant,
   useConnectionState,
 } from '@livekit/components-react';
-import { ConnectionState, Track } from 'livekit-client';
+import {
+  ConnectionState,
+  DisconnectReason,
+  Track,
+  VideoPresets,
+  type RoomOptions,
+  type RoomConnectOptions,
+} from 'livekit-client';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { LuMic, LuMicOff, LuMonitorUp, LuPhoneOff, LuVideo, LuVideoOff } from 'react-icons/lu';
 
@@ -337,17 +344,17 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
 
   useEffect(() => {
     return subscribeRealtimeMessages((raw) => {
-      const m = raw as { type?: string; callId?: string; reason?: string };
+      const m = raw as { type?: string; callId?: string; reason?: string; error?: string };
       if (String(m.callId ?? '') !== activeCall.callId) return;
       if (m.type === 'call:accepted') {
         setStatus('active');
       }
-      if (
-        m.type === 'call:ended' ||
-        m.type === 'call:rejected' ||
-        m.type === 'call:cancelled' ||
-        m.type === 'call:error'
-      ) {
+      if (m.type === 'call:error') {
+        // Не закрывать активный звонок из‑за побочных WS-ошибок (иначе «пропал» звонок и чат).
+        emitAppToast('Ошибка сигналинга звонка', 'error');
+        return;
+      }
+      if (m.type === 'call:ended' || m.type === 'call:rejected' || m.type === 'call:cancelled') {
         if (m.type === 'call:rejected') emitAppToast('Звонок отклонён', 'info');
         if (m.type === 'call:cancelled') emitAppToast('Звонок отменён', 'info');
         if (m.type === 'call:ended' && m.reason === 'no_answer') {
@@ -411,11 +418,28 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     return () => window.clearTimeout(t);
   }, [creds?.token, creds?.url, connectError, lkConnected]);
 
-  const roomOptions = useMemo(
+  const roomOptions = useMemo<RoomOptions>(
     () => ({
       adaptiveStream: true,
       dynacast: true,
       disconnectOnPageLeave: false,
+      // Меньше слоёв simulcast — стабильнее на домашнем Wi‑Fi / LTE.
+      videoCaptureDefaults: {
+        resolution: VideoPresets.h720.resolution,
+      },
+      publishDefaults: {
+        videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360],
+        stopMicTrackOnMute: true,
+      },
+    }),
+    [],
+  );
+
+  const connectOptions = useMemo<RoomConnectOptions>(
+    () => ({
+      autoSubscribe: true,
+      maxRetries: 5,
+      peerConnectionTimeout: 20_000,
     }),
     [],
   );
@@ -452,7 +476,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         audio
         video={videoEnabled}
         options={roomOptions}
-        connectOptions={{ autoSubscribe: true, maxRetries: 3 }}
+        connectOptions={connectOptions}
         onError={(e) => {
           const msg = mapDeviceError(e);
           setConnectError(msg);
@@ -462,8 +486,16 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
           setLkConnected(true);
           setConnectError(null);
         }}
-        onDisconnected={() => {
+        onDisconnected={(reason) => {
           setLkConnected(false);
+          // Не закрывать звонок при кратком обрыве — LiveKit сам переподключится.
+          if (
+            reason === DisconnectReason.CLIENT_INITIATED ||
+            reason === DisconnectReason.ROOM_DELETED ||
+            reason === DisconnectReason.PARTICIPANT_REMOVED
+          ) {
+            return;
+          }
         }}
         className="call-lk-room"
       >

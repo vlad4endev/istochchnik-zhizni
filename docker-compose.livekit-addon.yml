@@ -1,43 +1,34 @@
-# Опциональный LiveKit Server для аудио/видеозвонков.
-# Запуск:
-#   docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d
+# LiveKit для аудио/видеозвонков (host network — стабильный ICE за домашним NAT).
 #
-# В .env:
+#   docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build
+#
+# .env:
 #   LIVEKIT_API_KEY=...
 #   LIVEKIT_API_SECRET=...
 #   LIVEKIT_PUBLIC_URL=wss://app.church-tambov.ru/lk
 #   PUBLIC_WEB_ORIGIN=https://app.church-tambov.ru
 #   CALLS_ENABLED=true
-#   LIVEKIT_RTC_NODE_IP=77.93.125.36   # белый WAN IP (curl -4 -s ifconfig.me)
+#   # опционально, если STUN врёт: LIVEKIT_RTC_NODE_IP=77.93.125.36
 #
-# Роутер → LAN IP Docker-хоста (напр. 192.168.1.203):
+# Роутер → LAN IP хоста (напр. 192.168.1.203):
 #   TCP 7881 → 7881
 #   UDP 7882 → 7882
-# (диапазон 50000+ больше не нужен)
 #
-# Рекомендуется на хосте Docker: "userland-proxy": false в /etc/docker/daemon.json
-# (иначе UDP медиа через -p часто ломается → reconnect loop).
+# Рекомендуется: /etc/docker/daemon.json → { "userland-proxy": false }
 
 services:
   livekit:
     image: livekit/livekit-server:v1.8.4
     restart: always
+    network_mode: host
+    # host network: порты 7880/7881/7882 на хосте напрямую (без docker-proxy).
     command:
       - --config
       - /etc/livekit.yaml
-      - --node-ip
-      - ${LIVEKIT_RTC_NODE_IP:?Set LIVEKIT_RTC_NODE_IP to your public WAN IP}
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
-      LIVEKIT_RTC_NODE_IP: "${LIVEKIT_RTC_NODE_IP:?Set LIVEKIT_RTC_NODE_IP to your public WAN IP}"
     volumes:
       - ./docker/livekit.yaml:/etc/livekit.yaml:ro
-    ports:
-      - "127.0.0.1:7880:7880"
-      - "7881:7881"
-      - "7882:7882/udp"
-    networks:
-      - default
     healthcheck:
       test: ["CMD", "/livekit-server", "--version"]
       interval: 10s
@@ -49,8 +40,11 @@ services:
     depends_on:
       livekit:
         condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      LIVEKIT_URL: http://livekit:7880
+      # LiveKit на host network → API ходит на шлюз Docker (= хост)
+      LIVEKIT_URL: http://host.docker.internal:7880
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-wss://app.church-tambov.ru/lk}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
@@ -64,5 +58,5 @@ services:
     depends_on:
       livekit:
         condition: service_started
-    networks:
-      - default
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

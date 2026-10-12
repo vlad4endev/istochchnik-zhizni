@@ -1,20 +1,23 @@
-# LiveKit Server config for «Источник жизни».
-# Keys: env LIVEKIT_KEYS (см. docker-compose.livekit-addon.yml).
-# Публичный IP для ICE: CLI --node-ip из LIVEKIT_RTC_NODE_IP (обязателен за NAT).
+# LiveKit Server — «Источник жизни»
+# Рекомендуемый режим: network_mode: host (см. docker-compose.livekit-addon.yml).
 # Docs: https://docs.livekit.io/transport/self-hosting/
 
 port: 7880
+# 0.0.0.0 нужен, чтобы api/web (Docker) достучались через host.docker.internal.
+# На роутере НЕ пробрасывайте 7880 наружу — только TCP 7881 и UDP 7882.
+# Браузер ходит на WSS /lk (nginx → host:7880).
 bind_addresses:
   - "0.0.0.0"
 
 rtc:
-  # Один UDP mux-порт вместо диапазона — проще проброс на роутере и меньше
-  # проблем с Docker userland-proxy (иначе звонок «живёт» 3–10 с и переподключается).
-  # Не задавайте port_range_* вместе с udp_port.
+  # Один UDP mux + TCP ICE (проброс на роутере: UDP 7882, TCP 7881)
   udp_port: 7882
   tcp_port: 7881
-  # node_ip задаётся флагом --node-ip (см. compose).
-  use_external_ip: false
+  # STUN → белый IP; advertise_internal_ip → 192.168.x для клиентов в той же Wi‑Fi
+  # (без hairpin NAT звонок LAN↔LAN через публичный IP нестабилен).
+  use_external_ip: true
+  advertise_internal_ip: true
+  skip_external_ip_validation: true
   stun_servers:
     - stun.l.google.com:19302
 
