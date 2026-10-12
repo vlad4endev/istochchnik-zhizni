@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { query as dbQuery } from '../config/db';
+import { pool, query as dbQuery } from '../config/db';
 import { getUnreadMessagesCount } from '../lib/unreadHelpers';
 import type {
   ConversationListItem,
@@ -22,6 +22,9 @@ import {
   isMessageEncryptionEnabled,
 } from '../lib/messageCrypto';
 import { normalizeChatDisplayText } from '../utils/normalizeChatDisplayText';
+import { parsePositiveMemberIds } from '../utils/parsePositiveMemberIds';
+
+export { parsePositiveMemberIds };
 
 const MARK_READ_DEDUP_WINDOW_MS = 5_000;
 const recentMarkReadCalls = new Map<string, number>();
@@ -1065,40 +1068,115 @@ export async function findOrCreatePersonalConversation(
   return convId;
 }
 
+export type CreateGroupConversationResult = {
+  conversationId: string;
+  /** Invitees that were actually inserted (excludes creator; only existing active members). */
+  addedMemberIds: number[];
+};
+
 /**
- * Create a group or channel conversation.
+ * Create a group or channel conversation atomically (conversation + all participants).
+ * Invalid / inactive member ids are skipped so one bad id cannot abort the whole create.
  */
 export async function createGroupConversation(
   creatorId: number,
   title: string,
   type: 'group' | 'channel',
   memberIds: number[],
-): Promise<string> {
-  const conv = await dbQuery(
-    `INSERT INTO conversations (type, title) VALUES ($1, $2) RETURNING id`,
-    [type, title.trim()],
-  );
-  const convId = bigint(conv.rows[0].id);
-
-  // Creator is owner
-  await dbQuery(
-    `INSERT INTO conversation_participants (conversation_id, member_id, role)
-     VALUES ($1, $2, 'owner')`,
-    [convId, creatorId],
-  );
-
-  // Add members
-  const uniqueMembers = [...new Set(memberIds.filter((id) => id !== creatorId))];
-  for (const mId of uniqueMembers) {
-    await dbQuery(
-      `INSERT INTO conversation_participants (conversation_id, member_id, role)
-       VALUES ($1, $2, 'member')
-       ON CONFLICT DO NOTHING`,
-      [convId, mId],
-    );
+): Promise<CreateGroupConversationResult> {
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) {
+    throw new Error('title is required');
+  }
+  if (!Number.isFinite(creatorId) || creatorId < 1) {
+    throw new Error('creatorId is required');
   }
 
-  return convId;
+  const requested = parsePositiveMemberIds(memberIds).filter((id) => id !== creatorId);
+
+  if (!pool) {
+    throw new Error('DATABASE_URL is not defined in .env');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const conv = await client.query(
+      `INSERT INTO conversations (type, title, updated_at)
+       VALUES ($1, $2, NOW())
+       RETURNING id`,
+      [type, trimmedTitle],
+    );
+    const convId = bigint(conv.rows[0].id);
+
+    await client.query(
+      `INSERT INTO conversation_participants (conversation_id, member_id, role)
+       VALUES ($1::bigint, $2, 'owner')`,
+      [convId, creatorId],
+    );
+
+    let addedMemberIds: number[] = [];
+    if (requested.length > 0) {
+      // Only attach real active members — avoids FK failures and silent empty invites.
+      const existing = await client.query<{ id: number }>(
+        `SELECT id FROM members
+         WHERE id = ANY($1::int[])
+           AND is_active = TRUE`,
+        [requested],
+      );
+      const validIds = existing.rows
+        .map((r) => Number(r.id))
+        .filter((id) => Number.isFinite(id) && id >= 1 && id !== creatorId);
+      const validSet = new Set(validIds);
+      // Preserve request order for stable notifications.
+      addedMemberIds = requested.filter((id) => validSet.has(id));
+
+      if (addedMemberIds.length > 0) {
+        await client.query(
+          `INSERT INTO conversation_participants (conversation_id, member_id, role)
+           SELECT $1::bigint, m_id, 'member'
+           FROM unnest($2::int[]) AS m_id
+           ON CONFLICT (conversation_id, member_id) DO UPDATE
+             SET left_at = NULL,
+                 role = EXCLUDED.role,
+                 joined_at = NOW()`,
+          [convId, addedMemberIds],
+        );
+      }
+    }
+
+    // Seed list preview so empty groups still sort near the top after create.
+    const createdLabel = type === 'channel' ? 'Канал создан' : 'Группа создана';
+    await client.query(
+      `INSERT INTO messages (conversation_id, sender_id, content, payload_type, payload)
+       VALUES (
+         $1::bigint,
+         $2,
+         $3,
+         'text'::message_payload_type,
+         $4::jsonb
+       )`,
+      [
+        convId,
+        creatorId,
+        createdLabel,
+        JSON.stringify({ kind: 'group_created', system_like: true }),
+      ],
+    );
+
+    await client.query('COMMIT');
+    return { conversationId: convId, addedMemberIds };
+  } catch (e) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      /* ignore rollback errors */
+    }
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 /**

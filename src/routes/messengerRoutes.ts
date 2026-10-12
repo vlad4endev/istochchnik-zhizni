@@ -754,25 +754,26 @@ router.post('/conversations/personal', async (req: Request, res: Response) => {
 router.post('/conversations/group', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const { title, type, memberIds } = req.body;
-  if (!title || typeof title !== 'string') {
+  if (!title || typeof title !== 'string' || !title.trim()) {
     res.status(400).json({ error: 'title is required' });
     return;
   }
   const convType = type === 'channel' ? 'channel' : 'group';
-  const ids: number[] = Array.isArray(memberIds)
-    ? memberIds.filter((id: unknown): id is number => typeof id === 'number')
-    : [];
+  // Accept number | numeric string — strict typeof==='number' previously dropped all string ids.
+  const ids = svc.parsePositiveMemberIds(memberIds).filter((id) => id !== userId);
   try {
-    const convId = await svc.createGroupConversation(userId, title, convType, ids);
-    const convKey = String(convId);
+    const created = await svc.createGroupConversation(userId, title, convType, ids);
+    const convKey = String(created.conversationId);
+    const notifiedIds = created.addedMemberIds;
+
     // Ensure all members join the WS room
     ensureMemberInRoom(userId, convKey);
-    for (const mId of ids) ensureMemberInRoom(mId, convKey);
+    for (const mId of notifiedIds) ensureMemberInRoom(mId, convKey);
 
     const convForMe = await getConversationListItemForMember(userId, convKey);
 
     // Notify invitees (their list row shape differs from the owner's).
-    for (const mId of ids) {
+    for (const mId of notifiedIds) {
       const convForMember = await getConversationListItemForMember(mId, convKey);
       if (convForMember) {
         sendToMember(mId, { type: 'conv:created', conversation: convForMember });
@@ -792,7 +793,7 @@ router.post('/conversations/group', async (req: Request, res: Response) => {
           title.trim() ||
           (convType === 'channel' ? 'Канал' : 'Группа');
         const kindWord = convType === 'channel' ? 'канал' : 'группу';
-        for (const mId of ids) {
+        for (const mId of notifiedIds) {
           await sendPushNotification(mId, {
             title: `Вас добавили в ${kindWord} «${chatLabel}»`,
             body: `${inviterName} пригласил(а) вас`,
@@ -810,7 +811,11 @@ router.post('/conversations/group', async (req: Request, res: Response) => {
       }
     })();
 
-    res.json({ conversationId: convKey, conversation: convForMe ?? null });
+    res.json({
+      conversationId: convKey,
+      conversation: convForMe ?? null,
+      addedMemberIds: notifiedIds,
+    });
   } catch (e) {
     console.error('[messenger] createGroupConversation error:', e);
     res.status(500).json({ error: 'Failed to create group' });

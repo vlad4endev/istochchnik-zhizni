@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../src/features/messenger/api/messengerApi', () => ({
-  sendMessage: vi.fn(),
-  fetchConversations: vi.fn(async () => []),
-  fetchMessengerMember: vi.fn(async () => null),
-}));
+vi.mock('../src/features/messenger/api/messengerApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/features/messenger/api/messengerApi')>();
+  return {
+    ...actual,
+    sendMessage: vi.fn(),
+    fetchConversations: vi.fn(async () => []),
+    fetchMessengerMember: vi.fn(async () => null),
+  };
+});
 
 vi.mock('../src/utils/audio', () => ({
   playAudio: vi.fn(),
@@ -231,5 +235,57 @@ describe('messenger chatStore last message preview', () => {
 
     expect(useChatStore.getState().activeConversationId).toBe('draft:42');
     expect(useChatStore.getState().privateDraftPeer?.id).toBe(42);
+  });
+
+  it('does not drop a group created while loadConversations is in flight', async () => {
+    let resolveFetch: ((value: unknown) => void) | null = null;
+    vi.mocked(messengerApi.fetchConversations).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }) as never,
+    );
+
+    useChatStore.setState((s) => ({
+      ...s,
+      conversations: [],
+      conversationsLoaded: true,
+      conversationsLoading: false,
+      conversationsLastLoadedAt: 0,
+    }));
+
+    const loadPromise = useChatStore.getState().loadConversations({ force: true });
+
+    useChatStore.getState().handleConvCreated({
+      id: '999',
+      type: 'group',
+      title: 'Новая группа',
+      avatar_url: null,
+      updated_at: '2026-05-07T12:05:00.000Z',
+      last_message: null,
+      unread_count: 0,
+      other_member: null,
+    } as never);
+
+    expect(useChatStore.getState().conversations.some((c) => String(c.id) === '999')).toBe(true);
+
+    resolveFetch?.([
+      {
+        id: 'group-1',
+        type: 'group',
+        title: 'Старый чат',
+        avatar_url: null,
+        updated_at: '2026-05-07T12:00:00.000Z',
+        last_message: null,
+        unread_count: 0,
+        other_member: null,
+      },
+    ]);
+
+    await loadPromise;
+
+    const ids = useChatStore.getState().conversations.map((c) => String(c.id));
+    expect(ids).toContain('999');
+    expect(ids).toContain('group-1');
   });
 });
