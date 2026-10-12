@@ -224,6 +224,10 @@ function isStandardParticipantMutation(
     if (path.startsWith('/api/messenger/')) {
       return true;
     }
+    // Звонки LiveKit — те же участники, что и в мессенджере.
+    if (path.startsWith('/api/calls') || path.startsWith('/api/call-invitations')) {
+      return true;
+    }
     if (
       (method === 'PATCH' || method === 'POST') &&
       (path === '/api/auth/me' || path === '/api/auth/me/')
@@ -261,6 +265,10 @@ function isStandardParticipantMutation(
     return false;
   }
   if (path.startsWith('/api/messenger/')) {
+    return true;
+  }
+  // Звонки LiveKit — create/accept/decline/token/invitations для обычных участников.
+  if (path.startsWith('/api/calls') || path.startsWith('/api/call-invitations')) {
     return true;
   }
   if (
