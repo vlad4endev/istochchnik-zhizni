@@ -28,6 +28,7 @@ import {
   mapDeviceError,
   type CallTokenResponse,
 } from './callsApi';
+import { startCallRing, stopCallRing, unlockCallAudio } from './callRingtone';
 import { useCallStore, type ActiveCallState } from './callStore';
 import './calls.css';
 
@@ -230,6 +231,16 @@ function RoomStage({
 
 function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; onCancel: () => void }) {
   const avatarSrc = activeCall.peerAvatar ? resolvePublicUrl(activeCall.peerAvatar) : undefined;
+
+  useEffect(() => {
+    unlockCallAudio();
+    const stop = startCallRing('ringback');
+    return () => {
+      stop();
+      stopCallRing();
+    };
+  }, [activeCall.callId]);
+
   return (
     <div className="call-window call-window--ringing" role="dialog" aria-label="Исходящий звонок">
       <div className="call-stage">
@@ -262,7 +273,15 @@ function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; o
         </div>
       </div>
       <div className="call-controls">
-        <button type="button" className="call-ctrl-btn call-ctrl-btn--hangup" onClick={onCancel} aria-label="Отменить">
+        <button
+          type="button"
+          className="call-ctrl-btn call-ctrl-btn--hangup"
+          onClick={() => {
+            stopCallRing();
+            onCancel();
+          }}
+          aria-label="Отменить"
+        >
           <LuPhoneOff size={22} />
         </button>
       </div>
@@ -330,6 +349,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     (activeCall.callKind === 'group' && activeCall.status === 'calling');
 
   const hangup = useCallback(async () => {
+    stopCallRing();
     try {
       if (activeCall.status === 'calling' && activeCall.isInitiator) {
         await cancelCall(activeCall.callId);
@@ -341,6 +361,12 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     }
     closeCall();
   }, [activeCall.callId, activeCall.isInitiator, activeCall.status, closeCall]);
+
+  useEffect(() => {
+    if (activeCall.status === 'active' || activeCall.status === 'ended') {
+      stopCallRing();
+    }
+  }, [activeCall.status]);
 
   useEffect(() => {
     return subscribeRealtimeMessages((raw) => {

@@ -334,6 +334,17 @@ if (typeof window !== 'undefined') {
   });
 
   registerPwaStaleDeployRecovery();
+
+  // Разблокировать Web Audio для рингтона после первого жеста (автоплей-политика браузера).
+  const unlockOnce = () => {
+    void import('./features/calls/callRingtone').then((m) => m.unlockCallAudio());
+    window.removeEventListener('pointerdown', unlockOnce);
+    window.removeEventListener('keydown', unlockOnce);
+    window.removeEventListener('touchstart', unlockOnce);
+  };
+  window.addEventListener('pointerdown', unlockOnce, { passive: true });
+  window.addEventListener('keydown', unlockOnce);
+  window.addEventListener('touchstart', unlockOnce, { passive: true });
 }
 
 const rootEl = document.getElementById('root');

@@ -997,6 +997,7 @@ export function ChatWindow({
       }
       if (isDraft || isAccessRequestsChannel) return;
       requestCallNotificationsFromUserGesture();
+      void import('../../calls/callRingtone').then((m) => m.unlockCallAudio());
 
       void (async () => {
         try {
