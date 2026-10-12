@@ -13,6 +13,9 @@ export type { AiConnectionPresetId };
 /** Промпты по разделам: если для раздела не задано, используется общий `system_prompt`. */
 export type AiSectionPrompts = Partial<Record<AiPromptScopeId, string>>;
 
+/** Модели по разделам: если для раздела не задано, используется `default_model`. */
+export type AiSectionModels = Partial<Record<AiPromptScopeId, string>>;
+
 export interface AiSettingsDocument {
   enabled: boolean;
   provider: AiProviderId;
@@ -25,6 +28,8 @@ export interface AiSettingsDocument {
   default_model: string;
   system_prompt: string | null;
   section_prompts: AiSectionPrompts;
+  /** Отдельная модель для раздела приложения (категории проекта) */
+  section_models: AiSectionModels;
   temperature: number;
   max_tokens: number;
   /**
@@ -47,10 +52,12 @@ export interface AiSettingsAdminView {
   has_api_key: boolean;
   default_model: string;
   system_prompt: string | null;
-  /** Список разделов для UI */
+  /** Список разделов (категорий проекта) для UI */
   prompt_scopes: AiPromptScopeOption[];
   /** Значения по каждому разделу (null — не задано, возьмётся общий промпт) */
   section_prompts: Record<AiPromptScopeId, string | null>;
+  /** Модель по разделу (null — использовать default_model) */
+  section_models: Record<AiPromptScopeId, string | null>;
   connection_preset: AiConnectionPresetId;
   /** Каталог пресетов для админки (одинаковый при каждом ответе) */
   preset_catalog: AiPresetCatalogEntry[];
@@ -74,6 +81,22 @@ function clampMaxTokens(v: number): number {
 
 function normalizeSectionPrompts(raw: unknown): AiSectionPrompts {
   const out: AiSectionPrompts = {};
+  if (!raw || typeof raw !== 'object') {
+    return out;
+  }
+  const o = raw as Record<string, unknown>;
+  for (const key of Object.keys(o)) {
+    if (!isAiPromptScopeId(key)) continue;
+    const v = o[key];
+    if (typeof v === 'string' && v.trim().length > 0) {
+      out[key] = v.trim();
+    }
+  }
+  return out;
+}
+
+function normalizeSectionModels(raw: unknown): AiSectionModels {
+  const out: AiSectionModels = {};
   if (!raw || typeof raw !== 'object') {
     return out;
   }
@@ -115,6 +138,7 @@ export function normalizeAiSettingsDocument(raw: unknown): AiSettingsDocument {
     typeof o.max_tokens === 'number' ? clampMaxTokens(o.max_tokens) : clampMaxTokens(Number(o.max_tokens));
 
   const section_prompts = normalizeSectionPrompts(o.section_prompts);
+  const section_models = normalizeSectionModels(o.section_models);
 
   const connection_preset: AiConnectionPresetId =
     typeof o.connection_preset === 'string' && isConnectionPresetId(o.connection_preset)
@@ -135,6 +159,7 @@ export function normalizeAiSettingsDocument(raw: unknown): AiSettingsDocument {
     default_model,
     system_prompt,
     section_prompts,
+    section_models,
     temperature,
     max_tokens,
     gptunnel_assistant_code,
@@ -146,6 +171,15 @@ export function buildSectionPromptsAdminView(doc: AiSettingsDocument): Record<Ai
   for (const { id } of AI_PROMPT_SCOPE_LIST) {
     const p = doc.section_prompts[id];
     out[id] = typeof p === 'string' && p.trim().length > 0 ? p : null;
+  }
+  return out;
+}
+
+export function buildSectionModelsAdminView(doc: AiSettingsDocument): Record<AiPromptScopeId, string | null> {
+  const out = {} as Record<AiPromptScopeId, string | null>;
+  for (const { id } of AI_PROMPT_SCOPE_LIST) {
+    const m = doc.section_models[id];
+    out[id] = typeof m === 'string' && m.trim().length > 0 ? m : null;
   }
   return out;
 }

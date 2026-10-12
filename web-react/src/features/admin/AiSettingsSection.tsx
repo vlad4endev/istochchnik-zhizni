@@ -1,22 +1,85 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { LuBot, LuCheck, LuKeyRound, LuServer } from 'react-icons/lu';
+import { LuBot, LuCheck, LuKeyRound, LuLayers, LuRefreshCw, LuServer } from 'react-icons/lu';
 
 import { DecimalTextInput } from '@/components/DecimalTextInput';
 import { IntegerTextInput } from '@/components/IntegerTextInput';
 import {
   apiErrorMessage,
+  fetchAiProviderModels,
   fetchAiSettingsAdmin,
   patchAiSettings,
   postAiTest,
   type AiConnectionPresetId,
+  type AiModelGroupId,
   type AiPresetCatalogEntry,
   type AiSettingsAdminResponse,
 } from './api';
 
 const Q_AI = ['admin', 'ai', 'settings'] as const;
+const Q_AI_MODELS = ['admin', 'ai', 'models'] as const;
 
 const MANUAL_MODEL = '__manual__';
+const INHERIT_MODEL = '__inherit__';
+
+const MODEL_GROUP_LABELS: Record<AiModelGroupId, string> = {
+  chat: 'Чат и текст',
+  reasoning: 'Рассуждение',
+  vision: 'Зрение и фото',
+  other: 'Прочее',
+};
+
+type ModelOption = { id: string; label: string; group?: AiModelGroupId };
+
+function guessModelGroup(id: string): AiModelGroupId {
+  const m = id.toLowerCase();
+  if (/o1|o3|reasoner|r1|thinking|deepseek-r/i.test(m)) return 'reasoning';
+  if (/gemini|gpt-4o|vision|pixtral|llava|claude-3/i.test(m)) return 'vision';
+  if (/chat|gpt|claude|deepseek|sonnet|flash|mini|turbo/i.test(m)) return 'chat';
+  return 'other';
+}
+
+function groupModelOptions(options: ModelOption[]): { group: AiModelGroupId; items: ModelOption[] }[] {
+  const order: AiModelGroupId[] = ['chat', 'reasoning', 'vision', 'other'];
+  const buckets = new Map<AiModelGroupId, ModelOption[]>();
+  for (const g of order) buckets.set(g, []);
+  for (const opt of options) {
+    const g = opt.group ?? guessModelGroup(opt.id);
+    buckets.get(g)!.push(opt);
+  }
+  return order
+    .map((group) => ({ group, items: buckets.get(group) ?? [] }))
+    .filter((b) => b.items.length > 0);
+}
+
+function ModelSelectOptions({ options }: { options: ModelOption[] }) {
+  const grouped = groupModelOptions(options);
+  const hasGroups = grouped.length > 1 || (grouped[0] && grouped[0].group !== 'other');
+  if (!hasGroups) {
+    return (
+      <>
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </>
+    );
+  }
+  return (
+    <>
+      {grouped.map(({ group, items }) => (
+        <optgroup key={group} label={MODEL_GROUP_LABELS[group]}>
+          {items.map((o) => (
+            <option key={`${group}:${o.id}`} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </>
+  );
+}
 
 function fieldClass() {
   return (
@@ -68,11 +131,20 @@ export function AiSettingsSection() {
     gptunnel_assistant_code: '',
   });
   const [sectionPrompts, setSectionPrompts] = useState<Record<string, string>>({});
+  const [sectionModels, setSectionModels] = useState<Record<string, string>>({});
   const [testPrompt, setTestPrompt] = useState('');
   const [testSection, setTestSection] = useState('');
   /** Пользователь явно выбрал «Другая модель…» в списке (иначе селект «откатывается»). */
   const [forceManualModel, setForceManualModel] = useState(false);
+  const [manualSectionModels, setManualSectionModels] = useState<Record<string, boolean>>({});
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  const modelsQ = useQuery({
+    queryKey: Q_AI_MODELS,
+    queryFn: fetchAiProviderModels,
+    enabled: Boolean(data),
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
     if (!data) return;
@@ -88,11 +160,15 @@ export function AiSettingsSection() {
       gptunnel_assistant_code: data.gptunnel_assistant_code ?? '',
     });
     const sp: Record<string, string> = {};
+    const sm: Record<string, string> = {};
     for (const s of data.prompt_scopes ?? []) {
       sp[s.id] = data.section_prompts[s.id] ?? '';
+      sm[s.id] = data.section_models?.[s.id] ?? '';
     }
     setSectionPrompts(sp);
+    setSectionModels(sm);
     setForceManualModel(false);
+    setManualSectionModels({});
   }, [data]);
 
   const catalog = data?.preset_catalog ?? [];
@@ -102,19 +178,36 @@ export function AiSettingsSection() {
     return catalog.find((c) => c.id === form.connection_preset);
   }, [catalog, form.connection_preset]);
 
+  const availableModels = useMemo((): ModelOption[] => {
+    const fromCatalog = activeCatalogEntry?.model_options ?? [];
+    const fromProvider = (modelsQ.data?.models ?? []).map((m) => ({
+      id: m.id,
+      label: m.label,
+      group: guessModelGroup(m.id),
+    }));
+    const byId = new Map<string, ModelOption>();
+    for (const o of fromCatalog) byId.set(o.id, o);
+    for (const o of fromProvider) {
+      if (!byId.has(o.id)) byId.set(o.id, o);
+    }
+    return Array.from(byId.values());
+  }, [activeCatalogEntry, modelsQ.data?.models]);
+
   const modelSelectValue = useMemo(() => {
     if (form.connection_preset === 'custom') return MANUAL_MODEL;
     if (forceManualModel) return MANUAL_MODEL;
-    const opts = activeCatalogEntry?.model_options ?? [];
-    return opts.some((o) => o.id === form.default_model) ? form.default_model : MANUAL_MODEL;
-  }, [activeCatalogEntry, forceManualModel, form.connection_preset, form.default_model]);
+    return availableModels.some((o) => o.id === form.default_model) ? form.default_model : MANUAL_MODEL;
+  }, [availableModels, forceManualModel, form.connection_preset, form.default_model]);
 
   const saveMut = useMutation({
     mutationFn: () => {
       const section_payload: Record<string, string | null> = {};
+      const models_payload: Record<string, string | null> = {};
       for (const s of data?.prompt_scopes ?? []) {
         const v = (sectionPrompts[s.id] ?? '').trim();
         section_payload[s.id] = v.length > 0 ? v : null;
+        const m = (sectionModels[s.id] ?? '').trim();
+        models_payload[s.id] = m.length > 0 ? m : null;
       }
       return patchAiSettings({
         enabled: form.enabled,
@@ -124,6 +217,7 @@ export function AiSettingsSection() {
         default_model: form.default_model.trim(),
         system_prompt: form.system_prompt.trim() ? form.system_prompt.trim() : null,
         section_prompts: section_payload,
+        section_models: models_payload,
         temperature: form.temperature,
         max_tokens: form.max_tokens,
         gptunnel_assistant_code: form.gptunnel_assistant_code.trim()
@@ -137,6 +231,7 @@ export function AiSettingsSection() {
         text: 'Настройки сохранены. Можно отправить тестовый запрос ниже.',
       });
       qc.setQueryData(Q_AI, next);
+      void qc.invalidateQueries({ queryKey: Q_AI_MODELS });
       setForm((prev) => ({ ...prev, api_key: '' }));
     },
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить настройки ИИ.') }),
@@ -387,7 +482,23 @@ export function AiSettingsSection() {
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-semibold text-stone-600">Модель</label>
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                  <label className="block text-xs font-semibold text-stone-600">
+                    Модель по умолчанию
+                  </label>
+                  <button
+                    type="button"
+                    className={btnSecondary('!px-2.5 !py-1.5 text-xs')}
+                    disabled={modelsQ.isFetching}
+                    onClick={() => void modelsQ.refetch()}
+                    title="Загрузить все модели с API провайдера"
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <LuRefreshCw className={`h-3.5 w-3.5 ${modelsQ.isFetching ? 'animate-spin' : ''}`} />
+                      {modelsQ.isFetching ? 'Загрузка…' : 'Все модели провайдера'}
+                    </span>
+                  </button>
+                </div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <select
                     className={`${fieldClass()} sm:max-w-md`}
@@ -402,11 +513,7 @@ export function AiSettingsSection() {
                       setForm((s) => ({ ...s, default_model: v }));
                     }}
                   >
-                    {(activeCatalogEntry?.model_options ?? []).map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
+                    <ModelSelectOptions options={availableModels} />
                     <option value={MANUAL_MODEL}>Другая модель…</option>
                   </select>
                   {modelSelectValue === MANUAL_MODEL ? (
@@ -422,6 +529,13 @@ export function AiSettingsSection() {
                     />
                   ) : null}
                 </div>
+                {modelsQ.data ? (
+                  <p className="mt-1.5 text-xs text-[var(--text-secondary)]">
+                    {modelsQ.data.source === 'provider'
+                      ? `Загружено с провайдера: ${modelsQ.data.models.length} моделей.`
+                      : modelsQ.data.error ?? 'Показан каталог пресета.'}
+                  </p>
+                ) : null}
               </div>
               <div className="sm:col-span-2 rounded-lg border border-stone-100 bg-stone-50/90 px-3 py-2 font-mono text-xs text-stone-600">
                 <span className="font-sans font-semibold text-stone-500">Endpoint: </span>
@@ -452,6 +566,100 @@ export function AiSettingsSection() {
             }}
           >
             Сохранить и проверить
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-[#F0E9EA] bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)] sm:p-6">
+        <h3 className="flex items-center gap-2 text-base font-extrabold text-[var(--text)]">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <LuLayers className="h-5 w-5" />
+          </span>
+          Модели по разделам проекта
+        </h3>
+        <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+          Для каждой категории приложения можно выбрать свою модель провайдера. Пустое значение —
+          используется модель по умолчанию выше.
+        </p>
+        <div className="mt-5 space-y-3">
+          {(settings.prompt_scopes ?? []).map((scope) => {
+            const current = (sectionModels[scope.id] ?? '').trim();
+            const isManual = Boolean(manualSectionModels[scope.id]);
+            const selectValue = !current
+              ? INHERIT_MODEL
+              : isManual || !availableModels.some((o) => o.id === current)
+                ? MANUAL_MODEL
+                : current;
+            return (
+              <div
+                key={scope.id}
+                className="rounded-xl border border-stone-200/90 bg-[var(--surface)]/60 px-3.5 py-3 sm:px-4"
+              >
+                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                  <label className="text-sm font-semibold text-[var(--text)]">{scope.label}</label>
+                  <span className="font-mono text-[11px] text-[var(--text-muted)]">{scope.id}</span>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <select
+                    className={`${fieldClass()} sm:min-w-[16rem] sm:flex-1`}
+                    value={selectValue}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === INHERIT_MODEL) {
+                        setManualSectionModels((prev) => ({ ...prev, [scope.id]: false }));
+                        setSectionModels((prev) => ({ ...prev, [scope.id]: '' }));
+                        return;
+                      }
+                      if (v === MANUAL_MODEL) {
+                        setManualSectionModels((prev) => ({ ...prev, [scope.id]: true }));
+                        return;
+                      }
+                      setManualSectionModels((prev) => ({ ...prev, [scope.id]: false }));
+                      setSectionModels((prev) => ({ ...prev, [scope.id]: v }));
+                    }}
+                  >
+                    <option value={INHERIT_MODEL}>
+                      Как по умолчанию ({form.default_model || 'не задано'})
+                    </option>
+                    <ModelSelectOptions options={availableModels} />
+                    <option value={MANUAL_MODEL}>Другая модель…</option>
+                  </select>
+                  {selectValue === MANUAL_MODEL ? (
+                    <input
+                      className={fieldClass()}
+                      value={sectionModels[scope.id] ?? ''}
+                      onChange={(e) => {
+                        setManualSectionModels((prev) => ({ ...prev, [scope.id]: true }));
+                        setSectionModels((prev) => ({ ...prev, [scope.id]: e.target.value }));
+                      }}
+                      placeholder="точное имя модели"
+                      autoComplete="off"
+                    />
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={btnPrimary('bg-[#7B2D3F]')}
+            disabled={saveMut.isPending}
+            onClick={() => {
+              setNote(null);
+              saveMut.mutate();
+            }}
+          >
+            Сохранить модели разделов
+          </button>
+          <button
+            type="button"
+            className={btnSecondary()}
+            disabled={modelsQ.isFetching}
+            onClick={() => void modelsQ.refetch()}
+          >
+            Обновить список моделей
           </button>
         </div>
       </section>

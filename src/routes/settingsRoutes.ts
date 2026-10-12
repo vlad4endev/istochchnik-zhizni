@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  getAiProviderModelsHandler,
   getAiSettingsAdminHandler,
   patchAiSettingsHandler,
   postAiTestHandler,
@@ -36,6 +37,7 @@ router.get('/logs/telegram-sends', getTelegramSendLogsAdmin);
 
 /** Настройки языковых моделей (только админ). */
 router.get('/ai/admin', getAiSettingsAdminHandler);
+router.get('/ai/models', getAiProviderModelsHandler);
 router.patch('/ai', patchAiSettingsHandler);
 router.post('/ai/test', postAiTestHandler);
 /** Мониторинг диалогов с ИИ-помощником (только админ). */

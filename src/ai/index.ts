@@ -7,4 +7,9 @@ export {
   gptunnelChatIdFromConversation,
   isGptunnelBaseUrl,
 } from './gptunnelAssistantClient';
-export { resolveEffectiveSystemPrompt, resolveLlmRuntimeConfig } from '../services/aiSettingsService';
+export {
+  resolveEffectiveSystemPrompt,
+  resolveLlmRuntimeConfig,
+  resolveModelForSection,
+  listProviderModels,
+} from '../services/aiSettingsService';

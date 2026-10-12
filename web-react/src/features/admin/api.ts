@@ -1122,6 +1122,8 @@ export interface AiPromptScopeOption {
 
 export type AiConnectionPresetId = 'openai' | 'deepseek' | 'openrouter' | 'gptunnel' | 'custom';
 
+export type AiModelGroupId = 'chat' | 'reasoning' | 'vision' | 'other';
+
 export interface AiPresetCatalogEntry {
   id: 'openai' | 'deepseek' | 'openrouter' | 'gptunnel';
   label: string;
@@ -1129,7 +1131,7 @@ export interface AiPresetCatalogEntry {
   base_url: string;
   default_model: string;
   key_hint: string;
-  model_options: { id: string; label: string }[];
+  model_options: { id: string; label: string; group?: AiModelGroupId }[];
 }
 
 export interface AiSettingsAdminResponse {
@@ -1145,14 +1147,27 @@ export interface AiSettingsAdminResponse {
   prompt_scopes: AiPromptScopeOption[];
   /** Промпт по разделу; null — использовать общий системный промпт */
   section_prompts: Record<string, string | null>;
+  /** Модель по разделу; null — использовать default_model */
+  section_models: Record<string, string | null>;
   temperature: number;
   max_tokens: number;
   /** Код ассистента GPTunnel для RAG (например ai08158128) */
   gptunnel_assistant_code: string | null;
 }
 
+export interface AiProviderModelsResponse {
+  source: 'provider' | 'catalog';
+  models: { id: string; label: string; owned_by?: string | null }[];
+  error?: string;
+}
+
 export async function fetchAiSettingsAdmin(): Promise<AiSettingsAdminResponse> {
   const { data } = await apiClient.get<AiSettingsAdminResponse>('/api/settings/ai/admin');
+  return data;
+}
+
+export async function fetchAiProviderModels(): Promise<AiProviderModelsResponse> {
+  const { data } = await apiClient.get<AiProviderModelsResponse>('/api/settings/ai/models');
   return data;
 }
 
@@ -1164,6 +1179,7 @@ export async function patchAiSettings(body: {
   default_model?: string | null;
   system_prompt?: string | null;
   section_prompts?: Partial<Record<string, string | null>>;
+  section_models?: Partial<Record<string, string | null>>;
   temperature?: number | null;
   max_tokens?: number | null;
   gptunnel_assistant_code?: string | null;

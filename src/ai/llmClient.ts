@@ -1,6 +1,10 @@
 import { spawn } from 'child_process';
 
-import { resolveEffectiveSystemPrompt, resolveLlmRuntimeConfig } from '../services/aiSettingsService';
+import {
+  resolveEffectiveSystemPrompt,
+  resolveLlmRuntimeConfig,
+  resolveModelForSection,
+} from '../services/aiSettingsService';
 import type { ChatMessage } from './types';
 
 export type AiAgentErrorCode =
@@ -267,7 +271,7 @@ export async function chatCompletion(
     throw new AiAgentError('Модуль ИИ отключён в настройках.', 'ai_disabled');
   }
 
-  const model = options.model ?? cfg.default_model;
+  const model = options.model ?? resolveModelForSection(cfg, options.section);
   const baseUrl = (options.base_url ?? cfg.base_url).replace(/\/+$/, '');
   const apiKey = options.api_key ?? cfg.api_key;
   const temperature =

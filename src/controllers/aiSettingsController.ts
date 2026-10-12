@@ -1,7 +1,11 @@
 import type { Request, Response } from 'express';
 import { AiAgentError, chatCompletion } from '../ai';
 import { notifyRealtime } from '../realtime/notify';
-import { getAiSettingsAdmin, updateAiSettings } from '../services/aiSettingsService';
+import {
+  getAiSettingsAdmin,
+  listProviderModels,
+  updateAiSettings,
+} from '../services/aiSettingsService';
 import { isConnectionPresetId, type AiConnectionPresetId } from '../types/aiConnectionPresets';
 import { isAiPromptScopeId, type AiPromptScopeId } from '../types/aiPromptScopes';
 
@@ -47,6 +51,7 @@ export async function patchAiSettingsHandler(req: Request, res: Response): Promi
     default_model?: string | null;
     system_prompt?: string | null;
     section_prompts?: Partial<Record<AiPromptScopeId, string | null>>;
+    section_models?: Partial<Record<AiPromptScopeId, string | null>>;
     temperature?: number | null;
     max_tokens?: number | null;
     gptunnel_assistant_code?: string | null;
@@ -122,6 +127,30 @@ export async function patchAiSettingsHandler(req: Request, res: Response): Promi
     }
     patch.section_prompts = cleaned;
   }
+  if (body.section_models !== undefined) {
+    if (body.section_models === null || typeof body.section_models !== 'object' || Array.isArray(body.section_models)) {
+      res.status(400).json({ error: 'Поле section_models должно быть объектом с моделями по разделам' });
+      return;
+    }
+    const raw = body.section_models as Record<string, unknown>;
+    const cleaned: Partial<Record<AiPromptScopeId, string | null>> = {};
+    for (const key of Object.keys(raw)) {
+      if (!isAiPromptScopeId(key)) {
+        res.status(400).json({ error: `Неизвестный раздел модели: ${key}` });
+        return;
+      }
+      const v = raw[key];
+      if (v === null) {
+        cleaned[key] = null;
+      } else if (typeof v === 'string') {
+        cleaned[key] = v;
+      } else {
+        res.status(400).json({ error: `Некорректное значение модели для раздела «${key}»` });
+        return;
+      }
+    }
+    patch.section_models = cleaned;
+  }
   if (body.temperature !== undefined) {
     if (body.temperature !== null && typeof body.temperature !== 'number') {
       res.status(400).json({ error: 'Поле temperature: число или null' });
@@ -151,6 +180,17 @@ export async function patchAiSettingsHandler(req: Request, res: Response): Promi
   } catch (e) {
     console.error('[ai-settings] PATCH error', e);
     res.status(500).json({ error: 'Не удалось сохранить настройки ИИ' });
+  }
+}
+
+export async function getAiProviderModelsHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    const result = await listProviderModels();
+    res.json(result);
+  } catch (e) {
+    console.error('[ai-settings] GET models error', e);
+    res.status(500).json({ error: 'Не удалось загрузить список моделей провайдера' });
   }
 }
 
