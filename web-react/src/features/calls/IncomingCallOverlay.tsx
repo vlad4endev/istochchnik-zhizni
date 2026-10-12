@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 
+import { startCallRing, stopCallRing, unlockCallAudio } from './callRingtone';
 import { requestCallNotificationsFromUserGesture } from './incomingCallBackground';
 import { useIncomingCall } from './useIncomingCall';
 import './calls.css';
@@ -11,19 +12,10 @@ import './calls.css';
 export function IncomingCallOverlay() {
   const navigate = useNavigate();
   const { incomingCall, accept, reject, suppressWebRingtone } = useIncomingCall();
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const stopRingRef = useRef<(() => void) | null>(null);
   const titleBlinkTimerRef = useRef<number | null>(null);
   const savedTitleRef = useRef<string | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-
-  const tryPlayRing = () => {
-    if (suppressWebRingtone) return;
-    const el = audioRef.current;
-    if (!el) return;
-    void el.play().catch(() => {
-      /* фон / автовоспроизведение */
-    });
-  };
 
   useEffect(() => {
     const onNotifClick = (ev: Event) => {
@@ -40,7 +32,9 @@ export function IncomingCallOverlay() {
 
   useEffect(() => {
     if (!incomingCall) {
-      audioRef.current?.pause();
+      stopRingRef.current?.();
+      stopRingRef.current = null;
+      stopCallRing();
       if (titleBlinkTimerRef.current != null) {
         window.clearInterval(titleBlinkTimerRef.current);
         titleBlinkTimerRef.current = null;
@@ -54,14 +48,13 @@ export function IncomingCallOverlay() {
       return;
     }
 
-    tryPlayRing();
-
-    try {
-      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-        navigator.vibrate([200, 100, 200, 100, 400]);
-      }
-    } catch {
-      /* ignore */
+    if (!suppressWebRingtone) {
+      unlockCallAudio();
+      stopRingRef.current?.();
+      stopRingRef.current = startCallRing('ringtone');
+    } else {
+      stopRingRef.current?.();
+      stopRingRef.current = null;
     }
 
     if (document.visibilityState === 'hidden' && savedTitleRef.current == null) {
@@ -88,16 +81,18 @@ export function IncomingCallOverlay() {
     }
 
     const onVis = () => {
-      if (document.visibilityState === 'visible') {
-        tryPlayRing();
+      if (document.visibilityState === 'visible' && !suppressWebRingtone && incomingCall) {
+        unlockCallAudio();
+        stopRingRef.current?.();
+        stopRingRef.current = startCallRing('ringtone');
       }
     };
     document.addEventListener('visibilitychange', onVis);
-    window.addEventListener('focus', tryPlayRing);
 
     return () => {
       document.removeEventListener('visibilitychange', onVis);
-      window.removeEventListener('focus', tryPlayRing);
+      stopRingRef.current?.();
+      stopRingRef.current = null;
       if (titleBlinkTimerRef.current != null) {
         window.clearInterval(titleBlinkTimerRef.current);
         titleBlinkTimerRef.current = null;
@@ -109,7 +104,6 @@ export function IncomingCallOverlay() {
       void wakeLockRef.current?.release().catch(() => {});
       wakeLockRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- ring helpers close over suppressWebRingtone
   }, [incomingCall, suppressWebRingtone]);
 
   if (!incomingCall) return null;
@@ -121,17 +115,23 @@ export function IncomingCallOverlay() {
   const initial = (incomingCall.callerName || '?').trim().charAt(0).toUpperCase() || '?';
 
   const onReject = () => {
+    unlockCallAudio();
     requestCallNotificationsFromUserGesture();
+    stopCallRing();
     void reject();
   };
 
   const onAccept = () => {
+    unlockCallAudio();
     requestCallNotificationsFromUserGesture();
+    stopCallRing();
     void accept();
   };
 
   const onMessage = () => {
+    unlockCallAudio();
     requestCallNotificationsFromUserGesture();
+    stopCallRing();
     const conversationId = incomingCall.conversationId;
     void reject().then(() => {
       if (conversationId) {
@@ -151,11 +151,8 @@ export function IncomingCallOverlay() {
       role="dialog"
       aria-modal="true"
       aria-label="Входящий звонок"
+      onPointerDown={unlockCallAudio}
     >
-      {!suppressWebRingtone ? (
-        <audio ref={audioRef} src="/sounds/ringtone.mp3" loop preload="auto" />
-      ) : null}
-
       {isVideo && avatarSrc ? (
         <div
           className="incoming-call-overlay__photo-bg"
