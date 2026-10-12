@@ -1,16 +1,20 @@
 import {
   LiveKitRoom,
   RoomAudioRenderer,
+  StartAudio,
+  isTrackReference,
   useTracks,
   VideoTrack,
   useLocalParticipant,
   useConnectionState,
+  useRoomContext,
 } from '@livekit/components-react';
 import {
   ConnectionState,
   DisconnectReason,
   Track,
   VideoPresets,
+  type Room,
   type RoomOptions,
   type RoomConnectOptions,
 } from 'livekit-client';
@@ -64,6 +68,13 @@ function hostLabel(url: string): string {
   }
 }
 
+/** Разблокировать WebAudio + LiveKit HTMLMediaElement playback (autoplay policy). */
+function resumeCallMedia(room?: Room | null): void {
+  unlockCallAudio();
+  if (!room) return;
+  void room.startAudio().catch(() => undefined);
+}
+
 function CallControls({
   videoEnabled,
   onHangup,
@@ -71,35 +82,47 @@ function CallControls({
   videoEnabled: boolean;
   onHangup: () => void;
 }) {
-  const { localParticipant } = useLocalParticipant();
-  const isMuted = useCallStore((s) => s.isMuted);
-  const isVideoOff = useCallStore((s) => s.isVideoOff);
-  const isScreenSharing = useCallStore((s) => s.isScreenSharing);
+  const room = useRoomContext();
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
+    useLocalParticipant();
   const setMuted = useCallStore((s) => s.setMuted);
   const setVideoOff = useCallStore((s) => s.setVideoOff);
   const setScreenSharing = useCallStore((s) => s.setScreenSharing);
   const showScreenShare = !isMobileUa();
 
+  // Источник истины — LiveKit participant, не zustand (иначе рассинхрон после mute).
+  const isMuted = !isMicrophoneEnabled;
+  const isVideoOff = videoEnabled ? !isCameraEnabled : true;
+  const isScreenSharing = Boolean(isScreenShareEnabled);
+
+  useEffect(() => {
+    setMuted(isMuted);
+  }, [isMuted, setMuted]);
+  useEffect(() => {
+    if (videoEnabled) setVideoOff(isVideoOff);
+  }, [isVideoOff, setVideoOff, videoEnabled]);
+  useEffect(() => {
+    setScreenSharing(isScreenSharing);
+  }, [isScreenSharing, setScreenSharing]);
+
   const toggleMic = useCallback(async () => {
     try {
-      const next = !isMuted;
-      await localParticipant.setMicrophoneEnabled(!next);
-      setMuted(next);
+      resumeCallMedia(room);
+      await localParticipant.setMicrophoneEnabled(isMuted);
     } catch (e) {
       emitAppToast(mapDeviceError(e), 'error');
     }
-  }, [isMuted, localParticipant, setMuted]);
+  }, [isMuted, localParticipant, room]);
 
   const toggleCam = useCallback(async () => {
     if (!videoEnabled) return;
     try {
-      const next = !isVideoOff;
-      await localParticipant.setCameraEnabled(!next);
-      setVideoOff(next);
+      resumeCallMedia(room);
+      await localParticipant.setCameraEnabled(isVideoOff);
     } catch (e) {
       emitAppToast(mapDeviceError(e), 'error');
     }
-  }, [isVideoOff, localParticipant, setVideoOff, videoEnabled]);
+  }, [isVideoOff, localParticipant, room, videoEnabled]);
 
   const toggleScreen = useCallback(async () => {
     if (!showScreenShare) {
@@ -107,18 +130,12 @@ function CallControls({
       return;
     }
     try {
-      if (isScreenSharing) {
-        await localParticipant.setScreenShareEnabled(false);
-        setScreenSharing(false);
-      } else {
-        await localParticipant.setScreenShareEnabled(true);
-        setScreenSharing(true);
-      }
+      resumeCallMedia(room);
+      await localParticipant.setScreenShareEnabled(!isScreenSharing);
     } catch (e) {
       emitAppToast(mapDeviceError(e), 'error');
-      setScreenSharing(false);
     }
-  }, [isScreenSharing, localParticipant, setScreenSharing, showScreenShare]);
+  }, [isScreenSharing, localParticipant, room, showScreenShare]);
 
   return (
     <div className="call-controls">
@@ -166,37 +183,75 @@ function RoomStage({
   serverUrl: string;
   connectError: string | null;
 }) {
+  const room = useRoomContext();
   const tracks = useTracks(
     [
-      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.Camera, withPlaceholder: false },
       { source: Track.Source.ScreenShare, withPlaceholder: false },
     ],
     { onlySubscribed: false },
   );
   const connectionState = useConnectionState();
+  const { isCameraEnabled } = useLocalParticipant();
   const peerName = useCallStore((s) => s.activeCall?.peerName ?? 'Собеседник');
   const peerAvatar = useCallStore((s) => s.activeCall?.peerAvatar ?? '');
   const [elapsed, setElapsed] = useState(0);
   const connected = connectionState === ConnectionState.Connected;
+  const stageRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!connected) {
       setElapsed(0);
       return;
     }
+    resumeCallMedia(room);
     const t = window.setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => window.clearInterval(t);
-  }, [connected]);
+  }, [connected, room]);
 
-  const remoteVideo = tracks.find(
+  // После attach трека Safari/Chrome иногда не стартуют video.play без явного вызова.
+  useEffect(() => {
+    const root = stageRef.current;
+    if (!root) return;
+    const kick = () => {
+      root.querySelectorAll('video').forEach((el) => {
+        if (el.paused) void el.play().catch(() => undefined);
+      });
+    };
+    kick();
+    const t = window.setInterval(kick, 1500);
+    return () => window.clearInterval(t);
+  }, [connected, tracks.length]);
+
+  const remoteScreen = tracks.find(
     (t) =>
       !t.participant.isLocal &&
-      t.publication?.kind === Track.Kind.Video &&
-      t.publication?.isSubscribed,
+      t.source === Track.Source.ScreenShare &&
+      t.publication?.track,
   );
-  const localVideo = tracks.find(
-    (t) => t.participant.isLocal && t.source === Track.Source.Camera && t.publication,
+  const remoteCam = tracks.find(
+    (t) =>
+      !t.participant.isLocal &&
+      t.source === Track.Source.Camera &&
+      t.publication?.track,
   );
+  // Не фильтровать local по isMuted — иначе mute mic/cam размонтирует <video> и мигает картинка.
+  const localCam = tracks.find(
+    (t) =>
+      t.participant.isLocal &&
+      t.source === Track.Source.Camera &&
+      t.publication?.track,
+  );
+
+  const remoteVideo =
+    remoteScreen && isTrackReference(remoteScreen)
+      ? remoteScreen
+      : remoteCam && isTrackReference(remoteCam)
+        ? remoteCam
+        : null;
+  const localVideo = localCam && isTrackReference(localCam) ? localCam : null;
+  const showRemoteVideo = callType === 'video' && Boolean(remoteVideo?.publication?.track);
+  const showLocalPip = callType === 'video' && Boolean(localVideo) && isCameraEnabled;
 
   const avatarSrc = peerAvatar ? resolvePublicUrl(peerAvatar) : undefined;
   let statusLabel = 'Соединение…';
@@ -210,11 +265,18 @@ function RoomStage({
   }
 
   return (
-    <div className="call-stage">
+    <div className="call-stage" ref={stageRef}>
       <div className="call-stage__main">
-        {callType === 'video' && remoteVideo?.publication ? (
-          <VideoTrack trackRef={remoteVideo} className="call-stage__remote-video" />
-        ) : (
+        {showRemoteVideo && remoteVideo ? (
+          <VideoTrack
+            trackRef={remoteVideo}
+            className="call-stage__remote-video"
+            manageSubscription={false}
+            playsInline
+            autoPlay
+          />
+        ) : null}
+        {!showRemoteVideo ? (
           <div className="call-stage__avatar-block">
             {avatarSrc ? (
               <img src={avatarSrc} alt="" className="call-stage__avatar" />
@@ -227,17 +289,28 @@ function RoomStage({
               <p className="call-stage__hint">Сервер: {hostLabel(serverUrl)}</p>
             ) : null}
           </div>
-        )}
-        {callType === 'video' && localVideo?.publication ? (
-          <div className="call-stage__local-pip">
-            <VideoTrack trackRef={localVideo} className="call-stage__local-video" />
+        ) : null}
+        {localVideo ? (
+          <div
+            className="call-stage__local-pip"
+            style={showLocalPip ? undefined : { visibility: 'hidden', pointerEvents: 'none' }}
+            aria-hidden={!showLocalPip}
+          >
+            <VideoTrack
+              trackRef={localVideo}
+              className="call-stage__local-video"
+              manageSubscription={false}
+              playsInline
+              autoPlay
+            />
           </div>
         ) : null}
       </div>
-      {callType === 'video' && remoteVideo?.publication ? (
+      {showRemoteVideo ? (
         <p className="call-stage__status call-stage__status--bar">{statusLabel}</p>
       ) : null}
       <RoomAudioRenderer />
+      <StartAudio label="Нажмите, чтобы включить звук" className="call-start-audio" />
     </div>
   );
 }
@@ -543,10 +616,10 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
 
   const roomOptions = useMemo<RoomOptions>(
     () => ({
-      adaptiveStream: true,
-      dynacast: true,
+      // Для 1:1 стабильнее без dynacast/adaptive — меньше «пропало видео до клика».
+      adaptiveStream: false,
+      dynacast: false,
       disconnectOnPageLeave: false,
-      // Стабильность > качество: 540p, один слой (без тяжёлого simulcast).
       videoCaptureDefaults: {
         resolution: VideoPresets.h540.resolution,
         facingMode: 'user',
@@ -557,9 +630,9 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         noiseSuppression: true,
       },
       publishDefaults: {
-        videoSimulcastLayers: [VideoPresets.h216],
+        // Не останавливать mic track при mute — иначе часто мигает/падает камера и autoplay.
+        stopMicTrackOnMute: false,
         videoCodec: 'vp8',
-        stopMicTrackOnMute: true,
         dtx: true,
         red: true,
       },
@@ -615,8 +688,12 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
           emitAppToast(msg, 'error');
         }}
         onConnected={() => {
+          unlockCallAudio();
           setLkConnected(true);
           setConnectError(null);
+        }}
+        onMediaDeviceFailure={() => {
+          emitAppToast('Не удалось получить доступ к камере или микрофону', 'error');
         }}
         onDisconnected={(reason) => {
           setLkConnected(false);
