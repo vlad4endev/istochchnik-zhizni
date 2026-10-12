@@ -920,6 +920,20 @@ function MessageBubbleInner({
         else title = callTypeLabel;
       }
       const invitePath = String(payload.invite_path ?? '').trim();
+      const inviteUrlRaw = String(payload.invite_url ?? '').trim();
+      const joinHref =
+        invitePath.startsWith('/call/join/')
+          ? invitePath
+          : inviteUrlRaw.includes('/call/join/')
+            ? inviteUrlRaw
+            : '';
+      const copyTarget =
+        inviteUrlRaw ||
+        (joinHref.startsWith('http')
+          ? joinHref
+          : joinHref
+            ? `${typeof window !== 'undefined' ? window.location.origin : ''}${joinHref}`
+            : '');
       return (
         <div
           className={[
@@ -929,16 +943,35 @@ function MessageBubbleInner({
         >
           <div className="min-w-0">
             <div className="font-semibold leading-tight">{title}</div>
-            {invitePath.startsWith('/call/join/') ? (
-              <a
-                href={invitePath}
-                className={[
-                  'mt-1 inline-block text-xs font-semibold underline',
-                  isMine ? 'text-white/85' : 'text-primary',
-                ].join(' ')}
-              >
-                Присоединиться
-              </a>
+            {joinHref ? (
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <a
+                  href={joinHref}
+                  className={[
+                    'inline-block text-xs font-semibold underline',
+                    isMine ? 'text-white/85' : 'text-primary',
+                  ].join(' ')}
+                >
+                  Присоединиться
+                </a>
+                {copyTarget ? (
+                  <button
+                    type="button"
+                    className={[
+                      'text-xs font-semibold underline',
+                      isMine ? 'text-white/75' : 'text-[var(--text-secondary)]',
+                    ].join(' ')}
+                    onClick={() => {
+                      void navigator.clipboard.writeText(copyTarget).then(
+                        () => emitAppToast('Ссылка на звонок скопирована', 'success'),
+                        () => emitAppToast('Не удалось скопировать ссылку', 'error'),
+                      );
+                    }}
+                  >
+                    Скопировать ссылку
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
         </div>

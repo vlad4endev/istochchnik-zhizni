@@ -13,6 +13,7 @@ import {
   LuChartColumn,
   LuMic,
   LuMusic,
+  LuPhone,
   LuTriangleAlert,
 } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
@@ -30,6 +31,8 @@ import { compressImageForMessengerUpload } from '../compressImageForUpload';
 import { MessengerPlainText } from '../messengerPlainText';
 import axios from 'axios';
 import { emitAppToast } from '../../../lib/uiFeedback';
+
+const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
 import {
   audioDisplayTitle,
   CHAT_AUDIO_ACCEPT,
@@ -285,6 +288,45 @@ export function ChatInput({
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
   const saveDraft = useChatStore((s) => s.saveDraft);
   const clearDraft = useChatStore((s) => s.clearDraft);
+  const conversation = useChatStore((s) =>
+    s.conversations.find((c) => String(c.id) === String(conversationId)),
+  );
+  const canCreateMeeting =
+    CALLS_FEATURE_ENABLED &&
+    !textOnly &&
+    !isDraftPrivateConversationId(conversationId) &&
+    Boolean(conversation) &&
+    (conversation?.type === 'private' ||
+      conversation?.type === 'group' ||
+      conversation?.type === 'channel');
+
+  const startMeetingFromAttachMenu = useCallback(
+    (mediaType: 'audio' | 'video') => {
+      setAttachMenuOpen(false);
+      void (async () => {
+        try {
+          const { startMeetingCall } = await import('../../calls/startMeetingCall');
+          let peerName = conversation?.title?.trim() || 'Конференция';
+          let peerAvatar = conversation?.avatar_url ?? '';
+          if (conversation?.type === 'private' && conversation.other_member) {
+            const fn = conversation.other_member.first_name || '';
+            const ln = conversation.other_member.last_name || '';
+            peerName = `${fn} ${ln}`.trim() || conversation.other_member.name || peerName;
+            peerAvatar = conversation.other_member.avatar_url ?? peerAvatar;
+          }
+          await startMeetingCall({
+            conversationId,
+            mediaType,
+            peerName,
+            peerAvatar,
+          });
+        } catch (e) {
+          emitAppToast(e instanceof Error ? e.message : 'Не удалось создать звонок', 'error');
+        }
+      })();
+    },
+    [conversation, conversationId],
+  );
 
   const [content, setContent] = useState('');
   const [pending, setPending] = useState<PendingAttachment | null>(null);
@@ -2553,6 +2595,48 @@ export function ChatInput({
                 </span>
                 <span className="min-w-0 flex-1">Фото или видео</span>
               </button>
+              {canCreateMeeting ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    haptic(12);
+                    startMeetingFromAttachMenu('video');
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-[var(--text)] transition-colors duration-200 hover:bg-[var(--surface)] active:bg-stone-100"
+                >
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-sky-50 text-sky-700 ring-1 ring-sky-100 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-500/25">
+                    <LuVideo size={18} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block leading-tight">Создать звонок</span>
+                    <span className="mt-0.5 block text-xs font-medium text-[var(--text-secondary)]">
+                      Ссылка для подключения
+                    </span>
+                  </span>
+                </button>
+              ) : null}
+              {canCreateMeeting ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    haptic(12);
+                    startMeetingFromAttachMenu('audio');
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-[var(--text)] transition-colors duration-200 hover:bg-[var(--surface)] active:bg-stone-100"
+                >
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-teal-50 text-teal-700 ring-1 ring-teal-100 dark:bg-teal-500/15 dark:text-teal-300 dark:ring-teal-500/25">
+                    <LuPhone size={18} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block leading-tight">Аудиоконференция</span>
+                    <span className="mt-0.5 block text-xs font-medium text-[var(--text-secondary)]">
+                      Только голос · по ссылке
+                    </span>
+                  </span>
+                </button>
+              ) : null}
               <button
                 type="button"
                 role="menuitem"

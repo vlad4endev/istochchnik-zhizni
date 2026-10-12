@@ -522,6 +522,72 @@
   cursor: pointer;
 }
 
+.call-invite-copy:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.call-invite-copy--primary {
+  background: rgba(56, 189, 248, 0.28);
+  border-color: rgba(125, 211, 252, 0.45);
+}
+
+.call-invite-bar {
+  position: absolute;
+  left: 50%;
+  top: max(52px, calc(env(safe-area-inset-top, 0px) + 44px));
+  z-index: 6;
+  transform: translateX(-50%);
+  width: min(22rem, calc(100% - 24px));
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(12, 14, 22, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: #fff;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.call-invite-bar__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.call-invite-bar__hint {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.35;
+}
+
+.call-invite-bar__url {
+  display: block;
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.72rem;
+  word-break: break-all;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.call-invite-bar__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.call-invite-bar__actions .call-invite-copy {
+  margin-top: 8px;
+  flex: 1 1 auto;
+  min-width: 7.5rem;
+}
+
 .call-route-page {
   min-height: 60vh;
   display: flex;
