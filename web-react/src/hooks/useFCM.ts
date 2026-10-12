@@ -221,17 +221,46 @@ export function useFCM(): void {
         });
 
         const receivedListener = await PushNotifications.addListener('pushNotificationReceived', (notification) => {
+          const data = (notification.data ?? {}) as Record<string, unknown>;
+          const pushType = typeof data.type === 'string' ? data.type : '';
+
+          // Входящий звонок: открываем overlay + рингтон, не toast
+          if (pushType === 'incoming_call' && typeof data.callId === 'string' && data.callId) {
+            window.dispatchEvent(
+              new CustomEvent('calls:push-incoming', {
+                detail: {
+                  callId: data.callId,
+                  callerId: data.callerId,
+                  conversationId: data.conversationId,
+                  callType: data.callType,
+                  callerName: data.callerName,
+                  callerAvatar: data.callerAvatar ?? null,
+                },
+              }),
+            );
+            return;
+          }
+          if (pushType === 'call_ended' || pushType === 'call_cancelled') {
+            const callId = typeof data.callId === 'string' ? data.callId : '';
+            if (callId) {
+              window.dispatchEvent(
+                new CustomEvent('calls:push-call-ended', { detail: { callId } }),
+              );
+            }
+            return;
+          }
+
           const title =
             typeof notification.notification?.title === 'string'
               ? notification.notification.title
-              : typeof notification.data?.title === 'string'
-                ? notification.data.title
+              : typeof data.title === 'string'
+                ? data.title
                 : '';
           const body =
             typeof notification.notification?.body === 'string'
               ? notification.notification.body
-              : typeof notification.data?.body === 'string'
-                ? notification.data.body
+              : typeof data.body === 'string'
+                ? data.body
                 : '';
           showForegroundNotification(title, body);
         });
@@ -240,7 +269,32 @@ export function useFCM(): void {
         });
 
         const actionListener = await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-          const data = action.notification?.data ?? {};
+          const data = (action.notification?.data ?? {}) as Record<string, unknown>;
+          const pushType = typeof data.type === 'string' ? data.type : '';
+          if (pushType === 'incoming_call' && typeof data.callId === 'string' && data.callId) {
+            window.dispatchEvent(
+              new CustomEvent('calls:push-incoming', {
+                detail: {
+                  callId: data.callId,
+                  callerId: data.callerId,
+                  conversationId: data.conversationId,
+                  callType: data.callType,
+                  callerName: data.callerName,
+                  callerAvatar: data.callerAvatar ?? null,
+                },
+              }),
+            );
+            const callUrl = typeof data.url === 'string' && data.url ? data.url : `/call/${data.callId}`;
+            window.dispatchEvent(
+              new CustomEvent('app:native-push-navigate', {
+                detail: {
+                  url: callUrl,
+                  conversationId: typeof data.conversationId === 'string' ? data.conversationId : '',
+                },
+              }),
+            );
+            return;
+          }
           const url = typeof data.url === 'string' ? data.url : '';
           const conversationId = typeof data.conversationId === 'string' ? data.conversationId : '';
           window.dispatchEvent(

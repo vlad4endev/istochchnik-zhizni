@@ -17,6 +17,9 @@ export type NativeCallActionPayload = {
 export interface NativeCallPlugin {
   isSupported(): Promise<{ supported: boolean }>;
   endCall(options: { callId: string }): Promise<void>;
+  /** Системный рингтон (обходит autoplay Web Audio). */
+  playRingtone(): Promise<void>;
+  stopRingtone(): Promise<void>;
   registerVoip?(): Promise<{ token?: string | null }>;
   addListener(
     eventName: 'incoming' | 'accepted' | 'declined' | 'ended' | 'voipToken',
@@ -30,6 +33,12 @@ const NativeCall = registerPlugin<NativeCallPlugin>('NativeCall', {
       return { supported: false };
     },
     async endCall() {
+      /* no-op on web */
+    },
+    async playRingtone() {
+      /* no-op on web */
+    },
+    async stopRingtone() {
       /* no-op on web */
     },
     async addListener() {

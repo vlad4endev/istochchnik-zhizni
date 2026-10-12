@@ -157,6 +157,8 @@ Push **не** содержит LiveKit token. Успешная отправка 
 
 На Android OEM с агрессивной оптимизацией батареи CallStyle может задерживаться — исключите приложение из оптимизации.
 
+В **foreground** Capacitor-приложении рингтон у адресата идёт через нативный `NativeCall.playRingtone` (Android `RingtoneManager` / iOS `AVAudioEngine`), потому что Web Audio часто молчит без жеста пользователя. FCM `incoming_call` в foreground открывает overlay (не toast).
+
 ## Проверка вручную
 
 1. Два пользователя в личном чате, `CALLS_ENABLED` и `VITE_CALLS_ENABLED`.

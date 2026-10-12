@@ -58,7 +58,48 @@ export function useIncomingCall() {
   const [suppressWebRingtone, setSuppressWebRingtone] = useState(false);
 
   useEffect(() => {
-    return subscribeRealtimeMessages((raw) => {
+    const applyIncoming = (
+      raw: {
+        callId?: string;
+        callerId?: number | string;
+        conversationId?: string;
+        callType?: string;
+        callerName?: string;
+        callerAvatar?: string | null;
+      },
+      source: 'ws' | 'push' | 'native',
+    ) => {
+      const next = normalizeIncoming(raw);
+      if (!next.callId) return;
+      setIncomingCall(next);
+      if (source === 'native') {
+        // CallKit / CallStyle уже звонят — не дублируем
+        setSuppressWebRingtone(true);
+      } else {
+        // WS/FCM: включаем рингтон, но не сбрасываем suppress, если натив уже показал UI
+        setSuppressWebRingtone((prev) => prev);
+      }
+      if (!isCapacitorNative()) {
+        notifyIncomingCallBackground({
+          callId: next.callId,
+          callerName: next.callerName,
+          callType: next.callType,
+          callerAvatar: next.callerAvatar,
+        });
+      }
+    };
+
+    const clearIncoming = (callId: string) => {
+      if (!callId) return;
+      dismissIncomingCallBrowserNotification(callId);
+      setIncomingCall((cur) => (cur && cur.callId === callId ? null : cur));
+      setSuppressWebRingtone(false);
+      if (isCapacitorNative()) {
+        void NativeCall.endCall({ callId }).catch(() => undefined);
+      }
+    };
+
+    const unsubWs = subscribeRealtimeMessages((raw) => {
       const m = raw as {
         type?: string;
         callId?: string;
@@ -69,30 +110,46 @@ export function useIncomingCall() {
         callerAvatar?: string | null;
       };
       if (m.type === 'call:incoming') {
-        const next = normalizeIncoming(m);
-        setIncomingCall(next);
-        // Foreground: WebView ringtone; native CallStyle только в фоне
-        setSuppressWebRingtone(false);
-        if (!isCapacitorNative()) {
-          notifyIncomingCallBackground({
-            callId: next.callId,
-            callerName: next.callerName,
-            callType: next.callType,
-            callerAvatar: next.callerAvatar,
-          });
-        }
+        applyIncoming(m, 'ws');
         return;
       }
       if (m.type === 'call:cancelled' || m.type === 'call:ended' || m.type === 'call:rejected') {
-        const callId = String(m.callId ?? '');
-        dismissIncomingCallBrowserNotification(callId);
-        setIncomingCall((cur) => (cur && cur.callId === callId ? null : cur));
-        setSuppressWebRingtone(false);
-        if (isCapacitorNative() && callId) {
-          void NativeCall.endCall({ callId }).catch(() => undefined);
-        }
+        clearIncoming(String(m.callId ?? ''));
       }
     });
+
+    // FCM data-only в foreground (и tap по пушу) — если WS ещё не доставил call:incoming
+    const onPushIncoming = (ev: Event) => {
+      const detail = (ev as CustomEvent<Record<string, unknown>>).detail ?? {};
+      applyIncoming(
+        {
+          callId: typeof detail.callId === 'string' ? detail.callId : undefined,
+          callerId: detail.callerId as number | string | undefined,
+          conversationId: typeof detail.conversationId === 'string' ? detail.conversationId : undefined,
+          callType: typeof detail.callType === 'string' ? detail.callType : undefined,
+          callerName: typeof detail.callerName === 'string' ? detail.callerName : undefined,
+          callerAvatar:
+            detail.callerAvatar == null
+              ? null
+              : typeof detail.callerAvatar === 'string'
+                ? detail.callerAvatar
+                : null,
+        },
+        'push',
+      );
+    };
+    const onPushEnded = (ev: Event) => {
+      const callId = String((ev as CustomEvent<{ callId?: string }>).detail?.callId ?? '');
+      clearIncoming(callId);
+    };
+    window.addEventListener('calls:push-incoming', onPushIncoming);
+    window.addEventListener('calls:push-call-ended', onPushEnded);
+
+    return () => {
+      unsubWs();
+      window.removeEventListener('calls:push-incoming', onPushIncoming);
+      window.removeEventListener('calls:push-call-ended', onPushEnded);
+    };
   }, []);
 
   useEffect(() => {
@@ -111,7 +168,6 @@ export function useIncomingCall() {
             const next = fromNativePayload(ev);
             if (!next.callId) return;
             setIncomingCall(next);
-            // Нативный UI уже звонит (фон / lock screen)
             setSuppressWebRingtone(true);
           }),
         );
