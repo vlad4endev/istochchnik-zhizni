@@ -215,20 +215,26 @@ cmd_update() {
         exit 1
       fi
       echo "[$( _ts )] Выполняю: docker compose … up -d --build"
+      _compose_files=()
       if [[ -n "${UPDATE_COMPOSE_FILES:-}" ]]; then
-        # shellcheck disable=SC2086
-        docker compose ${UPDATE_COMPOSE_FILES} up -d --build
+        # shellcheck disable=SC2206
+        _compose_files=(${UPDATE_COMPOSE_FILES})
       else
-        docker compose up -d --build
+        _compose_files=(-f docker-compose.yml)
+        if [[ -f docker-compose.livekit-addon.yml ]] && grep -Eq '^[[:space:]]*CALLS_ENABLED[[:space:]]*=[[:space:]]*true' .env 2>/dev/null; then
+          _compose_files+=(-f docker-compose.livekit-addon.yml)
+          echo "[$( _ts )] Compose: + docker-compose.livekit-addon.yml (CALLS_ENABLED=true)"
+        fi
+        if [[ -f docker-compose.redis-addon.yml ]] && grep -Eq '^[[:space:]]*REDIS_REALTIME_ENABLED[[:space:]]*=[[:space:]]*true' .env 2>/dev/null; then
+          _compose_files+=(-f docker-compose.redis-addon.yml)
+          echo "[$( _ts )] Compose: + docker-compose.redis-addon.yml"
+        fi
       fi
+      # shellcheck disable=SC2086
+      docker compose "${_compose_files[@]}" up -d --build
       echo "[$( _ts )] ✓ Контейнеры пересобраны и запущены"
       echo "[$( _ts )] Статус контейнеров:"
-      if [[ -n "${UPDATE_COMPOSE_FILES:-}" ]]; then
-        # shellcheck disable=SC2086
-        docker compose ${UPDATE_COMPOSE_FILES} ps 2>/dev/null || true
-      else
-        docker compose ps 2>/dev/null || true
-      fi
+      docker compose "${_compose_files[@]}" ps 2>/dev/null || true
     fi
 
     section "Готово"
