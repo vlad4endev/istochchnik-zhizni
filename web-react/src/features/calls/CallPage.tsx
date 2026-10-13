@@ -70,6 +70,8 @@ export function CallPage() {
             isInitiator,
             status: c.status === 'ringing' && isInitiator ? 'calling' : 'active',
             inviteUrl: c.inviteUrl,
+            // Link meetings: do not bind UI to a chat the joiner may not belong to.
+            conversationId: c.accessMode === 'link' ? '' : (c.conversationId ?? ''),
           });
         }
       } catch (e) {
@@ -97,8 +99,12 @@ export function CallPage() {
     );
   }
 
+  // Link / standalone meetings: invitees are not chat members — never open ?conversationId=…
   const messengerHref =
-    call?.conversationId != null && String(call.conversationId).trim() !== ''
+    call &&
+    call.accessMode !== 'link' &&
+    call.conversationId != null &&
+    String(call.conversationId).trim() !== ''
       ? `/messenger?conversationId=${call.conversationId}`
       : '/messenger';
 

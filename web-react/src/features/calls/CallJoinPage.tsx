@@ -76,12 +76,15 @@ export function CallJoinPage() {
           : preview.mediaType === 'video'
             ? 'Видеовстреча'
             : 'Аудиовстреча';
+      // Link joins must not deep-link into the host chat: invitees are call participants,
+      // not conversation members → otherwise messenger returns «Not a member of this conversation».
       hydrateFromPublic(result.call, {
         peerName: title,
         peerAvatar: '',
         peerId: 0,
         isInitiator: false,
         status: 'active',
+        conversationId: '',
         livekitUrl: result.url,
         livekitToken: result.token,
       });

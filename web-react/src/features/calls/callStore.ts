@@ -82,7 +82,11 @@ export const useCallStore = create<CallStore>((set) => ({
       return {
         activeCall: {
           callId: call.id,
-          conversationId: call.conversationId ?? extras.conversationId ?? '',
+          // extras.conversationId wins (e.g. link-join clears chat id so guests aren't sent into a foreign group)
+          conversationId:
+            extras.conversationId !== undefined
+              ? extras.conversationId
+              : (call.conversationId ?? ''),
           peerId: extras.peerId ?? s.activeCall?.peerId ?? 0,
           peerName: extras.peerName ?? s.activeCall?.peerName ?? 'Участник',
           peerAvatar: extras.peerAvatar ?? s.activeCall?.peerAvatar ?? '',
