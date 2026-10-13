@@ -1,17 +1,10 @@
 import { useEffect, useCallback, useState, useRef, lazy, Suspense } from 'react';
-import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
 import { useMessengerWsContext } from '../MessengerWsContext';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
 import { ChatList } from './ChatList';
-import {
-  LuPlus,
-  LuMessageSquare,
-  LuSlidersHorizontal,
-  LuVideo,
-  LuPhone,
-} from 'react-icons/lu';
+import { LuPlus, LuMessageSquare, LuSlidersHorizontal } from 'react-icons/lu';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
 import {
@@ -19,10 +12,7 @@ import {
   saveActiveMessengerConversation,
 } from '../../../lib/persistAppLocation';
 import { syncViewportHeightVars } from '../../../lib/nativeShellViewport';
-import { emitAppToast } from '../../../lib/uiFeedback';
 import './messenger.css';
-
-const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
 
 const ChatWindow = lazy(async () => {
   const m = await import('./ChatWindow');
@@ -66,13 +56,6 @@ export function MessengerPage() {
   const ensurePrivateDraftFromConversationId = useChatStore((s) => s.ensurePrivateDraftFromConversationId);
   const loadConversations = useChatStore((s) => s.loadConversations);
   const [showNewChat, setShowNewChat] = useState(false);
-  const [composeMenuOpen, setComposeMenuOpen] = useState(false);
-  const [meetingBusy, setMeetingBusy] = useState(false);
-  const composeBtnRef = useRef<HTMLButtonElement | null>(null);
-  const composeMenuRef = useRef<HTMLDivElement | null>(null);
-  const [composeMenuPos, setComposeMenuPos] = useState<{ top: number; right: number } | null>(
-    null,
-  );
   const [mobileView, setMobileView] = useState<'list' | 'chat'>(() => {
     if (typeof window === 'undefined') return 'list';
     const params = new URLSearchParams(window.location.search);
@@ -239,70 +222,6 @@ export function MessengerPage() {
     navigate('/messenger', { replace: true });
   }, [activeId, navigate, runTransitionWindow, setActive]);
 
-  const repositionComposeMenu = useCallback(() => {
-    const btn = composeBtnRef.current;
-    if (!btn) return;
-    const rect = btn.getBoundingClientRect();
-    const pad = 8;
-    setComposeMenuPos({
-      top: Math.round(rect.bottom + pad),
-      right: Math.max(pad, Math.round(window.innerWidth - rect.right)),
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!composeMenuOpen) return;
-    repositionComposeMenu();
-    const onReposition = () => repositionComposeMenu();
-    window.addEventListener('resize', onReposition);
-    window.addEventListener('scroll', onReposition, true);
-    return () => {
-      window.removeEventListener('resize', onReposition);
-      window.removeEventListener('scroll', onReposition, true);
-    };
-  }, [composeMenuOpen, repositionComposeMenu]);
-
-  useEffect(() => {
-    if (!composeMenuOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      if (composeBtnRef.current?.contains(t)) return;
-      if (composeMenuRef.current?.contains(t)) return;
-      setComposeMenuOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setComposeMenuOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [composeMenuOpen]);
-
-  const startMeetingFromCompose = useCallback(
-    (mediaType: 'audio' | 'video') => {
-      if (meetingBusy) return;
-      setComposeMenuOpen(false);
-      setMeetingBusy(true);
-      void (async () => {
-        try {
-          const { startStandaloneMeetingCall } = await import('../../calls/startMeetingCall');
-          const result = await startStandaloneMeetingCall(mediaType);
-          if (result?.conversationId) {
-            handleSelectConversation(result.conversationId);
-          }
-        } catch (e) {
-          emitAppToast(e instanceof Error ? e.message : 'Не удалось создать конференцию', 'error');
-        } finally {
-          setMeetingBusy(false);
-        }
-      })();
-    },
-    [handleSelectConversation, meetingBusy],
-  );
-
   return (
     <div className="tg-messenger-page messenger-layout relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <div
@@ -327,19 +246,9 @@ export function MessengerPage() {
             </button>
             <button
               type="button"
-              ref={composeBtnRef}
               className="tg-compose-btn-sm"
-              onClick={() => {
-                if (CALLS_FEATURE_ENABLED) {
-                  setComposeMenuOpen((v) => !v);
-                } else {
-                  setShowNewChat(true);
-                }
-              }}
-              aria-label="Создать"
-              aria-haspopup="menu"
-              aria-expanded={composeMenuOpen}
-              disabled={meetingBusy}
+              onClick={() => setShowNewChat(true)}
+              aria-label="Создать чат или встречу"
             >
               <LuPlus size={20} strokeWidth={2.5} />
             </button>
@@ -348,74 +257,6 @@ export function MessengerPage() {
         <ChatList onSelect={handleSelectConversation} activeId={activeId} />
       </aside>
 
-      {typeof document !== 'undefined' && composeMenuOpen && composeMenuPos
-        ? createPortal(
-            <div
-              ref={composeMenuRef}
-              role="menu"
-              className="tg-popover tg-compose-menu w-64 overflow-hidden rounded-2xl border border-gray-100 bg-[var(--surface-elevated)] shadow-md"
-              style={{
-                position: 'fixed',
-                top: `${composeMenuPos.top}px`,
-                right: `${composeMenuPos.right}px`,
-                zIndex: 100000,
-              }}
-            >
-              <button
-                type="button"
-                role="menuitem"
-                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-[var(--text)] transition-colors duration-200 hover:bg-[var(--surface)] active:bg-stone-100"
-                onClick={() => {
-                  setComposeMenuOpen(false);
-                  setShowNewChat(true);
-                }}
-              >
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">
-                  <LuMessageSquare size={18} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block leading-tight">Новый чат</span>
-                  <span className="mt-0.5 block text-xs font-medium text-[var(--text-secondary)]">
-                    Личный, группа или канал
-                  </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-[var(--text)] transition-colors duration-200 hover:bg-[var(--surface)] active:bg-stone-100"
-                onClick={() => startMeetingFromCompose('video')}
-              >
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-sky-50 text-sky-700 ring-1 ring-sky-100 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-500/25">
-                  <LuVideo size={18} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block leading-tight">Создать звонок</span>
-                  <span className="mt-0.5 block text-xs font-medium text-[var(--text-secondary)]">
-                    Видеоконференция · ссылка
-                  </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-[var(--text)] transition-colors duration-200 hover:bg-[var(--surface)] active:bg-stone-100"
-                onClick={() => startMeetingFromCompose('audio')}
-              >
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-teal-50 text-teal-700 ring-1 ring-teal-100 dark:bg-teal-500/15 dark:text-teal-300 dark:ring-teal-500/25">
-                  <LuPhone size={18} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block leading-tight">Аудиоконференция</span>
-                  <span className="mt-0.5 block text-xs font-medium text-[var(--text-secondary)]">
-                    Только голос · по ссылке
-                  </span>
-                </span>
-              </button>
-            </div>,
-            document.body,
-          )
-        : null}
       {mobileView === 'list' && activeId ? (
         <button
           type="button"

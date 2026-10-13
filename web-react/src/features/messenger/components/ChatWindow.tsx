@@ -172,12 +172,6 @@ export function ChatWindow({
     return true;
   }, [conv, isAccessRequestsChannel, isAssistantChannel, isDraft]);
 
-  const canShowGroupCall = useMemo(() => {
-    if (!CALLS_FEATURE_ENABLED) return false;
-    if (isDraft || !conv || isAccessRequestsChannel || isAssistantChannel) return false;
-    return conv.type === 'group' || conv.type === 'channel';
-  }, [conv, isAccessRequestsChannel, isAssistantChannel, isDraft]);
-
   useEffect(() => {
     setCallHeaderMenuOpen(false);
   }, [conversationId]);
@@ -996,44 +990,36 @@ export function ChatWindow({
         return;
       }
       if (isDraft || isAccessRequestsChannel) return;
+      if (conv?.type !== 'private' || !conv.other_member) {
+        emitAppToast('Конференции создаются через «+» в списке чатов', 'info');
+        return;
+      }
       requestCallNotificationsFromUserGesture();
       void import('../../calls/callRingtone').then((m) => m.unlockCallAudio());
 
       void (async () => {
         try {
-          if (conv?.type === 'private' && conv.other_member) {
-            const { createDirectCall } = await import('../../calls/callsApi');
-            const call = await createDirectCall({
-              conversationId,
-              recipientId: conv.other_member.id,
-              mediaType: callType,
-            });
-            const fn = conv.other_member.first_name || '';
-            const ln = conv.other_member.last_name || '';
-            const peerName = `${fn} ${ln}`.trim() || conv.other_member.name;
-            const peerAvatar = conv.other_member.avatar_url ?? '';
-            useCallStore.getState().openCall({
-              callId: call.id,
-              conversationId,
-              peerId: conv.other_member.id,
-              peerName,
-              peerAvatar,
-              callType,
-              isInitiator: true,
-              status: 'calling',
-              callKind: 'direct',
-            });
-            return;
-          }
-          if (conv && (conv.type === 'group' || conv.type === 'channel')) {
-            const { startMeetingCall } = await import('../../calls/startMeetingCall');
-            await startMeetingCall({
-              conversationId,
-              mediaType: callType,
-              peerName: conv.title?.trim() || 'Конференция',
-              peerAvatar: conv.avatar_url ?? '',
-            });
-          }
+          const { createDirectCall } = await import('../../calls/callsApi');
+          const call = await createDirectCall({
+            conversationId,
+            recipientId: conv.other_member!.id,
+            mediaType: callType,
+          });
+          const fn = conv.other_member!.first_name || '';
+          const ln = conv.other_member!.last_name || '';
+          const peerName = `${fn} ${ln}`.trim() || conv.other_member!.name;
+          const peerAvatar = conv.other_member!.avatar_url ?? '';
+          useCallStore.getState().openCall({
+            callId: call.id,
+            conversationId,
+            peerId: conv.other_member!.id,
+            peerName,
+            peerAvatar,
+            callType,
+            isInitiator: true,
+            status: 'calling',
+            callKind: 'direct',
+          });
         } catch (e) {
           emitAppToast(e instanceof Error ? e.message : 'Не удалось начать звонок', 'error');
         }
@@ -1220,13 +1206,13 @@ export function ChatWindow({
                     ↓
                   </button>
                 ) : null}
-                {!isDraft && (canShowDirectCall || canShowGroupCall) ? (
+                {!isDraft && canShowDirectCall ? (
                   <div className="relative" ref={callHeaderMenuRef}>
                     <button
                       type="button"
                       onClick={() => setCallHeaderMenuOpen((v) => !v)}
-                      aria-label={canShowGroupCall ? 'Начать звонок' : 'Позвонить'}
-                      title={canShowGroupCall ? 'Начать звонок' : 'Позвонить'}
+                      aria-label="Позвонить"
+                      title="Позвонить"
                       aria-haspopup="menu"
                       aria-expanded={callHeaderMenuOpen}
                       className={[
@@ -1256,9 +1242,7 @@ export function ChatWindow({
                             <LuPhone className="h-[18px] w-[18px]" strokeWidth={2.25} aria-hidden />
                           </span>
                           <span className="min-w-0">
-                            <span className="block leading-tight">
-                              {canShowGroupCall ? 'Начать аудиозвонок' : 'Аудиозвонок'}
-                            </span>
+                            <span className="block leading-tight">Аудиозвонок</span>
                             <span className="mt-0.5 block text-xs font-medium text-[var(--text-secondary)]">
                               Только голос
                             </span>
@@ -1277,9 +1261,7 @@ export function ChatWindow({
                             <LuVideo className="h-[18px] w-[18px]" strokeWidth={2.25} aria-hidden />
                           </span>
                           <span className="min-w-0">
-                            <span className="block leading-tight">
-                              {canShowGroupCall ? 'Начать видеозвонок' : 'Видеозвонок'}
-                            </span>
+                            <span className="block leading-tight">Видеозвонок</span>
                             <span className="mt-0.5 block text-xs font-medium text-[var(--text-secondary)]">
                               С камерой
                             </span>
