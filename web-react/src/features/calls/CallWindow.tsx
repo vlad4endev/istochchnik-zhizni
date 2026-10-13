@@ -55,6 +55,7 @@ import { BodyPortal } from '../../components/BodyPortal';
 import { emitAppToast } from '../../lib/uiFeedback';
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 import { subscribeRealtimeMessages } from '../../lib/realtimeWsClient';
+import { setTelegramCallPresentation } from '../../lib/telegramWebApp';
 
 import {
   cancelCall,
@@ -1931,6 +1932,16 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
 
 export function CallWindow() {
   const activeCall = useCallStore((s) => s.activeCall);
+  const callUiOpen = Boolean(
+    activeCall && activeCall.status !== 'ringing_in' && activeCall.status !== 'ended',
+  );
+
+  useEffect(() => {
+    if (!callUiOpen) return;
+    setTelegramCallPresentation(true);
+    return () => setTelegramCallPresentation(false);
+  }, [callUiOpen]);
+
   // ringing_in: Accept UI lives on IncomingCallOverlay / CallPage — do not cover it.
   if (!activeCall) return null;
   if (activeCall.status === 'ringing_in' || activeCall.status === 'ended') return null;

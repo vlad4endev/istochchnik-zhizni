@@ -12,6 +12,7 @@ import { BrowserRouter } from 'react-router-dom';
 
 import { scheduleHideNativeSplashAfterPaint } from './lib/hideNativeSplash';
 import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
+import { initTelegramWebApp } from './lib/telegramWebApp';
 import { client } from './lib/appwrite';
 import { PwaLaunchHandler } from './features/pwa/PwaLaunchHandler';
 import {
@@ -203,6 +204,7 @@ if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_WDYR === 'true') {
 
 applyNativeShellViewportLock();
 window.addEventListener('load', () => applyNativeShellViewportLock());
+initTelegramWebApp();
 initPwaStandaloneHtmlHint();
 
 /**

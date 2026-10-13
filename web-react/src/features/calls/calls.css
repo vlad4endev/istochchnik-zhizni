@@ -2,6 +2,10 @@
 .incoming-call-overlay {
   --call-accept: #4cd964;
   --call-decline: #ff3b30;
+  --call-safe-top: max(env(safe-area-inset-top, 0px), var(--tg-safe-area-inset-top, 0px));
+  --call-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px));
+  --call-inset-top: calc(var(--call-safe-top) + var(--tg-content-safe-area-inset-top, 0px));
+  --call-inset-bottom: calc(var(--call-safe-bottom) + var(--tg-content-safe-area-inset-bottom, 0px));
   position: fixed;
   inset: 0;
   z-index: 10050;
@@ -10,9 +14,9 @@
   align-items: center;
   justify-content: space-between;
   padding:
-    max(56px, calc(36px + env(safe-area-inset-top, 0px)))
+    max(56px, calc(36px + var(--call-inset-top)))
     28px
-    max(36px, calc(32px + env(safe-area-inset-bottom, 0px)));
+    max(36px, calc(32px + var(--call-inset-bottom)));
   box-sizing: border-box;
   background: #0a0c14;
   color: #fff;
@@ -331,8 +335,17 @@
   --call-speak: #3b82f6;
   --call-speak-soft: rgba(59, 130, 246, 0.35);
   --call-brand: var(--primary, #7d3640);
-  /* Место под нижнюю панель кнопок + home indicator (iOS / Android) */
-  --call-controls-reserve: calc(112px + env(safe-area-inset-bottom, 0px));
+  /* iOS/Android env + Telegram Mini App CSS vars (в TG env(*) часто 0). */
+  --call-safe-top: max(env(safe-area-inset-top, 0px), var(--tg-safe-area-inset-top, 0px));
+  --call-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px));
+  --call-safe-left: max(env(safe-area-inset-left, 0px), var(--tg-safe-area-inset-left, 0px));
+  --call-safe-right: max(env(safe-area-inset-right, 0px), var(--tg-safe-area-inset-right, 0px));
+  --call-content-top: var(--tg-content-safe-area-inset-top, 0px);
+  --call-content-bottom: var(--tg-content-safe-area-inset-bottom, 0px);
+  --call-inset-top: calc(var(--call-safe-top) + var(--call-content-top));
+  --call-inset-bottom: calc(var(--call-safe-bottom) + var(--call-content-bottom));
+  /* Место под нижнюю панель кнопок + home indicator / TG chrome */
+  --call-controls-reserve: calc(112px + var(--call-inset-bottom));
   position: fixed;
   inset: 0;
   z-index: 10040;
@@ -397,7 +410,8 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  padding: max(12px, calc(env(safe-area-inset-top, 0px) + 6px)) 16px 8px;
+  padding: max(12px, calc(var(--call-inset-top, 0px) + 6px)) max(16px, var(--call-safe-right, 0px)) 8px
+    max(16px, var(--call-safe-left, 0px));
   z-index: 4;
 }
 
@@ -496,7 +510,7 @@
   align-items: center;
   justify-content: center;
   position: relative;
-  padding: 12px 12px var(--call-controls-reserve, calc(108px + env(safe-area-inset-bottom, 0px)));
+  padding: 12px 12px var(--call-controls-reserve, calc(108px + var(--call-inset-bottom, 0px)));
   box-sizing: border-box;
 }
 
@@ -525,8 +539,8 @@
 
 .call-stage__local-pip {
   position: absolute;
-  bottom: var(--call-controls-reserve, calc(110px + env(safe-area-inset-bottom, 0px)));
-  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: var(--call-controls-reserve, calc(110px + var(--call-inset-bottom, 0px)));
+  right: max(16px, var(--call-safe-right, 0px));
   width: min(132px, 34vw);
   aspect-ratio: 3 / 4;
   border-radius: 14px;
@@ -539,7 +553,7 @@
 .call-start-audio {
   position: absolute;
   left: 50%;
-  bottom: var(--call-controls-reserve, calc(128px + env(safe-area-inset-bottom, 0px)));
+  bottom: var(--call-controls-reserve, calc(128px + var(--call-inset-bottom, 0px)));
   transform: translateX(-50%);
   z-index: 5;
   border: 0;
@@ -660,7 +674,7 @@
 
 .call-stage__status--bar {
   position: absolute;
-  top: max(16px, env(safe-area-inset-top, 0px));
+  top: max(16px, var(--call-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 4;
@@ -681,7 +695,7 @@
   position: fixed;
   left: 50%;
   right: auto;
-  bottom: max(16px, calc(12px + env(safe-area-inset-bottom, 0px)));
+  bottom: max(16px, calc(12px + var(--call-inset-bottom, env(safe-area-inset-bottom, 0px))));
   z-index: 10045;
   display: flex;
   align-items: flex-end;
@@ -949,7 +963,7 @@
 .call-invite-bar {
   position: absolute;
   left: 50%;
-  top: max(52px, calc(env(safe-area-inset-top, 0px) + 44px));
+  top: max(52px, calc(var(--call-inset-top, env(safe-area-inset-top, 0px)) + 44px));
   z-index: 6;
   transform: translateX(-50%);
   width: min(22rem, calc(100% - 24px));
@@ -1223,26 +1237,86 @@
 }
 
 @media (max-width: 720px) {
+  /* Telegram-like: заполняем высоту, без «карточки» с пустотой снизу */
   .call-speaker-layout {
-    gap: 10px;
+    gap: 8px;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    height: 100%;
+  }
+
+  .call-speaker-layout__spotlight {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .call-speaker-layout__spotlight .call-participant-tile {
+    max-width: none;
+    height: 100%;
   }
 
   .call-speaker-layout__spotlight .call-participant-tile--video .call-participant-tile__media {
-    min-height: min(40vh, 340px);
-    border-radius: 16px;
+    min-height: 0;
+    height: 100%;
+    border-radius: 14px;
+  }
+
+  .call-speaker-layout__spotlight .call-participant-tile--video .call-participant-tile__media video {
+    object-fit: cover;
   }
 
   .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid) {
-    justify-content: flex-start;
+    justify-content: stretch;
+    gap: 8px;
+    padding: 0;
+  }
+
+  /* Один «второй» участник — почти на всю ширину, как в Telegram */
+  .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid):has(
+      > .call-participant-tile--strip:only-child
+    ),
+  .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid):has(
+      > .call-participant-tile--strip:first-child:nth-last-child(1)
+    ) {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid):has(
+      > .call-participant-tile--strip:only-child
+    )
+    .call-participant-tile--strip,
+  .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid):has(
+      > .call-participant-tile--strip:first-child:nth-last-child(1)
+    )
+    .call-participant-tile--strip {
+    width: 100%;
+    max-width: none;
+  }
+
+  .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid):has(
+      > .call-participant-tile--strip:only-child
+    )
+    .call-participant-tile--video
+    .call-participant-tile__media,
+  .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid):has(
+      > .call-participant-tile--strip:first-child:nth-last-child(1)
+    )
+    .call-participant-tile--video
+    .call-participant-tile__media {
+    aspect-ratio: 16 / 10;
+    max-height: min(28vh, 220px);
   }
 
   .call-speaker-layout__strip .call-participant-tile--strip {
-    width: min(132px, 40vw);
+    width: min(148px, 42vw);
   }
 
   .call-speaker-layout__strip--grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px 6px;
+    max-width: none;
   }
 }
 
@@ -1664,16 +1738,20 @@
 
 @media (max-width: 720px) {
   .call-window {
-    --call-controls-reserve: calc(118px + env(safe-area-inset-bottom, 0px));
+    /* Telegram-style: компактная панель без подписей */
+    --call-controls-reserve: calc(88px + var(--call-inset-bottom, 0px));
   }
 
   .call-meeting-topbar {
-    padding: max(10px, calc(env(safe-area-inset-top, 0px) + 4px)) 12px 6px;
+    padding: max(8px, calc(var(--call-inset-top, 0px) + 2px)) max(12px, var(--call-safe-right, 0px)) 4px
+      max(12px, var(--call-safe-left, 0px));
     gap: 8px;
   }
 
   .call-meeting-topbar__title {
-    font-size: 0.98rem;
+    font-size: 0.95rem;
+    font-weight: 650;
+    -webkit-line-clamp: 1;
   }
 
   .call-meeting-topbar__count {
@@ -1687,9 +1765,15 @@
     height: 28px;
   }
 
+  .call-stage--meeting .call-stage__main {
+    padding: 4px 8px var(--call-controls-reserve);
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
   .call-stage__main {
-    padding-left: 10px;
-    padding-right: 10px;
+    padding-left: 8px;
+    padding-right: 8px;
   }
 
   .call-meeting-lobby .call-participant-tile {
@@ -1701,11 +1785,22 @@
   }
 
   .call-controls {
-    bottom: max(14px, calc(10px + env(safe-area-inset-bottom, 0px)));
-    max-width: calc(100% - 12px);
-    gap: 2px;
-    padding: 8px 8px 6px;
-    border-radius: 22px;
+    bottom: max(10px, calc(8px + var(--call-inset-bottom, 0px)));
+    max-width: calc(100% - 20px);
+    gap: 4px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: rgba(20, 22, 30, 0.82);
+  }
+
+  /* Как в Telegram: только иконки, без подписей */
+  .call-ctrl__label {
+    display: none;
+  }
+
+  .call-ctrl {
+    min-width: 52px;
+    gap: 0;
   }
 
   .call-participants--video.call-participants--n2 {
@@ -1727,22 +1822,14 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .call-ctrl {
-    min-width: 48px;
-  }
-
   .call-ctrl__icon {
-    width: 46px;
-    height: 46px;
+    width: 48px;
+    height: 48px;
   }
 
   .call-ctrl--hangup .call-ctrl__icon {
-    width: 50px;
-    height: 50px;
-  }
-
-  .call-ctrl__label {
-    font-size: 0.6rem;
+    width: 52px;
+    height: 52px;
   }
 }
 
@@ -1751,6 +1838,24 @@ html[data-call-active='1'] .app-bottom-nav {
   opacity: 0 !important;
   pointer-events: none !important;
   visibility: hidden;
+}
+
+/* Telegram Mini App: плотнее к краям, уважаем content safe area хедера TG */
+html[data-telegram-webapp='1'] .call-window {
+  --call-controls-reserve: calc(84px + var(--call-inset-bottom));
+}
+
+html[data-telegram-webapp='1'] .call-meeting-topbar {
+  padding-top: max(6px, calc(var(--call-inset-top) + 2px));
+}
+
+html[data-telegram-call='1'] body {
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
+  display: none !important;
 }
 
 .call-participant-tile--speaking.call-participant-tile--video .call-participant-tile__media {
@@ -2274,9 +2379,21 @@ html[data-call-active='1'] .app-bottom-nav {
   align-items: center;
   justify-content: center;
   padding:
-    max(20px, env(safe-area-inset-top, 0px))
+    max(
+      20px,
+      calc(
+        max(env(safe-area-inset-top, 0px), var(--tg-safe-area-inset-top, 0px)) +
+          var(--tg-content-safe-area-inset-top, 0px)
+      )
+    )
     16px
-    max(20px, env(safe-area-inset-bottom, 0px));
+    max(
+      20px,
+      calc(
+        max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px)) +
+          var(--tg-content-safe-area-inset-bottom, 0px)
+      )
+    );
   box-sizing: border-box;
   background: var(--tm-bg-bottom);
   color: #fff;

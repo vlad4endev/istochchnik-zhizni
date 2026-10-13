@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { BodyPortal } from '../../components/BodyPortal';
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
+import { setTelegramCallPresentation } from '../../lib/telegramWebApp';
 
 import { startCallRing, stopCallRing, unlockCallAudio } from './callRingtone';
 import { requestCallNotificationsFromUserGesture } from './incomingCallBackground';
@@ -106,6 +107,12 @@ export function IncomingCallOverlay() {
       wakeLockRef.current = null;
     };
   }, [incomingCall, suppressWebRingtone]);
+
+  useEffect(() => {
+    if (!incomingCall) return;
+    setTelegramCallPresentation(true);
+    return () => setTelegramCallPresentation(false);
+  }, [incomingCall]);
 
   if (!incomingCall) return null;
 
