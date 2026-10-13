@@ -10,7 +10,7 @@ import {
   type ChangeEvent,
   type CSSProperties,
 } from 'react';
-import { LuSearch, LuX, LuUsers, LuMegaphone, LuChevronLeft, LuCamera, LuVideo, LuPhone } from 'react-icons/lu';
+import { LuSearch, LuX, LuUsers, LuMegaphone, LuChevronLeft, LuCamera } from 'react-icons/lu';
 import { useChatStore, DRAFT_PRIVATE_PREFIX } from '../chatStore';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { getAvatarColor } from '../avatarUtils';
@@ -18,9 +18,6 @@ import { emitAppToast } from '../../../lib/uiFeedback';
 import { compressImageForMessengerUpload } from '../compressImageForUpload';
 import { canAddMemberToGroupChat, formatMemberSearchStatusLine } from '../memberPresenceLabel';
 import { BodyPortal } from '../../../components/BodyPortal';
-import { CreateMeetingDialog } from '../../calls/CreateMeetingDialog';
-
-const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
 
 interface NewChatDialogProps {
   onClose: () => void;
@@ -93,15 +90,6 @@ const DIALOG_STYLES = `
   .tg-section-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .tg-section-title { font-size: 0.9375rem; font-weight: 700; color: var(--tg-text); line-height: 1.2; }
   .tg-section-sub { font-size: 0.75rem; font-weight: 500; color: var(--tg-text-muted); line-height: 1.25; }
-  .tg-section-btn--meeting { color: var(--tg-text); }
-  .tg-section-btn--meeting .tg-section-icon {
-    background: var(--tg-primary-light);
-    color: var(--tg-primary);
-  }
-  .tg-section-btn--meeting-video .tg-section-icon {
-    background: color-mix(in srgb, var(--tg-primary) 16%, transparent);
-    color: var(--tg-primary);
-  }
   .tg-group-footer {
     padding: 12px 16px 16px;
     border-top: 1px solid var(--tg-border);
@@ -165,7 +153,6 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   const [searchResults, setSearchResults] = useState<SearchMember[]>([]);
   const [searching, setSearching] = useState(false);
   const [mode, setMode] = useState<'contact' | 'group' | 'channel'>('contact');
-  const [meetingMedia, setMeetingMedia] = useState<'audio' | 'video' | null>(null);
   const [groupWizardStep, setGroupWizardStep] = useState<GroupWizardStep>('members');
   const [title, setTitle] = useState('');
   const [titleError, setTitleError] = useState<string | null>(null);
@@ -454,19 +441,6 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
     });
   };
 
-  if (meetingMedia) {
-    return (
-      <CreateMeetingDialog
-        mediaType={meetingMedia}
-        onClose={() => setMeetingMedia(null)}
-        onCreated={(id) => {
-          setMeetingMedia(null);
-          onCreated(id);
-        }}
-      />
-    );
-  }
-
   return (
     <BodyPortal><div className="tg-dialog-overlay" style={overlayVisualViewportStyle} onClick={onClose}>
       <div className="tg-dialog" onClick={(e) => e.stopPropagation()}>
@@ -520,32 +494,6 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                       <span className="tg-section-sub">Публикации и объявления</span>
                     </span>
                   </button>
-                  {CALLS_FEATURE_ENABLED ? (
-                    <>
-                      <button
-                        type="button"
-                        className="tg-section-btn tg-section-btn--meeting tg-section-btn--meeting-video"
-                        onClick={() => setMeetingMedia('video')}
-                      >
-                        <div className="tg-section-icon"><LuVideo size={20} aria-hidden /></div>
-                        <span className="tg-section-copy">
-                          <span className="tg-section-title">Видеовстреча</span>
-                          <span className="tg-section-sub">Как Телемост — ссылка сразу</span>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="tg-section-btn tg-section-btn--meeting"
-                        onClick={() => setMeetingMedia('audio')}
-                      >
-                        <div className="tg-section-icon"><LuPhone size={20} aria-hidden /></div>
-                        <span className="tg-section-copy">
-                          <span className="tg-section-title">Аудиовстреча</span>
-                          <span className="tg-section-sub">Только голос · по ссылке</span>
-                        </span>
-                      </button>
-                    </>
-                  ) : null}
                 </div>
               )}
 

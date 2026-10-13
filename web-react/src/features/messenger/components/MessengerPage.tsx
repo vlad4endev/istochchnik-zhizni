@@ -1,11 +1,12 @@
-import { useEffect, useCallback, useState, useRef, lazy, Suspense } from 'react';
+import { useEffect, useCallback, useState, useRef, lazy, Suspense, useLayoutEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { LuPhone, LuPlus, LuMessageSquare, LuSlidersHorizontal, LuVideo } from 'react-icons/lu';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
 import { useMessengerWsContext } from '../MessengerWsContext';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
 import { ChatList } from './ChatList';
-import { LuPlus, LuMessageSquare, LuSlidersHorizontal } from 'react-icons/lu';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
+import { BodyPortal } from '../../../components/BodyPortal';
 import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
 import {
   readActiveMessengerConversation,
@@ -13,6 +14,8 @@ import {
 } from '../../../lib/persistAppLocation';
 import { syncViewportHeightVars } from '../../../lib/nativeShellViewport';
 import './messenger.css';
+
+const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
 
 const ChatWindow = lazy(async () => {
   const m = await import('./ChatWindow');
@@ -22,6 +25,11 @@ const ChatWindow = lazy(async () => {
 const NewChatDialog = lazy(async () => {
   const m = await import('./NewChatDialog');
   return { default: m.NewChatDialog };
+});
+
+const CreateMeetingDialog = lazy(async () => {
+  const m = await import('../../calls/CreateMeetingDialog');
+  return { default: m.CreateMeetingDialog };
 });
 
 function MessengerFallback({ title }: { title: string }) {
@@ -56,6 +64,11 @@ export function MessengerPage() {
   const ensurePrivateDraftFromConversationId = useChatStore((s) => s.ensurePrivateDraftFromConversationId);
   const loadConversations = useChatStore((s) => s.loadConversations);
   const [showNewChat, setShowNewChat] = useState(false);
+  const [callsMenuOpen, setCallsMenuOpen] = useState(false);
+  const [meetingMedia, setMeetingMedia] = useState<'audio' | 'video' | null>(null);
+  const [callsMenuPos, setCallsMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const callsBtnRef = useRef<HTMLButtonElement | null>(null);
+  const callsMenuRef = useRef<HTMLDivElement | null>(null);
   const [mobileView, setMobileView] = useState<'list' | 'chat'>(() => {
     if (typeof window === 'undefined') return 'list';
     const params = new URLSearchParams(window.location.search);
@@ -222,6 +235,53 @@ export function MessengerPage() {
     navigate('/messenger', { replace: true });
   }, [activeId, navigate, runTransitionWindow, setActive]);
 
+  const repositionCallsMenu = useCallback(() => {
+    const btn = callsBtnRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const pad = 8;
+    setCallsMenuPos({
+      top: Math.round(rect.bottom + pad),
+      right: Math.max(pad, Math.round(window.innerWidth - rect.right)),
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!callsMenuOpen) return;
+    repositionCallsMenu();
+    const onReposition = () => repositionCallsMenu();
+    window.addEventListener('resize', onReposition);
+    window.addEventListener('scroll', onReposition, true);
+    return () => {
+      window.removeEventListener('resize', onReposition);
+      window.removeEventListener('scroll', onReposition, true);
+    };
+  }, [callsMenuOpen, repositionCallsMenu]);
+
+  useEffect(() => {
+    if (!callsMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (callsBtnRef.current?.contains(t)) return;
+      if (callsMenuRef.current?.contains(t)) return;
+      setCallsMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCallsMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [callsMenuOpen]);
+
+  const openMeeting = useCallback((media: 'audio' | 'video') => {
+    setCallsMenuOpen(false);
+    setMeetingMedia(media);
+  }, []);
+
   return (
     <div className="tg-messenger-page messenger-layout relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <div
@@ -234,7 +294,7 @@ export function MessengerPage() {
       >
         <div className="tg-sidebar-header">
           <h1 className="tg-sidebar-title">Чаты</h1>
-          <div className="flex items-center gap-2">
+          <div className="tg-sidebar-actions">
             <button
               type="button"
               className={`tg-density-toggle hidden md:inline-flex ${density === 'compact' ? 'tg-density-toggle--compact' : ''}`}
@@ -244,11 +304,29 @@ export function MessengerPage() {
             >
               <LuSlidersHorizontal size={16} strokeWidth={2.3} aria-hidden />
             </button>
+            {CALLS_FEATURE_ENABLED ? (
+              <button
+                type="button"
+                ref={callsBtnRef}
+                className="tg-calls-btn-sm"
+                onClick={() => setCallsMenuOpen((v) => !v)}
+                aria-label="Новая встреча"
+                title="Новая встреча"
+                aria-haspopup="menu"
+                aria-expanded={callsMenuOpen}
+              >
+                <LuVideo size={20} strokeWidth={2.35} aria-hidden />
+              </button>
+            ) : null}
             <button
               type="button"
               className="tg-compose-btn-sm"
-              onClick={() => setShowNewChat(true)}
-              aria-label="Создать чат или встречу"
+              onClick={() => {
+                setCallsMenuOpen(false);
+                setShowNewChat(true);
+              }}
+              aria-label="Создать чат"
+              title="Новый чат"
             >
               <LuPlus size={20} strokeWidth={2.5} />
             </button>
@@ -283,10 +361,55 @@ export function MessengerPage() {
               <LuMessageSquare size={80} strokeWidth={1} />
             </div>
             <h2 className="tg-empty-title">Выберите чат</h2>
-            <p className="tg-empty-sub">или создайте новый, нажав на <strong>+</strong></p>
+            <p className="tg-empty-sub">
+              {CALLS_FEATURE_ENABLED
+                ? <>чат — на <strong>+</strong>, встреча — на кнопку с камерой</>
+                : <>или создайте новый, нажав на <strong>+</strong></>}
+            </p>
           </div>
         )}
       </main>
+
+      {callsMenuOpen && callsMenuPos ? (
+        <BodyPortal>
+          <div
+            ref={callsMenuRef}
+            role="menu"
+            aria-label="Создать встречу"
+            className="tg-calls-menu"
+            style={{ top: callsMenuPos.top, right: callsMenuPos.right }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="tg-calls-menu__item"
+              onClick={() => openMeeting('video')}
+            >
+              <span className="tg-calls-menu__icon tg-calls-menu__icon--video" aria-hidden>
+                <LuVideo size={20} strokeWidth={2.2} />
+              </span>
+              <span className="tg-calls-menu__copy">
+                <span className="tg-calls-menu__title">Видеовстреча</span>
+                <span className="tg-calls-menu__sub">Камера и ссылка сразу</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="tg-calls-menu__item"
+              onClick={() => openMeeting('audio')}
+            >
+              <span className="tg-calls-menu__icon" aria-hidden>
+                <LuPhone size={20} strokeWidth={2.2} />
+              </span>
+              <span className="tg-calls-menu__copy">
+                <span className="tg-calls-menu__title">Аудиовстреча</span>
+                <span className="tg-calls-menu__sub">Только голос · по ссылке</span>
+              </span>
+            </button>
+          </div>
+        </BodyPortal>
+      ) : null}
 
       {showNewChat && (
         <Suspense fallback={<MessengerFallback title="Загрузка…" />}>
@@ -299,6 +422,19 @@ export function MessengerPage() {
           />
         </Suspense>
       )}
+
+      {meetingMedia ? (
+        <Suspense fallback={null}>
+          <CreateMeetingDialog
+            mediaType={meetingMedia}
+            onClose={() => setMeetingMedia(null)}
+            onCreated={(id) => {
+              setMeetingMedia(null);
+              handleSelectConversation(id);
+            }}
+          />
+        </Suspense>
+      ) : null}
       </div>
     </div>
   );

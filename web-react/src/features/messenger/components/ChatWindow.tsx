@@ -991,7 +991,7 @@ export function ChatWindow({
       }
       if (isDraft || isAccessRequestsChannel) return;
       if (conv?.type !== 'private' || !conv.other_member) {
-        emitAppToast('Конференции создаются через «+» в списке чатов', 'info');
+        emitAppToast('Встречи создаются кнопкой с камерой рядом с «+»', 'info');
         return;
       }
       requestCallNotificationsFromUserGesture();
