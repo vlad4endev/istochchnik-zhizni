@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   audioDisplayTitle,
+  browserCanPlayWebmAudio,
   isChatAudioFile,
   isGeneratedStorageFileName,
   isMessengerAudioFilePayload,
   isVoiceRecordingFileName,
+  isWebmLikeChatAudio,
   messengerAudioListPreview,
+  messengerAudioNeedsM4aTranscode,
   parseId3v2Title,
   resolveMessengerAudioFileTitle,
 } from '../src/features/messenger/chatAudio';
@@ -70,6 +73,21 @@ describe('chatAudio helpers', () => {
         originalName: 'Worship Night.mp3',
       }),
     ).toBe('Worship Night');
+  });
+
+  it('detects webm-like chat audio', () => {
+    expect(isWebmLikeChatAudio('audio/webm')).toBe(true);
+    expect(isWebmLikeChatAudio('video/webm')).toBe(true);
+    expect(isWebmLikeChatAudio('voice-123.webm')).toBe(true);
+    expect(isWebmLikeChatAudio('song.mp3')).toBe(false);
+  });
+
+  it('requests m4a transcode when browser cannot play webm', () => {
+    const canPlay = browserCanPlayWebmAudio();
+    expect(messengerAudioNeedsM4aTranscode({ kind: 'voice', name: 'voice-1.webm' })).toBe(!canPlay);
+    expect(messengerAudioNeedsM4aTranscode({ mimeType: 'audio/mpeg', name: 'a.mp3', kind: 'file' })).toBe(
+      false,
+    );
   });
 
   it('parses ID3v2 TIT2 title', () => {

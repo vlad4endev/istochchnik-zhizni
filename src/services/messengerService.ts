@@ -3043,12 +3043,26 @@ export async function getMessageAttachmentForMember(
   let mimeType =
     String(payload.mimeType ?? (payload as { mimetype?: unknown }).mimetype ?? '').trim() || null;
 
-  if (mimeType) {
-    const m = mimeType.toLowerCase();
-    // Исторически в payload встречался audio/webm даже для video_note.
-    // Нормализуем MIME по типу сообщения, чтобы браузер правильно выбирал декодер.
-    if (payloadType === 'video_note' && m === 'audio/webm') mimeType = 'video/webm';
-    if (payloadType === 'audio' && m === 'video/webm') mimeType = 'audio/webm';
+  // Исторически WebM в payload путали audio/webm и video/webm.
+  // Нормализуем MIME по типу сообщения, чтобы браузер выбирал правильный декодер.
+  const mimeMain = mimeType ? mimeType.toLowerCase().split(';')[0].trim() : '';
+  const nameLower = fileName.toLowerCase();
+  if (payloadType === 'video_note') {
+    if (!mimeMain || mimeMain === 'audio/webm' || mimeMain === 'video/webm' || mimeMain === 'application/octet-stream') {
+      mimeType = nameLower.endsWith('.mp4') || nameLower.endsWith('.m4v') ? 'video/mp4' : 'video/webm';
+    }
+  } else if (payloadType === 'audio') {
+    if (mimeMain === 'video/webm' || (!mimeMain && nameLower.endsWith('.webm'))) {
+      mimeType = 'audio/webm';
+    } else if (!mimeMain || mimeMain === 'application/octet-stream') {
+      if (nameLower.endsWith('.webm')) mimeType = 'audio/webm';
+      else if (nameLower.endsWith('.ogg') || nameLower.endsWith('.oga') || nameLower.endsWith('.opus')) {
+        mimeType = 'audio/ogg';
+      } else if (nameLower.endsWith('.m4a') || nameLower.endsWith('.mp4')) mimeType = 'audio/mp4';
+      else if (nameLower.endsWith('.mp3')) mimeType = 'audio/mpeg';
+      else if (nameLower.endsWith('.wav')) mimeType = 'audio/wav';
+      else if (nameLower.endsWith('.aac')) mimeType = 'audio/aac';
+    }
   }
 
   const slotIdx =

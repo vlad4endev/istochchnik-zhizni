@@ -54,11 +54,46 @@ export function useAuthenticatedApiBlobSrc(src: string | null | undefined): stri
     void (async () => {
       try {
         const path = toRequestPath(src);
-        const { data } = await apiClient.get(path, {
+        const { data, headers } = await apiClient.get(path, {
           responseType: 'blob',
           baseURL: samePageOriginBaseURL(),
+          timeout: 120_000,
+          headers: { Accept: '*/*' },
+          silentErrorToast: true,
         });
-        const objectUrl = URL.createObjectURL(data as Blob);
+        const blob = data as Blob;
+        const headerType =
+          typeof headers['content-type'] === 'string'
+            ? headers['content-type']
+            : Array.isArray(headers['content-type'])
+              ? headers['content-type'][0]
+              : '';
+        const headerMain = String(headerType || '')
+          .split(';')[0]
+          .trim()
+          .toLowerCase();
+        const blobMain = String(blob.type || '')
+          .split(';')[0]
+          .trim()
+          .toLowerCase();
+        if (
+          headerMain.startsWith('application/json') ||
+          headerMain.startsWith('text/') ||
+          blobMain.startsWith('application/json') ||
+          blobMain.startsWith('text/')
+        ) {
+          throw new Error('attachment_not_binary');
+        }
+        // Доверяем Content-Type API (для voice он уже audio/webm, для video_note — video/webm).
+        let playable = blob;
+        if (
+          headerMain &&
+          headerMain !== blobMain &&
+          (!blobMain || blobMain === 'application/octet-stream' || blobMain.startsWith('video/') || blobMain.startsWith('audio/'))
+        ) {
+          playable = new Blob([blob], { type: headerMain });
+        }
+        const objectUrl = URL.createObjectURL(playable);
         if (cancelled) {
           URL.revokeObjectURL(objectUrl);
           return;

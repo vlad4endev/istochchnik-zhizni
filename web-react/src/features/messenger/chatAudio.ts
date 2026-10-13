@@ -1,6 +1,51 @@
 /** Расширения аудио, которые принимает мессенджер (совпадает с backend upload allowlist). */
 export const AUDIO_NAME_EXT_RE = /\.(mp3|m4a|aac|ogg|oga|opus|wav|webm|caf)$/i;
 
+/** WebM/Opus voice — Safari/iOS не играют audio/webm нативно. */
+export function isWebmLikeChatAudio(mimeOrNameOrUrl: string): boolean {
+  const s = String(mimeOrNameOrUrl || '')
+    .trim()
+    .toLowerCase()
+    .split(';')[0]
+    .trim();
+  if (!s) return false;
+  if (s === 'audio/webm' || s === 'video/webm') return true;
+  const path = s.split(/[?#]/)[0];
+  return path.endsWith('.webm') || /(?:^|\/)voice-\d+\.webm$/i.test(path);
+}
+
+/** Есть ли у браузера декодер для голосовых WebM (Opus). */
+export function browserCanPlayWebmAudio(): boolean {
+  if (typeof Audio === 'undefined') return true;
+  try {
+    const probe =
+      typeof document !== 'undefined' ? document.createElement('audio') : new Audio();
+    const rank =
+      probe.canPlayType('audio/webm;codecs=opus') ||
+      probe.canPlayType('audio/webm') ||
+      probe.canPlayType('audio/ogg;codecs=opus');
+    return rank === 'probably' || rank === 'maybe';
+  } catch {
+    return false;
+  }
+}
+
+/** Нужен ли proxy `transcode=m4a` для воспроизведения вложения. */
+export function messengerAudioNeedsM4aTranscode(payload?: Record<string, unknown> | null): boolean {
+  if (browserCanPlayWebmAudio()) return false;
+  if (!payload || typeof payload !== 'object') return true;
+  const mime = String(payload.mimeType ?? payload.mimetype ?? '').trim();
+  const name = String(payload.name ?? payload.filename ?? payload.originalName ?? '').trim();
+  const url = String(payload.url ?? '').trim();
+  if (isWebmLikeChatAudio(mime) || isWebmLikeChatAudio(name) || isWebmLikeChatAudio(url)) {
+    return true;
+  }
+  // Голосовые без расширения в proxy-URL — по kind / voice-* имени.
+  const kind = String(payload.kind ?? payload.audioKind ?? '').trim().toLowerCase();
+  if (kind === 'voice' || kind === 'recording' || isVoiceRecordingFileName(name)) return true;
+  return false;
+}
+
 export const CHAT_AUDIO_ACCEPT =
   'audio/*,.mp3,.m4a,.aac,.ogg,.oga,.opus,.wav,.webm,.caf';
 

@@ -25,7 +25,11 @@ import {
   assistantMarkdownToPlainText,
   renderAssistantMessageContent,
 } from '../assistantMessageFormat';
-import { isMessengerAudioFilePayload, resolveMessengerAudioFileTitle } from '../chatAudio';
+import {
+  isMessengerAudioFilePayload,
+  messengerAudioNeedsM4aTranscode,
+  resolveMessengerAudioFileTitle,
+} from '../chatAudio';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { ChatVideoAttachmentPreview } from './ChatVideoAttachmentPreview';
@@ -1412,15 +1416,18 @@ function MessageBubbleInner({
     if (payloadType === 'audio') {
       const rawUrl = attachmentRawUrl;
       const fallbackHref = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
+      const audioPayload = payload as Record<string, unknown>;
       const href = persistedNumericId
-        ? buildMessengerAttachmentFileUrl(String(message.id))
+        ? buildMessengerAttachmentFileUrl(String(message.id), {
+            transcode: messengerAudioNeedsM4aTranscode(audioPayload) ? 'm4a' : undefined,
+          })
         : fallbackHref;
       const caption = String(message.content ?? '').trim();
       const durRaw = payload.durationSec ?? payload.duration_sec;
       const durationHint = typeof durRaw === 'number' && Number.isFinite(durRaw) ? durRaw : Number(durRaw);
-      const isAudioFile = isMessengerAudioFilePayload(payload as Record<string, unknown>);
+      const isAudioFile = isMessengerAudioFilePayload(audioPayload);
       const displayTitle = isAudioFile
-        ? resolveMessengerAudioFileTitle(payload as Record<string, unknown>)
+        ? resolveMessengerAudioFileTitle(audioPayload)
         : '';
       return (
         <div
