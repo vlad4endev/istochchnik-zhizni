@@ -1706,13 +1706,13 @@
   color: color-mix(in srgb, var(--cp-brand) 28%, #fff);
 }
 
-/* Боковая панель участников (ПК) */
+/* Боковая панель участников (ПК); на мобиле не перекрываем нижние контролы */
 .call-sidepanel {
   position: fixed;
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: 10046;
+  z-index: 10044;
   width: min(360px, 100vw);
   display: flex;
   flex-direction: column;
@@ -1966,8 +1966,15 @@
     display: none;
   }
 
-  .call-meeting-shell--panel-open .call-sidepanel {
+  .call-sidepanel {
+    top: max(10px, env(safe-area-inset-top, 0px));
+    bottom: calc(108px + env(safe-area-inset-bottom, 0px));
     width: min(100vw, 400px);
+    border-radius: 16px 0 0 16px;
+  }
+
+  .call-controls {
+    z-index: 10047;
   }
 }
 

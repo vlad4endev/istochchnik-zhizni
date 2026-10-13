@@ -756,14 +756,14 @@ function RoomStage({
     ? sortedParticipants.length - VIDEO_GRID_VISIBLE
     : 0;
 
-  const AUDIO_STRIP_VISIBLE = 8;
-  const showAudioOverflow =
-    useFocusLayout && callType === 'audio' && stripParticipants.length > AUDIO_STRIP_VISIBLE;
-  const visibleStripParticipants = showAudioOverflow
-    ? stripParticipants.slice(0, AUDIO_STRIP_VISIBLE)
+  /** Лимит плиток в speaker/sidebar — иначе на слабых устройствах падает декодер. */
+  const STRIP_VISIBLE = callType === 'audio' ? 8 : 6;
+  const showStripOverflow = useFocusLayout && stripParticipants.length > STRIP_VISIBLE;
+  const visibleStripParticipants = showStripOverflow
+    ? stripParticipants.slice(0, STRIP_VISIBLE)
     : stripParticipants;
-  const stripOverflowCount = showAudioOverflow
-    ? stripParticipants.length - AUDIO_STRIP_VISIBLE
+  const stripOverflowCount = showStripOverflow
+    ? stripParticipants.length - STRIP_VISIBLE
     : 0;
 
   const groupStatusText = connectError
@@ -1266,6 +1266,20 @@ function GroupMeetingShell({
   const [inviteOpen, setInviteOpen] = useState(isHost);
   const [statusLabel, setStatusLabel] = useState('Подключение…');
   const hadRemotes = useRef(false);
+
+  // Sidebar-раскладка только для ПК; на узком экране откатываем в speaker.
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(max-width: 959px)');
+    const sync = () => {
+      if (mq.matches) {
+        setLayoutMode((mode) => (mode === 'sidebar' ? 'speaker' : mode));
+      }
+    };
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
 
   useEffect(() => {
     if (remotes.length === 0) return;
