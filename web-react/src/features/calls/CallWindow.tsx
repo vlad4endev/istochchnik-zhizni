@@ -409,7 +409,7 @@ function RoomStage({
   else if (connectionState === ConnectionState.Reconnecting) {
     statusLabel = 'Переподключение…';
   } else if (disconnectedAfterAttempt) {
-    statusLabel = 'Ошибка сервера или идут технические работы';
+    statusLabel = 'Подключение…';
   }
 
   let groupWaitLabel = 'Ждём участников';
@@ -417,7 +417,8 @@ function RoomStage({
   else if (connectionState === ConnectionState.Connecting) groupWaitLabel = 'Подключение…';
   else if (connectionState === ConnectionState.Reconnecting) groupWaitLabel = 'Переподключение…';
   else if (disconnectedAfterAttempt) {
-    groupWaitLabel = 'Ошибка сервера или идут технические работы. Попробуйте позже.';
+    // Между попытками LiveKit кратков Disconnected — не орём «ошибка сервера».
+    groupWaitLabel = 'Подключение…';
   } else if (connectionState === ConnectionState.Disconnected) {
     groupWaitLabel = 'Подключение…';
   }
@@ -810,6 +811,8 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [lkConnected, setLkConnected] = useState(false);
+  /** Remount LiveKitRoom after manual retry / fatal connect error. */
+  const [roomMountId, setRoomMountId] = useState(0);
   const tokenInflight = useRef(false);
   /** Стабильные props для LiveKitRoom — смена JWT иначе делает leave/rejoin. */
   const roomTokenRef = useRef<string | null>(
@@ -932,14 +935,14 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     };
   }, [activeCall.callId, activeCall.status, needsLiveKit, setLiveKitCreds, setStatus]);
 
-  // LiveKit Room.connect ждёт и signal, и первый ICE (waitForPCInitialConnection).
-  useEffect(() => {
-    if (!creds?.token || !creds.url || connectError || lkConnected) return;
-    const t = window.setTimeout(() => {
-      setConnectError('Ошибка сервера или идут технические работы. Попробуйте позже.');
-    }, 32_000);
-    return () => window.clearTimeout(t);
-  }, [creds?.token, creds?.url, connectError, lkConnected]);
+  // Не ставим «ошибка сервера» по короткому таймеру: LiveKit сам ретраит ICE/signal
+  // (maxRetries), а 32s UI-таймер раньше срабатывал посреди переподключения.
+
+  const retryConnect = useCallback(() => {
+    setConnectError(null);
+    setLkConnected(false);
+    setRoomMountId((n) => n + 1);
+  }, []);
 
   const isGroupCall = activeCall.callKind === 'group';
   const roomOptions = useMemo<RoomOptions>(
@@ -973,8 +976,9 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const connectOptions = useMemo<RoomConnectOptions>(
     () => ({
       autoSubscribe: true,
-      maxRetries: 8,
-      peerConnectionTimeout: 30_000,
+      maxRetries: 12,
+      // TURN/relay за домашним NAT иногда >30s до первого ICE.
+      peerConnectionTimeout: 60_000,
     }),
     [],
   );
@@ -1001,12 +1005,14 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     );
   }
 
+  const normalizedRoomUrl = roomUrl.endsWith('/') ? roomUrl : `${roomUrl}/`;
+
   return (
     <div className="call-window" role="dialog" aria-label="Активный звонок">
       <LiveKitRoom
-        key={activeCall.callId}
+        key={`${activeCall.callId}-${roomMountId}`}
         token={roomToken}
-        serverUrl={roomUrl}
+        serverUrl={normalizedRoomUrl}
         connect
         audio={preferMicOn}
         video={preferCamOn}
@@ -1049,6 +1055,13 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
       >
         <ApplyLobbyMediaPrefs micOn={preferMicOn} camOn={preferCamOn} videoEnabled={videoEnabled} />
         <RoomStage callType={activeCall.callType} connectError={connectError} />
+        {connectError ? (
+          <div className="call-connect-retry">
+            <button type="button" className="call-invite-btn call-invite-btn--primary" onClick={retryConnect}>
+              Повторить подключение
+            </button>
+          </div>
+        ) : null}
         {activeCall.callKind === 'group' && activeCall.isInitiator ? (
           <MeetingHostChrome
             callId={activeCall.callId}

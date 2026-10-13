@@ -751,6 +751,18 @@
   letter-spacing: 0.01em;
 }
 
+.call-connect-retry {
+  position: absolute;
+  left: 50%;
+  bottom: max(96px, calc(72px + env(safe-area-inset-bottom, 0px)));
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  justify-content: center;
+  width: min(100% - 32px, 22rem);
+  pointer-events: auto;
+}
+
 /* Telemost-style participant grid */
 .call-participants {
   --cp-brand: var(--primary, #7d3640);

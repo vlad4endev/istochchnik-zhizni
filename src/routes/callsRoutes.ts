@@ -16,6 +16,11 @@ import {
   invitationPreviewHandler,
   revokeInvitationHandler,
 } from '../controllers/callsController';
+import {
+  getLiveKitPublicUrl,
+  isLiveKitConfigured,
+  probeLiveKitRoomService,
+} from '../services/livekitService';
 
 const router = Router();
 
@@ -81,6 +86,36 @@ router.get('/ice-servers', requireAuthSession, async (_req: Request, res: Respon
 });
 
 router.get('/history', requireAuthSession, callHistoryHandler);
+
+/** Диагностика LiveKit через /api (не зависит от nginx location /health/livekit). */
+router.get('/livekit-health', requireAuthSession, async (_req: Request, res: Response) => {
+  try {
+    const configured = isLiveKitConfigured();
+    const probe = configured
+      ? await probeLiveKitRoomService()
+      : { ok: false, configured: false, error: 'not_configured' as string | undefined, url: undefined as string | undefined };
+    const publicUrl = configured ? getLiveKitPublicUrl() : null;
+    res.status(200).json({
+      status: probe.ok ? 'ok' : 'degraded',
+      configured,
+      roomService: probe.ok ? 'up' : 'down',
+      roomServiceUrl: probe.url ?? null,
+      publicSignalUrl: publicUrl,
+      error: probe.error ?? null,
+      hint: probe.ok
+        ? null
+        : 'На сервере: sudo bash scripts/repair-livekit.sh (UFW docker→host:7880 + recreate livekit)',
+    });
+  } catch (e) {
+    res.status(200).json({
+      status: 'degraded',
+      configured: isLiveKitConfigured(),
+      roomService: 'down',
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+});
+
 router.post('/', requireAuthSession, createCallLimiter, createCallHandler);
 router.get('/:callId', requireAuthSession, getCallHandler);
 router.post('/:callId/accept', requireAuthSession, acceptCallHandler);

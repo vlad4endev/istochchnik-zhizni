@@ -214,12 +214,15 @@ export function mapDeviceError(err: unknown): string {
   if (name === 'NotReadableError' || /in use|NotReadable/i.test(msg)) {
     return 'Устройство занято другим приложением.';
   }
+  if (/invalid authorization|invalid token|jwt|signature/i.test(msg)) {
+    return 'Нет доступа к комнате звонка. Обновите страницу или пересоздайте встречу.';
+  }
   if (
-    /websocket|timed?\s*out|connection.*(fail|refus|reset|closed)|network|failed to fetch|503|502|504|ECONN|ENOTFOUND|server.*unreachable|could not establish/i.test(
+    /websocket|timed?\s*out|connection.*(fail|refus|reset|closed)|network|failed to fetch|503|502|504|ECONN|ENOTFOUND|server.*unreachable|could not establish|pc connection|ice/i.test(
       msg,
     )
   ) {
-    return 'Ошибка сервера или идут технические работы. Попробуйте позже.';
+    return 'Не удалось связаться с сервером звонков. Проверьте интернет и нажмите «Повторить».';
   }
   if (/room|token|unauthorized|forbidden|401|403/i.test(msg)) {
     return 'Нет доступа к комнате звонка. Попробуйте перезвонить.';

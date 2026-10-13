@@ -15,9 +15,13 @@ describe('mapDeviceError', () => {
 
   it('maps connection failures to a non-technical message', () => {
     expect(mapDeviceError(new Error('websocket connection failed'))).toMatch(
-      /технические работы|Ошибка сервера/i,
+      /Не удалось связаться|Повторить/i,
     );
     expect(mapDeviceError(new Error('websocket connection failed'))).not.toMatch(/7881|WSS|\/lk/i);
+  });
+
+  it('maps invalid LiveKit token', () => {
+    expect(mapDeviceError(new Error('invalid authorization token'))).toMatch(/Нет доступа к комнате/i);
   });
 
   it('maps unknown message as-is', () => {
