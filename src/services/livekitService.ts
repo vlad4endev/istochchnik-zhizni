@@ -123,9 +123,17 @@ function originHost(url: string): string {
 
 function publicUrlFromWebOrigin(webOrigin: string): string | null {
   const web = webOrigin.replace(/\/$/, '');
-  if (web.startsWith('https://')) return `${web.replace(/^https/, 'wss')}/lk`;
-  if (web.startsWith('http://')) return `${web.replace(/^http/, 'ws')}/lk`;
+  // Trailing slash: LiveKit client appends rtc/… via pathname join.
+  if (web.startsWith('https://')) return `${web.replace(/^https/, 'wss')}/lk/`;
+  if (web.startsWith('http://')) return `${web.replace(/^http/, 'ws')}/lk/`;
   return null;
+}
+
+/** Normalize browser LiveKit URL to end with `/` (…/lk/). */
+export function ensureLiveKitPublicUrlPath(url: string): string {
+  const trimmed = String(url ?? '').trim();
+  if (!trimmed) return '';
+  return trimmed.endsWith('/') ? trimmed : `${trimmed}/`;
 }
 
 /** wss://call.example.ru → wss://app.example.ru/lk (отдельный call.* часто без DNS/nginx). */
@@ -137,7 +145,7 @@ function rewriteLegacyCallHost(url: string): string | null {
     if (!host.startsWith('call.')) return null;
     const appHost = `app.${host.slice('call.'.length)}`;
     const isSecure = /^wss:/i.test(url) || /^https:/i.test(url);
-    return `${isSecure ? 'wss' : 'ws'}://${appHost}/lk`;
+    return `${isSecure ? 'wss' : 'ws'}://${appHost}/lk/`;
   } catch {
     return null;
   }
@@ -152,39 +160,45 @@ export function getLiveKitPublicUrl(): string {
   const fromWeb = web ? publicUrlFromWebOrigin(web) : null;
   const pub = trimEnv('LIVEKIT_PUBLIC_URL').replace(/\/$/, '');
 
+  let resolved = '';
   if (pub) {
     const rewrittenCall = rewriteLegacyCallHost(pub);
     if (rewrittenCall) {
       console.warn(`[livekit] rewriting legacy LIVEKIT_PUBLIC_URL ${pub} → ${rewrittenCall}`);
-      return fromWeb ?? rewrittenCall;
-    }
-
-    const internal = /livekit:|127\.0\.0\.1|localhost/i.test(pub);
-    if (internal) {
-      console.warn('[livekit] LIVEKIT_PUBLIC_URL looks internal, falling back to PUBLIC_WEB_ORIGIN/lk');
-    } else if (fromWeb) {
-      const pubHost = originHost(pub);
-      const webHost = originHost(web);
-      // wss://app…/lk — ок; другой хост при заданном PUBLIC_WEB_ORIGIN — берём /lk
-      if (pubHost && webHost && pubHost !== webHost) {
-        console.warn(
-          `[livekit] LIVEKIT_PUBLIC_URL host (${pubHost}) != PUBLIC_WEB_ORIGIN (${webHost}); using ${fromWeb}`,
-        );
-        return fromWeb;
-      }
-      return pub;
+      resolved = fromWeb ?? rewrittenCall;
     } else {
-      return pub;
+      const internal = /livekit:|127\.0\.0\.1|localhost/i.test(pub);
+      if (internal) {
+        console.warn('[livekit] LIVEKIT_PUBLIC_URL looks internal, falling back to PUBLIC_WEB_ORIGIN/lk');
+      } else if (fromWeb) {
+        const pubHost = originHost(pub);
+        const webHost = originHost(web);
+        // wss://app…/lk — ок; другой хост при заданном PUBLIC_WEB_ORIGIN — берём /lk
+        if (pubHost && webHost && pubHost !== webHost) {
+          console.warn(
+            `[livekit] LIVEKIT_PUBLIC_URL host (${pubHost}) != PUBLIC_WEB_ORIGIN (${webHost}); using ${fromWeb}`,
+          );
+          resolved = fromWeb;
+        } else {
+          resolved = pub;
+        }
+      } else {
+        resolved = pub;
+      }
     }
   }
 
-  if (fromWeb) return fromWeb;
+  if (!resolved && fromWeb) resolved = fromWeb;
 
-  // Last resort — never return bare docker DNS to browsers
-  const internal = getLiveKitInternalUrl();
-  if (internal.startsWith('https://')) return internal.replace(/^https/, 'wss');
-  if (internal.startsWith('http://')) return internal.replace(/^http/, 'ws');
-  return internal;
+  if (!resolved) {
+    // Last resort — never return bare docker DNS to browsers
+    const internal = getLiveKitInternalUrl();
+    if (internal.startsWith('https://')) resolved = internal.replace(/^https/, 'wss');
+    else if (internal.startsWith('http://')) resolved = internal.replace(/^http/, 'ws');
+    else resolved = internal;
+  }
+
+  return ensureLiveKitPublicUrlPath(resolved);
 }
 
 function roomServiceAt(url: string): RoomServiceClient {
