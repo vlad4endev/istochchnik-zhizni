@@ -49,35 +49,35 @@ async function main(): Promise<void> {
   assert.equal(getLiveKitInternalUrl(), 'http://host.docker.internal:7880');
   process.env.LIVEKIT_URL = 'http://livekit:7880';
 
-  // Same-origin /lk from PUBLIC_WEB_ORIGIN
+  // Same-origin /lk/ from PUBLIC_WEB_ORIGIN (trailing slash)
   process.env.PUBLIC_WEB_ORIGIN = 'https://app.example.ru';
-  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk');
+  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk/');
 
-  // Explicit LIVEKIT_PUBLIC_URL on same host is kept
+  // Explicit LIVEKIT_PUBLIC_URL on same host is kept (normalized with /)
   process.env.LIVEKIT_PUBLIC_URL = 'wss://app.example.ru/lk';
-  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk');
+  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk/');
 
   // Legacy call.* host is overridden when PUBLIC_WEB_ORIGIN is the app host
   process.env.LIVEKIT_PUBLIC_URL = 'wss://call.example.ru';
-  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk');
+  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk/');
   delete process.env.LIVEKIT_PUBLIC_URL;
   delete process.env.PUBLIC_WEB_ORIGIN;
 
-  // Internal docker URL falls back to PUBLIC_WEB_ORIGIN/lk
+  // Internal docker URL falls back to PUBLIC_WEB_ORIGIN/lk/
   process.env.LIVEKIT_PUBLIC_URL = 'ws://livekit:7880';
   process.env.PUBLIC_WEB_ORIGIN = 'https://app.example.ru';
-  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk');
+  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk/');
   delete process.env.LIVEKIT_PUBLIC_URL;
   delete process.env.PUBLIC_WEB_ORIGIN;
 
-  // Without PUBLIC_WEB_ORIGIN, rewrite legacy call.* → app.*/lk
+  // Without PUBLIC_WEB_ORIGIN, rewrite legacy call.* → app.*/lk/
   process.env.LIVEKIT_PUBLIC_URL = 'wss://call.example.ru';
-  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk');
+  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk/');
   delete process.env.LIVEKIT_PUBLIC_URL;
 
   // Non-call external host kept when no PUBLIC_WEB_ORIGIN
   process.env.LIVEKIT_PUBLIC_URL = 'wss://lk.example.ru';
-  assert.equal(getLiveKitPublicUrl(), 'wss://lk.example.ru');
+  assert.equal(getLiveKitPublicUrl(), 'wss://lk.example.ru/');
   delete process.env.LIVEKIT_PUBLIC_URL;
 
   // restore
