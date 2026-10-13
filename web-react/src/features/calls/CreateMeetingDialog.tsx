@@ -46,9 +46,10 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
   const [pendingTemplate, setPendingTemplate] = useState<PrayerWatchMeetingTemplateId | null>(null);
 
   const defaultTitle = isVideo ? 'Видеовстреча' : 'Аудиовстреча';
+  const pageTitle = isVideo ? 'Создать видеовстречу' : 'Создать аудиовстречу';
   const cta = isVideo ? 'Создать видеовстречу' : 'Создать аудиовстречу';
   const hint = showPrayerTemplates
-    ? 'Выберите стражу — встреча сразу откроется, название и ссылка скопируются для рассылки.'
+    ? 'Выберите шаблон или укажите своё название — встреча сразу откроется, название и ссылка скопируются для рассылки.'
     : isVideo
       ? 'Создаётся только звонок по ссылке — без группы в чатах. После завершения всё закрывается.'
       : 'Только звонок по ссылке, без группы. Участники подключатся с голосом; после завершения всё закрывается.';
@@ -117,9 +118,7 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
         </button>
 
         <div className="telemost-create__panel">
-          <p className="telemost-create__eyebrow">
-            {showPrayerTemplates ? 'Молитвенные стражи' : 'Источник жизни · встречи'}
-          </p>
+          <p className="telemost-create__eyebrow">Источник жизни · встречи</p>
           <div className="telemost-create__hero" aria-hidden>
             <span className="telemost-create__ring" />
             <span className="telemost-create__ring telemost-create__ring--late" />
@@ -129,7 +128,7 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
           </div>
 
           <h1 id="telemost-create-title" className="telemost-create__title">
-            {showPrayerTemplates ? 'Создать стражу' : defaultTitle}
+            {pageTitle}
           </h1>
           <p className="telemost-create__lead">{hint}</p>
 
@@ -166,29 +165,39 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
                 );
               })}
             </div>
-          ) : (
-            <label className="telemost-create__name" htmlFor={nameId}>
-              <span className="telemost-create__name-label">Название встречи</span>
-              <input
-                id={nameId}
-                type="text"
-                className="telemost-create__name-input"
-                value={meetingName}
-                onChange={(e) => setMeetingName(e.target.value.slice(0, MAX_TITLE))}
-                placeholder={defaultTitle}
-                maxLength={MAX_TITLE}
-                autoComplete="off"
-                disabled={busy}
-                enterKeyHint="done"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    createCustom();
-                  }
-                }}
-              />
-            </label>
-          )}
+          ) : null}
+
+          {showPrayerTemplates ? (
+            <p className="telemost-create__or" aria-hidden>
+              или своё название
+            </p>
+          ) : null}
+
+          <label className="telemost-create__name" htmlFor={nameId}>
+            <span className="telemost-create__name-label">
+              {showPrayerTemplates ? 'Своё название' : 'Название встречи'}
+            </span>
+            <input
+              id={nameId}
+              type="text"
+              className="telemost-create__name-input"
+              value={meetingName}
+              onChange={(e) => setMeetingName(e.target.value.slice(0, MAX_TITLE))}
+              placeholder={
+                showPrayerTemplates ? 'Например: Молитва за семью' : defaultTitle
+              }
+              maxLength={MAX_TITLE}
+              autoComplete="off"
+              disabled={busy}
+              enterKeyHint="done"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  createCustom();
+                }
+              }}
+            />
+          </label>
 
           <div className="telemost-create__devices" role="group" aria-label="Устройства перед входом">
             <DeviceToggle
@@ -211,11 +220,14 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
             ) : null}
           </div>
 
-          {!showPrayerTemplates ? (
-            <button type="button" className="telemost-create__cta" disabled={busy} onClick={createCustom}>
-              {busy ? 'Создаём…' : cta}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="telemost-create__cta"
+            disabled={busy || (showPrayerTemplates && !meetingName.trim() && pendingTemplate == null)}
+            onClick={createCustom}
+          >
+            {busy && !pendingTemplate ? 'Создаём…' : cta}
+          </button>
 
           <p className="telemost-create__foot">
             <LuLink2 size={16} aria-hidden />
