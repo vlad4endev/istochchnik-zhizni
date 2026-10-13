@@ -82,7 +82,11 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
         const ok = await ensureDevices();
         if (!ok) return;
         const title = rawTitle?.trim().slice(0, MAX_TITLE) || undefined;
-        const result = await startStandaloneMeetingCall(mediaType, { title });
+        const result = await startStandaloneMeetingCall(mediaType, {
+          title,
+          micOn,
+          camOn: isVideo && camOn,
+        });
         if (result?.callId) {
           onCreated();
         }
@@ -93,7 +97,7 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
         setPendingTemplate(null);
       }
     },
-    [busy, ensureDevices, mediaType, onCreated],
+    [busy, camOn, ensureDevices, isVideo, mediaType, micOn, onCreated],
   );
 
   const createCustom = useCallback(() => {

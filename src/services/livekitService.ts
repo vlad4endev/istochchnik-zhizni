@@ -331,6 +331,27 @@ export async function removeLiveKitParticipant(
   }
 }
 
+/**
+ * Список identity участников в комнате LiveKit.
+ * `null` — Room Service недоступен / комната не найдена (не путать с пустым списком).
+ */
+export async function listLiveKitParticipantIdentities(
+  roomName: string,
+): Promise<string[] | null> {
+  if (!isLiveKitConfigured()) return null;
+  try {
+    return await withRoomServiceFallback('listParticipants', async (svc) => {
+      const parts = await svc.listParticipants(roomName);
+      return parts.map((p) => String(p.identity ?? '')).filter(Boolean);
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/not found|does not exist/i.test(msg)) return [];
+    console.warn('[livekit] listParticipants:', msg);
+    return null;
+  }
+}
+
 export async function mintLiveKitJoinToken(input: LiveKitJoinTokenInput): Promise<{
   token: string;
   url: string;
@@ -341,9 +362,10 @@ export async function mintLiveKitJoinToken(input: LiveKitJoinTokenInput): Promis
   if (!apiKey || !apiSecret) {
     throw new Error('livekit_not_configured');
   }
+  // До 8 ч — длинные конференции; reconnect после TTL требует свежий JWT.
   const ttl =
     input.ttlSeconds ??
-    Math.max(60, Math.min(3600, Number(process.env.CALL_TOKEN_TTL_SEC ?? 900) || 900));
+    Math.max(60, Math.min(28_800, Number(process.env.CALL_TOKEN_TTL_SEC ?? 14_400) || 14_400));
 
   const avatar = String(input.avatarUrl ?? '').trim();
   const at = new AccessToken(apiKey, apiSecret, {

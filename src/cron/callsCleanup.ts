@@ -17,7 +17,7 @@ export function initCallsCleanupJob(): void {
   cron.schedule(schedule, () => {
     void cleanupStaleCalls()
       .then((r) => {
-        if (r.missed > 0 || r.endedEmpty > 0) {
+        if (r.missed > 0 || r.endedEmpty > 0 || r.ghostsCleared > 0) {
           console.log('[calls] cleanup', r);
         }
       })

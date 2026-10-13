@@ -225,6 +225,32 @@ function CallControls({
   );
 }
 
+/** Apply mic/cam lobby toggles once after LiveKit connects. */
+function ApplyLobbyMediaPrefs({
+  micOn,
+  camOn,
+  videoEnabled,
+}: {
+  micOn: boolean;
+  camOn: boolean;
+  videoEnabled: boolean;
+}) {
+  const room = useRoomContext();
+  const connectionState = useConnectionState();
+  const applied = useRef(false);
+
+  useEffect(() => {
+    if (connectionState !== ConnectionState.Connected || applied.current) return;
+    applied.current = true;
+    void room.localParticipant.setMicrophoneEnabled(micOn).catch(() => undefined);
+    if (videoEnabled) {
+      void room.localParticipant.setCameraEnabled(camOn).catch(() => undefined);
+    }
+  }, [camOn, connectionState, micOn, room, videoEnabled]);
+
+  return null;
+}
+
 function MeetingParticipantTile({
   participant,
   callType,
@@ -398,6 +424,17 @@ function RoomStage({
 
   const localParticipant = sortedParticipants.find((p) => p.isLocal) ?? null;
   const waitingAlone = isGroup && remotes.length === 0;
+  const groupScreenShare =
+    isGroup && remoteScreen && isTrackReference(remoteScreen) ? remoteScreen : null;
+  const localScreenRaw = tracks.find(
+    (t) =>
+      t.participant.isLocal &&
+      t.source === Track.Source.ScreenShare &&
+      t.publication?.track,
+  );
+  const localScreenShare =
+    localScreenRaw && isTrackReference(localScreenRaw) ? localScreenRaw : null;
+  const stageScreenShare = groupScreenShare ?? localScreenShare;
 
   return (
     <div className="call-stage" ref={stageRef}>
@@ -417,27 +454,40 @@ function RoomStage({
               <p className="call-meeting-lobby__wait">{groupWaitLabel}</p>
             </div>
           ) : (
-            <div
-              className={[
-                'call-participants',
-                callType === 'audio' ? 'call-participants--audio' : 'call-participants--video',
-                sortedParticipants.length <= 2
-                  ? 'call-participants--few'
-                  : sortedParticipants.length <= 4
-                    ? 'call-participants--mid'
-                    : 'call-participants--many',
-              ].join(' ')}
-              aria-label="Участники встречи"
-            >
-              {sortedParticipants.map((p) => (
-                <MeetingParticipantTile
-                  key={p.identity || p.sid}
-                  participant={p}
-                  callType={callType}
-                  cameraTrack={cameraByIdentity.get(p.identity) ?? null}
-                />
-              ))}
-            </div>
+            <>
+              {stageScreenShare ? (
+                <div className="call-group-screenshare" aria-label="Демонстрация экрана">
+                  <VideoTrack
+                    trackRef={stageScreenShare}
+                    className="call-group-screenshare__video"
+                    manageSubscription={false}
+                    playsInline
+                    autoPlay
+                  />
+                </div>
+              ) : null}
+              <div
+                className={[
+                  'call-participants',
+                  callType === 'audio' ? 'call-participants--audio' : 'call-participants--video',
+                  sortedParticipants.length <= 2
+                    ? 'call-participants--few'
+                    : sortedParticipants.length <= 4
+                      ? 'call-participants--mid'
+                      : 'call-participants--many',
+                ].join(' ')}
+                aria-label="Участники встречи"
+              >
+                {sortedParticipants.map((p) => (
+                  <MeetingParticipantTile
+                    key={p.identity || p.sid}
+                    participant={p}
+                    callType={callType}
+                    cameraTrack={cameraByIdentity.get(p.identity) ?? null}
+                  />
+                ))}
+              </div>
+            </>
           )
         ) : (
           <>
@@ -754,6 +804,8 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   );
 
   const videoEnabled = activeCall.callType === 'video';
+  const preferMicOn = activeCall.initialMicOn !== false;
+  const preferCamOn = videoEnabled && activeCall.initialCamOn !== false;
   const needsLiveKit =
     activeCall.status === 'active' ||
     (activeCall.callKind === 'group' && activeCall.status === 'calling');
@@ -777,6 +829,27 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
       stopCallRing();
     }
   }, [activeCall.status]);
+
+  // Best-effort leave when the tab closes — prevents permanent «busy» for other callers.
+  useEffect(() => {
+    if (!needsLiveKit) return;
+    const onPageHide = () => {
+      const body = JSON.stringify({});
+      const url =
+        activeCall.status === 'calling' && activeCall.isInitiator
+          ? `/api/calls/${activeCall.callId}/cancel`
+          : `/api/calls/${activeCall.callId}/end`;
+      try {
+        if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+          navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
+  }, [activeCall.callId, activeCall.isInitiator, activeCall.status, needsLiveKit]);
 
   useEffect(() => {
     return subscribeRealtimeMessages((raw) => {
@@ -852,14 +925,16 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     return () => window.clearTimeout(t);
   }, [creds?.token, creds?.url, connectError, lkConnected]);
 
+  const isGroupCall = activeCall.callKind === 'group';
   const roomOptions = useMemo<RoomOptions>(
     () => ({
-      // Для 1:1 стабильнее без dynacast/adaptive — меньше «пропало видео до клика».
-      adaptiveStream: false,
-      dynacast: false,
+      // Группы: adaptive/dynacast снижают нагрузку при многих участниках.
+      // 1:1: без них — стабильнее первое видео до жеста.
+      adaptiveStream: isGroupCall,
+      dynacast: isGroupCall,
       disconnectOnPageLeave: false,
       videoCaptureDefaults: {
-        resolution: VideoPresets.h540.resolution,
+        resolution: isGroupCall ? VideoPresets.h360.resolution : VideoPresets.h540.resolution,
         facingMode: 'user',
       },
       audioCaptureDefaults: {
@@ -873,9 +948,10 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         videoCodec: 'vp8',
         dtx: true,
         red: true,
+        ...(isGroupCall ? { videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360] } : {}),
       },
     }),
-    [],
+    [isGroupCall],
   );
 
   const connectOptions = useMemo<RoomConnectOptions>(
@@ -916,8 +992,8 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         token={roomToken}
         serverUrl={roomUrl}
         connect
-        audio
-        video={videoEnabled}
+        audio={preferMicOn}
+        video={preferCamOn}
         options={roomOptions}
         connectOptions={connectOptions}
         onError={(e) => {
@@ -935,17 +1011,27 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         }}
         onDisconnected={(reason) => {
           setLkConnected(false);
-          // Не закрывать звонок при кратком обрыве — LiveKit сам переподключится.
-          if (
-            reason === DisconnectReason.CLIENT_INITIATED ||
+          // Hard end: room gone / kicked / duplicate. Transient drops → LiveKit reconnects.
+          const roomClosed = (DisconnectReason as unknown as { ROOM_CLOSED?: number }).ROOM_CLOSED;
+          const hardEnd =
             reason === DisconnectReason.ROOM_DELETED ||
-            reason === DisconnectReason.PARTICIPANT_REMOVED
-          ) {
-            return;
+            reason === DisconnectReason.PARTICIPANT_REMOVED ||
+            reason === DisconnectReason.SERVER_SHUTDOWN ||
+            reason === DisconnectReason.DUPLICATE_IDENTITY ||
+            (roomClosed != null && reason === roomClosed);
+          if (hardEnd) {
+            emitAppToast(
+              reason === DisconnectReason.DUPLICATE_IDENTITY
+                ? 'Звонок открыт на другом устройстве'
+                : 'Звонок завершён',
+              'info',
+            );
+            closeCall();
           }
         }}
         className="call-lk-room"
       >
+        <ApplyLobbyMediaPrefs micOn={preferMicOn} camOn={preferCamOn} videoEnabled={videoEnabled} />
         <RoomStage callType={activeCall.callType} connectError={connectError} />
         {activeCall.callKind === 'group' && activeCall.isInitiator ? (
           <MeetingHostChrome
@@ -963,6 +1049,8 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
 
 export function CallWindow() {
   const activeCall = useCallStore((s) => s.activeCall);
+  // ringing_in: Accept UI lives on IncomingCallOverlay / CallPage — do not cover it.
   if (!activeCall) return null;
+  if (activeCall.status === 'ringing_in' || activeCall.status === 'ended') return null;
   return <CallWindowInner key={activeCall.callId} activeCall={activeCall} />;
 }

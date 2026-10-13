@@ -81,6 +81,8 @@ export function CallJoinPage() {
         conversationId: '',
         livekitUrl: result.url,
         livekitToken: result.token,
+        initialMicOn: micOn,
+        initialCamOn: isVideo && camOn,
       });
       setLiveKitCreds(result.url, result.token);
       void navigate(`/call/${result.call.id}`, { replace: true });

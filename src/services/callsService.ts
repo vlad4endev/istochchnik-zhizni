@@ -18,6 +18,7 @@ import {
   endLiveKitRoom,
   ensureLiveKitRoom,
   isLiveKitConfigured,
+  listLiveKitParticipantIdentities,
   livekitIdentityForMember,
   mintLiveKitJoinToken,
   removeLiveKitParticipant,
@@ -280,6 +281,34 @@ export async function isMemberBusyInCall(memberId: number, excludeCallId?: strin
   return res.rows.length > 0;
 }
 
+/** Serialize create/join per member so concurrent requests cannot double-book a user. */
+async function lockMemberCallSlot(client: DbClient, memberId: number): Promise<void> {
+  // Namespace key avoids colliding with unrelated advisory locks elsewhere.
+  await client.query(`SELECT pg_advisory_xact_lock(87201401, $1::int)`, [memberId]);
+}
+
+async function assertMemberFreeInTx(
+  client: DbClient,
+  memberId: number,
+  excludeCallId?: string,
+): Promise<void> {
+  await lockMemberCallSlot(client, memberId);
+  const busy = await client.query(
+    `SELECT 1
+     FROM call_participants cp
+     JOIN calls c ON c.id = cp.call_id
+     WHERE cp.user_id = $1
+       AND c.status IN ('ringing', 'waiting', 'active')
+       AND cp.status IN ('invited', 'ringing', 'joined')
+       AND ($2::uuid IS NULL OR c.id <> $2::uuid)
+     LIMIT 1`,
+    [memberId, excludeCallId ?? null],
+  );
+  if (busy.rows.length > 0) {
+    throw new CallsError('already_in_call', 'Вы уже участвуете в другом звонке');
+  }
+}
+
 async function getParticipantRoleInConversation(
   conversationId: string | null | undefined,
   memberId: number,
@@ -494,7 +523,14 @@ export async function createDirectCall(input: {
   const roomName = `direct_${callId.replace(/-/g, '')}`;
 
   const call = await withTransaction(async (client) => {
-    // Re-check busy inside transaction
+    // Lock both members (stable order) to prevent concurrent double-create races.
+    const [first, second] =
+      input.initiatorId <= input.recipientId
+        ? [input.initiatorId, input.recipientId]
+        : [input.recipientId, input.initiatorId];
+    await lockMemberCallSlot(client, first);
+    await lockMemberCallSlot(client, second);
+
     const busy = await client.query(
       `SELECT cp.user_id
        FROM call_participants cp
@@ -619,14 +655,12 @@ export async function createGroupCall(input: {
   );
   if (!membership) throw new CallsError('forbidden', 'Нет доступа к чату');
 
-  if (await isMemberBusyInCall(input.initiatorId)) {
-    throw new CallsError('already_in_call', 'Вы уже участвуете в другом звонке');
-  }
-
   const callId = randomUUID();
   const roomName = `group_${callId.replace(/-/g, '')}`;
 
   const { call, invite } = await withTransaction(async (client) => {
+    await assertMemberFreeInTx(client, input.initiatorId);
+
     const ins = await client.query(
       `INSERT INTO calls (
          id, type, media_type, status, conversation_id, livekit_room_name,
@@ -783,15 +817,13 @@ export async function createStandaloneLinkCall(input: {
 }): Promise<CallPublic> {
   if (!isCallsEnabled()) throw new CallsError('disabled', 'Звонки отключены');
 
-  if (await isMemberBusyInCall(input.initiatorId)) {
-    throw new CallsError('already_in_call', 'Вы уже участвуете в другом звонке');
-  }
-
   const callTitle = normalizeCallTitle(input.title, input.mediaType, true);
   const callId = randomUUID();
   const roomName = `meet_${callId.replace(/-/g, '')}`;
 
   const { call, invite } = await withTransaction(async (client) => {
+    await assertMemberFreeInTx(client, input.initiatorId);
+
     const ins = await client.query(
       `INSERT INTO calls (
          id, type, media_type, status, conversation_id, livekit_room_name,
@@ -890,9 +922,7 @@ export async function acceptCall(callId: string, memberId: number): Promise<Call
     );
     if (!part.rows[0]) throw new CallsError('forbidden', 'Вы не участник этого звонка');
 
-    if (await isMemberBusyInCall(memberId, callId)) {
-      throw new CallsError('already_in_call', 'Вы уже участвуете в другом звонке');
-    }
+    await assertMemberFreeInTx(client, memberId, callId);
 
     await client.query(
       `UPDATE call_participants
@@ -1025,6 +1055,8 @@ export async function cancelCall(callId: string, memberId: number): Promise<Call
 }
 
 export async function endCall(callId: string, memberId: number): Promise<CallPublic> {
+  const leaveLiveKit: { roomName: string; identity: string }[] = [];
+
   const { updated, notifyIds } = await withTransaction(async (client) => {
     const locked = await client.query(
       `SELECT * FROM calls WHERE id = $1::uuid FOR UPDATE`,
@@ -1081,18 +1113,17 @@ export async function endCall(callId: string, memberId: number): Promise<CallPub
       };
     }
 
-    // Regular participant leaves
+    // Regular participant leaves — LiveKit remove runs after COMMIT (avoid holding row locks on I/O).
     await client.query(
       `UPDATE call_participants
        SET status = 'left', left_at = NOW()
        WHERE call_id = $1::uuid AND user_id = $2`,
       [callId, memberId],
     );
-    try {
-      await removeLiveKitParticipant(call.livekit_room_name, livekitIdentityForMember(memberId));
-    } catch {
-      /* ignore */
-    }
+    leaveLiveKit.push({
+      roomName: call.livekit_room_name,
+      identity: livekitIdentityForMember(memberId),
+    });
 
     const remaining = await client.query(
       `SELECT COUNT(*)::int AS c FROM call_participants
@@ -1117,6 +1148,14 @@ export async function endCall(callId: string, memberId: number): Promise<CallPub
     const current = await loadCallById(callId, client);
     return { updated: current!, notifyIds: [] as number[] };
   });
+
+  for (const target of leaveLiveKit) {
+    try {
+      await removeLiveKitParticipant(target.roomName, target.identity);
+    } catch {
+      /* ignore */
+    }
+  }
 
   const duration = updated.duration_seconds ?? undefined;
   for (const nid of notifyIds) {
@@ -1161,66 +1200,93 @@ export async function issueCallToken(
     throw new CallsError('livekit_unavailable', 'Сервис звонков не настроен');
   }
 
-  const call = await loadCallById(callId);
-  if (!call) throw new CallsError('not_found', 'Звонок не найден');
+  let notifyJoinedConversationId: string | null = null;
 
-  if (!['ringing', 'waiting', 'active'].includes(call.status)) {
-    throw new CallsError('conflict', 'Звонок недоступен для подключения');
-  }
+  const { call, participant } = await withTransaction(async (client) => {
+    const locked = await client.query(
+      `SELECT * FROM calls WHERE id = $1::uuid FOR UPDATE`,
+      [callId],
+    );
+    if (!locked.rows[0]) throw new CallsError('not_found', 'Звонок не найден');
+    const callRow = mapCallRow(locked.rows[0]);
 
-  // Direct: initiator may get token while ringing; callee only after accept (active) or if already joined
-  const part = await query(
-    `SELECT role, status FROM call_participants WHERE call_id = $1::uuid AND user_id = $2`,
-    [callId, memberId],
-  );
-  let participant = part.rows[0] as { role?: string; status?: string } | undefined;
+    if (!['ringing', 'waiting', 'active'].includes(callRow.status)) {
+      throw new CallsError('conflict', 'Звонок недоступен для подключения');
+    }
 
-  if (!participant) {
-    if (call.type === 'group' && call.access_mode === 'closed' && call.conversation_id) {
-      const inConv = await isMemberInConversation(call.conversation_id, memberId);
-      if (!inConv) {
-        throw new CallsError('forbidden', 'Нет доступа к конференции');
-      }
-      // Auto-join closed group members
-      const joinedCount = await query(
-        `SELECT COUNT(*)::int AS c FROM call_participants WHERE call_id = $1::uuid AND status = 'joined'`,
-        [callId],
-      );
-      if (Number(joinedCount.rows[0]?.c ?? 0) >= maxGroupParticipants()) {
-        throw new CallsError('full', 'Достигнут лимит участников');
-      }
-      await query(
-        `INSERT INTO call_participants (call_id, user_id, role, status, joined_at)
-         VALUES ($1::uuid, $2, 'participant', 'joined', NOW())
-         ON CONFLICT (call_id, user_id) DO UPDATE
-           SET status = 'joined', joined_at = COALESCE(call_participants.joined_at, NOW()), left_at = NULL`,
-        [callId, memberId],
-      );
-      if (call.status === 'waiting') {
-        await query(
-          `UPDATE calls SET status = 'active', started_at = COALESCE(started_at, NOW())
-           WHERE id = $1::uuid AND status = 'waiting'`,
+    const part = await client.query(
+      `SELECT role, status FROM call_participants WHERE call_id = $1::uuid AND user_id = $2`,
+      [callId, memberId],
+    );
+    let participantRow = part.rows[0] as { role?: string; status?: string } | undefined;
+
+    // Already on this call → allow token refresh; otherwise enforce single active call.
+    if (!participantRow || !['joined', 'ringing', 'invited'].includes(String(participantRow.status))) {
+      await assertMemberFreeInTx(client, memberId, callId);
+    }
+
+    if (!participantRow) {
+      if (callRow.type === 'group' && callRow.access_mode === 'closed' && callRow.conversation_id) {
+        const inConv = await isMemberInConversation(callRow.conversation_id, memberId);
+        if (!inConv) {
+          throw new CallsError('forbidden', 'Нет доступа к конференции');
+        }
+        const joinedCount = await client.query(
+          `SELECT COUNT(*)::int AS c FROM call_participants
+           WHERE call_id = $1::uuid AND status = 'joined'`,
           [callId],
         );
+        if (Number(joinedCount.rows[0]?.c ?? 0) >= maxGroupParticipants()) {
+          throw new CallsError('full', 'Достигнут лимит участников');
+        }
+        await client.query(
+          `INSERT INTO call_participants (call_id, user_id, role, status, joined_at)
+           VALUES ($1::uuid, $2, 'participant', 'joined', NOW())
+           ON CONFLICT (call_id, user_id) DO UPDATE
+             SET status = 'joined',
+                 joined_at = COALESCE(call_participants.joined_at, NOW()),
+                 left_at = NULL`,
+          [callId, memberId],
+        );
+        if (callRow.status === 'waiting') {
+          await client.query(
+            `UPDATE calls SET status = 'active', started_at = COALESCE(started_at, NOW())
+             WHERE id = $1::uuid AND status = 'waiting'`,
+            [callId],
+          );
+        }
+        participantRow = { role: 'participant', status: 'joined' };
+        notifyJoinedConversationId = callRow.conversation_id;
+      } else {
+        throw new CallsError('forbidden', 'Нет доступа');
       }
-      participant = { role: 'participant', status: 'joined' };
-      await sendWsRoom(call.conversation_id, {
-        type: 'call:participant_joined',
-        callId: call.id,
-        userId: memberId,
-      });
-    } else {
-      throw new CallsError('forbidden', 'Нет доступа');
     }
-  }
 
-  if (call.type === 'direct') {
-    if (memberId !== call.initiated_by && call.status === 'ringing') {
-      throw new CallsError('conflict', 'Сначала примите звонок');
+    if (callRow.type === 'direct') {
+      if (memberId !== callRow.initiated_by && callRow.status === 'ringing') {
+        throw new CallsError('conflict', 'Сначала примите звонок');
+      }
+      if (participantRow.status === 'declined' || participantRow.status === 'missed') {
+        throw new CallsError('forbidden', 'Нет доступа к звонку');
+      }
     }
-    if (participant.status === 'declined' || participant.status === 'missed') {
-      throw new CallsError('forbidden', 'Нет доступа к звонку');
-    }
+
+    await client.query(
+      `UPDATE call_participants
+       SET status = 'joined', joined_at = COALESCE(joined_at, NOW()), left_at = NULL
+       WHERE call_id = $1::uuid AND user_id = $2`,
+      [callId, memberId],
+    );
+
+    return { call: callRow, participant: participantRow };
+  });
+
+  if (notifyJoinedConversationId) {
+    await sendWsRoom(notifyJoinedConversationId, {
+      type: 'call:participant_joined',
+      callId: call.id,
+      userId: memberId,
+    });
   }
 
   const profile = await loadMemberProfile(memberId);
@@ -1233,14 +1299,6 @@ export async function issueCallToken(
     roomName: call.livekit_room_name,
     maxParticipants: call.type === 'direct' ? 2 : maxGroupParticipants(),
   });
-
-  // Mark joined
-  await query(
-    `UPDATE call_participants
-     SET status = 'joined', joined_at = COALESCE(joined_at, NOW()), left_at = NULL
-     WHERE call_id = $1::uuid AND user_id = $2`,
-    [callId, memberId],
-  );
 
   const minted = await mintLiveKitJoinToken({
     roomName: call.livekit_room_name,
@@ -1462,16 +1520,20 @@ export async function joinViaInvitation(
       if (!inConv) throw new CallsError('forbidden', 'Нет доступа к группе');
     }
 
-    const joinedCount = await client.query(
-      `SELECT COUNT(*)::int AS c FROM call_participants
-       WHERE call_id = $1::uuid AND status = 'joined'`,
-      [call.id],
-    );
     const existing = await client.query(
       `SELECT status FROM call_participants WHERE call_id = $1::uuid AND user_id = $2`,
       [call.id, memberId],
     );
     const alreadyJoined = existing.rows[0]?.status === 'joined';
+    if (!alreadyJoined) {
+      await assertMemberFreeInTx(client, memberId, call.id);
+    }
+
+    const joinedCount = await client.query(
+      `SELECT COUNT(*)::int AS c FROM call_participants
+       WHERE call_id = $1::uuid AND status = 'joined'`,
+      [call.id],
+    );
     if (!alreadyJoined && Number(joinedCount.rows[0]?.c ?? 0) >= maxGroupParticipants()) {
       throw new CallsError('full', 'Достигнут лимит участников');
     }
@@ -1565,8 +1627,125 @@ export async function listCallHistory(input: {
   return { items, nextCursor };
 }
 
-/** Cron: ringing past timeout → missed */
-export async function cleanupStaleCalls(): Promise<{ missed: number; endedEmpty: number }> {
+/**
+ * Sync DB «joined» with LiveKit presence so closed tabs don't leave users permanently busy.
+ * Grace: ignore participants who joined less than N seconds ago (reconnect window).
+ */
+async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmpty: number }> {
+  let cleared = 0;
+  let endedEmpty = 0;
+  if (!isLiveKitConfigured()) return { cleared, endedEmpty };
+
+  const graceSec = Math.max(60, Math.min(600, Number(process.env.CALL_GHOST_GRACE_SEC ?? 120) || 120));
+
+  const active = await query(
+    `SELECT c.*
+     FROM calls c
+     WHERE c.status IN ('waiting', 'active')
+       AND EXISTS (
+         SELECT 1 FROM call_participants cp
+         WHERE cp.call_id = c.id AND cp.status = 'joined'
+       )
+     ORDER BY c.created_at ASC
+     LIMIT 80`,
+  );
+
+  for (const row of active.rows) {
+    const call = mapCallRow(row);
+    try {
+      const identities = await listLiveKitParticipantIdentities(call.livekit_room_name);
+      if (identities === null) continue; // Room Service unreachable — skip this tick
+
+      const present = new Set(identities);
+      const parts = await query(
+        `SELECT user_id, joined_at
+         FROM call_participants
+         WHERE call_id = $1::uuid AND status = 'joined'`,
+        [call.id],
+      );
+
+      const ghosts: number[] = [];
+      for (const p of parts.rows) {
+        const uid = Number(p.user_id);
+        const identity = livekitIdentityForMember(uid);
+        if (present.has(identity)) continue;
+        const joinedAt = p.joined_at ? new Date(String(p.joined_at)).getTime() : 0;
+        if (joinedAt && Date.now() - joinedAt < graceSec * 1000) continue;
+        ghosts.push(uid);
+      }
+
+      if (ghosts.length === 0) {
+        // Room empty in LiveKit but DB still has joined → clear all if past grace
+        if (present.size === 0 && parts.rows.length > 0) {
+          const oldest = Math.min(
+            ...parts.rows.map((p) =>
+              p.joined_at ? new Date(String(p.joined_at)).getTime() : Date.now(),
+            ),
+          );
+          if (Date.now() - oldest >= graceSec * 1000) {
+            for (const p of parts.rows) ghosts.push(Number(p.user_id));
+          }
+        }
+      }
+
+      if (ghosts.length === 0) continue;
+
+      const remaining = await withTransaction(async (client) => {
+        const locked = await client.query(
+          `SELECT * FROM calls WHERE id = $1::uuid AND status IN ('waiting', 'active') FOR UPDATE`,
+          [call.id],
+        );
+        if (!locked.rows[0]) return -1;
+
+        await client.query(
+          `UPDATE call_participants
+           SET status = 'left', left_at = NOW()
+           WHERE call_id = $1::uuid
+             AND user_id = ANY($2::int[])
+             AND status = 'joined'`,
+          [call.id, ghosts],
+        );
+        cleared += ghosts.length;
+
+        const rem = await client.query(
+          `SELECT COUNT(*)::int AS c FROM call_participants
+           WHERE call_id = $1::uuid AND status = 'joined'`,
+          [call.id],
+        );
+        const count = Number(rem.rows[0]?.c ?? 0);
+        if (count === 0) {
+          await finalizeCall(client, mapCallRow(locked.rows[0]), 'ended', 'ghost_cleanup');
+          return 0;
+        }
+        return count;
+      });
+
+      for (const uid of ghosts) {
+        await sendWs(uid, {
+          type: 'call:ended',
+          callId: call.id,
+          reason: 'ghost_cleanup',
+        }).catch(() => undefined);
+      }
+
+      if (remaining === 0) {
+        await endLiveKitRoom(call.livekit_room_name);
+        endedEmpty += 1;
+      }
+    } catch (e) {
+      console.warn('[calls] ghost reconcile:', e instanceof Error ? e.message : e);
+    }
+  }
+
+  return { cleared, endedEmpty };
+}
+
+/** Cron: ringing past timeout → missed; ghost joined → left; empty rooms → ended */
+export async function cleanupStaleCalls(): Promise<{
+  missed: number;
+  endedEmpty: number;
+  ghostsCleared: number;
+}> {
   const timeout = ringTimeoutSec();
   const ringing = await query(
     `SELECT * FROM calls
@@ -1637,25 +1816,64 @@ export async function cleanupStaleCalls(): Promise<{ missed: number; endedEmpty:
     }
   }
 
-  // Empty group calls waiting too long with no joined besides stale
+  const ghosts = await reconcileGhostParticipants();
+
+  // Empty group calls waiting too long with no joined (fallback if LiveKit unreachable)
   const empty = await query(
     `SELECT c.*
      FROM calls c
      WHERE c.type = 'group'
        AND c.status IN ('waiting', 'active')
-       AND c.created_at < NOW() - INTERVAL '6 hours'
+       AND c.created_at < NOW() - INTERVAL '2 hours'
        AND NOT EXISTS (
          SELECT 1 FROM call_participants cp
          WHERE cp.call_id = c.id AND cp.status = 'joined'
        )
      LIMIT 50`,
   );
-  let endedEmpty = 0;
+  let endedEmpty = ghosts.endedEmpty;
   for (const row of empty.rows) {
     const call = mapCallRow(row);
     try {
       await withTransaction(async (client) => {
-        await finalizeCall(client, call, 'ended', 'expired_empty');
+        const locked = await client.query(
+          `SELECT * FROM calls WHERE id = $1::uuid AND status IN ('waiting', 'active') FOR UPDATE`,
+          [call.id],
+        );
+        if (!locked.rows[0]) return;
+        await finalizeCall(client, mapCallRow(locked.rows[0]), 'ended', 'expired_empty');
+      });
+      await endLiveKitRoom(call.livekit_room_name);
+      endedEmpty += 1;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Direct calls stuck in active with no joined (ghost hangup)
+  const stuckDirect = await query(
+    `SELECT c.*
+     FROM calls c
+     WHERE c.type = 'direct'
+       AND c.status IN ('waiting', 'active')
+       AND c.started_at IS NOT NULL
+       AND c.started_at < NOW() - INTERVAL '30 minutes'
+       AND NOT EXISTS (
+         SELECT 1 FROM call_participants cp
+         WHERE cp.call_id = c.id AND cp.status = 'joined'
+       )
+     LIMIT 30`,
+  );
+  for (const row of stuckDirect.rows) {
+    const call = mapCallRow(row);
+    try {
+      await withTransaction(async (client) => {
+        const locked = await client.query(
+          `SELECT * FROM calls WHERE id = $1::uuid AND status IN ('waiting', 'active') FOR UPDATE`,
+          [call.id],
+        );
+        if (!locked.rows[0]) return;
+        await finalizeCall(client, mapCallRow(locked.rows[0]), 'ended', 'stale_direct');
       });
       await endLiveKitRoom(call.livekit_room_name);
       endedEmpty += 1;
@@ -1671,5 +1889,5 @@ export async function cleanupStaleCalls(): Promise<{ missed: number; endedEmpty:
      WHERE revoked_at IS NULL AND expires_at < NOW() - INTERVAL '7 days'`,
   ).catch(() => undefined);
 
-  return { missed, endedEmpty };
+  return { missed, endedEmpty, ghostsCleared: ghosts.cleared };
 }
