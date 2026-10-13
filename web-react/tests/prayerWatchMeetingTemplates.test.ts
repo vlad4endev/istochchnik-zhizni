@@ -31,7 +31,7 @@ describe('userCanUsePrayerWatchMeetingTemplates', () => {
     expect(userCanUsePrayerWatchMeetingTemplates(me({ app_role: 'member' }))).toBe(false);
   });
 
-  it('пастор без флага координатора — без шаблонов', () => {
-    expect(userCanUsePrayerWatchMeetingTemplates(me({ app_role: 'pastor' }))).toBe(false);
+  it('пастор видит шаблоны без флага координатора', () => {
+    expect(userCanUsePrayerWatchMeetingTemplates(me({ app_role: 'pastor' }))).toBe(true);
   });
 });
