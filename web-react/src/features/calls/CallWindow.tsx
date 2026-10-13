@@ -325,9 +325,21 @@ function RoomStage({
   const peerAvatar = useCallStore((s) => s.activeCall?.peerAvatar ?? '');
   const callKind = useCallStore((s) => s.activeCall?.callKind ?? 'direct');
   const [elapsed, setElapsed] = useState(0);
+  /** LiveKit стартует в Disconnected — это не ошибка, пока не было Connecting/Connected. */
+  const [connectAttempted, setConnectAttempted] = useState(false);
   const connected = connectionState === ConnectionState.Connected;
   const stageRef = useRef<HTMLDivElement | null>(null);
   const isGroup = callKind === 'group';
+
+  useEffect(() => {
+    if (
+      connectionState === ConnectionState.Connecting ||
+      connectionState === ConnectionState.Connected ||
+      connectionState === ConnectionState.Reconnecting
+    ) {
+      setConnectAttempted(true);
+    }
+  }, [connectionState]);
 
   useEffect(() => {
     if (!connected) {
@@ -387,6 +399,8 @@ function RoomStage({
   const showLocalPip = !isGroup && callType === 'video' && Boolean(localVideo) && isCameraEnabled;
 
   const avatarSrc = peerAvatar ? resolvePublicUrl(peerAvatar) : undefined;
+  const disconnectedAfterAttempt =
+    connectionState === ConnectionState.Disconnected && connectAttempted;
   // Прямой звонок: таймер / статусы. Конференция: без таймера (как Телемост).
   let statusLabel = 'Соединение…';
   if (connectError) statusLabel = connectError;
@@ -394,7 +408,7 @@ function RoomStage({
   else if (connectionState === ConnectionState.Connecting) statusLabel = 'Подключение к серверу…';
   else if (connectionState === ConnectionState.Reconnecting) {
     statusLabel = 'Переподключение…';
-  } else if (connectionState === ConnectionState.Disconnected) {
+  } else if (disconnectedAfterAttempt) {
     statusLabel = 'Ошибка сервера или идут технические работы';
   }
 
@@ -402,8 +416,10 @@ function RoomStage({
   if (connectError) groupWaitLabel = connectError;
   else if (connectionState === ConnectionState.Connecting) groupWaitLabel = 'Подключение…';
   else if (connectionState === ConnectionState.Reconnecting) groupWaitLabel = 'Переподключение…';
-  else if (connectionState === ConnectionState.Disconnected) {
-    groupWaitLabel = 'Ошибка сервера или идут технические работы';
+  else if (disconnectedAfterAttempt) {
+    groupWaitLabel = 'Ошибка сервера или идут технические работы. Попробуйте позже.';
+  } else if (connectionState === ConnectionState.Disconnected) {
+    groupWaitLabel = 'Подключение…';
   }
 
   const cameraByIdentity = useMemo(() => {
