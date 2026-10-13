@@ -11,10 +11,12 @@ import {
   useParticipants,
   useRemoteParticipants,
   useSpeakingParticipants,
+  useIsSpeaking,
 } from '@livekit/components-react';
 import {
   ConnectionState,
   DisconnectReason,
+  ParticipantEvent,
   Track,
   VideoPresets,
   type Participant,
@@ -30,6 +32,7 @@ import {
   LuMonitorUp,
   LuPhoneOff,
   LuShare2,
+  LuUsers,
   LuVideo,
   LuVideoOff,
   LuX,
@@ -179,48 +182,68 @@ function CallControls({
   }, [isScreenSharing, localParticipant, room, showScreenShare]);
 
   return (
-    <div className="call-controls">
+    <div className="call-controls" role="toolbar" aria-label="Управление звонком">
       {canShare ? (
         <button
           type="button"
-          className={['call-ctrl-btn', shareOpen ? 'call-ctrl-btn--active' : ''].join(' ')}
+          className={['call-ctrl', shareOpen ? 'call-ctrl--active' : ''].join(' ')}
           onClick={() => onToggleShare?.()}
           aria-label={shareOpen ? 'Скрыть ссылку' : 'Поделиться ссылкой'}
           aria-pressed={shareOpen}
         >
-          <LuShare2 size={22} />
+          <span className="call-ctrl__icon">
+            <LuShare2 size={22} />
+          </span>
+          <span className="call-ctrl__label">Ссылка</span>
         </button>
       ) : null}
       <button
         type="button"
-        className={['call-ctrl-btn', isMuted ? 'call-ctrl-btn--off' : ''].join(' ')}
+        className={['call-ctrl', isMuted ? 'call-ctrl--off' : ''].join(' ')}
         onClick={() => void toggleMic()}
         aria-label={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
       >
-        {isMuted ? <LuMicOff size={22} /> : <LuMic size={22} />}
+        <span className="call-ctrl__icon">
+          {isMuted ? <LuMicOff size={22} /> : <LuMic size={22} />}
+        </span>
+        <span className="call-ctrl__label">Микрофон</span>
       </button>
       {videoEnabled ? (
         <button
           type="button"
-          className={['call-ctrl-btn', isVideoOff ? 'call-ctrl-btn--off' : ''].join(' ')}
+          className={['call-ctrl', isVideoOff ? 'call-ctrl--off' : ''].join(' ')}
           onClick={() => void toggleCam()}
           aria-label={isVideoOff ? 'Включить камеру' : 'Выключить камеру'}
         >
-          {isVideoOff ? <LuVideoOff size={22} /> : <LuVideo size={22} />}
+          <span className="call-ctrl__icon">
+            {isVideoOff ? <LuVideoOff size={22} /> : <LuVideo size={22} />}
+          </span>
+          <span className="call-ctrl__label">Камера</span>
         </button>
       ) : null}
       {showScreenShare ? (
         <button
           type="button"
-          className={['call-ctrl-btn', isScreenSharing ? 'call-ctrl-btn--active' : ''].join(' ')}
+          className={['call-ctrl', isScreenSharing ? 'call-ctrl--active' : ''].join(' ')}
           onClick={() => void toggleScreen()}
           aria-label="Демонстрация экрана"
         >
-          <LuMonitorUp size={22} />
+          <span className="call-ctrl__icon">
+            <LuMonitorUp size={22} />
+          </span>
+          <span className="call-ctrl__label">Экран</span>
         </button>
       ) : null}
-      <button type="button" className="call-ctrl-btn call-ctrl-btn--hangup" onClick={onHangup} aria-label="Завершить">
-        <LuPhoneOff size={22} />
+      <button
+        type="button"
+        className="call-ctrl call-ctrl--hangup"
+        onClick={onHangup}
+        aria-label="Завершить"
+      >
+        <span className="call-ctrl__icon">
+          <LuPhoneOff size={22} />
+        </span>
+        <span className="call-ctrl__label">Выйти</span>
       </button>
     </div>
   );
@@ -273,6 +296,58 @@ function useStickySpotlightIdentity(participants: Participant[]): string | null 
   return spotlightId;
 }
 
+function useIsMicEnabled(participant: Participant): boolean {
+  const [enabled, setEnabled] = useState(() => participant.isMicrophoneEnabled);
+  useEffect(() => {
+    const update = () => setEnabled(participant.isMicrophoneEnabled);
+    update();
+    const events = [
+      ParticipantEvent.TrackMuted,
+      ParticipantEvent.TrackUnmuted,
+      ParticipantEvent.LocalTrackPublished,
+      ParticipantEvent.LocalTrackUnpublished,
+      ParticipantEvent.TrackPublished,
+      ParticipantEvent.TrackUnpublished,
+      ParticipantEvent.TrackSubscribed,
+      ParticipantEvent.TrackUnsubscribed,
+    ] as const;
+    for (const event of events) participant.on(event, update);
+    return () => {
+      for (const event of events) participant.off(event, update);
+    };
+  }, [participant]);
+  return enabled;
+}
+
+function SpeakingWaveform({ active }: { active: boolean }) {
+  return (
+    <div
+      className={['call-waveform', active ? 'call-waveform--active' : ''].filter(Boolean).join(' ')}
+      aria-hidden
+    >
+      <span />
+      <span />
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
+
+function MeetingOverflowTile({ count }: { count: number }) {
+  const label =
+    count === 1 ? '+1 участник' : count < 5 ? `+${count} участника` : `+${count} участников`;
+  return (
+    <div className="call-participant-tile call-participant-tile--overflow" aria-label={label}>
+      <div className="call-participant-tile__media call-participant-tile__media--overflow">
+        <LuUsers size={28} strokeWidth={2} aria-hidden />
+        <span className="call-participant-tile__overflow-count">+{count}</span>
+      </div>
+      <p className="call-participant-tile__name">{label}</p>
+    </div>
+  );
+}
+
 function MeetingParticipantTile({
   participant,
   callType,
@@ -285,26 +360,37 @@ function MeetingParticipantTile({
   size?: 'default' | 'spotlight' | 'strip';
 }) {
   const name = participantDisplayName(participant);
+  const displayName = participant.isLocal ? `${name} (вы)` : name;
   const avatarSrc = participantAvatarUrl(participant);
   const showVideo =
     callType === 'video' &&
     Boolean(cameraTrack && isTrackReference(cameraTrack) && cameraTrack.publication?.track);
-  const speaking = Boolean(participant.isSpeaking);
+  const speaking = useIsSpeaking(participant);
+  const micOn = useIsMicEnabled(participant);
+  const isAudio = callType === 'audio';
+  const isSpotlight = size === 'spotlight';
 
   return (
     <div
       className={[
         'call-participant-tile',
-        callType === 'audio' ? 'call-participant-tile--audio' : 'call-participant-tile--video',
-        size === 'spotlight' ? 'call-participant-tile--spotlight' : '',
+        isAudio ? 'call-participant-tile--audio' : 'call-participant-tile--video',
+        isSpotlight ? 'call-participant-tile--spotlight' : '',
         size === 'strip' ? 'call-participant-tile--strip' : '',
         speaking ? 'call-participant-tile--speaking' : '',
+        !micOn ? 'call-participant-tile--mic-off' : '',
         participant.isLocal ? 'call-participant-tile--local' : '',
       ]
         .filter(Boolean)
         .join(' ')}
     >
       <div className="call-participant-tile__media">
+        {isAudio && speaking ? (
+          <>
+            <span className="call-participant-tile__speak-ring" aria-hidden />
+            <span className="call-participant-tile__speak-ring call-participant-tile__speak-ring--late" aria-hidden />
+          </>
+        ) : null}
         {showVideo && cameraTrack && isTrackReference(cameraTrack) ? (
           <VideoTrack
             trackRef={cameraTrack}
@@ -320,10 +406,47 @@ function MeetingParticipantTile({
             {participantInitials(name)}
           </div>
         )}
+        {!isAudio ? (
+          <div className="call-participant-tile__chrome">
+            <span className="call-participant-tile__label">{displayName}</span>
+            <span
+              className={[
+                'call-participant-tile__mic',
+                micOn ? '' : 'call-participant-tile__mic--off',
+                speaking ? 'call-participant-tile__mic--speaking' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              aria-label={micOn ? (speaking ? 'Говорит' : 'Микрофон включён') : 'Микрофон выключен'}
+            >
+              {micOn ? <LuMic size={14} strokeWidth={2.4} /> : <LuMicOff size={14} strokeWidth={2.4} />}
+            </span>
+          </div>
+        ) : null}
       </div>
-      <p className="call-participant-tile__name">
-        {participant.isLocal ? `${name} (вы)` : name}
-      </p>
+      {isAudio ? (
+        <>
+          {isSpotlight ? <SpeakingWaveform active={speaking} /> : null}
+          <div className="call-participant-tile__meta">
+            <p className="call-participant-tile__name">{displayName}</p>
+            <span
+              className={[
+                'call-participant-tile__mic',
+                'call-participant-tile__mic--inline',
+                micOn ? '' : 'call-participant-tile__mic--off',
+                speaking ? 'call-participant-tile__mic--speaking' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              aria-hidden
+            >
+              {micOn ? <LuMic size={12} strokeWidth={2.4} /> : <LuMicOff size={12} strokeWidth={2.4} />}
+            </span>
+          </div>
+        </>
+      ) : size === 'strip' || size === 'spotlight' ? (
+        <p className="call-participant-tile__name call-participant-tile__name--sr">{displayName}</p>
+      ) : null}
     </div>
   );
 }
@@ -373,11 +496,9 @@ function RoomStage({
       return;
     }
     resumeCallMedia(room);
-    // Таймер только для 1:1 — в конференциях (Телемост) длительность не показываем.
-    if (isGroup) return;
     const t = window.setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => window.clearInterval(t);
-  }, [connected, room, isGroup]);
+  }, [connected, room]);
 
   // После attach трека Safari/Chrome иногда не стартуют video.play без явного вызова.
   useEffect(() => {
@@ -492,12 +613,67 @@ function RoomStage({
   const localScreenShare =
     localScreenRaw && isTrackReference(localScreenRaw) ? localScreenRaw : null;
   const stageScreenShare = groupScreenShare ?? localScreenShare;
-  /** Zoom-style: с 3+ участниками говорящий крупно, остальные — лента снизу. */
+  const meetingTitle = peerName?.trim() || 'Встреча';
+  /** Аудио: всегда фокус на говорящем (как в макете). Видео: с 3+ — spotlight. */
   const useSpeakerView =
-    isGroup && !waitingAlone && !stageScreenShare && sortedParticipants.length >= 3;
+    isGroup &&
+    !waitingAlone &&
+    !stageScreenShare &&
+    ((callType === 'audio' && sortedParticipants.length >= 2) ||
+      (callType === 'video' && sortedParticipants.length >= 3));
+
+  const VIDEO_GRID_VISIBLE = 5;
+  const showVideoOverflow =
+    !useSpeakerView && callType === 'video' && sortedParticipants.length > VIDEO_GRID_VISIBLE;
+  const visibleGridParticipants = showVideoOverflow
+    ? sortedParticipants.slice(0, VIDEO_GRID_VISIBLE)
+    : sortedParticipants;
+  const overflowCount = showVideoOverflow
+    ? sortedParticipants.length - VIDEO_GRID_VISIBLE
+    : 0;
+
+  const AUDIO_STRIP_VISIBLE = 8;
+  const showAudioOverflow = useSpeakerView && callType === 'audio' && stripParticipants.length > AUDIO_STRIP_VISIBLE;
+  const visibleStripParticipants = showAudioOverflow
+    ? stripParticipants.slice(0, AUDIO_STRIP_VISIBLE)
+    : stripParticipants;
+  const stripOverflowCount = showAudioOverflow
+    ? stripParticipants.length - AUDIO_STRIP_VISIBLE
+    : 0;
+
+  const groupStatusText = connectError
+    ? connectError
+    : connectionState === ConnectionState.Connected
+      ? formatDuration(elapsed)
+      : connectionState === ConnectionState.Reconnecting
+        ? 'Переподключение…'
+        : 'Подключение…';
 
   return (
-    <div className="call-stage" ref={stageRef}>
+    <div
+      className={[
+        'call-stage',
+        isGroup ? 'call-stage--meeting' : '',
+        callType === 'audio' ? 'call-stage--audio' : 'call-stage--video',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      ref={stageRef}
+    >
+      {isGroup ? (
+        <header className="call-meeting-topbar" aria-label="Информация о встрече">
+          <div className="call-meeting-topbar__title-wrap">
+            <p className="call-meeting-topbar__title">{meetingTitle}</p>
+          </div>
+          <div className="call-meeting-topbar__meta">
+            <span className="call-meeting-topbar__timer">{groupStatusText}</span>
+            <span className="call-meeting-topbar__count" title="Участники">
+              <LuUsers size={14} strokeWidth={2.4} aria-hidden />
+              {Math.max(1, sortedParticipants.length)}
+            </span>
+          </div>
+        </header>
+      ) : null}
       <div className="call-stage__main">
         {isGroup ? (
           waitingAlone ? (
@@ -507,6 +683,7 @@ function RoomStage({
                   participant={localParticipant}
                   callType={callType}
                   cameraTrack={cameraByIdentity.get(localParticipant.identity) ?? null}
+                  size={callType === 'audio' ? 'spotlight' : 'default'}
                 />
               ) : (
                 <MeetingAvatar mediaType={callType} size="lg" />
@@ -529,9 +706,17 @@ function RoomStage({
                   size="spotlight"
                 />
               </div>
-              {stripParticipants.length > 0 ? (
-                <div className="call-speaker-layout__strip" aria-label="Остальные участники">
-                  {stripParticipants.map((p) => (
+              {visibleStripParticipants.length > 0 || stripOverflowCount > 0 ? (
+                <div
+                  className={[
+                    'call-speaker-layout__strip',
+                    callType === 'audio' ? 'call-speaker-layout__strip--grid' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  aria-label="Остальные участники"
+                >
+                  {visibleStripParticipants.map((p) => (
                     <MeetingParticipantTile
                       key={p.identity || p.sid}
                       participant={p}
@@ -540,6 +725,7 @@ function RoomStage({
                       size="strip"
                     />
                   ))}
+                  {stripOverflowCount > 0 ? <MeetingOverflowTile count={stripOverflowCount} /> : null}
                 </div>
               ) : null}
             </div>
@@ -559,19 +745,25 @@ function RoomStage({
               <div
                 className={[
                   'call-participants',
+                  'call-participants--modern',
                   callType === 'audio' ? 'call-participants--audio' : 'call-participants--video',
-                  sortedParticipants.length <= 9
-                    ? `call-participants--n${sortedParticipants.length}`
+                  (showVideoOverflow ? VIDEO_GRID_VISIBLE + 1 : sortedParticipants.length) <= 9
+                    ? `call-participants--n${showVideoOverflow ? VIDEO_GRID_VISIBLE + 1 : sortedParticipants.length}`
                     : 'call-participants--many',
                 ].join(' ')}
                 style={
                   {
-                    '--cp-count': String(Math.max(1, sortedParticipants.length)),
+                    '--cp-count': String(
+                      Math.max(
+                        1,
+                        showVideoOverflow ? VIDEO_GRID_VISIBLE + 1 : sortedParticipants.length,
+                      ),
+                    ),
                   } as CSSProperties
                 }
                 aria-label="Участники встречи"
               >
-                {sortedParticipants.map((p) => (
+                {visibleGridParticipants.map((p) => (
                   <MeetingParticipantTile
                     key={p.identity || p.sid}
                     participant={p}
@@ -579,6 +771,7 @@ function RoomStage({
                     cameraTrack={cameraByIdentity.get(p.identity) ?? null}
                   />
                 ))}
+                {overflowCount > 0 ? <MeetingOverflowTile count={overflowCount} /> : null}
               </div>
             </>
           )
@@ -624,7 +817,6 @@ function RoomStage({
           </>
         )}
       </div>
-      {/* Конференции: без таймера и без верхней плашки — только окна участников */}
       {!isGroup && showRemoteVideo ? (
         <p className="call-stage__status call-stage__status--bar">{statusLabel}</p>
       ) : null}
@@ -825,17 +1017,20 @@ function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; o
           </div>
         </div>
       </div>
-      <div className="call-controls">
+      <div className="call-controls" role="toolbar" aria-label="Управление звонком">
         <button
           type="button"
-          className="call-ctrl-btn call-ctrl-btn--hangup"
+          className="call-ctrl call-ctrl--hangup"
           onClick={() => {
             stopCallRing();
             onCancel();
           }}
           aria-label="Отменить"
         >
-          <LuPhoneOff size={22} />
+          <span className="call-ctrl__icon">
+            <LuPhoneOff size={22} />
+          </span>
+          <span className="call-ctrl__label">Отмена</span>
         </button>
       </div>
     </div>
@@ -861,9 +1056,12 @@ function CallShell({
           </div>
         </div>
       </div>
-      <div className="call-controls">
-        <button type="button" className="call-ctrl-btn call-ctrl-btn--hangup" onClick={onHangup} aria-label="Завершить">
-          <LuPhoneOff size={22} />
+      <div className="call-controls" role="toolbar" aria-label="Управление звонком">
+        <button type="button" className="call-ctrl call-ctrl--hangup" onClick={onHangup} aria-label="Завершить">
+          <span className="call-ctrl__icon">
+            <LuPhoneOff size={22} />
+          </span>
+          <span className="call-ctrl__label">Выйти</span>
         </button>
       </div>
     </div>
