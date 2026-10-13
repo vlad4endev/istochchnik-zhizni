@@ -305,16 +305,21 @@
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
 }
 
-/* Call route accept/decline (deep link) */
+/* Call route accept/decline (deep link) — flex только в горизонтальном ряду действий */
 .call-route-page .btn-reject,
 .call-route-page .btn-accept {
-  flex: 1;
-  padding: 12px;
+  padding: 12px 20px;
   border-radius: 12px;
   border: none;
   color: white;
   font-weight: 600;
   cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.call-actions .btn-reject,
+.call-actions .btn-accept {
+  flex: 1 1 0;
 }
 
 .call-route-page .btn-reject {
@@ -635,4 +640,391 @@
 
 .call-window--ringing {
   background: #12121c;
+}
+
+/* ——— Join lobby (invite link) ——— */
+.call-join {
+  --call-join-ink: #15201c;
+  --call-join-mist: #dce8e2;
+  --call-join-foam: #f3f7f5;
+  --call-join-accent: #1f8a55;
+  --call-join-accent-deep: #146b41;
+  --call-join-rose: #8b3a45;
+  position: relative;
+  isolation: isolate;
+  min-height: 100%;
+  min-height: 100dvh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding:
+    max(28px, calc(16px + env(safe-area-inset-top, 0px)))
+    22px
+    max(28px, calc(20px + env(safe-area-inset-bottom, 0px)));
+  box-sizing: border-box;
+  overflow: hidden;
+  color: var(--call-join-ink);
+  font-family: Karla, 'Segoe UI', sans-serif;
+  background: var(--call-join-foam);
+}
+
+.call-join--video {
+  --call-join-mist: #e2e4ec;
+  --call-join-foam: #f2f3f7;
+  --call-join-accent: #2563a8;
+  --call-join-accent-deep: #1a4f88;
+}
+
+.call-join__atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 55% at 50% -10%, rgba(31, 138, 85, 0.18), transparent 58%),
+    radial-gradient(ellipse 55% 45% at 100% 80%, rgba(139, 58, 69, 0.12), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 0% 70%, rgba(45, 90, 78, 0.14), transparent 50%),
+    linear-gradient(165deg, #eef5f1 0%, #f7f4ef 48%, #e8eee9 100%);
+}
+
+.call-join--video .call-join__atmosphere {
+  background:
+    radial-gradient(ellipse 80% 55% at 50% -10%, rgba(37, 99, 168, 0.2), transparent 58%),
+    radial-gradient(ellipse 55% 45% at 100% 80%, rgba(139, 58, 69, 0.1), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 0% 70%, rgba(60, 80, 120, 0.14), transparent 50%),
+    linear-gradient(165deg, #eef1f7 0%, #f6f4f1 48%, #e8ebf0 100%);
+}
+
+.call-join__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.55;
+  animation: call-join-drift 14s ease-in-out infinite;
+}
+
+.call-join__orb--a {
+  width: min(48vw, 280px);
+  height: min(48vw, 280px);
+  left: -8%;
+  top: 12%;
+  background: rgba(31, 138, 85, 0.35);
+}
+
+.call-join__orb--b {
+  width: min(42vw, 240px);
+  height: min(42vw, 240px);
+  right: -6%;
+  bottom: 18%;
+  background: rgba(139, 58, 69, 0.22);
+  animation-delay: -5s;
+}
+
+.call-join__orb--c {
+  width: min(36vw, 200px);
+  height: min(36vw, 200px);
+  left: 40%;
+  bottom: -8%;
+  background: rgba(45, 90, 78, 0.2);
+  animation-delay: -9s;
+}
+
+.call-join--video .call-join__orb--a {
+  background: rgba(37, 99, 168, 0.32);
+}
+
+.call-join__grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.07;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+  mix-blend-mode: multiply;
+}
+
+@keyframes call-join-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(12px, -18px, 0) scale(1.06);
+  }
+}
+
+.call-join__frame {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 22.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: call-join-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes call-join-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.call-join__brand {
+  margin: 0 0 26px;
+  font-family: Fraunces, Georgia, serif;
+  font-size: clamp(1.85rem, 6.2vw, 2.35rem);
+  font-weight: 550;
+  font-variation-settings: 'opsz' 96;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  color: var(--call-join-rose);
+}
+
+.call-join__mark {
+  position: relative;
+  width: 7.5rem;
+  height: 7.5rem;
+  margin: 0 0 22px;
+  display: grid;
+  place-items: center;
+}
+
+.call-join__pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--call-join-accent) 45%, transparent);
+  animation: call-join-pulse 2.8s ease-out infinite;
+}
+
+.call-join__pulse--late {
+  animation-delay: 1.4s;
+}
+
+@keyframes call-join-pulse {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(1.45);
+    opacity: 0;
+  }
+}
+
+.call-join__mark-core {
+  position: relative;
+  z-index: 1;
+  width: 5.25rem;
+  height: 5.25rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--call-join-accent) 92%, #fff) 0%, var(--call-join-accent-deep) 100%);
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--call-join-accent) 12%, transparent),
+    0 18px 40px color-mix(in srgb, var(--call-join-accent) 28%, transparent);
+}
+
+.call-join__mark--loading .call-join__mark-core {
+  background: color-mix(in srgb, var(--call-join-mist) 70%, #fff);
+  box-shadow: none;
+  animation: call-join-breathe 1.4s ease-in-out infinite;
+}
+
+@keyframes call-join-breathe {
+  0%,
+  100% {
+    transform: scale(0.96);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.call-join__title {
+  margin: 0;
+  font-family: Karla, 'Segoe UI', sans-serif;
+  font-size: clamp(1.2rem, 3.8vw, 1.35rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--call-join-ink);
+}
+
+.call-join__lead {
+  margin: 10px 0 0;
+  max-width: 20rem;
+  font-size: 1.02rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--call-join-ink) 62%, transparent);
+}
+
+.call-join__devices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+  width: 100%;
+}
+
+.call-join__device {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 16px 10px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--call-join-ink) 10%, transparent);
+  background: color-mix(in srgb, #fff 78%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--call-join-ink);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.15s ease,
+    box-shadow 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.call-join__device:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(21, 32, 28, 0.08);
+}
+
+.call-join__device:active {
+  transform: scale(0.98);
+}
+
+.call-join__device.is-on {
+  border-color: color-mix(in srgb, var(--call-join-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--call-join-accent) 10%, #fff);
+}
+
+.call-join__device.is-off {
+  opacity: 0.78;
+  border-color: color-mix(in srgb, var(--call-join-ink) 14%, transparent);
+  background: color-mix(in srgb, #fff 55%, var(--call-join-mist));
+}
+
+.call-join__device-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--call-join-ink) 8%, transparent);
+  color: var(--call-join-ink);
+  flex-shrink: 0;
+}
+
+.call-join__device.is-on .call-join__device-icon {
+  background: var(--call-join-accent);
+  color: #fff;
+}
+
+.call-join__device.is-off .call-join__device-icon {
+  background: color-mix(in srgb, var(--call-join-ink) 14%, transparent);
+  color: color-mix(in srgb, var(--call-join-ink) 70%, transparent);
+}
+
+.call-join__device-label {
+  white-space: nowrap;
+}
+
+.call-join__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 20rem;
+  min-height: 54px;
+  margin-top: 26px;
+  padding: 14px 28px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--call-join-accent) 92%, #fff), var(--call-join-accent-deep));
+  color: #fff;
+  font: inherit;
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.22) inset,
+    0 14px 32px color-mix(in srgb, var(--call-join-accent) 35%, transparent);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.call-join__cta:hover:not(:disabled) {
+  filter: brightness(1.04);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.25) inset,
+    0 18px 36px color-mix(in srgb, var(--call-join-accent) 42%, transparent);
+}
+
+.call-join__cta:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.call-join__cta:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+a.call-join__cta {
+  box-sizing: border-box;
+}
+
+.call-join__ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--call-join-ink) 68%, transparent);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.call-join__ghost:hover {
+  color: var(--call-join-ink);
+  background: color-mix(in srgb, #fff 55%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-join__orb,
+  .call-join__pulse,
+  .call-join__pulse--late,
+  .call-join__frame,
+  .call-join__mark--loading .call-join__mark-core {
+    animation: none;
+  }
 }

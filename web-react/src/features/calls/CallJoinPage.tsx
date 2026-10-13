@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { LuArrowLeft, LuMic, LuMicOff, LuUsers, LuVideo, LuVideoOff } from 'react-icons/lu';
 
 import { LOGIN_PATH } from '../../app/routeGuards';
 import { emitAppToast } from '../../lib/uiFeedback';
@@ -7,6 +8,27 @@ import { useAuthStore } from '../auth/authStore';
 
 import { joinInvitation, previewInvitation } from './callsApi';
 import { useCallStore } from './callStore';
+import './calls.css';
+
+function CallJoinShell({
+  children,
+  mediaType = 'audio',
+}: {
+  children: ReactNode;
+  mediaType?: 'audio' | 'video';
+}) {
+  return (
+    <div className={['call-join', mediaType === 'video' ? 'call-join--video' : ''].join(' ')}>
+      <div className="call-join__atmosphere" aria-hidden>
+        <span className="call-join__orb call-join__orb--a" />
+        <span className="call-join__orb call-join__orb--b" />
+        <span className="call-join__orb call-join__orb--c" />
+        <span className="call-join__grain" />
+      </div>
+      <div className="call-join__frame">{children}</div>
+    </div>
+  );
+}
 
 export function CallJoinPage() {
   const { inviteToken = '' } = useParams();
@@ -39,13 +61,21 @@ export function CallJoinPage() {
   if (!isAuthenticated) {
     const from = `/call/join/${encodeURIComponent(inviteToken)}`;
     return (
-      <div className="call-route-page">
-        <h1 className="text-xl font-semibold">Вход в конференцию</h1>
-        <p className="mt-2 text-[var(--text-secondary)]">Войдите в аккаунт, чтобы подключиться.</p>
-        <Link className="call-route-link mt-4 inline-block" to={`${LOGIN_PATH}?from=${encodeURIComponent(from)}`}>
+      <CallJoinShell>
+        <p className="call-join__brand">Источник жизни</p>
+        <div className="call-join__mark" aria-hidden>
+          <span className="call-join__pulse" />
+          <span className="call-join__pulse call-join__pulse--late" />
+          <span className="call-join__mark-core">
+            <LuUsers size={36} strokeWidth={1.75} />
+          </span>
+        </div>
+        <h1 className="call-join__title">Вход в конференцию</h1>
+        <p className="call-join__lead">Войдите в аккаунт, чтобы подключиться к звонку.</p>
+        <Link className="call-join__cta" to={`${LOGIN_PATH}?from=${encodeURIComponent(from)}`}>
           Войти
         </Link>
-      </div>
+      </CallJoinShell>
     );
   }
 
@@ -64,20 +94,28 @@ export function CallJoinPage() {
                 ? 'Лимит использований приглашения исчерпан'
                 : error || 'Приглашение недействительно';
     return (
-      <div className="call-route-page">
-        <p>{msg}</p>
-        <Link to="/messenger" className="call-route-link">
+      <CallJoinShell>
+        <p className="call-join__brand">Источник жизни</p>
+        <h1 className="call-join__title">Не удалось войти</h1>
+        <p className="call-join__lead">{msg}</p>
+        <Link to="/messenger" className="call-join__ghost">
+          <LuArrowLeft size={18} aria-hidden />
           В мессенджер
         </Link>
-      </div>
+      </CallJoinShell>
     );
   }
 
   if (!preview) {
     return (
-      <div className="call-route-page">
-        <p>Проверка приглашения…</p>
-      </div>
+      <CallJoinShell>
+        <p className="call-join__brand">Источник жизни</p>
+        <div className="call-join__mark call-join__mark--loading" aria-hidden>
+          <span className="call-join__pulse" />
+          <span className="call-join__mark-core" />
+        </div>
+        <p className="call-join__lead">Проверка приглашения…</p>
+      </CallJoinShell>
     );
   }
 
@@ -121,39 +159,74 @@ export function CallJoinPage() {
     }
   };
 
-  return (
-    <div className="call-route-page">
-      <h1 className="text-xl font-semibold">
-        {preview.mediaType === 'video' ? 'Видеоконференция' : 'Аудиоконференция'}
-      </h1>
-      {preview.conversationTitle ? (
-        <p className="mt-1 text-[var(--text-secondary)]">{preview.conversationTitle}</p>
-      ) : null}
-      {preview.participantCount != null ? (
-        <p className="mt-1 text-sm text-[var(--text-secondary)]">Участников: {preview.participantCount}</p>
-      ) : null}
+  const isVideo = preview.mediaType === 'video';
+  const headline = isVideo ? 'Видеоконференция' : 'Аудиоконференция';
+  const metaParts = [
+    preview.conversationTitle?.trim() || null,
+    preview.participantCount != null ? `${preview.participantCount} в эфире` : null,
+  ].filter(Boolean);
 
-      <div className="mt-6 flex flex-col gap-3">
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={micOn} onChange={(e) => setMicOn(e.target.checked)} />
-          Микрофон
-        </label>
-        {preview.mediaType === 'video' ? (
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={camOn} onChange={(e) => setCamOn(e.target.checked)} />
-            Камера
-          </label>
+  return (
+    <CallJoinShell mediaType={preview.mediaType}>
+      <p className="call-join__brand">Источник жизни</p>
+
+      <div className="call-join__mark" aria-hidden>
+        <span className="call-join__pulse" />
+        <span className="call-join__pulse call-join__pulse--late" />
+        <span className="call-join__mark-core">
+          {isVideo ? <LuVideo size={36} strokeWidth={1.75} /> : <LuMic size={36} strokeWidth={1.75} />}
+        </span>
+      </div>
+
+      <h1 className="call-join__title">{headline}</h1>
+      {metaParts.length > 0 ? (
+        <p className="call-join__lead">
+          {metaParts.join(' · ')}
+        </p>
+      ) : (
+        <p className="call-join__lead">Подключитесь, когда будете готовы.</p>
+      )}
+
+      <div className="call-join__devices" role="group" aria-label="Устройства">
+        <button
+          type="button"
+          className={['call-join__device', micOn ? 'is-on' : 'is-off'].join(' ')}
+          aria-pressed={micOn}
+          onClick={() => setMicOn((v) => !v)}
+        >
+          <span className="call-join__device-icon" aria-hidden>
+            {micOn ? <LuMic size={22} strokeWidth={2} /> : <LuMicOff size={22} strokeWidth={2} />}
+          </span>
+          <span className="call-join__device-label">{micOn ? 'Микрофон вкл.' : 'Микрофон выкл.'}</span>
+        </button>
+        {isVideo ? (
+          <button
+            type="button"
+            className={['call-join__device', camOn ? 'is-on' : 'is-off'].join(' ')}
+            aria-pressed={camOn}
+            onClick={() => setCamOn((v) => !v)}
+          >
+            <span className="call-join__device-icon" aria-hidden>
+              {camOn ? <LuVideo size={22} strokeWidth={2} /> : <LuVideoOff size={22} strokeWidth={2} />}
+            </span>
+            <span className="call-join__device-label">{camOn ? 'Камера вкл.' : 'Камера выкл.'}</span>
+          </button>
         ) : null}
       </div>
 
       <button
         type="button"
-        className="btn-accept mt-6 px-6 py-3 rounded-xl"
+        className="call-join__cta"
         disabled={!preview.canJoin || joining}
         onClick={() => void onJoin()}
       >
         {joining ? 'Подключение…' : preview.canJoin ? 'Подключиться' : 'Нет доступа'}
       </button>
-    </div>
+
+      <Link to="/messenger" className="call-join__ghost">
+        <LuArrowLeft size={18} aria-hidden />
+        В мессенджер
+      </Link>
+    </CallJoinShell>
   );
 }
