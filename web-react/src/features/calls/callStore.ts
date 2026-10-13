@@ -17,6 +17,9 @@ export interface ActiveCallState {
   inviteUrl?: string | null;
   livekitUrl?: string | null;
   livekitToken?: string | null;
+  /** Prefs from pre-join lobby (join link / create meeting). Applied on LiveKit connect. */
+  initialMicOn?: boolean;
+  initialCamOn?: boolean;
 }
 
 interface CallStore {
@@ -47,9 +50,11 @@ export const useCallStore = create<CallStore>((set) => ({
         ...call,
         callKind: call.callKind ?? 'direct',
         status: call.status ?? 'calling',
+        initialMicOn: call.initialMicOn ?? true,
+        initialCamOn: call.initialCamOn ?? call.callType === 'video',
       },
-      isMuted: false,
-      isVideoOff: call.callType === 'audio',
+      isMuted: call.initialMicOn === false,
+      isVideoOff: call.initialCamOn === false || call.callType === 'audio',
       isScreenSharing: false,
     }),
 
@@ -100,9 +105,21 @@ export const useCallStore = create<CallStore>((set) => ({
           // Не затирать уже выданный токен при navigate на /call/:id
           livekitUrl: extras.livekitUrl ?? (sameCall ? s.activeCall?.livekitUrl ?? null : null),
           livekitToken: extras.livekitToken ?? (sameCall ? s.activeCall?.livekitToken ?? null : null),
+          initialMicOn:
+            extras.initialMicOn ??
+            (sameCall ? s.activeCall?.initialMicOn : undefined) ??
+            true,
+          initialCamOn:
+            extras.initialCamOn ??
+            (sameCall ? s.activeCall?.initialCamOn : undefined) ??
+            call.mediaType === 'video',
         },
-        isMuted: sameCall ? s.isMuted : false,
-        isVideoOff: sameCall ? s.isVideoOff : call.mediaType === 'audio',
+        isMuted: sameCall
+          ? s.isMuted
+          : extras.initialMicOn === false,
+        isVideoOff: sameCall
+          ? s.isVideoOff
+          : extras.initialCamOn === false || call.mediaType === 'audio',
         isScreenSharing: sameCall ? s.isScreenSharing : false,
       };
     }),

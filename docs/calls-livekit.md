@@ -24,9 +24,10 @@ LIVEKIT_API_KEY=...
 LIVEKIT_API_SECRET=...                   # только сервер
 CALLS_ENABLED=true
 CALL_RING_TIMEOUT_SEC=60
-CALL_TOKEN_TTL_SEC=900
+CALL_TOKEN_TTL_SEC=14400          # JWT TTL (до 8 ч); длинные конференции
 CALL_INVITE_TTL_HOURS=24
 CALL_MAX_GROUP_PARTICIPANTS=50
+CALL_GHOST_GRACE_SEC=120          # отключённый клиент → снятие «занят» после grace
 PUBLIC_WEB_ORIGIN=https://app.church-tambov.ru   # invite URL + fallback для LIVEKIT_PUBLIC_URL
 ```
 
@@ -192,3 +193,12 @@ Push **не** содержит LiveKit token. Успешная отправка 
 4. Пропущенный (не отвечать > ring timeout) → история «Пропущенный вызов».
 
 Автотесты без реального медиа: `npm test` (unit для LiveKit helpers / invite hash).
+
+## Стабильность при многих пользователях
+
+- **Один активный звонок на пользователя** — `pg_advisory_xact_lock` при create / accept / join / token; повторный join в другую комнату блокируется (`already_in_call`).
+- **Ghost «занят»** — cron сверяет `call_participants.status=joined` с LiveKit presence (`CALL_GHOST_GRACE_SEC`); закрытый таб больше не блокирует новые звонки навсегда.
+- **Лимит группы** — `CALL_MAX_GROUP_PARTICIPANTS` (по умолчанию 50) + LiveKit `maxParticipants`; join закрытой группы — в транзакции с `FOR UPDATE`.
+- **Длинные конференции** — JWT TTL по умолчанию 4 ч (до 8 ч); в UI для групп включены adaptiveStream / dynacast / simulcast.
+- **1:1** — только из личного чата (оба участника должны быть в private conversation).
+- **Многопользовательские встречи** — кнопка камеры в мессенджере → standalone link-встреча (как Телемост) или конференция по ссылке из группы.

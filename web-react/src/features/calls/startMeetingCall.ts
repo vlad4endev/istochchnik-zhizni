@@ -76,8 +76,14 @@ export async function startMeetingCall(opts: StartMeetingOptions): Promise<strin
  * Встреча из списка чатов (кнопка камеры): только звонок + ссылка, как в Телемосте.
  * Группа/чат не создаётся; после завершения окно закрывается.
  */
+export type StandaloneMeetingMediaPrefs = {
+  micOn?: boolean;
+  camOn?: boolean;
+};
+
 export async function startStandaloneMeetingCall(
   mediaType: CallMediaType = 'video',
+  prefs?: StandaloneMeetingMediaPrefs,
 ): Promise<StandaloneMeetingResult | null> {
   if (!CALLS_FEATURE_ENABLED) {
     emitAppToast('Звонки временно отключены', 'info');
@@ -86,6 +92,8 @@ export async function startStandaloneMeetingCall(
 
   const kind: CallMediaType = mediaType === 'audio' ? 'audio' : 'video';
   const title = kind === 'video' ? 'Видеовстреча' : 'Аудиовстреча';
+  const micOn = prefs?.micOn !== false;
+  const camOn = kind === 'video' && prefs?.camOn !== false;
 
   requestCallNotificationsFromUserGesture();
   unlockCallAudio();
@@ -103,6 +111,8 @@ export async function startStandaloneMeetingCall(
     status: 'active',
     callKind: 'group',
     inviteUrl: call.inviteUrl,
+    initialMicOn: micOn,
+    initialCamOn: camOn,
   });
 
   if (call.inviteUrl) {

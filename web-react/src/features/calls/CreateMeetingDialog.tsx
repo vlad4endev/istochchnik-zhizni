@@ -50,7 +50,10 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
           return;
         }
       }
-      const result = await startStandaloneMeetingCall(mediaType);
+      const result = await startStandaloneMeetingCall(mediaType, {
+        micOn,
+        camOn: isVideo && camOn,
+      });
       if (result?.callId) {
         onCreated();
       }
