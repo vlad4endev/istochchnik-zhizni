@@ -2708,6 +2708,21 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   color: rgba(255, 255, 255, 0.55);
 }
 
+.telemost-create__or {
+  margin: 18px 0 0;
+  width: min(100%, 21rem);
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.telemost-create__or + .telemost-create__name {
+  margin-top: 10px;
+}
+
 .telemost-create__name {
   display: flex;
   flex-direction: column;
