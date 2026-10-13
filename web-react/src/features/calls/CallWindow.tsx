@@ -61,14 +61,6 @@ function isMobileUa(): boolean {
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 }
 
-function hostLabel(url: string): string {
-  try {
-    return new URL(url).host + new URL(url).pathname.replace(/\/$/, '');
-  } catch {
-    return url;
-  }
-}
-
 /** Разблокировать WebAudio + LiveKit HTMLMediaElement playback (autoplay policy). */
 function resumeCallMedia(room?: Room | null): void {
   unlockCallAudio();
@@ -177,11 +169,9 @@ function CallControls({
 
 function RoomStage({
   callType,
-  serverUrl,
   connectError,
 }: {
   callType: 'audio' | 'video';
-  serverUrl: string;
   connectError: string | null;
 }) {
   const room = useRoomContext();
@@ -263,7 +253,7 @@ function RoomStage({
   else if (connectionState === ConnectionState.Reconnecting) {
     statusLabel = 'Переподключение…';
   } else if (connectionState === ConnectionState.Disconnected) {
-    statusLabel = 'Нет соединения с сервером звонков';
+    statusLabel = 'Ошибка сервера или идут технические работы';
   }
 
   return (
@@ -289,9 +279,6 @@ function RoomStage({
             )}
             <p className="call-stage__name">{peerName}</p>
             <p className="call-stage__status">{statusLabel}</p>
-            {!connected ? (
-              <p className="call-stage__hint">Сервер: {hostLabel(serverUrl)}</p>
-            ) : null}
           </div>
         ) : null}
         {localVideo ? (
@@ -615,9 +602,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   useEffect(() => {
     if (!creds?.token || !creds.url || connectError || lkConnected) return;
     const t = window.setTimeout(() => {
-      setConnectError(
-        'Нет медиа-связи (ICE). Проверьте на роутере TCP 7881, UDP 7882, UDP 3478, UDP 50100 и WSS /lk.',
-      );
+      setConnectError('Ошибка сервера или идут технические работы. Попробуйте позже.');
     }, 32_000);
     return () => window.clearTimeout(t);
   }, [creds?.token, creds?.url, connectError, lkConnected]);
@@ -716,7 +701,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         }}
         className="call-lk-room"
       >
-        <RoomStage callType={activeCall.callType} serverUrl={roomUrl} connectError={connectError} />
+        <RoomStage callType={activeCall.callType} connectError={connectError} />
         {/* Ссылка «Скопировать / Поделиться» — только создателю встречи, не подключившимся участникам */}
         {activeCall.callKind === 'group' && activeCall.isInitiator ? (
           <MeetingInviteBar callId={activeCall.callId} />
