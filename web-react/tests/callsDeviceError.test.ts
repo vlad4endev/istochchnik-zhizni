@@ -13,8 +13,11 @@ describe('mapDeviceError', () => {
     expect(mapDeviceError(err)).toMatch(/не найдено/i);
   });
 
-  it('maps connection failures', () => {
-    expect(mapDeviceError(new Error('websocket connection failed'))).toMatch(/Нет связи с сервером/);
+  it('maps connection failures to a non-technical message', () => {
+    expect(mapDeviceError(new Error('websocket connection failed'))).toMatch(
+      /технические работы|Ошибка сервера/i,
+    );
+    expect(mapDeviceError(new Error('websocket connection failed'))).not.toMatch(/7881|WSS|\/lk/i);
   });
 
   it('maps unknown message as-is', () => {
