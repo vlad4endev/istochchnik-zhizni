@@ -29,4 +29,16 @@ describe('mobile call layout', () => {
     expect(css).toMatch(/html\[data-call-active='1'\]\s*\.app-bottom-nav/);
     expect(css).toMatch(/-webkit-line-clamp:\s*2/);
   });
+
+  it('учитывает Telegram Mini App safe-area и fullscreen звонка', () => {
+    const css = readFileSync(join(root, 'src/features/calls/calls.css'), 'utf8');
+    const tg = readFileSync(join(root, 'src/lib/telegramWebApp.ts'), 'utf8');
+    const callWindow = readFileSync(join(root, 'src/features/calls/CallWindow.tsx'), 'utf8');
+    expect(css).toMatch(/--tg-safe-area-inset-top/);
+    expect(css).toMatch(/--call-inset-top/);
+    expect(css).toMatch(/data-telegram-webapp/);
+    expect(tg).toMatch(/requestFullscreen/);
+    expect(tg).toMatch(/initTelegramWebApp/);
+    expect(callWindow).toMatch(/setTelegramCallPresentation/);
+  });
 });
