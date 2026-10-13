@@ -91,7 +91,9 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs li
   4. Стек без `docker-compose.livekit-addon.yml`  
   Поднять с **обоими** `-f`:  
   `docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --force-recreate livekit`
-- Сообщение UI «Сервис звонков временно недоступен» = API не смог `createRoom` (тот же 502 / LiveKit down / неверные ключи).
+- Сообщение UI «Сервис звонков временно недоступен» = API не смог достучаться до LiveKit / неверные ключи / стек без addon.
+  Быстрый ремонт на сервере: `sudo bash scripts/repair-livekit.sh`
+  Диагностика: `curl -s https://app.church-tambov.ru/health/livekit` и `curl -s https://app.church-tambov.ru/lk/`
 - `text/html` ~29KB → старый образ web без location `/lk/`.
 - WSS ок, но «Переподключение…» / нет медиа → UDP **7882** + TCP **7881** + UDP **3478** + UDP **50100** на роутере + `userland-proxy: false`.
 

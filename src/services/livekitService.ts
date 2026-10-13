@@ -10,15 +10,55 @@ export type LiveKitJoinTokenInput = {
   ttlSeconds?: number;
 };
 
+/** Запомненный рабочий Room Service URL после успешного createRoom/listRooms. */
+let preferredInternalUrl: string | null = null;
+
 function trimEnv(name: string): string {
   return String(process.env[name] ?? '').trim();
+}
+
+/**
+ * Host-network LiveKit слушает на хосте :7880.
+ * Docker DNS `livekit` не резолвится при network_mode:host — подменяем на gateway.
+ */
+export function normalizeLiveKitInternalUrl(raw: string): string {
+  const trimmed = String(raw ?? '')
+    .trim()
+    .replace(/\/$/, '');
+  if (!trimmed) return '';
+  try {
+    const u = new URL(trimmed);
+    const host = u.hostname.toLowerCase();
+    if (host === 'livekit' || host === 'livekit.internal') {
+      u.hostname = 'host.docker.internal';
+      return u.toString().replace(/\/$/, '');
+    }
+  } catch {
+    /* keep as-is */
+  }
+  return trimmed;
 }
 
 /**
  * Внутренний URL Room Service (host-network LiveKit → http://host.docker.internal:7880).
  */
 export function getLiveKitInternalUrl(): string {
-  return trimEnv('LIVEKIT_URL').replace(/\/$/, '');
+  return normalizeLiveKitInternalUrl(trimEnv('LIVEKIT_URL'));
+}
+
+/** Кандидаты Room Service: preferred → env → docker gateway → loopback. */
+export function getLiveKitInternalUrlCandidates(): string[] {
+  const primary = getLiveKitInternalUrl();
+  const list = [
+    preferredInternalUrl,
+    primary,
+    'http://host.docker.internal:7880',
+    'http://172.17.0.1:7880',
+    'http://127.0.0.1:7880',
+  ]
+    .map((u) => normalizeLiveKitInternalUrl(u ?? ''))
+    .filter(Boolean);
+  return [...new Set(list)];
 }
 
 export function isLiveKitConfigured(): boolean {
@@ -46,10 +86,8 @@ export function logLiveKitBootDiagnostics(): void {
     );
     return;
   }
-  if (/\/\/livekit[:/]/i.test(rawUrl)) {
-    console.warn(
-      `[livekit] LIVEKIT_URL=${rawUrl} — для host-network лучше http://host.docker.internal:7880`,
-    );
+  if (/\/\/livekit[:/]/i.test(rawUrl) && internal !== rawUrl.replace(/\/$/, '')) {
+    console.warn(`[livekit] LIVEKIT_URL=${rawUrl} → normalized ${internal}`);
   }
   if (/call\./i.test(pub)) {
     console.warn(
@@ -57,8 +95,20 @@ export function logLiveKitBootDiagnostics(): void {
     );
   }
   console.info(
-    `[livekit] calls ready: roomService=${internal} browser=${publicUrl || '(unset)'} key=${key.slice(0, 8)}… origin=${web || '(unset)'}`,
+    `[livekit] calls ready: roomService=${internal} candidates=${getLiveKitInternalUrlCandidates().join(',')} browser=${publicUrl || '(unset)'} key=${key.slice(0, 8)}… origin=${web || '(unset)'}`,
   );
+
+  void probeLiveKitRoomService()
+    .then((r) => {
+      if (r.ok) {
+        console.info(`[livekit] roomService probe OK via ${r.url}`);
+      } else {
+        console.error(`[livekit] roomService probe FAIL: ${r.error}`);
+      }
+    })
+    .catch((e) => {
+      console.error('[livekit] roomService probe error:', e instanceof Error ? e.message : e);
+    });
 }
 
 function originHost(url: string): string {
@@ -135,14 +185,79 @@ export function getLiveKitPublicUrl(): string {
   return internal;
 }
 
-function getRoomService(): RoomServiceClient {
-  const url = getLiveKitInternalUrl();
+function roomServiceAt(url: string): RoomServiceClient {
   const apiKey = trimEnv('LIVEKIT_API_KEY');
   const apiSecret = trimEnv('LIVEKIT_API_SECRET');
   if (!url || !apiKey || !apiSecret) {
     throw new Error('livekit_not_configured');
   }
   return new RoomServiceClient(url, apiKey, apiSecret);
+}
+
+function isRoomExistsError(msg: string): boolean {
+  return /already exists|room exists|conflict/i.test(msg);
+}
+
+function isTransientReachabilityError(msg: string): boolean {
+  return /fetch failed|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|socket hang up|network|AbortError|undici|connect/i.test(
+    msg,
+  );
+}
+
+async function withRoomServiceFallback<T>(
+  opName: string,
+  fn: (svc: RoomServiceClient) => Promise<T>,
+): Promise<T> {
+  const candidates = getLiveKitInternalUrlCandidates();
+  let lastErr: unknown;
+  for (const url of candidates) {
+    try {
+      const result = await fn(roomServiceAt(url));
+      if (preferredInternalUrl !== url) {
+        preferredInternalUrl = url;
+        console.info(`[livekit] ${opName} OK via ${url}`);
+      }
+      return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      lastErr = err;
+      if (isRoomExistsError(msg)) {
+        preferredInternalUrl = url;
+        throw err;
+      }
+      // Auth/validation — нет смысла перебирать другие URL с теми же ключами.
+      if (!isTransientReachabilityError(msg)) {
+        throw err;
+      }
+      console.warn(`[livekit] ${opName} via ${url} failed: ${msg}`);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr ?? `${opName} failed`));
+}
+
+/** Проверка Room Service (listRooms) — для /health/livekit и boot-логов. */
+export async function probeLiveKitRoomService(): Promise<{
+  ok: boolean;
+  url?: string;
+  error?: string;
+  configured: boolean;
+}> {
+  if (!isLiveKitConfigured()) {
+    return { ok: false, configured: false, error: 'not_configured' };
+  }
+  try {
+    await withRoomServiceFallback('listRooms', async (svc) => {
+      await svc.listRooms();
+    });
+    return { ok: true, configured: true, url: preferredInternalUrl || getLiveKitInternalUrl() };
+  } catch (err) {
+    return {
+      ok: false,
+      configured: true,
+      error: err instanceof Error ? err.message : String(err),
+      url: getLiveKitInternalUrl(),
+    };
+  }
 }
 
 export function livekitIdentityForMember(memberId: number): string {
@@ -159,32 +274,38 @@ export async function ensureLiveKitRoom(input: {
     console.warn('[livekit] ensureLiveKitRoom skipped — not configured');
     return;
   }
-  const svc = getRoomService();
   try {
-    await svc.createRoom({
-      name: input.roomName,
-      emptyTimeout: input.emptyTimeoutSec ?? 900,
-      // Дать клиенту время на LiveKit reconnect, не считая комнату пустой.
-      departureTimeout: 180,
-      maxParticipants: input.maxParticipants,
-      metadata: input.metadata,
+    await withRoomServiceFallback('createRoom', async (svc) => {
+      await svc.createRoom({
+        name: input.roomName,
+        emptyTimeout: input.emptyTimeoutSec ?? 900,
+        // Дать клиенту время на LiveKit reconnect, не считая комнату пустой.
+        departureTimeout: 180,
+        maxParticipants: input.maxParticipants,
+        metadata: input.metadata,
+      });
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // Idempotent: room may already exist
-    if (/already exists|room exists|conflict/i.test(msg)) {
+    if (isRoomExistsError(msg)) {
       return;
     }
-    console.error('[livekit] createRoom failed:', msg);
-    throw err;
+    // LiveKit создаёт комнату при первом join. Не валим звонок, если Room Service
+    // недоступен из api (часто UFW docker→host:7880), а публичный WSS /lk жив.
+    console.error(
+      '[livekit] createRoom failed (continuing — room auto-creates on join):',
+      msg,
+    );
   }
 }
 
 export async function endLiveKitRoom(roomName: string): Promise<void> {
   if (!isLiveKitConfigured()) return;
   try {
-    const svc = getRoomService();
-    await svc.deleteRoom(roomName);
+    await withRoomServiceFallback('deleteRoom', async (svc) => {
+      await svc.deleteRoom(roomName);
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (/not found|does not exist/i.test(msg)) return;
@@ -198,8 +319,9 @@ export async function removeLiveKitParticipant(
 ): Promise<void> {
   if (!isLiveKitConfigured()) return;
   try {
-    const svc = getRoomService();
-    await svc.removeParticipant(roomName, identity);
+    await withRoomServiceFallback('removeParticipant', async (svc) => {
+      await svc.removeParticipant(roomName, identity);
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (/not found|does not exist/i.test(msg)) return;

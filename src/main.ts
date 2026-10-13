@@ -55,7 +55,7 @@ import { initPushCronJobs } from './cron/pushJobs';
 import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
 import { initBackupJob } from './cron/backupJob';
 import { initCallsCleanupJob } from './cron/callsCleanup';
-import { logLiveKitBootDiagnostics } from './services/livekitService';
+import { logLiveKitBootDiagnostics, probeLiveKitRoomService } from './services/livekitService';
 import callsRoutes, { callInvitationsRouter } from './routes/callsRoutes';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel, ensureMediykaMessengerChannel, ensureServicePlanPlanningMessengerChannel } from './services/messengerService';
@@ -368,6 +368,19 @@ app.get('/health', async (_req, res) => {
     console.error('[health] database ping failed:', err);
     res.status(503).json({ status: 'error', database: 'down' });
   }
+});
+
+/** Диагностика LiveKit Room Service (без секретов). 200 даже при fail — чтобы не ронять внешние healthchecks. */
+app.get('/health/livekit', async (_req, res) => {
+  const probe = await probeLiveKitRoomService();
+  res.status(200).json({
+    status: probe.ok ? 'ok' : 'degraded',
+    configured: probe.configured,
+    roomService: probe.ok ? 'up' : 'down',
+    url: probe.url ?? null,
+    error: probe.error ?? null,
+    publicSignal: 'see GET /lk/',
+  });
 });
 
 // /api/users — раньше общего /api, чтобы спец-маршруты (merge-duplicates, swap-all-…) не пересекались с будущими catch-all.

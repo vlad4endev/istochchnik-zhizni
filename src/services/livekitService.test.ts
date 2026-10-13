@@ -2,14 +2,25 @@ import assert from 'node:assert/strict';
 
 import {
   getLiveKitInternalUrl,
+  getLiveKitInternalUrlCandidates,
   getLiveKitPublicUrl,
   isLiveKitConfigured,
   livekitIdentityForMember,
+  normalizeLiveKitInternalUrl,
 } from './livekitService';
 
 async function main(): Promise<void> {
   assert.equal(livekitIdentityForMember(42), 'member:42');
   assert.equal(livekitIdentityForMember(1), 'member:1');
+
+  assert.equal(
+    normalizeLiveKitInternalUrl('http://livekit:7880'),
+    'http://host.docker.internal:7880',
+  );
+  assert.equal(
+    normalizeLiveKitInternalUrl('http://host.docker.internal:7880/'),
+    'http://host.docker.internal:7880',
+  );
 
   const prev = {
     KEY: process.env.LIVEKIT_API_KEY,
@@ -30,7 +41,9 @@ async function main(): Promise<void> {
   process.env.LIVEKIT_API_SECRET = 'secret';
   process.env.LIVEKIT_URL = 'http://livekit:7880';
   assert.equal(isLiveKitConfigured(), true);
-  assert.equal(getLiveKitInternalUrl(), 'http://livekit:7880');
+  // host-network: docker DNS livekit → gateway
+  assert.equal(getLiveKitInternalUrl(), 'http://host.docker.internal:7880');
+  assert.ok(getLiveKitInternalUrlCandidates().includes('http://172.17.0.1:7880'));
 
   process.env.LIVEKIT_URL = 'http://host.docker.internal:7880';
   assert.equal(getLiveKitInternalUrl(), 'http://host.docker.internal:7880');
