@@ -24,12 +24,25 @@ import {
   type RoomOptions,
   type RoomConnectOptions,
 } from 'livekit-client';
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import {
   LuCopy,
+  LuGalleryHorizontalEnd,
+  LuLayoutGrid,
   LuMic,
   LuMicOff,
   LuMonitorUp,
+  LuPanelRight,
   LuPhoneOff,
   LuShare2,
   LuUsers,
@@ -79,6 +92,27 @@ function isMobileUa(): boolean {
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 }
 
+/** Раскладки ПК-встречи (как в макете). */
+type MeetingLayoutMode = 'grid' | 'speaker' | 'sidebar';
+
+type MeetingUiState = {
+  layoutMode: MeetingLayoutMode;
+  setLayoutMode: (mode: MeetingLayoutMode) => void;
+  panelOpen: boolean;
+  setPanelOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
+  inviteOpen: boolean;
+  setInviteOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
+  isHost: boolean;
+  callId: string;
+  setStatusLabel: (label: string) => void;
+};
+
+const MeetingUiContext = createContext<MeetingUiState | null>(null);
+
+function useMeetingUi(): MeetingUiState | null {
+  return useContext(MeetingUiContext);
+}
+
 /** Разблокировать WebAudio + LiveKit HTMLMediaElement playback (autoplay policy). */
 function resumeCallMedia(room?: Room | null): void {
   unlockCallAudio();
@@ -119,12 +153,20 @@ function CallControls({
   canShare = false,
   shareOpen = false,
   onToggleShare,
+  variant = 'default',
+  statusLabel,
+  participantsOpen = false,
+  onToggleParticipants,
 }: {
   videoEnabled: boolean;
   onHangup: () => void;
   canShare?: boolean;
   shareOpen?: boolean;
   onToggleShare?: () => void;
+  variant?: 'default' | 'meeting';
+  statusLabel?: string;
+  participantsOpen?: boolean;
+  onToggleParticipants?: () => void;
 }) {
   const room = useRoomContext();
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
@@ -138,6 +180,7 @@ function CallControls({
   const isMuted = !isMicrophoneEnabled;
   const isVideoOff = videoEnabled ? !isCameraEnabled : true;
   const isScreenSharing = Boolean(isScreenShareEnabled);
+  const isMeeting = variant === 'meeting';
 
   useEffect(() => {
     setMuted(isMuted);
@@ -182,68 +225,98 @@ function CallControls({
   }, [isScreenSharing, localParticipant, room, showScreenShare]);
 
   return (
-    <div className="call-controls" role="toolbar" aria-label="Управление звонком">
-      {canShare ? (
-        <button
-          type="button"
-          className={['call-ctrl', shareOpen ? 'call-ctrl--active' : ''].join(' ')}
-          onClick={() => onToggleShare?.()}
-          aria-label={shareOpen ? 'Скрыть ссылку' : 'Поделиться ссылкой'}
-          aria-pressed={shareOpen}
-        >
-          <span className="call-ctrl__icon">
-            <LuShare2 size={22} />
-          </span>
-          <span className="call-ctrl__label">Ссылка</span>
-        </button>
-      ) : null}
-      <button
-        type="button"
-        className={['call-ctrl', isMuted ? 'call-ctrl--off' : ''].join(' ')}
-        onClick={() => void toggleMic()}
-        aria-label={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
-      >
-        <span className="call-ctrl__icon">
-          {isMuted ? <LuMicOff size={22} /> : <LuMic size={22} />}
+    <div
+      className={['call-controls', isMeeting ? 'call-controls--meeting' : ''].filter(Boolean).join(' ')}
+      role="toolbar"
+      aria-label="Управление звонком"
+    >
+      {isMeeting && statusLabel ? (
+        <span className="call-controls__timer" aria-live="polite">
+          {statusLabel}
         </span>
-        <span className="call-ctrl__label">Микрофон</span>
-      </button>
-      {videoEnabled ? (
+      ) : null}
+      <div className="call-controls__actions">
         <button
           type="button"
-          className={['call-ctrl', isVideoOff ? 'call-ctrl--off' : ''].join(' ')}
-          onClick={() => void toggleCam()}
-          aria-label={isVideoOff ? 'Включить камеру' : 'Выключить камеру'}
+          className={[
+            'call-ctrl',
+            isMuted ? 'call-ctrl--off' : 'call-ctrl--mic-on',
+          ].join(' ')}
+          onClick={() => void toggleMic()}
+          aria-label={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
         >
           <span className="call-ctrl__icon">
-            {isVideoOff ? <LuVideoOff size={22} /> : <LuVideo size={22} />}
+            {isMuted ? <LuMicOff size={22} /> : <LuMic size={22} />}
           </span>
-          <span className="call-ctrl__label">Камера</span>
+          <span className="call-ctrl__label">Микрофон</span>
         </button>
-      ) : null}
-      {showScreenShare ? (
-        <button
-          type="button"
-          className={['call-ctrl', isScreenSharing ? 'call-ctrl--active' : ''].join(' ')}
-          onClick={() => void toggleScreen()}
-          aria-label="Демонстрация экрана"
-        >
-          <span className="call-ctrl__icon">
-            <LuMonitorUp size={22} />
-          </span>
-          <span className="call-ctrl__label">Экран</span>
-        </button>
-      ) : null}
+        {videoEnabled ? (
+          <button
+            type="button"
+            className={['call-ctrl', isVideoOff ? 'call-ctrl--off' : ''].join(' ')}
+            onClick={() => void toggleCam()}
+            aria-label={isVideoOff ? 'Включить камеру' : 'Выключить камеру'}
+          >
+            <span className="call-ctrl__icon">
+              {isVideoOff ? <LuVideoOff size={22} /> : <LuVideo size={22} />}
+            </span>
+            <span className="call-ctrl__label">Камера</span>
+          </button>
+        ) : null}
+        {showScreenShare ? (
+          <button
+            type="button"
+            className={['call-ctrl', isScreenSharing ? 'call-ctrl--active' : ''].join(' ')}
+            onClick={() => void toggleScreen()}
+            aria-label="Демонстрация экрана"
+          >
+            <span className="call-ctrl__icon">
+              <LuMonitorUp size={22} />
+            </span>
+            <span className="call-ctrl__label">Экран</span>
+          </button>
+        ) : null}
+        {isMeeting && onToggleParticipants ? (
+          <button
+            type="button"
+            className={['call-ctrl', participantsOpen ? 'call-ctrl--active' : ''].join(' ')}
+            onClick={() => onToggleParticipants()}
+            aria-label={participantsOpen ? 'Скрыть участников' : 'Участники'}
+            aria-pressed={participantsOpen}
+          >
+            <span className="call-ctrl__icon">
+              <LuUsers size={22} />
+            </span>
+            <span className="call-ctrl__label">Участники</span>
+          </button>
+        ) : null}
+        {canShare ? (
+          <button
+            type="button"
+            className={['call-ctrl', shareOpen ? 'call-ctrl--active' : ''].join(' ')}
+            onClick={() => onToggleShare?.()}
+            aria-label={shareOpen ? 'Скрыть ссылку' : 'Поделиться ссылкой'}
+            aria-pressed={shareOpen}
+          >
+            <span className="call-ctrl__icon">
+              <LuShare2 size={22} />
+            </span>
+            <span className="call-ctrl__label">Ссылка</span>
+          </button>
+        ) : null}
+      </div>
       <button
         type="button"
-        className="call-ctrl call-ctrl--hangup"
+        className={['call-ctrl', 'call-ctrl--hangup', isMeeting ? 'call-ctrl--hangup-wide' : '']
+          .filter(Boolean)
+          .join(' ')}
         onClick={onHangup}
         aria-label="Завершить"
       >
         <span className="call-ctrl__icon">
           <LuPhoneOff size={22} />
         </span>
-        <span className="call-ctrl__label">Выйти</span>
+        <span className="call-ctrl__label">{isMeeting ? 'Выйти' : 'Выйти'}</span>
       </button>
     </div>
   );
@@ -296,10 +369,14 @@ function useStickySpotlightIdentity(participants: Participant[]): string | null 
   return spotlightId;
 }
 
-function useIsMicEnabled(participant: Participant): boolean {
-  const [enabled, setEnabled] = useState(() => participant.isMicrophoneEnabled);
+function useParticipantMediaFlags(participant: Participant): { micOn: boolean; camOn: boolean } {
+  const [micOn, setMicOn] = useState(() => participant.isMicrophoneEnabled);
+  const [camOn, setCamOn] = useState(() => participant.isCameraEnabled);
   useEffect(() => {
-    const update = () => setEnabled(participant.isMicrophoneEnabled);
+    const update = () => {
+      setMicOn(participant.isMicrophoneEnabled);
+      setCamOn(participant.isCameraEnabled);
+    };
     update();
     const events = [
       ParticipantEvent.TrackMuted,
@@ -316,10 +393,42 @@ function useIsMicEnabled(participant: Participant): boolean {
       for (const event of events) participant.off(event, update);
     };
   }, [participant]);
-  return enabled;
+  return { micOn, camOn };
 }
 
-function SpeakingWaveform({ active }: { active: boolean }) {
+function SpeakingWaveform({ active, variant = 'bar' }: { active: boolean; variant?: 'bar' | 'sides' }) {
+  if (variant === 'sides') {
+    return (
+      <>
+        <div
+          className={['call-waveform-sides', 'call-waveform-sides--left', active ? 'call-waveform-sides--active' : '']
+            .filter(Boolean)
+            .join(' ')}
+          aria-hidden
+        >
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+        <div
+          className={['call-waveform-sides', 'call-waveform-sides--right', active ? 'call-waveform-sides--active' : '']
+            .filter(Boolean)
+            .join(' ')}
+          aria-hidden
+        >
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+      </>
+    );
+  }
   return (
     <div
       className={['call-waveform', active ? 'call-waveform--active' : ''].filter(Boolean).join(' ')}
@@ -366,7 +475,7 @@ function MeetingParticipantTile({
     callType === 'video' &&
     Boolean(cameraTrack && isTrackReference(cameraTrack) && cameraTrack.publication?.track);
   const speaking = useIsSpeaking(participant);
-  const micOn = useIsMicEnabled(participant);
+  const { micOn } = useParticipantMediaFlags(participant);
   const isAudio = callType === 'audio';
   const isSpotlight = size === 'spotlight';
 
@@ -408,25 +517,36 @@ function MeetingParticipantTile({
         )}
         {!isAudio ? (
           <div className="call-participant-tile__chrome">
-            <span className="call-participant-tile__label">{displayName}</span>
             <span
               className={[
-                'call-participant-tile__mic',
-                micOn ? '' : 'call-participant-tile__mic--off',
-                speaking ? 'call-participant-tile__mic--speaking' : '',
+                'call-participant-tile__pill',
+                speaking ? 'call-participant-tile__pill--speaking' : '',
+                !micOn ? 'call-participant-tile__pill--mic-off' : '',
               ]
                 .filter(Boolean)
                 .join(' ')}
-              aria-label={micOn ? (speaking ? 'Говорит' : 'Микрофон включён') : 'Микрофон выключен'}
             >
-              {micOn ? <LuMic size={14} strokeWidth={2.4} /> : <LuMicOff size={14} strokeWidth={2.4} />}
+              <span
+                className={[
+                  'call-participant-tile__mic',
+                  micOn ? '' : 'call-participant-tile__mic--off',
+                  speaking ? 'call-participant-tile__mic--speaking' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                aria-label={micOn ? (speaking ? 'Говорит' : 'Микрофон включён') : 'Микрофон выключен'}
+              >
+                {micOn ? <LuMic size={13} strokeWidth={2.4} /> : <LuMicOff size={13} strokeWidth={2.4} />}
+              </span>
+              <span className="call-participant-tile__label">{displayName}</span>
             </span>
           </div>
         ) : null}
+        {isAudio && isSpotlight ? <SpeakingWaveform active={speaking} variant="sides" /> : null}
       </div>
       {isAudio ? (
         <>
-          {isSpotlight ? <SpeakingWaveform active={speaking} /> : null}
+          {isSpotlight ? <SpeakingWaveform active={speaking} variant="bar" /> : null}
           <div className="call-participant-tile__meta">
             <p className="call-participant-tile__name">{displayName}</p>
             <span
@@ -614,17 +734,21 @@ function RoomStage({
     localScreenRaw && isTrackReference(localScreenRaw) ? localScreenRaw : null;
   const stageScreenShare = groupScreenShare ?? localScreenShare;
   const meetingTitle = peerName?.trim() || 'Встреча';
-  /** Аудио: всегда фокус на говорящем (как в макете). Видео: с 3+ — spotlight. */
-  const useSpeakerView =
+  const meetingUi = useMeetingUi();
+  const layoutMode: MeetingLayoutMode =
+    meetingUi?.layoutMode ?? (callType === 'audio' ? 'speaker' : 'grid');
+
+  /** Focus layout: speaker (лента снизу) или sidebar (лента справа, ПК). */
+  const useFocusLayout =
     isGroup &&
     !waitingAlone &&
     !stageScreenShare &&
-    ((callType === 'audio' && sortedParticipants.length >= 2) ||
-      (callType === 'video' && sortedParticipants.length >= 3));
+    (layoutMode === 'speaker' || layoutMode === 'sidebar') &&
+    sortedParticipants.length >= 2;
 
-  const VIDEO_GRID_VISIBLE = 5;
+  const VIDEO_GRID_VISIBLE = 8;
   const showVideoOverflow =
-    !useSpeakerView && callType === 'video' && sortedParticipants.length > VIDEO_GRID_VISIBLE;
+    !useFocusLayout && callType === 'video' && sortedParticipants.length > VIDEO_GRID_VISIBLE;
   const visibleGridParticipants = showVideoOverflow
     ? sortedParticipants.slice(0, VIDEO_GRID_VISIBLE)
     : sortedParticipants;
@@ -633,7 +757,8 @@ function RoomStage({
     : 0;
 
   const AUDIO_STRIP_VISIBLE = 8;
-  const showAudioOverflow = useSpeakerView && callType === 'audio' && stripParticipants.length > AUDIO_STRIP_VISIBLE;
+  const showAudioOverflow =
+    useFocusLayout && callType === 'audio' && stripParticipants.length > AUDIO_STRIP_VISIBLE;
   const visibleStripParticipants = showAudioOverflow
     ? stripParticipants.slice(0, AUDIO_STRIP_VISIBLE)
     : stripParticipants;
@@ -649,12 +774,18 @@ function RoomStage({
         ? 'Переподключение…'
         : 'Подключение…';
 
+  const setMeetingStatusLabel = meetingUi?.setStatusLabel;
+  useEffect(() => {
+    setMeetingStatusLabel?.(groupStatusText);
+  }, [groupStatusText, setMeetingStatusLabel]);
+
   return (
     <div
       className={[
         'call-stage',
         isGroup ? 'call-stage--meeting' : '',
         callType === 'audio' ? 'call-stage--audio' : 'call-stage--video',
+        useFocusLayout && layoutMode === 'sidebar' ? 'call-stage--sidebar-layout' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -664,13 +795,64 @@ function RoomStage({
         <header className="call-meeting-topbar" aria-label="Информация о встрече">
           <div className="call-meeting-topbar__title-wrap">
             <p className="call-meeting-topbar__title">{meetingTitle}</p>
-          </div>
-          <div className="call-meeting-topbar__meta">
-            <span className="call-meeting-topbar__timer">{groupStatusText}</span>
             <span className="call-meeting-topbar__count" title="Участники">
               <LuUsers size={14} strokeWidth={2.4} aria-hidden />
               {Math.max(1, sortedParticipants.length)}
             </span>
+          </div>
+          <div className="call-meeting-topbar__meta">
+            {meetingUi ? (
+              <div className="call-layout-switch" role="group" aria-label="Раскладка">
+                <button
+                  type="button"
+                  className={[
+                    'call-layout-switch__btn',
+                    layoutMode === 'grid' ? 'call-layout-switch__btn--active' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  onClick={() => meetingUi.setLayoutMode('grid')}
+                  aria-label="Сетка"
+                  aria-pressed={layoutMode === 'grid'}
+                  title="Сетка"
+                >
+                  <LuLayoutGrid size={16} strokeWidth={2.2} />
+                </button>
+                <button
+                  type="button"
+                  className={[
+                    'call-layout-switch__btn',
+                    layoutMode === 'speaker' ? 'call-layout-switch__btn--active' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  onClick={() => meetingUi.setLayoutMode('speaker')}
+                  aria-label="Говорящий"
+                  aria-pressed={layoutMode === 'speaker'}
+                  title="Говорящий крупно"
+                >
+                  <LuGalleryHorizontalEnd size={16} strokeWidth={2.2} />
+                </button>
+                <button
+                  type="button"
+                  className={[
+                    'call-layout-switch__btn',
+                    'call-layout-switch__btn--desktop',
+                    layoutMode === 'sidebar' ? 'call-layout-switch__btn--active' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  onClick={() => meetingUi.setLayoutMode('sidebar')}
+                  aria-label="Боковая лента"
+                  aria-pressed={layoutMode === 'sidebar'}
+                  title="Боковая лента"
+                >
+                  <LuPanelRight size={16} strokeWidth={2.2} />
+                </button>
+              </div>
+            ) : (
+              <span className="call-meeting-topbar__timer">{groupStatusText}</span>
+            )}
           </div>
         </header>
       ) : null}
@@ -690,12 +872,15 @@ function RoomStage({
               )}
               <p className="call-meeting-lobby__wait">{groupWaitLabel}</p>
             </div>
-          ) : useSpeakerView && spotlightParticipant ? (
+          ) : useFocusLayout && spotlightParticipant ? (
             <div
               className={[
                 'call-speaker-layout',
                 callType === 'audio' ? 'call-speaker-layout--audio' : 'call-speaker-layout--video',
-              ].join(' ')}
+                layoutMode === 'sidebar' ? 'call-speaker-layout--sidebar' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
               aria-label="Участники встречи"
             >
               <div className="call-speaker-layout__spotlight">
@@ -710,7 +895,10 @@ function RoomStage({
                 <div
                   className={[
                     'call-speaker-layout__strip',
-                    callType === 'audio' ? 'call-speaker-layout__strip--grid' : '',
+                    callType === 'audio' && layoutMode !== 'sidebar'
+                      ? 'call-speaker-layout__strip--grid'
+                      : '',
+                    layoutMode === 'sidebar' ? 'call-speaker-layout__strip--vertical' : '',
                   ]
                     .filter(Boolean)
                     .join(' ')}
@@ -915,18 +1103,168 @@ function MeetingInviteBar({ callId, onCollapse }: { callId: string; onCollapse: 
   );
 }
 
-/** Хост: панель ссылки + кнопка «Поделиться» у микрофона; автосворачивание при входе участников. */
-function MeetingHostChrome({
+function MeetingSidePanelRow({ participant }: { participant: Participant }) {
+  const name = participantDisplayName(participant);
+  const avatarSrc = participantAvatarUrl(participant);
+  const speaking = useIsSpeaking(participant);
+  const { micOn, camOn } = useParticipantMediaFlags(participant);
+
+  return (
+    <li
+      className={[
+        'call-sidepanel__row',
+        speaking ? 'call-sidepanel__row--speaking' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <div className="call-sidepanel__avatar" aria-hidden>
+        {avatarSrc ? (
+          <img src={avatarSrc} alt="" />
+        ) : (
+          <span>{participantInitials(name)}</span>
+        )}
+      </div>
+      <div className="call-sidepanel__info">
+        <p className="call-sidepanel__name">
+          {participant.isLocal ? `${name} (вы)` : name}
+        </p>
+        <p className="call-sidepanel__status">
+          {speaking ? 'Говорит' : micOn ? 'В сети' : 'Микрофон выкл.'}
+        </p>
+      </div>
+      <div className="call-sidepanel__flags">
+        <span
+          className={[
+            'call-sidepanel__flag',
+            !micOn ? 'call-sidepanel__flag--off' : '',
+            speaking ? 'call-sidepanel__flag--speak' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          title={micOn ? 'Микрофон' : 'Микрофон выкл.'}
+        >
+          {micOn ? <LuMic size={14} /> : <LuMicOff size={14} />}
+        </span>
+        <span
+          className={['call-sidepanel__flag', !camOn ? 'call-sidepanel__flag--off' : '']
+            .filter(Boolean)
+            .join(' ')}
+          title={camOn ? 'Камера' : 'Камера выкл.'}
+        >
+          {camOn ? <LuVideo size={14} /> : <LuVideoOff size={14} />}
+        </span>
+      </div>
+    </li>
+  );
+}
+
+function MeetingSidePanel({
+  callId,
+  isHost,
+  onClose,
+}: {
+  callId: string;
+  isHost: boolean;
+  onClose: () => void;
+}) {
+  const participants = useParticipants();
+  const meetingTitle = useCallStore((s) => s.activeCall?.peerName?.trim() || 'Встреча');
+  const inviteUrl = useCallStore((s) => s.activeCall?.inviteUrl ?? null);
+  const setInviteUrl = useCallStore((s) => s.setInviteUrl);
+  const [busy, setBusy] = useState(false);
+
+  const sorted = useMemo(() => {
+    return [...participants].sort((a, b) => {
+      if (a.isLocal !== b.isLocal) return a.isLocal ? -1 : 1;
+      return participantDisplayName(a).localeCompare(participantDisplayName(b), 'ru');
+    });
+  }, [participants]);
+
+  useEffect(() => {
+    if (inviteUrl || !isHost) return;
+    let cancelled = false;
+    setBusy(true);
+    void createCallInvitation(callId)
+      .then((inv) => {
+        if (!cancelled) setInviteUrl(inv.inviteUrl);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [callId, inviteUrl, isHost, setInviteUrl]);
+
+  const displayUrl = inviteUrl ? absoluteInviteUrl(inviteUrl) : '';
+
+  const copy = useCallback(() => {
+    if (!displayUrl) return;
+    void copyInviteShare(meetingTitle, displayUrl).then((ok) => {
+      if (ok) emitAppToast('Название и ссылка скопированы', 'success');
+      else emitAppToast('Не удалось скопировать ссылку', 'error');
+    });
+  }, [displayUrl, meetingTitle]);
+
+  return (
+    <aside className="call-sidepanel" aria-label="Участники встречи">
+      <header className="call-sidepanel__head">
+        <h2 className="call-sidepanel__title">Участники ({sorted.length})</h2>
+        <button type="button" className="call-sidepanel__close" onClick={onClose} aria-label="Закрыть">
+          <LuX size={18} strokeWidth={2.2} />
+        </button>
+      </header>
+      <ul className="call-sidepanel__list">
+        {sorted.map((p) => (
+          <MeetingSidePanelRow key={p.identity || p.sid} participant={p} />
+        ))}
+      </ul>
+      {isHost ? (
+        <div className="call-sidepanel__invite">
+          <p className="call-sidepanel__invite-label">Ссылка для приглашения</p>
+          <code className="call-sidepanel__invite-url" title={displayUrl || undefined}>
+            {busy && !displayUrl ? 'Получаем ссылку…' : displayUrl || 'Нет ссылки'}
+          </code>
+          <button
+            type="button"
+            className="call-invite-btn call-invite-btn--primary call-sidepanel__invite-btn"
+            disabled={!displayUrl}
+            onClick={copy}
+          >
+            <LuCopy size={16} strokeWidth={2.2} aria-hidden />
+            Пригласить участников
+          </button>
+        </div>
+      ) : null}
+    </aside>
+  );
+}
+
+/** ПК/мобильная оболочка групповой встречи: раскладки, панель участников, панель управления. */
+function GroupMeetingShell({
   callId,
   videoEnabled,
+  callType,
+  isHost,
+  connectError,
   onHangup,
 }: {
   callId: string;
   videoEnabled: boolean;
+  callType: 'audio' | 'video';
+  isHost: boolean;
+  connectError: string | null;
   onHangup: () => void;
 }) {
   const remotes = useRemoteParticipants();
-  const [inviteOpen, setInviteOpen] = useState(true);
+  const [layoutMode, setLayoutMode] = useState<MeetingLayoutMode>(() =>
+    callType === 'audio' ? 'speaker' : 'grid',
+  );
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(isHost);
+  const [statusLabel, setStatusLabel] = useState('Подключение…');
   const hadRemotes = useRef(false);
 
   useEffect(() => {
@@ -937,11 +1275,10 @@ function MeetingHostChrome({
     }
   }, [remotes.length]);
 
-  // Prefetch invite URL while collapsed so share opens instantly.
   const inviteUrl = useCallStore((s) => s.activeCall?.inviteUrl ?? null);
   const setInviteUrl = useCallStore((s) => s.setInviteUrl);
   useEffect(() => {
-    if (inviteUrl) return;
+    if (inviteUrl || !isHost) return;
     let cancelled = false;
     void createCallInvitation(callId)
       .then((inv) => {
@@ -951,21 +1288,69 @@ function MeetingHostChrome({
     return () => {
       cancelled = true;
     };
-  }, [callId, inviteUrl, setInviteUrl]);
+  }, [callId, inviteUrl, isHost, setInviteUrl]);
+
+  const meetingUi = useMemo<MeetingUiState>(
+    () => ({
+      layoutMode,
+      setLayoutMode,
+      panelOpen,
+      setPanelOpen,
+      inviteOpen,
+      setInviteOpen,
+      isHost,
+      callId,
+      setStatusLabel,
+    }),
+    [layoutMode, panelOpen, inviteOpen, isHost, callId],
+  );
 
   return (
-    <>
-      {inviteOpen ? (
-        <MeetingInviteBar callId={callId} onCollapse={() => setInviteOpen(false)} />
-      ) : null}
-      <CallControls
-        videoEnabled={videoEnabled}
-        onHangup={onHangup}
-        canShare
-        shareOpen={inviteOpen}
-        onToggleShare={() => setInviteOpen((v) => !v)}
-      />
-    </>
+    <MeetingUiContext.Provider value={meetingUi}>
+      <div
+        className={[
+          'call-meeting-shell',
+          panelOpen ? 'call-meeting-shell--panel-open' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <div className="call-meeting-shell__main">
+          <RoomStage callType={callType} connectError={connectError} />
+          {inviteOpen && isHost && !panelOpen ? (
+            <MeetingInviteBar callId={callId} onCollapse={() => setInviteOpen(false)} />
+          ) : null}
+          <CallControls
+            videoEnabled={videoEnabled}
+            onHangup={onHangup}
+            canShare={isHost}
+            shareOpen={inviteOpen}
+            onToggleShare={() => {
+              if (panelOpen) {
+                setPanelOpen(false);
+                setInviteOpen(true);
+              } else {
+                setInviteOpen((v) => !v);
+              }
+            }}
+            variant="meeting"
+            statusLabel={statusLabel}
+            participantsOpen={panelOpen}
+            onToggleParticipants={() => {
+              setPanelOpen((v) => !v);
+              if (!panelOpen) setInviteOpen(false);
+            }}
+          />
+        </div>
+        {panelOpen ? (
+          <MeetingSidePanel
+            callId={callId}
+            isHost={isHost}
+            onClose={() => setPanelOpen(false)}
+          />
+        ) : null}
+      </div>
+    </MeetingUiContext.Provider>
   );
 }
 
@@ -1323,15 +1708,20 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         className="call-lk-room"
       >
         <ApplyLobbyMediaPrefs micOn={preferMicOn} camOn={preferCamOn} videoEnabled={videoEnabled} />
-        <RoomStage callType={activeCall.callType} connectError={connectError} />
-        {activeCall.callKind === 'group' && activeCall.isInitiator ? (
-          <MeetingHostChrome
+        {activeCall.callKind === 'group' ? (
+          <GroupMeetingShell
             callId={activeCall.callId}
             videoEnabled={videoEnabled}
+            callType={activeCall.callType}
+            isHost={Boolean(activeCall.isInitiator)}
+            connectError={connectError}
             onHangup={() => void hangup()}
           />
         ) : (
-          <CallControls videoEnabled={videoEnabled} onHangup={() => void hangup()} />
+          <>
+            <RoomStage callType={activeCall.callType} connectError={connectError} />
+            <CallControls videoEnabled={videoEnabled} onHangup={() => void hangup()} />
+          </>
         )}
       </LiveKitRoom>
     </div>

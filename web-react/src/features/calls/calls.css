@@ -366,24 +366,47 @@
   position: relative;
 }
 
+.call-meeting-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  overflow: hidden;
+}
+
+.call-meeting-shell__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
 .call-meeting-topbar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: max(12px, env(safe-area-inset-top, 0px)) 16px 8px;
+  padding: max(12px, env(safe-area-inset-top, 0px)) 18px 8px;
   z-index: 4;
 }
 
 .call-meeting-topbar__title-wrap {
   min-width: 0;
   flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .call-meeting-topbar__title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.08rem;
   font-weight: 700;
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -412,6 +435,43 @@
   font-weight: 650;
   color: rgba(255, 255, 255, 0.9);
   font-variant-numeric: tabular-nums;
+}
+
+.call-layout-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.call-layout-switch__btn {
+  width: 34px;
+  height: 30px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.call-layout-switch__btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.call-layout-switch__btn--active {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.call-layout-switch__btn--desktop {
+  display: none;
 }
 
 .call-stage__main {
@@ -613,7 +673,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: nowrap;
   width: auto;
   max-width: calc(100% - 20px);
@@ -630,8 +690,25 @@
   pointer-events: none;
 }
 
-.call-controls > * {
+.call-controls > *,
+.call-controls__actions > * {
   pointer-events: auto;
+}
+
+.call-controls__actions {
+  display: contents;
+}
+
+.call-controls__timer {
+  display: none;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.88);
+  pointer-events: none;
 }
 
 .call-ctrl {
@@ -677,6 +754,11 @@
   opacity: 0.72;
 }
 
+.call-ctrl--mic-on .call-ctrl__icon {
+  background: #22c55e;
+  color: #fff;
+}
+
 .call-ctrl--active .call-ctrl__icon {
   background: rgba(59, 130, 246, 0.55);
 }
@@ -690,6 +772,33 @@
 
 .call-ctrl--hangup .call-ctrl__label {
   color: rgba(255, 200, 196, 0.92);
+}
+
+@media (min-width: 960px) {
+  .call-ctrl--hangup-wide {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    min-width: auto;
+    min-height: 48px;
+    padding: 0 16px 0 12px;
+    border-radius: 16px;
+    background: #ff3b30;
+    box-shadow: 0 6px 20px rgba(255, 59, 48, 0.4);
+  }
+
+  .call-ctrl--hangup-wide .call-ctrl__icon {
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .call-ctrl--hangup-wide .call-ctrl__label {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #fff;
+  }
 }
 
 /* legacy alias (на всякий случай) */
@@ -983,6 +1092,38 @@
   font-size: 0.68rem;
 }
 
+.call-speaker-layout--sidebar {
+  flex-direction: row;
+  align-items: stretch;
+  max-width: min(1400px, 100%);
+  gap: 14px;
+}
+
+.call-speaker-layout--sidebar .call-speaker-layout__spotlight {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.call-speaker-layout__strip--vertical {
+  flex: 0 0 auto;
+  width: min(220px, 26vw);
+  flex-direction: column;
+  flex-wrap: nowrap;
+  overflow-x: hidden;
+  overflow-y: auto;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 10px;
+  max-height: 100%;
+  padding: 0 2px;
+}
+
+.call-speaker-layout__strip--vertical .call-participant-tile--strip,
+.call-speaker-layout__strip--vertical .call-participant-tile--overflow {
+  width: 100%;
+  max-width: none;
+}
+
 .call-speaker-layout__strip .call-participant-tile--video .call-participant-tile__media {
   width: 100%;
   height: auto;
@@ -1222,48 +1363,63 @@
   z-index: 2;
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   padding: 28px 10px 10px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.2) 55%, transparent 100%);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.12) 55%, transparent 100%);
   pointer-events: none;
+}
+
+.call-participant-tile__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(100%, 240px);
+  min-height: 28px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 999px;
+  background: rgba(10, 12, 18, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.call-participant-tile__pill--speaking {
+  border-color: color-mix(in srgb, var(--call-speak, #3b82f6) 55%, transparent);
+  box-shadow: 0 0 0 1px var(--call-speak-soft, rgba(59, 130, 246, 0.35));
 }
 
 .call-participant-tile__label {
   min-width: 0;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 650;
   color: #fff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
 }
 
 .call-participant-tile__mic {
   flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(255, 255, 255, 0.12);
   color: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: none;
 }
 
 .call-participant-tile__mic--off {
-  background: rgba(255, 59, 48, 0.82);
-  border-color: transparent;
+  background: rgba(255, 59, 48, 0.88);
   color: #fff;
 }
 
 .call-participant-tile__mic--speaking {
-  background: var(--call-speak, #3b82f6);
-  border-color: transparent;
+  background: #22c55e;
   color: #fff;
-  box-shadow: 0 0 0 3px var(--call-speak-soft, rgba(59, 130, 246, 0.35));
 }
 
 .call-participant-tile__mic--inline {
@@ -1347,6 +1503,62 @@
     transform: scaleY(1.15);
   }
 }
+
+.call-participant-tile--spotlight.call-participant-tile--audio .call-participant-tile__media {
+  overflow: visible;
+}
+
+.call-waveform-sides {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 64%;
+  z-index: 0;
+  opacity: 0.28;
+  pointer-events: none;
+}
+
+.call-waveform-sides--left {
+  right: calc(100% + 14px);
+  flex-direction: row;
+}
+
+.call-waveform-sides--right {
+  left: calc(100% + 14px);
+  flex-direction: row-reverse;
+}
+
+.call-waveform-sides span {
+  width: 4px;
+  border-radius: 999px;
+  background: var(--call-speak, #3b82f6);
+  align-self: center;
+}
+
+.call-waveform-sides span:nth-child(1) { height: 28%; }
+.call-waveform-sides span:nth-child(2) { height: 48%; }
+.call-waveform-sides span:nth-child(3) { height: 72%; }
+.call-waveform-sides span:nth-child(4) { height: 92%; }
+.call-waveform-sides span:nth-child(5) { height: 60%; }
+.call-waveform-sides span:nth-child(6) { height: 36%; }
+
+.call-waveform-sides--active {
+  opacity: 1;
+}
+
+.call-waveform-sides--active span {
+  animation: call-wave 0.85s ease-in-out infinite;
+}
+
+.call-waveform-sides--active span:nth-child(1) { animation-delay: 0.05s; }
+.call-waveform-sides--active span:nth-child(2) { animation-delay: 0.15s; }
+.call-waveform-sides--active span:nth-child(3) { animation-delay: 0.22s; }
+.call-waveform-sides--active span:nth-child(4) { animation-delay: 0.1s; }
+.call-waveform-sides--active span:nth-child(5) { animation-delay: 0.28s; }
+.call-waveform-sides--active span:nth-child(6) { animation-delay: 0.18s; }
 
 .call-participant-tile--overflow .call-participant-tile__media--overflow {
   display: flex;
@@ -1492,6 +1704,271 @@
 .call-participant-tile--local .call-participant-tile__name,
 .call-participant-tile--local .call-participant-tile__label {
   color: color-mix(in srgb, var(--cp-brand) 28%, #fff);
+}
+
+/* Боковая панель участников (ПК) */
+.call-sidepanel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10046;
+  width: min(360px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: #f4f5f7;
+  color: #1a1d26;
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.28);
+  animation: call-sidepanel-in 0.2s ease-out;
+}
+
+@keyframes call-sidepanel-in {
+  from {
+    transform: translateX(12px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.call-sidepanel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid rgba(15, 18, 28, 0.08);
+}
+
+.call-sidepanel__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 750;
+}
+
+.call-sidepanel__close {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(15, 18, 28, 0.06);
+  color: #1a1d26;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.call-sidepanel__list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.call-sidepanel__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: 12px;
+}
+
+.call-sidepanel__row--speaking {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.call-sidepanel__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, #7d3640, #3a1c22);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.call-sidepanel__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.call-sidepanel__info {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.call-sidepanel__name {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.call-sidepanel__status {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  color: rgba(26, 29, 38, 0.58);
+}
+
+.call-sidepanel__row--speaking .call-sidepanel__status {
+  color: #2563eb;
+  font-weight: 650;
+}
+
+.call-sidepanel__flags {
+  display: inline-flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.call-sidepanel__flag {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 18, 28, 0.06);
+  color: #1a1d26;
+}
+
+.call-sidepanel__flag--off {
+  color: #ef4444;
+  opacity: 0.85;
+}
+
+.call-sidepanel__flag--speak {
+  background: rgba(34, 197, 94, 0.18);
+  color: #16a34a;
+}
+
+.call-sidepanel__invite {
+  padding: 14px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgba(15, 18, 28, 0.08);
+  background: #fff;
+}
+
+.call-sidepanel__invite-label {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: rgba(26, 29, 38, 0.65);
+}
+
+.call-sidepanel__invite-url {
+  display: block;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f0f2f5;
+  font-size: 0.78rem;
+  word-break: break-all;
+  color: #334;
+}
+
+.call-sidepanel__invite-btn {
+  width: 100%;
+  margin-top: 0;
+}
+
+/* ПК-версия встречи */
+@media (min-width: 960px) {
+  .call-layout-switch__btn--desktop {
+    display: inline-flex;
+  }
+
+  .call-meeting-shell--panel-open .call-meeting-shell__main {
+    margin-right: 360px;
+  }
+
+  .call-sidepanel {
+    width: 360px;
+  }
+
+  .call-stage--meeting .call-stage__main {
+    padding: 12px 20px calc(118px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .call-controls--meeting {
+    left: 50%;
+    transform: translateX(-50%);
+    align-items: center;
+    gap: 14px;
+    min-width: min(720px, calc(100% - 48px));
+    max-width: calc(100% - 48px);
+    padding: 12px 16px;
+    border-radius: 22px;
+  }
+
+  .call-meeting-shell--panel-open .call-controls--meeting {
+    left: calc(50% - 180px);
+  }
+
+  .call-controls--meeting .call-controls__timer {
+    display: inline-flex;
+    min-width: 52px;
+  }
+
+  .call-controls--meeting .call-controls__actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex: 1 1 auto;
+  }
+
+  .call-controls--meeting .call-ctrl__label {
+    display: none;
+  }
+
+  .call-controls--meeting .call-ctrl--hangup-wide .call-ctrl__label {
+    display: inline;
+  }
+
+  .call-controls--meeting .call-ctrl {
+    min-width: 52px;
+  }
+
+  .call-controls--meeting .call-ctrl__icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .call-participants--video.call-participants--n3,
+  .call-participants--video.call-participants--n4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: min(1200px, 100%);
+  }
+
+  .call-speaker-layout--audio .call-speaker-layout__spotlight .call-participant-tile--audio .call-participant-tile__media {
+    width: min(220px, 28vw);
+    height: min(220px, 28vw);
+  }
+
+  .call-waveform-sides {
+    display: flex;
+  }
+}
+
+@media (max-width: 959px) {
+  .call-waveform-sides {
+    display: none;
+  }
+
+  .call-meeting-shell--panel-open .call-sidepanel {
+    width: min(100vw, 400px);
+  }
 }
 
 .call-invite-bar__hint {
