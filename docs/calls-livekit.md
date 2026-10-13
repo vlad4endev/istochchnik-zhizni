@@ -47,6 +47,29 @@ bash scripts/repair-livekit.sh      # recreate + curl :7880 и /lk
 docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --build --force-recreate livekit api web
 ```
 
+### `npm run server:update` и LiveKit
+
+При `CALLS_ENABLED=true` скрипт `scripts/server-update.sh` **обязан** подключать
+`docker-compose.livekit-addon.yml` (делает это сам). Если обновлять только
+`docker-compose.yml`, сервис `livekit` (host network) не входит в стек —
+после `compose up --force-recreate` звонки и `/lk` ломаются (502 / «сервис недоступен»).
+
+```bash
+# нормальный путь на проде (CALLS_ENABLED=true в .env):
+git pull origin main
+npm run server:update
+# в логе должно быть: Compose: livekit addon (…)
+
+# если LiveKit всё же упал (UFW/iptables после ребута и т.п.):
+sudo bash scripts/repair-livekit.sh
+```
+
+Если задаёте свой `UPDATE_COMPOSE_FILES`, включите addon явно:
+
+```bash
+UPDATE_COMPOSE_FILES="-f docker-compose.yml -f docker-compose.livekit-addon.yml" npm run server:update
+```
+
 Образ: `livekit/livekit-server:v1.13.9` (**host network**).  
 Entrypoint: `docker/livekit-entrypoint.sh`.
 

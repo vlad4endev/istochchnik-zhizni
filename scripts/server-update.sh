@@ -21,19 +21,25 @@
 #   USE_PROD_OVERLAY=1     — docker-compose.prod.overlay.yml (API на loopback)
 #   RUN_SUPABASE_PUSH=1    — дополнительно npx supabase db push (нужен DATABASE_URL)
 #   UPDATE_COMPOSE_FILES=… — свои флаги compose, напр. "-f docker-compose.yml -f …"
+#                            (если задано — addons не подключаются автоматически)
 #   SERVICES=api web       — какие сервисы пересобирать (по умолчанию весь стек)
 #   BACKUP_BEFORE_UPDATE=1 — полный бекап БД+uploads перед обновлением (рекомендуется)
 #   SKIP_BACKUP=1          — не делать бекап даже если BACKUP_BEFORE_UPDATE=1
+#
+# При CALLS_ENABLED=true в .env автоматически подключается
+# docker-compose.livekit-addon.yml (иначе server:update ломает LiveKit).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 REDIS_ADDON_FILE="docker-compose.redis-addon.yml"
+LIVEKIT_ADDON_FILE="docker-compose.livekit-addon.yml"
 PROD_OVERLAY_FILE="docker-compose.prod.overlay.yml"
 WEB_PREBUILT_FILE="docker-compose.web-prebuilt.yml"
 LOG_DIR=".run/updates"
 COMPOSE_ARGS=()
+LIVEKIT_COMPOSE_ENABLED=0
 
 log() {
   echo "[server-update $(date '+%H:%M:%S')] $*"
@@ -76,6 +82,7 @@ restore_pull_blockers() {
     docker-compose.portainer.yml
     docker-compose.local.yml
     docker-compose.redis-addon.yml
+    docker-compose.livekit-addon.yml
     docker-compose.web-prebuilt.yml
     docker-compose.web-split.yml
   )
@@ -92,6 +99,13 @@ setup_compose_args() {
     # shellcheck disable=SC2206
     COMPOSE_ARGS=(${UPDATE_COMPOSE_FILES})
     log "Compose: UPDATE_COMPOSE_FILES=${UPDATE_COMPOSE_FILES}"
+    if env_flag_true "CALLS_ENABLED" && [[ "${UPDATE_COMPOSE_FILES}" != *"$LIVEKIT_ADDON_FILE"* ]]; then
+      log "WARNING: CALLS_ENABLED=true, но UPDATE_COMPOSE_FILES без $LIVEKIT_ADDON_FILE — LiveKit не поднимется."
+      log "  Добавьте: -f $LIVEKIT_ADDON_FILE  или уберите UPDATE_COMPOSE_FILES."
+    fi
+    if [[ "${UPDATE_COMPOSE_FILES}" == *"$LIVEKIT_ADDON_FILE"* ]]; then
+      LIVEKIT_COMPOSE_ENABLED=1
+    fi
     return
   fi
 
@@ -116,6 +130,16 @@ setup_compose_args() {
   if [[ -f "$REDIS_ADDON_FILE" ]] && env_flag_true "REDIS_REALTIME_ENABLED"; then
     COMPOSE_ARGS+=(-f "$REDIS_ADDON_FILE")
     log "Compose: redis addon ($REDIS_ADDON_FILE)"
+  fi
+
+  # Без этого addon `compose up --force-recreate` поднимает api/web без сервиса
+  # livekit (host network) — после npm run server:update звонки/ /lk ломаются.
+  if [[ -f "$LIVEKIT_ADDON_FILE" ]] && env_flag_true "CALLS_ENABLED"; then
+    COMPOSE_ARGS+=(-f "$LIVEKIT_ADDON_FILE")
+    LIVEKIT_COMPOSE_ENABLED=1
+    log "Compose: livekit addon ($LIVEKIT_ADDON_FILE) — CALLS_ENABLED=true"
+  elif [[ -f "$LIVEKIT_ADDON_FILE" ]]; then
+    log "Compose: livekit addon пропущен (CALLS_ENABLED != true)"
   fi
 }
 
@@ -246,9 +270,11 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "help" ]]; then
   SKIP_MIGRATE=1         без initDb / CLI-миграций
   RUN_SUPABASE_PUSH=1    supabase db push после контейнеров
   SERVICES="api web"     пересобрать только эти сервисы
-  UPDATE_COMPOSE_FILES=  свои -f флаги compose
+  UPDATE_COMPOSE_FILES=  свои -f флаги compose (отключает авто-addons)
   BACKUP_BEFORE_UPDATE=1 полный бекап БД+uploads до обновления
   SKIP_BACKUP=1          отключить бекап
+
+При CALLS_ENABLED=true автоматически: -f docker-compose.livekit-addon.yml
 EOF
   exit 0
 fi
@@ -336,6 +362,27 @@ wait_service_ready api 120 || true
 wait_service_ready web 120 || true
 if printf '%s\n' "${COMPOSE_ARGS[@]}" | grep -q "$REDIS_ADDON_FILE"; then
   wait_service_ready redis 120 || true
+fi
+
+if [[ "${LIVEKIT_COMPOSE_ENABLED:-0}" == "1" ]]; then
+  log "Проверка LiveKit (host :7880)…"
+  wait_service_ready livekit 60 || true
+  lk_ok=0
+  for _i in $(seq 1 15); do
+    if curl -fsS -m 1 http://127.0.0.1:7880/ >/dev/null 2>&1; then
+      lk_ok=1
+      break
+    fi
+    sleep 1
+  done
+  if [[ "$lk_ok" -eq 1 ]]; then
+    log "LiveKit OK: http://127.0.0.1:7880/"
+  else
+    log "WARNING: LiveKit не отвечает на :7880 после обновления."
+    log "  На сервере: sudo bash scripts/repair-livekit.sh"
+    log "  Диагностика: bash scripts/check-livekit-env.sh && curl -sS http://127.0.0.1:7880/; echo"
+    compose logs --tail=40 livekit || true
+  fi
 fi
 
 log "Статус контейнеров:"
