@@ -66,3 +66,28 @@ export function userCanManageCoordinatorDashboardNotes(me: MeResponse | undefine
   if (meAppRoles(me).includes('admin')) return true;
   return apiBoolean(me.is_collection_coordinator);
 }
+
+/**
+ * Шаблоны названий молитвенных страж при создании встречи:
+ * админ приложения или координатор сбора молитвенных нужд.
+ */
+export function userCanUsePrayerWatchMeetingTemplates(me: MeResponse | undefined): boolean {
+  return userCanManageCoordinatorDashboardNotes(me);
+}
+
+export const PRAYER_WATCH_MEETING_TEMPLATES = [
+  {
+    id: 'morning',
+    title: 'Утренняя молитвенная стража',
+    short: 'Утро',
+    hint: 'Для утреннего созвона',
+  },
+  {
+    id: 'evening',
+    title: 'Вечерняя молитвенная стража',
+    short: 'Вечер',
+    hint: 'Для вечернего созвона',
+  },
+] as const;
+
+export type PrayerWatchMeetingTemplateId = (typeof PRAYER_WATCH_MEETING_TEMPLATES)[number]['id'];
