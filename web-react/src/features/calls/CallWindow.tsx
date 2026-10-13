@@ -308,9 +308,11 @@ function RoomStage({
       return;
     }
     resumeCallMedia(room);
+    // Таймер только для 1:1 — в конференциях (Телемост) длительность не показываем.
+    if (isGroup) return;
     const t = window.setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => window.clearInterval(t);
-  }, [connected, room]);
+  }, [connected, room, isGroup]);
 
   // После attach трека Safari/Chrome иногда не стартуют video.play без явного вызова.
   useEffect(() => {
@@ -358,6 +360,7 @@ function RoomStage({
   const showLocalPip = !isGroup && callType === 'video' && Boolean(localVideo) && isCameraEnabled;
 
   const avatarSrc = peerAvatar ? resolvePublicUrl(peerAvatar) : undefined;
+  // Прямой звонок: таймер / статусы. Конференция: без таймера (как Телемост).
   let statusLabel = 'Соединение…';
   if (connectError) statusLabel = connectError;
   else if (connectionState === ConnectionState.Connected) statusLabel = formatDuration(elapsed);
@@ -366,6 +369,14 @@ function RoomStage({
     statusLabel = 'Переподключение…';
   } else if (connectionState === ConnectionState.Disconnected) {
     statusLabel = 'Ошибка сервера или идут технические работы';
+  }
+
+  let groupWaitLabel = 'Ждём участников';
+  if (connectError) groupWaitLabel = connectError;
+  else if (connectionState === ConnectionState.Connecting) groupWaitLabel = 'Подключение…';
+  else if (connectionState === ConnectionState.Reconnecting) groupWaitLabel = 'Переподключение…';
+  else if (connectionState === ConnectionState.Disconnected) {
+    groupWaitLabel = 'Ошибка сервера или идут технические работы';
   }
 
   const cameraByIdentity = useMemo(() => {
@@ -384,6 +395,7 @@ function RoomStage({
     });
   }, [participants]);
 
+  const localParticipant = sortedParticipants.find((p) => p.isLocal) ?? null;
   const waitingAlone = isGroup && remotes.length === 0;
 
   return (
@@ -391,12 +403,17 @@ function RoomStage({
       <div className="call-stage__main">
         {isGroup ? (
           waitingAlone ? (
-            <div className="call-stage__avatar-block">
-              <MeetingAvatar mediaType={callType} size="lg" />
-              <p className="call-stage__name">Встреча</p>
-              <p className="call-stage__status">
-                {connectError || (connected ? 'Ожидание участников…' : statusLabel)}
-              </p>
+            <div className="call-meeting-lobby">
+              {localParticipant ? (
+                <MeetingParticipantTile
+                  participant={localParticipant}
+                  callType={callType}
+                  cameraTrack={cameraByIdentity.get(localParticipant.identity) ?? null}
+                />
+              ) : (
+                <MeetingAvatar mediaType={callType} size="lg" />
+              )}
+              <p className="call-meeting-lobby__wait">{groupWaitLabel}</p>
             </div>
           ) : (
             <div
@@ -463,11 +480,7 @@ function RoomStage({
           </>
         )}
       </div>
-      {isGroup && !waitingAlone ? (
-        <p className="call-stage__status call-stage__status--bar">
-          {connectError || `${statusLabel} · ${sortedParticipants.length}`}
-        </p>
-      ) : null}
+      {/* Конференции: без таймера и без верхней плашки — только окна участников */}
       {!isGroup && showRemoteVideo ? (
         <p className="call-stage__status call-stage__status--bar">{statusLabel}</p>
       ) : null}
