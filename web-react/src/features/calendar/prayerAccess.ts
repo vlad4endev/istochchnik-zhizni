@@ -69,9 +69,11 @@ export function userCanManageCoordinatorDashboardNotes(me: MeResponse | undefine
 
 /**
  * Шаблоны названий молитвенных страж при создании встречи:
- * админ приложения или координатор сбора молитвенных нужд.
+ * админ, пастор или координатор сбора молитвенных нужд.
  */
 export function userCanUsePrayerWatchMeetingTemplates(me: MeResponse | undefined): boolean {
+  if (!me) return false;
+  if (meAppRoles(me).includes('pastor')) return true;
   return userCanManageCoordinatorDashboardNotes(me);
 }
 
