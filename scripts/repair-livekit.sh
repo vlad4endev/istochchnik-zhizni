@@ -81,9 +81,23 @@ probe "web→host.docker.internal:7880" \
 
 echo ""
 echo "== 7) public /lk + WSS rtc =="
-code=$(curl -sS -m 8 -o /tmp/pub-lk.txt -w "%{http_code}" https://app.church-tambov.ru/lk/ || echo 000)
-echo "HTTP $code body=$(head -c 40 /tmp/pub-lk.txt)"
-[[ "$code" == "200" ]] || { echo "FAIL /lk"; exit 1; }
+# Не склеивать http_code с "000" через || echo — при curl exit 23 (ошибка записи
+# во временный файл) получалось "200000" и ложный FAIL, хотя /lk уже отдал OK.
+pub_lk_body="$(mktemp)"
+set +e
+code=$(curl -sS -m 8 -o "$pub_lk_body" -w "%{http_code}" https://app.church-tambov.ru/lk/)
+curl_rc=$?
+set -e
+body_preview=$(head -c 40 "$pub_lk_body" 2>/dev/null || true)
+rm -f "$pub_lk_body"
+echo "HTTP ${code:-000} (curl_rc=$curl_rc) body=${body_preview}"
+# Успех: 200 и короткое тело LiveKit ("OK"), не SPA HTML.
+if [[ "$code" == "200" ]] && [[ "$body_preview" == *OK* ]] && [[ "${#body_preview}" -lt 200 ]]; then
+  echo "OK /lk"
+else
+  echo "FAIL /lk — ожидаем HTTP 200 и тело OK (не index.html). Проверьте nginx location /lk/ и контейнер web."
+  exit 1
+fi
 
 echo ""
 echo "== 8) порты ICE/TURN на хосте =="
