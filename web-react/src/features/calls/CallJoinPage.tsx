@@ -67,15 +67,9 @@ export function CallJoinPage() {
       }
       const result = await joinInvitation(inviteToken);
       const title =
-        preview.conversationTitle &&
-        preview.conversationTitle !== 'Видеоконференция' &&
-        preview.conversationTitle !== 'Аудиоконференция' &&
-        preview.conversationTitle !== 'Видеовстреча' &&
-        preview.conversationTitle !== 'Аудиовстреча'
-          ? preview.conversationTitle
-          : preview.mediaType === 'video'
-            ? 'Видеовстреча'
-            : 'Аудиовстреча';
+        result.call.title?.trim() ||
+        preview.conversationTitle?.trim() ||
+        (preview.mediaType === 'video' ? 'Видеовстреча' : 'Аудиовстреча');
       // Link joins must not deep-link into the host chat: invitees are call participants,
       // not conversation members → otherwise messenger returns «Not a member of this conversation».
       hydrateFromPublic(result.call, {
