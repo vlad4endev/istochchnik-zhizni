@@ -1054,8 +1054,13 @@ export async function cancelCall(callId: string, memberId: number): Promise<Call
   return toPublicCall(updated);
 }
 
-export async function endCall(callId: string, memberId: number): Promise<CallPublic> {
+export async function endCall(
+  callId: string,
+  memberId: number,
+  opts?: { endForAll?: boolean },
+): Promise<CallPublic> {
   const leaveLiveKit: { roomName: string; identity: string }[] = [];
+  const endForAll = Boolean(opts?.endForAll);
 
   const { updated, notifyIds } = await withTransaction(async (client) => {
     const locked = await client.query(
@@ -1099,9 +1104,13 @@ export async function endCall(callId: string, memberId: number): Promise<CallPub
       throw new CallsError('forbidden', 'Нет доступа');
     }
 
-    // If moderator ends — finish whole call
-    if (isModerator && (call.status === 'waiting' || call.status === 'active')) {
-      // Explicit end of conference
+    // Явное «завершить для всех» — только модератор/инициатор.
+    // Обычный «Выйти» (в т.ч. хоста) = leave, иначе аудиовстречи рвутся при уходе организатора.
+    if (
+      endForAll &&
+      isModerator &&
+      (call.status === 'waiting' || call.status === 'active')
+    ) {
       const done = await finalizeCall(client, call, 'ended', 'ended_by_moderator');
       const others = await client.query(
         `SELECT user_id FROM call_participants WHERE call_id = $1::uuid AND user_id <> $2`,
@@ -1113,7 +1122,7 @@ export async function endCall(callId: string, memberId: number): Promise<CallPub
       };
     }
 
-    // Regular participant leaves — LiveKit remove runs after COMMIT (avoid holding row locks on I/O).
+    // Participant (включая хоста) выходит — LiveKit remove после COMMIT.
     await client.query(
       `UPDATE call_participants
        SET status = 'left', left_at = NOW()
@@ -1627,16 +1636,27 @@ export async function listCallHistory(input: {
   return { items, nextCursor };
 }
 
+/** Consecutive LiveKit absences before DB marks left (cron tick ≈ 15s). */
+const ghostMissStreak = new Map<string, number>();
+
+function ghostMissKey(callId: string, userId: number): string {
+  return `${callId}:${userId}`;
+}
+
 /**
  * Sync DB «joined» with LiveKit presence so closed tabs don't leave users permanently busy.
- * Grace: ignore participants who joined less than N seconds ago (reconnect window).
+ * Grace: ignore recent joins; require several consecutive misses so ICE blips don't kill meetings.
  */
 async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmpty: number }> {
   let cleared = 0;
   let endedEmpty = 0;
   if (!isLiveKitConfigured()) return { cleared, endedEmpty };
 
-  const graceSec = Math.max(60, Math.min(600, Number(process.env.CALL_GHOST_GRACE_SEC ?? 120) || 120));
+  const graceSec = Math.max(60, Math.min(600, Number(process.env.CALL_GHOST_GRACE_SEC ?? 180) || 180));
+  const requiredMisses = Math.max(
+    2,
+    Math.min(8, Number(process.env.CALL_GHOST_MISS_TICKS ?? 3) || 3),
+  );
 
   const active = await query(
     `SELECT c.*
@@ -1649,6 +1669,8 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
      ORDER BY c.created_at ASC
      LIMIT 80`,
   );
+
+  const seenKeys = new Set<string>();
 
   for (const row of active.rows) {
     const call = mapCallRow(row);
@@ -1668,22 +1690,35 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
       for (const p of parts.rows) {
         const uid = Number(p.user_id);
         const identity = livekitIdentityForMember(uid);
-        if (present.has(identity)) continue;
+        const key = ghostMissKey(call.id, uid);
+        seenKeys.add(key);
+        if (present.has(identity)) {
+          ghostMissStreak.delete(key);
+          continue;
+        }
         const joinedAt = p.joined_at ? new Date(String(p.joined_at)).getTime() : 0;
-        if (joinedAt && Date.now() - joinedAt < graceSec * 1000) continue;
+        if (joinedAt && Date.now() - joinedAt < graceSec * 1000) {
+          ghostMissStreak.delete(key);
+          continue;
+        }
+        const misses = (ghostMissStreak.get(key) ?? 0) + 1;
+        ghostMissStreak.set(key, misses);
+        if (misses < requiredMisses) continue;
         ghosts.push(uid);
       }
 
-      if (ghosts.length === 0) {
-        // Room empty in LiveKit but DB still has joined → clear all if past grace
-        if (present.size === 0 && parts.rows.length > 0) {
-          const oldest = Math.min(
-            ...parts.rows.map((p) =>
-              p.joined_at ? new Date(String(p.joined_at)).getTime() : Date.now(),
-            ),
-          );
-          if (Date.now() - oldest >= graceSec * 1000) {
-            for (const p of parts.rows) ghosts.push(Number(p.user_id));
+      if (ghosts.length === 0 && present.size === 0 && parts.rows.length > 0) {
+        // Empty LiveKit room: first loop already bumped streaks; promote those at threshold.
+        const oldest = Math.min(
+          ...parts.rows.map((p) =>
+            p.joined_at ? new Date(String(p.joined_at)).getTime() : Date.now(),
+          ),
+        );
+        if (Date.now() - oldest >= graceSec * 1000) {
+          for (const p of parts.rows) {
+            const uid = Number(p.user_id);
+            const key = ghostMissKey(call.id, uid);
+            if ((ghostMissStreak.get(key) ?? 0) >= requiredMisses) ghosts.push(uid);
           }
         }
       }
@@ -1706,6 +1741,7 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
           [call.id, ghosts],
         );
         cleared += ghosts.length;
+        for (const uid of ghosts) ghostMissStreak.delete(ghostMissKey(call.id, uid));
 
         const rem = await client.query(
           `SELECT COUNT(*)::int AS c FROM call_participants
@@ -1720,21 +1756,31 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
         return count;
       });
 
-      for (const uid of ghosts) {
-        await sendWs(uid, {
-          type: 'call:ended',
-          callId: call.id,
-          reason: 'ghost_cleanup',
-        }).catch(() => undefined);
-      }
-
+      // Не шлём call:ended «призракам» — иначе клиент закрывает UI во время LiveKit reconnect.
+      // Если комната реально завершена (remaining === 0), уведомим остальных ниже.
       if (remaining === 0) {
+        const others = await query(
+          `SELECT user_id FROM call_participants WHERE call_id = $1::uuid`,
+          [call.id],
+        );
+        for (const r of others.rows) {
+          await sendWs(Number(r.user_id), {
+            type: 'call:ended',
+            callId: call.id,
+            reason: 'ghost_cleanup',
+          }).catch(() => undefined);
+        }
         await endLiveKitRoom(call.livekit_room_name);
         endedEmpty += 1;
       }
     } catch (e) {
       console.warn('[calls] ghost reconcile:', e instanceof Error ? e.message : e);
     }
+  }
+
+  // Drop stale streak keys for calls no longer active in this pass
+  for (const key of ghostMissStreak.keys()) {
+    if (!seenKeys.has(key)) ghostMissStreak.delete(key);
   }
 
   return { cleared, endedEmpty };
