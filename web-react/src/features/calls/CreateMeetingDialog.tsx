@@ -72,7 +72,7 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
           <LuX size={22} strokeWidth={2.25} />
         </button>
 
-        <div className={['telemost-create__panel', isVideo ? 'telemost-create__panel--video' : ''].join(' ')}>
+        <div className="telemost-create__panel">
           <p className="telemost-create__eyebrow">Источник жизни · встречи</p>
           <div className="telemost-create__hero" aria-hidden>
             <span className="telemost-create__ring" />

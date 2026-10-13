@@ -94,8 +94,14 @@ const DIALOG_STYLES = `
   .tg-section-title { font-size: 0.9375rem; font-weight: 700; color: var(--tg-text); line-height: 1.2; }
   .tg-section-sub { font-size: 0.75rem; font-weight: 500; color: var(--tg-text-muted); line-height: 1.25; }
   .tg-section-btn--meeting { color: var(--tg-text); }
-  .tg-section-btn--meeting .tg-section-icon { background: rgba(255, 204, 0, 0.18); color: #b8860b; }
-  .tg-section-btn--meeting-video .tg-section-icon { background: rgba(47, 111, 237, 0.14); color: #2f6fed; }
+  .tg-section-btn--meeting .tg-section-icon {
+    background: var(--tg-primary-light);
+    color: var(--tg-primary);
+  }
+  .tg-section-btn--meeting-video .tg-section-icon {
+    background: color-mix(in srgb, var(--tg-primary) 16%, transparent);
+    color: var(--tg-primary);
+  }
   .tg-group-footer {
     padding: 12px 16px 16px;
     border-top: 1px solid var(--tg-border);

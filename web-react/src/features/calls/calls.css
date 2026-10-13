@@ -637,14 +637,15 @@
   background: #12121c;
 }
 
-/* ——— Telemost-style create meeting ——— */
+/* ——— Create meeting (layout like Telemost, colors from app theme) ——— */
 .telemost-create {
-  --tm-ink: #14191f;
-  --tm-muted: rgba(20, 25, 31, 0.62);
-  --tm-accent: #ffcc00;
-  --tm-accent-ink: #1a1600;
-  --tm-video: #2f6fed;
-  --tm-audio: #0f9d58;
+  --tm-brand: var(--primary, #7d3640);
+  --tm-brand-dark: var(--primary-dark, #5c2830);
+  --tm-on-brand: var(--text-on-primary, #ffffff);
+  --tm-brand-soft: color-mix(in srgb, var(--tm-brand) 22%, transparent);
+  --tm-brand-mid: color-mix(in srgb, var(--tm-brand) 38%, transparent);
+  --tm-bg-top: color-mix(in srgb, var(--tm-brand-dark) 55%, #1c1917);
+  --tm-bg-bottom: #141210;
   position: fixed;
   inset: 0;
   z-index: 10060;
@@ -656,7 +657,7 @@
     16px
     max(20px, env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
-  background: #0f1218;
+  background: var(--tm-bg-bottom);
   color: #fff;
   font-family: Karla, 'Segoe UI', sans-serif;
   overflow: auto;
@@ -668,16 +669,20 @@
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 70% 50% at 50% 0%, rgba(255, 204, 0, 0.16), transparent 60%),
-    radial-gradient(ellipse 45% 40% at 90% 80%, rgba(47, 111, 237, 0.18), transparent 55%),
-    linear-gradient(180deg, #151a22 0%, #0c0f14 100%);
+    radial-gradient(ellipse 70% 50% at 50% 0%, var(--tm-brand-soft), transparent 60%),
+    radial-gradient(
+      ellipse 45% 40% at 88% 82%,
+      color-mix(in srgb, var(--tm-brand-dark) 35%, transparent),
+      transparent 55%
+    ),
+    linear-gradient(180deg, var(--tm-bg-top) 0%, var(--tm-bg-bottom) 100%);
 }
 
 .telemost-create__glow {
   position: absolute;
   border-radius: 50%;
   filter: blur(48px);
-  opacity: 0.55;
+  opacity: 0.5;
   animation: telemost-drift 12s ease-in-out infinite;
 }
 
@@ -686,7 +691,7 @@
   height: min(50vw, 280px);
   left: -8%;
   top: 18%;
-  background: rgba(255, 204, 0, 0.22);
+  background: var(--tm-brand-mid);
 }
 
 .telemost-create__glow--b {
@@ -694,7 +699,7 @@
   height: min(46vw, 260px);
   right: -10%;
   bottom: 12%;
-  background: rgba(47, 111, 237, 0.25);
+  background: color-mix(in srgb, var(--tm-brand-dark) 45%, transparent);
   animation-delay: -4s;
 }
 
@@ -743,11 +748,11 @@
   align-items: center;
   text-align: center;
   padding: 28px 22px 24px;
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius, 16px);
+  background: color-mix(in srgb, #fff 6%, transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 24px 64px rgba(0, 0, 0, 0.35);
+    0 24px 64px rgba(28, 25, 23, 0.4);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   animation: telemost-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -770,7 +775,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.55);
+  color: color-mix(in srgb, #fff 55%, var(--tm-brand));
 }
 
 .telemost-create__hero {
@@ -786,12 +791,8 @@
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 204, 0, 0.35);
+  border: 1.5px solid var(--tm-brand-mid);
   animation: telemost-pulse 2.6s ease-out infinite;
-}
-
-.telemost-create__panel--video .telemost-create__ring {
-  border-color: rgba(47, 111, 237, 0.4);
 }
 
 .telemost-create__ring--late {
@@ -817,19 +818,16 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  color: var(--tm-accent-ink);
-  background: linear-gradient(160deg, #ffe566 0%, var(--tm-accent) 55%, #e6b800 100%);
+  color: var(--tm-on-brand);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--tm-brand) 78%, #fff) 0%,
+    var(--tm-brand) 55%,
+    var(--tm-brand-dark) 100%
+  );
   box-shadow:
-    0 0 0 6px rgba(255, 204, 0, 0.12),
-    0 16px 36px rgba(255, 204, 0, 0.28);
-}
-
-.telemost-create__panel--video .telemost-create__badge {
-  color: #fff;
-  background: linear-gradient(160deg, #5b8fff 0%, var(--tm-video) 60%, #1f56c9 100%);
-  box-shadow:
-    0 0 0 6px rgba(47, 111, 237, 0.14),
-    0 16px 36px rgba(47, 111, 237, 0.35);
+    0 0 0 6px var(--tm-brand-soft),
+    0 16px 36px color-mix(in srgb, var(--tm-brand) 40%, transparent);
 }
 
 .telemost-create__title {
@@ -885,13 +883,8 @@
 }
 
 .telemost-create__device.is-on {
-  border-color: rgba(255, 204, 0, 0.35);
-  background: rgba(255, 204, 0, 0.12);
-}
-
-.telemost-create__panel--video .telemost-create__device.is-on {
-  border-color: rgba(47, 111, 237, 0.4);
-  background: rgba(47, 111, 237, 0.16);
+  border-color: var(--tm-brand-mid);
+  background: var(--tm-brand-soft);
 }
 
 .telemost-create__device.is-off {
@@ -908,13 +901,8 @@
 }
 
 .telemost-create__device.is-on .telemost-create__device-icon {
-  background: var(--tm-accent);
-  color: var(--tm-accent-ink);
-}
-
-.telemost-create__panel--video .telemost-create__device.is-on .telemost-create__device-icon {
-  background: var(--tm-video);
-  color: #fff;
+  background: var(--tm-brand);
+  color: var(--tm-on-brand);
 }
 
 .telemost-create__cta {
@@ -925,25 +913,22 @@
   padding: 14px 24px;
   border: none;
   border-radius: 999px;
-  background: linear-gradient(180deg, #ffe14d 0%, var(--tm-accent) 45%, #e0b400 100%);
-  color: var(--tm-accent-ink);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tm-brand) 82%, #fff) 0%,
+    var(--tm-brand) 45%,
+    var(--tm-brand-dark) 100%
+  );
+  color: var(--tm-on-brand);
   font: inherit;
   font-size: 1.05rem;
   font-weight: 800;
   letter-spacing: 0.01em;
   cursor: pointer;
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.45) inset,
-    0 14px 32px rgba(255, 204, 0, 0.28);
+    0 1px 0 rgba(255, 255, 255, 0.22) inset,
+    0 14px 32px color-mix(in srgb, var(--tm-brand) 38%, transparent);
   transition: transform 0.15s ease, filter 0.15s ease;
-}
-
-.telemost-create__panel--video .telemost-create__cta {
-  background: linear-gradient(180deg, #6b9aff 0%, var(--tm-video) 50%, #1f56c9 100%);
-  color: #fff;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.28) inset,
-    0 14px 32px rgba(47, 111, 237, 0.35);
 }
 
 .telemost-create__cta:hover:not(:disabled) {
