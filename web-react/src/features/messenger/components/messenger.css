@@ -677,7 +677,7 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
 }
 
 .tg-compose-btn-sm:hover {
-  background: rgba(125, 54, 64, 0.18);
+  background: color-mix(in srgb, var(--tg-primary) 18%, transparent);
 }
 
 .tg-compose-btn-sm:active {
@@ -685,7 +685,151 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
 }
 
 .tg-compose-btn-sm:focus-visible {
-  box-shadow: 0 0 0 3px rgba(125, 54, 64, 0.22);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tg-primary) 22%, transparent);
+}
+
+.tg-sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tg-calls-btn-sm {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-on-primary, #fff);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--tg-primary) 88%, #fff) 0%,
+    var(--tg-primary) 48%,
+    var(--tg-primary-hover, var(--primary-dark, #5c2830)) 100%
+  );
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.2) inset,
+    0 6px 16px color-mix(in srgb, var(--tg-primary) 28%, transparent);
+  transition: transform 0.14s ease, filter 0.18s ease, box-shadow 0.18s ease;
+}
+
+.tg-calls-btn-sm:hover {
+  filter: brightness(1.05);
+}
+
+.tg-calls-btn-sm:active {
+  transform: scale(0.96);
+}
+
+.tg-calls-btn-sm:focus-visible {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.2) inset,
+    0 0 0 3px color-mix(in srgb, var(--tg-primary) 28%, transparent);
+}
+
+.tg-calls-btn-sm[aria-expanded='true'] {
+  filter: brightness(1.06);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.22) inset,
+    0 0 0 3px color-mix(in srgb, var(--tg-primary) 24%, transparent);
+}
+
+.tg-calls-menu {
+  position: fixed;
+  z-index: 100080;
+  width: min(18.5rem, calc(100vw - 24px));
+  padding: 6px;
+  border-radius: 16px;
+  border: 1px solid var(--tg-border, rgba(28, 25, 23, 0.1));
+  background: var(--tg-surface-elevated, var(--surface-elevated, #fff));
+  box-shadow:
+    0 18px 48px rgba(28, 25, 23, 0.14),
+    0 4px 14px rgba(28, 25, 23, 0.06);
+  animation: tg-calls-menu-in 0.18s ease-out;
+}
+
+@keyframes tg-calls-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.tg-calls-menu__item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--tg-text, var(--text));
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.tg-calls-menu__item:hover,
+.tg-calls-menu__item:focus-visible {
+  background: var(--tg-primary-light);
+  outline: none;
+}
+
+.tg-calls-menu__item:active {
+  transform: scale(0.99);
+}
+
+.tg-calls-menu__icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--tg-primary-light);
+  color: var(--tg-primary);
+}
+
+.tg-calls-menu__icon--video {
+  background: color-mix(in srgb, var(--tg-primary) 16%, transparent);
+}
+
+.tg-calls-menu__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tg-calls-menu__title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--tg-text, var(--text));
+}
+
+.tg-calls-menu__sub {
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--tg-text-muted, var(--text-muted));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tg-calls-menu {
+    animation: none;
+  }
 }
 
 .tg-density-toggle {
