@@ -65,7 +65,10 @@ export function CallPage() {
         } else {
           hydrateFromPublic(c, {
             peerId: peer?.userId ?? 0,
-            peerName: peer?.name || (c.type === 'group' ? 'Конференция' : 'Собеседник'),
+            peerName:
+              c.title?.trim() ||
+              peer?.name ||
+              (c.type === 'group' ? 'Конференция' : 'Собеседник'),
             peerAvatar: peer?.avatarUrl ?? '',
             isInitiator,
             status: c.status === 'ringing' && isInitiator ? 'calling' : 'active',

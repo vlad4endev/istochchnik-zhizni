@@ -1137,12 +1137,181 @@
   color: rgba(255, 255, 255, 0.68);
 }
 
+.telemost-create__templates {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(100%, 22rem);
+  margin-top: 22px;
+}
+
+.telemost-create__template {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(8, 10, 16, 0.42);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.telemost-create__template:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(8, 10, 16, 0.58);
+}
+
+.telemost-create__template:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.telemost-create__template:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.telemost-create__template.is-starting {
+  opacity: 1;
+  border-color: rgba(255, 255, 255, 0.36);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 12px 28px rgba(0, 0, 0, 0.28);
+}
+
+.telemost-create__template--morning {
+  background:
+    linear-gradient(135deg, rgba(251, 191, 36, 0.16), transparent 55%),
+    rgba(8, 10, 16, 0.42);
+}
+
+.telemost-create__template--morning:hover:not(:disabled),
+.telemost-create__template--morning.is-starting {
+  background:
+    linear-gradient(135deg, rgba(251, 191, 36, 0.24), transparent 55%),
+    rgba(8, 10, 16, 0.58);
+}
+
+.telemost-create__template--evening {
+  background:
+    linear-gradient(135deg, rgba(129, 140, 248, 0.18), transparent 55%),
+    rgba(8, 10, 16, 0.42);
+}
+
+.telemost-create__template--evening:hover:not(:disabled),
+.telemost-create__template--evening.is-starting {
+  background:
+    linear-gradient(135deg, rgba(129, 140, 248, 0.26), transparent 55%),
+    rgba(8, 10, 16, 0.58);
+}
+
+.telemost-create__template-icon {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.telemost-create__template--morning .telemost-create__template-icon {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.14);
+}
+
+.telemost-create__template--evening .telemost-create__template-icon {
+  color: #a5b4fc;
+  background: rgba(129, 140, 248, 0.16);
+}
+
+.telemost-create__template-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.telemost-create__template-short {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.telemost-create__template-title {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.telemost-create__template-hint {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.telemost-create__name {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: min(100%, 21rem);
+  margin-top: 22px;
+  text-align: left;
+}
+
+.telemost-create__name-label {
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.telemost-create__name-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(8, 10, 16, 0.45);
+  color: #fff;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.telemost-create__name-input::placeholder {
+  color: rgba(255, 255, 255, 0.38);
+  font-weight: 500;
+}
+
+.telemost-create__name-input:focus {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(8, 10, 16, 0.62);
+}
+
+.telemost-create__name-input:disabled {
+  opacity: 0.55;
+}
+
 .telemost-create__devices {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
-  margin-top: 26px;
+  margin-top: 22px;
   width: 100%;
 }
 
@@ -1249,6 +1418,7 @@
   .telemost-create__ring,
   .telemost-create__ring--late,
   .telemost-create__panel,
+  .telemost-create__template,
   .meeting-avatar__ring,
   .meeting-avatar__ring--late,
   .telemost-join__glow,

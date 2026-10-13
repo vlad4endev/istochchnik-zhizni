@@ -67,15 +67,9 @@ export function CallJoinPage() {
       }
       const result = await joinInvitation(inviteToken);
       const title =
-        preview.conversationTitle &&
-        preview.conversationTitle !== 'Видеоконференция' &&
-        preview.conversationTitle !== 'Аудиоконференция' &&
-        preview.conversationTitle !== 'Видеовстреча' &&
-        preview.conversationTitle !== 'Аудиовстреча'
-          ? preview.conversationTitle
-          : preview.mediaType === 'video'
-            ? 'Видеовстреча'
-            : 'Аудиовстреча';
+        result.call.title?.trim() ||
+        preview.conversationTitle?.trim() ||
+        (preview.mediaType === 'video' ? 'Видеовстреча' : 'Аудиовстреча');
       // Link joins must not deep-link into the host chat: invitees are call participants,
       // not conversation members → otherwise messenger returns «Not a member of this conversation».
       hydrateFromPublic(result.call, {
@@ -165,14 +159,9 @@ export function CallJoinPage() {
   }
 
   const isVideo = preview.mediaType === 'video';
-  const title = isVideo ? 'Видеовстреча' : 'Аудиовстреча';
-  const subtitle =
-    preview.conversationTitle &&
-    preview.conversationTitle !== title &&
-    preview.conversationTitle !== 'Видеоконференция' &&
-    preview.conversationTitle !== 'Аудиоконференция'
-      ? preview.conversationTitle
-      : 'Вас пригласили подключиться по ссылке';
+  const defaultTitle = isVideo ? 'Видеовстреча' : 'Аудиовстреча';
+  const title = preview.conversationTitle?.trim() || defaultTitle;
+  const subtitle = 'Вас пригласили подключиться по ссылке';
 
   return (
     <div className="telemost-join" role="main">

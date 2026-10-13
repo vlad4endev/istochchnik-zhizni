@@ -19,6 +19,8 @@ export type CallPublic = {
   status: CallStatus;
   /** null for standalone Telemost-style meetings (no chat) */
   conversationId: string | null;
+  /** Пользовательское название встречи */
+  title?: string | null;
   initiatedBy: number;
   accessMode: 'closed' | 'link';
   createdAt: string;
@@ -72,6 +74,7 @@ export async function createGroupCall(input: {
   conversationId: string;
   mediaType: CallMediaType;
   accessMode?: 'closed' | 'link';
+  title?: string;
 }): Promise<CallPublic> {
   try {
     const { data } = await apiClient.post<{ call: CallPublic }>('/api/calls', {
@@ -79,6 +82,7 @@ export async function createGroupCall(input: {
       conversationId: input.conversationId,
       mediaType: input.mediaType,
       accessMode: input.accessMode ?? 'closed',
+      title: input.title?.trim() || undefined,
     });
     return data.call;
   } catch (e) {
@@ -89,6 +93,7 @@ export async function createGroupCall(input: {
 /** Standalone link meeting — no chat/group created (Телемост). */
 export async function createStandaloneCall(input: {
   mediaType: CallMediaType;
+  title?: string;
 }): Promise<CallPublic> {
   try {
     const { data } = await apiClient.post<{ call: CallPublic }>('/api/calls', {
@@ -96,6 +101,7 @@ export async function createStandaloneCall(input: {
       mediaType: input.mediaType,
       accessMode: 'link',
       standalone: true,
+      title: input.title?.trim() || undefined,
     });
     return data.call;
   } catch (e) {

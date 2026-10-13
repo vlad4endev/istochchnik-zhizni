@@ -88,7 +88,9 @@ export const useCallStore = create<CallStore>((set) => ({
               ? extras.conversationId
               : (call.conversationId ?? ''),
           peerId: extras.peerId ?? s.activeCall?.peerId ?? 0,
-          peerName: extras.peerName ?? s.activeCall?.peerName ?? 'Участник',
+          peerName:
+            extras.peerName ??
+            (call.title?.trim() || s.activeCall?.peerName || 'Участник'),
           peerAvatar: extras.peerAvatar ?? s.activeCall?.peerAvatar ?? '',
           callType: call.mediaType,
           isInitiator: extras.isInitiator ?? s.activeCall?.isInitiator ?? false,

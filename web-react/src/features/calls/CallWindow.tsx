@@ -47,6 +47,7 @@ import {
   type CallTokenResponse,
 } from './callsApi';
 import { startCallRing, stopCallRing, unlockCallAudio } from './callRingtone';
+import { copyInviteShare, formatInviteShareText, shareInviteLink } from './inviteShare';
 import { MeetingAvatar } from './MeetingAvatar';
 import { useCallStore, type ActiveCallState } from './callStore';
 import './calls.css';
@@ -493,6 +494,7 @@ function RoomStage({
 /** Панель ссылки: на старте раскрыта, после подключения участников — сворачивается. */
 function MeetingInviteBar({ callId, onCollapse }: { callId: string; onCollapse: () => void }) {
   const inviteUrl = useCallStore((s) => s.activeCall?.inviteUrl ?? null);
+  const meetingTitle = useCallStore((s) => s.activeCall?.peerName?.trim() || 'Встреча');
   const setInviteUrl = useCallStore((s) => s.setInviteUrl);
   const [busy, setBusy] = useState(false);
 
@@ -517,31 +519,21 @@ function MeetingInviteBar({ callId, onCollapse }: { callId: string; onCollapse: 
 
   const copy = useCallback(() => {
     if (!displayUrl) return;
-    void navigator.clipboard.writeText(displayUrl).then(
-      () => emitAppToast('Ссылка скопирована — отправьте в чат', 'success'),
-      () => emitAppToast('Не удалось скопировать ссылку', 'error'),
-    );
-  }, [displayUrl]);
+    void copyInviteShare(meetingTitle, displayUrl).then((ok) => {
+      if (ok) emitAppToast('Название и ссылка скопированы', 'success');
+      else emitAppToast('Не удалось скопировать ссылку', 'error');
+    });
+  }, [displayUrl, meetingTitle]);
 
   const share = useCallback(async () => {
     if (!displayUrl) return;
-    const nav = navigator as Navigator & {
-      share?: (data: { title?: string; text?: string; url?: string }) => Promise<void>;
-    };
-    if (typeof nav.share === 'function') {
-      try {
-        await nav.share({
-          title: 'Приглашение на звонок',
-          text: 'Подключитесь к конференции',
-          url: displayUrl,
-        });
-        return;
-      } catch {
-        /* user cancelled or share failed — fall through to copy */
-      }
+    const result = await shareInviteLink(meetingTitle, displayUrl);
+    if (result === 'copied') {
+      emitAppToast('Название и ссылка скопированы', 'success');
+    } else if (result === 'failed') {
+      emitAppToast('Не удалось поделиться ссылкой', 'error');
     }
-    copy();
-  }, [copy, displayUrl]);
+  }, [displayUrl, meetingTitle]);
 
   return (
     <div className="call-invite-bar" role="dialog" aria-label="Ссылка для подключения">
@@ -553,12 +545,16 @@ function MeetingInviteBar({ callId, onCollapse }: { callId: string; onCollapse: 
       >
         <LuX size={18} strokeWidth={2.2} />
       </button>
-      <p className="call-invite-bar__title">Ссылка для подключения</p>
+      <p className="call-invite-bar__title">{meetingTitle}</p>
       <p className="call-invite-bar__hint">
-        Отправьте в чат или мессенджер — участники зайдут по ссылке
+        При шаринге уйдёт название и ссылка — отправьте в чат или мессенджер
       </p>
       <code className="call-invite-bar__url" title={displayUrl || undefined}>
-        {busy && !displayUrl ? 'Получаем ссылку…' : displayUrl || 'Ссылка недоступна'}
+        {busy && !displayUrl
+          ? 'Получаем ссылку…'
+          : displayUrl
+            ? formatInviteShareText(meetingTitle, displayUrl)
+            : 'Ссылка недоступна'}
       </code>
       <div className="call-invite-bar__actions">
         <button
@@ -670,10 +666,13 @@ function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; o
                 type="button"
                 className="call-invite-btn call-invite-btn--primary"
                 onClick={() => {
-                  void navigator.clipboard.writeText(activeCall.inviteUrl!).then(
-                    () => emitAppToast('Ссылка скопирована', 'success'),
-                    () => emitAppToast('Не удалось скопировать ссылку', 'error'),
-                  );
+                  void copyInviteShare(
+                    activeCall.peerName?.trim() || 'Встреча',
+                    absoluteInviteUrl(activeCall.inviteUrl!),
+                  ).then((ok) => {
+                    if (ok) emitAppToast('Название и ссылка скопированы', 'success');
+                    else emitAppToast('Не удалось скопировать ссылку', 'error');
+                  });
                 }}
               >
                 <LuCopy size={18} strokeWidth={2.2} aria-hidden />

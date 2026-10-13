@@ -78,11 +78,15 @@ export async function createCallHandler(req: Request, res: Response): Promise<vo
       return;
     }
 
+    const titleRaw = body.title ?? body.name;
+    const title = typeof titleRaw === 'string' ? titleRaw : null;
+
     // Telemost-style: link meeting without a chat/group
     if (type === 'group' && accessMode === 'link' && standalone) {
       const call = await createStandaloneLinkCall({
         initiatorId: uid,
         mediaType,
+        title,
       });
       res.status(201).json({ call });
       return;
@@ -110,6 +114,7 @@ export async function createCallHandler(req: Request, res: Response): Promise<vo
       conversationId,
       mediaType,
       accessMode,
+      title,
     });
     res.status(201).json({ call });
   } catch (err) {
