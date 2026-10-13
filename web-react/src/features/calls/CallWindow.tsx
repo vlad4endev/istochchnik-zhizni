@@ -717,7 +717,10 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         className="call-lk-room"
       >
         <RoomStage callType={activeCall.callType} serverUrl={roomUrl} connectError={connectError} />
-        {activeCall.callKind === 'group' ? <MeetingInviteBar callId={activeCall.callId} /> : null}
+        {/* Ссылка «Скопировать / Поделиться» — только создателю встречи, не подключившимся участникам */}
+        {activeCall.callKind === 'group' && activeCall.isInitiator ? (
+          <MeetingInviteBar callId={activeCall.callId} />
+        ) : null}
         <CallControls videoEnabled={videoEnabled} onHangup={() => void hangup()} />
       </LiveKitRoom>
     </div>
