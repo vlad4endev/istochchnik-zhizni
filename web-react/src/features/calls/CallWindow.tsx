@@ -8,18 +8,31 @@ import {
   useLocalParticipant,
   useConnectionState,
   useRoomContext,
+  useParticipants,
+  useRemoteParticipants,
 } from '@livekit/components-react';
 import {
   ConnectionState,
   DisconnectReason,
   Track,
   VideoPresets,
+  type Participant,
   type Room,
   type RoomOptions,
   type RoomConnectOptions,
 } from 'livekit-client';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { LuCopy, LuMic, LuMicOff, LuMonitorUp, LuPhoneOff, LuShare2, LuVideo, LuVideoOff } from 'react-icons/lu';
+import {
+  LuCopy,
+  LuMic,
+  LuMicOff,
+  LuMonitorUp,
+  LuPhoneOff,
+  LuShare2,
+  LuVideo,
+  LuVideoOff,
+  LuX,
+} from 'react-icons/lu';
 
 import { emitAppToast } from '../../lib/uiFeedback';
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
@@ -68,12 +81,45 @@ function resumeCallMedia(room?: Room | null): void {
   void room.startAudio().catch(() => undefined);
 }
 
+function participantDisplayName(p: Participant): string {
+  const name = String(p.name || '').trim();
+  if (name) return name;
+  const id = String(p.identity || '').replace(/^member:/, '');
+  return id ? `Участник ${id}` : 'Участник';
+}
+
+function participantAvatarUrl(p: Participant): string | undefined {
+  const raw = String(p.metadata || '').trim();
+  if (!raw) return undefined;
+  try {
+    const meta = JSON.parse(raw) as { avatarUrl?: unknown };
+    const path = typeof meta.avatarUrl === 'string' ? meta.avatarUrl.trim() : '';
+    if (!path) return undefined;
+    return resolvePublicUrl(path) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function participantInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return `${parts[0]![0] ?? ''}${parts[parts.length - 1]![0] ?? ''}`.toUpperCase();
+}
+
 function CallControls({
   videoEnabled,
   onHangup,
+  canShare = false,
+  shareOpen = false,
+  onToggleShare,
 }: {
   videoEnabled: boolean;
   onHangup: () => void;
+  canShare?: boolean;
+  shareOpen?: boolean;
+  onToggleShare?: () => void;
 }) {
   const room = useRoomContext();
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
@@ -132,6 +178,17 @@ function CallControls({
 
   return (
     <div className="call-controls">
+      {canShare ? (
+        <button
+          type="button"
+          className={['call-ctrl-btn', shareOpen ? 'call-ctrl-btn--active' : ''].join(' ')}
+          onClick={() => onToggleShare?.()}
+          aria-label={shareOpen ? 'Скрыть ссылку' : 'Поделиться ссылкой'}
+          aria-pressed={shareOpen}
+        >
+          <LuShare2 size={22} />
+        </button>
+      ) : null}
       <button
         type="button"
         className={['call-ctrl-btn', isMuted ? 'call-ctrl-btn--off' : ''].join(' ')}
@@ -167,6 +224,57 @@ function CallControls({
   );
 }
 
+function MeetingParticipantTile({
+  participant,
+  callType,
+  cameraTrack,
+}: {
+  participant: Participant;
+  callType: 'audio' | 'video';
+  cameraTrack: ReturnType<typeof useTracks>[number] | null;
+}) {
+  const name = participantDisplayName(participant);
+  const avatarSrc = participantAvatarUrl(participant);
+  const showVideo =
+    callType === 'video' &&
+    Boolean(cameraTrack && isTrackReference(cameraTrack) && cameraTrack.publication?.track);
+  const speaking = Boolean(participant.isSpeaking);
+
+  return (
+    <div
+      className={[
+        'call-participant-tile',
+        callType === 'audio' ? 'call-participant-tile--audio' : 'call-participant-tile--video',
+        speaking ? 'call-participant-tile--speaking' : '',
+        participant.isLocal ? 'call-participant-tile--local' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <div className="call-participant-tile__media">
+        {showVideo && cameraTrack && isTrackReference(cameraTrack) ? (
+          <VideoTrack
+            trackRef={cameraTrack}
+            className="call-participant-tile__video"
+            manageSubscription={false}
+            playsInline
+            autoPlay
+          />
+        ) : avatarSrc ? (
+          <img src={avatarSrc} alt="" className="call-participant-tile__avatar-img" />
+        ) : (
+          <div className="call-participant-tile__initials" aria-hidden>
+            {participantInitials(name)}
+          </div>
+        )}
+      </div>
+      <p className="call-participant-tile__name">
+        {participant.isLocal ? `${name} (вы)` : name}
+      </p>
+    </div>
+  );
+}
+
 function RoomStage({
   callType,
   connectError,
@@ -182,6 +290,8 @@ function RoomStage({
     ],
     { onlySubscribed: false },
   );
+  const participants = useParticipants();
+  const remotes = useRemoteParticipants();
   const connectionState = useConnectionState();
   const { isCameraEnabled } = useLocalParticipant();
   const peerName = useCallStore((s) => s.activeCall?.peerName ?? 'Собеседник');
@@ -190,6 +300,7 @@ function RoomStage({
   const [elapsed, setElapsed] = useState(0);
   const connected = connectionState === ConnectionState.Connected;
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const isGroup = callKind === 'group';
 
   useEffect(() => {
     if (!connected) {
@@ -213,7 +324,7 @@ function RoomStage({
     kick();
     const t = window.setInterval(kick, 1500);
     return () => window.clearInterval(t);
-  }, [connected, tracks.length]);
+  }, [connected, tracks.length, participants.length]);
 
   const remoteScreen = tracks.find(
     (t) =>
@@ -242,8 +353,9 @@ function RoomStage({
         ? remoteCam
         : null;
   const localVideo = localCam && isTrackReference(localCam) ? localCam : null;
-  const showRemoteVideo = callType === 'video' && Boolean(remoteVideo?.publication?.track);
-  const showLocalPip = callType === 'video' && Boolean(localVideo) && isCameraEnabled;
+  const showRemoteVideo =
+    !isGroup && callType === 'video' && Boolean(remoteVideo?.publication?.track);
+  const showLocalPip = !isGroup && callType === 'video' && Boolean(localVideo) && isCameraEnabled;
 
   const avatarSrc = peerAvatar ? resolvePublicUrl(peerAvatar) : undefined;
   let statusLabel = 'Соединение…';
@@ -256,48 +368,107 @@ function RoomStage({
     statusLabel = 'Ошибка сервера или идут технические работы';
   }
 
+  const cameraByIdentity = useMemo(() => {
+    const map = new Map<string, (typeof tracks)[number]>();
+    for (const t of tracks) {
+      if (t.source !== Track.Source.Camera || !t.publication?.track) continue;
+      map.set(t.participant.identity, t);
+    }
+    return map;
+  }, [tracks]);
+
+  const sortedParticipants = useMemo(() => {
+    return [...participants].sort((a, b) => {
+      if (a.isLocal !== b.isLocal) return a.isLocal ? 1 : -1;
+      return participantDisplayName(a).localeCompare(participantDisplayName(b), 'ru');
+    });
+  }, [participants]);
+
+  const waitingAlone = isGroup && remotes.length === 0;
+
   return (
     <div className="call-stage" ref={stageRef}>
       <div className="call-stage__main">
-        {showRemoteVideo && remoteVideo ? (
-          <VideoTrack
-            trackRef={remoteVideo}
-            className="call-stage__remote-video"
-            manageSubscription={false}
-            playsInline
-            autoPlay
-          />
-        ) : null}
-        {!showRemoteVideo ? (
-          <div className="call-stage__avatar-block">
-            {avatarSrc ? (
-              <img src={avatarSrc} alt="" className="call-stage__avatar" />
-            ) : callKind === 'group' || !peerAvatar ? (
+        {isGroup ? (
+          waitingAlone ? (
+            <div className="call-stage__avatar-block">
               <MeetingAvatar mediaType={callType} size="lg" />
-            ) : (
-              <div className="call-stage__avatar call-stage__avatar--placeholder" aria-hidden />
-            )}
-            <p className="call-stage__name">{peerName}</p>
-            <p className="call-stage__status">{statusLabel}</p>
-          </div>
-        ) : null}
-        {localVideo ? (
-          <div
-            className="call-stage__local-pip"
-            style={showLocalPip ? undefined : { visibility: 'hidden', pointerEvents: 'none' }}
-            aria-hidden={!showLocalPip}
-          >
-            <VideoTrack
-              trackRef={localVideo}
-              className="call-stage__local-video"
-              manageSubscription={false}
-              playsInline
-              autoPlay
-            />
-          </div>
-        ) : null}
+              <p className="call-stage__name">Встреча</p>
+              <p className="call-stage__status">
+                {connectError || (connected ? 'Ожидание участников…' : statusLabel)}
+              </p>
+            </div>
+          ) : (
+            <div
+              className={[
+                'call-participants',
+                callType === 'audio' ? 'call-participants--audio' : 'call-participants--video',
+                sortedParticipants.length <= 2
+                  ? 'call-participants--few'
+                  : sortedParticipants.length <= 4
+                    ? 'call-participants--mid'
+                    : 'call-participants--many',
+              ].join(' ')}
+              aria-label="Участники встречи"
+            >
+              {sortedParticipants.map((p) => (
+                <MeetingParticipantTile
+                  key={p.identity || p.sid}
+                  participant={p}
+                  callType={callType}
+                  cameraTrack={cameraByIdentity.get(p.identity) ?? null}
+                />
+              ))}
+            </div>
+          )
+        ) : (
+          <>
+            {showRemoteVideo && remoteVideo ? (
+              <VideoTrack
+                trackRef={remoteVideo}
+                className="call-stage__remote-video"
+                manageSubscription={false}
+                playsInline
+                autoPlay
+              />
+            ) : null}
+            {!showRemoteVideo ? (
+              <div className="call-stage__avatar-block">
+                {avatarSrc ? (
+                  <img src={avatarSrc} alt="" className="call-stage__avatar" />
+                ) : !peerAvatar ? (
+                  <MeetingAvatar mediaType={callType} size="lg" />
+                ) : (
+                  <div className="call-stage__avatar call-stage__avatar--placeholder" aria-hidden />
+                )}
+                <p className="call-stage__name">{peerName}</p>
+                <p className="call-stage__status">{statusLabel}</p>
+              </div>
+            ) : null}
+            {localVideo ? (
+              <div
+                className="call-stage__local-pip"
+                style={showLocalPip ? undefined : { visibility: 'hidden', pointerEvents: 'none' }}
+                aria-hidden={!showLocalPip}
+              >
+                <VideoTrack
+                  trackRef={localVideo}
+                  className="call-stage__local-video"
+                  manageSubscription={false}
+                  playsInline
+                  autoPlay
+                />
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
-      {showRemoteVideo ? (
+      {isGroup && !waitingAlone ? (
+        <p className="call-stage__status call-stage__status--bar">
+          {connectError || `${statusLabel} · ${sortedParticipants.length}`}
+        </p>
+      ) : null}
+      {!isGroup && showRemoteVideo ? (
         <p className="call-stage__status call-stage__status--bar">{statusLabel}</p>
       ) : null}
       <RoomAudioRenderer />
@@ -306,8 +477,8 @@ function RoomStage({
   );
 }
 
-/** Панель ссылки конференции (Телемост/Zoom): копировать / ждать участников. */
-function MeetingInviteBar({ callId }: { callId: string }) {
+/** Панель ссылки: на старте раскрыта, после подключения участников — сворачивается. */
+function MeetingInviteBar({ callId, onCollapse }: { callId: string; onCollapse: () => void }) {
   const inviteUrl = useCallStore((s) => s.activeCall?.inviteUrl ?? null);
   const setInviteUrl = useCallStore((s) => s.setInviteUrl);
   const [busy, setBusy] = useState(false);
@@ -360,7 +531,15 @@ function MeetingInviteBar({ callId }: { callId: string }) {
   }, [copy, displayUrl]);
 
   return (
-    <div className="call-invite-bar">
+    <div className="call-invite-bar" role="dialog" aria-label="Ссылка для подключения">
+      <button
+        type="button"
+        className="call-invite-bar__close"
+        onClick={onCollapse}
+        aria-label="Свернуть"
+      >
+        <LuX size={18} strokeWidth={2.2} />
+      </button>
       <p className="call-invite-bar__title">Ссылка для подключения</p>
       <p className="call-invite-bar__hint">
         Отправьте в чат или мессенджер — участники зайдут по ссылке
@@ -389,6 +568,60 @@ function MeetingInviteBar({ callId }: { callId: string }) {
         </button>
       </div>
     </div>
+  );
+}
+
+/** Хост: панель ссылки + кнопка «Поделиться» у микрофона; автосворачивание при входе участников. */
+function MeetingHostChrome({
+  callId,
+  videoEnabled,
+  onHangup,
+}: {
+  callId: string;
+  videoEnabled: boolean;
+  onHangup: () => void;
+}) {
+  const remotes = useRemoteParticipants();
+  const [inviteOpen, setInviteOpen] = useState(true);
+  const hadRemotes = useRef(false);
+
+  useEffect(() => {
+    if (remotes.length === 0) return;
+    if (!hadRemotes.current) {
+      hadRemotes.current = true;
+      setInviteOpen(false);
+    }
+  }, [remotes.length]);
+
+  // Prefetch invite URL while collapsed so share opens instantly.
+  const inviteUrl = useCallStore((s) => s.activeCall?.inviteUrl ?? null);
+  const setInviteUrl = useCallStore((s) => s.setInviteUrl);
+  useEffect(() => {
+    if (inviteUrl) return;
+    let cancelled = false;
+    void createCallInvitation(callId)
+      .then((inv) => {
+        if (!cancelled) setInviteUrl(inv.inviteUrl);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [callId, inviteUrl, setInviteUrl]);
+
+  return (
+    <>
+      {inviteOpen ? (
+        <MeetingInviteBar callId={callId} onCollapse={() => setInviteOpen(false)} />
+      ) : null}
+      <CallControls
+        videoEnabled={videoEnabled}
+        onHangup={onHangup}
+        canShare
+        shareOpen={inviteOpen}
+        onToggleShare={() => setInviteOpen((v) => !v)}
+      />
+    </>
   );
 }
 
@@ -702,11 +935,15 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         className="call-lk-room"
       >
         <RoomStage callType={activeCall.callType} connectError={connectError} />
-        {/* Ссылка «Скопировать / Поделиться» — только создателю встречи, не подключившимся участникам */}
         {activeCall.callKind === 'group' && activeCall.isInitiator ? (
-          <MeetingInviteBar callId={activeCall.callId} />
-        ) : null}
-        <CallControls videoEnabled={videoEnabled} onHangup={() => void hangup()} />
+          <MeetingHostChrome
+            callId={activeCall.callId}
+            videoEnabled={videoEnabled}
+            onHangup={() => void hangup()}
+          />
+        ) : (
+          <CallControls videoEnabled={videoEnabled} onHangup={() => void hangup()} />
+        )}
       </LiveKitRoom>
     </div>
   );
