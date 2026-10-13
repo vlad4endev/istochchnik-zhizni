@@ -81,6 +81,8 @@ export type CallPublic = {
   status: CallStatus;
   /** null for standalone Telemost-style meetings without a chat */
   conversationId: string | null;
+  /** Пользовательское название встречи (из metadata.title). */
+  title?: string | null;
   initiatedBy: number;
   accessMode: CallAccessMode;
   createdAt: string;
@@ -143,6 +145,30 @@ function maxGroupParticipants(): number {
 function publicWebOrigin(): string {
   const o = String(process.env.PUBLIC_WEB_ORIGIN ?? process.env.VITE_PWA_ORIGIN ?? '').trim();
   return o.replace(/\/$/, '');
+}
+
+const MAX_CALL_TITLE_LEN = 80;
+
+export function defaultCallTitle(mediaType: CallMediaType, standalone = false): string {
+  if (standalone) return mediaType === 'video' ? 'Видеовстреча' : 'Аудиовстреча';
+  return mediaType === 'video' ? 'Видеоконференция' : 'Аудиоконференция';
+}
+
+/** Trim + length limit; empty → default label. */
+export function normalizeCallTitle(
+  raw: unknown,
+  mediaType: CallMediaType,
+  standalone = false,
+): string {
+  const t = typeof raw === 'string' ? raw.trim().replace(/\s+/g, ' ') : '';
+  if (!t) return defaultCallTitle(mediaType, standalone);
+  return t.slice(0, MAX_CALL_TITLE_LEN);
+}
+
+function titleFromCallMetadata(call: Pick<CallRow, 'metadata' | 'media_type' | 'conversation_id'>): string | null {
+  const t = call.metadata?.title;
+  if (typeof t === 'string' && t.trim()) return t.trim().slice(0, MAX_CALL_TITLE_LEN);
+  return null;
 }
 
 function hashInviteToken(raw: string): string {
@@ -288,6 +314,7 @@ function toPublicCall(
     mediaType: call.media_type,
     status: call.status,
     conversationId: call.conversation_id,
+    title: titleFromCallMetadata(call),
     initiatedBy: call.initiated_by,
     accessMode: call.access_mode,
     createdAt: call.created_at,
@@ -566,10 +593,13 @@ export async function createGroupCall(input: {
   conversationId: string;
   mediaType: CallMediaType;
   accessMode?: CallAccessMode;
+  /** Отображаемое название конференции (шаринг / UI). */
+  title?: string | null;
 }): Promise<CallPublic> {
   if (!isCallsEnabled()) throw new CallsError('disabled', 'Звонки отключены');
 
   const accessMode: CallAccessMode = input.accessMode === 'link' ? 'link' : 'closed';
+  const callTitle = normalizeCallTitle(input.title, input.mediaType, false);
   const convType = await getConversationType(input.conversationId);
   // closed — только группа/канал; link (как Телемост/Zoom) — любой чат, включая личный.
   if (accessMode === 'closed' && convType !== 'group' && convType !== 'channel') {
@@ -603,9 +633,17 @@ export async function createGroupCall(input: {
          initiated_by, access_mode, started_at, metadata
        ) VALUES (
          $1::uuid, 'group', $2, 'waiting', $3::bigint, $4, $5, $6, NOW(),
-         '{}'::jsonb
+         $7::jsonb
        ) RETURNING *`,
-      [callId, input.mediaType, input.conversationId, roomName, input.initiatorId, accessMode],
+      [
+        callId,
+        input.mediaType,
+        input.conversationId,
+        roomName,
+        input.initiatorId,
+        accessMode,
+        JSON.stringify({ title: callTitle }),
+      ],
     );
     await client.query(
       `INSERT INTO call_participants (call_id, user_id, role, status, joined_at)
@@ -621,7 +659,7 @@ export async function createGroupCall(input: {
       roomName,
       emptyTimeoutSec: 3600,
       maxParticipants: maxGroupParticipants(),
-      metadata: JSON.stringify({ callId: call.id, type: 'group' }),
+      metadata: JSON.stringify({ callId: call.id, type: 'group', title: callTitle }),
     });
   } catch (e) {
     console.error('[calls] LiveKit group room failed:', e instanceof Error ? e.message : e);
@@ -653,7 +691,7 @@ export async function createGroupCall(input: {
     if (mid === input.initiatorId) continue;
     await sendWs(mid, startedEvt);
     void sendPushNotification(mid, {
-      title: input.mediaType === 'video' ? 'Видеоконференция' : 'Аудиоконференция',
+      title: callTitle,
       body: `${initiatorProfile.name} · ${meta?.title?.trim() || (convType === 'private' ? 'Чат' : 'Группа')}`,
       type: 'group_call_started',
       callId: call.id,
@@ -665,10 +703,7 @@ export async function createGroupCall(input: {
 
   // Системное сообщение со ссылкой + live fan-out msg:new (чтобы чат обновился сразу).
   try {
-    const content =
-      input.mediaType === 'video'
-        ? 'Создана видеоконференция'
-        : 'Создана аудиоконференция';
+    const content = `Создана конференция «${callTitle}»`;
     const contentForDb = encryptMessageText(content);
     const payload = {
       kind: 'call_event',
@@ -679,6 +714,7 @@ export async function createGroupCall(input: {
       access_mode: accessMode,
       invite_path: invitePath,
       invite_url: inviteUrl,
+      title: callTitle,
       initiated_by: input.initiatorId,
     };
     await query(`UPDATE conversations SET updated_at = NOW() WHERE id = $1::bigint`, [
@@ -742,6 +778,8 @@ export async function createGroupCall(input: {
 export async function createStandaloneLinkCall(input: {
   initiatorId: number;
   mediaType: CallMediaType;
+  /** Отображаемое название встречи (шаринг / join / UI). */
+  title?: string | null;
 }): Promise<CallPublic> {
   if (!isCallsEnabled()) throw new CallsError('disabled', 'Звонки отключены');
 
@@ -749,6 +787,7 @@ export async function createStandaloneLinkCall(input: {
     throw new CallsError('already_in_call', 'Вы уже участвуете в другом звонке');
   }
 
+  const callTitle = normalizeCallTitle(input.title, input.mediaType, true);
   const callId = randomUUID();
   const roomName = `meet_${callId.replace(/-/g, '')}`;
 
@@ -759,9 +798,15 @@ export async function createStandaloneLinkCall(input: {
          initiated_by, access_mode, started_at, metadata
        ) VALUES (
          $1::uuid, 'group', $2, 'waiting', NULL, $3, $4, 'link', NOW(),
-         jsonb_build_object('standalone', true)
+         $5::jsonb
        ) RETURNING *`,
-      [callId, input.mediaType, roomName, input.initiatorId],
+      [
+        callId,
+        input.mediaType,
+        roomName,
+        input.initiatorId,
+        JSON.stringify({ standalone: true, title: callTitle }),
+      ],
     );
     await client.query(
       `INSERT INTO call_participants (call_id, user_id, role, status, joined_at)
@@ -777,7 +822,7 @@ export async function createStandaloneLinkCall(input: {
       roomName,
       emptyTimeoutSec: 3600,
       maxParticipants: maxGroupParticipants(),
-      metadata: JSON.stringify({ callId: call.id, type: 'standalone' }),
+      metadata: JSON.stringify({ callId: call.id, type: 'standalone', title: callTitle }),
     });
   } catch (e) {
     console.error('[calls] LiveKit standalone room failed:', e instanceof Error ? e.message : e);
@@ -1287,7 +1332,7 @@ export async function getInvitationPreview(rawToken: string, memberId: number | 
   const res = await query(
     `SELECT i.id, i.expires_at, i.revoked_at, i.max_uses, i.use_count,
             c.id AS call_id, c.status AS call_status, c.media_type, c.access_mode,
-            c.conversation_id, c.type AS call_type
+            c.conversation_id, c.type AS call_type, c.metadata AS call_metadata
      FROM call_invitations i
      JOIN calls c ON c.id = i.call_id
      WHERE i.token_hash = $1
@@ -1317,7 +1362,17 @@ export async function getInvitationPreview(rawToken: string, memberId: number | 
     };
   }
 
-  let conversationTitle: string | null = null;
+  const mediaType = row.media_type as CallMediaType;
+  const callMeta =
+    row.call_metadata && typeof row.call_metadata === 'object' && !Array.isArray(row.call_metadata)
+      ? (row.call_metadata as Record<string, unknown>)
+      : {};
+  const namedTitle =
+    typeof callMeta.title === 'string' && callMeta.title.trim()
+      ? callMeta.title.trim().slice(0, MAX_CALL_TITLE_LEN)
+      : null;
+
+  let conversationTitle: string | null = namedTitle;
   let canJoin = false;
   const convId =
     row.conversation_id != null && String(row.conversation_id).trim() !== ''
@@ -1329,21 +1384,22 @@ export async function getInvitationPreview(rawToken: string, memberId: number | 
       return {
         valid: true,
         reason: 'no_group_access',
-        mediaType: row.media_type as CallMediaType,
+        mediaType,
         callStatus: row.call_status as CallStatus,
+        conversationTitle: namedTitle,
         requiresAuth: true,
         canJoin: false,
         callId: String(row.call_id),
       };
     }
     canJoin = row.access_mode === 'link' || inConv;
-    if (inConv && convId) {
+    if (!conversationTitle && inConv && convId) {
       const meta = await getConversationMeta(convId);
       conversationTitle = meta?.title ?? null;
-    } else if (!convId && row.access_mode === 'link') {
-      conversationTitle =
-        row.media_type === 'video' ? 'Видеовстреча' : 'Аудиовстреча';
     }
+  }
+  if (!conversationTitle && !convId && row.access_mode === 'link') {
+    conversationTitle = defaultCallTitle(mediaType, true);
   }
 
   const countRes = await query(
@@ -1353,7 +1409,7 @@ export async function getInvitationPreview(rawToken: string, memberId: number | 
 
   return {
     valid: true,
-    mediaType: row.media_type as CallMediaType,
+    mediaType,
     callStatus: row.call_status as CallStatus,
     conversationTitle,
     participantCount: Number(countRes.rows[0]?.c ?? 0),

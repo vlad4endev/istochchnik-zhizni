@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'crypto';
 
-import { CallsError } from './callsService';
+import { CallsError, defaultCallTitle, normalizeCallTitle } from './callsService';
 
 function hashInviteToken(raw: string): string {
   return createHash('sha256').update(raw, 'utf8').digest('hex');
@@ -24,6 +24,12 @@ async function main(): Promise<void> {
   // Opaque invite must not equal call UUID alone
   const callId = '11111111-1111-1111-1111-111111111111';
   assert.notEqual(hashInviteToken(callId), callId);
+
+  assert.equal(defaultCallTitle('video', true), 'Видеовстреча');
+  assert.equal(defaultCallTitle('audio', false), 'Аудиоконференция');
+  assert.equal(normalizeCallTitle('  Молитва   вечера  ', 'video', true), 'Молитва вечера');
+  assert.equal(normalizeCallTitle('', 'audio', true), 'Аудиовстреча');
+  assert.equal(normalizeCallTitle('x'.repeat(100), 'video', true).length, 80);
 
   console.log('callsService (unit) ok');
 }

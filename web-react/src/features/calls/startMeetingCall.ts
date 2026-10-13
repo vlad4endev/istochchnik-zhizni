@@ -3,6 +3,7 @@ import { emitAppToast } from '../../lib/uiFeedback';
 import { createGroupCall, createStandaloneCall, type CallMediaType } from './callsApi';
 import { unlockCallAudio } from './callRingtone';
 import { useCallStore } from './callStore';
+import { copyInviteShare } from './inviteShare';
 import { requestCallNotificationsFromUserGesture } from './incomingCallBackground';
 
 const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
@@ -15,11 +16,14 @@ export type StartMeetingOptions = {
   peerAvatar?: string;
   /** Скопировать ссылку в буфер после создания. */
   copyLink?: boolean;
+  /** Пользовательское название конференции. */
+  title?: string;
 };
 
 export type StandaloneMeetingResult = {
   inviteUrl: string | null;
   callId: string;
+  title: string;
 };
 
 /**
@@ -40,13 +44,20 @@ export async function startMeetingCall(opts: StartMeetingOptions): Promise<strin
     conversationId: opts.conversationId,
     mediaType,
     accessMode: 'link',
+    title: opts.title,
   });
+
+  const displayName =
+    call.title?.trim() ||
+    opts.peerName?.trim() ||
+    opts.title?.trim() ||
+    'Конференция';
 
   useCallStore.getState().openCall({
     callId: call.id,
     conversationId: opts.conversationId,
     peerId: 0,
-    peerName: opts.peerName?.trim() || 'Конференция',
+    peerName: displayName,
     peerAvatar: opts.peerAvatar ?? '',
     callType: mediaType,
     isInitiator: true,
@@ -56,10 +67,10 @@ export async function startMeetingCall(opts: StartMeetingOptions): Promise<strin
   });
 
   if (opts.copyLink !== false && call.inviteUrl) {
-    try {
-      await navigator.clipboard.writeText(call.inviteUrl);
-      emitAppToast('Ссылка на звонок скопирована — отправьте её участникам', 'success');
-    } catch {
+    const ok = await copyInviteShare(displayName, call.inviteUrl);
+    if (ok) {
+      emitAppToast('Название и ссылка скопированы — отправьте участникам', 'success');
+    } else {
       emitAppToast('Конференция создана. Скопируйте ссылку в окне звонка.', 'info');
     }
   } else {
@@ -78,6 +89,7 @@ export async function startMeetingCall(opts: StartMeetingOptions): Promise<strin
  */
 export async function startStandaloneMeetingCall(
   mediaType: CallMediaType = 'video',
+  opts?: { title?: string },
 ): Promise<StandaloneMeetingResult | null> {
   if (!CALLS_FEATURE_ENABLED) {
     emitAppToast('Звонки временно отключены', 'info');
@@ -85,12 +97,13 @@ export async function startStandaloneMeetingCall(
   }
 
   const kind: CallMediaType = mediaType === 'audio' ? 'audio' : 'video';
-  const title = kind === 'video' ? 'Видеовстреча' : 'Аудиовстреча';
+  const fallback = kind === 'video' ? 'Видеовстреча' : 'Аудиовстреча';
 
   requestCallNotificationsFromUserGesture();
   unlockCallAudio();
 
-  const call = await createStandaloneCall({ mediaType: kind });
+  const call = await createStandaloneCall({ mediaType: kind, title: opts?.title });
+  const title = call.title?.trim() || opts?.title?.trim() || fallback;
 
   useCallStore.getState().openCall({
     callId: call.id,
@@ -106,15 +119,15 @@ export async function startStandaloneMeetingCall(
   });
 
   if (call.inviteUrl) {
-    try {
-      await navigator.clipboard.writeText(call.inviteUrl);
-      emitAppToast('Ссылка на встречу скопирована — отправьте её участникам', 'success');
-    } catch {
+    const ok = await copyInviteShare(title, call.inviteUrl);
+    if (ok) {
+      emitAppToast('Название и ссылка скопированы — отправьте участникам', 'success');
+    } else {
       emitAppToast('Встреча создана. Скопируйте ссылку в окне звонка.', 'info');
     }
   } else {
     emitAppToast(kind === 'video' ? 'Видеовстреча создана' : 'Аудиовстреча создана', 'success');
   }
 
-  return { callId: call.id, inviteUrl: call.inviteUrl ?? null };
+  return { callId: call.id, inviteUrl: call.inviteUrl ?? null, title };
 }

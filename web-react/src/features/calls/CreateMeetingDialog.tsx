@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useId, useState, type ReactNode } from 'react';
 import { LuLink2, LuMic, LuMicOff, LuVideo, LuVideoOff, LuX } from 'react-icons/lu';
 
 import { BodyPortal } from '../../components/BodyPortal';
@@ -16,13 +16,17 @@ type CreateMeetingDialogProps = {
   onCreated: () => void;
 };
 
+const MAX_TITLE = 80;
+
 export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMeetingDialogProps) {
   const isVideo = mediaType === 'video';
+  const nameId = useId();
+  const [meetingName, setMeetingName] = useState('');
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(isVideo);
   const [busy, setBusy] = useState(false);
 
-  const title = isVideo ? 'Видеовстреча' : 'Аудиовстреча';
+  const defaultTitle = isVideo ? 'Видеовстреча' : 'Аудиовстреча';
   const cta = isVideo ? 'Создать видеовстречу' : 'Создать аудиовстречу';
   const hint = isVideo
     ? 'Создаётся только звонок по ссылке — без группы в чатах. После завершения всё закрывается.'
@@ -50,7 +54,8 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
           return;
         }
       }
-      const result = await startStandaloneMeetingCall(mediaType);
+      const title = meetingName.trim().slice(0, MAX_TITLE) || undefined;
+      const result = await startStandaloneMeetingCall(mediaType, { title });
       if (result?.callId) {
         onCreated();
       }
@@ -59,7 +64,7 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
     } finally {
       setBusy(false);
     }
-  }, [busy, camOn, isVideo, mediaType, micOn, onCreated]);
+  }, [busy, camOn, isVideo, mediaType, meetingName, micOn, onCreated]);
 
   return (
     <BodyPortal>
@@ -84,9 +89,31 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
           </div>
 
           <h1 id="telemost-create-title" className="telemost-create__title">
-            {title}
+            {defaultTitle}
           </h1>
           <p className="telemost-create__lead">{hint}</p>
+
+          <label className="telemost-create__name" htmlFor={nameId}>
+            <span className="telemost-create__name-label">Название встречи</span>
+            <input
+              id={nameId}
+              type="text"
+              className="telemost-create__name-input"
+              value={meetingName}
+              onChange={(e) => setMeetingName(e.target.value.slice(0, MAX_TITLE))}
+              placeholder={defaultTitle}
+              maxLength={MAX_TITLE}
+              autoComplete="off"
+              disabled={busy}
+              enterKeyHint="done"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void create();
+                }
+              }}
+            />
+          </label>
 
           <div className="telemost-create__devices" role="group" aria-label="Устройства перед входом">
             <DeviceToggle
@@ -115,7 +142,7 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
 
           <p className="telemost-create__foot">
             <LuLink2 size={16} aria-hidden />
-            Ссылка появится сразу после создания
+            В ссылке для шаринга будет название и адрес
           </p>
         </div>
       </div>

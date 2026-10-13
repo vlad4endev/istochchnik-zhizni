@@ -165,14 +165,9 @@ export function CallJoinPage() {
   }
 
   const isVideo = preview.mediaType === 'video';
-  const title = isVideo ? 'Видеовстреча' : 'Аудиовстреча';
-  const subtitle =
-    preview.conversationTitle &&
-    preview.conversationTitle !== title &&
-    preview.conversationTitle !== 'Видеоконференция' &&
-    preview.conversationTitle !== 'Аудиоконференция'
-      ? preview.conversationTitle
-      : 'Вас пригласили подключиться по ссылке';
+  const defaultTitle = isVideo ? 'Видеовстреча' : 'Аудиовстреча';
+  const title = preview.conversationTitle?.trim() || defaultTitle;
+  const subtitle = 'Вас пригласили подключиться по ссылке';
 
   return (
     <div className="telemost-join" role="main">

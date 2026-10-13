@@ -1102,12 +1102,59 @@
   color: rgba(255, 255, 255, 0.68);
 }
 
+.telemost-create__name {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: min(100%, 21rem);
+  margin-top: 22px;
+  text-align: left;
+}
+
+.telemost-create__name-label {
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.telemost-create__name-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(8, 10, 16, 0.45);
+  color: #fff;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.telemost-create__name-input::placeholder {
+  color: rgba(255, 255, 255, 0.38);
+  font-weight: 500;
+}
+
+.telemost-create__name-input:focus {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(8, 10, 16, 0.62);
+}
+
+.telemost-create__name-input:disabled {
+  opacity: 0.55;
+}
+
 .telemost-create__devices {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
-  margin-top: 26px;
+  margin-top: 22px;
   width: 100%;
 }
 
