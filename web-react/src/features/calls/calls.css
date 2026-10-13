@@ -1593,9 +1593,22 @@
 }
 
 @media (max-width: 720px) {
+  /* Не растягиваем плитки на всю высоту — иначе cover режет портрет до лба. */
+  .call-participants--video {
+    align-content: center;
+    justify-items: center;
+    grid-auto-rows: auto;
+  }
+
+  .call-participants--video.call-participants--n1,
   .call-participants--video.call-participants--n2 {
-    grid-template-columns: 1fr;
-    grid-template-rows: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    max-width: min(420px, 100%);
+  }
+
+  .call-participants--video.call-participants--n2 {
+    gap: 10px;
   }
 
   .call-participants--video.call-participants--n3,
@@ -1610,6 +1623,41 @@
   .call-participants--video.call-participants--n9,
   .call-participants--video.call-participants--many {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .call-participants--video .call-participant-tile--video {
+    height: auto;
+    max-width: min(100%, 420px);
+  }
+
+  .call-participants--video .call-participant-tile--video .call-participant-tile__media {
+    aspect-ratio: 3 / 4;
+    width: 100%;
+    height: auto;
+    flex: 0 0 auto;
+    max-height: min(46vh, 420px);
+  }
+
+  .call-participants--video.call-participants--n1 .call-participant-tile--video .call-participant-tile__media {
+    max-height: min(58vh, 520px);
+  }
+
+  .call-participant-tile__video {
+    object-fit: contain;
+    object-position: center center;
+  }
+
+  .call-speaker-layout__spotlight .call-participant-tile--video .call-participant-tile__media {
+    aspect-ratio: 3 / 4;
+    width: min(100%, 420px);
+    height: auto;
+    min-height: 0;
+    max-height: min(54vh, 520px);
+    margin: 0 auto;
+  }
+
+  .call-speaker-layout__strip .call-participant-tile--video .call-participant-tile__media {
+    aspect-ratio: 3 / 4;
   }
 
   .call-ctrl {
@@ -1650,8 +1698,10 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center 28%;
   display: block;
   border-radius: inherit;
+  background: #0b0b0c;
 }
 
 .call-participant-tile--audio .call-participant-tile__avatar-img,

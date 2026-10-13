@@ -1616,6 +1616,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   }, [creds?.token, creds?.url, connectError, lkConnected]);
 
   const isGroupCall = activeCall.callKind === 'group';
+  const mobileCapture = isMobileUa();
   const roomOptions = useMemo<RoomOptions>(
     () => ({
       // Группы: adaptive/dynacast снижают нагрузку при многих участниках.
@@ -1624,7 +1625,13 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
       dynacast: isGroupCall,
       disconnectOnPageLeave: false,
       videoCaptureDefaults: {
-        resolution: isGroupCall ? VideoPresets.h360.resolution : VideoPresets.h540.resolution,
+        // На телефоне не форсируем landscape 16:9 (VideoPresets.h360) —
+        // иначе фронтальная камера обрезает портрет до «только лоб».
+        resolution: mobileCapture
+          ? { width: 720, height: 1280, frameRate: 24 }
+          : isGroupCall
+            ? VideoPresets.h360.resolution
+            : VideoPresets.h540.resolution,
         facingMode: 'user',
       },
       audioCaptureDefaults: {
@@ -1638,10 +1645,12 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         videoCodec: 'vp8',
         dtx: true,
         red: true,
-        ...(isGroupCall ? { videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360] } : {}),
+        ...(isGroupCall && !mobileCapture
+          ? { videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360] }
+          : {}),
       },
     }),
-    [isGroupCall],
+    [isGroupCall, mobileCapture],
   );
 
   const connectOptions = useMemo<RoomConnectOptions>(
