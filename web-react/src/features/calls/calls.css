@@ -751,18 +751,32 @@
   letter-spacing: 0.01em;
 }
 
-/* Telemost-style participant grid */
+/* Когда есть сетка участников — колонка на всю сцену (не крошечный блок по центру). */
+.call-stage__main:has(.call-participants) {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 10px;
+}
+
+/* Telemost-style participant grid — адаптив по числу участников */
 .call-participants {
   --cp-brand: var(--primary, #7d3640);
-  width: min(920px, 100%);
+  --cp-gap: 12px;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  max-width: min(1280px, 100%);
   max-height: 100%;
+  margin: 0 auto;
   overflow-x: hidden;
   overflow-y: auto;
   display: grid;
-  gap: 16px 20px;
-  align-content: start;
-  justify-content: center;
-  padding: 8px 4px;
+  gap: var(--cp-gap);
+  align-content: stretch;
+  justify-content: stretch;
+  grid-auto-rows: minmax(0, 1fr);
+  padding: 4px 2px;
   box-sizing: border-box;
   z-index: 2;
   -webkit-overflow-scrolling: touch;
@@ -776,6 +790,7 @@
   overflow: hidden;
   background: #0b0b0c;
   z-index: 2;
+  flex: 0 0 auto;
 }
 
 .call-group-screenshare__video {
@@ -787,36 +802,91 @@
   background: #0b0b0c;
 }
 
-.call-participants--audio.call-participants--few {
-  grid-template-columns: repeat(auto-fit, minmax(140px, 180px));
+/* Рядом с демонстрацией экрана сетка компактнее */
+.call-stage__main:has(.call-group-screenshare) .call-participants {
+  max-height: min(38vh, 320px);
+  flex: 0 1 auto;
+  align-content: start;
+  grid-auto-rows: minmax(120px, 1fr);
 }
 
-.call-participants--audio.call-participants--mid {
-  grid-template-columns: repeat(auto-fit, minmax(120px, 160px));
+/* —— Видео: мало участников → крупные плитки на весь экран —— */
+.call-participants--video.call-participants--n1 {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: min(720px, 100%);
 }
 
-.call-participants--audio.call-participants--many {
-  grid-template-columns: repeat(auto-fit, minmax(100px, 140px));
+.call-participants--video.call-participants--n2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: min(1280px, 100%);
 }
 
-.call-participants--video.call-participants--few {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 320px));
+.call-participants--video.call-participants--n3,
+.call-participants--video.call-participants--n4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: min(1100px, 100%);
 }
 
-.call-participants--video.call-participants--mid {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 260px));
+.call-participants--video.call-participants--n5,
+.call-participants--video.call-participants--n6 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.call-participants--video.call-participants--n7,
+.call-participants--video.call-participants--n8,
+.call-participants--video.call-participants--n9 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .call-participants--video.call-participants--many {
-  grid-template-columns: repeat(auto-fit, minmax(140px, 200px));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: start;
+  grid-auto-rows: minmax(140px, auto);
+}
+
+/* —— Аудио: круги крупнее при малом числе —— */
+.call-participants--audio {
+  align-content: center;
+  justify-items: center;
+  grid-auto-rows: auto;
+}
+
+.call-participants--audio.call-participants--n1,
+.call-participants--audio.call-participants--n2 {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  max-width: min(720px, 100%);
+}
+
+.call-participants--audio.call-participants--n3,
+.call-participants--audio.call-participants--n4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: min(640px, 100%);
+}
+
+.call-participants--audio.call-participants--n5,
+.call-participants--audio.call-participants--n6,
+.call-participants--audio.call-participants--n7,
+.call-participants--audio.call-participants--n8,
+.call-participants--audio.call-participants--n9 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: min(720px, 100%);
+}
+
+.call-participants--audio.call-participants--many {
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  max-width: min(900px, 100%);
 }
 
 .call-participant-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 8px;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
 }
 
 .call-participant-tile__media {
@@ -838,17 +908,57 @@
 }
 
 .call-participant-tile--audio .call-participant-tile__media {
-  width: min(148px, 38vw);
-  height: min(148px, 38vw);
+  width: min(168px, 42vw);
+  height: min(168px, 42vw);
   border-radius: 50%;
   border: 3px solid rgba(255, 255, 255, 0.14);
 }
 
+.call-participants--audio.call-participants--n1 .call-participant-tile--audio .call-participant-tile__media,
+.call-participants--audio.call-participants--n2 .call-participant-tile--audio .call-participant-tile__media {
+  width: min(220px, 46vw);
+  height: min(220px, 46vw);
+}
+
 .call-participant-tile--video .call-participant-tile__media {
   width: 100%;
-  aspect-ratio: 4 / 3;
-  border-radius: 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* При многих — фиксируем пропорции, чтобы сетка не разъезжалась */
+.call-participants--video.call-participants--many .call-participant-tile--video .call-participant-tile__media,
+.call-participants--video.call-participants--n7 .call-participant-tile--video .call-participant-tile__media,
+.call-participants--video.call-participants--n8 .call-participant-tile--video .call-participant-tile__media,
+.call-participants--video.call-participants--n9 .call-participant-tile--video .call-participant-tile__media {
+  aspect-ratio: 4 / 3;
+  height: auto;
+  flex: 0 1 auto;
+}
+
+@media (max-width: 720px) {
+  .call-participants--video.call-participants--n2 {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .call-participants--video.call-participants--n3,
+  .call-participants--video.call-participants--n4 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .call-participants--video.call-participants--n5,
+  .call-participants--video.call-participants--n6,
+  .call-participants--video.call-participants--n7,
+  .call-participants--video.call-participants--n8,
+  .call-participants--video.call-participants--n9,
+  .call-participants--video.call-participants--many {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .call-participant-tile--speaking .call-participant-tile__media {

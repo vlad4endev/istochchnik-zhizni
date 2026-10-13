@@ -21,7 +21,7 @@ import {
   type RoomOptions,
   type RoomConnectOptions,
 } from 'livekit-client';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   LuCopy,
   LuMic,
@@ -486,12 +486,15 @@ function RoomStage({
                 className={[
                   'call-participants',
                   callType === 'audio' ? 'call-participants--audio' : 'call-participants--video',
-                  sortedParticipants.length <= 2
-                    ? 'call-participants--few'
-                    : sortedParticipants.length <= 4
-                      ? 'call-participants--mid'
-                      : 'call-participants--many',
+                  sortedParticipants.length <= 9
+                    ? `call-participants--n${sortedParticipants.length}`
+                    : 'call-participants--many',
                 ].join(' ')}
+                style={
+                  {
+                    '--cp-count': String(Math.max(1, sortedParticipants.length)),
+                  } as CSSProperties
+                }
                 aria-label="Участники встречи"
               >
                 {sortedParticipants.map((p) => (
