@@ -245,11 +245,15 @@ export default defineConfig(({ mode }) => {
                  * После изменения манифеста пользователю обычно нужно обновить/переустановить PWA.
                  */
                 url_handlers: [{ origin: pwaOrigin }],
+                /** Preference hint: open in-scope links in the installed app when the UA supports it. */
+                handle_links: 'preferred',
                 /**
-                 * При открытии ссылки стараемся фокусировать существующее окно приложения,
-                 * а не плодить отдельные инстансы.
+                 * navigate-existing: открыть/перейти к URL ссылки в уже запущенной PWA
+                 * (звонок /call/join/... не теряется). Fallback `auto` для старых UA.
                  */
-                launch_handler: { client_mode: 'focus-existing' },
+                launch_handler: {
+                  client_mode: ['navigate-existing', 'auto'],
+                },
               } as Record<string, unknown>)
             : {}),
         },
