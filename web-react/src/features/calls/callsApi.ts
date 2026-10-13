@@ -145,9 +145,16 @@ export async function cancelCall(callId: string): Promise<CallPublic> {
   }
 }
 
-export async function endCall(callId: string): Promise<CallPublic> {
+export async function endCall(
+  callId: string,
+  opts?: { endForAll?: boolean },
+): Promise<CallPublic> {
   try {
-    const { data } = await apiClient.post<{ call: CallPublic }>(`/api/calls/${callId}/end`);
+    const body = opts?.endForAll ? { endForAll: true } : {};
+    const { data } = await apiClient.post<{ call: CallPublic }>(
+      `/api/calls/${callId}/end`,
+      body,
+    );
     return data.call;
   } catch (e) {
     throw new Error(errMessage(e, 'Не удалось завершить звонок'));

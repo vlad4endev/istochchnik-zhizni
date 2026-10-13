@@ -27,7 +27,8 @@ CALL_RING_TIMEOUT_SEC=60
 CALL_TOKEN_TTL_SEC=14400          # JWT TTL (до 8 ч); длинные конференции
 CALL_INVITE_TTL_HOURS=24
 CALL_MAX_GROUP_PARTICIPANTS=50
-CALL_GHOST_GRACE_SEC=120          # отключённый клиент → снятие «занят» после grace
+CALL_GHOST_GRACE_SEC=180          # grace после join перед ghost-reconcile
+CALL_GHOST_MISS_TICKS=3           # подряд пропусков LiveKit (~15s tick) до «left»
 PUBLIC_WEB_ORIGIN=https://app.church-tambov.ru   # invite URL + fallback для LIVEKIT_PUBLIC_URL
 ```
 
@@ -197,8 +198,9 @@ Push **не** содержит LiveKit token. Успешная отправка 
 ## Стабильность при многих пользователях
 
 - **Один активный звонок на пользователя** — `pg_advisory_xact_lock` при create / accept / join / token; повторный join в другую комнату блокируется (`already_in_call`).
-- **Ghost «занят»** — cron сверяет `call_participants.status=joined` с LiveKit presence (`CALL_GHOST_GRACE_SEC`); закрытый таб больше не блокирует новые звонки навсегда.
+- **Ghost «занят»** — cron сверяет `joined` с LiveKit presence (`CALL_GHOST_GRACE_SEC` + `CALL_GHOST_MISS_TICKS`); ICE-blip не закрывает UI (клиент игнорирует `ghost_cleanup`, пока комната жива).
+- **Выход ≠ завершение** — в группе «Выйти» только leave (в т.ч. хост); «Завершить для всех» — явный `endForAll` модератора. Pagehide-beacon `/end` только для 1:1 (мобильный фон не рвёт встречу).
 - **Лимит группы** — `CALL_MAX_GROUP_PARTICIPANTS` (по умолчанию 50) + LiveKit `maxParticipants`; join закрытой группы — в транзакции с `FOR UPDATE`.
-- **Длинные конференции** — JWT TTL по умолчанию 4 ч (до 8 ч); в UI для групп включены adaptiveStream / dynacast / simulcast.
+- **Длинные конференции** — JWT TTL по умолчанию 4 ч (compose/docs `14400`); в UI для групп включены adaptiveStream / dynacast / simulcast.
 - **1:1** — только из личного чата (оба участника должны быть в private conversation).
 - **Многопользовательские встречи** — кнопка камеры в мессенджере → standalone link-встреча (как Телемост) или конференция по ссылке из группы.

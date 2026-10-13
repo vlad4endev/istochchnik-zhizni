@@ -120,6 +120,26 @@ function resumeCallMedia(room?: Room | null): void {
   void room.startAudio().catch(() => undefined);
 }
 
+/** После фона/блокировки экрана браузер часто suspend'ит audio — вернуть на foreground. */
+function KeepAliveCallMedia() {
+  const room = useRoomContext();
+  useEffect(() => {
+    const kick = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      resumeCallMedia(room);
+    };
+    document.addEventListener('visibilitychange', kick);
+    window.addEventListener('focus', kick);
+    window.addEventListener('pageshow', kick);
+    return () => {
+      document.removeEventListener('visibilitychange', kick);
+      window.removeEventListener('focus', kick);
+      window.removeEventListener('pageshow', kick);
+    };
+  }, [room]);
+  return null;
+}
+
 function participantDisplayName(p: Participant): string {
   const name = String(p.name || '').trim();
   if (name) return name;
@@ -150,6 +170,7 @@ function participantInitials(name: string): string {
 function CallControls({
   videoEnabled,
   onHangup,
+  onEndForAll,
   canShare = false,
   shareOpen = false,
   onToggleShare,
@@ -160,6 +181,8 @@ function CallControls({
 }: {
   videoEnabled: boolean;
   onHangup: () => void;
+  /** Хост/модератор: явное завершение комнаты для всех. */
+  onEndForAll?: () => void;
   canShare?: boolean;
   shareOpen?: boolean;
   onToggleShare?: () => void;
@@ -181,6 +204,31 @@ function CallControls({
   const isVideoOff = videoEnabled ? !isCameraEnabled : true;
   const isScreenSharing = Boolean(isScreenShareEnabled);
   const isMeeting = variant === 'meeting';
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const [leaveMenuOpen, setLeaveMenuOpen] = useState(false);
+  const leaveWrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!leaveMenuOpen) return;
+    const onDoc = (ev: MouseEvent | TouchEvent) => {
+      const root = leaveWrapRef.current;
+      if (!root) return;
+      if (ev.target instanceof Node && !root.contains(ev.target)) {
+        setLeaveMenuOpen(false);
+      }
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') setLeaveMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('touchstart', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('touchstart', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [leaveMenuOpen]);
 
   useEffect(() => {
     setMuted(isMuted);
@@ -193,36 +241,48 @@ function CallControls({
   }, [isScreenSharing, setScreenSharing]);
 
   const toggleMic = useCallback(async () => {
+    if (mediaBusy) return;
+    setMediaBusy(true);
     try {
       resumeCallMedia(room);
       await localParticipant.setMicrophoneEnabled(isMuted);
     } catch (e) {
       emitAppToast(mapDeviceError(e), 'error');
+    } finally {
+      setMediaBusy(false);
     }
-  }, [isMuted, localParticipant, room]);
+  }, [isMuted, localParticipant, mediaBusy, room]);
 
   const toggleCam = useCallback(async () => {
-    if (!videoEnabled) return;
+    if (!videoEnabled || mediaBusy) return;
+    setMediaBusy(true);
     try {
       resumeCallMedia(room);
       await localParticipant.setCameraEnabled(isVideoOff);
     } catch (e) {
       emitAppToast(mapDeviceError(e), 'error');
+    } finally {
+      setMediaBusy(false);
     }
-  }, [isVideoOff, localParticipant, room, videoEnabled]);
+  }, [isVideoOff, localParticipant, mediaBusy, room, videoEnabled]);
 
   const toggleScreen = useCallback(async () => {
-    if (!showScreenShare) {
-      emitAppToast('Демонстрация экрана недоступна на этом устройстве', 'info');
+    if (!showScreenShare || mediaBusy) {
+      if (!showScreenShare) {
+        emitAppToast('Демонстрация экрана недоступна на этом устройстве', 'info');
+      }
       return;
     }
+    setMediaBusy(true);
     try {
       resumeCallMedia(room);
       await localParticipant.setScreenShareEnabled(!isScreenSharing);
     } catch (e) {
       emitAppToast(mapDeviceError(e), 'error');
+    } finally {
+      setMediaBusy(false);
     }
-  }, [isScreenSharing, localParticipant, room, showScreenShare]);
+  }, [isScreenSharing, localParticipant, mediaBusy, room, showScreenShare]);
 
   return (
     <div
@@ -243,6 +303,7 @@ function CallControls({
             isMuted ? 'call-ctrl--off' : 'call-ctrl--mic-on',
           ].join(' ')}
           onClick={() => void toggleMic()}
+          disabled={mediaBusy}
           aria-label={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
         >
           <span className="call-ctrl__icon">
@@ -255,6 +316,7 @@ function CallControls({
             type="button"
             className={['call-ctrl', isVideoOff ? 'call-ctrl--off' : ''].join(' ')}
             onClick={() => void toggleCam()}
+            disabled={mediaBusy}
             aria-label={isVideoOff ? 'Включить камеру' : 'Выключить камеру'}
           >
             <span className="call-ctrl__icon">
@@ -268,6 +330,7 @@ function CallControls({
             type="button"
             className={['call-ctrl', isScreenSharing ? 'call-ctrl--active' : ''].join(' ')}
             onClick={() => void toggleScreen()}
+            disabled={mediaBusy}
             aria-label="Демонстрация экрана"
           >
             <span className="call-ctrl__icon">
@@ -305,19 +368,55 @@ function CallControls({
           </button>
         ) : null}
       </div>
-      <button
-        type="button"
-        className={['call-ctrl', 'call-ctrl--hangup', isMeeting ? 'call-ctrl--hangup-wide' : '']
-          .filter(Boolean)
-          .join(' ')}
-        onClick={onHangup}
-        aria-label="Завершить"
-      >
-        <span className="call-ctrl__icon">
-          <LuPhoneOff size={22} />
-        </span>
-        <span className="call-ctrl__label">{isMeeting ? 'Выйти' : 'Выйти'}</span>
-      </button>
+      <div className="call-leave-wrap" ref={leaveWrapRef}>
+        {leaveMenuOpen && onEndForAll ? (
+          <div className="call-leave-menu" role="menu" aria-label="Выход из встречи">
+            <button
+              type="button"
+              className="call-leave-menu__btn"
+              role="menuitem"
+              onClick={() => {
+                setLeaveMenuOpen(false);
+                onHangup();
+              }}
+            >
+              Выйти из встречи
+            </button>
+            <button
+              type="button"
+              className="call-leave-menu__btn call-leave-menu__btn--danger"
+              role="menuitem"
+              onClick={() => {
+                setLeaveMenuOpen(false);
+                onEndForAll();
+              }}
+            >
+              Завершить для всех
+            </button>
+          </div>
+        ) : null}
+        <button
+          type="button"
+          className={['call-ctrl', 'call-ctrl--hangup', isMeeting ? 'call-ctrl--hangup-wide' : '']
+            .filter(Boolean)
+            .join(' ')}
+          onClick={() => {
+            if (onEndForAll) {
+              setLeaveMenuOpen((v) => !v);
+              return;
+            }
+            onHangup();
+          }}
+          aria-label={onEndForAll ? 'Выйти или завершить встречу' : 'Выйти'}
+          aria-haspopup={onEndForAll ? 'menu' : undefined}
+          aria-expanded={onEndForAll ? leaveMenuOpen : undefined}
+        >
+          <span className="call-ctrl__icon">
+            <LuPhoneOff size={22} />
+          </span>
+          <span className="call-ctrl__label">Выйти</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -339,9 +438,17 @@ function ApplyLobbyMediaPrefs({
   useEffect(() => {
     if (connectionState !== ConnectionState.Connected || applied.current) return;
     applied.current = true;
-    void room.localParticipant.setMicrophoneEnabled(micOn).catch(() => undefined);
+    void room.localParticipant
+      .setMicrophoneEnabled(micOn)
+      .catch((e) => {
+        emitAppToast(mapDeviceError(e), 'error');
+      });
     if (videoEnabled) {
-      void room.localParticipant.setCameraEnabled(camOn).catch(() => undefined);
+      void room.localParticipant
+        .setCameraEnabled(camOn)
+        .catch((e) => {
+          emitAppToast(mapDeviceError(e), 'error');
+        });
     }
   }, [camOn, connectionState, micOn, room, videoEnabled]);
 
@@ -1250,6 +1357,7 @@ function GroupMeetingShell({
   isHost,
   connectError,
   onHangup,
+  onEndForAll,
 }: {
   callId: string;
   videoEnabled: boolean;
@@ -1257,6 +1365,7 @@ function GroupMeetingShell({
   isHost: boolean;
   connectError: string | null;
   onHangup: () => void;
+  onEndForAll?: () => void;
 }) {
   const remotes = useRemoteParticipants();
   const [layoutMode, setLayoutMode] = useState<MeetingLayoutMode>(() =>
@@ -1337,6 +1446,7 @@ function GroupMeetingShell({
           <CallControls
             videoEnabled={videoEnabled}
             onHangup={onHangup}
+            onEndForAll={isHost ? onEndForAll : undefined}
             canShare={isHost}
             shareOpen={inviteOpen}
             onToggleShare={() => {
@@ -1500,19 +1610,22 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     activeCall.status === 'active' ||
     (activeCall.callKind === 'group' && activeCall.status === 'calling');
 
-  const hangup = useCallback(async () => {
-    stopCallRing();
-    try {
-      if (activeCall.status === 'calling' && activeCall.isInitiator) {
-        await cancelCall(activeCall.callId);
-      } else {
-        await endCall(activeCall.callId);
+  const hangup = useCallback(
+    async (opts?: { endForAll?: boolean }) => {
+      stopCallRing();
+      try {
+        if (activeCall.status === 'calling' && activeCall.isInitiator && !opts?.endForAll) {
+          await cancelCall(activeCall.callId);
+        } else {
+          await endCall(activeCall.callId, opts?.endForAll ? { endForAll: true } : undefined);
+        }
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* ignore */
-    }
-    closeCall();
-  }, [activeCall.callId, activeCall.isInitiator, activeCall.status, closeCall]);
+      closeCall();
+    },
+    [activeCall.callId, activeCall.isInitiator, activeCall.status, closeCall],
+  );
 
   useEffect(() => {
     if (activeCall.status === 'active' || activeCall.status === 'ended') {
@@ -1520,9 +1633,11 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     }
   }, [activeCall.status]);
 
-  // Best-effort leave when the tab closes — prevents permanent «busy» for other callers.
+  // Best-effort leave when the tab closes — only for 1:1 / cancel ring.
+  // Group meetings: no beacon /end — mobile background would kick host and kill the room.
   useEffect(() => {
     if (!needsLiveKit) return;
+    if (activeCall.callKind === 'group' && activeCall.status !== 'calling') return;
     const onPageHide = () => {
       const body = JSON.stringify({});
       const url =
@@ -1539,7 +1654,13 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     };
     window.addEventListener('pagehide', onPageHide);
     return () => window.removeEventListener('pagehide', onPageHide);
-  }, [activeCall.callId, activeCall.isInitiator, activeCall.status, needsLiveKit]);
+  }, [
+    activeCall.callId,
+    activeCall.callKind,
+    activeCall.isInitiator,
+    activeCall.status,
+    needsLiveKit,
+  ]);
 
   useEffect(() => {
     return subscribeRealtimeMessages((raw) => {
@@ -1554,6 +1675,11 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         return;
       }
       if (m.type === 'call:ended' || m.type === 'call:rejected' || m.type === 'call:cancelled') {
+        // ghost_cleanup во время ICE/reconnect раньше убивал UI встречи — игнор.
+        // Реальное закрытие комнаты приходит как ROOM_DELETED / ended_by_moderator / all_left.
+        if (m.type === 'call:ended' && m.reason === 'ghost_cleanup') {
+          return;
+        }
         if (m.type === 'call:rejected') emitAppToast('Звонок отклонён', 'info');
         if (m.type === 'call:cancelled') emitAppToast('Звонок отменён', 'info');
         if (m.type === 'call:ended' && m.reason === 'no_answer') {
@@ -1604,12 +1730,21 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     return () => {
       cancelled = true;
     };
-  }, [activeCall.callId, activeCall.status, needsLiveKit, setLiveKitCreds, setStatus]);
+    // Не зависеть от status — иначе refetch/remount при active.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: callId + needsLiveKit only
+  }, [activeCall.callId, needsLiveKit, setLiveKitCreds, setStatus]);
 
-  // LiveKit Room.connect ждёт и signal, и первый ICE (waitForPCInitialConnection).
+  const hadConnectedRef = useRef(false);
+  useEffect(() => {
+    if (lkConnected) hadConnectedRef.current = true;
+  }, [lkConnected]);
+
+  // LiveKit Room.connect ждёт и signal, и первый ICE — только для первого входа, не для reconnect.
   useEffect(() => {
     if (!creds?.token || !creds.url || connectError || lkConnected) return;
+    if (hadConnectedRef.current) return;
     const t = window.setTimeout(() => {
+      if (hadConnectedRef.current) return;
       setConnectError('Ошибка сервера или идут технические работы. Попробуйте позже.');
     }, 32_000);
     return () => window.clearTimeout(t);
@@ -1721,6 +1856,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         }}
         className="call-lk-room"
       >
+        <KeepAliveCallMedia />
         <ApplyLobbyMediaPrefs micOn={preferMicOn} camOn={preferCamOn} videoEnabled={videoEnabled} />
         {activeCall.callKind === 'group' ? (
           <GroupMeetingShell
@@ -1730,6 +1866,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
             isHost={Boolean(activeCall.isInitiator)}
             connectError={connectError}
             onHangup={() => void hangup()}
+            onEndForAll={() => void hangup({ endForAll: true })}
           />
         ) : (
           <>

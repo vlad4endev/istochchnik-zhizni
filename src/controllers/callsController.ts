@@ -186,7 +186,10 @@ export async function endCallHandler(req: Request, res: Response): Promise<void>
     return;
   }
   try {
-    const call = await endCall(String(req.params.callId ?? ''), uid);
+    const endForAll = Boolean(
+      (req.body as { endForAll?: unknown } | undefined)?.endForAll === true,
+    );
+    const call = await endCall(String(req.params.callId ?? ''), uid, { endForAll });
     res.json({ call });
   } catch (err) {
     sendCallsError(res, err);
