@@ -4,6 +4,8 @@ export type LiveKitJoinTokenInput = {
   roomName: string;
   identity: string;
   displayName: string;
+  /** Публичный путь/URL аватара — в metadata участника для UI сетки. */
+  avatarUrl?: string | null;
   canPublish: boolean;
   canSubscribe: boolean;
   roomAdmin?: boolean;
@@ -343,10 +345,12 @@ export async function mintLiveKitJoinToken(input: LiveKitJoinTokenInput): Promis
     input.ttlSeconds ??
     Math.max(60, Math.min(3600, Number(process.env.CALL_TOKEN_TTL_SEC ?? 900) || 900));
 
+  const avatar = String(input.avatarUrl ?? '').trim();
   const at = new AccessToken(apiKey, apiSecret, {
     identity: input.identity,
     name: input.displayName,
     ttl,
+    metadata: avatar ? JSON.stringify({ avatarUrl: avatar }) : undefined,
   });
   at.addGrant({
     roomJoin: true,

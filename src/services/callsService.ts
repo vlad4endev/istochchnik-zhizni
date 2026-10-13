@@ -1201,6 +1201,7 @@ export async function issueCallToken(
     roomName: call.livekit_room_name,
     identity: livekitIdentityForMember(memberId),
     displayName: profile.name,
+    avatarUrl: profile.avatarUrl,
     canPublish: true,
     canSubscribe: true,
     roomAdmin: isModerator && call.type === 'group',
