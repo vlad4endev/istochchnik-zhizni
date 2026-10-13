@@ -1,4 +1,6 @@
 import { emitAppToast } from '../../lib/uiFeedback';
+import { createGroupChat } from '../messenger/api/messengerApi';
+import { useChatStore } from '../messenger/chatStore';
 
 import { createGroupCall, type CallMediaType } from './callsApi';
 import { unlockCallAudio } from './callRingtone';
@@ -15,6 +17,11 @@ export type StartMeetingOptions = {
   peerAvatar?: string;
   /** Скопировать ссылку в буфер после создания. */
   copyLink?: boolean;
+};
+
+export type StandaloneMeetingResult = {
+  conversationId: string;
+  inviteUrl: string | null;
 };
 
 /**
@@ -65,4 +72,40 @@ export async function startMeetingCall(opts: StartMeetingOptions): Promise<strin
   }
 
   return call.inviteUrl ?? null;
+}
+
+/**
+ * Конференция из списка чатов («+»): отдельная группа + ссылка (как Телемост).
+ */
+export async function startStandaloneMeetingCall(
+  mediaType: CallMediaType = 'video',
+): Promise<StandaloneMeetingResult | null> {
+  if (!CALLS_FEATURE_ENABLED) {
+    emitAppToast('Звонки временно отключены', 'info');
+    return null;
+  }
+
+  const kind: CallMediaType = mediaType === 'audio' ? 'audio' : 'video';
+  const title = kind === 'video' ? 'Видеоконференция' : 'Аудиоконференция';
+  const created = await createGroupChat(title, 'group', []);
+  const conversationId = String(created.conversationId ?? '');
+  if (!conversationId) {
+    throw new Error('Не удалось создать чат для конференции');
+  }
+
+  const store = useChatStore.getState();
+  if (created.conversation) {
+    store.handleConvCreated(created.conversation);
+  } else {
+    await store.loadConversations({ force: true });
+  }
+
+  const inviteUrl = await startMeetingCall({
+    conversationId,
+    mediaType: kind,
+    peerName: title,
+    peerAvatar: created.conversation?.avatar_url ?? '',
+  });
+
+  return { conversationId, inviteUrl };
 }
