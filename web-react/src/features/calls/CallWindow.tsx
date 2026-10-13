@@ -10,6 +10,7 @@ import {
   useRoomContext,
   useParticipants,
   useRemoteParticipants,
+  useSpeakingParticipants,
 } from '@livekit/components-react';
 import {
   ConnectionState,
@@ -251,14 +252,37 @@ function ApplyLobbyMediaPrefs({
   return null;
 }
 
+/** Sticky active speaker for Zoom-style spotlight (remote preferred). */
+function useStickySpotlightIdentity(participants: Participant[]): string | null {
+  const speaking = useSpeakingParticipants();
+  const [spotlightId, setSpotlightId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!speaking.length) return;
+    const pick = speaking.find((p) => !p.isLocal) ?? speaking[0];
+    if (pick?.identity) setSpotlightId(pick.identity);
+  }, [speaking]);
+
+  useEffect(() => {
+    if (!spotlightId) return;
+    if (!participants.some((p) => p.identity === spotlightId)) {
+      setSpotlightId(null);
+    }
+  }, [participants, spotlightId]);
+
+  return spotlightId;
+}
+
 function MeetingParticipantTile({
   participant,
   callType,
   cameraTrack,
+  size = 'default',
 }: {
   participant: Participant;
   callType: 'audio' | 'video';
   cameraTrack: ReturnType<typeof useTracks>[number] | null;
+  size?: 'default' | 'spotlight' | 'strip';
 }) {
   const name = participantDisplayName(participant);
   const avatarSrc = participantAvatarUrl(participant);
@@ -272,6 +296,8 @@ function MeetingParticipantTile({
       className={[
         'call-participant-tile',
         callType === 'audio' ? 'call-participant-tile--audio' : 'call-participant-tile--video',
+        size === 'spotlight' ? 'call-participant-tile--spotlight' : '',
+        size === 'strip' ? 'call-participant-tile--strip' : '',
         speaking ? 'call-participant-tile--speaking' : '',
         participant.isLocal ? 'call-participant-tile--local' : '',
       ]
@@ -438,6 +464,21 @@ function RoomStage({
     });
   }, [participants]);
 
+  const stickySpotlightId = useStickySpotlightIdentity(sortedParticipants);
+  const spotlightParticipant = useMemo(() => {
+    if (!sortedParticipants.length) return null;
+    return (
+      sortedParticipants.find((p) => p.identity === stickySpotlightId) ??
+      sortedParticipants.find((p) => !p.isLocal) ??
+      sortedParticipants[0] ??
+      null
+    );
+  }, [sortedParticipants, stickySpotlightId]);
+  const stripParticipants = useMemo(() => {
+    if (!spotlightParticipant) return sortedParticipants;
+    return sortedParticipants.filter((p) => p.identity !== spotlightParticipant.identity);
+  }, [sortedParticipants, spotlightParticipant]);
+
   const localParticipant = sortedParticipants.find((p) => p.isLocal) ?? null;
   const waitingAlone = isGroup && remotes.length === 0;
   const groupScreenShare =
@@ -451,6 +492,9 @@ function RoomStage({
   const localScreenShare =
     localScreenRaw && isTrackReference(localScreenRaw) ? localScreenRaw : null;
   const stageScreenShare = groupScreenShare ?? localScreenShare;
+  /** Zoom-style: с 3+ участниками говорящий крупно, остальные — лента снизу. */
+  const useSpeakerView =
+    isGroup && !waitingAlone && !stageScreenShare && sortedParticipants.length >= 3;
 
   return (
     <div className="call-stage" ref={stageRef}>
@@ -468,6 +512,36 @@ function RoomStage({
                 <MeetingAvatar mediaType={callType} size="lg" />
               )}
               <p className="call-meeting-lobby__wait">{groupWaitLabel}</p>
+            </div>
+          ) : useSpeakerView && spotlightParticipant ? (
+            <div
+              className={[
+                'call-speaker-layout',
+                callType === 'audio' ? 'call-speaker-layout--audio' : 'call-speaker-layout--video',
+              ].join(' ')}
+              aria-label="Участники встречи"
+            >
+              <div className="call-speaker-layout__spotlight">
+                <MeetingParticipantTile
+                  participant={spotlightParticipant}
+                  callType={callType}
+                  cameraTrack={cameraByIdentity.get(spotlightParticipant.identity) ?? null}
+                  size="spotlight"
+                />
+              </div>
+              {stripParticipants.length > 0 ? (
+                <div className="call-speaker-layout__strip" aria-label="Остальные участники">
+                  {stripParticipants.map((p) => (
+                    <MeetingParticipantTile
+                      key={p.identity || p.sid}
+                      participant={p}
+                      callType={callType}
+                      cameraTrack={cameraByIdentity.get(p.identity) ?? null}
+                      size="strip"
+                    />
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : (
             <>
