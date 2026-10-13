@@ -12,7 +12,8 @@ type MediaType = 'audio' | 'video';
 type CreateMeetingDialogProps = {
   mediaType: MediaType;
   onClose: () => void;
-  onCreated: (conversationId: string) => void;
+  /** Called after the call window opens (no chat is created). */
+  onCreated: () => void;
 };
 
 export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMeetingDialogProps) {
@@ -24,8 +25,8 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
   const title = isVideo ? 'Видеовстреча' : 'Аудиовстреча';
   const cta = isVideo ? 'Создать видеовстречу' : 'Создать аудиовстречу';
   const hint = isVideo
-    ? 'Ссылка скопируется автоматически — отправьте её участникам. Камеру можно выключить до входа.'
-    : 'Ссылка скопируется автоматически. Участники подключатся только с голосом.';
+    ? 'Создаётся только звонок по ссылке — без группы в чатах. После завершения всё закрывается.'
+    : 'Только звонок по ссылке, без группы. Участники подключатся с голосом; после завершения всё закрывается.';
 
   const create = useCallback(async () => {
     if (busy) return;
@@ -50,8 +51,8 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
         }
       }
       const result = await startStandaloneMeetingCall(mediaType);
-      if (result?.conversationId) {
-        onCreated(result.conversationId);
+      if (result?.callId) {
+        onCreated();
       }
     } catch (e) {
       emitAppToast(e instanceof Error ? e.message : 'Не удалось создать встречу', 'error');

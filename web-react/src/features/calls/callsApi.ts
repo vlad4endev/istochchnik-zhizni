@@ -17,7 +17,8 @@ export type CallPublic = {
   type: CallType;
   mediaType: CallMediaType;
   status: CallStatus;
-  conversationId: string;
+  /** null for standalone Telemost-style meetings (no chat) */
+  conversationId: string | null;
   initiatedBy: number;
   accessMode: 'closed' | 'link';
   createdAt: string;
@@ -82,6 +83,23 @@ export async function createGroupCall(input: {
     return data.call;
   } catch (e) {
     throw new Error(errMessage(e, 'Не удалось начать конференцию'));
+  }
+}
+
+/** Standalone link meeting — no chat/group created (Телемост). */
+export async function createStandaloneCall(input: {
+  mediaType: CallMediaType;
+}): Promise<CallPublic> {
+  try {
+    const { data } = await apiClient.post<{ call: CallPublic }>('/api/calls', {
+      type: 'group',
+      mediaType: input.mediaType,
+      accessMode: 'link',
+      standalone: true,
+    });
+    return data.call;
+  } catch (e) {
+    throw new Error(errMessage(e, 'Не удалось создать встречу'));
   }
 }
 

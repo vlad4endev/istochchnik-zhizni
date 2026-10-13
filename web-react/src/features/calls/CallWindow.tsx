@@ -19,7 +19,7 @@ import {
   type RoomConnectOptions,
 } from 'livekit-client';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { LuMic, LuMicOff, LuMonitorUp, LuPhoneOff, LuVideo, LuVideoOff } from 'react-icons/lu';
+import { LuCopy, LuMic, LuMicOff, LuMonitorUp, LuPhoneOff, LuShare2, LuVideo, LuVideoOff } from 'react-icons/lu';
 
 import { emitAppToast } from '../../lib/uiFeedback';
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
@@ -34,6 +34,7 @@ import {
   type CallTokenResponse,
 } from './callsApi';
 import { startCallRing, stopCallRing, unlockCallAudio } from './callRingtone';
+import { MeetingAvatar } from './MeetingAvatar';
 import { useCallStore, type ActiveCallState } from './callStore';
 import './calls.css';
 
@@ -195,6 +196,7 @@ function RoomStage({
   const { isCameraEnabled } = useLocalParticipant();
   const peerName = useCallStore((s) => s.activeCall?.peerName ?? 'Собеседник');
   const peerAvatar = useCallStore((s) => s.activeCall?.peerAvatar ?? '');
+  const callKind = useCallStore((s) => s.activeCall?.callKind ?? 'direct');
   const [elapsed, setElapsed] = useState(0);
   const connected = connectionState === ConnectionState.Connected;
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -280,6 +282,8 @@ function RoomStage({
           <div className="call-stage__avatar-block">
             {avatarSrc ? (
               <img src={avatarSrc} alt="" className="call-stage__avatar" />
+            ) : callKind === 'group' || !peerAvatar ? (
+              <MeetingAvatar mediaType={callType} size="lg" />
             ) : (
               <div className="call-stage__avatar call-stage__avatar--placeholder" aria-hidden />
             )}
@@ -380,18 +384,20 @@ function MeetingInviteBar({ callId }: { callId: string }) {
       <div className="call-invite-bar__actions">
         <button
           type="button"
-          className="call-invite-copy"
+          className="call-invite-btn call-invite-btn--secondary"
           disabled={!displayUrl}
           onClick={copy}
         >
+          <LuCopy size={18} strokeWidth={2.2} aria-hidden />
           Скопировать
         </button>
         <button
           type="button"
-          className="call-invite-copy call-invite-copy--primary"
+          className="call-invite-btn call-invite-btn--primary"
           disabled={!displayUrl}
           onClick={() => void share()}
         >
+          <LuShare2 size={18} strokeWidth={2.2} aria-hidden />
           Поделиться
         </button>
       </div>
@@ -401,6 +407,7 @@ function MeetingInviteBar({ callId }: { callId: string }) {
 
 function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; onCancel: () => void }) {
   const avatarSrc = activeCall.peerAvatar ? resolvePublicUrl(activeCall.peerAvatar) : undefined;
+  const showMeetingMark = activeCall.callKind === 'group' || !avatarSrc;
 
   useEffect(() => {
     unlockCallAudio();
@@ -416,10 +423,10 @@ function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; o
       <div className="call-stage">
         <div className="call-stage__main">
           <div className="call-stage__avatar-block">
-            {avatarSrc ? (
+            {avatarSrc && !showMeetingMark ? (
               <img src={avatarSrc} alt="" className="call-stage__avatar" />
             ) : (
-              <div className="call-stage__avatar call-stage__avatar--placeholder" aria-hidden />
+              <MeetingAvatar mediaType={activeCall.callType} size="lg" />
             )}
             <p className="call-stage__name">{activeCall.peerName}</p>
             <p className="call-stage__status">
@@ -428,7 +435,7 @@ function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; o
             {activeCall.inviteUrl ? (
               <button
                 type="button"
-                className="call-invite-copy"
+                className="call-invite-btn call-invite-btn--primary"
                 onClick={() => {
                   void navigator.clipboard.writeText(activeCall.inviteUrl!).then(
                     () => emitAppToast('Ссылка скопирована', 'success'),
@@ -436,7 +443,8 @@ function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; o
                   );
                 }}
               >
-                Скопировать ссылку-приглашение
+                <LuCopy size={18} strokeWidth={2.2} aria-hidden />
+                Скопировать ссылку
               </button>
             ) : null}
           </div>

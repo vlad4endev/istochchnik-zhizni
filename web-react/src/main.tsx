@@ -13,6 +13,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { scheduleHideNativeSplashAfterPaint } from './lib/hideNativeSplash';
 import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
 import { client } from './lib/appwrite';
+import { PwaLaunchHandler } from './features/pwa/PwaLaunchHandler';
 import {
   initPwaStandaloneHtmlHint,
   isAndroidInstalledPwa,
@@ -369,6 +370,7 @@ if (!rootEl) {
               <ViewportHeightBridge />
               <TopLoader />
               <BrowserRouter>
+                <PwaLaunchHandler />
                 <AccessibilityProvider>
                   <ImpersonationBanner />
                   <SessionKeepAlive />

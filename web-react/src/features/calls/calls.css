@@ -443,6 +443,75 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
+/* Thematic meeting mark (replaces empty dark circle) */
+.meeting-avatar {
+  --ma-brand: var(--primary, #7d3640);
+  --ma-brand-dark: var(--primary-dark, #5c2830);
+  --ma-on: var(--text-on-primary, #ffffff);
+  --ma-soft: color-mix(in srgb, var(--ma-brand) 28%, transparent);
+  --ma-mid: color-mix(in srgb, var(--ma-brand) 45%, transparent);
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.meeting-avatar--lg {
+  width: min(168px, 42vw);
+  height: min(168px, 42vw);
+}
+
+.meeting-avatar--md {
+  width: 5.6rem;
+  height: 5.6rem;
+}
+
+.meeting-avatar__ring {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  border: 1.5px solid var(--ma-mid);
+  animation: meeting-avatar-pulse 2.6s ease-out infinite;
+  pointer-events: none;
+}
+
+.meeting-avatar__ring--late {
+  animation-delay: 1.1s;
+}
+
+@keyframes meeting-avatar-pulse {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.38);
+    opacity: 0;
+  }
+}
+
+.meeting-avatar__badge {
+  position: relative;
+  z-index: 1;
+  width: 62%;
+  height: 62%;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--ma-on);
+  background:
+    radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.28), transparent 42%),
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--ma-brand) 72%, #fff) 0%,
+      var(--ma-brand) 52%,
+      var(--ma-brand-dark) 100%
+    );
+  box-shadow:
+    0 0 0 6px var(--ma-soft),
+    0 18px 40px color-mix(in srgb, var(--ma-brand) 42%, transparent);
+}
+
 .call-stage__name {
   margin: 0;
   font-size: clamp(1.25rem, 4vw, 1.75rem);
@@ -535,25 +604,58 @@
   box-shadow: 0 6px 20px rgba(255, 59, 48, 0.45);
 }
 
-.call-invite-copy {
+.call-invite-btn {
+  --cib-brand: var(--primary, #7d3640);
+  --cib-brand-dark: var(--primary-dark, #5c2830);
+  --cib-on: var(--text-on-primary, #ffffff);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   margin-top: 8px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  font-size: 14px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: none;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 750;
+  letter-spacing: 0.01em;
   cursor: pointer;
+  transition: transform 0.12s ease, filter 0.15s ease, opacity 0.15s ease;
 }
 
-.call-invite-copy:disabled {
+.call-invite-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.call-invite-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.call-invite-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  filter: none;
 }
 
-.call-invite-copy--primary {
-  background: rgba(56, 189, 248, 0.28);
-  border-color: rgba(125, 211, 252, 0.45);
+.call-invite-btn--primary {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--cib-brand) 78%, #fff) 0%,
+    var(--cib-brand) 48%,
+    var(--cib-brand-dark) 100%
+  );
+  color: var(--cib-on);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.22) inset,
+    0 10px 22px color-mix(in srgb, var(--cib-brand) 40%, transparent);
+}
+
+.call-invite-btn--secondary {
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--cib-brand-dark);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
 }
 
 .call-invite-bar {
@@ -563,53 +665,53 @@
   z-index: 6;
   transform: translateX(-50%);
   width: min(22rem, calc(100% - 24px));
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: rgba(12, 14, 22, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  padding: 14px 14px 12px;
+  border-radius: 18px;
+  background: rgba(16, 14, 18, 0.82);
+  border: 1px solid color-mix(in srgb, var(--primary, #7d3640) 35%, rgba(255, 255, 255, 0.16));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   color: #fff;
   text-align: center;
   box-sizing: border-box;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
 }
 
 .call-invite-bar__title {
   margin: 0;
-  font-size: 0.95rem;
-  font-weight: 650;
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .call-invite-bar__hint {
   margin: 4px 0 0;
-  font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.72);
   line-height: 1.35;
 }
 
 .call-invite-bar__url {
   display: block;
   margin: 10px 0 0;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
   font-size: 0.72rem;
   word-break: break-all;
-  color: rgba(255, 255, 255, 0.88);
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .call-invite-bar__actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   justify-content: center;
   flex-wrap: wrap;
   margin-top: 4px;
 }
 
-.call-invite-bar__actions .call-invite-copy {
-  margin-top: 8px;
+.call-invite-bar__actions .call-invite-btn {
   flex: 1 1 auto;
-  min-width: 7.5rem;
+  min-width: 8rem;
 }
 
 .call-route-page {
@@ -959,7 +1061,237 @@
   .telemost-create__glow,
   .telemost-create__ring,
   .telemost-create__ring--late,
-  .telemost-create__panel {
+  .telemost-create__panel,
+  .meeting-avatar__ring,
+  .meeting-avatar__ring--late,
+  .telemost-join__glow,
+  .telemost-join__panel {
     animation: none;
   }
+}
+
+/* ——— Join meeting lobby (same visual language as create) ——— */
+.telemost-join {
+  --tm-brand: var(--primary, #7d3640);
+  --tm-brand-dark: var(--primary-dark, #5c2830);
+  --tm-on-brand: var(--text-on-primary, #ffffff);
+  --tm-brand-soft: color-mix(in srgb, var(--tm-brand) 22%, transparent);
+  --tm-brand-mid: color-mix(in srgb, var(--tm-brand) 38%, transparent);
+  --tm-bg-top: color-mix(in srgb, var(--tm-brand-dark) 55%, #1c1917);
+  --tm-bg-bottom: #141210;
+  position: relative;
+  min-height: 100dvh;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding: max(24px, env(safe-area-inset-top, 0px)) 20px max(28px, env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%, var(--tm-brand-soft), transparent 60%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--tm-brand-dark) 35%, transparent),
+      transparent 40%
+    ),
+    linear-gradient(180deg, var(--tm-bg-top), var(--tm-bg-bottom));
+}
+
+.telemost-join__atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.telemost-join__glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.55;
+  animation: telemost-drift 12s ease-in-out infinite;
+}
+
+.telemost-join__glow--a {
+  width: min(420px, 80vw);
+  height: min(420px, 80vw);
+  left: -10%;
+  top: 8%;
+  background: var(--tm-brand-mid);
+}
+
+.telemost-join__glow--b {
+  width: min(380px, 70vw);
+  height: min(380px, 70vw);
+  right: -12%;
+  bottom: 6%;
+  background: color-mix(in srgb, var(--tm-brand-dark) 45%, transparent);
+  animation-delay: -4s;
+}
+
+.telemost-join__panel {
+  position: relative;
+  z-index: 1;
+  width: min(26rem, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 28px 22px 26px;
+  border-radius: 28px;
+  background: rgba(18, 16, 18, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  animation: telemost-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.telemost-join__eyebrow {
+  margin: 0 0 18px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, #fff 55%, var(--tm-brand));
+}
+
+.telemost-join__title {
+  margin: 16px 0 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: clamp(1.7rem, 5.5vw, 2.1rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.telemost-join__lead {
+  margin: 10px 0 0;
+  max-width: 21rem;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.telemost-join__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.telemost-join__devices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 26px;
+  width: 100%;
+}
+
+.telemost-join__device {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 14px 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.telemost-join__device:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.telemost-join__device:active {
+  transform: scale(0.98);
+}
+
+.telemost-join__device.is-on {
+  border-color: var(--tm-brand-mid);
+  background: var(--tm-brand-soft);
+}
+
+.telemost-join__device.is-off {
+  opacity: 0.72;
+}
+
+.telemost-join__device-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.telemost-join__device.is-on .telemost-join__device-icon {
+  background: var(--tm-brand);
+  color: var(--tm-on-brand);
+}
+
+.telemost-join__cta {
+  width: 100%;
+  max-width: 20rem;
+  min-height: 54px;
+  margin-top: 26px;
+  padding: 14px 24px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tm-brand) 82%, #fff) 0%,
+    var(--tm-brand) 45%,
+    var(--tm-brand-dark) 100%
+  );
+  color: var(--tm-on-brand);
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.22) inset,
+    0 14px 32px color-mix(in srgb, var(--tm-brand) 38%, transparent);
+  transition: transform 0.15s ease, filter 0.15s ease;
+  box-sizing: border-box;
+}
+
+.telemost-join__cta:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.telemost-join__cta:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.telemost-join__cta:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.telemost-join__cta--ghost {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }

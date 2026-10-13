@@ -97,11 +97,16 @@ export function CallPage() {
     );
   }
 
+  const messengerHref =
+    call?.conversationId != null && String(call.conversationId).trim() !== ''
+      ? `/messenger?conversationId=${call.conversationId}`
+      : '/messenger';
+
   if (error) {
     return (
       <div className="call-route-page">
         <p>{error}</p>
-        <Link to={call ? `/messenger?conversationId=${call.conversationId}` : '/messenger'} className="call-route-link">
+        <Link to={messengerHref} className="call-route-link">
           Вернуться в чат
         </Link>
       </div>
@@ -123,7 +128,7 @@ export function CallPage() {
               void import('./callsApi').then(({ declineCall }) =>
                 declineCall(call.id).finally(() => {
                   closeCall();
-                  void navigate(`/messenger?conversationId=${call.conversationId}`);
+                  void navigate(messengerHref);
                 }),
               );
             }}
@@ -152,11 +157,9 @@ export function CallPage() {
   return (
     <div className="call-route-page call-route-page--active">
       <p className="call-stage__status">Звонок активен</p>
-      {call ? (
-        <Link to={`/messenger?conversationId=${call.conversationId}`} className="call-route-link">
-          Вернуться в чат
-        </Link>
-      ) : null}
+      <Link to={messengerHref} className="call-route-link">
+        Вернуться в чат
+      </Link>
     </div>
   );
 }

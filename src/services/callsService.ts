@@ -50,7 +50,8 @@ export type CallRow = {
   type: CallType;
   media_type: CallMediaType;
   status: CallStatus;
-  conversation_id: string;
+  /** null = standalone link meeting (no chat/group) */
+  conversation_id: string | null;
   livekit_room_name: string;
   initiated_by: number;
   access_mode: CallAccessMode;
@@ -78,7 +79,8 @@ export type CallPublic = {
   type: CallType;
   mediaType: CallMediaType;
   status: CallStatus;
-  conversationId: string;
+  /** null for standalone Telemost-style meetings without a chat */
+  conversationId: string | null;
   initiatedBy: number;
   accessMode: CallAccessMode;
   createdAt: string;
@@ -149,12 +151,13 @@ function hashInviteToken(raw: string): string {
 
 function mapCallRow(row: Record<string, unknown>): CallRow {
   const meta = row.metadata;
+  const convRaw = row.conversation_id;
   return {
     id: String(row.id),
     type: row.type as CallType,
     media_type: row.media_type as CallMediaType,
     status: row.status as CallStatus,
-    conversation_id: String(row.conversation_id),
+    conversation_id: convRaw != null && String(convRaw).trim() !== '' ? String(convRaw) : null,
     livekit_room_name: String(row.livekit_room_name),
     initiated_by: Number(row.initiated_by),
     access_mode: (row.access_mode as CallAccessMode) || 'closed',
@@ -168,6 +171,10 @@ function mapCallRow(row: Record<string, unknown>): CallRow {
         ? (meta as Record<string, unknown>)
         : {},
   };
+}
+
+function isStandaloneCall(call: Pick<CallRow, 'conversation_id'>): boolean {
+  return call.conversation_id == null;
 }
 
 async function withTransaction<T>(fn: (client: DbClient) => Promise<T>): Promise<T> {
@@ -199,10 +206,14 @@ async function sendWs(memberId: number, event: WsMessengerEvent): Promise<void> 
   }
 }
 
-async function sendWsRoom(conversationId: string, event: WsMessengerEvent): Promise<void> {
+async function sendWsRoom(
+  conversationId: string | null | undefined,
+  event: WsMessengerEvent,
+): Promise<void> {
+  if (conversationId == null || String(conversationId).trim() === '') return;
   try {
     const { sendToRoomAll } = await import('../realtime/wsHub');
-    sendToRoomAll(conversationId, event);
+    sendToRoomAll(String(conversationId), event);
   } catch (e) {
     console.warn('[calls] WS room send failed:', e instanceof Error ? e.message : e);
   }
@@ -244,9 +255,10 @@ export async function isMemberBusyInCall(memberId: number, excludeCallId?: strin
 }
 
 async function getParticipantRoleInConversation(
-  conversationId: string,
+  conversationId: string | null | undefined,
   memberId: number,
 ): Promise<{ role: string; canManage: boolean } | null> {
+  if (conversationId == null || String(conversationId).trim() === '') return null;
   const res = await query(
     `SELECT role, permissions
      FROM conversation_participants
@@ -296,8 +308,10 @@ async function loadCallById(callId: string, client?: DbClient): Promise<CallRow 
 }
 
 async function assertCanViewCall(call: CallRow, memberId: number): Promise<void> {
-  const inConv = await isMemberInConversation(call.conversation_id, memberId);
-  if (inConv) return;
+  if (!isStandaloneCall(call) && call.conversation_id) {
+    const inConv = await isMemberInConversation(call.conversation_id, memberId);
+    if (inConv) return;
+  }
   const part = await query(
     `SELECT 1 FROM call_participants WHERE call_id = $1::uuid AND user_id = $2 LIMIT 1`,
     [call.id, memberId],
@@ -308,7 +322,7 @@ async function assertCanViewCall(call: CallRow, memberId: number): Promise<void>
 }
 
 async function insertCallHistoryMessage(input: {
-  conversationId: string;
+  conversationId: string | null;
   callId: string;
   mediaType: CallMediaType;
   callType: CallType;
@@ -316,6 +330,7 @@ async function insertCallHistoryMessage(input: {
   durationSeconds: number | null;
   initiatedBy: number;
 }): Promise<void> {
+  if (input.conversationId == null || String(input.conversationId).trim() === '') return;
   const labels: Record<string, string> = {
     ended: input.mediaType === 'video' ? 'Видеозвонок' : 'Аудиозвонок',
     missed: 'Пропущенный вызов',
@@ -720,6 +735,65 @@ export async function createGroupCall(input: {
   return toPublicCall(call, { inviteUrl });
 }
 
+/**
+ * Standalone link meeting (Yandex Telemost style): no chat/group — only LiveKit room + invite URL.
+ * After the call ends nothing remains in the messenger.
+ */
+export async function createStandaloneLinkCall(input: {
+  initiatorId: number;
+  mediaType: CallMediaType;
+}): Promise<CallPublic> {
+  if (!isCallsEnabled()) throw new CallsError('disabled', 'Звонки отключены');
+
+  if (await isMemberBusyInCall(input.initiatorId)) {
+    throw new CallsError('already_in_call', 'Вы уже участвуете в другом звонке');
+  }
+
+  const callId = randomUUID();
+  const roomName = `meet_${callId.replace(/-/g, '')}`;
+
+  const { call, invite } = await withTransaction(async (client) => {
+    const ins = await client.query(
+      `INSERT INTO calls (
+         id, type, media_type, status, conversation_id, livekit_room_name,
+         initiated_by, access_mode, started_at, metadata
+       ) VALUES (
+         $1::uuid, 'group', $2, 'waiting', NULL, $3, $4, 'link', NOW(),
+         jsonb_build_object('standalone', true)
+       ) RETURNING *`,
+      [callId, input.mediaType, roomName, input.initiatorId],
+    );
+    await client.query(
+      `INSERT INTO call_participants (call_id, user_id, role, status, joined_at)
+       VALUES ($1::uuid, $2, 'initiator', 'joined', NOW())`,
+      [callId, input.initiatorId],
+    );
+    const inv = await createInvitationRaw(client, callId, input.initiatorId, null);
+    return { call: mapCallRow(ins.rows[0]), invite: inv };
+  });
+
+  try {
+    await ensureLiveKitRoom({
+      roomName,
+      emptyTimeoutSec: 3600,
+      maxParticipants: maxGroupParticipants(),
+      metadata: JSON.stringify({ callId: call.id, type: 'standalone' }),
+    });
+  } catch (e) {
+    console.error('[calls] LiveKit standalone room failed:', e instanceof Error ? e.message : e);
+    if (isLiveKitConfigured()) {
+      await query(
+        `UPDATE calls SET status = 'failed', ended_at = NOW(), end_reason = 'livekit_unavailable'
+         WHERE id = $1::uuid`,
+        [call.id],
+      );
+      throw new CallsError('livekit_unavailable', 'Сервис звонков временно недоступен');
+    }
+  }
+
+  return toPublicCall(call, { inviteUrl: inviteUrlFromToken(invite.rawToken) });
+}
+
 export async function getCallForMember(callId: string, memberId: number): Promise<CallPublic> {
   const call = await loadCallById(callId);
   if (!call) throw new CallsError('not_found', 'Звонок не найден');
@@ -833,7 +907,9 @@ export async function declineCall(callId: string, memberId: number): Promise<Cal
     body: 'Абонент отклонил вызов',
     type: 'call_declined',
     callId: updated.id,
-    url: `/messenger?conversationId=${updated.conversation_id}`,
+    url: updated.conversation_id
+      ? `/messenger?conversationId=${updated.conversation_id}`
+      : `/call/${updated.id}`,
     tag: `call-${updated.id}`,
   }).catch(() => undefined);
 
@@ -884,7 +960,9 @@ export async function cancelCall(callId: string, memberId: number): Promise<Call
       body: 'Вызов отменён',
       type: 'call_cancelled',
       callId: updated.id,
-      url: `/messenger?conversationId=${updated.conversation_id}`,
+      url: updated.conversation_id
+        ? `/messenger?conversationId=${updated.conversation_id}`
+        : `/call/${updated.id}`,
       tag: `call-${updated.id}`,
     }).catch(() => undefined);
   }
@@ -1018,7 +1096,7 @@ export async function endCall(callId: string, memberId: number): Promise<CallPub
         initiatedBy: updated.initiated_by,
       });
     }
-  } else {
+  } else if (updated.conversation_id) {
     await sendWsRoom(updated.conversation_id, {
       type: 'call:participant_left',
       callId: updated.id,
@@ -1053,9 +1131,9 @@ export async function issueCallToken(
   let participant = part.rows[0] as { role?: string; status?: string } | undefined;
 
   if (!participant) {
-    if (call.type === 'group') {
+    if (call.type === 'group' && call.access_mode === 'closed' && call.conversation_id) {
       const inConv = await isMemberInConversation(call.conversation_id, memberId);
-      if (!inConv || call.access_mode !== 'closed') {
+      if (!inConv) {
         throw new CallsError('forbidden', 'Нет доступа к конференции');
       }
       // Auto-join closed group members
@@ -1240,8 +1318,12 @@ export async function getInvitationPreview(rawToken: string, memberId: number | 
 
   let conversationTitle: string | null = null;
   let canJoin = false;
+  const convId =
+    row.conversation_id != null && String(row.conversation_id).trim() !== ''
+      ? String(row.conversation_id)
+      : null;
   if (memberId != null) {
-    const inConv = await isMemberInConversation(String(row.conversation_id), memberId);
+    const inConv = convId ? await isMemberInConversation(convId, memberId) : false;
     if (row.access_mode === 'closed' && !inConv) {
       return {
         valid: true,
@@ -1254,9 +1336,12 @@ export async function getInvitationPreview(rawToken: string, memberId: number | 
       };
     }
     canJoin = row.access_mode === 'link' || inConv;
-    if (inConv) {
-      const meta = await getConversationMeta(String(row.conversation_id));
+    if (inConv && convId) {
+      const meta = await getConversationMeta(convId);
       conversationTitle = meta?.title ?? null;
+    } else if (!convId && row.access_mode === 'link') {
+      conversationTitle =
+        row.media_type === 'video' ? 'Видеовстреча' : 'Аудиовстреча';
     }
   }
 
@@ -1313,6 +1398,9 @@ export async function joinViaInvitation(
     }
 
     if (call.access_mode === 'closed') {
+      if (!call.conversation_id) {
+        throw new CallsError('forbidden', 'Нет доступа к группе');
+      }
       const inConv = await isMemberInConversation(call.conversation_id, memberId);
       if (!inConv) throw new CallsError('forbidden', 'Нет доступа к группе');
     }
@@ -1363,10 +1451,14 @@ export async function joinViaInvitation(
     return call.id;
   });
 
-  await sendWsRoom(
-    (await loadCallById(callId))!.conversation_id,
-    { type: 'call:participant_joined', callId, userId: memberId },
-  );
+  const joinedCall = await loadCallById(callId);
+  if (joinedCall?.conversation_id) {
+    await sendWsRoom(joinedCall.conversation_id, {
+      type: 'call:participant_joined',
+      callId,
+      userId: memberId,
+    });
+  }
 
   return issueCallToken(callId, memberId);
 }
@@ -1467,8 +1559,10 @@ export async function cleanupStaleCalls(): Promise<{ missed: number; endedEmpty:
           body: done.media_type === 'video' ? 'Видеозвонок' : 'Аудиозвонок',
           type: 'missed_call',
           callId: done.id,
-          conversationId: done.conversation_id,
-          url: `/messenger?conversationId=${done.conversation_id}`,
+          conversationId: done.conversation_id ?? undefined,
+          url: done.conversation_id
+            ? `/messenger?conversationId=${done.conversation_id}`
+            : `/call/${done.id}`,
           tag: `call-${done.id}`,
         }).catch(() => undefined);
       }

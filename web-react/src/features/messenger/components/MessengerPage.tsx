@@ -428,9 +428,8 @@ export function MessengerPage() {
           <CreateMeetingDialog
             mediaType={meetingMedia}
             onClose={() => setMeetingMedia(null)}
-            onCreated={(id) => {
+            onCreated={() => {
               setMeetingMedia(null);
-              handleSelectConversation(id);
             }}
           />
         </Suspense>

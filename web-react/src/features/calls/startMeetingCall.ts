@@ -1,8 +1,6 @@
 import { emitAppToast } from '../../lib/uiFeedback';
-import { createGroupChat } from '../messenger/api/messengerApi';
-import { useChatStore } from '../messenger/chatStore';
 
-import { createGroupCall, type CallMediaType } from './callsApi';
+import { createGroupCall, createStandaloneCall, type CallMediaType } from './callsApi';
 import { unlockCallAudio } from './callRingtone';
 import { useCallStore } from './callStore';
 import { requestCallNotificationsFromUserGesture } from './incomingCallBackground';
@@ -20,12 +18,12 @@ export type StartMeetingOptions = {
 };
 
 export type StandaloneMeetingResult = {
-  conversationId: string;
   inviteUrl: string | null;
+  callId: string;
 };
 
 /**
- * Создать конференцию со ссылкой (режим Телемост/Zoom):
+ * Создать конференцию в существующем чате со ссылкой:
  * комната → invite URL в чат → хост ждёт подключений.
  */
 export async function startMeetingCall(opts: StartMeetingOptions): Promise<string | null> {
@@ -75,7 +73,8 @@ export async function startMeetingCall(opts: StartMeetingOptions): Promise<strin
 }
 
 /**
- * Конференция из списка чатов («+»): отдельная группа + ссылка (как Телемост).
+ * Встреча из списка чатов (кнопка камеры): только звонок + ссылка, как в Телемосте.
+ * Группа/чат не создаётся; после завершения окно закрывается.
  */
 export async function startStandaloneMeetingCall(
   mediaType: CallMediaType = 'video',
@@ -86,26 +85,36 @@ export async function startStandaloneMeetingCall(
   }
 
   const kind: CallMediaType = mediaType === 'audio' ? 'audio' : 'video';
-  const title = kind === 'video' ? 'Видеоконференция' : 'Аудиоконференция';
-  const created = await createGroupChat(title, 'group', []);
-  const conversationId = String(created.conversationId ?? '');
-  if (!conversationId) {
-    throw new Error('Не удалось создать чат для конференции');
-  }
+  const title = kind === 'video' ? 'Видеовстреча' : 'Аудиовстреча';
 
-  const store = useChatStore.getState();
-  if (created.conversation) {
-    store.handleConvCreated(created.conversation);
-  } else {
-    await store.loadConversations({ force: true });
-  }
+  requestCallNotificationsFromUserGesture();
+  unlockCallAudio();
 
-  const inviteUrl = await startMeetingCall({
-    conversationId,
-    mediaType: kind,
+  const call = await createStandaloneCall({ mediaType: kind });
+
+  useCallStore.getState().openCall({
+    callId: call.id,
+    conversationId: '',
+    peerId: 0,
     peerName: title,
-    peerAvatar: created.conversation?.avatar_url ?? '',
+    peerAvatar: '',
+    callType: kind,
+    isInitiator: true,
+    status: 'active',
+    callKind: 'group',
+    inviteUrl: call.inviteUrl,
   });
 
-  return { conversationId, inviteUrl };
+  if (call.inviteUrl) {
+    try {
+      await navigator.clipboard.writeText(call.inviteUrl);
+      emitAppToast('Ссылка на встречу скопирована — отправьте её участникам', 'success');
+    } catch {
+      emitAppToast('Встреча создана. Скопируйте ссылку в окне звонка.', 'info');
+    }
+  } else {
+    emitAppToast(kind === 'video' ? 'Видеовстреча создана' : 'Аудиовстреча создана', 'success');
+  }
+
+  return { callId: call.id, inviteUrl: call.inviteUrl ?? null };
 }
