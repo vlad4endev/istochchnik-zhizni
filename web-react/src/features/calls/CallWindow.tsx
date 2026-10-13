@@ -51,6 +51,7 @@ import {
   LuX,
 } from 'react-icons/lu';
 
+import { BodyPortal } from '../../components/BodyPortal';
 import { emitAppToast } from '../../lib/uiFeedback';
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 import { subscribeRealtimeMessages } from '../../lib/realtimeWsClient';
@@ -946,14 +947,14 @@ function RoomStage({
     >
       {isGroup ? (
         <header className="call-meeting-topbar" aria-label="Информация о встрече">
-          <div className="call-meeting-topbar__title-wrap">
-            <p className="call-meeting-topbar__title">{meetingTitle}</p>
+          <h1 className="call-meeting-topbar__title" title={meetingTitle}>
+            {meetingTitle}
+          </h1>
+          <div className="call-meeting-topbar__meta">
             <span className="call-meeting-topbar__count" title="Участники">
               <LuUsers size={14} strokeWidth={2.4} aria-hidden />
               {Math.max(1, sortedParticipants.length)}
             </span>
-          </div>
-          <div className="call-meeting-topbar__meta">
             {meetingUi ? (
               <div className="call-layout-switch" role="group" aria-label="Раскладка">
                 <button
@@ -1933,5 +1934,10 @@ export function CallWindow() {
   // ringing_in: Accept UI lives on IncomingCallOverlay / CallPage — do not cover it.
   if (!activeCall) return null;
   if (activeCall.status === 'ringing_in' || activeCall.status === 'ended') return null;
-  return <CallWindowInner key={activeCall.callId} activeCall={activeCall} />;
+  // BodyPortal: на iOS/Android #root короче viewport — иначе таббар (тоже в body) перекрывает кнопки.
+  return (
+    <BodyPortal>
+      <CallWindowInner key={activeCall.callId} activeCall={activeCall} />
+    </BodyPortal>
+  );
 }

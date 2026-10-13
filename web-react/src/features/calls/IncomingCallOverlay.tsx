@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { BodyPortal } from '../../components/BodyPortal';
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 
 import { startCallRing, stopCallRing, unlockCallAudio } from './callRingtone';
@@ -143,6 +144,7 @@ export function IncomingCallOverlay() {
   };
 
   return (
+    <BodyPortal>
     <div
       className={[
         'incoming-call-overlay',
@@ -236,6 +238,7 @@ export function IncomingCallOverlay() {
         </div>
       </div>
     </div>
+    </BodyPortal>
   );
 }
 

@@ -43,6 +43,7 @@ import { ScrollRestoration } from '../components/ScrollRestoration';
 import { isDraftPrivateConversationId, useChatStore } from '../features/messenger/chatStore';
 import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
 import { CallWindow } from '../features/calls/CallWindow';
+import { useCallStore } from '../features/calls/callStore';
 import { IncomingCallOverlay } from '../features/calls/IncomingCallOverlay';
 import { SermonPlaybackProvider } from '../features/resources/sermonPlayback/SermonPlaybackContext';
 import { SermonPlayer } from '../features/resources/sermonPlayback/SermonPlayer';
@@ -695,6 +696,12 @@ export function Layout() {
   const [navCollapsed, setNavCollapsed] = useState(false);
   /** Скрытие сайдбара и нижнего таббара (режим чтения песен и т.п.). */
   const [mainChromeVisible, setMainChromeVisible] = useState(true);
+  /** Во время звонка таббар прячем — иначе на iOS/Android он перекрывает кнопки управления. */
+  const callUiOpen = useCallStore((s) => {
+    const c = s.activeCall;
+    return Boolean(c && c.status !== 'ended');
+  });
+  const showMobileBottomNav = mainChromeVisible && !callUiOpen;
 
   const appName = useBrandingStore((s) => s.appName);
   const description = useBrandingStore((s) => s.description);
@@ -852,7 +859,14 @@ export function Layout() {
     observer.observe(nav);
     syncBottomNavMeasuredHeight();
     return () => observer.disconnect();
-  }, [mainChromeVisible, mobileNavSplit.primary.length, mobileNavSplit.overflow.length]);
+  }, [showMobileBottomNav, mobileNavSplit.primary.length, mobileNavSplit.overflow.length]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (callUiOpen) root.setAttribute('data-call-active', '1');
+    else root.removeAttribute('data-call-active');
+    return () => root.removeAttribute('data-call-active');
+  }, [callUiOpen]);
 
   function toggleNavCollapsed() {
     setNavCollapsed((prev) => {
@@ -1295,7 +1309,7 @@ export function Layout() {
       <div
         className={[
           'app-bottom-nav-spacer pointer-events-none lg:hidden',
-          mainChromeVisible ? '' : 'hidden',
+          showMobileBottomNav ? '' : 'hidden',
         ].join(' ')}
         aria-hidden="true"
       />
@@ -1308,6 +1322,7 @@ export function Layout() {
         fixed привязан к body/viewport полной высоты.
         На iOS idle оболочка — 100lvh, а bottom панели — --app-keyboard-inset
         (хром Safari), чтобы панель не оказалась посреди экрана и не уехала под хром.
+        Во время звонка скрываем (showMobileBottomNav) — CallWindow тоже в body.
       */}
       {typeof document !== 'undefined'
         ? createPortal(
@@ -1315,10 +1330,10 @@ export function Layout() {
               ref={bottomNavRef}
               className={[
                 'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex w-full min-w-0 max-w-full flex-col border-t border-black/[0.07] bg-[var(--surface-elevated)] pb-[max(0px,env(safe-area-inset-bottom,0px))] shadow-[0_-1px_0_rgba(0,0,0,0.05),0_-10px_40px_rgba(28,25,23,0.08)] lg:hidden transition-opacity duration-150 ease-out dark:border-white/[0.08] dark:shadow-[0_-1px_0_rgba(255,255,255,0.06),0_-12px_40px_rgba(0,0,0,0.35)] [padding-left:max(0px,env(safe-area-inset-left,0px))] [padding-right:max(0px,env(safe-area-inset-right,0px))]',
-                mainChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
+                showMobileBottomNav ? 'opacity-100' : 'pointer-events-none opacity-0',
               ].join(' ')}
               aria-label="Основная навигация"
-              aria-hidden={!mainChromeVisible}
+              aria-hidden={!showMobileBottomNav}
               style={
                 {
                   '--app-bottom-nav-cols': String(

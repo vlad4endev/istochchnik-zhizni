@@ -331,9 +331,14 @@
   --call-speak: #3b82f6;
   --call-speak-soft: rgba(59, 130, 246, 0.35);
   --call-brand: var(--primary, #7d3640);
+  /* Место под нижнюю панель кнопок + home indicator (iOS / Android) */
+  --call-controls-reserve: calc(112px + env(safe-area-inset-bottom, 0px));
   position: fixed;
   inset: 0;
   z-index: 10040;
+  /* Над таббаром (z-100 в body) и системными оверлеями приложения */
+  overscroll-behavior: none;
+  touch-action: manipulation;
   background:
     radial-gradient(120% 80% at 50% -10%, rgba(59, 130, 246, 0.12), transparent 55%),
     radial-gradient(90% 60% at 100% 100%, color-mix(in srgb, var(--call-brand) 22%, transparent), transparent 50%),
@@ -389,10 +394,10 @@
 .call-meeting-topbar {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: max(12px, env(safe-area-inset-top, 0px)) 18px 8px;
+  gap: 10px;
+  padding: max(12px, calc(env(safe-area-inset-top, 0px) + 6px)) 16px 8px;
   z-index: 4;
 }
 
@@ -406,12 +411,19 @@
 
 .call-meeting-topbar__title {
   margin: 0;
-  font-size: 1.08rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 1.05rem;
   font-weight: 700;
   letter-spacing: -0.01em;
-  white-space: nowrap;
+  line-height: 1.25;
+  color: #fff;
+  /* До 2 строк на узком экране — длинные названия страж не режутся в «…» сразу */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-word;
 }
 
 .call-meeting-topbar__meta {
@@ -419,6 +431,7 @@
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
+  padding-top: 1px;
 }
 
 .call-meeting-topbar__timer,
@@ -483,12 +496,12 @@
   align-items: center;
   justify-content: center;
   position: relative;
-  padding: 16px 14px calc(132px + env(safe-area-inset-bottom, 0px));
+  padding: 12px 12px var(--call-controls-reserve, calc(108px + env(safe-area-inset-bottom, 0px)));
   box-sizing: border-box;
 }
 
 .call-stage--meeting .call-stage__main {
-  padding-top: 8px;
+  padding-top: 4px;
 }
 
 .call-stage__remote-video,
@@ -512,7 +525,7 @@
 
 .call-stage__local-pip {
   position: absolute;
-  bottom: calc(110px + env(safe-area-inset-bottom, 0px));
+  bottom: var(--call-controls-reserve, calc(110px + env(safe-area-inset-bottom, 0px)));
   right: max(16px, env(safe-area-inset-right, 0px));
   width: min(132px, 34vw);
   aspect-ratio: 3 / 4;
@@ -526,7 +539,7 @@
 .call-start-audio {
   position: absolute;
   left: 50%;
-  bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+  bottom: var(--call-controls-reserve, calc(128px + env(safe-area-inset-bottom, 0px)));
   transform: translateX(-50%);
   z-index: 5;
   border: 0;
@@ -668,25 +681,25 @@
   position: fixed;
   left: 50%;
   right: auto;
-  bottom: max(14px, env(safe-area-inset-bottom, 0px));
+  bottom: max(16px, calc(12px + env(safe-area-inset-bottom, 0px)));
   z-index: 10045;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: nowrap;
   width: auto;
-  max-width: calc(100% - 20px);
+  max-width: min(520px, calc(100% - 16px));
   margin: 0;
-  padding: 10px 14px 8px;
+  padding: 10px 12px 8px;
   box-sizing: border-box;
   transform: translateX(-50%);
-  background: rgba(22, 24, 32, 0.72);
+  background: rgba(22, 24, 32, 0.78);
   backdrop-filter: blur(22px) saturate(1.2);
   -webkit-backdrop-filter: blur(22px) saturate(1.2);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 28px;
-  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.4);
+  border-radius: 26px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.45);
   pointer-events: none;
 }
 
@@ -997,20 +1010,26 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: 14px;
   z-index: 2;
-  max-width: min(420px, 100%);
-  padding: 8px;
+  width: 100%;
+  max-width: min(440px, 100%);
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 4px 2px;
   text-align: center;
+  box-sizing: border-box;
 }
 
 .call-meeting-lobby .call-participant-tile {
-  width: min(280px, 72vw);
+  width: min(320px, 86vw);
+  max-width: 100%;
 }
 
 .call-meeting-lobby .call-participant-tile--video .call-participant-tile__media {
   aspect-ratio: 3 / 4;
-  max-height: min(52vh, 420px);
+  width: 100%;
+  max-height: min(58vh, 520px);
 }
 
 .call-meeting-lobby .call-participant-tile--audio .call-participant-tile__media {
@@ -1020,10 +1039,14 @@
 
 .call-meeting-lobby__wait {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.78);
   letter-spacing: 0.01em;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* Когда есть сетка участников — колонка на всю сцену (не крошечный блок по центру). */
@@ -1640,6 +1663,51 @@
 }
 
 @media (max-width: 720px) {
+  .call-window {
+    --call-controls-reserve: calc(118px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .call-meeting-topbar {
+    padding: max(10px, calc(env(safe-area-inset-top, 0px) + 4px)) 12px 6px;
+    gap: 8px;
+  }
+
+  .call-meeting-topbar__title {
+    font-size: 0.98rem;
+  }
+
+  .call-meeting-topbar__count {
+    min-height: 26px;
+    padding: 3px 8px;
+    font-size: 0.78rem;
+  }
+
+  .call-layout-switch__btn {
+    width: 32px;
+    height: 28px;
+  }
+
+  .call-stage__main {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .call-meeting-lobby .call-participant-tile {
+    width: min(100%, 360px);
+  }
+
+  .call-meeting-lobby .call-participant-tile--video .call-participant-tile__media {
+    max-height: min(62vh, 560px);
+  }
+
+  .call-controls {
+    bottom: max(14px, calc(10px + env(safe-area-inset-bottom, 0px)));
+    max-width: calc(100% - 12px);
+    gap: 2px;
+    padding: 8px 8px 6px;
+    border-radius: 22px;
+  }
+
   .call-participants--video.call-participants--n2 {
     grid-template-columns: 1fr;
     grid-template-rows: repeat(2, minmax(0, 1fr));
@@ -1660,29 +1728,36 @@
   }
 
   .call-ctrl {
-    min-width: 52px;
+    min-width: 48px;
   }
 
   .call-ctrl__icon {
-    width: 44px;
-    height: 44px;
+    width: 46px;
+    height: 46px;
   }
 
   .call-ctrl--hangup .call-ctrl__icon {
-    width: 48px;
-    height: 48px;
+    width: 50px;
+    height: 50px;
   }
 
   .call-ctrl__label {
-    font-size: 0.62rem;
+    font-size: 0.6rem;
   }
+}
+
+/* Таббар не должен перехватывать клики во время звонка (страховка к Layout) */
+html[data-call-active='1'] .app-bottom-nav {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden;
 }
 
 .call-participant-tile--speaking.call-participant-tile--video .call-participant-tile__media {
   box-shadow:
     0 0 0 2px var(--call-speak, #3b82f6),
-    0 0 0 6px var(--call-speak-soft, rgba(59, 130, 246, 0.28)),
-    0 14px 36px rgba(0, 0, 0, 0.4);
+    0 0 0 5px var(--call-speak-soft, rgba(59, 130, 246, 0.22)),
+    0 12px 28px rgba(0, 0, 0, 0.35);
 }
 
 .call-participant-tile--speaking.call-participant-tile--audio .call-participant-tile__media {
@@ -2112,13 +2187,18 @@
 
   .call-sidepanel {
     top: max(10px, env(safe-area-inset-top, 0px));
-    bottom: calc(108px + env(safe-area-inset-bottom, 0px));
+    bottom: var(--call-controls-reserve, calc(118px + env(safe-area-inset-bottom, 0px)));
     width: min(100vw, 400px);
     border-radius: 16px 0 0 16px;
   }
 
   .call-controls {
     z-index: 10047;
+  }
+
+  .call-stage--meeting .call-stage__main:has(.call-meeting-lobby) {
+    align-items: stretch;
+    justify-content: stretch;
   }
 }
 
