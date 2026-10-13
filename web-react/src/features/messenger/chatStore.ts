@@ -1336,7 +1336,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] loadMessages error:', e);
-      // Чат из deep-link / устаревшего кэша, к которому больше нет доступа.
+      // Чат из deep-link / ссылки на встречу / устаревшего кэша — пользователь не участник.
       if (axios.isAxiosError(e) && e.response?.status === 403) {
         const goneId = String(conversationId);
         set((s) => ({
@@ -1346,9 +1346,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ? null
               : s.activeConversationId,
         }));
+        // Не дублируем англ. «Not a member of this conversation» из apiClient (silentErrorToast).
         emitAppToast({
           message: 'Нет доступа к этому чату.',
-          kind: 'error',
+          kind: 'info',
           adminOnly: true,
         });
       }

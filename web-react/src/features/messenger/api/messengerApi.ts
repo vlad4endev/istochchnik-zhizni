@@ -269,7 +269,11 @@ export async function fetchMessages(
   if (afterId) params.after = afterId;
   const { data } = await apiClient.get<MessageWithSender[]>(
     `${BASE}/conversations/${conversationId}/messages`,
-    { params },
+    {
+      params,
+      // 403 «Not a member…» обрабатывает chatStore (без глобального англ. toast).
+      silentErrorToast: true,
+    },
   );
   return data;
 }
