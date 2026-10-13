@@ -4,6 +4,7 @@ import type { CallMediaType, CallPublic } from './callsApi';
 
 export interface ActiveCallState {
   callId: string;
+  /** Empty for standalone Telemost-style meetings (no chat). */
   conversationId: string;
   peerId: number;
   peerName: string;
@@ -81,7 +82,7 @@ export const useCallStore = create<CallStore>((set) => ({
       return {
         activeCall: {
           callId: call.id,
-          conversationId: call.conversationId,
+          conversationId: call.conversationId ?? extras.conversationId ?? '',
           peerId: extras.peerId ?? s.activeCall?.peerId ?? 0,
           peerName: extras.peerName ?? s.activeCall?.peerName ?? 'Участник',
           peerAvatar: extras.peerAvatar ?? s.activeCall?.peerAvatar ?? '',

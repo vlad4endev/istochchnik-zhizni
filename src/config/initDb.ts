@@ -2361,6 +2361,7 @@ CREATE INDEX IF NOT EXISTS idx_app_releases_active_created
   ON app_releases (is_active, created_at DESC);
 
 -- LiveKit audio/video calls
+-- conversation_id NULL = standalone link meeting (Телемост): no chat/group created
 CREATE TABLE IF NOT EXISTS calls (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   type VARCHAR(16) NOT NULL CHECK (type IN ('direct', 'group')),
@@ -2377,7 +2378,7 @@ CREATE TABLE IF NOT EXISTS calls (
       'failed'
     )
   ),
-  conversation_id BIGINT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  conversation_id BIGINT REFERENCES conversations(id) ON DELETE CASCADE,
   livekit_room_name TEXT NOT NULL,
   initiated_by INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   access_mode VARCHAR(16) NOT NULL DEFAULT 'closed'
@@ -2388,7 +2389,16 @@ CREATE TABLE IF NOT EXISTS calls (
   duration_seconds INTEGER,
   end_reason VARCHAR(64),
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-  CONSTRAINT calls_livekit_room_name_unique UNIQUE (livekit_room_name)
+  CONSTRAINT calls_livekit_room_name_unique UNIQUE (livekit_room_name),
+  CONSTRAINT calls_conversation_or_link_check CHECK (
+    conversation_id IS NOT NULL OR access_mode = 'link'
+  )
+);
+-- Existing DBs: allow standalone meetings without a chat
+ALTER TABLE calls ALTER COLUMN conversation_id DROP NOT NULL;
+ALTER TABLE calls DROP CONSTRAINT IF EXISTS calls_conversation_or_link_check;
+ALTER TABLE calls ADD CONSTRAINT calls_conversation_or_link_check CHECK (
+  conversation_id IS NOT NULL OR access_mode = 'link'
 );
 CREATE INDEX IF NOT EXISTS idx_calls_conversation_created
   ON calls (conversation_id, created_at DESC);

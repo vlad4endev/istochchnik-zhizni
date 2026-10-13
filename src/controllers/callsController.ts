@@ -6,6 +6,7 @@ import {
   cancelCall,
   createDirectCall,
   createGroupCall,
+  createStandaloneLinkCall,
   createInvitation,
   declineCall,
   endCall,
@@ -65,7 +66,29 @@ export async function createCallHandler(req: Request, res: Response): Promise<vo
     const type = body.type === 'group' ? 'group' : body.type === 'direct' ? 'direct' : null;
     const mediaType = pickMediaType(body.mediaType ?? body.media_type);
     const conversationId = String(body.conversationId ?? body.chatId ?? '').trim();
-    if (!type || !mediaType || !conversationId) {
+    const accessMode: CallAccessMode =
+      body.accessMode === 'link' || body.access_mode === 'link' ? 'link' : 'closed';
+    const standalone =
+      body.standalone === true ||
+      body.standalone === 'true' ||
+      (!conversationId && type === 'group' && accessMode === 'link');
+
+    if (!type || !mediaType) {
+      res.status(400).json({ error: 'Укажите type и mediaType' });
+      return;
+    }
+
+    // Telemost-style: link meeting without a chat/group
+    if (type === 'group' && accessMode === 'link' && standalone) {
+      const call = await createStandaloneLinkCall({
+        initiatorId: uid,
+        mediaType,
+      });
+      res.status(201).json({ call });
+      return;
+    }
+
+    if (!conversationId) {
       res.status(400).json({ error: 'Укажите type, mediaType и conversationId' });
       return;
     }
@@ -82,8 +105,6 @@ export async function createCallHandler(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const accessMode: CallAccessMode =
-      body.accessMode === 'link' || body.access_mode === 'link' ? 'link' : 'closed';
     const call = await createGroupCall({
       initiatorId: uid,
       conversationId,
