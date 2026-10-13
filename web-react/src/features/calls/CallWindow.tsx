@@ -457,6 +457,33 @@ function MeetingOverflowTile({ count }: { count: number }) {
   );
 }
 
+function CameraOffPortrait({
+  name,
+  avatarSrc,
+  compact = false,
+}: {
+  name: string;
+  avatarSrc?: string;
+  compact?: boolean;
+}) {
+  const initials = participantInitials(name);
+  return (
+    <div
+      className={['call-cam-off', compact ? 'call-cam-off--compact' : ''].filter(Boolean).join(' ')}
+      aria-hidden
+    >
+      <span className="call-cam-off__glow" />
+      {avatarSrc ? (
+        <img src={avatarSrc} alt="" className="call-cam-off__avatar" />
+      ) : (
+        <div className="call-cam-off__initials" data-initials={initials}>
+          {initials}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MeetingParticipantTile({
   participant,
   callType,
@@ -471,13 +498,19 @@ function MeetingParticipantTile({
   const name = participantDisplayName(participant);
   const displayName = participant.isLocal ? `${name} (вы)` : name;
   const avatarSrc = participantAvatarUrl(participant);
-  const showVideo =
-    callType === 'video' &&
-    Boolean(cameraTrack && isTrackReference(cameraTrack) && cameraTrack.publication?.track);
   const speaking = useIsSpeaking(participant);
-  const { micOn } = useParticipantMediaFlags(participant);
+  const { micOn, camOn } = useParticipantMediaFlags(participant);
   const isAudio = callType === 'audio';
   const isSpotlight = size === 'spotlight';
+  const trackMuted = Boolean(
+    cameraTrack && isTrackReference(cameraTrack) && cameraTrack.publication?.isMuted,
+  );
+  // Камера выкл. / muted → не VideoTrack (чёрный кадр), а аватар или инициалы.
+  const showVideo =
+    callType === 'video' &&
+    camOn &&
+    !trackMuted &&
+    Boolean(cameraTrack && isTrackReference(cameraTrack) && cameraTrack.publication?.track);
 
   return (
     <div
@@ -488,6 +521,7 @@ function MeetingParticipantTile({
         size === 'strip' ? 'call-participant-tile--strip' : '',
         speaking ? 'call-participant-tile--speaking' : '',
         !micOn ? 'call-participant-tile--mic-off' : '',
+        !isAudio && !showVideo ? 'call-participant-tile--cam-off' : '',
         participant.isLocal ? 'call-participant-tile--local' : '',
       ]
         .filter(Boolean)
@@ -508,12 +542,16 @@ function MeetingParticipantTile({
             playsInline
             autoPlay
           />
-        ) : avatarSrc ? (
-          <img src={avatarSrc} alt="" className="call-participant-tile__avatar-img" />
+        ) : isAudio ? (
+          avatarSrc ? (
+            <img src={avatarSrc} alt="" className="call-participant-tile__avatar-img" />
+          ) : (
+            <div className="call-participant-tile__initials" aria-hidden>
+              {participantInitials(name)}
+            </div>
+          )
         ) : (
-          <div className="call-participant-tile__initials" aria-hidden>
-            {participantInitials(name)}
-          </div>
+          <CameraOffPortrait name={name} avatarSrc={avatarSrc} compact={size === 'strip'} />
         )}
         {!isAudio ? (
           <div className="call-participant-tile__chrome">
@@ -661,8 +699,16 @@ function RoomStage({
         ? remoteCam
         : null;
   const localVideo = localCam && isTrackReference(localCam) ? localCam : null;
+  const remoteCamOff = Boolean(
+    remoteCam &&
+      isTrackReference(remoteCam) &&
+      (remoteCam.publication?.isMuted || !remoteCam.participant.isCameraEnabled),
+  );
   const showRemoteVideo =
-    !isGroup && callType === 'video' && Boolean(remoteVideo?.publication?.track);
+    !isGroup &&
+    callType === 'video' &&
+    Boolean(remoteVideo?.publication?.track) &&
+    !(remoteVideo === remoteCam && remoteCamOff);
   const showLocalPip = !isGroup && callType === 'video' && Boolean(localVideo) && isCameraEnabled;
 
   const avatarSrc = peerAvatar ? resolvePublicUrl(peerAvatar) : undefined;
@@ -976,12 +1022,15 @@ function RoomStage({
             ) : null}
             {!showRemoteVideo ? (
               <div className="call-stage__avatar-block">
-                {avatarSrc ? (
+                {callType === 'video' ? (
+                  <CameraOffPortrait
+                    name={peerName}
+                    avatarSrc={avatarSrc || undefined}
+                  />
+                ) : avatarSrc ? (
                   <img src={avatarSrc} alt="" className="call-stage__avatar" />
-                ) : !peerAvatar ? (
-                  <MeetingAvatar mediaType={callType} size="lg" />
                 ) : (
-                  <div className="call-stage__avatar call-stage__avatar--placeholder" aria-hidden />
+                  <MeetingAvatar mediaType={callType} size="lg" />
                 )}
                 <p className="call-stage__name">{peerName}</p>
                 <p className="call-stage__status">{statusLabel}</p>

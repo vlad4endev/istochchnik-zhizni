@@ -1654,6 +1654,103 @@
   border-radius: inherit;
 }
 
+/* Camera off — avatar / stylish initials (no black square) */
+.call-cam-off {
+  --cam-off-brand: var(--primary, #7d3640);
+  --cam-off-brand-dark: var(--primary-dark, #5c2830);
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 42%, color-mix(in srgb, var(--cam-off-brand) 28%, transparent), transparent 70%),
+    linear-gradient(165deg, #1a1820 0%, #12121c 48%, #0e0d12 100%);
+}
+
+.call-cam-off__glow {
+  position: absolute;
+  width: min(58%, 220px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--cam-off-brand) 38%, transparent) 0%,
+    transparent 72%
+  );
+  filter: blur(2px);
+  pointer-events: none;
+}
+
+.call-cam-off__avatar,
+.call-cam-off__initials {
+  position: relative;
+  z-index: 1;
+  width: min(42%, 148px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.14),
+    0 0 0 10px color-mix(in srgb, var(--cam-off-brand) 22%, transparent),
+    0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+.call-cam-off__avatar {
+  object-fit: cover;
+  display: block;
+  background: #2a2224;
+}
+
+.call-cam-off__initials {
+  display: grid;
+  place-items: center;
+  font-size: clamp(1.35rem, 4.2vw, 2.35rem);
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  color: var(--text-on-primary, #fff);
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.32), transparent 42%),
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--cam-off-brand) 72%, #fff) 0%,
+      var(--cam-off-brand) 48%,
+      var(--cam-off-brand-dark) 100%
+    );
+  user-select: none;
+}
+
+.call-cam-off--compact .call-cam-off__avatar,
+.call-cam-off--compact .call-cam-off__initials {
+  width: min(52%, 72px);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.14),
+    0 0 0 6px color-mix(in srgb, var(--cam-off-brand) 20%, transparent),
+    0 10px 22px rgba(0, 0, 0, 0.4);
+}
+
+.call-cam-off--compact .call-cam-off__initials {
+  font-size: clamp(0.95rem, 2.8vw, 1.25rem);
+}
+
+.call-participant-tile--cam-off .call-participant-tile__media {
+  background: #12121c;
+}
+
+.call-stage__avatar-block > .call-cam-off {
+  position: relative;
+  width: min(220px, 56vw);
+  aspect-ratio: 1;
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+}
+
+.call-stage__avatar-block > .call-cam-off .call-cam-off__avatar,
+.call-stage__avatar-block > .call-cam-off .call-cam-off__initials {
+  width: min(58%, 120px);
+}
+
 .call-participant-tile--audio .call-participant-tile__avatar-img,
 .call-participant-tile--audio .call-participant-tile__initials {
   position: relative;
