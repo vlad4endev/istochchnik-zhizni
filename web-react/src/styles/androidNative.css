@@ -54,10 +54,11 @@ html.app-android-native .app-page-header {
   position: relative;
   isolation: isolate;
   height: auto;
-  min-height: 68px;
+  min-height: 88px;
   align-items: flex-start;
-  padding-top: 14px;
-  padding-bottom: 26px;
+  padding-top: 18px;
+  padding-bottom: 38px;
+  padding-inline: 20px;
   border-radius: 0;
   background:
     radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
@@ -66,7 +67,7 @@ html.app-android-native .app-page-header {
 }
 
 html.app-android-native .app-page-header h1 {
-  font-size: 23px;
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.15;
@@ -79,7 +80,7 @@ html.app-android-native .app-page-header::after {
   left: 0;
   right: 0;
   bottom: -1px;
-  height: 26px;
+  height: 30px;
   z-index: -1;
   background: var(--surface);
   border-radius: 30px 30px 0 0;
@@ -154,9 +155,9 @@ html.app-android-native:not(.dark, [data-mantine-color-scheme='dark'], [data-col
 html.app-android-native .tg-sidebar-header {
   position: relative;
   isolation: isolate;
-  min-height: 68px;
+  min-height: 88px;
   align-items: flex-start;
-  padding: 14px 20px 26px;
+  padding: 14px 20px 30px;
   border-bottom: none;
   background:
     radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
@@ -170,7 +171,7 @@ html.app-android-native .tg-sidebar-header::after {
   left: 0;
   right: 0;
   bottom: -1px;
-  height: 26px;
+  height: 30px;
   z-index: -1;
   background: var(--surface);
   border-radius: 30px 30px 0 0;
@@ -251,8 +252,8 @@ html.app-android-native .app-feed-header {
   isolation: isolate;
   grid-template-columns: 1fr auto;
   align-items: start;
-  min-height: 68px;
-  padding: 14px 20px 26px;
+  min-height: 88px;
+  padding: 14px 20px 30px;
   background:
     radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
     radial-gradient(90% 120% at 100% 10%, rgba(240, 162, 90, 0.34), transparent 62%),
@@ -266,7 +267,7 @@ html.app-android-native .app-feed-header::after {
   left: 0;
   right: 0;
   bottom: -1px;
-  height: 26px;
+  height: 30px;
   z-index: -1;
   background: var(--surface);
   border-radius: 30px 30px 0 0;
@@ -806,14 +807,14 @@ html.app-android-native:not(.dark) [class*='border-primary/'] {
 }
 
 /* Публичный профиль: бордовая верхняя панель и отступы ленты. */
-html.app-android-native:not(.dark) [data-profile-root] > div:first-child:not(.profile-banner):not([class*='Skel']) {
+html.app-android-native:not(.dark) [data-profile-root] > [class*='igTopBar']:not([class*='Skel']) {
   background: linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
   color: #fff;
   border-bottom: none;
 }
-html.app-android-native:not(.dark) [data-profile-root] > div:first-child:not(.profile-banner) button,
-html.app-android-native:not(.dark) [data-profile-root] > div:first-child:not(.profile-banner) a,
-html.app-android-native:not(.dark) [data-profile-root] > div:first-child:not(.profile-banner) span {
+html.app-android-native:not(.dark) [data-profile-root] > [class*='igTopBar'] button,
+html.app-android-native:not(.dark) [data-profile-root] > [class*='igTopBar'] a,
+html.app-android-native:not(.dark) [data-profile-root] > [class*='igTopBar'] span {
   color: #fff;
 }
 html.app-android-native:not(.dark) [data-profile-root] main {
@@ -896,4 +897,109 @@ html.app-android-native:not(.dark) .studio-btn-success {
 html.app-android-native:not(.dark) button[class*='bg-[#1A9A55]'] {
   background: linear-gradient(135deg, #8a2742, #5a1826);
   color: #fff;
+}
+
+
+/* ───────── Единая сетка: поля 16px, ритм 12/20px, читаемые размеры текста ───────── */
+
+html.app-android-native {
+  --ac-gutter: 16px;
+}
+
+/* Корневые обёртки страниц с узкими полями (px-3 = 12px) приводим к общим 16px. */
+html.app-android-native .dashboard-adaptive > .mx-auto,
+html.app-android-native .prayer-page-bg > div:not(.section-hero-sticky),
+html.app-android-native main[class*='_feed_'] {
+  padding-left: var(--ac-gutter) !important;
+  padding-right: var(--ac-gutter) !important;
+}
+
+/* Мелкий служебный текст: не меньше 12px (рекомендация Material/Android). */
+html.app-android-native .app-main-content [class*='text-[10px]'],
+html.app-android-native .app-main-content [class*='text-[11px]'] {
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+/* Быстрые действия на главной: крупные плитки с читаемой подписью. */
+html.app-android-native .dashboard-quick-actions {
+  gap: 10px;
+  padding-top: 16px;
+  padding-bottom: 8px;
+}
+html.app-android-native .dashboard-quick-actions > button {
+  min-height: 84px;
+  padding: 12px 6px;
+  gap: 8px;
+  border-radius: 20px;
+  box-shadow: var(--shadow-card);
+}
+html.app-android-native .dashboard-quick-actions > button > span:first-child {
+  width: 40px;
+  height: 40px;
+}
+html.app-android-native .dashboard-quick-actions > button > span:first-child svg {
+  width: 20px;
+  height: 20px;
+}
+html.app-android-native .dashboard-quick-actions > button > span:last-child {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+/* Заголовки блоков (ДНИ РОЖДЕНИЯ и т.п.): один стиль и воздух сверху. */
+html.app-android-native .dashboard-adaptive section > div[class*='uppercase'] {
+  margin-top: 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #8a2742;
+}
+
+/* mobile.css схлопывает любые .grid-cols-2/3 в одну колонку на телефоне — из-за этого плитки и метрики
+   вытягивались в длинный столбик. В Android-режиме возвращаем колонки, заданные в разметке. */
+@media (max-width: 639px) {
+  html.app-android-native .grid-cols-2:not(.app-mobile-sections-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+  html.app-android-native .grid-cols-3:not(.app-mobile-sections-grid) {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+}
+
+html.app-android-native .tg-sidebar-header h1,
+html.app-android-native .tg-sidebar-header h2,
+html.app-android-native .app-feed-header__title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* Контент чуть поднимается к скруглению листа. Полоса-«шторка» лежит поверх верхних 30px шапки,
+   поэтому сдвиг небольшой: больше — и она накроет верх контента. */
+html.app-android-native .section-hero-sticky + * {
+  position: relative;
+  z-index: 1;
+  margin-top: -6px;
+}
+
+/* Поля страниц: любые блоки-обёртки с px-3 (12px) приводим к общим 16px. */
+html.app-android-native .app-main-content :is(div, section, header, main, aside).px-3 {
+  padding-left: var(--ac-gutter);
+  padding-right: var(--ac-gutter);
+}
+html.app-android-native .app-main-content [class*='pl-[max(0.75rem'] {
+  padding-left: max(var(--ac-gutter), env(safe-area-inset-left, 0px));
+}
+html.app-android-native .app-main-content [class*='pr-[max(0.75rem'] {
+  padding-right: max(var(--ac-gutter), env(safe-area-inset-right, 0px));
+}
+
+/* «Песенник»: у прокручиваемой колонки был верхний отступ 4px — шапка отрывалась от края экрана. */
+html.app-android-native div.overflow-y-auto:has(> div > .section-hero-sticky) {
+  padding-top: 0;
 }
