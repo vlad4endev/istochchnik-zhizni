@@ -896,7 +896,7 @@ export function DailyPrayerPage() {
   return (
     <div className="prayer-page-bg flex min-h-0 flex-1 flex-col max-lg:pb-0 lg:pb-8">
       <div className={sectionHeroStickyClass}>
-        <PageHeader title="Молитва" />
+        <PageHeader title="Молитва" subtitle="Нужды и план на день" />
       </div>
 
       {/* Чип даты и календарь — под шапкой, не внутри липкой primary-полосы */}
