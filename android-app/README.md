@@ -70,19 +70,22 @@ npm run android
 
 ## Сборка APK / AAB
 
-```bash
-# Debug APK (подписан debug keystore)
-npm run android:apk
-# → android/app/build/outputs/apk/debug/app-debug.apk
+Standalone APK **должен** включать JS-бандл. Скрипт `android:apk` сначала делает
+`react-native bundle`, затем `assembleRelease` — Metro для установки не нужен.
 
-# Release APK (сейчас тоже debug keystore — замените перед магазином)
-npm run android:apk:release
+```bash
+# Standalone release APK (armeabi-v7a + arm64-v8a), работает без Metro
+npm run android:apk
+# → android/app/build/outputs/apk/release/app-release.apk
+
+# Только Metro-debug (для разработки: npm start + npm run android)
+npm run android:apk:debug-metro
 
 # Play Store AAB
 npm run android:bundle
 ```
 
-Для магазина: создайте upload keystore и настройте `signingConfigs.release` в `android/app/build.gradle` (не коммитьте секреты).
+Для магазина: создайте upload keystore и настройте `signingConfigs.release` в `android/app/build.gradle` (не коммитьте секреты). Сейчас release подписан debug keystore — удобно для внутренней установки.
 
 ## Тесты
 
