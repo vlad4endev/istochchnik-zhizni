@@ -215,7 +215,7 @@ function StudioTopBar({
 }) {
   return (
     <header
-      className="flex shrink-0 items-center gap-2 border-b border-[var(--studio-toolbar-border)] bg-[var(--studio-toolbar-bg)] px-3 py-2 md:hidden"
+      className="studio-mobile-toolbar flex shrink-0 items-center gap-2 border-b border-[var(--studio-toolbar-border)] bg-[var(--studio-toolbar-bg)] px-3 py-2 md:hidden"
       /*
        * Без env(safe-area-inset-top): корень StudioLayout — обычный блок в потоке,
        * а #root уже держит `padding-top: env(safe-area-inset-top)`. Второй такой

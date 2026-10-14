@@ -113,6 +113,7 @@ import { useImpersonation } from '../hooks/useImpersonation';
 import { isAppAdministratorSession } from '../../auth/authStore';
 import { APP_ROLE_IDS, appRoleLabel } from '../../settings/sectionVisibilityApi';
 import { BodyPortal } from '../../../components/BodyPortal';
+import { NativeScreenHeader } from '@/components/layout/NativeScreenHeader';
 
 type UpcomingBirthday = {
   nextDate: Date;
@@ -458,6 +459,8 @@ export function AdminPage() {
   const meta = ADMIN_TABS.find((t) => t.id === tab)!;
 
   return (
+    <>
+    <NativeScreenHeader title="Админ" />
     <div className="mx-auto w-full min-w-0 max-w-6xl px-3 py-3 sm:px-4 sm:py-4 shell:px-6 shell:py-6">
       <div className="min-w-0">
         {/* На узких экранах разделы в основном меню недоступны — компактный переключатель */}
@@ -515,6 +518,7 @@ export function AdminPage() {
         {tab === 'integrations' && <IntegrationsSection />}
       </div>
     </div>
+    </>
   );
 }
 
