@@ -117,7 +117,11 @@ function navIconClass(isActive: boolean, compact: boolean) {
     compact ? 'app-bottom-nav__glyph h-[1.125rem] w-[1.125rem] sm:h-5 sm:w-5' : 'h-5 w-5',
     'shrink-0 transition-colors duration-200',
     isActive && compact ? 'bottom-nav-active-icon' : '',
-    isActive && compact ? 'text-primary' : isActive ? 'text-white' : 'text-gray-400 group-hover:text-primary',
+    isActive && compact
+      ? 'text-primary max-phone:text-ink'
+      : isActive
+        ? 'text-white'
+        : 'text-gray-400 group-hover:text-primary',
   ].join(' ');
 }
 
@@ -197,8 +201,10 @@ function navClassName(isActive: boolean, compact = false): string {
 
 function mobileBottomTabIconClass(isActive: boolean): string {
   return [
-    'app-bottom-nav__icon relative z-10 grid place-items-center overflow-visible rounded-full transition-colors duration-200',
-    isActive ? 'is-active bg-primary/[0.12]' : 'group-active:bg-black/[0.05] dark:group-active:bg-white/[0.08]',
+    'app-bottom-nav__icon relative z-10 grid h-9 w-9 place-items-center overflow-visible rounded-full transition-colors duration-200 max-phone:h-10 max-phone:w-10',
+    isActive
+      ? 'is-active bg-primary/[0.12] max-phone:bg-gold max-phone:text-ink max-phone:shadow-[0_4px_12px_rgba(242,184,121,0.45)]'
+      : 'group-active:bg-black/[0.05] dark:group-active:bg-white/[0.08]',
   ].join(' ');
 }
 
