@@ -549,7 +549,7 @@ function IntegrationsSection() {
   return (
     <div className="space-y-6">
       <section className="rounded-[10px] bg-stone-100 p-1">
-        <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+        <div className="admin-subtabs grid grid-cols-2 gap-1 sm:grid-cols-4">
           <button
             type="button"
             className={

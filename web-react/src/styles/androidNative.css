@@ -1486,3 +1486,44 @@ html.app-android-native .perform-stage .perform-song-strip-btn--active {
 html.app-android-native .songbook-reader--stage .chorus-block {
   border-left-color: #f2b879;
 }
+
+/* Ссылки «sky» и синие аккорды на светлых страницах — в бордовый (кроме тёмных сцен). */
+html.app-android-native:not(.dark) a[class*='text-sky-'],
+html.app-android-native:not(.dark) a[class*='text-blue-'] {
+  color: #8a2742;
+  font-weight: 600;
+}
+html.app-android-native:not(.dark) li .chord-line,
+html.app-android-native:not(.dark) li .chord-line *,
+html.app-android-native:not(.dark) li [class*='chord'] {
+  color: #8a2742;
+}
+
+/* Админ → «Релизы»: кнопка под текстом, а не в узкой колонке справа. */
+html.app-android-native .release-card-row {
+  flex-wrap: wrap;
+}
+html.app-android-native .release-card-row > div {
+  flex: 1 1 calc(100% - 3.5rem);
+}
+html.app-android-native .release-card-row > button {
+  flex: 1 1 100%;
+  justify-content: center;
+}
+
+/* Админ → «Интеграции»: вкладки в одну прокручиваемую строку, подписи не рвутся по слогам. */
+html.app-android-native .admin-subtabs {
+  display: flex;
+  overflow-x: auto;
+  gap: 6px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+html.app-android-native .admin-subtabs::-webkit-scrollbar {
+  display: none;
+}
+html.app-android-native .admin-subtabs > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-height: 44px;
+}

@@ -144,7 +144,7 @@ export function AppReleasesSection() {
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border border-stone-200/80 bg-gradient-to-br from-[#E8F5E9] via-white to-stone-50 p-4 sm:p-5">
-        <div className="flex items-start gap-3">
+        <div className="release-card-row flex items-start gap-3">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#3DDC84] text-[#073042]">
             <FaAndroid className="h-6 w-6" aria-hidden />
           </span>
