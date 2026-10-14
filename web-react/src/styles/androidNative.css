@@ -642,3 +642,23 @@ html.app-android-native .sermon-editor-title {
   line-height: 1.2;
   color: var(--text);
 }
+
+/* «Ещё»: шторка в палитре «Моя церковь» (разметка прежняя) */
+html.app-android-native:not(.dark) .app-mobile-nav-more-sheet {
+  background: #fbf6ef;
+  border-color: rgba(138, 39, 66, 0.12);
+  border-top-left-radius: 30px;
+  border-top-right-radius: 30px;
+  color: #3a1018;
+}
+html.app-android-native:not(.dark) .app-mobile-nav-more-sheet a,
+html.app-android-native:not(.dark) .app-mobile-nav-more-sheet button:not([aria-label]) {
+  background: #fff;
+  border-color: rgba(138, 39, 66, 0.12);
+  color: #3a1018;
+  font-weight: 700;
+}
+html.app-android-native:not(.dark) .app-mobile-nav-more-sheet a svg,
+html.app-android-native:not(.dark) .app-mobile-nav-more-sheet button:not([aria-label]) svg {
+  color: #8a2742;
+}
