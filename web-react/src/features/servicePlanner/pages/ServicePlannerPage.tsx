@@ -3261,7 +3261,7 @@ export function ServicePlannerPage() {
                                 </p>
                               ) : null}
                               {hiddenFromPublic ? (
-                                <p className="text-xs font-semibold leading-snug text-stone-500 max-lg:text-[13px] sm:text-xs">
+                                <p className="text-xs font-semibold leading-snug text-wine max-lg:text-[13px] sm:text-xs">
                                   Скрыт в опубликованной версии
                                 </p>
                               ) : null}
