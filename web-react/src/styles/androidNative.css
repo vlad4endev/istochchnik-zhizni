@@ -780,3 +780,43 @@ html.app-android-native .call-participant-tile__chrome {
   border-radius: 999px;
   padding: 4px 10px;
 }
+
+/* Tailwind-утилиты `primary` заданы литералом (#7d3640); в Android-режиме ведём их в палитру макетов. */
+html.app-android-native:not(.dark) .bg-primary {
+  background-color: #8a2742;
+}
+html.app-android-native:not(.dark) .bg-primary-dark,
+html.app-android-native:not(.dark) .hover\:bg-primary-dark:hover {
+  background-color: #5a1826;
+}
+html.app-android-native:not(.dark) .text-primary {
+  color: #8a2742;
+}
+html.app-android-native:not(.dark) .text-primary-dark {
+  color: #5a1826;
+}
+html.app-android-native:not(.dark) .border-primary {
+  border-color: #8a2742;
+}
+html.app-android-native:not(.dark) [class*='bg-primary/'] {
+  background-color: rgba(138, 39, 66, 0.1);
+}
+html.app-android-native:not(.dark) [class*='border-primary/'] {
+  border-color: rgba(138, 39, 66, 0.25);
+}
+
+/* Публичный профиль: бордовая верхняя панель и отступы ленты. */
+html.app-android-native:not(.dark) [data-profile-root] > div:first-child:not(.profile-banner):not([class*='Skel']) {
+  background: linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+  color: #fff;
+  border-bottom: none;
+}
+html.app-android-native:not(.dark) [data-profile-root] > div:first-child:not(.profile-banner) button,
+html.app-android-native:not(.dark) [data-profile-root] > div:first-child:not(.profile-banner) a,
+html.app-android-native:not(.dark) [data-profile-root] > div:first-child:not(.profile-banner) span {
+  color: #fff;
+}
+html.app-android-native:not(.dark) [data-profile-root] main {
+  padding: 0.75rem 0.75rem 2.5rem !important;
+  box-sizing: border-box;
+}
