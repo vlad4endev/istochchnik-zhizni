@@ -869,3 +869,25 @@ html.app-android-native:not(.dark) [role='dialog'][aria-labelledby='poll-create-
 html.app-android-native:not(.dark) [role='dialog'][aria-labelledby='poll-create-title'] header h2 {
   color: #3a1018;
 }
+
+/* Редактор песни: нижняя панель на всю ширину (кнопка «В каталог» не должна схлопываться). */
+html.app-android-native .studio-editor-mobile-dock > div {
+  width: 100%;
+}
+html.app-android-native .studio-editor-mobile-dock > div {
+  gap: 0.375rem;
+  padding-inline: 0.5rem;
+}
+html.app-android-native .studio-editor-mobile-dock button {
+  white-space: nowrap;
+  padding-inline: 0.625rem;
+  font-size: 0.8125rem;
+}
+html.app-android-native .studio-editor-mobile-dock button[aria-label] {
+  padding-inline: 0;
+  flex-shrink: 0;
+}
+html.app-android-native:not(.dark) .studio-btn-success {
+  background: linear-gradient(135deg, #8a2742, #5a1826);
+  color: #fff;
+}
