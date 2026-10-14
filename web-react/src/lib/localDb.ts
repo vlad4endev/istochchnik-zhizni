@@ -86,7 +86,9 @@ function currentUserKey(): string {
   try {
     const s = useAuthStore.getState();
     if (!s.token) return '';
-    return String(s.memberId ?? s.username ?? 'user');
+    // Публичный UUID (members.user_id) — стабильный ключ пользователя; без него — числовой id.
+    const publicId = (s as { userId?: string | null }).userId;
+    return String(publicId?.trim() || s.memberId || s.username || 'user');
   } catch {
     return '';
   }
