@@ -445,3 +445,49 @@ html.app-android-native .app-offline-page a {
   background: var(--ac-amber);
   color: var(--ac-amber-ink);
 }
+
+/* ───────── Чтение песни: тёмный режим из макета (янтарные аккорды) ───────── */
+
+html.app-android-native .song-detail-page {
+  --sd-surface: #0b0b0e !important;
+  --sd-surface-elevated: #0b0b0e !important;
+  --sd-text: #ffffff !important;
+  --sd-text-secondary: rgba(255, 255, 255, 0.78) !important;
+  --sd-text-muted: rgba(255, 255, 255, 0.55) !important;
+  --sd-border: rgba(255, 255, 255, 0.1) !important;
+  --sd-bg-elevated: rgba(255, 255, 255, 0.08) !important;
+  --sd-bg-hover: rgba(255, 255, 255, 0.12) !important;
+  background: #0b0b0e;
+}
+
+html.app-android-native .song-detail-page .songbook-reader {
+  border-color: transparent;
+  background: #0b0b0e;
+  color: #fff;
+}
+
+html.app-android-native .song-detail-page .songbook-reader .chord-slot,
+html.app-android-native .song-detail-page .songbook-reader .chord-token {
+  color: var(--ac-amber) !important;
+}
+
+html.app-android-native .song-detail-page .songbook-reader .section-label {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* ───────── Профиль: баннер в палитре макетов ───────── */
+
+html.app-android-native [data-profile-root] {
+  --profile-gradient-from: #7a1f3a;
+  --profile-gradient-to: #230810;
+}
+
+html.app-android-native .song-detail-page .songbook-reader .chord-line,
+html.app-android-native .song-detail-page .songbook-reader .chord-line * {
+  color: var(--ac-amber) !important;
+}
+
+html.app-android-native .song-detail-page .app-page-header::after {
+  background: #0b0b0e;
+}

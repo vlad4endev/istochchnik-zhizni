@@ -123,7 +123,7 @@ export function SongDetailPage() {
   };
 
   return (
-    <div style={semanticVars as CSSProperties} className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--sd-text)]">
+    <div style={semanticVars as CSSProperties} className="song-detail-page mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--sd-text)]">
       <div className={`${sectionHeroStickyClass} z-30`}>
         <PageHeader title={s.title} />
       </div>
