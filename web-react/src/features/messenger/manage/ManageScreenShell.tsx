@@ -15,9 +15,9 @@ export function ManageScreenShell({ children, trailing }: ManageScreenShellProps
   const navigate = useNavigate();
 
   return (
-    <div className="w-full bg-[#F2F2F7] pb-4 text-[var(--text)] dark:bg-[var(--bg-base)]">
+    <div className="manage-screen w-full bg-[#F2F2F7] pb-4 text-[var(--text)] dark:bg-[var(--bg-base)]">
       <div className="mx-auto w-full max-w-xl px-4 pb-24 pt-3 md:max-w-2xl md:px-6 lg:max-w-3xl">
-        <div className="flex items-center justify-between gap-2">
+        <div className="manage-screen__bar flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={() => navigate(-1)}

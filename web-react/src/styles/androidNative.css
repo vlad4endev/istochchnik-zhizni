@@ -820,3 +820,52 @@ html.app-android-native:not(.dark) [data-profile-root] main {
   padding: 0.75rem 0.75rem 2.5rem !important;
   box-sizing: border-box;
 }
+
+/* Управление чатом (участники, админы, права, медиа): бордовая шапка и кремовый фон */
+html.app-android-native:not(.dark) .manage-screen {
+  background: var(--surface);
+  min-height: var(--app-content-height, 100dvh);
+}
+html.app-android-native:not(.dark) .manage-screen__bar {
+  position: relative;
+  isolation: isolate;
+  margin: -0.75rem -1rem 1rem;
+  padding: 0.75rem 1rem 1.75rem;
+  color: #fff;
+  background:
+    radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+}
+html.app-android-native:not(.dark) .manage-screen__bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 18px;
+  z-index: -1;
+  background: var(--surface);
+  border-radius: 24px 24px 0 0;
+}
+html.app-android-native:not(.dark) .manage-screen__bar button:not(.bg-primary) {
+  color: #fff;
+}
+html.app-android-native:not(.dark) .manage-screen__bar .bg-primary {
+  background: var(--ac-amber);
+  color: var(--ac-amber-ink);
+}
+html.app-android-native:not(.dark) .manage-screen .bg-gray-900 {
+  background: linear-gradient(135deg, #8a2742, #5a1826);
+}
+
+/* Серые «iOS»-подложки (#f2f2f7) в окнах и листах заменяем кремовой поверхностью. */
+html.app-android-native:not(.dark) [class*='bg-[#f2f2f7]'],
+html.app-android-native:not(.dark) [class*='bg-[#F2F2F7]'] {
+  background-color: var(--surface);
+}
+html.app-android-native:not(.dark) [role='dialog'][aria-labelledby='poll-create-title'] > div {
+  border-radius: 26px;
+}
+html.app-android-native:not(.dark) [role='dialog'][aria-labelledby='poll-create-title'] header h2 {
+  color: #3a1018;
+}
