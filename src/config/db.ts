@@ -1,14 +1,15 @@
 import { Pool, type PoolConfig } from 'pg';
 import dotenv from 'dotenv';
 
+import { buildPgSslOptions, resolveUseSsl } from './pgSsl';
+
 dotenv.config();
 
 const rawConnectionString = process.env.DATABASE_URL;
-const forceSsl = process.env.DB_SSL === 'true';
-const hasSslModeInConnectionString = rawConnectionString?.includes('sslmode=');
-const useSsl = forceSsl || Boolean(hasSslModeInConnectionString);
-/** По умолчанию false — Supabase/managed Postgres часто дают SELF_SIGNED_CERT_IN_CHAIN при verify-full. Строгая проверка CA: DB_SSL_REJECT_UNAUTHORIZED=true */
-const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true';
+const hasSslModeInConnectionString = Boolean(rawConnectionString?.includes('sslmode='));
+const useSsl = resolveUseSsl(rawConnectionString, process.env.DB_SSL);
+const sslOptions = buildPgSslOptions({ connectionString: rawConnectionString });
+const rejectUnauthorized = sslOptions?.rejectUnauthorized ?? false;
 const dbDebugLog = process.env.DB_DEBUG_LOG === 'true';
 
 /**
@@ -82,7 +83,7 @@ function buildPoolConfig(): PoolConfig {
 
   return {
     connectionString,
-    ssl: useSsl ? { rejectUnauthorized } : undefined,
+    ssl: sslOptions,
     max,
     idleTimeoutMillis,
     connectionTimeoutMillis,

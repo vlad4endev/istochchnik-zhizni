@@ -131,7 +131,7 @@ export async function previewSongImportXlsx(req: Request, res: Response): Promis
     res.status(400).json({ error: 'xlsx file required (field: file)' });
     return;
   }
-  const parsed = parseXlsxBuffer(Buffer.from(file.buffer), { previewLimit: 5 });
+  const parsed = await parseXlsxBuffer(Buffer.from(file.buffer), { previewLimit: 5 });
   res.json({
     totalRows: parsed.totalRows,
     parsedSongs: parsed.songs.length,
@@ -149,7 +149,7 @@ export async function parseSongImportXlsx(req: Request, res: Response): Promise<
     res.status(400).json({ error: 'xlsx file required (field: file)' });
     return;
   }
-  const parsed = parseXlsxBuffer(Buffer.from(file.buffer), { previewLimit: 0 });
+  const parsed = await parseXlsxBuffer(Buffer.from(file.buffer), { previewLimit: 0 });
   res.json({
     totalRows: parsed.totalRows,
     parsedSongs: parsed.songs.length,
@@ -170,7 +170,7 @@ export async function startSongImportXlsx(req: Request, res: Response): Promise<
 
   cleanupJobs();
 
-  const parsed = parseXlsxBuffer(Buffer.from(file.buffer), { previewLimit: 0 });
+  const parsed = await parseXlsxBuffer(Buffer.from(file.buffer), { previewLimit: 0 });
   if (parsed.errors.length > 0) {
     res.status(422).json({ error: 'Файл содержит ошибки. Сначала исправьте их.', errors: parsed.errors });
     return;
