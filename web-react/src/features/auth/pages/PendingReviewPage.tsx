@@ -8,7 +8,7 @@ export function PendingReviewPage() {
   const logout = useAuthStore((s) => s.logout);
 
   return (
-    <div className="mx-auto flex min-h-[70dvh] max-w-lg flex-col justify-center gap-4 px-4 py-12 text-center text-stone-700">
+    <div className="app-pending-page mx-auto flex min-h-[70dvh] max-w-lg flex-col justify-center gap-4 px-4 py-12 text-center text-stone-700">
       <h1 className="text-xl font-semibold text-stone-900">Заявка на рассмотрении</h1>
       <p className="text-sm leading-relaxed">
         После подтверждения администратором откроется полный доступ. Затем обновите страницу или войдите снова.

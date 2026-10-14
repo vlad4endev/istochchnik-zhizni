@@ -491,3 +491,43 @@ html.app-android-native .song-detail-page .songbook-reader .chord-line * {
 html.app-android-native .song-detail-page .app-page-header::after {
   background: #0b0b0e;
 }
+
+/* Активные «чипы» в тёмном цвете — в палитре макетов бордовые. */
+html.app-android-native button.bg-stone-900 {
+  background: linear-gradient(135deg, #8a2742, #5a1826);
+  color: #fff;
+}
+
+/* «Заявка на проверке» */
+html.app-android-native .app-pending-page {
+  max-width: none;
+  min-height: var(--app-content-height, 100dvh);
+  padding-inline: 24px;
+  color: rgba(255, 255, 255, 0.8);
+  background:
+    radial-gradient(120% 70% at 8% 0%, rgba(194, 69, 95, 0.55), transparent 60%),
+    radial-gradient(90% 60% at 100% 35%, rgba(240, 162, 90, 0.34), transparent 62%),
+    linear-gradient(170deg, #7a1f3a 0%, #230810 100%);
+}
+
+html.app-android-native .app-pending-page h1 {
+  color: #fff;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+html.app-android-native .app-pending-page button {
+  color: var(--ac-amber);
+}
+
+/* Запрос разрешений: бордовая стеклянная карточка. */
+html.app-android-native .app-permissions-card {
+  border-radius: 28px;
+  background: rgba(34, 8, 16, 0.92);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+html.app-android-native .app-permissions-card button:first-of-type {
+  background: var(--ac-amber);
+  color: var(--ac-amber-ink);
+}

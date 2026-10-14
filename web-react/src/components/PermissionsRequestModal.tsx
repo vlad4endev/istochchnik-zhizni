@@ -175,7 +175,7 @@ export function PermissionsRequestModal() {
         role="dialog"
         aria-modal="true"
         aria-label="Разрешения приложения"
-        className="relative z-[111] w-full max-w-[min(100%,24rem)] rounded-2xl border border-white/10 bg-zinc-900/90 px-5 py-5 text-zinc-100 shadow-2xl ring-1 ring-inset ring-white/10 backdrop-blur-xl"
+        className="app-permissions-card relative z-[111] w-full max-w-[min(100%,24rem)] rounded-2xl border border-white/10 bg-zinc-900/90 px-5 py-5 text-zinc-100 shadow-2xl ring-1 ring-inset ring-white/10 backdrop-blur-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-[15px] font-extrabold tracking-tight text-white">
