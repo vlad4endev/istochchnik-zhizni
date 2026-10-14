@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Цвета темы AppTheme (styles.xml). Палитра из макетов: бордовый и янтарь. -->
+    <color name="colorPrimary">#8A2742</color>
+    <color name="colorPrimaryDark">#5A1826</color>
+    <color name="colorAccent">#F2B879</color>
+</resources>
