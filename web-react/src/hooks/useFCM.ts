@@ -70,7 +70,12 @@ async function postSaveTokenRequest(
     method: 'POST',
     headers,
     credentials: 'include',
-    body: JSON.stringify({ fcm_token: fcmToken, device_id: deviceId }),
+    body: JSON.stringify({
+      fcm_token: fcmToken,
+      device_id: deviceId,
+      platform: Capacitor.getPlatform(),
+      app_version: String(import.meta.env.VITE_APP_VERSION ?? '0.0.1'),
+    }),
   });
   return res.ok;
 }
@@ -98,6 +103,8 @@ async function saveFcmTokenToServer(fcmToken: string, deviceId: string): Promise
         {
           fcm_token: fcmToken,
           device_id: deviceId,
+          platform: Capacitor.getPlatform(),
+          app_version: String(import.meta.env.VITE_APP_VERSION ?? '0.0.1'),
         },
         {
           // Фоновый sync FCM не должен выкидывать пользователя (как Web Push subscribe).
@@ -223,6 +230,9 @@ export function useFCM(): void {
         const receivedListener = await PushNotifications.addListener('pushNotificationReceived', (notification) => {
           const data = (notification.data ?? {}) as Record<string, unknown>;
           const pushType = typeof data.type === 'string' ? data.type : '';
+          // Push = wake signal; pull fresh data via offline sync / WS.
+          window.dispatchEvent(new CustomEvent('app:push-signal', { detail: { type: pushType, data } }));
+          void import('../offline/sync/syncEngine').then((m) => m.runSyncCycle()).catch(() => undefined);
 
           // Входящий звонок: открываем overlay + рингтон, не toast
           if (pushType === 'incoming_call' && typeof data.callId === 'string' && data.callId) {
