@@ -90,6 +90,7 @@ export function VoiceMessageAttachment({
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const bars = useMemo(
     () => buildVoiceWaveBars(waveSeed || title || audioSrc || instanceId, variant === 'file' ? 38 : 44),
@@ -105,6 +106,7 @@ export function VoiceMessageAttachment({
       }
       setPlaying(snap.playing);
       setLoading(snap.loading);
+      setError(snap.error);
       if (!seekingRef.current) {
         setCurrent(snap.current);
         setProgress(snap.progress);
@@ -318,8 +320,12 @@ export function VoiceMessageAttachment({
 
         <div className="tg-voice-meta">
           <span className="tg-voice-time">
-            {loading && !playing ? 'Загрузка…' : timeLeft}
-            {!loading && total > 0 && (playing || current > 0) ? (
+            {error && !playing
+              ? error
+              : loading && !playing
+                ? 'Загрузка…'
+                : timeLeft}
+            {!error && !loading && total > 0 && (playing || current > 0) ? (
               <span className="tg-voice-time--total"> / {formatVoiceTime(total)}</span>
             ) : null}
           </span>

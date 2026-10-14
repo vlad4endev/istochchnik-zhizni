@@ -1,5 +1,9 @@
+import axios from 'axios';
+
 import { apiClient } from '../../lib/apiClient';
 import { resolveAxiosBaseURL } from '../../lib/config';
+import { fetchMessageAttachmentUrl } from './api/messengerApi';
+import { browserCanPlayWebmAudio } from './chatAudio';
 
 export const MESSENGER_AUDIO_PLAY_EVENT = 'messenger-audio-play';
 
@@ -7,6 +11,7 @@ export type MessengerAudioSnapshot = {
   ownerId: string | null;
   playing: boolean;
   loading: boolean;
+  error: string | null;
   current: number;
   duration: number;
   progress: number;
@@ -35,6 +40,7 @@ let ownedBlobSrcKey: string | null = null;
 let activeOwnerId: string | null = null;
 let activeSrcKey: string | null = null;
 let loading = false;
+let lastError: string | null = null;
 let playGeneration = 0;
 let mediaSessionBound = false;
 
@@ -61,6 +67,68 @@ function toRequestPath(url: string): string {
   return url;
 }
 
+function extractMessageIdFromAttachmentUrl(url: string): string | null {
+  const m = String(url).match(/\/api\/messenger\/messages\/(\d+)\/attachment-file/i);
+  return m?.[1] ?? null;
+}
+
+function withQueryParam(url: string, key: string, value: string): string {
+  try {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      const u = new URL(url);
+      u.searchParams.set(key, value);
+      return u.toString();
+    }
+  } catch {
+    /* relative */
+  }
+  const [path, qs = ''] = url.split('?');
+  const params = new URLSearchParams(qs);
+  params.set(key, value);
+  const next = params.toString();
+  return next ? `${path}?${next}` : path;
+}
+
+function attachmentUrlHasTranscode(url: string): boolean {
+  return /[?&]transcode=/i.test(url);
+}
+
+function guessAudioMimeFromSrc(src: string, headerType?: string): string {
+  const header = String(headerType || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  if (header.startsWith('audio/')) return header;
+  if (header === 'video/webm' || /(?:^|[?&])transcode=m4a(?:&|$)/i.test(src)) {
+    if (/(?:^|[?&])transcode=m4a(?:&|$)/i.test(src)) return 'audio/mp4';
+  }
+  const path = src.split(/[?#]/)[0].toLowerCase();
+  if (path.endsWith('.m4a') || path.endsWith('.mp4')) return 'audio/mp4';
+  if (path.endsWith('.mp3')) return 'audio/mpeg';
+  if (path.endsWith('.ogg') || path.endsWith('.oga') || path.endsWith('.opus')) return 'audio/ogg';
+  if (path.endsWith('.wav')) return 'audio/wav';
+  if (path.endsWith('.aac')) return 'audio/aac';
+  if (path.endsWith('.webm') || header === 'video/webm') return 'audio/webm';
+  return header || 'audio/webm';
+}
+
+function asPlayableAudioBlob(data: Blob, src: string, headerType?: string): Blob {
+  const type = String(data.type || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  if (type.startsWith('application/json') || type.startsWith('text/')) {
+    throw new Error('attachment_not_binary');
+  }
+  const wanted = guessAudioMimeFromSrc(src, headerType || type);
+  if (type.startsWith('audio/') && type !== 'audio/webm') return data;
+  // video/webm / octet-stream / empty — пересобираем с audio MIME для HTMLAudioElement.
+  if (!type || type === 'application/octet-stream' || type.startsWith('video/') || type !== wanted) {
+    return new Blob([data], { type: wanted });
+  }
+  return data;
+}
+
 function revokeOwnedBlob(): void {
   if (!ownedBlobUrl) return;
   try {
@@ -78,9 +146,11 @@ function getAudio(): HTMLAudioElement {
   audio.preload = 'metadata';
   audio.setAttribute('playsinline', 'true');
   audio.setAttribute('webkit-playsinline', 'true');
+  audio.controls = false;
 
   audio.addEventListener('play', () => {
     pauseOtherPageMedia(audio);
+    lastError = null;
     window.dispatchEvent(
       new CustomEvent(MESSENGER_AUDIO_PLAY_EVENT, { detail: { id: activeOwnerId } }),
     );
@@ -105,6 +175,11 @@ function getAudio(): HTMLAudioElement {
   });
   audio.addEventListener('error', () => {
     loading = false;
+    const code = audio?.error?.code;
+    lastError =
+      code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
+        ? 'Формат не поддерживается'
+        : 'Не удалось воспроизвести';
     emit();
   });
 
@@ -134,6 +209,7 @@ function snapshot(): MessengerAudioSnapshot {
     ownerId: activeOwnerId,
     playing: Boolean(el && !el.paused && !el.ended),
     loading,
+    error: lastError,
     current,
     duration,
     progress: duration > 0 ? current / duration : 0,
@@ -232,20 +308,95 @@ function setMediaMetadata(title?: string, artist?: string): void {
   }
 }
 
+async function fetchAttachmentBlob(fetchSrc: string, cacheKey: string): Promise<string> {
+  const path = toRequestPath(fetchSrc);
+  const { data, headers, status } = await apiClient.get(path, {
+    responseType: 'blob',
+    baseURL: samePageOriginBaseURL(),
+    timeout: 120_000,
+    headers: { Accept: '*/*' },
+    silentErrorToast: true,
+  });
+  if (status >= 400) {
+    throw new Error(`attachment_http_${status}`);
+  }
+  const headerType =
+    typeof headers['content-type'] === 'string'
+      ? headers['content-type']
+      : Array.isArray(headers['content-type'])
+        ? headers['content-type'][0]
+        : undefined;
+  const blob = asPlayableAudioBlob(data as Blob, fetchSrc, headerType);
+  const objectUrl = URL.createObjectURL(blob);
+  revokeOwnedBlob();
+  ownedBlobUrl = objectUrl;
+  ownedBlobSrcKey = cacheKey;
+  return objectUrl;
+}
+
 async function resolvePlayableSrc(src: string): Promise<string> {
   if (!needsAuthBlobFetch(src)) return src;
   if (ownedBlobUrl && ownedBlobSrcKey === src) return ownedBlobUrl;
 
-  const path = toRequestPath(src);
-  const { data } = await apiClient.get(path, {
-    responseType: 'blob',
-    baseURL: samePageOriginBaseURL(),
+  let fetchSrc = src;
+  if (!browserCanPlayWebmAudio() && !attachmentUrlHasTranscode(src)) {
+    fetchSrc = withQueryParam(src, 'transcode', 'm4a');
+  }
+
+  try {
+    return await fetchAttachmentBlob(fetchSrc, src);
+  } catch (err) {
+    const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+    // Крупные файлы (> proxy limit) — стримим через signed/public URL.
+    if (status === 413) {
+      const messageId = extractMessageIdFromAttachmentUrl(src);
+      if (messageId) {
+        const { url } = await fetchMessageAttachmentUrl(messageId);
+        if (url) return url;
+      }
+    }
+    // Если без транскода не вышло — пробуем m4a (Safari / старый Chrome).
+    if (!attachmentUrlHasTranscode(fetchSrc)) {
+      try {
+        return await fetchAttachmentBlob(withQueryParam(src, 'transcode', 'm4a'), src);
+      } catch {
+        /* fall through */
+      }
+    }
+    throw err;
+  }
+}
+
+function waitForCanPlay(el: HTMLAudioElement, gen: number): Promise<void> {
+  if (el.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const onReady = () => {
+      cleanup();
+      resolve();
+    };
+    const onErr = () => {
+      cleanup();
+      reject(new Error('audio_load_failed'));
+    };
+    const timer = window.setTimeout(() => {
+      cleanup();
+      // metadata может не прийти для части стримов — всё равно пробуем play()
+      resolve();
+    }, 12_000);
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      el.removeEventListener('canplay', onReady);
+      el.removeEventListener('loadeddata', onReady);
+      el.removeEventListener('error', onErr);
+    };
+    el.addEventListener('canplay', onReady, { once: true });
+    el.addEventListener('loadeddata', onReady, { once: true });
+    el.addEventListener('error', onErr, { once: true });
+    if (gen !== playGeneration) {
+      cleanup();
+      resolve();
+    }
   });
-  const objectUrl = URL.createObjectURL(data as Blob);
-  revokeOwnedBlob();
-  ownedBlobUrl = objectUrl;
-  ownedBlobSrcKey = src;
-  return objectUrl;
 }
 
 async function loadAndPlay(req: MessengerAudioPlayRequest): Promise<void> {
@@ -253,6 +404,7 @@ async function loadAndPlay(req: MessengerAudioPlayRequest): Promise<void> {
   const gen = ++playGeneration;
   activeOwnerId = req.ownerId;
   loading = true;
+  lastError = null;
   emit();
 
   try {
@@ -285,16 +437,23 @@ async function loadAndPlay(req: MessengerAudioPlayRequest): Promise<void> {
     }
 
     setMediaMetadata(req.title, req.artist);
+    await waitForCanPlay(el, gen);
+    if (gen !== playGeneration || activeOwnerId !== req.ownerId) return;
+
     loading = false;
     emit();
     await el.play();
+    lastError = null;
     syncMediaSession();
     emit();
-  } catch {
-    if (gen === playGeneration) {
-      loading = false;
-      emit();
-    }
+  } catch (err) {
+    if (gen !== playGeneration) return;
+    loading = false;
+    lastError =
+      axios.isAxiosError(err) && err.response?.status === 413
+        ? 'Файл слишком большой для воспроизведения'
+        : 'Не удалось загрузить аудио';
+    emit();
   }
 }
 
@@ -323,6 +482,7 @@ export function toggleMessengerAudio(req: MessengerAudioPlayRequest): void {
     if (typeof req.rate === 'number' && req.rate > 0) {
       el.playbackRate = req.rate;
     }
+    lastError = null;
     void el.play().catch(() => {
       void loadAndPlay(req);
     });

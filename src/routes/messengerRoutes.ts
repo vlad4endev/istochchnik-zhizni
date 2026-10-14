@@ -36,6 +36,10 @@ import {
 } from '../lib/supabaseStorage';
 import type { AppRole } from '../types/appRole';
 import { canAccessMessengerAssistant } from '../types/appRole';
+import {
+  isVoiceRecordingUploadName,
+  reconcileMessengerProxyContentType,
+} from '../utils/messengerAttachmentMime';
 
 type AuthReq = Request & {
   authUserId?: number;
@@ -70,38 +74,22 @@ function withMp4Extension(fileName: string): string {
   return `${base.slice(0, idx)}.mp4`;
 }
 
-async function transcodeWebmBufferToMp4(input: Buffer): Promise<Buffer | null> {
+async function runFfmpegToBuffer(
+  input: Buffer,
+  inExt: string,
+  outExt: string,
+  args: string[],
+  label: string,
+): Promise<Buffer | null> {
   const token = randomUUID();
-  const inPath = path.join(os.tmpdir(), `messenger-vn-${token}.webm`);
-  const outPath = path.join(os.tmpdir(), `messenger-vn-${token}.mp4`);
+  const inPath = path.join(os.tmpdir(), `messenger-${label}-${token}${inExt}`);
+  const outPath = path.join(os.tmpdir(), `messenger-${label}-${token}${outExt}`);
   try {
     await fsp.writeFile(inPath, input);
     await new Promise<void>((resolve, reject) => {
-      const ff = spawn(
-        'ffmpeg',
-        [
-          '-y',
-          '-hide_banner',
-          '-loglevel',
-          'error',
-          '-i',
-          inPath,
-          '-c:v',
-          'libx264',
-          '-preset',
-          'veryfast',
-          '-pix_fmt',
-          'yuv420p',
-          '-movflags',
-          '+faststart',
-          '-c:a',
-          'aac',
-          '-b:a',
-          '128k',
-          outPath,
-        ],
-        { stdio: ['ignore', 'pipe', 'pipe'] },
-      );
+      const ff = spawn('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-i', inPath, ...args, outPath], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
       let errText = '';
       ff.stderr?.on('data', (d) => {
         errText += String(d);
@@ -118,11 +106,53 @@ async function transcodeWebmBufferToMp4(input: Buffer): Promise<Buffer | null> {
     return await fsp.readFile(outPath);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.warn('[messenger] webm->mp4 transcode skipped:', msg);
+    console.warn(`[messenger] ${label} transcode skipped:`, msg);
     return null;
   } finally {
     await Promise.allSettled([fsp.unlink(inPath), fsp.unlink(outPath)]);
   }
+}
+
+async function transcodeWebmBufferToMp4(input: Buffer): Promise<Buffer | null> {
+  return runFfmpegToBuffer(
+    input,
+    '.webm',
+    '.mp4',
+    [
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-pix_fmt',
+      'yuv420p',
+      '-movflags',
+      '+faststart',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '128k',
+    ],
+    'webm-mp4',
+  );
+}
+
+/** Voice WebM/Opus → M4A/AAC for Safari / iOS (no native audio/webm). */
+async function transcodeWebmBufferToM4a(input: Buffer): Promise<Buffer | null> {
+  return runFfmpegToBuffer(
+    input,
+    '.webm',
+    '.m4a',
+    ['-vn', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart'],
+    'webm-m4a',
+  );
+}
+
+function withM4aExtension(fileName: string): string {
+  const base = String(fileName || '').trim();
+  if (!base) return 'voice.m4a';
+  const idx = base.lastIndexOf('.');
+  if (idx <= 0) return `${base}.m4a`;
+  return `${base.slice(0, idx)}.m4a`;
 }
 
 async function loadMessengerAttachmentBytesForProxy(
@@ -348,6 +378,7 @@ async function resolveMessengerUploadMetadata(file: Express.Multer.File): Promis
   const extMatch = filename.match(/(\.[a-z0-9]{1,12})$/i);
   const byName = normalizeExtension(extMatch?.[1] || '');
   const byMime = String(file.mimetype || '').trim().toLowerCase();
+  const byMimeMain = byMime.split(';')[0].trim();
   let sniffed = '';
   if (file.path) {
     const fh = await fsp.open(file.path, 'r');
@@ -361,7 +392,16 @@ async function resolveMessengerUploadMetadata(file: Express.Multer.File): Promis
   } else if (file.buffer && file.buffer.length > 0) {
     sniffed = inferMimeFromHeader(file.buffer) ?? '';
   }
-  const mimeType = sniffed || byMime || EXT_TO_MIME[byName] || 'application/octet-stream';
+  let mimeType = sniffed || byMimeMain || EXT_TO_MIME[byName] || 'application/octet-stream';
+  // EBML sniff cannot tell audio-only WebM from video; keep client audio/* / voice-* names.
+  if (
+    (sniffed === 'video/webm' || mimeType === 'video/webm') &&
+    (byMimeMain === 'audio/webm' ||
+      byMimeMain.startsWith('audio/') ||
+      isVoiceRecordingUploadName(filename))
+  ) {
+    mimeType = byMimeMain.startsWith('audio/') ? byMimeMain : 'audio/webm';
+  }
   const extension = normalizeExtension(byName || MIME_TO_EXT[mimeType] || MIME_TO_EXT[sniffed] || '');
   return { mimeType, extension };
 }
@@ -1705,6 +1745,7 @@ router.get('/messages/:id/attachment-file', async (req: Request, res: Response) 
   const forceDownload = dlRaw === '1' || dlRaw === 'true' || dlRaw === 'yes';
   const transcodeRaw = String(req.query.transcode ?? '').trim().toLowerCase();
   const wantsMp4Transcode = transcodeRaw === 'mp4';
+  const wantsM4aTranscode = transcodeRaw === 'm4a' || transcodeRaw === 'aac';
   try {
     const slotRaw = req.query.slot;
     let slot: number | undefined;
@@ -1719,11 +1760,26 @@ router.get('/messages/:id/attachment-file', async (req: Request, res: Response) 
     }
     const origType = (item.mimeType || '').trim().toLowerCase();
     const origName = (item.fileName || '').trim().toLowerCase();
-    const isWebmLike = origType.startsWith('video/webm') || origName.endsWith('.webm');
+    const isWebmLike = origType.includes('webm') || origName.endsWith('.webm');
     let { buffer, contentType } = await loadMessengerAttachmentBytesForProxy(item);
+    contentType = reconcileMessengerProxyContentType(item, contentType);
     let fileName = item.fileName;
+    const reconciledMain = contentType.toLowerCase().split(';')[0].trim();
+    const isAudioAttachment =
+      reconciledMain.startsWith('audio/') || isVoiceRecordingUploadName(origName);
 
-    if (wantsMp4Transcode && isWebmLike) {
+    if (wantsM4aTranscode && isWebmLike && isAudioAttachment) {
+      const m4a = await transcodeWebmBufferToM4a(buffer);
+      if (m4a) {
+        if (m4a.length <= MESSENGER_ATTACHMENT_PROXY_MAX_BYTES) {
+          buffer = m4a;
+          contentType = 'audio/mp4';
+          fileName = withM4aExtension(fileName);
+        } else {
+          console.warn('[messenger] transcoded m4a is too large for proxy response');
+        }
+      }
+    } else if (wantsMp4Transcode && isWebmLike && !isAudioAttachment) {
       const mp4 = await transcodeWebmBufferToMp4(buffer);
       if (mp4) {
         if (mp4.length <= MESSENGER_ATTACHMENT_PROXY_MAX_BYTES) {
