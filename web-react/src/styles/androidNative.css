@@ -891,3 +891,9 @@ html.app-android-native:not(.dark) .studio-btn-success {
   background: linear-gradient(135deg, #8a2742, #5a1826);
   color: #fff;
 }
+
+/* Главные кнопки-действия, заданные зелёным литералом (#1A9A55), — бордовые, как все основные кнопки. */
+html.app-android-native:not(.dark) button[class*='bg-[#1A9A55]'] {
+  background: linear-gradient(135deg, #8a2742, #5a1826);
+  color: #fff;
+}
