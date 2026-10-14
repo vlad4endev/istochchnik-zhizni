@@ -419,3 +419,29 @@ html.app-android-native .chat-header::after {
   background: var(--tg-bg, var(--surface));
   border-radius: 24px 24px 0 0;
 }
+
+/* ───────── Вход и «нет соединения»: тёмный бордовый фон из макетов ───────── */
+
+html.app-android-native .app-auth-landing,
+html.app-android-native .app-offline-page {
+  color: #fff;
+  background:
+    radial-gradient(120% 70% at 8% 0%, rgba(194, 69, 95, 0.55), transparent 60%),
+    radial-gradient(90% 60% at 100% 35%, rgba(240, 162, 90, 0.34), transparent 62%),
+    linear-gradient(170deg, #7a1f3a 0%, #230810 100%);
+}
+
+html.app-android-native .app-auth-landing a:first-of-type {
+  background: #fff6ea;
+  color: var(--ac-amber-ink);
+}
+
+html.app-android-native .app-offline-page h2,
+html.app-android-native .app-offline-page p {
+  color: #fff !important;
+}
+
+html.app-android-native .app-offline-page a {
+  background: var(--ac-amber);
+  color: var(--ac-amber-ink);
+}
