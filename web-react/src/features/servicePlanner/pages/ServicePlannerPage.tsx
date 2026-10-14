@@ -1770,16 +1770,20 @@ export function ServicePlannerPage() {
   if (screen === 'home') {
     return (
       <>
-        <SectionHeroChrome title="Служение" stickyClassName={sectionHeroStickyClassNested} />
+        <SectionHeroChrome
+          title="Служение"
+          subtitle="Планы и блоки собрания"
+          stickyClassName={sectionHeroStickyClassNested}
+        />
         <section className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-3 py-4 pb-6 sm:px-4 sm:py-5 md:px-6">
         <section className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Новый план</p>
-            <div className="mt-2 grid min-w-0 gap-2 sm:grid-cols-2">
+          <div className="rounded-[20px] bg-[#F4E6E4] p-4 shadow-[inset_0_0_0_1px_rgba(138,39,66,0.25)] max-phone:p-4">
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.04em] text-wine">Новый план</p>
+            <div className="mt-2.5 grid min-w-0 gap-2.5 sm:grid-cols-2">
               <select
                 value={activeTemplateId ?? ''}
                 onChange={(e) => setActiveTemplateId(e.target.value ? Number(e.target.value) : null)}
-                className="min-h-[46px] w-full min-w-0 rounded-xl border border-stone-300 bg-white px-3 py-2 text-base sm:text-sm"
+                className="min-h-[50px] w-full min-w-0 rounded-2xl border-0 bg-white px-4 py-2 text-[15px] shadow-[inset_0_0_0_1px_rgba(90,24,38,0.12)] sm:text-sm"
                 aria-label="Шаблон программы"
               >
                 {templates.length === 0 || activeTemplateId == null ? (
@@ -1798,12 +1802,12 @@ export function ServicePlannerPage() {
                   const next = e.target.value;
                   if (isIsoDate(next)) setCreatePlanDate(next);
                 }}
-                className="min-h-[46px] w-full min-w-0 rounded-xl border border-stone-300 bg-white px-3 py-2 text-base sm:text-sm"
+                className="min-h-[50px] w-full min-w-0 rounded-2xl border-0 bg-white px-4 py-2 text-[15px] shadow-[inset_0_0_0_1px_rgba(90,24,38,0.12)] sm:text-sm"
               />
             </div>
-            <p className="mt-2 text-xs leading-snug text-stone-600">
+            <p className="mt-2 text-xs leading-snug text-muted">
               <span className="block sm:inline">Дата служения:</span>{' '}
-              <span className="block break-words font-semibold text-stone-800 sm:inline">
+              <span className="block break-words font-semibold text-ink sm:inline">
                 {formatRuDateLong(createPlanDate)}
               </span>
             </p>
@@ -1811,7 +1815,7 @@ export function ServicePlannerPage() {
               type="button"
               disabled={!activeTemplate}
               onClick={() => generateFromTemplate(createPlanDate)}
-              className="mt-3 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-stone-300"
+              className="app-btn-primary mt-3 inline-flex min-h-[50px] w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:shadow-none"
             >
               <LuPlus className="h-4 w-4" />
               Создать программу
@@ -3257,7 +3261,7 @@ export function ServicePlannerPage() {
                                 </p>
                               ) : null}
                               {hiddenFromPublic ? (
-                                <p className="text-xs font-semibold leading-snug text-stone-500 max-lg:text-[13px] sm:text-xs">
+                                <p className="text-xs font-semibold leading-snug text-wine max-lg:text-[13px] sm:text-xs">
                                   Скрыт в опубликованной версии
                                 </p>
                               ) : null}

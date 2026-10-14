@@ -150,7 +150,7 @@ export function PodcastsPage() {
       ].join(' ')}
     >
       <div className={sectionHeroStickyClass}>
-        <PageHeader title="Проповеди" />
+        <PageHeader title="Проповеди" subtitle="Аудиозаписи" />
       </div>
 
       <div className="py-5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] sm:py-8 sm:pl-[max(1rem,env(safe-area-inset-left,0px))] sm:pr-[max(1rem,env(safe-area-inset-right,0px))] md:pl-6 md:pr-6 lg:pl-8 lg:pr-8 xl:pl-10 xl:pr-10">

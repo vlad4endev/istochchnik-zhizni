@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { LuMinus, LuPlus, LuSettings2 } from 'react-icons/lu';
 
+import { AppSegment } from '@/components/ui/AppSegment';
+import type { SongThemeId } from '@/lib/designTokens';
+
+const SONG_THEME_KEY = 'songbook:song-theme';
+const SONG_THEME_OPTIONS: { value: SongThemeId; label: string }[] = [
+  { value: 'black', label: 'Чёрная' },
+  { value: 'dark', label: 'Тёмная' },
+  { value: 'light', label: 'Светлая' },
+];
+
 type SongReaderSettingsProps = {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -82,6 +92,15 @@ export function SongReaderSettings({
   };
 
   const [internalOpen, setInternalOpen] = useState(false);
+  const [songTheme, setSongTheme] = useState<SongThemeId>(() => {
+    try {
+      const raw = localStorage.getItem(SONG_THEME_KEY);
+      if (raw === 'black' || raw === 'dark' || raw === 'light') return raw;
+    } catch {
+      /* ignore */
+    }
+    return 'black';
+  });
   const rootRef = useRef<HTMLDivElement>(null);
   const dragStartYRef = useRef<number | null>(null);
   const isControlled = typeof open === 'boolean';
@@ -200,6 +219,26 @@ export function SongReaderSettings({
                   </button>
                 ) : null}
               </div>
+            </section>
+
+            <section className="rounded-xl bg-stone-50 p-3">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-stone-500">Тема песни</p>
+              <AppSegment
+                ariaLabel="Тема песни"
+                value={songTheme}
+                options={SONG_THEME_OPTIONS}
+                onChange={(next) => {
+                  setSongTheme(next);
+                  try {
+                    localStorage.setItem(SONG_THEME_KEY, next);
+                  } catch {
+                    /* ignore */
+                  }
+                  document.documentElement.dispatchEvent(
+                    new CustomEvent('songbook:song-theme', { detail: next }),
+                  );
+                }}
+              />
             </section>
 
             <section className="rounded-xl bg-stone-50 p-3">

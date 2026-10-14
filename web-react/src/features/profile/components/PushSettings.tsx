@@ -5,6 +5,7 @@ import { fetchPushStatus, sendTestPush, unsubscribeFromPushApi, type PushStatus 
 import { isAppleMobileWeb, isInstalledPwa } from '../../pwa/utils/pwaEnvironment';
 import { useNotificationManager } from '../../pwa';
 import { useAuthStore } from '../../auth/authStore';
+import { PushPrefsPanel } from '../../notifications/PushPrefsPanel';
 import profileShell from '../profileShell.module.css';
 
 export function PushSettings() {
@@ -82,6 +83,9 @@ export function PushSettings() {
             Служебные назначения координаторам не отправляются.
           </p>
         ) : null}
+        <div className="mt-4">
+          <PushPrefsPanel />
+        </div>
       </div>
     );
   }
@@ -229,6 +233,10 @@ export function PushSettings() {
           обновите страницу.
         </p>
       ) : null}
+
+      <div className="mt-4 border-t border-[color:var(--profile-card-ring)] pt-4">
+        <PushPrefsPanel />
+      </div>
     </div>
   );
 }

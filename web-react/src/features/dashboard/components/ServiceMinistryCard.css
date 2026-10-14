@@ -13,8 +13,8 @@
   --svc-ink-soft: #6b5e5a;
   --svc-line: rgba(40, 28, 30, 0.12);
   --svc-shadow: rgba(72, 27, 39, 0.14);
-  --svc-font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
-  --svc-font-body: 'Karla', 'Segoe UI', system-ui, sans-serif;
+  --svc-font-display: var(--font-accent, 'Playfair Display', Georgia, 'Times New Roman', serif);
+  --svc-font-body: var(--font-ui, 'Onest', system-ui, sans-serif);
 
   width: 100%;
   min-width: 0;

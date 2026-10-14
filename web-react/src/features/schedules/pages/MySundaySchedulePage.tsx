@@ -94,7 +94,7 @@ export function MySundaySchedulePage() {
             <LuArrowLeft className="h-5 w-5" />
           </Link>
           <div className="min-w-0">
-            <h1 className="text-xl font-extrabold tracking-tight text-stone-900 sm:text-2xl">Моё расписание</h1>
+            <h1 className="font-ui text-header-title tracking-tight text-ink sm:text-2xl">Моё расписание</h1>
             <p className="text-[13px] font-semibold text-stone-500 sm:text-sm">
               Воскресное служение
               {upcomingCount > 0 ? (

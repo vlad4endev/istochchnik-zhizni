@@ -12,6 +12,12 @@ import {
   setCookieSessionEnabled,
 } from '../../lib/cookieSessionMode';
 import { beginSessionTeardown, endSessionTeardown } from '../../lib/sessionTeardown';
+import { isNativePlatform } from '../../lib/platform';
+import {
+  getSecureItemSync,
+  removeSecureItem,
+  setSecureItem,
+} from '../../lib/secureTokenStorage';
 
 /** Те же ключи, что в Flutter AuthTokenStore — можно читать сессию с того же origin. */
 const LS_TOKEN = 'auth_access_token';
@@ -99,34 +105,55 @@ function readLegacyFlutterKeys(): Partial<
   >
 > | null {
   if (typeof localStorage === 'undefined') return null;
-  const token = localStorage.getItem(LS_TOKEN);
+  const token = getSecureItemSync(LS_TOKEN);
   if (!token) return null;
   return {
     token,
-    firstName: localStorage.getItem(LS_FIRST) ?? '',
-    lastName: localStorage.getItem(LS_LAST) ?? '',
-    role: normalizeRole(localStorage.getItem(LS_ROLE) ?? undefined),
-    registrationStatus: normalizeRegistrationStatus(localStorage.getItem(LS_REG)),
+    firstName: getSecureItemSync(LS_FIRST) ?? '',
+    lastName: getSecureItemSync(LS_LAST) ?? '',
+    role: normalizeRole(getSecureItemSync(LS_ROLE) ?? undefined),
+    registrationStatus: normalizeRegistrationStatus(getSecureItemSync(LS_REG)),
   };
 }
 
+function persistAuthKeys(s: AuthProfile & { token: string | null }): void {
+  const write = async () => {
+    if (s.token) await setSecureItem(LS_TOKEN, s.token);
+    else await removeSecureItem(LS_TOKEN);
+    await setSecureItem(LS_FIRST, s.firstName ?? '');
+    await setSecureItem(LS_LAST, s.lastName ?? '');
+    await setSecureItem(LS_ROLE, normalizeRole(s.role as string));
+    await setSecureItem(LS_REG, normalizeRegistrationStatus(s.registrationStatus as string));
+  };
+  void write();
+  // Sync mirror on web for multi-tab; on native avoid leaving token in localStorage.
+  if (!isNativePlatform() && typeof localStorage !== 'undefined') {
+    if (s.token) localStorage.setItem(LS_TOKEN, s.token);
+    else localStorage.removeItem(LS_TOKEN);
+    localStorage.setItem(LS_FIRST, s.firstName ?? '');
+    localStorage.setItem(LS_LAST, s.lastName ?? '');
+    localStorage.setItem(LS_ROLE, normalizeRole(s.role as string));
+    localStorage.setItem(LS_REG, normalizeRegistrationStatus(s.registrationStatus as string));
+  }
+}
+
 /**
- * Хранилище Zustand persist, пишущее те же ключи, что Flutter SharedPreferences на web.
+ * Хранилище Zustand persist: web → localStorage; native → Keychain/Keystore.
  */
 const flutterCompatibleStorage: StateStorage = {
   getItem: () => {
-    if (typeof localStorage === 'undefined') return null;
+    if (typeof localStorage === 'undefined' && !isNativePlatform()) return null;
     const legacy = readLegacyFlutterKeys();
-    const token = legacy?.token ?? localStorage.getItem(LS_TOKEN);
+    const token = legacy?.token ?? getSecureItemSync(LS_TOKEN);
     if (!token) return null;
     return JSON.stringify({
       state: {
         token,
-        firstName: legacy?.firstName ?? localStorage.getItem(LS_FIRST) ?? '',
-        lastName: legacy?.lastName ?? localStorage.getItem(LS_LAST) ?? '',
-        role: legacy?.role ?? normalizeRole(localStorage.getItem(LS_ROLE) ?? undefined),
+        firstName: legacy?.firstName ?? getSecureItemSync(LS_FIRST) ?? '',
+        lastName: legacy?.lastName ?? getSecureItemSync(LS_LAST) ?? '',
+        role: legacy?.role ?? normalizeRole(getSecureItemSync(LS_ROLE) ?? undefined),
         registrationStatus: normalizeRegistrationStatus(
-          legacy?.registrationStatus ?? localStorage.getItem(LS_REG),
+          legacy?.registrationStatus ?? getSecureItemSync(LS_REG),
         ),
         username: legacy?.username ?? '',
         memberId: legacy?.memberId ?? null,
@@ -135,31 +162,28 @@ const flutterCompatibleStorage: StateStorage = {
     });
   },
   setItem: (_name, value) => {
-    if (typeof localStorage === 'undefined') return;
     try {
       const parsed = JSON.parse(value) as { state?: AuthProfile & { token: string | null } };
       const s = parsed.state;
       if (!s) return;
-      if (s.token) {
-        localStorage.setItem(LS_TOKEN, s.token);
-      } else {
-        localStorage.removeItem(LS_TOKEN);
-      }
-      localStorage.setItem(LS_FIRST, s.firstName ?? '');
-      localStorage.setItem(LS_LAST, s.lastName ?? '');
-      localStorage.setItem(LS_ROLE, normalizeRole(s.role as string));
-      localStorage.setItem(LS_REG, normalizeRegistrationStatus(s.registrationStatus as string));
+      persistAuthKeys(s);
     } catch {
       /* ignore */
     }
   },
   removeItem: () => {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.removeItem(LS_TOKEN);
-    localStorage.removeItem(LS_FIRST);
-    localStorage.removeItem(LS_LAST);
-    localStorage.removeItem(LS_ROLE);
-    localStorage.removeItem(LS_REG);
+    void removeSecureItem(LS_TOKEN);
+    void removeSecureItem(LS_FIRST);
+    void removeSecureItem(LS_LAST);
+    void removeSecureItem(LS_ROLE);
+    void removeSecureItem(LS_REG);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(LS_TOKEN);
+      localStorage.removeItem(LS_FIRST);
+      localStorage.removeItem(LS_LAST);
+      localStorage.removeItem(LS_ROLE);
+      localStorage.removeItem(LS_REG);
+    }
   },
 };
 

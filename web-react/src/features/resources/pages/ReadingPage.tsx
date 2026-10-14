@@ -14,7 +14,7 @@ export function ReadingPage() {
   return (
     <div className="min-h-full bg-[var(--surface)] max-lg:pb-0 lg:pb-8">
       <div className={sectionHeroStickyClass}>
-        <PageHeader title="Читать" />
+        <PageHeader title="Читать" subtitle="Тексты и заметки" />
       </div>
 
       <div className="px-3 py-6 sm:px-4 sm:py-8 md:px-6 lg:px-8 xl:px-10">

@@ -6,8 +6,9 @@
   box-sizing: border-box;
   /* Нижний safe-area уже в --app-bottom-nav-total-height у main — не дублируем. */
   padding-bottom: 0;
-  background: var(--profile-surface, #f4f1ed);
-  color: var(--profile-text-body, #1c1917);
+  background: var(--surface, #fbf6ef);
+  color: var(--ink, #3a1018);
+  font-family: var(--font-ui, 'Onest', system-ui, sans-serif);
 }
 
 .topBar {
@@ -18,18 +19,19 @@
   grid-template-columns: 2.75rem 1fr 2.75rem;
   align-items: center;
   gap: 0.25rem;
-  min-height: 2.85rem;
+  min-height: 3.25rem;
   /* #root уже даёт safe-area-inset-top — здесь только внутренний отступ. */
-  padding: 0.2rem 0.35rem;
+  padding: 0.35rem 0.35rem;
   padding-left: max(0.55rem, env(safe-area-inset-left, 0px));
   padding-right: max(0.55rem, env(safe-area-inset-right, 0px));
-  background: var(--profile-surface, #f4f1ed);
+  background: var(--header-bg, #230810);
+  color: #fbf6ef;
   border-bottom: none;
   transition: background 0.2s ease;
 }
 
 .topBarScrolled {
-  background: color-mix(in srgb, var(--profile-surface, #f4f1ed) 92%, transparent);
+  background: color-mix(in srgb, var(--header-bg, #230810) 92%, transparent);
   backdrop-filter: blur(14px);
 }
 
@@ -47,17 +49,18 @@
   background: transparent;
   padding: 0.1rem 0.15rem;
   cursor: pointer;
-  color: var(--profile-text-heading, #1c1917);
+  color: #fbf6ef;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 .brand {
   margin: 0;
-  font-family: 'Grand Hotel', 'Segoe Script', 'Snell Roundhand', cursive;
-  font-size: clamp(1.85rem, 8vw, 2.25rem);
-  font-weight: 400;
-  line-height: 1.05;
+  font-family: var(--font-accent, 'Playfair Display', Georgia, serif);
+  font-style: italic;
+  font-size: clamp(1.55rem, 6.5vw, 1.85rem);
+  font-weight: 500;
+  line-height: 1.15;
   letter-spacing: 0.01em;
   color: inherit;
   padding-bottom: 0.05rem;
@@ -109,7 +112,7 @@
 }
 
 .sortMenuItemActive {
-  color: var(--profile-primary, #7d3640);
+  color: var(--wine, #8a2742);
 }
 
 @media (min-width: 640px) {
@@ -132,13 +135,14 @@
   border: none;
   border-radius: 0.5rem;
   background: transparent;
-  color: var(--profile-text-heading, #1c1917);
+  color: #fbf6ef;
   cursor: pointer;
   text-decoration: none;
   transition: opacity 0.15s ease, transform 0.15s ease;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   justify-self: start;
+  border-radius: 999px;
 }
 
 .iconBtn:active {
@@ -154,8 +158,12 @@
 
 .storiesWrap {
   border-bottom: 1px solid color-mix(in srgb, var(--profile-border, rgba(120, 113, 108, 0.18)) 80%, transparent);
-  background: var(--profile-surface, #f4f1ed);
+  background: var(--surface, #fbf6ef);
   min-height: 0;
+  border-radius: var(--radius-leaf, 30px) var(--radius-leaf, 30px) 0 0;
+  margin-top: -2px;
+  position: relative;
+  z-index: 1;
 }
 
 @keyframes menuPop {
@@ -280,12 +288,12 @@
   padding: 0.75rem 1.15rem;
   border: none;
   border-radius: 999px;
-  background: var(--profile-primary, #7d3640);
+  background: var(--wine, #8a2742);
   color: #fff;
   font-weight: 800;
   cursor: pointer;
   touch-action: manipulation;
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--profile-primary, #7d3640) 28%, transparent);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--wine, #8a2742) 28%, transparent);
   transition: transform 0.15s ease;
 }
 
@@ -299,8 +307,8 @@
   border-radius: 999px;
   min-height: 2.75rem;
   padding: 0.65rem 1.35rem;
-  background: color-mix(in srgb, var(--profile-primary, #7d3640) 12%, transparent);
-  color: var(--profile-primary-dark, #5c2830);
+  background: color-mix(in srgb, var(--wine, #8a2742) 12%, transparent);
+  color: var(--profile-primary-dark, #5a1826);
   font-weight: 800;
   cursor: pointer;
   touch-action: manipulation;
@@ -308,7 +316,7 @@
 }
 
 .loadMore:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--profile-primary, #7d3640) 18%, transparent);
+  background: color-mix(in srgb, var(--wine, #8a2742) 18%, transparent);
 }
 
 .loadMore:active:not(:disabled) {
@@ -338,14 +346,14 @@
   background:
     linear-gradient(
       145deg,
-      color-mix(in srgb, var(--profile-primary, #7d3640) 88%, #c47884),
-      var(--profile-primary-dark, #5c2830)
+      color-mix(in srgb, var(--wine, #8a2742) 88%, #c47884),
+      var(--profile-primary-dark, #5a1826)
     );
   color: #fff;
   display: grid;
   place-items: center;
   box-shadow:
-    0 12px 30px color-mix(in srgb, var(--profile-primary, #7d3640) 38%, transparent),
+    0 12px 30px color-mix(in srgb, var(--wine, #8a2742) 38%, transparent),
     0 0 0 1px color-mix(in srgb, #fff 18%, transparent) inset;
   cursor: pointer;
   transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease, opacity 0.15s ease;
@@ -362,7 +370,7 @@
 .fab:hover {
   transform: scale(1.06) translateY(-1px);
   box-shadow:
-    0 16px 36px color-mix(in srgb, var(--profile-primary, #7d3640) 42%, transparent),
+    0 16px 36px color-mix(in srgb, var(--wine, #8a2742) 42%, transparent),
     0 0 0 1px color-mix(in srgb, #fff 22%, transparent) inset;
 }
 
@@ -440,7 +448,7 @@
 
 .skelActions {
   height: 2.75rem;
-  background: color-mix(in srgb, var(--profile-surface, #f4f1ed) 50%, transparent);
+  background: color-mix(in srgb, var(--profile-surface, #fbf6ef) 50%, transparent);
 }
 
 @keyframes shimmer {

@@ -6,29 +6,77 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Onest', 'system-ui', 'sans-serif'],
+        accent: ['"Playfair Display"', 'Georgia', '"Times New Roman"', 'serif'],
+        ui: ['Onest', 'system-ui', 'sans-serif'],
+      },
       /** `h-screen` / `min-h-screen` / `max-h-screen` → visual viewport на iOS PWA (см. nativeShellViewport.ts). */
       height: {
         screen: 'var(--viewport-height, 100dvh)',
         dvh: '100dvh',
+        btn: 'var(--size-btn-h, 52px)',
+        field: 'var(--size-field-h, 48px)',
+        'nav-bar': 'var(--app-bottom-nav-bar-height)',
+        'header-btn': 'var(--size-header-btn, 36px)',
+      },
+      width: {
+        'header-btn': 'var(--size-header-btn, 36px)',
       },
       /** Для `min-h-dvh` / корректной высоты PWA на iOS/Android (100dvh ≠ height.dvh в Tailwind по умолчанию). */
       minHeight: {
         screen: 'var(--viewport-height, 100dvh)',
         dvh: '100dvh',
+        btn: 'var(--size-btn-h, 52px)',
+        field: 'var(--size-field-h, 48px)',
+        'list-row': 'var(--size-list-row-h, 52px)',
       },
       maxHeight: {
         screen: 'var(--viewport-height, 100dvh)',
         dvh: '100dvh',
       },
+      borderRadius: {
+        card: 'var(--radius-card, 18px)',
+        'card-lg': 'var(--radius-card-lg, 20px)',
+        leaf: 'var(--radius-leaf, 30px)',
+        chip: 'var(--radius-chip, 999px)',
+        btn: 'var(--radius-btn, 16px)',
+        field: 'var(--radius-field, 14px)',
+      },
+      boxShadow: {
+        card: 'var(--shadow-card)',
+        btn: 'var(--shadow-btn, 0 8px 20px rgba(138, 39, 66, 0.28))',
+        sheet: 'var(--shadow-sheet, 0 -12px 40px rgba(35, 8, 16, 0.18))',
+        nav: 'var(--nav-pill-shadow)',
+      },
+      fontSize: {
+        'header-title': ['var(--size-header-title, 23px)', { lineHeight: '1.2', fontWeight: '800' }],
+        'header-sub': ['var(--size-header-subtitle, 12.5px)', { lineHeight: '1.3', fontWeight: '500' }],
+      },
       screens: {
         /** Совпадает с Flutter Responsive: phone &lt; 600 */
         shell: '600px',
+        /** Android mockup viewport (max-width) */
+        'max-phone': { max: '430px' },
       },
       colors: {
         primary: {
-          DEFAULT: '#7d3640',
-          dark: '#5c2830',
+          DEFAULT: 'var(--primary, #8A2742)',
+          dark: 'var(--primary-dark, #5A1826)',
         },
+        wine: {
+          DEFAULT: 'var(--wine, #8A2742)',
+          dark: 'var(--wine-dark, #5A1826)',
+        },
+        gold: 'var(--gold, #F2B879)',
+        ink: 'var(--ink, #3A1018)',
+        muted: {
+          DEFAULT: 'var(--muted, #6A5555)',
+          ink: 'var(--muted, #6A5555)',
+        },
+        leaf: 'var(--surface, #FBF6EF)',
+        card: 'var(--surface-elevated, #ffffff)',
+        header: 'var(--header-bg, #230810)',
         studio: {
           'nav-bg': 'var(--studio-nav-bg)',
           'nav-border': 'var(--studio-nav-border)',
@@ -71,8 +119,8 @@ export default {
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         'pwa-android-pulse-ring': {
-          '0%, 100%': { boxShadow: '0 0 0 0 rgba(125, 54, 64, 0.35)' },
-          '50%': { boxShadow: '0 0 0 8px rgba(125, 54, 64, 0)' },
+          '0%, 100%': { boxShadow: '0 0 0 0 rgba(138, 39, 66, 0.35)' },
+          '50%': { boxShadow: '0 0 0 8px rgba(138, 39, 66, 0)' },
         },
         'pwa-android-check-in': {
           '0%': { transform: 'scale(0.5) rotate(-10deg)', opacity: '0' },

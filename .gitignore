@@ -14,10 +14,37 @@ backups/
 supabase/.temp/
 istochchnik-zhizni/
 
+# IDE
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
 # Firebase / секреты (ключи не в git)
-secrets/*.json
+secrets/*
 !secrets/.gitkeep
+secrets/*.json
+
+# Локальные CA / keystore (не коммитить)
+*.pem
+!**/certs/.gitkeep
+**/debug.keystore
+**/release.keystore
+**/*.jks
+
+# iOS Firebase plist (локально из Firebase Console)
+web-react/ios/App/App/GoogleService-Info.plist
 
 # Артефакты для Dockerfile.web.prebuilt (генерируются локально)
 release/web/*
 !release/web/.gitkeep
+
+# Одноразовые scratch-файлы
+fix_db.ts
+tmp_logo_process.dart
+new.sh
+
+# Android design mockups (spec only — never ship in bundle)
+_design-android/
+design-android/

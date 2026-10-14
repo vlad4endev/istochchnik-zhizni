@@ -1,4 +1,4 @@
-# Сборка web-react на main: проверка, что в исходниках нет старой заглушки админки.
+# lint + typecheck + test + build для web-react
 name: web-react
 
 on:
@@ -14,7 +14,7 @@ on:
       - '.github/workflows/web-react.yml'
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -40,10 +40,17 @@ jobs:
           cache: npm
           cache-dependency-path: web-react/package-lock.json
 
-      - name: Install and build
-        run: |
-          npm ci
-          npm run build
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc -b --pretty false
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
 
       - name: Marker file in dist
         run: |
