@@ -35,6 +35,7 @@ import { useAuthSessionReady } from './hooks/useAuthSessionReady';
 import { useFCM } from './hooks/useFCM';
 import { useVoipTokenSync } from './hooks/useVoipTokenSync';
 import { useBackgroundDataSync } from './hooks/useBackgroundDataSync';
+import { useNativeShellBootstrap } from './hooks/useNativeShellBootstrap';
 import { ImpersonationBanner } from './features/admin/components/ImpersonationBanner';
 import { initAuthCrossTabLocalStorageSync, useAuthStore } from './features/auth/authStore';
 import { installSessionCacheCleanup } from './lib/sessionCacheCleanup';
@@ -290,6 +291,11 @@ function NativePushBridge() {
   return null;
 }
 
+function NativeShellBridge() {
+  useNativeShellBootstrap();
+  return null;
+}
+
 function PwaUpdateListener() {
   useAppUpdate();
   return null;
@@ -376,6 +382,7 @@ if (!rootEl) {
                 <AccessibilityProvider>
                   <ImpersonationBanner />
                   <SessionKeepAlive />
+                  <NativeShellBridge />
                   <NativePushBridge />
                   <AppBootstrapGate>
                     <RootRouter />

@@ -20,6 +20,24 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- App Links / deep links (call join, messenger, shared plans) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="app.church-tambov.ru" android:pathPrefix="/call" />
+                <data android:scheme="https" android:host="app.church-tambov.ru" android:pathPrefix="/messenger" />
+                <data android:scheme="https" android:host="app.church-tambov.ru" android:pathPrefix="/service-plan" />
+                <data android:scheme="https" android:host="app.church-tambov.ru" android:pathPrefix="/setlist-share" />
+                <data android:scheme="https" android:host="app.church-tambov.ru" android:pathPrefix="/sermon-notes" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.istochnikzhizni.molitva" />
+            </intent-filter>
         </activity>
 
         <activity
