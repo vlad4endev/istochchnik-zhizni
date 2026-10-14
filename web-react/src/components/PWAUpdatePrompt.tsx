@@ -1,4 +1,3 @@
-import { Button, Group, Paper, Text } from '@mantine/core';
 import { useEffect, useMemo, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 
@@ -57,40 +56,35 @@ export function PWAUpdatePrompt() {
   if (!needRefresh || hiddenByCooldown) return null;
 
   return (
-    <Paper
-      shadow="md"
-      p="md"
-      radius="md"
-      withBorder
-      style={{
-        position: 'fixed',
-        bottom: 'calc(var(--app-bottom-nav-total-height) + 8px)',
-        left: 16,
-        right: 16,
-        zIndex: 10_000,
-        maxWidth: 480,
-        margin: '0 auto',
-      }}
+    <div
+      className="app-card fixed left-4 right-4 z-[10000] mx-auto flex max-w-md flex-col gap-3 p-4"
+      style={{ bottom: 'calc(var(--app-bottom-nav-total-height) + 8px)' }}
+      role="status"
     >
-      <Group justify="space-between" wrap="nowrap" gap="sm" align="flex-start">
-        <Text size="sm">Доступна новая версия приложения. Обновить сейчас?</Text>
-        <Group gap="xs" wrap="nowrap">
-          <Button
-            variant="default"
-            size="xs"
-            onClick={() => {
-              persistCooldown();
-              setNeedRefresh(false);
-            }}
-            disabled={updateInProgress}
-          >
-            Позже
-          </Button>
-          <Button size="xs" onClick={onUpdateClick} loading={updateInProgress}>
-            Обновить
-          </Button>
-        </Group>
-      </Group>
-    </Paper>
+      <p className="font-ui text-sm font-medium leading-snug text-ink">
+        Доступна новая версия приложения. Обновить сейчас?
+      </p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="app-btn-ghost min-h-[44px] flex-1 !min-h-[44px] px-3 text-sm"
+          onClick={() => {
+            persistCooldown();
+            setNeedRefresh(false);
+          }}
+          disabled={updateInProgress}
+        >
+          Позже
+        </button>
+        <button
+          type="button"
+          className="app-btn-primary min-h-[44px] flex-1 !min-h-[44px] px-3 text-sm disabled:opacity-60"
+          onClick={onUpdateClick}
+          disabled={updateInProgress}
+        >
+          {updateInProgress ? 'Обновляем…' : 'Обновить'}
+        </button>
+      </div>
+    </div>
   );
 }

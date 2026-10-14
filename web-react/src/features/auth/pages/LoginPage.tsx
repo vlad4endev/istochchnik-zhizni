@@ -640,38 +640,38 @@ export function LoginPage() {
   };
 
   const inputClass =
-    'min-h-[52px] w-full rounded-2xl border border-stone-200/90 bg-stone-50/80 px-4 py-3 text-base text-stone-900 outline-none transition-[border-color,box-shadow,background-color] placeholder:text-stone-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 dark:border-[var(--border)] dark:bg-[var(--bg-interactive)] dark:text-[var(--text)] dark:placeholder:text-[var(--text-muted)] dark:focus:bg-[var(--bg-elevated)] sm:min-h-[48px] sm:text-[15px]';
-  const labelClass =
-    'mb-1.5 block text-[13px] font-semibold tracking-wide text-stone-600 dark:text-[var(--text-secondary)]';
+    'app-field w-full outline-none transition-[border-color,box-shadow,background-color] placeholder:text-muted focus:border-wine focus:ring-2 focus:ring-wine/20';
+  const labelClass = 'mb-1.5 block font-ui text-[13px] font-semibold tracking-wide text-muted';
   const eyeBtnClass =
-    'absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary';
+    'absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-muted transition-colors hover:bg-wine/10 hover:text-wine';
 
   return (
-    <div className="app-auth-screen relative min-h-dvh w-full max-w-[100vw] overflow-y-auto bg-[var(--surface)] [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[42vh] bg-gradient-to-b from-primary/[0.12] via-primary/[0.04] to-transparent"
-        aria-hidden
-      />
+    <div className="app-auth-screen relative min-h-dvh w-full max-w-[100vw] overflow-y-auto bg-leaf [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
+      <div className="app-header-band pointer-events-none absolute inset-x-0 top-0 h-[38vh]" aria-hidden>
+        <span className="app-header-band__orb app-header-band__orb--wine" />
+        <span className="app-header-band__orb app-header-band__orb--gold" />
+        <span className="app-header-band__grain" />
+      </div>
       <div className="relative flex min-h-dvh flex-col py-5 [padding-left:max(1rem,env(safe-area-inset-left,0px))] [padding-right:max(1rem,env(safe-area-inset-right,0px))] sm:py-6">
         <Link
           to="/login"
-          className="mb-3 inline-flex min-h-[44px] items-center gap-1.5 self-start rounded-full px-1 text-sm font-semibold text-stone-500 transition hover:text-primary active:text-primary"
+          className="mb-3 inline-flex min-h-[44px] items-center gap-1.5 self-start rounded-full px-1 font-ui text-sm font-semibold text-white/85 transition hover:text-white"
         >
           <LuArrowLeft className="h-4 w-4" strokeWidth={2.25} aria-hidden />
           Назад
         </Link>
 
         <div className="flex flex-1 flex-col justify-start pb-4 sm:justify-center">
-          <div className="app-auth-card mx-auto w-full max-w-[min(100%,480px)] overflow-hidden rounded-[1.5rem] bg-[var(--surface-elevated)]/95 p-5 shadow-[0_18px_50px_rgba(28,25,23,0.08)] ring-1 ring-stone-900/[0.06] backdrop-blur-sm sm:rounded-[1.75rem] sm:p-7">
+          <div className="app-auth-card app-card mx-auto w-full max-w-[min(100%,480px)] overflow-hidden p-5 sm:p-7">
             <div className="flex items-center gap-3.5">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 p-2.5 ring-1 ring-primary/15">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-card bg-wine/10 p-2.5 ring-1 ring-wine/15">
                 <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-[1.4rem] font-extrabold leading-tight tracking-tight text-stone-900 sm:text-2xl">
+                <h1 className="font-ui text-header-title leading-tight tracking-tight text-ink sm:text-2xl">
                   {title}
                 </h1>
-                <p className="mt-0.5 text-sm leading-snug text-stone-500 sm:text-[15px]">{subtitle}</p>
+                <p className="mt-0.5 font-ui text-header-sub leading-snug text-muted sm:text-[15px]">{subtitle}</p>
               </div>
             </div>
 
@@ -1113,7 +1113,7 @@ export function LoginPage() {
               <button
                 type="button"
                 disabled={submitting}
-                className="touch-manipulation flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-white shadow-lg shadow-primary/25 transition-[opacity,transform] hover:opacity-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+                className="app-btn-primary touch-manipulation w-full gap-2 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => {
                   if (isRegisterMode) goRegisterNext();
                   else void submitLogin();

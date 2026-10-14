@@ -5,6 +5,7 @@
  */
 import pg from 'pg';
 
+import { buildPgSslOptions } from '../config/pgSsl';
 import { loadEnvFromDotenv } from './loadEnv';
 
 type MemberRow = {
@@ -31,10 +32,9 @@ function buildClient(): pg.Client {
   loadEnvFromDotenv();
   const cs = process.env.DATABASE_URL?.trim();
   if (!cs) throw new Error('Задайте DATABASE_URL в окружении или .env');
-  const useSsl = cs.includes('sslmode=') || process.env.DB_SSL === 'true';
   return new pg.Client({
     connectionString: cs,
-    ssl: useSsl ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true' } : undefined,
+    ssl: buildPgSslOptions({ connectionString: cs }),
   });
 }
 

@@ -1,15 +1,41 @@
+import Dexie, { type Table } from 'dexie';
+
 import type { ChurchFeedPage, FeedPost } from '../features/feed/feedApi';
 
-import { offlineDb } from './db';
+type OfflineFeedPost = {
+  id: string;
+  authorJson: string;
+  caption: string | null;
+  mediaJson: string;
+  likeCount: number;
+  commentCount: number;
+  repostCount: number;
+  likedByMe: boolean;
+  createdAt: number;
+  cachedAt: number;
+};
+
+/** Separate from sync DB (`istochnik_offline_v1`) — feed is cache-only. */
+class FeedCacheDatabase extends Dexie {
+  feedPosts!: Table<OfflineFeedPost, string>;
+
+  constructor() {
+    super('istochnik_feed_cache_v1');
+    this.version(1).stores({
+      feedPosts: 'id, createdAt, cachedAt',
+    });
+  }
+}
+
+const feedDb = new FeedCacheDatabase();
 
 export async function cacheFeedPage(page: ChurchFeedPage): Promise<void> {
   const now = Date.now();
-  await offlineDb.transaction('rw', offlineDb.feedPosts, async () => {
-    // Keep a rolling window of recent posts for offline reading.
-    const existing = await offlineDb.feedPosts.orderBy('createdAt').reverse().toArray();
+  await feedDb.transaction('rw', feedDb.feedPosts, async () => {
+    const existing = await feedDb.feedPosts.orderBy('createdAt').reverse().toArray();
     const keepIds = new Set((page.posts ?? []).map((p) => String(p.id)));
     for (const post of page.posts ?? []) {
-      await offlineDb.feedPosts.put({
+      await feedDb.feedPosts.put({
         id: String(post.id),
         authorJson: JSON.stringify(post.author ?? {}),
         caption: post.caption,
@@ -22,11 +48,10 @@ export async function cacheFeedPage(page: ChurchFeedPage): Promise<void> {
         cachedAt: now,
       });
     }
-    // Drop stale cached posts not in the latest page when online refresh replaced the head.
     if ((page.posts?.length ?? 0) > 0 && !page.next_cursor) {
       for (const row of existing) {
         if (!keepIds.has(row.id) && existing.length > 80) {
-          await offlineDb.feedPosts.delete(row.id);
+          await feedDb.feedPosts.delete(row.id);
         }
       }
     }
@@ -34,7 +59,7 @@ export async function cacheFeedPage(page: ChurchFeedPage): Promise<void> {
 }
 
 export async function listCachedFeed(limit = 30): Promise<FeedPost[]> {
-  const rows = await offlineDb.feedPosts.orderBy('createdAt').reverse().limit(limit).toArray();
+  const rows = await feedDb.feedPosts.orderBy('createdAt').reverse().limit(limit).toArray();
   return rows.map((row) => {
     let author: FeedPost['author'];
     let media: FeedPost['media'];

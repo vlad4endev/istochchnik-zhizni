@@ -1,4 +1,5 @@
 import type { CapacitorConfig } from '@capacitor/cli';
+import { KeyboardResize } from '@capacitor/keyboard';
 
 /**
  * APK по умолчанию грузит встроенный dist (нативные FCM, разрешения, CapacitorHttp).
@@ -51,13 +52,14 @@ const config: CapacitorConfig = {
       layoutName: 'launch_screen',
       useDialog: true,
     },
-    /*
-     * Настройки StatusBar и Keyboard убраны: пакеты @capacitor/status-bar и @capacitor/keyboard
-     * не установлены ни в package.json, ни в нативных проектах, поэтому блоки ничего не делали.
-     * Цвет статус-бара и подъём интерфейса над клавиатурой обеспечивают CSS/JS оболочки
-     * (theme-color, --app-keyboard-inset, safe-area). Если понадобятся плагины — ставить пакеты
-     * и возвращать конфиг вместе, с проверкой на устройствах: resize: 'body' изменит раскладку.
-     */
+    StatusBar: {
+      style: 'LIGHT',
+      backgroundColor: '#f4f1ed',
+    },
+    Keyboard: {
+      resize: KeyboardResize.Body,
+      resizeOnFullScreen: true,
+    },
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },

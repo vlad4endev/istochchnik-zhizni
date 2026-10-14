@@ -35,7 +35,8 @@ import { useAuthSessionReady } from './hooks/useAuthSessionReady';
 import { useFCM } from './hooks/useFCM';
 import { useVoipTokenSync } from './hooks/useVoipTokenSync';
 import { useBackgroundDataSync } from './hooks/useBackgroundDataSync';
-import { OfflineSyncBridge } from './offline/useOfflineSync';
+import { useNativeShellBootstrap } from './hooks/useNativeShellBootstrap';
+import { useOfflineSync } from './offline/hooks/useOfflineSync';
 import { ImpersonationBanner } from './features/admin/components/ImpersonationBanner';
 import { initAuthCrossTabLocalStorageSync, useAuthStore } from './features/auth/authStore';
 import { installSessionCacheCleanup } from './lib/sessionCacheCleanup';
@@ -47,7 +48,27 @@ import { appearanceColorSchemeManager } from './lib/mantineAppearanceColorScheme
 import { theme } from './lib/theme';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
+/* Local fonts (offline / Capacitor) — Onest UI, Playfair Display accents */
+import '@fontsource/onest/400.css';
+import '@fontsource/onest/500.css';
+import '@fontsource/onest/600.css';
+import '@fontsource/onest/700.css';
+import '@fontsource/onest/800.css';
+import '@fontsource/onest/cyrillic-400.css';
+import '@fontsource/onest/cyrillic-500.css';
+import '@fontsource/onest/cyrillic-600.css';
+import '@fontsource/onest/cyrillic-700.css';
+import '@fontsource/onest/cyrillic-800.css';
+import '@fontsource/playfair-display/400-italic.css';
+import '@fontsource/playfair-display/500-italic.css';
+import '@fontsource/playfair-display/600-italic.css';
+import '@fontsource/playfair-display/700-italic.css';
+import '@fontsource/playfair-display/cyrillic-400-italic.css';
+import '@fontsource/playfair-display/cyrillic-500-italic.css';
+import '@fontsource/playfair-display/cyrillic-600-italic.css';
+import '@fontsource/playfair-display/cyrillic-700-italic.css';
 import './index.css';
+import './styles/androidDesignTokens.css';
 import './styles/mobile.css';
 import './styles/compactIphone.css';
 
@@ -285,13 +306,19 @@ function BackgroundDataSyncBridge() {
   return null;
 }
 
-function OfflineDbSyncBridge() {
-  return <OfflineSyncBridge />;
-}
-
 function NativePushBridge() {
   useFCM();
   useVoipTokenSync();
+  return null;
+}
+
+function NativeShellBridge() {
+  useNativeShellBootstrap();
+  return null;
+}
+
+function OfflineSyncBridge() {
+  useOfflineSync();
   return null;
 }
 
@@ -374,7 +401,6 @@ if (!rootEl) {
               {import.meta.env.PROD ? <PWAUpdatePrompt /> : null}
               <PwaUpdateListener />
               <BackgroundDataSyncBridge />
-              <OfflineDbSyncBridge />
               <ViewportHeightBridge />
               <TopLoader />
               <BrowserRouter>
@@ -382,6 +408,8 @@ if (!rootEl) {
                 <AccessibilityProvider>
                   <ImpersonationBanner />
                   <SessionKeepAlive />
+                  <NativeShellBridge />
+                  <OfflineSyncBridge />
                   <NativePushBridge />
                   <AppBootstrapGate>
                     <RootRouter />

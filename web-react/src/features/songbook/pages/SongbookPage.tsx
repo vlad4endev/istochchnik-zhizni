@@ -95,7 +95,7 @@ export function SongbookPage() {
     return (
       <div style={semanticVars as CSSProperties} className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--sb-text)]">
         <div className={sectionHeroStickyClass}>
-          <PageHeader title="Песенник" />
+          <PageHeader title="Песенник" subtitle="Каталог и избранное" />
         </div>
         <div className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-3 py-1.5 backdrop-blur md:px-4">
           <div className="flex items-center gap-2">
@@ -157,7 +157,7 @@ export function SongbookPage() {
     return (
       <div style={semanticVars as CSSProperties} className="mx-auto flex h-full min-h-0 max-w-3xl flex-col gap-2 text-[var(--sb-text)]">
         <div className={sectionHeroStickyClass}>
-          <PageHeader title="Песенник" />
+          <PageHeader title="Песенник" subtitle="Каталог и избранное" />
         </div>
         <div className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-3 py-1.5 backdrop-blur md:px-4">
           <div className="flex items-center gap-2">
@@ -217,7 +217,7 @@ export function SongbookPage() {
   return (
     <div style={semanticVars as CSSProperties} className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--sb-text)]">
       <div className={sectionHeroStickyClass}>
-        <PageHeader title="Песенник" />
+        <PageHeader title="Песенник" subtitle="Каталог и избранное" />
       </div>
       <div className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-3 py-1.5 backdrop-blur md:px-4">
         <div className="flex items-center gap-2">

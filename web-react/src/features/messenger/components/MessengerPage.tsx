@@ -283,9 +283,9 @@ export function MessengerPage() {
   }, []);
 
   return (
-    <div className="tg-messenger-page messenger-layout relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
+    <div className="tg-messenger-page messenger-layout relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[var(--surface,#FBF6EF)] max-phone:bg-[var(--header-bg,#230810)]">
       <div
-        className={`tg-messenger min-h-0 flex-1 bg-white tg-density--${density} ${isTransitioning ? 'transitioning' : ''}`}
+        className={`tg-messenger min-h-0 flex-1 bg-[var(--surface,#FBF6EF)] tg-density--${density} ${isTransitioning ? 'transitioning' : ''}`}
         ref={messengerRef}
       >
       {/* Sidebar */}

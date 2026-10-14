@@ -5,18 +5,18 @@
  */
 .profileRoot {
   /* Привязка к теме приложения (через локальные алиасы) */
-  --profile-surface: var(--surface, #f4f1ed);
+  --profile-surface: var(--surface, #fbf6ef);
   --profile-surface-elevated: var(--surface-elevated, #fafaf9);
-  --profile-text: var(--text, #1c1917);
-  --profile-text-heading: var(--text, #1c1917);
-  --profile-text-body: color-mix(in srgb, var(--text, #1c1917) 88%, transparent);
-  --profile-text-muted: var(--text-secondary, #78716c);
-  --profile-text-soft: color-mix(in srgb, var(--text-secondary, #57534e) 88%, transparent);
-  --profile-text-faint: var(--text-muted, #a8a29e);
+  --profile-text: var(--text, #3a1018);
+  --profile-text-heading: var(--text, #3a1018);
+  --profile-text-body: color-mix(in srgb, var(--text, #3a1018) 88%, transparent);
+  --profile-text-muted: var(--text-secondary, #6a5555);
+  --profile-text-soft: color-mix(in srgb, var(--text-secondary, #6a5555) 88%, transparent);
+  --profile-text-faint: var(--text-muted, #6a5555);
 
-  --profile-primary: var(--primary, #7d3640);
-  --profile-primary-mid: color-mix(in srgb, var(--primary, #7d3640) 74%, white);
-  --profile-primary-dark: var(--primary-dark, #5c2830);
+  --profile-primary: var(--primary, #8a2742);
+  --profile-primary-mid: color-mix(in srgb, var(--primary, #8a2742) 74%, white);
+  --profile-primary-dark: var(--primary-dark, #5a1826);
 
   --profile-card-bg: color-mix(in srgb, var(--profile-surface-elevated) 86%, transparent);
   --profile-card-bg-soft: color-mix(in srgb, var(--profile-surface-elevated) 68%, transparent);
@@ -24,8 +24,8 @@
   --profile-border: rgba(120, 113, 108, 0.18);
   --profile-border-light: color-mix(in srgb, var(--profile-surface-elevated) 85%, var(--profile-surface));
 
-  --profile-gradient-from: #4a1e26;
-  --profile-gradient-to: #a25260;
+  --profile-gradient-from: #230810;
+  --profile-gradient-to: #8a2742;
 
   --profile-danger: #b91c1c;
   --profile-success: #047857;

@@ -1,5 +1,5 @@
 import { apiClient } from '../../lib/apiClient';
-import { isBrowserOnline } from '../../offline/db';
+import { isBrowserOnline } from '../../offline/isOnline';
 import {
   getOfflineSongById,
   listOfflineSongs,
