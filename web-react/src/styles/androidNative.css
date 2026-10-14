@@ -578,15 +578,6 @@ html.app-android-native .call-controls {
   border-color: rgba(255, 255, 255, 0.14);
 }
 
-html.app-android-native .call-ctrl-btn--active {
-  background: rgba(242, 184, 121, 0.55);
-}
-
-html.app-android-native .call-ctrl-btn--hangup {
-  background: #e5385b;
-  box-shadow: 0 6px 20px rgba(229, 56, 91, 0.45);
-}
-
 /* ───────── Конспект проповеди: шапка и заголовок как в макете ───────── */
 
 html.app-android-native .sermon-editor-header {
@@ -777,9 +768,8 @@ html.app-android-native .call-participant-tile__media {
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
 }
 html.app-android-native .call-participant-tile__chrome {
-  background: rgba(35, 8, 16, 0.72);
-  border-radius: 999px;
-  padding: 4px 10px;
+  background: transparent;
+  padding: 0 12px 12px;
 }
 
 /* Tailwind-утилиты `primary` заданы литералом (#7d3640); в Android-режиме ведём их в палитру макетов. */
@@ -1271,4 +1261,133 @@ html.app-android-native .app-main-content [class*='_label_'],
 html.app-android-native .app-main-content time[class*='_time_'],
 html.app-android-native .tg-smart-tab__badge {
   font-size: 12px;
+}
+
+
+/* ───────── Окно звонка/встречи: плитки и панель управления как в макете ───────── */
+
+html.app-android-native .call-meeting-topbar__title {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+/* Говорящий: крупная плитка вдвое ниже экрана, а не «на всю высоту». */
+html.app-android-native .call-speaker-layout__spotlight {
+  flex: 0 0 auto;
+}
+html.app-android-native .call-speaker-layout__spotlight .call-participant-tile--video .call-participant-tile__media {
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 1.38;
+  border-radius: 28px;
+}
+
+/* Остальные участники: две равные плитки с разными цветами. */
+html.app-android-native .call-speaker-layout__strip {
+  justify-content: stretch;
+  gap: 12px;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile--strip {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile--strip .call-participant-tile__media {
+  aspect-ratio: 1.02;
+  height: auto;
+  border-radius: 26px;
+}
+
+html.app-android-native .call-participant-tile__media {
+  --tile-a: #6b2038;
+  --tile-b: #2a0c16;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile:nth-child(4n + 1) .call-participant-tile__media {
+  --tile-a: #b5561c;
+  --tile-b: #5e2509;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile:nth-child(4n + 2) .call-participant-tile__media {
+  --tile-a: #2d5287;
+  --tile-b: #11284a;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile:nth-child(4n + 3) .call-participant-tile__media {
+  --tile-a: #2d7a58;
+  --tile-b: #0f3a2a;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile:nth-child(4n) .call-participant-tile__media {
+  --tile-a: #6f3a8a;
+  --tile-b: #2b1440;
+}
+html.app-android-native .call-participant-tile--video .call-participant-tile__media {
+  background: linear-gradient(160deg, var(--tile-a), var(--tile-b));
+}
+html.app-android-native .call-cam-off {
+  background: transparent;
+}
+html.app-android-native .call-cam-off__glow {
+  display: none;
+}
+html.app-android-native .call-cam-off__initials {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: none;
+  border: none;
+}
+html.app-android-native .call-participant-tile__pill {
+  background: rgba(35, 8, 16, 0.72);
+  border: none;
+}
+html.app-android-native .call-participant-tile__label {
+  font-weight: 700;
+}
+
+/* Нижняя панель: квадратные кнопки со скруглением 18px, красная «Выйти». */
+html.app-android-native .call-controls {
+  left: 16px;
+  right: 16px;
+  max-width: none;
+  transform: none;
+  justify-content: space-between;
+  padding: 12px 12px 10px;
+  background: rgba(30, 7, 16, 0.82);
+  border-radius: 30px;
+}
+html.app-android-native .call-ctrl__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+html.app-android-native .call-ctrl--mic-on .call-ctrl__icon {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+html.app-android-native .call-ctrl--off .call-ctrl__icon {
+  background: #fbf6ef;
+  color: #3a1018;
+  opacity: 1;
+}
+html.app-android-native .call-ctrl--active .call-ctrl__icon {
+  background: var(--ac-amber);
+  color: var(--ac-amber-ink);
+}
+html.app-android-native .call-ctrl--hangup .call-ctrl__icon {
+  background: #e5385b;
+  border-color: transparent;
+  box-shadow: 0 8px 22px rgba(229, 56, 91, 0.45);
+}
+
+html.app-android-native .call-speaker-layout {
+  padding-inline: 12px;
+}
+html.app-android-native .call-meeting-topbar {
+  padding-inline: 20px;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile--strip:not(.call-participant-tile--speaking) .call-participant-tile__media {
+  box-shadow: none;
+}
+html.app-android-native .call-meeting-topbar {
+  padding-top: 14px;
+  padding-bottom: 10px;
 }
