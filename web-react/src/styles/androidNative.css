@@ -1003,3 +1003,52 @@ html.app-android-native .app-main-content [class*='pr-[max(0.75rem'] {
 html.app-android-native div.overflow-y-auto:has(> div > .section-hero-sticky) {
   padding-top: 0;
 }
+
+/* ───────── Доступность: области нажатия не меньше 44px, контраст приглушённого текста ───────── */
+
+html.app-android-native:not(.dark, [data-mantine-color-scheme='dark'], [data-color-theme='dark']) {
+  --text-muted: #7a6764;
+}
+
+html.app-android-native .app-main-content button[aria-label='Закрыть'],
+html.app-android-native .app-main-content button[aria-label*='тему'],
+html.app-android-native .app-main-content button[aria-label*='Нравится'],
+html.app-android-native .app-main-content button[aria-label^='Комментарии'],
+html.app-android-native .app-main-content button[aria-label^='Поделиться'],
+html.app-android-native .app-main-content button[aria-label^='Кто поставил'],
+html.app-android-native .app-main-content button[aria-label^='Написать поздравление'],
+html.app-android-native .app-main-content button[aria-label='Порядок ленты'] {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+html.app-android-native .tg-smart-tab,
+html.app-android-native .app-permissions-card button,
+html.app-android-native .app-main-content button[aria-pressed] {
+  min-height: 44px;
+}
+
+html.app-android-native button[aria-label='Закрыть'] {
+  min-width: 44px;
+  min-height: 44px;
+}
+html.app-android-native button[class*='py-2.5'] {
+  min-height: 44px;
+}
+
+html.app-android-native button.flex-1[class*='py-2']:not([class*='py-2.5']) {
+  min-height: 44px;
+}
+html.app-android-native [data-profile-root] .profile-hero a,
+html.app-android-native [data-profile-root] .profile-hero button {
+  min-height: 44px;
+  min-width: 44px;
+}
+html.app-android-native .app-main-content button[class*='min-h-[38px]'],
+html.app-android-native .app-main-content button[class*='h-[38px]'] {
+  min-height: 44px;
+}
+
+html.app-android-native .app-main-content button.inline-flex.items-center[class*='gap-1.5'] {
+  min-height: 44px;
+}
