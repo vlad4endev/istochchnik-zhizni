@@ -164,51 +164,48 @@ export function PermissionsRequestModal() {
   if (!open) return null;
 
   return (
-    <BodyPortal><div className="fixed inset-0 z-[110] flex items-center justify-center p-6" role="presentation">
-      <button
-        type="button"
-        aria-label="Закрыть окно разрешений"
-        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
-        onClick={dismiss}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Разрешения приложения"
-        className="relative z-[111] w-full max-w-[min(100%,24rem)] rounded-2xl border border-white/10 bg-zinc-900/90 px-5 py-5 text-zinc-100 shadow-2xl ring-1 ring-inset ring-white/10 backdrop-blur-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="text-[15px] font-extrabold tracking-tight text-white">
-          Разрешите доступ
-        </p>
-        <p className="mt-2 text-[13px] leading-relaxed text-zinc-200/90">
-          Для звонков, сообщений и уведомлений нужны разрешения:{' '}
-          <span className="font-semibold">{needsText || 'камера, микрофон, уведомления'}</span>.
-          {isMissingDeviceNotificationPermission(notif) ? (
-            <>
-              {' '}
-              Без разрешения на уведомления на устройстве вы не получите сигнал, когда вам пишут в чате.
-            </>
-          ) : null}
-        </p>
-        <div className="mt-4 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => void requestAll()}
-            disabled={busy}
-            className="w-full rounded-xl bg-white/14 py-3 text-[14px] font-extrabold text-white transition hover:bg-white/20 disabled:opacity-60"
-          >
-            {busy ? 'Запрашиваем…' : 'Разрешить'}
-          </button>
-          <button
-            type="button"
-            onClick={dismiss}
-            className="w-full rounded-xl bg-white/6 py-3 text-[14px] font-semibold text-zinc-200 transition hover:bg-white/10"
-          >
-            Позже
-          </button>
+    <BodyPortal>
+      <div className="fixed inset-0 z-[110] flex items-end justify-center max-phone:p-0 p-6 sm:items-center" role="presentation">
+        <button
+          type="button"
+          aria-label="Закрыть окно разрешений"
+          className="absolute inset-0 bg-[rgba(35,8,16,0.5)] backdrop-blur-[2px]"
+          onClick={dismiss}
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Разрешения приложения"
+          className="relative z-[111] w-full max-w-[min(100%,24rem)] rounded-t-leaf bg-card px-5 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] pt-4 text-ink shadow-sheet max-phone:rounded-b-none sm:rounded-card sm:pb-5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[color:var(--border-hover)] max-phone:block hidden" aria-hidden />
+          <p className="font-ui text-[17px] font-extrabold tracking-tight text-ink">Разрешите доступ</p>
+          <p className="mt-2 font-ui text-[13px] leading-relaxed text-muted">
+            Для звонков, сообщений и уведомлений нужны разрешения:{' '}
+            <span className="font-semibold text-ink">{needsText || 'камера, микрофон, уведомления'}</span>.
+            {isMissingDeviceNotificationPermission(notif) ? (
+              <>
+                {' '}
+                Без разрешения на уведомления на устройстве вы не получите сигнал, когда вам пишут в чате.
+              </>
+            ) : null}
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => void requestAll()}
+              disabled={busy}
+              className="app-btn-primary w-full disabled:opacity-60"
+            >
+              {busy ? 'Запрашиваем…' : 'Разрешить'}
+            </button>
+            <button type="button" onClick={dismiss} className="app-btn-ghost w-full">
+              Позже
+            </button>
+          </div>
         </div>
       </div>
-    </div></BodyPortal>
+    </BodyPortal>
   );
 }
