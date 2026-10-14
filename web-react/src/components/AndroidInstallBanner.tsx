@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { LuDownload, LuX, LuSmartphone } from 'react-icons/lu';
 import { useBrandingStore } from '../features/branding/brandingStore';
+import { isCapacitorNative } from '../lib/nativeApp';
 import { usePwaStore } from '../stores/pwaStore';
 
 const DISMISSED_KEY = 'android-install-banner-dismissed';
@@ -49,12 +50,15 @@ export function AndroidInstallBanner() {
   const customLogoDataUrl = useBrandingStore((s) => s.customLogoDataUrl);
 
   useEffect(() => {
+    // Already inside the native APK — never show the "install app" banner.
+    if (isCapacitorNative()) return;
     if (!isAndroid()) return;
     if (isStandalone()) return;
     if (isDismissed()) return;
   }, []);
 
   useEffect(() => {
+    if (isCapacitorNative()) return;
     if (!isAndroid() || isStandalone() || isDismissed()) return;
     if (!isInstallable || !deferredPrompt || isInstalled) return;
 

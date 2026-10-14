@@ -30,7 +30,8 @@
     "cap:build": "npm run build && cap sync",
     "mobile:icons": "npx @capacitor/assets generate --ios --android --iconBackgroundColor '#7d3640' --iconBackgroundColorDark '#5c2830' --splashBackgroundColor '#f4f1ed' --splashBackgroundColorDark '#1c1917'",
     "mobile:build": "npm run build && cap sync",
-    "android:apk": "VITE_RELATIVE_BASE=true VITE_API_BASE_URL=https://app.church-tambov.ru npm run build:prod && cd android && ./gradlew assembleDebug"
+    "android:apk": "VITE_RELATIVE_BASE=true VITE_API_BASE_URL=https://app.church-tambov.ru npm run build:prod && cd android && ./gradlew assembleRelease",
+    "android:apk:debug": "VITE_RELATIVE_BASE=true VITE_API_BASE_URL=https://app.church-tambov.ru npm run build:prod && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",
@@ -70,6 +71,7 @@
     "browser-image-compression": "^2.0.2",
     "chordsheetjs": "^14.5.1",
     "date-fns": "^4.1.0",
+    "dexie": "^4.0.11",
     "dompurify": "^3.4.16",
     "emoji-mart": "^5.6.0",
     "framer-motion": "^12.38.0",

@@ -73,6 +73,7 @@ export function SongDetailPage() {
     queryFn: () => fetchSong(songId),
     enabled: Number.isInteger(songId) && songId > 0,
     staleTime: 5 * 60_000,
+    networkMode: 'offlineFirst',
   });
   const versionQ = useQuery({
     queryKey: ['studio', 'version', songId],

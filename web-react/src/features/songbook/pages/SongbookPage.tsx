@@ -55,6 +55,8 @@ export function SongbookPage() {
     queryKey: [...keys.songs, queryParams] as const,
     queryFn: () => fetchSongs(queryParams),
     staleTime: 5 * 60_000,
+    /** IndexedDB fallback in fetchSongs — allow queries while offline. */
+    networkMode: 'offlineFirst',
   });
 
   const favoriteMut = useMutation({
