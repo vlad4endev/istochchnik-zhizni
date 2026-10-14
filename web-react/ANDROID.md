@@ -38,3 +38,21 @@ Metro не нужен: веб-ассеты в `assets/public` внутри APK.
 
 - Node.js 20+, JDK 21, Android SDK 35
 - `android/local.properties` с `sdk.dir=...` (локально, не в git)
+
+## Push (FCM) — проверка
+
+Цепочка в APK:
+
+1. `google-services.json` → Firebase project `mychurch-29bce`, package `com.istochnikzhizni.molitva`
+2. `AppFirebaseMessagingService` + `@capacitor/push-notifications`
+3. После логина `useFCM` → разрешение → `PushNotifications.register()` → `POST /api/notifications/save-token`
+4. Сервер шлёт через Firebase Admin (`FIREBASE_SERVICE_ACCOUNT_*`)
+
+Статическая проверка сборки:
+
+```bash
+cd web-react
+node scripts/verify-android-push.mjs android/app/build/outputs/apk/release/app-release.apk
+```
+
+На устройстве: войти → разрешить уведомления → тост «Push-уведомления подключены» → отправить сообщение/тест с другого аккаунта при свёрнутом приложении.

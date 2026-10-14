@@ -38,3 +38,15 @@
 
 # Плагин push вызывается из AppFirebaseMessagingService напрямую.
 -keep class com.capacitorjs.plugins.pushnotifications.** { *; }
+
+# Наш FCM-сервис и call UI — манифест + PendingIntent / reflection.
+-keep class com.istochnikzhizni.molitva.AppFirebaseMessagingService { *; }
+-keep class com.istochnikzhizni.molitva.CallNotificationHelper { *; }
+-keep class com.istochnikzhizni.molitva.CallActionReceiver { *; }
+-keep class com.istochnikzhizni.molitva.IncomingCallActivity { *; }
+-keep class com.istochnikzhizni.molitva.MainActivity { *; }
+-keep class com.istochnikzhizni.molitva.NativeCallPlugin { *; }
+
+# Firebase Messaging
+-keep class com.google.firebase.messaging.** { *; }
+-dontwarn com.google.firebase.messaging.**
