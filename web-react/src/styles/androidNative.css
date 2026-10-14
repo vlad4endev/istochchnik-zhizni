@@ -1438,3 +1438,51 @@ html.app-android-native .app-main-content article > div[class*='flex-1'][class*=
   min-height: 36px;
   padding-inline: 12px;
 }
+
+/* ───────── Режим выступления: тёмная сцена с янтарём вместо изумрудного ───────── */
+
+html.app-android-native .perform-stage-surface,
+html.app-android-native [class*='perform'] {
+  --perform-bg: #0b0b0e;
+}
+html.app-android-native [class*='bg-emerald-600'],
+html.app-android-native [class*='bg-emerald-500'] {
+  background: linear-gradient(135deg, #8a2742, #5a1826);
+  border-color: transparent;
+  color: #fff;
+}
+html.app-android-native [class*='bg-emerald-900/'],
+html.app-android-native [class*='bg-emerald-100'],
+html.app-android-native [class*='bg-emerald-50'] {
+  background: rgba(242, 184, 121, 0.16);
+  color: var(--ac-amber);
+  border-color: rgba(242, 184, 121, 0.35);
+}
+html.app-android-native [class*='text-emerald-300'],
+html.app-android-native [class*='text-emerald-200'],
+html.app-android-native [class*='text-emerald-100'],
+html.app-android-native [class*='text-emerald-700'],
+html.app-android-native [class*='text-emerald-900'] {
+  color: var(--ac-amber);
+}
+html.app-android-native [class*='bg-emerald-400'] {
+  background: var(--ac-amber);
+}
+html.app-android-native input[class*='accent-emerald'] {
+  accent-color: #f2b879;
+}
+html.app-android-native .perform-stage-surface .chord-line,
+html.app-android-native .perform-stage-surface .chord-line * {
+  color: var(--ac-amber) !important;
+}
+
+html.app-android-native .perform-stage {
+  --perform-accent: #f2b879;
+  --perform-chord: #f2b879;
+}
+html.app-android-native .perform-stage .perform-song-strip-btn--active {
+  color: #4b1620;
+}
+html.app-android-native .songbook-reader--stage .chorus-block {
+  border-left-color: #f2b879;
+}
