@@ -5,7 +5,7 @@ import { useAuthStore } from '../features/auth/authStore';
 import { performAuthRefresh } from './authRefresh';
 import { COOKIE_ONLY_SESSION_TOKEN, isCookieOnlySessionToken } from './authSessionConstants';
 import { resolveAxiosBaseURL } from './config';
-import { isLocalDbAvailable, localDbGet, localDbPut } from './localDb';
+import { isLocalDbAvailable, isQueueableWrite, localDbGet, localDbPut, outboxAdd } from './localDb';
 import { isSessionTeardownActive } from './sessionTeardown';
 import { emitAppToast } from './uiFeedback';
 
@@ -18,6 +18,8 @@ declare module 'axios' {
      * Refresh/cookie-retry всё равно пробуются; при неуспехе ошибка уходит вызывающему коду.
      */
     skipAuthClearOn401?: boolean;
+    /** Повтор из очереди SQLite: при обрыве не ставить в очередь второй раз. */
+    skipLocalOutbox?: boolean;
   }
 }
 
@@ -246,6 +248,34 @@ apiClient.interceptors.response.use(
     const status = error.response?.status;
     const bodyMsg = readResponseErrorMessage(error.response?.data);
     const tearingDown = isSessionTeardownActive();
+
+    // Android: действие без сети (подтверждение участия, молитвенная нужда…) кладём в очередь SQLite —
+    // оно уйдёт на сервер при появлении сети (lib/syncLocalDb).
+    if (
+      cfg &&
+      isLocalDbAvailable() &&
+      !tearingDown &&
+      !cfg.skipLocalOutbox &&
+      isQueueableWrite(cfg.method, cfg.url) &&
+      isConnectivityOrOffline(error) &&
+      (cfg._retryNetworkOnce || (typeof navigator !== 'undefined' && navigator.onLine === false))
+    ) {
+      let payload: unknown;
+      try {
+        payload = typeof cfg.data === 'string' && cfg.data ? JSON.parse(cfg.data) : cfg.data;
+      } catch {
+        payload = undefined;
+      }
+      if (await outboxAdd(cfg.method ?? 'post', cfg.url ?? '', payload)) {
+        return {
+          data: { queued: true },
+          status: 202,
+          statusText: 'Accepted (queued locally)',
+          headers: { 'x-local-db-queued': '1' },
+          config: cfg,
+        };
+      }
+    }
 
     // Android: сервера не видно (нет сети) — отдаём последний ответ из внутренней SQLite.
     if (

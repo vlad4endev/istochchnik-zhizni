@@ -56,6 +56,15 @@ async function openDb(): Promise<SqliteDb | null> {
          body     TEXT NOT NULL,
          saved_at INTEGER NOT NULL,
          PRIMARY KEY (user_key, url)
+       );
+       CREATE TABLE IF NOT EXISTS outbox (
+         id         INTEGER PRIMARY KEY AUTOINCREMENT,
+         user_key   TEXT NOT NULL,
+         method     TEXT NOT NULL,
+         url        TEXT NOT NULL,
+         body       TEXT,
+         created_at INTEGER NOT NULL,
+         attempts   INTEGER NOT NULL DEFAULT 0
        );`,
     );
     return db;
@@ -137,6 +146,86 @@ export async function localDbGet(url: string): Promise<LocalDbHit | null> {
   }
 }
 
+/**
+ * Действия, которые безопасно выполнить позже, когда появится сеть: ответ экрану не нужен,
+ * повтор не создаёт лишних данных. Остальные запросы без сети падают как в PWA.
+ */
+const QUEUEABLE_WRITES: Array<{ method: string; pattern: RegExp }> = [
+  { method: 'post', pattern: /^\/api\/calendar\/prayer-need\/submit$/ },
+  { method: 'post', pattern: /^\/api\/calendar\/prayer-section\/visit$/ },
+  { method: 'put', pattern: /^\/api\/calendar\/member-previous-prayer-need\/[^/]+$/ },
+  { method: 'patch', pattern: /^\/api\/(music|media)-schedule\/assignments\/[^/]+\/status$/ },
+  { method: 'post', pattern: /^\/api\/notifications\/deliveries\/[^/]+\/(open|dismiss)$/ },
+  { method: 'post', pattern: /^\/api\/notifications\/deliveries\/open-all$/ },
+];
+
+const MAX_OUTBOX_ATTEMPTS = 8;
+
+export type OutboxItem = { id: number; method: string; url: string; body: unknown };
+
+export function isQueueableWrite(method: string | undefined, url: string | undefined): boolean {
+  const m = (method ?? '').toLowerCase();
+  const path = normalizeCacheUrl(url).split('?')[0];
+  return QUEUEABLE_WRITES.some((w) => w.method === m && w.pattern.test(path));
+}
+
+export async function outboxAdd(method: string, url: string, body: unknown): Promise<boolean> {
+  const userKey = currentUserKey();
+  if (!userKey || !isQueueableWrite(method, url)) return false;
+  const db = await getDb();
+  if (!db) return false;
+  try {
+    await db.run(
+      'INSERT INTO outbox (user_key, method, url, body, created_at) VALUES (?, ?, ?, ?, ?)',
+      [userKey, method.toLowerCase(), normalizeCacheUrl(url), body === undefined ? null : JSON.stringify(body), Date.now()],
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function outboxList(): Promise<OutboxItem[]> {
+  const userKey = currentUserKey();
+  if (!userKey) return [];
+  const db = await getDb();
+  if (!db) return [];
+  try {
+    const res = await db.query(
+      'SELECT id, method, url, body FROM outbox WHERE user_key = ? AND attempts < ? ORDER BY id',
+      [userKey, MAX_OUTBOX_ATTEMPTS],
+    );
+    return (res.values ?? []).map((r) => ({
+      id: Number(r.id),
+      method: String(r.method),
+      url: String(r.url),
+      body: typeof r.body === 'string' ? JSON.parse(r.body) : undefined,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function outboxRemove(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.run('DELETE FROM outbox WHERE id = ?', [id]);
+  } catch {
+    /* запись уже удалена */
+  }
+}
+
+export async function outboxMarkFailed(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.run('UPDATE outbox SET attempts = attempts + 1 WHERE id = ?', [id]);
+  } catch {
+    /* не критично */
+  }
+}
+
 /** Выход из аккаунта: данные пользователя на устройстве не остаются. */
 export async function clearLocalDb(): Promise<void> {
   if (!isLocalDbAvailable()) return;
@@ -144,6 +233,7 @@ export async function clearLocalDb(): Promise<void> {
   if (!db) return;
   try {
     await db.run('DELETE FROM api_cache');
+    await db.run('DELETE FROM outbox');
   } catch {
     /* таблицы нет — нечего чистить */
   }
