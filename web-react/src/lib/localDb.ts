@@ -18,7 +18,6 @@ const MAX_BODY_CHARS = 2_000_000;
 const NEVER_STORE_PREFIXES = [
   '/api/messenger',
   '/api/realtime',
-  '/api/auth',
   '/api/notifications/vapid-public-key',
 ];
 
@@ -108,6 +107,8 @@ export function normalizeCacheUrl(url: string | undefined): string {
 export function isCacheableApiUrl(url: string | undefined): boolean {
   const path = normalizeCacheUrl(url);
   if (!path.startsWith('/api/')) return false;
+  // Авторизация не сохраняется, кроме профиля текущего пользователя (/me: id, роль, данные без токенов).
+  if (path.startsWith('/api/auth') && path.split('?')[0] !== '/api/auth/me') return false;
   return !NEVER_STORE_PREFIXES.some((p) => path.startsWith(p));
 }
 

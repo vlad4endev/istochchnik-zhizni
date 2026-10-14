@@ -6,7 +6,9 @@ describe('localDb: что сохраняется в SQLite', () => {
   it('чаты, realtime и авторизация не сохраняются', () => {
     expect(isCacheableApiUrl('/api/messenger/chats')).toBe(false);
     expect(isCacheableApiUrl('/api/realtime')).toBe(false);
-    expect(isCacheableApiUrl('/api/auth/me')).toBe(false);
+    expect(isCacheableApiUrl('/api/auth/login')).toBe(false);
+    expect(isCacheableApiUrl('/api/auth/refresh')).toBe(false);
+    expect(isCacheableApiUrl('/api/auth/me')).toBe(true);
   });
   it('остальные данные сохраняются', () => {
     expect(isCacheableApiUrl('/api/calendar/events')).toBe(true);

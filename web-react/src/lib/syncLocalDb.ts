@@ -4,21 +4,45 @@ import { apiClient } from './apiClient';
 import { isLocalDbAvailable, outboxList, outboxMarkFailed, outboxRemove } from './localDb';
 
 /**
- * Android: при входе в приложение и при возвращении сети подгружает основные данные с сервера;
+ * Android: после входа по номеру и паролю, при запуске и при возвращении сети подгружает с сервера
+ * личные данные пользователя (по его id) и общецерковные; сервер отдаёт то, что доступно его роли;
  * ответы сохраняются во внутреннюю SQLite (см. lib/localDb) через interceptor apiClient.
  * Чаты сюда не входят — они работают напрямую.
  */
-const CORE_ENDPOINTS = [
+/** Общецерковные данные: одинаковы для всех, кого пускает роль. */
+const CHURCH_ENDPOINTS = [
   '/api/calendar/events',
   '/api/calendar/birthdays/week',
   '/api/calendar/sunday-services',
   '/api/stories',
   '/api/resources/podcasts',
-  '/api/sunday-schedule/my',
-  '/api/music-schedule/my-schedule',
-  '/api/media-schedule/my-schedule',
+  '/api/broadcasts/active',
+  '/api/songs',
   '/api/settings/sections',
+  '/api/settings/role-permissions',
 ];
+
+function todayKey(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/** Личные данные того, кто вошёл: профиль, свои расписания, уведомления — по токену/id участника. */
+function personalEndpoints(): string[] {
+  const memberId = useAuthStore.getState().memberId;
+  return [
+    '/api/auth/me',
+    ...(memberId ? [`/api/profile/${memberId}`] : []),
+    '/api/sunday-schedule/my',
+    '/api/music-schedule/my-schedule',
+    '/api/media-schedule/my-schedule',
+    '/api/notifications/unread-deliveries-count',
+    '/api/notifications/status',
+    `/api/dashboard/bundle?date=${todayKey()}`,
+  ];
+}
 
 const MIN_SYNC_INTERVAL_MS = 60_000;
 let lastSyncAt = 0;
@@ -61,7 +85,7 @@ export async function syncLocalDb(): Promise<void> {
     await flushOutbox();
     if (Date.now() - lastSyncAt < MIN_SYNC_INTERVAL_MS) return;
     lastSyncAt = Date.now();
-    for (const url of CORE_ENDPOINTS) {
+    for (const url of [...personalEndpoints(), ...CHURCH_ENDPOINTS]) {
       try {
         await apiClient.get(url, { silentErrorToast: true, skipAuthClearOn401: true });
       } catch {
