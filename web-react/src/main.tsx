@@ -35,6 +35,7 @@ import { useAuthSessionReady } from './hooks/useAuthSessionReady';
 import { useFCM } from './hooks/useFCM';
 import { useVoipTokenSync } from './hooks/useVoipTokenSync';
 import { useBackgroundDataSync } from './hooks/useBackgroundDataSync';
+import { OfflineSyncBridge } from './offline/useOfflineSync';
 import { ImpersonationBanner } from './features/admin/components/ImpersonationBanner';
 import { initAuthCrossTabLocalStorageSync, useAuthStore } from './features/auth/authStore';
 import { installSessionCacheCleanup } from './lib/sessionCacheCleanup';
@@ -284,6 +285,10 @@ function BackgroundDataSyncBridge() {
   return null;
 }
 
+function OfflineDbSyncBridge() {
+  return <OfflineSyncBridge />;
+}
+
 function NativePushBridge() {
   useFCM();
   useVoipTokenSync();
@@ -369,6 +374,7 @@ if (!rootEl) {
               {import.meta.env.PROD ? <PWAUpdatePrompt /> : null}
               <PwaUpdateListener />
               <BackgroundDataSyncBridge />
+              <OfflineDbSyncBridge />
               <ViewportHeightBridge />
               <TopLoader />
               <BrowserRouter>

@@ -1,4 +1,10 @@
 import { apiClient } from '../../lib/apiClient';
+import { isBrowserOnline } from '../../offline/db';
+import {
+  getOfflineSongById,
+  listOfflineSongs,
+  upsertSongsFromList,
+} from '../../offline/songRepository';
 import type { RecognizedSong } from './studio/sheetMusicTypes';
 
 export interface SongListItem {
@@ -54,8 +60,17 @@ function buildSongQuery(params?: SongListQuery): string {
 }
 
 export async function fetchSongs(params?: SongListQuery): Promise<SongListItem[]> {
-  const { data } = await apiClient.get<SongListItem[]>(`${SONGS}${buildSongQuery(params)}`);
-  return data;
+  if (!isBrowserOnline()) {
+    return listOfflineSongs(params);
+  }
+  try {
+    const { data } = await apiClient.get<SongListItem[]>(`${SONGS}${buildSongQuery(params)}`);
+    // Keep IndexedDB catalog warm for offline / Capacitor.
+    void upsertSongsFromList(data).catch(() => undefined);
+    return data;
+  } catch {
+    return listOfflineSongs(params);
+  }
 }
 
 /** Для модераторов каталога: включает непубличные песни (например заготовки с тегом `нет_текста`). */
@@ -65,8 +80,20 @@ export async function fetchSongsForModeration(params?: SongListQuery): Promise<S
 }
 
 export async function fetchSong(id: number): Promise<SongListItem> {
-  const { data } = await apiClient.get<SongListItem>(`${SONGS}/${id}`);
-  return data;
+  if (!isBrowserOnline()) {
+    const local = await getOfflineSongById(id);
+    if (local) return local;
+    throw new Error('Песня недоступна офлайн');
+  }
+  try {
+    const { data } = await apiClient.get<SongListItem>(`${SONGS}/${id}`);
+    void upsertSongsFromList([data]).catch(() => undefined);
+    return data;
+  } catch (err) {
+    const local = await getOfflineSongById(id);
+    if (local) return local;
+    throw err;
+  }
 }
 
 export async function fetchSongUsage(songId: number): Promise<SongUsageSummary> {

@@ -62,14 +62,30 @@ export async function fetchChurchFeed(params?: {
   limit?: number;
   sort?: FeedSortMode;
 }): Promise<ChurchFeedPage> {
-  const { data } = await apiClient.get<ChurchFeedPage>('/api/feed', {
-    params: {
-      cursor: params?.cursor || undefined,
-      limit: params?.limit ?? 20,
-      sort: params?.sort ?? 'smart',
-    },
-  });
-  return data;
+  const { cacheFeedPage, listCachedFeed } = await import('../../offline/feedCache');
+  const online = typeof navigator === 'undefined' ? true : navigator.onLine !== false;
+
+  if (!online) {
+    const posts = await listCachedFeed(params?.limit ?? 20);
+    return { posts, next_cursor: null, sort: params?.sort ?? 'smart' };
+  }
+
+  try {
+    const { data } = await apiClient.get<ChurchFeedPage>('/api/feed', {
+      params: {
+        cursor: params?.cursor || undefined,
+        limit: params?.limit ?? 20,
+        sort: params?.sort ?? 'smart',
+      },
+    });
+    if (!params?.cursor) {
+      void cacheFeedPage(data).catch(() => undefined);
+    }
+    return data;
+  } catch {
+    const posts = await listCachedFeed(params?.limit ?? 20);
+    return { posts, next_cursor: null, sort: params?.sort ?? 'smart' };
+  }
 }
 
 export async function fetchFeedUnreadCount(): Promise<number> {

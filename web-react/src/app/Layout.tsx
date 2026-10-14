@@ -152,7 +152,7 @@ function ConnectivityBanner() {
       </span>
       <LuWifiOff className="h-4 w-4 shrink-0 text-zinc-400" strokeWidth={2} aria-hidden />
       <p className="min-w-0 max-w-[min(100%,40rem)] text-[13px] font-medium leading-snug text-zinc-100">
-        Нет подключения — работаем офлайн
+        Нет сети — песенник и кэш из локальной базы на устройстве
       </p>
     </div>
   );

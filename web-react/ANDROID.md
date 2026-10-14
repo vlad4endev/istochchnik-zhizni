@@ -1,13 +1,25 @@
-# Android APK = та же PWA (Capacitor)
+# Android APK = та же PWA (Capacitor) + офлайн БД
 
-Приложение для Android — это **тот же `web-react`**, что и сайт/PWA, обёрнутый в Capacitor WebView.
+Приложение для Android — это **тот же `web-react`**, что и сайт/PWA, в Capacitor WebView.
 
 - Package ID: `com.istochnikzhizni.molitva`
-- UI, маршруты, стили — идентичны браузерной версии
-- API: `https://app.church-tambov.ru` (задаётся при сборке)
-- Нативные дополнения: FCM, splash, входящие звонки (CallStyle)
+- UI — идентичен браузерной версии
+- API: `https://app.church-tambov.ru`
+- **Офлайн БД:** IndexedDB (Dexie) на устройстве, синхронизация с PostgreSQL через `/api/sync`
 
-> Отдельный клиент `android-app/` (React Native + WatermelonDB) — другой package ID и другой UI. Для «как на сайте» используйте этот Capacitor APK.
+## Как приложение получает данные
+
+```
+UI (web-react)
+  → IndexedDB (Dexie): songs, members, feed cache, sync_queue
+  ↔ HTTPS /api/sync/bootstrap|pull|push  (+ /api/songs, /api/feed …)
+  → Express → PostgreSQL
+```
+
+1. После входа запускается `OfflineSyncBridge`: bootstrap каталога песен, затем incremental pull.
+2. Песенник читает сервер онлайн и параллельно пишет в IndexedDB; **офлайн** — только локальная БД.
+3. Лента кэшируется в IndexedDB при успешной загрузке и отдаётся из кэша без сети.
+4. Локальные create песен (через sync queue) уходят на сервер при появлении сети.
 
 ## Сборка standalone APK
 
@@ -18,9 +30,7 @@ npm run android:apk
 # → android/app/build/outputs/apk/release/app-release.apk
 ```
 
-Скрипт: Vite production build с `VITE_RELATIVE_BASE` → `cap sync android` → `assembleRelease`.
-
-Metro не нужен: веб-ассеты лежат в `assets/public` внутри APK.
+Metro не нужен: веб-ассеты в `assets/public` внутри APK.
 
 ## Требования
 
