@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Моя церковь — вход, тёмная панель</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@500;600;700;800&amp;family=Playfair+Display:ital,wght@1,500;1,600&amp;display=swap">
+<style>
+body{margin:0}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; font-family: 'Onest', system-ui, sans-serif; color: #ffffff; background: #1E0710">
+
+<div aria-hidden="true" style="position: absolute; left: -120px; top: -140px; width: 440px; height: 440px; border-radius: 50%; background: #8A2342; filter: blur(80px); opacity: 0.95"></div>
+<div aria-hidden="true" style="position: absolute; left: -110px; top: 190px; width: 300px; height: 300px; border-radius: 50%; background: #C2455F; filter: blur(90px); opacity: 0.5"></div>
+<div aria-hidden="true" style="position: absolute; right: -130px; top: 230px; width: 320px; height: 320px; border-radius: 50%; background: #F0A25A; filter: blur(100px); opacity: 0.42"></div>
+
+<svg aria-hidden="true" width="390" height="844" viewBox="0 0 390 844" style="position: absolute; left: 0; top: 0; pointer-events: none">
+<defs><filter id="grainB" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"></feTurbulence><feColorMatrix type="saturate" values="0"></feColorMatrix></filter></defs>
+<rect width="390" height="844" filter="url(#grainB)" opacity="0.09" style="mix-blend-mode: overlay"></rect>
+</svg>
+
+<div style="position: relative; z-index: 3; margin-top: 56px; padding: 0 24px; display: flex; align-items: center; gap: 10px">
+<svg width="34" height="34" viewBox="0 0 34 34" role="img" aria-label="Логотип">
+<defs>
+<linearGradient id="tileT" x1="0" y1="0" x2="0" y2="34" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFFBF6"></stop><stop offset="1" stop-color="#EDDFD0"></stop></linearGradient>
+<linearGradient id="crossT" x1="0" y1="8" x2="0" y2="26" gradientUnits="userSpaceOnUse"><stop offset="0.35" stop-color="#7B1F3B"></stop><stop offset="1" stop-color="#DC9A52"></stop></linearGradient>
+</defs>
+<rect width="34" height="34" rx="11" fill="url(#tileT)"></rect>
+<path d="M17 8V26M10.5 13.5H23.5" stroke="url(#crossT)" stroke-width="2.6" stroke-linecap="round"></path>
+</svg>
+<div style="font-size: 17px; font-weight: 700; letter-spacing: -0.01em">Моя церковь</div>
+</div>
+
+<div aria-hidden="true" style="position: absolute; left: 35px; top: 98px; width: 320px; height: 320px; z-index: 1; border-radius: 50%; overflow: hidden; background: #FBF3EA; box-shadow: 0 0 0 1px rgba(255,255,255,0.45), 0 0 70px rgba(242,184,121,0.45), 0 24px 50px rgba(20,4,8,0.45)">
+<img src="/_blob/2658a5586d4a9db9a073f55995e865fb" alt="Община верующих перед крестом" style="width: 100%; height: 100%; object-fit: cover; object-position: center 52%; transform: scale(1.12); display: block">
+</div>
+
+<div style="position: absolute; left: 0; right: 0; top: 410px; z-index: 1; text-align: center">
+
+
+</div>
+
+<div style="position: relative; z-index: 4; margin-top: auto; box-sizing: border-box; padding: 30px 24px 30px; border-radius: 36px 36px 0 0; background: rgba(34,8,16,0.72); border-top: 1px solid rgba(255,255,255,0.2); -webkit-backdrop-filter: blur(28px); backdrop-filter: blur(28px); color: #ffffff; box-shadow: 0 -24px 60px rgba(10,2,5,0.45)">
+<h1 style="margin: 0; font-size: 31px; line-height: 1.1; font-weight: 800; letter-spacing: -0.025em">Будьте на связи<br><span style="font-family: 'Playfair Display', Georgia, serif; font-style: italic; font-weight: 500; font-size: 35px; letter-spacing: -0.01em; color: {{accent}}">со своей общиной</span></h1>
+<p style="margin: 12px 0 0; font-size: 15px; line-height: 1.5; color: rgba(255,255,255,0.78)">Чаты, звонки и служения вашей церкви — в одном приложении</p>
+<div style="margin-top: 22px; display: flex; flex-direction: column; gap: 10px">
+<button type="button" style="height: 58px; border: 0; border-radius: 20px; padding: 0 9px 0 24px; display: flex; align-items: center; justify-content: space-between; background: #FFF6EA; color: #4B1620; font-size: 16.5px; font-weight: 700; box-shadow: 0 14px 28px rgba(10,2,5,0.4)">
+<span>Войти</span>
+<span style="width: 40px; height: 40px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: #6C2431; color: #F2B879"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></span>
+</button>
+<button type="button" style="height: 54px; border-radius: 20px; background: rgba(255,255,255,0.06); border: 1.5px solid rgba(255,255,255,0.3); color: #ffffff; font-size: 16px; font-weight: 600">Зарегистрироваться</button>
+</div>
+<p style="margin: 16px 8px 0; text-align: center; font-size: 11.5px; line-height: 1.5; color: rgba(255,255,255,0.66)">Продолжая, вы принимаете условия использования и политику конфиденциальности</p>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#F2B879","options":["#F2B879","#FFD9A8","#FFFFFF"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#F2B879' };
+  }
+}
+</script>
+</body>
+</html>
