@@ -2,14 +2,18 @@ import {Database} from '@nozbe/watermelondb';
 import SQLiteAdapter from '@nozbe/watermelondb/adapters/sqlite';
 
 import {schema} from './schema';
+import {migrations} from './migrations';
 import Song from './models/Song';
 import Member from './models/Member';
 import SyncQueueItem from './models/SyncQueueItem';
 import SyncMetadata from './models/SyncMetadata';
 import SyncConflict from './models/SyncConflict';
+import FeedPost from './models/FeedPost';
+import MediaEvent from './models/MediaEvent';
 
 const adapter = new SQLiteAdapter({
   schema,
+  migrations,
   jsi: true,
   onSetUpError: error => {
     console.error('[WatermelonDB] setup error', error);
@@ -18,7 +22,15 @@ const adapter = new SQLiteAdapter({
 
 export const database = new Database({
   adapter,
-  modelClasses: [Song, Member, SyncQueueItem, SyncMetadata, SyncConflict],
+  modelClasses: [
+    Song,
+    Member,
+    SyncQueueItem,
+    SyncMetadata,
+    SyncConflict,
+    FeedPost,
+    MediaEvent,
+  ],
 });
 
 export function getSongsCollection() {
@@ -39,4 +51,12 @@ export function getSyncMetadataCollection() {
 
 export function getSyncConflictsCollection() {
   return database.get<SyncConflict>('sync_conflicts');
+}
+
+export function getFeedPostsCollection() {
+  return database.get<FeedPost>('feed_posts');
+}
+
+export function getMediaEventsCollection() {
+  return database.get<MediaEvent>('media_events');
 }

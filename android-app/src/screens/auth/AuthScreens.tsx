@@ -18,7 +18,8 @@ export function AuthLandingScreen() {
         <View className="gap-2">
           <Text className="text-3xl font-bold text-primary">Источник жизни</Text>
           <Text className="text-base text-stone-600">
-            Песенник и материалы церкви — работает офлайн и синхронизируется при подключении к сети.
+            Церковное приложение с локальной базой: песенник, лента и медиа-расписание доступны
+            офлайн и синхронизируются с сервером при появлении сети.
           </Text>
         </View>
         <Button title="Войти" onPress={() => navigation.navigate('Login')} />

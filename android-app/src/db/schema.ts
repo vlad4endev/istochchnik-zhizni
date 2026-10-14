@@ -1,7 +1,7 @@
 import {appSchema, tableSchema} from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 1,
+  version: 2,
   tables: [
     tableSchema({
       name: 'songs',
@@ -70,7 +70,42 @@ export const schema = appSchema({
         {name: 'created_at', type: 'number'},
       ],
     }),
+    /** Read-only cache for church feed (online pull → offline read). */
+    tableSchema({
+      name: 'feed_posts',
+      columns: [
+        {name: 'server_id', type: 'string', isIndexed: true},
+        {name: 'author_json', type: 'string'},
+        {name: 'caption', type: 'string', isOptional: true},
+        {name: 'media_json', type: 'string'},
+        {name: 'like_count', type: 'number'},
+        {name: 'comment_count', type: 'number'},
+        {name: 'repost_count', type: 'number'},
+        {name: 'liked_by_me', type: 'boolean'},
+        {name: 'created_at', type: 'number', isIndexed: true},
+        {name: 'cached_at', type: 'number'},
+      ],
+    }),
+    /** Read-only cache for media ministry schedule. */
+    tableSchema({
+      name: 'media_events',
+      columns: [
+        {name: 'server_id', type: 'string', isIndexed: true},
+        {name: 'title', type: 'string'},
+        {name: 'event_date', type: 'string', isIndexed: true},
+        {name: 'start_time', type: 'string', isOptional: true},
+        {name: 'end_time', type: 'string', isOptional: true},
+        {name: 'event_type', type: 'string'},
+        {name: 'assignments_json', type: 'string'},
+        {name: 'payload_json', type: 'string'},
+        {name: 'cached_at', type: 'number'},
+      ],
+    }),
   ],
 });
 
+/** Tables that participate in bidirectional /api/sync. */
 export type LocalTableName = 'songs' | 'members';
+
+/** Tables cached from feature APIs for offline reading. */
+export type CacheTableName = 'feed_posts' | 'media_events';

@@ -1,66 +1,88 @@
-# Источник жизни — Android (React Native)
+# Источник жизни — Android (React Native + WatermelonDB)
 
-Офлайн-first Android-приложение с локальной SQLite (WatermelonDB) и синхронизацией через Express API (`/api/sync/*`).
+Офлайн-first Android-приложение с локальной SQLite (WatermelonDB) и синхронизацией через Express API (`/api/sync/*`). Package ID: `com.istochnikapp`.
+
+## Что умеет
+
+| Раздел | Офлайн | Sync |
+|--------|--------|------|
+| Песенник (CRUD) | SQLite | двусторонний `/api/sync` (bootstrap → pull/push) |
+| Участники (профиль) | SQLite | pull |
+| Лента церкви | локальный кэш | pull в кэш при sync (`/api/feed`) |
+| Медиа-расписание | локальный кэш | pull в кэш (`/api/media-schedule/my-schedule`) |
+
+Фоновая синхронизация: NetInfo (при появлении сети) + BackgroundFetch.
 
 ## Структура
 
 ```
 src/
-  app/           Navigation, providers
-  screens/       Auth, Songbook (MVP)
+  app/           Navigation, tabs, providers
+  screens/       Home, Songbook, Feed, Media, Auth, Settings
   components/ui/ RN UI kit (NativeWind)
-  db/            WatermelonDB schema + models
-  sync/          pull/push queue, NetInfo, background fetch
-  repositories/  SongRepository, MemberRepository
-  shared/        apiClient, auth, types, config
+  db/            WatermelonDB schema v2 + models + migrations
+  sync/          bootstrap, pull/push queue, feature caches, NetInfo
+  repositories/  Song, Member, FeedCache, MediaEventCache
+  shared/        apiClient, auth, feed/media API, config
   theme/         design tokens from PWA
 ```
 
 ## Требования
 
 - Node.js 20+
-- Android Studio + SDK
-- Запущенный backend API (порт 40978) и PostgreSQL
+- JDK 17+ (21 OK)
+- Android SDK (API 35) + platform-tools
+- Backend API и PostgreSQL для live sync (прод: `https://app.church-tambov.ru`)
 
 ## Настройка
 
 ```bash
 cd android-app
-cp .env.example .env
+cp .env.example .env   # или используйте готовый .env с prod URL
 npm install
 ```
 
 `.env`:
 
 ```
+# Эмулятор → хост-машина
 API_BASE_URL=http://10.0.2.2:40978
-```
 
-`10.0.2.2` — localhost хост-машины из Android-эмулятора.
+# Или production
+# API_BASE_URL=https://app.church-tambov.ru
+```
 
 ## Запуск
 
 ```bash
-# Metro
 npm start
-
-# Android (другой терминал)
 npm run android
 ```
 
 ## Синхронизация
 
-- **Pull:** `GET /api/sync/pull?table=songs&since=ISO8601`
-- **Push:** `POST /api/sync/push` с batch операций
-- **Bootstrap:** `GET /api/sync/bootstrap` — начальный снимок каталога
+1. **Cold start:** `GET /api/sync/bootstrap` — снимок опубликованных песен + текущий member.
+2. **Pull:** `GET /api/sync/pull?table=songs|members&since=&cursor=`
+3. **Push:** `POST /api/sync/push` — batch операций по песням (members — read-only).
+4. **Feature caches:** после core-sync подтягиваются лента и медиа-расписание в локальные таблицы.
 
-Локальные изменения идут через `SongRepository` → SQLite → `sync_queue` → push при online.
+Локальные правки песен: `SongRepository` → SQLite → `sync_queue` → push при online.
 
-## Сборка release AAB
+## Сборка APK / AAB
 
-1. Создайте keystore и настройте `android/gradle.properties` / `android/app/build.gradle` (signingConfigs).
-2. Установите prod `API_BASE_URL` через `react-native-config` (`.env.production`).
-3. `cd android && ./gradlew bundleRelease`
+```bash
+# Debug APK (подписан debug keystore)
+npm run android:apk
+# → android/app/build/outputs/apk/debug/app-debug.apk
+
+# Release APK (сейчас тоже debug keystore — замените перед магазином)
+npm run android:apk:release
+
+# Play Store AAB
+npm run android:bundle
+```
+
+Для магазина: создайте upload keystore и настройте `signingConfigs.release` в `android/app/build.gradle` (не коммитьте секреты).
 
 ## Тесты
 
@@ -68,3 +90,8 @@ npm run android
 npm test
 npm run typecheck
 ```
+
+## Отличие от Capacitor APK
+
+Веб-обёртка (`web-react/android`, `com.istochnikzhizni.molitva`) — online SPA с FCM/звонками.  
+Этот клиент (`com.istochnikapp`) — нативный офлайн-first с локальной БД. Это **разные** приложения в магазине.
