@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuthSessionReady } from '../../../hooks/useAuthSessionReady';
 import { defaultPostLoginPath } from '../../../lib/appVariant';
+import { isAndroidNative } from '../../../lib/androidNativeTheme';
 import { useAuthStore } from '../authStore';
 import { AppSplash } from '@/components/AppSplash';
 
@@ -35,6 +36,51 @@ export function AuthLandingPage() {
 
   if (!sessionReady) {
     return <AppSplash variant="auth" />;
+  }
+
+  if (isAndroidNative()) {
+    return (
+      <div className="landing-native">
+        <header className="landing-native__top">
+          <span className="landing-native__brand-icon" aria-hidden>
+            <img src="/assets/logo.svg" alt="" />
+          </span>
+          <span className="landing-native__brand-name">Моя церковь</span>
+        </header>
+        <div className="landing-native__hero" aria-hidden>
+          <div className="landing-native__circle">
+            <img src="/assets/logo.svg" alt="" />
+          </div>
+        </div>
+        <section className="landing-native__sheet">
+          <h1 className="landing-native__title">
+            Будьте на связи
+            <em>со своей общиной</em>
+          </h1>
+          <p className="landing-native__lead">Чаты, звонки и служения вашей церкви — в одном приложении</p>
+          <Link
+            to={loginFormPath}
+            state={{ mode: 'signIn' as const, from: fromQuery || undefined }}
+            className="landing-native__primary"
+          >
+            <span>Войти</span>
+            <span className="landing-native__primary-arrow" aria-hidden>
+              →
+            </span>
+          </Link>
+          <Link
+            to={loginFormPath}
+            state={{ mode: 'signUp' as const, from: fromQuery || undefined }}
+            className="landing-native__secondary"
+          >
+            Зарегистрироваться
+          </Link>
+          <p className="landing-native__legal">
+            Продолжая, вы принимаете условия использования и политику конфиденциальности
+          </p>
+        </section>
+      </div>
+    );
   }
 
   return (

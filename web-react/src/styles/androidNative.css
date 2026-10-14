@@ -1052,3 +1052,223 @@ html.app-android-native .app-main-content button[class*='h-[38px]'] {
 html.app-android-native .app-main-content button.inline-flex.items-center[class*='gap-1.5'] {
   min-height: 44px;
 }
+
+/* «Чаты»: кнопка видеозвонка — янтарная, рядом с тёмной кнопкой «+», как в макете. */
+html.app-android-native .tg-sidebar-actions {
+  gap: 10px;
+}
+html.app-android-native .tg-calls-btn-sm {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  color: var(--ac-amber-ink);
+  background: linear-gradient(160deg, #f7c68f 0%, #f2b879 55%, #e6a05f 100%);
+  box-shadow: 0 8px 18px rgba(242, 184, 121, 0.35);
+}
+html.app-android-native .tg-sidebar-actions .tg-compose-btn-sm {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+}
+html.app-android-native .tg-sidebar-header {
+  padding-top: 12px;
+  padding-bottom: 32px;
+}
+html.app-android-native .tg-calls-btn-sm,
+html.app-android-native .tg-sidebar-actions .tg-compose-btn-sm {
+  width: 44px;
+  height: 44px;
+}
+html.app-android-native .tg-sidebar-header {
+  align-items: center;
+}
+
+/* ───────── Стартовый экран (Android): макет «Будьте на связи» ───────── */
+
+html.app-android-native .landing-native {
+  display: flex;
+  flex-direction: column;
+  min-height: var(--app-content-height, 100dvh);
+  color: #fff;
+  background:
+    radial-gradient(90% 55% at 50% 38%, rgba(194, 69, 95, 0.55), transparent 62%),
+    radial-gradient(70% 50% at 100% 60%, rgba(240, 162, 90, 0.3), transparent 65%),
+    linear-gradient(170deg, #7a1f3a 0%, #230810 100%);
+}
+html.app-android-native .landing-native__top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 24px 0;
+}
+html.app-android-native .landing-native__brand-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: #fbf6ef;
+}
+html.app-android-native .landing-native__brand-icon img {
+  width: 22px;
+  height: 22px;
+}
+html.app-android-native .landing-native__brand-name {
+  font-size: 17px;
+  font-weight: 700;
+}
+html.app-android-native .landing-native__hero {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: 16px 24px 28px;
+}
+html.app-android-native .landing-native__circle {
+  display: grid;
+  place-items: center;
+  width: min(72vw, 300px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #fbf6ef;
+  box-shadow: 0 24px 60px rgba(20, 4, 8, 0.4);
+}
+html.app-android-native .landing-native__circle img {
+  width: 42%;
+  height: 42%;
+  object-fit: contain;
+}
+html.app-android-native .landing-native__sheet {
+  padding: 32px 24px max(24px, env(safe-area-inset-bottom, 0px));
+  border-radius: 36px 36px 0 0;
+  background: #fbf6ef;
+  color: #3a1018;
+}
+html.app-android-native .landing-native__title {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+html.app-android-native .landing-native__title em {
+  display: block;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: #b03a5c;
+}
+html.app-android-native .landing-native__lead {
+  margin: 14px 0 24px;
+  font-size: 16px;
+  line-height: 1.45;
+  color: #6a5555;
+}
+html.app-android-native .landing-native__primary,
+html.app-android-native .landing-native__secondary {
+  display: flex;
+  align-items: center;
+  min-height: 58px;
+  border-radius: 22px;
+  font-size: 17px;
+  font-weight: 700;
+  text-decoration: none;
+}
+html.app-android-native .landing-native__primary {
+  justify-content: space-between;
+  padding: 0 8px 0 24px;
+  color: #fff;
+  background: linear-gradient(135deg, #8a2742, #5a1826);
+  box-shadow: 0 14px 30px rgba(90, 24, 38, 0.3);
+}
+html.app-android-native .landing-native__primary-arrow {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  font-size: 22px;
+  color: var(--ac-amber-ink);
+  background: var(--ac-amber);
+}
+html.app-android-native .landing-native__secondary {
+  justify-content: center;
+  margin-top: 12px;
+  color: #5a1826;
+  border: 1.5px solid #dccbc5;
+  background: transparent;
+}
+html.app-android-native .landing-native__legal {
+  margin: 18px 8px 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* ───────── Календарь мероприятий: месяц целиком на экране, события — цветные точки ───────── */
+
+html.app-android-native [class*='min-w-[560px]'] {
+  min-width: 0;
+}
+html.app-android-native section:has(> .max-sm\:overflow-x-auto) > p {
+  display: none;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] {
+  min-height: 68px;
+  gap: 4px;
+  padding: 6px 2px;
+  align-items: center;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > span:first-child {
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > div {
+  flex: 0 0 auto;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > div > button {
+  width: 8px;
+  height: 8px;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  font-size: 0;
+  box-shadow: none;
+  background-color: currentColor;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > div > button * {
+  display: none;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > div {
+  align-items: flex-start;
+  align-content: flex-start;
+  height: auto;
+  min-height: 0;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > div > button {
+  flex: 0 0 8px;
+  align-self: flex-start;
+  max-height: 8px;
+  background-color: #b03a5c;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > div > button {
+  min-height: 0 !important;
+  min-width: 0 !important;
+  height: 8px !important;
+  width: 8px !important;
+}
+
+/* Подписи историй, время поста и счётчики в чипах — не мельче 12px. */
+html.app-android-native .app-main-content [class*='_label_'],
+html.app-android-native .app-main-content time[class*='_time_'],
+html.app-android-native .tg-smart-tab__badge {
+  font-size: 12px;
+}

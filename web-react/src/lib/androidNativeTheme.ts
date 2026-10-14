@@ -11,3 +11,8 @@ export function initAndroidNativeTheme(): void {
   document.documentElement.classList.add('app-android-native');
   void import('../styles/androidNative');
 }
+
+/** Нативная оболочка Android (Capacitor): включает отдельную разметку там, где макет отличается от PWA. */
+export function isAndroidNative(): boolean {
+  return Capacitor.getPlatform() === 'android';
+}
