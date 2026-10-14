@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
 import { deleteFcmTokenForDevice, saveFcmToken } from '../services/fcmSubscriptionService';
+import { getMemberPushPrefs, upsertMemberPushPrefs } from '../services/memberPushPrefsService';
 import { saveVoipToken } from '../services/voipTokenService';
 import {
   getUnreadNotificationDeliveryCount,
@@ -158,6 +159,8 @@ router.post(
 
     const fcm_token = typeof req.body?.fcm_token === 'string' ? req.body.fcm_token.trim() : '';
     const device_id = typeof req.body?.device_id === 'string' ? req.body.device_id.trim() : '';
+    const platform = typeof req.body?.platform === 'string' ? req.body.platform.trim() : '';
+    const app_version = typeof req.body?.app_version === 'string' ? req.body.app_version.trim() : '';
     if (!fcm_token || !device_id) {
       res.status(400).json({ error: 'Fields fcm_token and device_id are required' });
       return;
@@ -173,7 +176,10 @@ router.post(
       } catch (schemaErr) {
         console.warn('[notifications] ensurePushSubscriptionsSchema on save-token failed:', schemaErr);
       }
-      await saveFcmToken(memberId, device_id, fcm_token);
+      await saveFcmToken(memberId, device_id, fcm_token, {
+        platform: platform || null,
+        appVersion: app_version || null,
+      });
       console.info('[notifications] save-token ok', { memberId, deviceId: device_id.slice(0, 12) });
       res.status(201).json({ ok: true });
     } catch (e) {
@@ -182,6 +188,38 @@ router.post(
     }
   },
 );
+
+/**
+ * GET/PUT /api/notifications/push-prefs — per-user channels + DND.
+ */
+router.get('/push-prefs', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const prefs = await getMemberPushPrefs(memberId);
+  res.json(prefs);
+});
+
+router.put('/push-prefs', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const body = req.body ?? {};
+  const prefs = await upsertMemberPushPrefs(memberId, {
+    messagesEnabled: typeof body.messagesEnabled === 'boolean' ? body.messagesEnabled : undefined,
+    callsEnabled: typeof body.callsEnabled === 'boolean' ? body.callsEnabled : undefined,
+    systemEnabled: typeof body.systemEnabled === 'boolean' ? body.systemEnabled : undefined,
+    dndEnabled: typeof body.dndEnabled === 'boolean' ? body.dndEnabled : undefined,
+    dndStartMinute: typeof body.dndStartMinute === 'number' ? body.dndStartMinute : undefined,
+    dndEndMinute: typeof body.dndEndMinute === 'number' ? body.dndEndMinute : undefined,
+    timezone: typeof body.timezone === 'string' ? body.timezone : undefined,
+  });
+  res.json(prefs);
+});
 
 /**
  * POST /api/notifications/save-voip-token

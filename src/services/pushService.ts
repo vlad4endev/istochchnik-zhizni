@@ -13,6 +13,7 @@ import {
 import { isParishionerAllowedPushKindOrType } from '../lib/parishionerPushAllowlist';
 import { sendApnsVoipPush, isApnsVoipConfigured } from './apnsVoipPush';
 import { deleteVoipToken, getVoipTokensForMember } from './voipTokenService';
+import { shouldDeliverPush, type PushKind } from './memberPushPrefsService';
 
 const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
 
@@ -437,6 +438,13 @@ async function shouldDeliverPushForMember(memberId: number, data?: Record<string
 /**
  * Web Push + FCM: все подписки участника.
  */
+function inferPushKind(data?: Record<string, string>): PushKind {
+  const t = String(data?.type ?? data?.kind ?? data?.tag ?? '').toLowerCase();
+  if (t.includes('call') || t === 'incoming_call' || t === 'call_ended') return 'call';
+  if (t.includes('message') || t.includes('chat') || t.includes('messenger')) return 'message';
+  return 'system';
+}
+
 export async function sendPush(
   memberId: number,
   title: string,
@@ -446,6 +454,10 @@ export async function sendPush(
 ): Promise<PushSendSummary> {
   const summary: PushSendSummary = { web: emptyChannel(), fcm: emptyChannel() };
   if (!opts?.bypassRoleFilter && !(await shouldDeliverPushForMember(memberId, data))) {
+    return summary;
+  }
+  // Push is a wake signal; respect per-user channel toggles + DND (calls bypass DND).
+  if (!(await shouldDeliverPush(memberId, inferPushKind(data)))) {
     return summary;
   }
 

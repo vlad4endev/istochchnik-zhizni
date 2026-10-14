@@ -11,22 +11,48 @@ const BAD_TOKEN_CODES = new Set([
  * привязки этого токена и прежние токены этого device_id удаляются, иначе прошлый
  * владелец продолжал бы получать чужие уведомления, а дубли давали двойные пуши.
  */
-export async function saveFcmToken(memberId: number, deviceId: string, fcmToken: string): Promise<void> {
+export type SaveFcmTokenMeta = {
+  platform?: string | null;
+  appVersion?: string | null;
+};
+
+export async function saveFcmToken(
+  memberId: number,
+  deviceId: string,
+  fcmToken: string,
+  meta: SaveFcmTokenMeta = {},
+): Promise<void> {
   if (!pool) throw new Error('Database is not configured');
+  const platform = meta.platform?.trim() || null;
+  const appVersion = meta.appVersion?.trim() || null;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query(
+      `ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS platform TEXT`,
+    ).catch(() => undefined);
+    await client.query(
+      `ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS app_version TEXT`,
+    ).catch(() => undefined);
+    await client.query(
+      `ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+    ).catch(() => undefined);
     await client.query(
       `DELETE FROM user_subscriptions
        WHERE fcm_token = $1 AND NOT (member_id = $2 AND device_id = $3)`,
       [fcmToken, memberId, deviceId],
     );
     await client.query(
-      `INSERT INTO user_subscriptions (member_id, device_id, fcm_token, updated_at)
-       VALUES ($1, $2, $3, NOW())
+      `INSERT INTO user_subscriptions (member_id, device_id, fcm_token, platform, app_version, updated_at, last_seen_at)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
        ON CONFLICT (member_id, device_id)
-       DO UPDATE SET fcm_token = EXCLUDED.fcm_token, updated_at = NOW()`,
-      [memberId, deviceId, fcmToken],
+       DO UPDATE SET
+         fcm_token = EXCLUDED.fcm_token,
+         platform = COALESCE(EXCLUDED.platform, user_subscriptions.platform),
+         app_version = COALESCE(EXCLUDED.app_version, user_subscriptions.app_version),
+         updated_at = NOW(),
+         last_seen_at = NOW()`,
+      [memberId, deviceId, fcmToken, platform, appVersion],
     );
     await client.query('COMMIT');
   } catch (e) {

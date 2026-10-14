@@ -3,15 +3,11 @@ import type {Request, Response} from 'express';
 import {requireAuthSession} from '../middleware/authSession';
 import {
   bootstrapSyncSnapshot,
+  isSyncTable,
   pullSyncChanges,
   pushSyncBatch,
   type SyncPushItem,
-  type SyncTableName,
 } from '../services/syncService';
-
-function isSyncTable(value: string): value is SyncTableName {
-  return value === 'songs' || value === 'members';
-}
 
 export async function pullHandler(req: Request, res: Response): Promise<void> {
   const tableRaw = String(req.query.table ?? '');

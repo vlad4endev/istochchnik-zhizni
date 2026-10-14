@@ -1,6 +1,12 @@
 # istochchnik_zhizni
 
-Монорепозиторий: **React (Vite)** в `web-react/` и **Node.js/TypeScript API** в `src/`.
+Монорепозиторий: **React (Vite) + Capacitor** в `web-react/` и **Node.js/TypeScript API** в `src/`.
+
+**Мобильный канон:** Capacitor (`web-react/android`, `web-react/ios`) — см. [docs/MOBILE.md](docs/MOBILE.md).  
+Каталоги `mobile/` (Expo) и `android-app/` (RN) **deprecated**, не развивать.
+
+**Compose:** какой файл для чего — [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.md).  
+**Секреты:** [docs/SECRETS.md](docs/SECRETS.md).
 
 ## Чтобы всё заработало (кратко)
 
@@ -10,7 +16,7 @@
 
 1. **Один раз:** `npm run quickstart` или `cp .env.example .env` и при необходимости `npm ci && npm run build`. В **`.env`** задайте **`DATABASE_URL`**:
    - **Всё локально:** строка с `db:5432` из `.env.example` (Postgres поднимается вместе с compose).
-   - **Supabase:** URI из Supabase (pooler **5432**), `?sslmode=require`, плюс `DB_SSL=true`, `DB_SSL_REJECT_UNAUTHORIZED=false`, `SKIP_DB_INIT_ON_START=true`.
+   - **Supabase:** URI из Supabase (pooler **5432**), `?sslmode=require`, плюс `DB_SSL=true`, CA через `DB_SSL_CA_PATH` (или `DB_SSL_CA`), `SKIP_DB_INIT_ON_START=true`. Без CA можно временно `DB_SSL_REJECT_UNAUTHORIZED=false` (не рекомендуется в проде).
 2. **Запуск:** `docker compose up -d --build` (или `npm run prod:start`). Собирается образ **`Dockerfile.web`** (Vite → nginx).
 3. **Откройте в браузере:** [http://localhost:8080](http://localhost:8080) — интерфейс. Запросы к API идут на **тот же хост** (`/api/...`, прокси в nginx).
 4. **Проверки:** [http://localhost:8080/health](http://localhost:8080/health) (через nginx) и при необходимости прямой API: [http://localhost:40978/health](http://localhost:40978/health).
@@ -47,7 +53,7 @@ npm run prod:deploy:prebuilt
 
 ### `SELF_SIGNED_CERT_IN_CHAIN` в логах API (Docker + Supabase)
 
-Задайте **`DB_SSL_REJECT_UNAUTHORIZED=false`** в окружении контейнера (или пересоберите образ с обновлённым `src/config/db.ts`: по умолчанию проверка цепочки CA отключена, пока явно не задано `true`). Без этого Node/pg отклоняет TLS к pooler Supabase.
+Предпочтительно положить CA провайдера в `DB_SSL_CA_PATH` / `DB_SSL_CA` — тогда verify включается автоматически. Временный обход: **`DB_SSL_REJECT_UNAUTHORIZED=false`**.
 
 ### Расхождение истории миграций (`migration repair`, `db pull`)
 

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 import type { ParsedXlsxSong, ValidationError, XlsxParseResult } from './types';
 
@@ -186,18 +186,69 @@ function validateRow(rowNumExcel: number, row: unknown[], headerMap: HeaderMap):
   };
 }
 
-export function parseXlsxBuffer(buffer: Buffer, options: { previewLimit?: number } = {}): XlsxParseResult {
+function cellToPlain(value: ExcelJS.CellValue): string {
+  if (value == null) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value).trim();
+  }
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'object') {
+    if ('text' in value && value.text != null) return String(value.text).trim();
+    if ('result' in value && value.result != null) return cellToPlain(value.result as ExcelJS.CellValue);
+    if ('richText' in value && Array.isArray(value.richText)) {
+      return value.richText.map((t) => t.text).join('').trim();
+    }
+  }
+  return String(value).trim();
+}
+
+async function workbookToRows(buffer: Buffer): Promise<unknown[][]> {
+  const wb = new ExcelJS.Workbook();
+  // exceljs typings expect Node Buffer shape that conflicts with @types/node Buffer generics
+  await wb.xlsx.load(Uint8Array.from(buffer) as unknown as ExcelJS.Buffer);
+  const ws = wb.worksheets[0];
+  if (!ws) return [];
+
+  const rows: unknown[][] = [];
+  ws.eachRow({ includeEmpty: false }, (row) => {
+    const values = row.values as ExcelJS.CellValue[];
+    // exceljs is 1-indexed; index 0 is unused
+    const cells: unknown[] = [];
+    const last = Math.max(values.length - 1, 0);
+    for (let col = 1; col <= last; col += 1) {
+      cells.push(cellToPlain(values[col]));
+    }
+    rows.push(cells);
+  });
+  return rows;
+}
+
+export async function parseXlsxBuffer(
+  buffer: Buffer,
+  options: { previewLimit?: number } = {},
+): Promise<XlsxParseResult> {
   const previewLimit = options.previewLimit ?? 5;
 
-  const wb = XLSX.read(buffer, { type: 'buffer', raw: true, cellDates: true });
-  const sheetName = wb.SheetNames[0];
-  if (!sheetName) {
-    return { songs: [], errors: [{ row: 1, field: 'row', message: 'В файле нет листов' }], preview: [], totalRows: 0 };
+  let rows: unknown[][];
+  try {
+    rows = await workbookToRows(buffer);
+  } catch (err) {
+    return {
+      songs: [],
+      errors: [
+        {
+          row: 1,
+          field: 'row',
+          message: `Не удалось прочитать XLSX: ${err instanceof Error ? err.message : String(err)}`,
+        },
+      ],
+      preview: [],
+      totalRows: 0,
+    };
   }
-  const ws = wb.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' }) as unknown[][];
+
   if (rows.length === 0) {
-    return { songs: [], errors: [{ row: 1, field: 'row', message: 'Лист пуст' }], preview: [], totalRows: 0 };
+    return { songs: [], errors: [{ row: 1, field: 'row', message: 'В файле нет листов или лист пуст' }], preview: [], totalRows: 0 };
   }
 
   const headers = rows[0] ?? [];
@@ -208,7 +259,6 @@ export function parseXlsxBuffer(buffer: Buffer, options: { previewLimit?: number
   for (let i = 1; i < rows.length; i += 1) {
     const r = rows[i] ?? [];
     const excelRow = i + 1; // header is row 1
-    // skip fully empty rows
     if (Array.isArray(r) && r.every((c) => String(c ?? '').trim() === '')) continue;
     const v = validateRow(excelRow, r, headerMap);
     if (v.song) songs.push(v.song);
@@ -223,7 +273,10 @@ export function parseXlsxBuffer(buffer: Buffer, options: { previewLimit?: number
   };
 }
 
-export function parseXlsxFile(filePath: string, options?: { previewLimit?: number }): XlsxParseResult {
+export async function parseXlsxFile(
+  filePath: string,
+  options?: { previewLimit?: number },
+): Promise<XlsxParseResult> {
   const p = path.resolve(filePath);
   const buf = fs.readFileSync(p);
   return parseXlsxBuffer(buf, options);
