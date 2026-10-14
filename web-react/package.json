@@ -33,6 +33,7 @@
     "android:apk": "VITE_RELATIVE_BASE=true VITE_API_BASE_URL=https://app.church-tambov.ru npm run build:prod && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor-community/sqlite": "^7.0.3",
     "@capacitor/android": "^7.2.0",
     "@capacitor/core": "^7.2.0",
     "@capacitor/ios": "^7.2.0",

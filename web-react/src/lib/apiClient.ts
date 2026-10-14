@@ -5,6 +5,7 @@ import { useAuthStore } from '../features/auth/authStore';
 import { performAuthRefresh } from './authRefresh';
 import { COOKIE_ONLY_SESSION_TOKEN, isCookieOnlySessionToken } from './authSessionConstants';
 import { resolveAxiosBaseURL } from './config';
+import { isLocalDbAvailable, localDbGet, localDbPut } from './localDb';
 import { isSessionTeardownActive } from './sessionTeardown';
 import { emitAppToast } from './uiFeedback';
 
@@ -164,6 +165,27 @@ function isConnectivityFailure(error: AxiosError): boolean {
   );
 }
 
+/** Обрыв связи или отсутствие сети (в отличие от isConnectivityFailure — включая navigator.onLine=false). */
+function isConnectivityOrOffline(error: AxiosError): boolean {
+  if (error.response) return false;
+  if (isCancel(error)) return false;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+  return isTransientNetworkError(error) || String(error.code ?? '') === 'ECONNABORTED';
+}
+
+/** Ключ записи в локальной базе: путь + параметры запроса. */
+function buildLocalDbUrl(config: InternalAxiosRequestConfig): string {
+  const raw = config.url ?? '';
+  const params = config.params as Record<string, unknown> | undefined;
+  if (!params || typeof params !== 'object') return raw;
+  const entries = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .sort(([a], [b]) => a.localeCompare(b));
+  if (entries.length === 0) return raw;
+  const qs = entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&');
+  return `${raw}${raw.includes('?') ? '&' : '?'}${qs}`;
+}
+
 function hasActiveAuthSession(): boolean {
   try {
     return Boolean(useAuthStore.getState().token);
@@ -198,7 +220,22 @@ apiClient.interceptors.request.use((config) => {
 });
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Android: успешный GET сохраняем во внутреннюю SQLite, чтобы без сети показать последние данные.
+    if (
+      isLocalDbAvailable() &&
+      response.config?.method?.toLowerCase() === 'get' &&
+      response.config.responseType !== 'blob' &&
+      response.config.responseType !== 'arraybuffer' &&
+      response.status === 200 &&
+      typeof response.data === 'object' &&
+      response.data !== null &&
+      !(response.headers as Record<string, unknown> | undefined)?.['x-local-db']
+    ) {
+      void localDbPut(buildLocalDbUrl(response.config), response.data);
+    }
+    return response;
+  },
   async (error: AxiosError) => {
     if (isCancel(error)) {
       return Promise.reject(error);
@@ -209,6 +246,29 @@ apiClient.interceptors.response.use(
     const status = error.response?.status;
     const bodyMsg = readResponseErrorMessage(error.response?.data);
     const tearingDown = isSessionTeardownActive();
+
+    // Android: сервера не видно (нет сети) — отдаём последний ответ из внутренней SQLite.
+    if (
+      cfg &&
+      isLocalDbAvailable() &&
+      !tearingDown &&
+      cfg.method?.toLowerCase() === 'get' &&
+      cfg.responseType !== 'blob' &&
+      cfg.responseType !== 'arraybuffer' &&
+      isConnectivityOrOffline(error) &&
+      (cfg._retryNetworkOnce || (typeof navigator !== 'undefined' && navigator.onLine === false))
+    ) {
+      const hit = await localDbGet(buildLocalDbUrl(cfg));
+      if (hit) {
+        return {
+          data: hit.body,
+          status: 200,
+          statusText: 'OK (local)',
+          headers: { 'x-local-db': String(hit.savedAt) },
+          config: cfg,
+        };
+      }
+    }
 
     // Краткий обрыв (рестарт контейнера / proxy): один повтор до toast.
     // Во время logout не ретраим — сессия уже снимается.
