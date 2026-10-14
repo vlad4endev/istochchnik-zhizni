@@ -325,17 +325,13 @@ export default defineConfig(({ mode }) => {
               handler: 'NetworkOnly',
             },
             {
+              /**
+               * Все /api/* — только сеть. NetworkFirst + networkTimeoutSeconds=15 обрывал
+               * долгие админ-списки (users, молитвенный план) как Network Error; плюс кэш
+               * API с cookie/Authorization опасен между сессиями. SW не должен трогать API.
+               */
               urlPattern: /\/api\//,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: `api-cache-${runtimeCacheSuffix}`,
-                networkTimeoutSeconds: 15,
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 5,
-                },
-                cacheableResponse: { statuses: [0, 200] },
-              },
+              handler: 'NetworkOnly',
             },
             {
               urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\//,

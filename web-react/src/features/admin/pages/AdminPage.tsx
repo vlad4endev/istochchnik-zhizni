@@ -2288,9 +2288,20 @@ function CalendarPrayerCycleRoster() {
   }
   if (error) {
     return (
-      <p className="text-sm text-red-600">
-        Не удалось загрузить членов церкви: {error instanceof Error ? error.message : 'ошибка'}
-      </p>
+      <div className="rounded-2xl border border-red-200 bg-red-50/80 p-4 text-sm text-red-800">
+        <p className="font-semibold text-red-900">Не удалось загрузить членов церкви</p>
+        <p className="mt-1">{apiErrorMessage(error, 'Ошибка сети или сервера.')}</p>
+        <button
+          type="button"
+          className={`${btnSecondary('mt-3')}`}
+          onClick={() => {
+            void qc.invalidateQueries({ queryKey: Q_MEMBERS });
+            void qc.invalidateQueries({ queryKey: ['admin', 'prayer-cycle-roster'] });
+          }}
+        >
+          Повторить
+        </button>
+      </div>
     );
   }
 
