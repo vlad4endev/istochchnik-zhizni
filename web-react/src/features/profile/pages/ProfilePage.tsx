@@ -431,7 +431,7 @@ export function ProfilePage() {
          ═══════════════════════════════════════════════════════ */}
       <div className="relative">
         {/* Gradient banner */}
-        <div className="relative h-44 overflow-hidden bg-gradient-to-br from-[var(--profile-gradient-from)] via-[color:var(--profile-primary)] to-[var(--profile-gradient-to)] sm:h-52 md:h-56">
+        <div className="profile-banner relative h-44 overflow-hidden bg-gradient-to-br from-[var(--profile-gradient-from)] via-[color:var(--profile-primary)] to-[var(--profile-gradient-to)] sm:h-52 md:h-56">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_20%_-20%,rgba(255,255,255,0.13),transparent)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_90%_120%,rgba(255,255,255,0.08),transparent)]" />
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/[0.04]" />
@@ -439,7 +439,7 @@ export function ProfilePage() {
         </div>
 
         {/* Avatar + name overlay */}
-        <div className="relative mx-auto -mt-16 flex max-w-xl flex-col items-center px-4 text-center sm:-mt-[4.5rem]">
+        <div className="profile-hero relative mx-auto -mt-16 flex max-w-xl flex-col items-center px-4 text-center sm:-mt-[4.5rem]">
           {/* Avatar with upload */}
           <div className="relative">
             <div className="flex h-[7.5rem] w-[7.5rem] items-center justify-center overflow-hidden rounded-full border-4 border-white bg-[color:var(--profile-surface)] shadow-[0_8px_30px_rgba(125,54,64,0.18)] sm:h-[8.5rem] sm:w-[8.5rem]">

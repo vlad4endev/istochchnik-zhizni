@@ -663,7 +663,7 @@ export function LoginPage() {
 
         <div className="flex flex-1 flex-col justify-start pb-4 sm:justify-center">
           <div className="app-auth-card mx-auto w-full max-w-[min(100%,480px)] overflow-hidden rounded-[1.5rem] bg-[var(--surface-elevated)]/95 p-5 shadow-[0_18px_50px_rgba(28,25,23,0.08)] ring-1 ring-stone-900/[0.06] backdrop-blur-sm sm:rounded-[1.75rem] sm:p-7">
-            <div className="flex items-center gap-3.5">
+            <div className="app-auth-head flex items-center gap-3.5">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 p-2.5 ring-1 ring-primary/15">
                 <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain" />
               </div>
