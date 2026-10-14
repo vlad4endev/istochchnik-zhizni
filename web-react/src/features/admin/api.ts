@@ -1393,6 +1393,24 @@ export async function createBackup(body?: { send_telegram?: boolean }): Promise<
   return data;
 }
 
+/** Загрузить архив бекапа с компьютера (имя istochnik-backup-YYYYMMDD-HHMMSS.tar.gz). */
+export async function uploadBackupArchive(file: File): Promise<{
+  ok: boolean;
+  item: BackupListItem;
+  message: string;
+}> {
+  const form = new FormData();
+  form.append('archive', file, file.name);
+  const { data } = await apiClient.post<{
+    ok: boolean;
+    item: BackupListItem;
+    message: string;
+  }>('/api/backup/upload', form, {
+    timeout: 60 * 60_000,
+  });
+  return data;
+}
+
 export async function deleteBackup(id: string): Promise<void> {
   await apiClient.delete(`/api/backup/${encodeURIComponent(id)}`);
 }

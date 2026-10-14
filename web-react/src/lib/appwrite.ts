@@ -1,5 +1,8 @@
-/** Default Cloud project (Frankfurt). Override via VITE_APPWRITE_* if needed. */
-const DEFAULT_PROJECT_ID = '69fbc3640000a911aa79';
+/**
+ * Optional Appwrite Cloud ping (diagnostics only).
+ * No hardcoded project: paused/missing projects flooded the console after restore.
+ * Set VITE_APPWRITE_PROJECT_ID (+ optional VITE_APPWRITE_ENDPOINT) to enable.
+ */
 const DEFAULT_ENDPOINT = 'https://fra.cloud.appwrite.io/v1';
 
 class AppwriteClient {
@@ -34,12 +37,10 @@ class AppwriteClient {
   }
 }
 
-const projectId =
-  String(import.meta.env.VITE_APPWRITE_PROJECT_ID ?? '').trim() ||
-  DEFAULT_PROJECT_ID;
+const projectId = String(import.meta.env.VITE_APPWRITE_PROJECT_ID ?? '').trim();
 const endpoint =
   String(import.meta.env.VITE_APPWRITE_ENDPOINT ?? '').trim() ||
-  DEFAULT_ENDPOINT;
+  (projectId ? DEFAULT_ENDPOINT : '');
 
 export const client = new AppwriteClient()
   .setProject(projectId)

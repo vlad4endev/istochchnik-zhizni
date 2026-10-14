@@ -6,6 +6,7 @@ import {
   createFullBackup,
   deleteBackup,
   getBackupSettingsAdminView,
+  importUploadedBackupArchive,
   isBackupBusy,
   listBackups,
   resolveDownloadPath,
@@ -19,6 +20,7 @@ import {
   type BackupSettingsPatch,
   type BackupTelegramTarget,
 } from '../services/backupSettingsService';
+import { cleanupBackupUploadTemp } from '../middleware/backupUpload';
 
 type AuthRequest = Request & { authUserId?: number; authUserRole?: string; authUserRoles?: string[] };
 
@@ -84,6 +86,22 @@ function mapBackupError(error: unknown): { status: number; error: string } {
   }
   if (msg.startsWith('extract_failed:')) {
     return { status: 500, error: `Не удалось распаковать архив: ${msg.slice('extract_failed:'.length).slice(0, 400)}` };
+  }
+  if (msg === 'invalid_backup_upload_name') {
+    return {
+      status: 400,
+      error:
+        'Имя файла должно быть istochnik-backup-YYYYMMDD-HHMMSS.tar.gz (например istochnik-backup-20261009-222241.tar.gz)',
+    };
+  }
+  if (msg === 'invalid_backup_archive_format') {
+    return { status: 400, error: 'Файл не похож на .tar.gz архив бекапа' };
+  }
+  if (msg === 'backup_upload_missing' || msg === 'backup_upload_empty') {
+    return { status: 400, error: 'Пустой или повреждённый файл загрузки' };
+  }
+  if (msg === 'backup_import_failed') {
+    return { status: 500, error: 'Не удалось зарегистрировать загруженный бекап' };
   }
   if (msg.startsWith('telegram_')) {
     return { status: 400, error: `Telegram: ${msg}` };
@@ -209,6 +227,31 @@ export async function createBackupHandler(req: Request, res: Response): Promise<
       running: false,
     });
   } catch (error) {
+    const mapped = mapBackupError(error);
+    res.status(mapped.status).json({ error: mapped.error });
+  }
+}
+
+/** Загрузка архива бекапа с компьютера администратора (например из «Загрузки»). */
+export async function uploadBackupHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const file = req.file;
+  if (!file?.path) {
+    res.status(400).json({ error: 'Прикрепите файл архива в поле archive' });
+    return;
+  }
+  try {
+    const item = await importUploadedBackupArchive({
+      tempPath: file.path,
+      originalName: file.originalname || file.filename,
+    });
+    res.status(201).json({
+      ok: true,
+      item,
+      message: `Бекап ${item.id} загружен. Можно проверить и восстановить.`,
+    });
+  } catch (error) {
+    await cleanupBackupUploadTemp(file.path);
     const mapped = mapBackupError(error);
     res.status(mapped.status).json({ error: mapped.error });
   }

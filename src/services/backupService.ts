@@ -582,6 +582,70 @@ export function isBackupBusy(): boolean {
   return createInFlight !== null || restoreInFlight !== null;
 }
 
+/**
+ * Принимает загруженный с компьютера архив .tar.gz и кладёт его в BACKUP_DIR
+ * под каноническим именем istochnik-backup-YYYYMMDD-HHMMSS.tar.gz.
+ */
+export async function importUploadedBackupArchive(args: {
+  tempPath: string;
+  originalName: string;
+}): Promise<BackupListItem> {
+  const base = path.basename(args.originalName || '');
+  const m = /^(istochnik-backup-\d{8}-\d{6})(?:\.tar\.gz)?$/i.exec(base);
+  if (!m) {
+    throw new Error('invalid_backup_upload_name');
+  }
+  const id = m[1]!;
+  if (!stampFromId(id)) {
+    throw new Error('invalid_backup_id');
+  }
+
+  let st: fs.Stats;
+  try {
+    st = await fsp.stat(args.tempPath);
+  } catch {
+    throw new Error('backup_upload_missing');
+  }
+  if (!st.isFile() || st.size <= 0) {
+    throw new Error('backup_upload_empty');
+  }
+
+  const root = backupsRoot();
+  await fsp.mkdir(root, { recursive: true });
+  const dest = path.join(root, `${id}.tar.gz`);
+  if (!dest.startsWith(root + path.sep)) {
+    throw new Error('invalid_backup_path');
+  }
+
+  await fsp.rm(dest, { force: true }).catch(() => undefined);
+  try {
+    await fsp.rename(args.tempPath, dest);
+  } catch {
+    await fsp.copyFile(args.tempPath, dest);
+    await fsp.rm(args.tempPath, { force: true }).catch(() => undefined);
+  }
+
+  // Быстрая проверка, что это gzip (магические байты 1f 8b)
+  const fd = await fsp.open(dest, 'r');
+  try {
+    const buf = Buffer.alloc(2);
+    await fd.read(buf, 0, 2, 0);
+    if (buf[0] !== 0x1f || buf[1] !== 0x8b) {
+      await fsp.rm(dest, { force: true }).catch(() => undefined);
+      throw new Error('invalid_backup_archive_format');
+    }
+  } finally {
+    await fd.close();
+  }
+
+  const items = await listBackups();
+  const item = items.find((i) => i.id === id);
+  if (!item) {
+    throw new Error('backup_import_failed');
+  }
+  return item;
+}
+
 /** Гарантирует наличие каталога бекапа (распакует .tar.gz при необходимости). */
 export async function ensureBackupDirectory(id: string): Promise<string> {
   if (!stampFromId(id)) throw new Error('invalid_backup_id');
@@ -775,12 +839,19 @@ export async function restoreFullBackup(
 
 export async function getBackupSettingsAdminView(): Promise<BackupSettingsAdminView> {
   const doc = await loadBackupSettingsDocument();
-  const tg = await getTelegramSettings();
+  // Telegram settings must not block the backup admin panel (restore depends on it).
+  let telegramBotReady = false;
+  try {
+    const tg = await getTelegramSettings();
+    telegramBotReady = Boolean(tg.enabled && tg.has_bot_token);
+  } catch (err) {
+    console.warn('[backup] getTelegramSettings failed; continuing without Telegram readiness', err);
+  }
   return {
     ...doc,
     backups_dir: backupsRoot(),
     max_retention_days: BACKUP_RETENTION_DAYS_MAX,
-    telegram_bot_ready: Boolean(tg.enabled && tg.has_bot_token),
+    telegram_bot_ready: telegramBotReady,
   };
 }
 
