@@ -41,9 +41,9 @@ import {
   isApiUrlProbablyWrongForWeb,
   resolveAxiosBaseURL,
 } from '../../../lib/config';
-import { PageHeader } from '@/components/layout/PageHeader';
+import { AppHeader } from '@/components/ui/AppHeader';
+import { AppLeaf } from '@/components/ui/AppLeaf';
 import { PrayerSkeleton } from '@/components/skeletons/PrayerSkeleton';
-import { sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { memberRosterName } from '../../../lib/memberRosterName';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
 import { useMe } from '@/hooks/useMe';
@@ -894,13 +894,11 @@ export function DailyPrayerPage() {
     );
 
   return (
-    <div className="prayer-page-bg flex min-h-0 flex-1 flex-col max-lg:pb-0 lg:pb-8">
-      <div className={sectionHeroStickyClass}>
-        <PageHeader title="Молитва" subtitle="Нужды и план на день" />
-      </div>
-
-      {/* Чип даты и календарь — под шапкой, не внутри липкой primary-полосы */}
-      <div className="z-10 w-full shrink-0 bg-[var(--surface)] px-3 pt-3 sm:px-4 shell:px-6 md:px-6 lg:px-8 xl:px-10">
+    <div className="prayer-page-bg flex min-h-0 flex-1 flex-col bg-[var(--header-bg,#230810)] max-lg:pb-0 lg:pb-8">
+      <AppHeader title="Молитва" subtitle="Нужды и план на день" />
+      <AppLeaf className="flex min-h-0 flex-1 flex-col">
+      {/* Чип даты и календарь — в листе под тёмной шапкой */}
+      <div className="z-10 w-full shrink-0 bg-[var(--surface)] px-3 pt-4 sm:px-4 shell:px-6 md:px-6 lg:px-8 xl:px-10">
         <button
           type="button"
           onClick={() => setCalendarExpanded((e) => !e)}
@@ -1006,7 +1004,7 @@ export function DailyPrayerPage() {
       </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch]">
+      <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pb-[calc(var(--app-bottom-nav-total-height,72px)+1.25rem)]">
       <div className="px-3 pt-4 sm:px-4 shell:px-6 md:px-6 lg:px-8 xl:px-10">
         {userCanViewNextWeekPrayerPlan(me, rolePermissionsQ.data) ? (
           <NextWeekPrayerPlanSection
@@ -1128,6 +1126,7 @@ export function DailyPrayerPage() {
         </div>
       ) : null}
       </div>
+      </AppLeaf>
       <TelegramPrayerDispatchModal
         open={telegramDispatchModalOpen}
         onClose={() => setTelegramDispatchModalOpen(false)}

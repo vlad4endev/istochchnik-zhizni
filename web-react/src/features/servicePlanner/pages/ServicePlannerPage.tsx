@@ -40,9 +40,9 @@ import {
 import type { IconType } from 'react-icons';
 import { useLocation } from 'react-router-dom';
 
-import { SectionHeroChrome } from '@/components/SectionHeroChrome';
+import { AppHeader } from '@/components/ui/AppHeader';
+import { AppLeaf } from '@/components/ui/AppLeaf';
 import { getAppScrollRoot, getAppScrollTop } from '@/lib/appScroll';
-import { sectionHeroStickyClassNested } from '@/lib/sectionHeroChrome';
 
 import { fetchSongs, type SongListItem } from '../../songbook/api';
 import type { AppUser } from '../../admin/types';
@@ -1769,13 +1769,9 @@ export function ServicePlannerPage() {
 
   if (screen === 'home') {
     return (
-      <>
-        <SectionHeroChrome
-          title="Служение"
-          subtitle="Планы и блоки собрания"
-          stickyClassName={sectionHeroStickyClassNested}
-        />
-        <section className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-3 py-4 pb-6 sm:px-4 sm:py-5 md:px-6">
+      <div className="flex min-h-0 flex-1 flex-col bg-[var(--header-bg,#230810)]">
+        <AppHeader title="Служение" subtitle="Планы и блоки собрания" />
+        <AppLeaf className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 px-3 pt-4 pb-[calc(var(--app-bottom-nav-total-height,72px)+1.25rem)] sm:px-4 sm:pt-5 md:px-6">
         <section className="grid gap-3 md:grid-cols-2">
           <div className="rounded-[20px] bg-[#F4E6E4] p-4 shadow-[inset_0_0_0_1px_rgba(138,39,66,0.25)] max-phone:p-4">
             <p className="text-[11px] font-extrabold uppercase tracking-[0.04em] text-wine">Новый план</p>
@@ -1949,8 +1945,8 @@ export function ServicePlannerPage() {
             </div>
           )}
         </section>
-      </section>
-      </>
+      </AppLeaf>
+      </div>
     );
   }
 

@@ -53,8 +53,10 @@ const config: CapacitorConfig = {
       useDialog: true,
     },
     StatusBar: {
-      style: 'LIGHT',
-      backgroundColor: '#f4f1ed',
+      // Dark icons off — Phase 8 headers are wine; keep content below the bar on Android.
+      style: 'DARK',
+      backgroundColor: '#5A1826',
+      overlaysWebView: false,
     },
     Keyboard: {
       resize: KeyboardResize.Body,

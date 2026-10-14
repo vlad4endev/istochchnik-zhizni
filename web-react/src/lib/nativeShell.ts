@@ -39,9 +39,19 @@ export async function startNativeShell(handlers: ShellHandlers = {}): Promise<()
   started = true;
 
   try {
-    await StatusBar.setStyle({ style: Style.Light });
+    // Phase 8: wine status bar + light glyphs; never draw WebView under the bar on Android.
+    await StatusBar.setStyle({ style: Style.Dark });
     if (Capacitor.getPlatform() === 'android') {
-      await StatusBar.setBackgroundColor({ color: '#f4f1ed' });
+      await StatusBar.setOverlaysWebView({ overlay: false });
+      await StatusBar.setBackgroundColor({ color: '#5A1826' });
+    }
+    const info = await StatusBar.getInfo();
+    if (typeof document !== 'undefined') {
+      // Only pad content when the WebView is drawn under the status bar.
+      const px =
+        info?.overlays && info.height > 0 ? `${Math.round(info.height)}px` : '0px';
+      document.documentElement.style.setProperty('--app-safe-top', px);
+      document.documentElement.style.setProperty('--app-status-bar-height', px);
     }
   } catch {
     /* plugin missing on web preview */

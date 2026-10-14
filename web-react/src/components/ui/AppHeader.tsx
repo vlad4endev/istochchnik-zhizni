@@ -32,7 +32,7 @@ export function AppHeader({
   band = true,
 }: AppHeaderProps) {
   const inner = (
-    <div className="flex w-full flex-col gap-1 px-4 pb-3 pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
+    <div className="flex w-full flex-col gap-1 px-4 pb-3 pt-[max(0.65rem,var(--app-safe-top,env(safe-area-inset-top,0px)))]">
       <div className="flex min-h-9 items-center gap-2">
         {onBack ? (
           <button

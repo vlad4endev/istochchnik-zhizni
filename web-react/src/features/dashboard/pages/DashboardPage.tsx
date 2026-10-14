@@ -52,8 +52,8 @@ import { fetchRolePermissionsPublic } from '../../settings/rolePermissionsApi';
 import { useMe } from '@/hooks/useMe';
 import { dashboardBundleKey, loadDashboardBundle } from '../dashboardBundle';
 import { fetchProfileByMemberId } from '../../profile/publicProfileApi';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { sectionHeroStickyClassNested } from '../../../lib/sectionHeroChrome';
+import { AppHeader } from '@/components/ui/AppHeader';
+import { AppLeaf } from '@/components/ui/AppLeaf';
 import { apiBoolean } from '../../../lib/apiBoolean';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { memberRosterName } from '../../../lib/memberRosterName';
@@ -1250,12 +1250,10 @@ function DashboardMain() {
   }
 
   return (
-    <div className="dashboard-adaptive flex min-h-0 flex-1 flex-col overflow-x-hidden bg-[var(--surface)]">
-      <div className={sectionHeroStickyClassNested}>
-        <PageHeader title="Главная" subtitle={formatTodayLabel(new Date())} />
-      </div>
-      <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-3 sm:px-4 shell:px-6 md:px-8 xl:px-10 2xl:max-w-[1480px]">
-        <div className="dashboard-scroll-pane min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pt-2 max-lg:pb-24 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
+    <div className="dashboard-adaptive flex min-h-0 flex-1 flex-col overflow-x-hidden bg-[var(--header-bg,#230810)]">
+      <AppHeader title="Главная" subtitle={formatTodayLabel(new Date())} />
+      <AppLeaf className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-3 sm:px-4 shell:px-6 md:px-8 xl:px-10 2xl:max-w-[1480px]">
+        <div className="dashboard-scroll-pane min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pt-4 max-lg:pb-[calc(var(--app-bottom-nav-total-height,72px)+1.5rem)] lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
         <AndroidAppReleaseWidget />
         <NotificationPermissionWidget />
         <DashboardQuickActionsStrip
@@ -1975,7 +1973,7 @@ function DashboardMain() {
           ) : null}
         </div>
         </div>
-      </div>
+      </AppLeaf>
 
       {showDashboardSermonPlayer && latestEpisode ? (
         <div className="fixed inset-x-3 bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] z-[60] lg:inset-x-6 lg:bottom-6">

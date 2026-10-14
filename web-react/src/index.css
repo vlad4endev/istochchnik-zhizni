@@ -77,7 +77,7 @@ textarea {
   --app-bottom-nav-row-pad-y: 0.25rem; /* вертикальный pad ряда табов */
   --app-bottom-nav-cols: 5;
   /* Зазор между последним блоком контента и верхней кромкой таб-бара. */
-  --app-bottom-nav-content-gap: 16px;
+  --app-bottom-nav-content-gap: 20px;
   /* Только «тело» таб-бара без home indicator. */
   --app-bottom-nav-main-gutter: calc(
     var(--app-bottom-nav-bar-height) + var(--app-bottom-nav-row-pad-y)
