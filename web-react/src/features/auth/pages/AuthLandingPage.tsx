@@ -48,9 +48,81 @@ export function AuthLandingPage() {
           <span className="landing-native__brand-name">Моя церковь</span>
         </header>
         <div className="landing-native__hero" aria-hidden>
-          <div className="landing-native__circle">
-            <img src="/assets/logo.svg" alt="" />
-          </div>
+          <svg className="landing-native__art" viewBox="0 0 320 300" role="img" focusable="false">
+            <defs>
+              <radialGradient id="ln-glow" cx="50%" cy="46%" r="54%">
+                <stop offset="0%" stopColor="#f2b879" stopOpacity="0.62" />
+                <stop offset="55%" stopColor="#c2455f" stopOpacity="0.2" />
+                <stop offset="100%" stopColor="#c2455f" stopOpacity="0" />
+              </radialGradient>
+              <linearGradient id="ln-wall" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#fff7ec" />
+                <stop offset="100%" stopColor="#e7cfbf" />
+              </linearGradient>
+              <linearGradient id="ln-roof" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#a8304e" />
+                <stop offset="100%" stopColor="#5a1826" />
+              </linearGradient>
+              <linearGradient id="ln-win" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#ffe3b3" />
+                <stop offset="100%" stopColor="#f2a65a" />
+              </linearGradient>
+              <linearGradient id="ln-fade-x" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#000" />
+                <stop offset="16%" stopColor="#fff" />
+                <stop offset="84%" stopColor="#fff" />
+                <stop offset="100%" stopColor="#000" />
+              </linearGradient>
+              <mask id="ln-ground-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="320" height="300">
+                <rect width="320" height="300" fill="url(#ln-fade-x)" />
+              </mask>
+              <linearGradient id="ln-ground-back" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#4a1322" />
+                <stop offset="100%" stopColor="#4a1322" stopOpacity="0" />
+              </linearGradient>
+              <linearGradient id="ln-ground-front" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#2c0a14" />
+                <stop offset="70%" stopColor="#2c0a14" stopOpacity="0.55" />
+                <stop offset="100%" stopColor="#2c0a14" stopOpacity="0" />
+              </linearGradient>
+              <radialGradient id="ln-cross" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#ffd9a0" stopOpacity="0.85" />
+                <stop offset="100%" stopColor="#ffd9a0" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            <circle cx="160" cy="138" r="142" fill="url(#ln-glow)" />
+            <g fill="#ffe3b3">
+              <circle cx="38" cy="52" r="1.8" opacity="0.8" />
+              <circle cx="276" cy="40" r="2.2" opacity="0.9" />
+              <circle cx="238" cy="86" r="1.5" opacity="0.7" />
+              <circle cx="70" cy="104" r="1.4" opacity="0.6" />
+              <circle cx="294" cy="120" r="1.6" opacity="0.7" />
+              <circle cx="104" cy="30" r="1.5" opacity="0.7" />
+            </g>
+            <path mask="url(#ln-ground-mask)" d="M0 246 Q80 212 160 238 T320 232 V300 H0Z" fill="url(#ln-ground-back)" />
+            <circle cx="150" cy="40" r="26" fill="url(#ln-cross)" />
+            <rect x="60" y="165" width="65" height="92" fill="url(#ln-wall)" />
+            <rect x="175" y="165" width="65" height="92" fill="url(#ln-wall)" />
+            <polygon points="50,170 92,138 134,170" fill="url(#ln-roof)" />
+            <polygon points="166,170 208,138 250,170" fill="url(#ln-roof)" />
+            <rect x="125" y="96" width="50" height="161" fill="url(#ln-wall)" />
+            <polygon points="118,100 150,50 182,100" fill="url(#ln-roof)" />
+            <rect x="147.5" y="12" width="5" height="40" rx="2" fill="#f2b879" />
+            <rect x="136" y="23" width="28" height="5" rx="2" fill="#f2b879" />
+            <path d="M141 134 v-15 a9 9 0 0 1 18 0 v15z" fill="url(#ln-win)" />
+            <path d="M80 232 v-30 a10 10 0 0 1 20 0 v30z" fill="url(#ln-win)" />
+            <path d="M200 232 v-30 a10 10 0 0 1 20 0 v30z" fill="url(#ln-win)" />
+            <path d="M137 257 v-34 a13 13 0 0 1 26 0 v34z" fill="#3a0f1c" />
+            <path d="M143 257 v-30 a7 7 0 0 1 14 0 v30z" fill="url(#ln-win)" opacity="0.9" />
+            <rect x="128" y="257" width="44" height="6" rx="1.5" fill="#d9c3b3" />
+            <path mask="url(#ln-ground-mask)" d="M0 268 Q100 244 200 260 T320 256 V300 H0Z" fill="url(#ln-ground-front)" />
+            <g fill="#2c0a14" opacity="0.92">
+              <rect x="22" y="236" width="5" height="26" />
+              <ellipse cx="24.5" cy="228" rx="13" ry="20" />
+              <rect x="292" y="240" width="4" height="22" />
+              <ellipse cx="294" cy="233" rx="11" ry="17" />
+            </g>
+          </svg>
         </div>
         <section className="landing-native__sheet">
           <h1 className="landing-native__title">

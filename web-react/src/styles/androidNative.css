@@ -1114,19 +1114,11 @@ html.app-android-native .landing-native__hero {
   min-height: 0;
   padding: 16px 24px 28px;
 }
-html.app-android-native .landing-native__circle {
-  display: grid;
-  place-items: center;
-  width: min(72vw, 300px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: #fbf6ef;
-  box-shadow: 0 24px 60px rgba(20, 4, 8, 0.4);
-}
-html.app-android-native .landing-native__circle img {
-  width: 42%;
-  height: 42%;
-  object-fit: contain;
+html.app-android-native .landing-native__art {
+  width: min(88vw, 340px);
+  height: auto;
+  max-height: 100%;
+  filter: drop-shadow(0 18px 36px rgba(20, 4, 8, 0.45));
 }
 html.app-android-native .landing-native__sheet {
   padding: 32px 24px max(24px, env(safe-area-inset-bottom, 0px));
@@ -1390,4 +1382,48 @@ html.app-android-native .call-speaker-layout__strip .call-participant-tile--stri
 html.app-android-native .call-meeting-topbar {
   padding-top: 14px;
   padding-bottom: 10px;
+}
+
+/* Редактор программы службы: верхняя карточка в стиле шапки экранов. */
+html.app-android-native:not(.dark) .planner-plan-header {
+  border: none;
+  color: #fff;
+  background:
+    radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+  box-shadow: 0 10px 28px rgba(58, 16, 24, 0.22);
+}
+html.app-android-native:not(.dark) .planner-plan-header h1,
+html.app-android-native:not(.dark) .planner-plan-header p,
+html.app-android-native:not(.dark) .planner-plan-header > div > div > span:not([class*='rounded-full']),
+html.app-android-native:not(.dark) .planner-plan-header svg {
+  color: #fff;
+}
+html.app-android-native:not(.dark) .planner-plan-header [class*='rounded-full'] {
+  color: #4b1620;
+}
+html.app-android-native:not(.dark) .planner-plan-header button:not([class*='border-amber']):not([class*='border-rose']):not([class*='border-red']) {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+html.app-android-native:not(.dark) .planner-plan-header button[class*='border-amber'] {
+  color: #ffd9a0;
+  border-color: #f2b879;
+  background: rgba(242, 184, 121, 0.16);
+}
+html.app-android-native:not(.dark) .planner-plan-header button[class*='border-rose'],
+html.app-android-native:not(.dark) .planner-plan-header button[class*='border-red'] {
+  color: #ffb3c2;
+  border-color: #ff7a95;
+  background: rgba(229, 56, 91, 0.18);
+}
+html.app-android-native:not(.dark) .planner-plan-header button[class*='border-amber'] svg,
+html.app-android-native:not(.dark) .planner-plan-header button[class*='border-rose'] svg,
+html.app-android-native:not(.dark) .planner-plan-header button[class*='border-red'] svg {
+  color: inherit;
+}
+html.app-android-native:not(.dark) .planner-plan-header [class*='text-stone']:not(button):not([class*='rounded-full']) {
+  color: rgba(255, 255, 255, 0.86);
 }
