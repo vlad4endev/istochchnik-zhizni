@@ -2465,6 +2465,32 @@ CREATE INDEX IF NOT EXISTS songs_updated_at_idx ON songs (updated_at);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS client_id UUID;
 CREATE INDEX IF NOT EXISTS members_updated_at_idx ON members (updated_at);
+
+-- Offline sync v2 (sequence + version + idempotency); full SQL also in supabase/migrations
+CREATE SEQUENCE IF NOT EXISTS sync_global_seq;
+CREATE TABLE IF NOT EXISTS sync_idempotency (
+  idempotency_key TEXT PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  table_name TEXT NOT NULL,
+  result JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE songs ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE songs ADD COLUMN IF NOT EXISTS sync_seq BIGINT;
+ALTER TABLE songs ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS sync_seq BIGINT;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS client_id UUID;
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS sync_seq BIGINT;
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE sermon_notes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE sermon_notes ADD COLUMN IF NOT EXISTS client_id UUID;
+ALTER TABLE sermon_notes ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE sermon_notes ADD COLUMN IF NOT EXISTS sync_seq BIGINT;
+ALTER TABLE sermon_notes ADD COLUMN IF NOT EXISTS device_id TEXT;
 `;
 
 export async function initDb(): Promise<void> {
