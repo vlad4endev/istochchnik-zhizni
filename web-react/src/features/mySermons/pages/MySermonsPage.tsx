@@ -70,7 +70,7 @@ export function MySermonsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className={sectionHeroStickyClass}>
-        <PageHeader title="Мои проповеди" />
+        <PageHeader title="Мои проповеди" subtitle="Черновики и конспекты" />
       </div>
 
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-4 py-4 sm:px-5">
