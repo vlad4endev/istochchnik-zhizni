@@ -1,55 +1,47 @@
 /** Messenger — современная тёплая тема (бургунди + нейтрали) **/
 
 :root {
-  --tg-font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    'Helvetica Neue',
-    Arial,
-    sans-serif;
+  --tg-font-family: var(--font-ui, 'Onest', system-ui, sans-serif);
   /* 100vw шире колонки main (игнорирует сайдбар приложения) → переполнение и «плавание» при md:pl-* */
   --tg-sidebar-width: min(400px, 100%);
   /* ПК: макс. ширина колонки переписки (центрирование на ультрашироких) */
   --tg-desktop-thread-max: 880px;
-  --tg-primary: var(--primary, #7d3640);
-  --tg-primary-hover: var(--primary-dark, #5c2830);
+  --tg-primary: var(--primary, #8a2742);
+  --tg-primary-hover: var(--primary-dark, #5a1826);
   --tg-primary-light: color-mix(in srgb, var(--tg-primary) 12%, transparent);
   /* Chrome мессенджера (вкладки, reply-bar) — не трогает аватары и пузыри */
-  --messenger-brand: #8b1a1a;
-  --messenger-brand-light: rgba(139, 26, 26, 0.1);
-  --tg-bg: #f0ebe6;
+  --messenger-brand: #8a2742;
+  --messenger-brand-light: rgba(138, 39, 66, 0.1);
+  --tg-bg: var(--surface, #fbf6ef);
   --tg-surface: #ffffff;
-  --tg-surface-elevated: #faf8f6;
-  --tg-border: rgba(28, 25, 23, 0.07);
+  --tg-surface-elevated: #fff9f2;
+  --tg-border: rgba(58, 16, 24, 0.1);
   --tg-border-strong: #e8e0dc;
-  --tg-text: #1c1917;
-  --tg-text-secondary: #44403c;
-  --tg-text-muted: #a8a29e;
-  --tg-shadow: 0 4px 24px rgba(28, 25, 23, 0.06);
+  --tg-text: var(--ink, #3a1018);
+  --tg-text-secondary: var(--muted, #6a5555);
+  --tg-text-muted: var(--muted, #6a5555);
+  --tg-shadow: 0 4px 24px rgba(58, 16, 24, 0.06);
   --tg-glass: rgba(255, 255, 255, 0.72);
   --tg-composer-bg: #ffffff;
-  --tg-composer-field: #f1f1f1;
-  --tg-composer-field-focus: #ebebeb;
+  --tg-composer-field: #f5efe6;
+  --tg-composer-field-focus: #fff9f2;
   --tg-composer-shadow: 0 -4px 32px color-mix(in srgb, var(--tg-primary) 8%, transparent);
   --tg-online: #22c55e;
   --tg-error: #f03738;
-  --tg-row-hover: rgba(0, 0, 0, 0.03);
-  --tg-row-divider: rgba(28, 25, 23, 0.08);
+  --tg-row-hover: rgba(58, 16, 24, 0.03);
+  --tg-row-divider: rgba(58, 16, 24, 0.08);
 
-  --tg-bubble-out: linear-gradient(145deg, #8b3d48 0%, #6d2f38 100%);
-  --tg-bubble-out-solid: #7d3640;
+  --tg-bubble-out: linear-gradient(145deg, #8a2742 0%, #5a1826 100%);
+  --tg-bubble-out-solid: #8a2742;
   --tg-bubble-out-text: #ffffff;
   --tg-bubble-in: #ffffff;
-  --tg-bubble-in-text: #1c1917;
+  --tg-bubble-in-text: #3a1018;
   --tg-bubble-radius: 22px;
   --tg-bubble-tail-radius: 6px;
   --tg-bubble-meta: rgba(255, 255, 255, 0.72);
-  --tg-bubble-meta-in: #a8a29e;
-  --tg-bubble-in-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --tg-bubble-out-shadow: 0 2px 12px rgba(125, 54, 64, 0.18);
+  --tg-bubble-meta-in: #6a5555;
+  --tg-bubble-in-shadow: 0 1px 3px rgba(58, 16, 24, 0.08);
+  --tg-bubble-out-shadow: 0 2px 12px rgba(138, 39, 66, 0.22);
   --tg-date-chip-bg: rgba(255, 255, 255, 0.85);
 
   /* Height of the global bottom tab bar (Layout.tsx).
@@ -657,7 +649,30 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
   flex-shrink: 0;
   /* Шапка и тулбар поиска — один сплошной блок без «дымки» градиента и двойной линии. */
   border-bottom: none;
-  background: var(--tg-surface-elevated, #fafaf9);
+  background: var(--tg-surface-elevated, #fff9f2);
+}
+
+@media (max-width: 430px) {
+  .tg-sidebar-header {
+    min-height: 64px;
+    background: var(--header-bg, #230810);
+    color: #fbf6ef;
+    padding-top: max(12px, env(safe-area-inset-top, 0px));
+  }
+
+  .tg-sidebar-title {
+    color: #fbf6ef;
+    font-family: var(--font-ui, 'Onest', system-ui, sans-serif);
+    font-size: var(--size-header-title, 23px);
+    font-weight: 800;
+  }
+
+  .tg-compose-btn-sm,
+  .tg-calls-btn-sm,
+  .tg-density-toggle {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fbf6ef;
+  }
 }
 
 .tg-compose-btn-sm {

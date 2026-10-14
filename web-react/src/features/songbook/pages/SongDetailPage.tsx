@@ -6,7 +6,7 @@ import { LuArrowLeft, LuMinus, LuPlus, LuSettings2, LuX } from 'react-icons/lu';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
-import { SEMANTIC_COLORS } from '@/lib/designTokens';
+import { SEMANTIC_COLORS, type SongThemeId } from '@/lib/designTokens';
 import { keys } from '@/lib/queryKeys';
 import { useAuthStore } from '../../auth/authStore';
 import { canAccessStudio } from '../../auth/studioAccess';
@@ -18,6 +18,13 @@ import { useSongbookChrome } from '../SongbookChromeContext';
 import { fetchVersionForSong } from '../../studio/api';
 import { useMe } from '@/hooks/useMe';
 import { BodyPortal } from '../../../components/BodyPortal';
+import { AppSegment } from '@/components/ui/AppSegment';
+
+const SONG_THEME_OPTIONS: { value: SongThemeId; label: string }[] = [
+  { value: 'black', label: 'Чёрная' },
+  { value: 'dark', label: 'Тёмная' },
+  { value: 'light', label: 'Светлая' },
+];
 
 /** Компактный переключатель вместо нативного checkbox (единообразно на iOS/Android). */
 function SheetSwitch({
@@ -122,10 +129,40 @@ export function SongDetailPage() {
     '--sd-error': SEMANTIC_COLORS.accent,
   };
 
+  const [songTheme, setSongTheme] = useState<'black' | 'dark' | 'light'>(() => {
+    try {
+      const raw = localStorage.getItem('songbook:song-theme');
+      if (raw === 'black' || raw === 'dark' || raw === 'light') return raw;
+    } catch {
+      /* ignore */
+    }
+    return 'black';
+  });
+
+  useEffect(() => {
+    const onTheme = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (detail === 'black' || detail === 'dark' || detail === 'light') setSongTheme(detail);
+    };
+    document.documentElement.addEventListener('songbook:song-theme', onTheme);
+    return () => document.documentElement.removeEventListener('songbook:song-theme', onTheme);
+  }, []);
+
+  const resolvedSongTheme = stageMode ? songTheme : 'light';
+
   return (
-    <div style={semanticVars as CSSProperties} className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--sd-text)]">
+    <div
+      style={semanticVars as CSSProperties}
+      className={[
+        'theme-musician mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--sd-text)]',
+        stageMode ? 'bg-[var(--surface)]' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      data-song-theme={resolvedSongTheme}
+    >
       <div className={`${sectionHeroStickyClass} z-30`}>
-        <PageHeader title={s.title} />
+        <PageHeader title={s.title} subtitle={keyBadge ?? undefined} />
       </div>
       <div className="sticky top-0 z-20 border-b border-[var(--sd-border)] bg-[var(--sd-surface)]/92 px-3 py-2 backdrop-blur md:px-4">
         <div className="flex min-h-[44px] items-center gap-2">
@@ -197,6 +234,22 @@ export function SongDetailPage() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-3">
+              <div className="mb-3 rounded-2xl border border-[var(--sd-border)] bg-[var(--sd-surface-elevated)] p-3 shadow-sm">
+                <p className="mb-2 text-sm font-medium text-[var(--sd-text)]">Тема песни</p>
+                <AppSegment
+                  ariaLabel="Тема песни"
+                  value={songTheme}
+                  options={SONG_THEME_OPTIONS}
+                  onChange={(next) => {
+                    setSongTheme(next);
+                    try {
+                      localStorage.setItem('songbook:song-theme', next);
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                />
+              </div>
               <div className="divide-y divide-[var(--sd-border)] overflow-hidden rounded-2xl border border-[var(--sd-border)] bg-[var(--sd-surface-elevated)] shadow-sm">
                 <div className="flex items-start gap-3 px-4 py-3.5">
                   <div className="min-w-0 flex-1 pt-0.5">
