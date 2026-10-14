@@ -1,318 +1,195 @@
-# istochchnik_zhizni
+<p align="center">
+  <img src="web-react/public/assets/logo.svg" alt="Источник жизни" width="96" height="96" />
+</p>
 
-Монорепозиторий: **React (Vite)** в `web-react/` и **Node.js/TypeScript API** в `src/`.
+<h1 align="center">Источник жизни</h1>
 
-## Чтобы всё заработало (кратко)
+<p align="center">
+  <strong>Цифровая платформа для церковной общины</strong><br />
+  Молитва · Песни · Мессенджер · Расписание · Медиа · Звонки — в одном продукте
+</p>
 
-### Локальный веб-сервис (рекомендуется: БД + API + веб в Docker)
+<p align="center">
+  <a href="https://istochchnik-zhizni.vercel.app"><img src="https://img.shields.io/badge/Demo-Открыть_сайт-8C2C3F?style=for-the-badge" alt="Demo" /></a>
+  &nbsp;
+  <a href="#быстрый-старт"><img src="https://img.shields.io/badge/Старт-5_минут-C1684B?style=for-the-badge" alt="Quick start" /></a>
+  &nbsp;
+  <a href="docs/operations.md"><img src="https://img.shields.io/badge/Docs-Операции-5C1325?style=for-the-badge" alt="Docs" /></a>
+</p>
 
-Один стек: Postgres, Node API и статика **web-react** за **nginx** на одном порту для браузера — без отдельной настройки `VITE_API_BASE_URL` для LAN (запросы на тот же origin, `/api` в nginx).
+<p align="center">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Express-API-000000?logo=express&logoColor=white" alt="Express" />
+  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Vite-PWA-646CFF?logo=vite&logoColor=white" alt="Vite" />
+  <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/LiveKit-Calls-1FA2FF?logo=livekit&logoColor=white" alt="LiveKit" />
+</p>
 
-1. **Один раз:** `npm run quickstart` или `cp .env.example .env` и при необходимости `npm ci && npm run build`. В **`.env`** задайте **`DATABASE_URL`**:
-   - **Всё локально:** строка с `db:5432` из `.env.example` (Postgres поднимается вместе с compose).
-   - **Supabase:** URI из Supabase (pooler **5432**), `?sslmode=require`, плюс `DB_SSL=true`, `DB_SSL_REJECT_UNAUTHORIZED=false`, `SKIP_DB_INIT_ON_START=true`.
-2. **Запуск:** `docker compose up -d --build` (или `npm run prod:start`). Собирается образ **`Dockerfile.web`** (Vite → nginx).
-3. **Откройте в браузере:** [http://localhost:8080](http://localhost:8080) — интерфейс. Запросы к API идут на **тот же хост** (`/api/...`, прокси в nginx).
-4. **Проверки:** [http://localhost:8080/health](http://localhost:8080/health) (через nginx) и при необходимости прямой API: [http://localhost:40978/health](http://localhost:40978/health).
+---
 
-Порт веба меняется переменной **`WEB_PORT`** в `.env`. Только API и БД без nginx: `docker compose up -d db api`.
+## Зачем это
 
-### Разработка без Docker (React + API в терминале)
+Общинам обычно не хватает одной системы: чаты — в одном месте, песни — в другом, расписание — в таблицах, медиа — на третьем сервисе. **Источник жизни** собирает повседневную жизнь церкви в единый современный продукт: понятный для прихожан, мощный для служителей и админов.
 
-- `npm run start-all` или `npm run dev:start:fg` — API и Vite в одном терминале.
-- `npm run dev:start` — то же в фоне (лог `.run/dev-bg.log`).
-- `npm run go:start` — API + Vite + при необходимости `db:up` (см. `scripts/project.sh`).
+| Боль сегодня | Что даёт платформа |
+| --- | --- |
+| Информация теряется между чатами и таблицами | Единая лента, уведомления и календарь |
+| Служения собираются вручную | Планировщик служений, расписания, роли |
+| Нет общего «дома» для контента | Песенник, медиа, проповеди, студия |
+| Связь разрозненная | Мессенджер, push, звонки LiveKit |
 
-Если API не стартует — проверьте **`DATABASE_URL`** в **`.env`** и доступность базы.
+---
 
-### Готовая статика без сборки Node в Docker на сервере
+## Возможности
 
-На слабом VPS надёжно собрать фронт локально и залить **`release/web/`**:
+<table>
+<tr>
+<td width="50%">
+
+### 🙏 Молитва и община
+Молитвенные нужды, публикации профиля, роли и безопасный доступ для членов церкви.
+
+### 🎵 Песенник
+Каталог песен, аккорды, транспозиция, импорт из PDF, сцена и студия для служения.
+
+### 💬 Мессенджер
+Чаты, медиа, push-уведомления — коммуникация внутри общины без сторонних приложений.
+
+</td>
+<td width="50%">
+
+### 📅 Расписание и служения
+Календарь, воскресные слоты, планировщик блоков служения, медиа- и музыкальные графики.
+
+### 📡 Медиа и трансляции
+Подкасты, видео, эфиры и контент-центр в одном маршруте.
+
+### 📞 Звонки
+Self-hosted LiveKit: аудио/видеозвонки с приглашениями и жизненным циклом на API.
+
+</td>
+</tr>
+</table>
+
+Также в продукте: **админ-панель**, аналитика, бэкапы, Telegram/SMS-интеграции, PWA и Android (Capacitor / React Native).
+
+---
+
+## Архитектура
+
+```text
+┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
+│  Web / PWA / Mobile │────▶│  Express API (TS)   │────▶│  PostgreSQL         │
+│  React · Vite · Cap │     │  Auth · Domains     │     │  (+ Supabase opt.)  │
+└─────────────────────┘     └──────────┬──────────┘     └─────────────────────┘
+                                       │
+                    ┌──────────────────┼──────────────────┐
+                    ▼                  ▼                  ▼
+              LiveKit Calls      Web Push / FCM      Redis (opt.)
+```
+
+| Слой | Технологии | Где в репозитории |
+| --- | --- | --- |
+| **Frontend** | React, TypeScript, Vite, Mantine, PWA | `web-react/` |
+| **API** | Express, TypeScript, PostgreSQL | `src/` |
+| **Mobile** | Capacitor (PWA → APK), React Native | `web-react/`, `android-app/` |
+| **Инфра** | Docker Compose, nginx, Supabase migrations | `docker-compose*.yml`, `supabase/` |
+
+---
+
+## Быстрый старт
+
+### Вариант A — всё в Docker (рекомендуется)
 
 ```bash
-bash scripts/package-web-for-server.sh
-# скопируйте release/web/ на сервер, затем:
-npm run prod:deploy:prebuilt
+cp .env.example .env          # или: npm run quickstart
+docker compose up -d --build  # или: npm run prod:start
 ```
 
-Используются **`Dockerfile.web.prebuilt`** и **`docker-compose.web-prebuilt.yml`**.
+Откройте **[http://localhost:8080](http://localhost:8080)** — UI, API и health на одном origin.
 
-### Supabase: `Circuit breaker open` или ошибка на порту 6543
-
-В Dashboard **Connect → Connection string** выберите **Session pooler** и порт **5432**, не **Transaction pooler** (6543). Скопируйте URI в `DATABASE_URL` (пользователь `postgres.<project-ref>`, `?sslmode=require`). Transaction pooler с 6543 может отдавать `Circuit breaker open` при миграциях и `psql` — это не пароль и не ваш сервер, а режим pooler.
-
-### `invalid sslmode value` / `sslmode is invalid`
-
-Должно быть полностью **`sslmode=require`**, не `requir` и не обрезанная строка при копировании. Проверьте конец `DATABASE_URL` в `.env`.
-
-### `SELF_SIGNED_CERT_IN_CHAIN` в логах API (Docker + Supabase)
-
-Задайте **`DB_SSL_REJECT_UNAUTHORIZED=false`** в окружении контейнера (или пересоберите образ с обновлённым `src/config/db.ts`: по умолчанию проверка цепочки CA отключена, пока явно не задано `true`). Без этого Node/pg отклоняет TLS к pooler Supabase.
-
-### Расхождение истории миграций (`migration repair`, `db pull`)
-
-Если `supabase db push` ругается на уже применённые версии или «битую» таблицу истории на удалённой БД:
-
-1. Обновите репозиторий: `git pull`.
-2. Подставьте **номер версии из текста ошибки CLI** (формат `YYYYMMDDHHMMSS`, не имя файла). В репозитории может не быть файла с этим префиксом — тогда версия записана только в удалённой БД.
-3. Пометить миграцию как откатанную (чтобы можно было синхронизировать историю). Версия — число из ошибки CLI, **первым аргументом** после `repair`:
-
-   ```bash
-   set -a && source .env && set +a
-   npx supabase@latest migration repair <VERSION> --status reverted --db-url "$DATABASE_URL"
-   ```
-
-4. Подтянуть схему с удалённой БД в локальные миграции (осторожно: создаст/изменит файлы — сделайте коммит или копию ветки до этого):
-
-   ```bash
-   npx supabase@latest db pull --db-url "$DATABASE_URL"
-   ```
-
-5. Снова `npx supabase@latest db push --db-url "$DATABASE_URL"` или `./scripts/supabase-db-push.sh`.
-
-### Web Push / VAPID keys
-
-Бэкенд использует переменные `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (см. `src/services/pushService.ts`).  
-Если в логах есть `VAPID keys are not configured`, сгенерируйте ключи:
+### Вариант B — разработка в терминале
 
 ```bash
-npm run push:vapid
+cp .env.local.example .env
+# PostgreSQL: docker start istochnik-postgres
+#   или: docker run -d --name istochnik-postgres \
+#        -e POSTGRES_DB=istochik_db -e POSTGRES_USER=postgres \
+#        -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16-alpine
+
+npm ci
+npx ts-node-dev --transpile-only --respawn src/main.ts   # API :40978
+npm run web:dev                                          # Vite :5173
+# или одной командой: npm run start-all
 ```
 
-### Аудио/видеозвонки (LiveKit)
+Vite проксирует `/api`, `/uploads` и `/health` на API — CORS в dev не нужен.
 
-Self-hosted LiveKit + API жизненного цикла. Подробно: [`docs/calls-livekit.md`](docs/calls-livekit.md).
+> Подробный деплой, Portainer, Supabase, VAPID, LiveKit и бэкапы: **[docs/operations.md](docs/operations.md)**.
 
-```bash
-# В .env: LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_PUBLIC_URL, CALLS_ENABLED=true
-# Frontend: VITE_CALLS_ENABLED=true
-docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d
+---
+
+## Структура репозитория
+
+```text
+istochchnik-zhizni/
+├── src/                 # Express API (порт 40978)
+├── web-react/           # React SPA + PWA + Capacitor
+├── android-app/         # React Native (offline-first)
+├── supabase/            # SQL-миграции
+├── docs/                # Документация
+├── scripts/             # Dev / deploy / backup
+└── docker-compose*.yml  # Локальный и прод-стек
 ```
 
-Нужны DNS `call.church-tambov.ru` (WSS), открытые **UDP 50000–50100** и TCP **7881**. За CGNAT медиа из интернета не заработает без внешнего TURN/VPS. Секреты `LIVEKIT_API_*` только на сервере.
+---
 
-Альтернатива:
+## Команды
 
-```bash
-npx web-push generate-vapid-keys
-```
+| Задача | Команда |
+| --- | --- |
+| Dev: API + веб | `npm run start-all` / `npm run dev:start:fg` |
+| Прод-стек | `npm run prod:start` |
+| Статус / логи | `npm run prod:status` · `npm run prod:logs` |
+| Обновление на VPS | `npm run server:update` |
+| Бекап | `npm run backup` |
+| Линт / тесты API | `npm run lint` · `npm test` |
+| Сборка фронта | `npm run web:build` |
+| Type-check API | `npx tsc --noEmit` |
 
-Вставьте значения в backend `.env`:
+---
 
-```env
-VAPID_PUBLIC_KEY=...
-VAPID_PRIVATE_KEY=...
-VAPID_SUBJECT=mailto:your-support@domain.com
-```
+## Документация
 
-После обновления `.env` перезапустите API.
+| Документ | О чём |
+| --- | --- |
+| [Операции и деплой](docs/operations.md) | Docker, VPS, Portainer, Supabase, push, LiveKit |
+| [Бэкап и восстановление](docs/backup.md) | Полный снимок БД + uploads |
+| [Звонки LiveKit](docs/calls-livekit.md) | Self-hosted звонки |
+| [Схема БД](docs/db-schema.md) | Миграции и источники правды |
+| [Логотипы и иконки](docs/logo-guidelines.md) | Визуальный стандарт |
+| [Безопасность](SECURITY.md) | Аудит и рекомендации |
 
-## Project Docs
+---
 
-- [Logo and icon guidelines](docs/logo-guidelines.md)
-- [Backup & restore](docs/backup.md) — полный бекап БД + uploads
+## Требования
 
-## Бекап (БД + uploads)
+- **Node.js 20+**
+- **Docker** (для PostgreSQL и прод-стека)
+- **npm** (lockfiles в корне и в `web-react/`)
 
-Полного бекапа в репозитории раньше не было — используйте:
+Опционально: Redis, Supabase Storage, SMS.ru, Telegram, Firebase, LiveKit.
 
-```bash
-npm run backup                 # создать снимок в backups/
-npm run backup:list
-npm run backup:verify -- backups/latest
-# Восстановление (сначала dry-run, потом с подтверждением):
-bash scripts/restore.sh backups/latest
-CONFIRM_RESTORE=YES bash scripts/restore.sh backups/latest
-```
+---
 
-На проде в `.env` задайте `BACKUP_BEFORE_UPDATE=1` (бекап перед `npm run server:update`) и по возможности `BACKUP_ENCRYPT_PASSPHRASE`. В админке: **Система → Резервная копия** (`/admin?tab=backup`) — создание/скачивание, автобекап и отправка в Telegram. Подробности: [docs/backup.md](docs/backup.md).
+## Лицензия
 
-## Обновление на сервере (одна команда)
+Приватный проект общины. Использование и распространение — по согласованию с владельцами репозитория.
 
-Из каталога клона на VPS:
+---
 
-```bash
-npm run server:update
-# или: bash scripts/server-update.sh
-# или: npm run go:update
-```
-
-Скрипт `scripts/server-update.sh`:
-1. опционально полный бекап (`BACKUP_BEFORE_UPDATE=1`)
-2. `git pull --ff-only` (сбрасывает локальные правки `package*.json`, мешающие merge)
-3. пересобирает образы и перезапускает Docker (`npm ci` внутри Dockerfile)
-4. применяет миграции (`initDb` + media/song CLI), если возможно
-5. ждёт health API/web и пишет лог в `.run/updates/`
-
-Полезные флаги:
-- `BACKUP_BEFORE_UPDATE=1` — бекап БД+uploads до обновления (рекомендуется)
-- `USE_PROD_OVERLAY=1` — overlay с API на loopback
-- `PREBUILT_WEB=1` / `HOST_BUILD=1` — сборка фронта на хосте + `release/web/`
-- `RUN_SUPABASE_PUSH=1` — дополнительно `supabase db push`
-- `SKIP_MIGRATE=1`, `OFFLINE=1`, `SKIP_DOCKER=1`, `SKIP_BACKUP=1` — точечные пропуски шагов
-
-## Docker Deployment (API + Postgres)
-
-### Продакшен на VPS (полный чеклист)
-
-1. **Сервер:** Docker и Docker Compose v2, открыт в фаерволе порт **`WEB_PORT`** (по умолчанию 8080).
-2. **Репозиторий и окружение:** `git clone` → `cp .env.example .env` → задать **`DATABASE_URL`**, для Supabase см. блоки выше (`DB_SSL`, `SKIP_DB_INIT_ON_START`).
-3. **Запуск с закрытым API наружу** (API только на `127.0.0.1`, браузер ходит в nginx на `WEB_PORT`):
-   ```bash
-   npm run prod:deploy
-   ```
-   или
-   ```bash
-   bash scripts/deploy-production.sh
-   ```
-   **Последующие обновления** с GitHub: `npm run server:update` (или `USE_PROD_OVERLAY=1 npm run server:update`).
-   Локально / без ограничения API на loopback: `npm run prod:start` или `docker compose up -d --build`. Остановка этого режима: `npm run prod:stop`. Остановка после `prod:deploy`: `npm run prod:deploy:down`.
-   **Только Postgres + API** (SPA на отдельном хостинге): `cp .env.production .env`, задайте `POSTGRES_PASSWORD` и `DATABASE_URL` с хостом `db`, затем `npm run prod:vps:up` (`docker-compose.prod.yml`). Остановка: `npm run prod:vps:down`.
-4. **Проверка:** `http://<IP>:<WEB_PORT>/` — приложение; `http://<IP>:<WEB_PORT>/health` — health.
-5. **HTTPS:** поставьте на хосте Caddy / Traefik / nginx с TLS и прокси на `127.0.0.1:<WEB_PORT>` (не публикуйте API напрямую в интернет).
-6. **Переменная `PORT` в `.env`** — это порт **на хосте**, который пробрасывается **в** контейнер на **40978**. Внутри контейнера Node всегда слушает **40978** (так устроен прокси в `docker/nginx-web.unified.conf`).
-7. **Portainer, одна БД снаружи (Supabase):** файл **`docker-compose.portainer.stack.yml`** — стек **API + веб** без Postgres; задайте `DATABASE_URL` и `WEB_PORT` в UI.
-
-### 1) Подготовка переменных окружения
-
-```bash
-cp .env.example .env
-```
-
-При необходимости поменяйте значения в `.env`.
-
-Для managed PostgreSQL (например Supabase) можно включить SSL:
-
-```env
-DB_SSL=true
-DB_SSL_REJECT_UNAUTHORIZED=false
-SKIP_DB_INIT_ON_START=true
-```
-
-### 2) Запуск контейнеров
-
-```bash
-docker compose up -d --build
-```
-
-Или одной npm-командой из корня проекта:
-
-```bash
-npm run prod:start
-```
-
-После запуска:
-
-- **Веб-интерфейс:** `http://localhost:8080` (или `WEB_PORT` из `.env`) — nginx отдаёт сборку **web-react** и проксирует `/api` и `/health` к API.
-- API напрямую: `http://localhost:40978`
-- Health: `http://localhost:8080/health` или `http://localhost:40978/health`
-- Корень API: `http://localhost:40978/` (JSON «Server is running»)
-- База данных: внутри Docker-сети на хосте `db:5432`
-
-### Portainer: production workflow (Supabase + API + Web)
-
-Варианты:
-
-- **Один стек (API + веб, сборка Vite в Docker):** `docker-compose.portainer.stack.yml` — образ `Dockerfile.web`.
-- **Два стека (надёжно на слабом VPS):**
-  1. **API** — `docker-compose.portainer.yml` (секреты только через Environment в Portainer).
-  2. **Только nginx + готовая папка** — `docker-compose.portainer.web-runtime.yml` (соберите web локально и залейте в `WEB_DIST_PATH`).
-
-#### API stack variables (Portainer)
-
-```env
-PORT=40978
-DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-1-<region>.pooler.supabase.com:5432/postgres
-DB_SSL=true
-DB_SSL_REJECT_UNAUTHORIZED=false
-DB_DEBUG_LOG=false
-SKIP_DB_INIT_ON_START=true
-AUTH_SESSION_TTL_DAYS=30
-AUTH_MAX_REFRESH_SESSIONS_PER_USER=15
-AUTH_MAX_ACCESS_SESSIONS_PER_USER=30
-```
-
-#### Web runtime deployment
-
-1) Локально соберите фронт:
-
-```bash
-bash scripts/package-web-for-server.sh
-```
-
-2) Скопируйте **`release/web/`** на сервер в `WEB_DIST_PATH` (например, `/opt/istochik-web`):
-
-```bash
-rsync -av --delete release/web/ user@<SERVER_IP>:/opt/istochik-web/
-```
-
-3) Разверните web runtime stack (`docker-compose.portainer.web-runtime.yml`) с переменными:
-
-```env
-WEB_PORT=8080
-WEB_DIST_PATH=/opt/istochik-web
-```
-
-После деплоя:
-- API: `http://<SERVER_IP>:40978`
-- Web: `http://<SERVER_IP>:8080`
-
-### 3) Остановка
-
-```bash
-docker compose down
-```
-
-Или:
-
-```bash
-npm run prod:stop
-```
-
-Чтобы удалить volume с данными Postgres:
-
-```bash
-docker compose down -v
-```
-
-### Быстрые прод-команды (все службы)
-
-```bash
-npm run prod:start    # разовый запуск/перезапуск всех служб в фоне
-npm run prod:status   # статус контейнеров
-npm run prod:logs     # логи всех служб
-npm run prod:restart  # перезапуск всех служб
-npm run prod:stop     # остановка всех служб
-npm run prod:fresh    # полный пересоздание (с удалением volume БД)
-```
-
-## React (Vite) и URL API
-
-В **web-react** базовый URL API задаётся переменной окружения **`VITE_API_BASE_URL`** на этапе сборки. Локально в dev можно не задавать: запросы идут на тот же origin, Vite проксирует `/api` на бэкенд (`vite.config.ts`).
-
-### Сборка web-react для продакшена
-
-```bash
-cd web-react
-VITE_API_BASE_URL=https://your-api-domain.com npm run build
-```
-
-Из корня: передайте переменную в окружении перед `npm run web:build`.
-
-GitHub Actions (`.github/workflows/web-react.yml`) проверяет сборку `web-react` на `main`.
-
-## Локальный запуск всех сервисов в фоне
-
-```bash
-npm run dev:start      # API + Vite в фоне
-npm run dev:status     # статус фоновых процессов
-npm run dev:logs       # последние логи
-npm run dev:restart    # перезапуск в фоне
-npm run dev:stop       # остановка всех dev-служб
-```
-
-Для запуска в текущем терминале (не в фоне):
-
-```bash
-npm run dev:start:fg
-```
+<p align="center">
+  <sub>Сделано с заботой об общине · <a href="https://istochchnik-zhizni.vercel.app">istochchnik-zhizni.vercel.app</a></sub>
+</p>
