@@ -6,7 +6,7 @@ let isRunning = false;
 
 export function initAppLogCleanupJob(): void {
   cron.schedule(
-    process.env.APP_LOG_CLEANUP_CRON ?? '15 3 * * 0',
+    process.env.APP_LOG_CLEANUP_CRON ?? '15 3 * * *',
     async () => {
       if (process.env.DISABLE_APP_LOG_CLEANUP_CRON === 'true') {
         return;

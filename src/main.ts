@@ -54,6 +54,7 @@ import {
 import { initPushCronJobs } from './cron/pushJobs';
 import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
 import { initBackupJob } from './cron/backupJob';
+import { initAppLogCleanupJob } from './cron/appLogCleanupJob';
 import { initCallsCleanupJob } from './cron/callsCleanup';
 import { logLiveKitBootDiagnostics, probeLiveKitRoomService } from './services/livekitService';
 import callsRoutes, { callInvitationsRouter } from './routes/callsRoutes';
@@ -280,7 +281,8 @@ app.use(analyticsMiddleware);
 app.use((req, res, next) => {
   const startedAt = Date.now();
   const targetPath = (req.originalUrl || req.url || req.path || '').split('?')[0] || '';
-  const shouldLog = targetPath.startsWith('/api/') || targetPath === '/health';
+  // /health дёргает healthcheck контейнера каждые секунды — в журнал не пишем, иначе он забивается шумом.
+  const shouldLog = targetPath.startsWith('/api/');
   if (!shouldLog) {
     next();
     return;
@@ -599,6 +601,7 @@ async function start(): Promise<void> {
   initPushCronJobs();
   initTelegramDispatchJob();
   initBackupJob();
+  initAppLogCleanupJob();
   initCallsCleanupJob();
   startAnalyticsMaintenance();
   logLiveKitBootDiagnostics();

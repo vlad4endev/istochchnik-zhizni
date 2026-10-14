@@ -42,33 +42,55 @@ function safeContext(input: unknown): Record<string, unknown> {
   return input as Record<string, unknown>;
 }
 
+/** Размер пачки при удалении: большие удаления одним запросом долго держат таблицу и раздувают WAL. */
+const CLEANUP_BATCH_SIZE = Math.min(
+  100_000,
+  Math.max(1000, Number(process.env.APP_LOG_CLEANUP_BATCH ?? 20_000)),
+);
+
+/**
+ * Удаляет строки пачками по `ctid` (быстро, без полного скана): `selectOldestSql` должен выбирать `ctid`
+ * самых старых строк, подлежащих удалению, и принимать `$1…$n` из `params` плюс `$last` — лимит пачки.
+ */
+async function deleteInBatches(selectOldestSql: string, params: unknown[]): Promise<number> {
+  if (!pool) return 0;
+  const limitParam = `$${params.length + 1}`;
+  let total = 0;
+  for (;;) {
+    const result = await pool.query(
+      `
+        WITH doomed AS (${selectOldestSql} LIMIT ${limitParam})
+        DELETE FROM app_logs a USING doomed d WHERE a.ctid = d.ctid
+      `,
+      [...params, CLEANUP_BATCH_SIZE],
+    );
+    const deleted = result.rowCount ?? 0;
+    total += deleted;
+    if (deleted < CLEANUP_BATCH_SIZE) return total;
+  }
+}
+
 async function cleanupLogTail(): Promise<number> {
   if (!pool) return 0;
-  const result = await pool.query(
-    `
-      DELETE FROM app_logs
-      WHERE id IN (
-        SELECT id
-        FROM app_logs
-        ORDER BY created_at DESC, id DESC
-        OFFSET $1
-      )
-    `,
+  // Граница: (LOG_LIMIT+1)-я по свежести строка — она и всё старее удаляются.
+  const edge = await pool.query(
+    // created_at::text — чтобы не потерять микросекунды при проходе через JS Date.
+    `SELECT created_at::text AS created_at, id::text AS id FROM app_logs ORDER BY created_at DESC, id DESC OFFSET $1 LIMIT 1`,
     [LOG_LIMIT],
   );
-  return result.rowCount ?? 0;
+  const row = edge.rows[0] as { created_at: string; id: string } | undefined;
+  if (!row) return 0;
+  return deleteInBatches(
+    `SELECT ctid FROM app_logs WHERE (created_at, id) <= ($1::timestamptz, $2::bigint) ORDER BY created_at, id`,
+    [row.created_at, row.id],
+  );
 }
 
 async function cleanupOldLogsByRetention(): Promise<number> {
-  if (!pool) return 0;
-  const result = await pool.query(
-    `
-      DELETE FROM app_logs
-      WHERE created_at < NOW() - ($1::int * INTERVAL '1 day')
-    `,
+  return deleteInBatches(
+    `SELECT ctid FROM app_logs WHERE created_at < NOW() - ($1::int * INTERVAL '1 day') ORDER BY created_at`,
     [LOG_RETENTION_DAYS],
   );
-  return result.rowCount ?? 0;
 }
 
 export async function runAppLogCleanup(): Promise<{
