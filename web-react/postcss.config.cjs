@@ -18,6 +18,8 @@ module.exports = {
   plugins: {
     'postcss-preset-mantine': {},
     'postcss-simple-vars': {
+      // Fontsource unicode-range lines can look like `$vars` to this plugin.
+      silent: true,
       variables: {
         'mantine-breakpoint-xs': '36em',
         'mantine-breakpoint-sm': '48em',
