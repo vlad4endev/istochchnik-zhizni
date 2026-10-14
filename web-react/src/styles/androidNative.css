@@ -1427,3 +1427,14 @@ html.app-android-native:not(.dark) .planner-plan-header button[class*='border-re
 html.app-android-native:not(.dark) .planner-plan-header [class*='text-stone']:not(button):not([class*='rounded-full']) {
   color: rgba(255, 255, 255, 0.86);
 }
+
+/* Админ → «Разделы»: подписи ролей идут отдельной строкой под названием раздела и не рвутся посреди слова. */
+html.app-android-native .app-main-content article > div[class*='flex-1'][class*='flex-wrap'] {
+  flex: 1 1 100%;
+  gap: 8px;
+}
+html.app-android-native .app-main-content article > div[class*='flex-1'][class*='flex-wrap'] > button {
+  white-space: nowrap;
+  min-height: 36px;
+  padding-inline: 12px;
+}
