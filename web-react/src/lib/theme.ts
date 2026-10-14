@@ -1,6 +1,6 @@
 import { createTheme } from '@mantine/core';
 
-import { BRAND_COLORS, COMPONENT_TOKENS, RADII, TYPOGRAPHY } from './designTokens';
+import { BRAND_COLORS, COMPONENT_TOKENS, RADII, SIZES, TYPOGRAPHY } from './designTokens';
 
 export const theme = createTheme({
   primaryColor: 'brand',
@@ -13,8 +13,25 @@ export const theme = createTheme({
     fontWeight: TYPOGRAPHY.headingsFontWeight,
   },
   components: {
-    Button: { defaultProps: { radius: RADII.button } },
-    TextInput: { defaultProps: { radius: RADII.input } },
+    Button: {
+      defaultProps: { radius: RADII.button },
+      styles: {
+        root: {
+          fontFamily: TYPOGRAPHY.fontFamily,
+          fontWeight: 700,
+          minHeight: SIZES.buttonMinH,
+        },
+      },
+    },
+    TextInput: {
+      defaultProps: { radius: RADII.input },
+      styles: {
+        input: {
+          fontFamily: TYPOGRAPHY.fontFamily,
+          minHeight: SIZES.fieldMinH,
+        },
+      },
+    },
     Select: { defaultProps: { radius: RADII.input } },
     Card: {
       defaultProps: {

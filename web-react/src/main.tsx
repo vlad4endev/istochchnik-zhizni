@@ -48,7 +48,27 @@ import { appearanceColorSchemeManager } from './lib/mantineAppearanceColorScheme
 import { theme } from './lib/theme';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
+/* Local fonts (offline / Capacitor) — Onest UI, Playfair Display accents */
+import '@fontsource/onest/400.css';
+import '@fontsource/onest/500.css';
+import '@fontsource/onest/600.css';
+import '@fontsource/onest/700.css';
+import '@fontsource/onest/800.css';
+import '@fontsource/onest/cyrillic-400.css';
+import '@fontsource/onest/cyrillic-500.css';
+import '@fontsource/onest/cyrillic-600.css';
+import '@fontsource/onest/cyrillic-700.css';
+import '@fontsource/onest/cyrillic-800.css';
+import '@fontsource/playfair-display/400-italic.css';
+import '@fontsource/playfair-display/500-italic.css';
+import '@fontsource/playfair-display/600-italic.css';
+import '@fontsource/playfair-display/700-italic.css';
+import '@fontsource/playfair-display/cyrillic-400-italic.css';
+import '@fontsource/playfair-display/cyrillic-500-italic.css';
+import '@fontsource/playfair-display/cyrillic-600-italic.css';
+import '@fontsource/playfair-display/cyrillic-700-italic.css';
 import './index.css';
+import './styles/androidDesignTokens.css';
 import './styles/mobile.css';
 import './styles/compactIphone.css';
 

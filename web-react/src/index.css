@@ -10,33 +10,46 @@ textarea {
 }
 
 :root {
-  --primary: #7d3640;
-  --primary-dark: #5c2830;
-  --accent: #dc2626;
-  --surface: #f4f1ed;
+  /* Phase 8 Android palette — see styles/androidDesignTokens.css + lib/designTokens.ts */
+  --font-ui: 'Onest', system-ui, sans-serif;
+  --font-accent: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --primary: #8a2742;
+  --primary-dark: #5a1826;
+  --accent: #f2b879;
+  --wine: #8a2742;
+  --wine-dark: #5a1826;
+  --gold: #f2b879;
+  --ink: #3a1018;
+  --muted: #6a5555;
+  --surface: #fbf6ef;
   --surface-elevated: #ffffff;
-  --text: #1c1917;
-  --text-secondary: #57534e;
-  --text-muted: #a8a29e;
+  --text: #3a1018;
+  --text-secondary: #6a5555;
+  --text-muted: #6a5555;
   --text-on-primary: #ffffff;
   --member: #6366f1;
   --theme: #0d9488;
   --ministry: #ea580c;
   --backslider: #be185d;
-  --radius: 16px;
-  --shadow: 0 8px 24px rgba(28, 25, 23, 0.06);
+  --radius: 18px;
+  --radius-card: 18px;
+  --radius-card-lg: 20px;
+  --radius-leaf: 30px;
+  --shadow: 0 8px 24px rgba(58, 16, 24, 0.06);
   /* Легче на маленьких экранах — меньше «грязи» при скролле */
-  --shadow-card: 0 2px 12px rgba(28, 25, 23, 0.05);
-  --nav-pill-shadow: 0 -8px 32px rgba(28, 25, 23, 0.09), 0 4px 16px rgba(28, 25, 23, 0.04);
-  --border: rgba(28, 25, 23, 0.1);
-  --border-hover: rgba(28, 25, 23, 0.18);
+  --shadow-card: 0 2px 16px rgba(58, 16, 24, 0.06);
+  --nav-pill-shadow: 0 -8px 32px rgba(58, 16, 24, 0.09), 0 4px 16px rgba(58, 16, 24, 0.04);
+  --border: rgba(58, 16, 24, 0.1);
+  --border-hover: rgba(58, 16, 24, 0.18);
   --bg-base: var(--surface);
   --bg-card: var(--surface-elevated);
-  --bg-elevated: #fafaf9;
+  --bg-elevated: #fff9f2;
   --bg-interactive: #ffffff;
-  --bg-hover: #f5f5f4;
+  --bg-hover: #f5efe6;
   --glass: rgba(255, 255, 255, 0.72);
-  --glass-border: rgba(28, 25, 23, 0.08);
+  --glass-border: rgba(58, 16, 24, 0.08);
+  --header-bg: #230810;
+  --btn-gradient: linear-gradient(135deg, #8a2742 0%, #5a1826 100%);
 
   /* Доступность: масштаб только из панели приложения; системный шрифт ОС не умножаем (иначе на части телефонов завышался). */
   --a11y-font-scale: 1;
@@ -51,7 +64,7 @@ textarea {
    * Литерал, а не var(--primary): акцент темы бывает светлым (#ffff00 в
    * high-contrast, #e895a0 в тёмной) — белые глифы на нём не читались бы.
    */
-  --app-status-bar-bg: #7d3640;
+  --app-status-bar-bg: #230810;
   --sidebar-width: 88px;
   --app-safe-bottom: env(safe-area-inset-bottom, 0px);
   /*
@@ -91,7 +104,7 @@ textarea {
   --studio-nav-text: #374151;
   --studio-nav-text-mute: #6b7280;
   --studio-nav-active-bg: #f3f4f6;
-  --studio-nav-active-text: #7d3640;
+  --studio-nav-active-text: #8a2742;
 
   /* === Студия: редактор === */
   --studio-editor-bg: #f9fafb;
@@ -99,7 +112,7 @@ textarea {
   --studio-editor-border: #e5e7eb;
   --studio-editor-text: #111827;
   --studio-editor-mute: #6b7280;
-  --studio-editor-accent: #7d3640;
+  --studio-editor-accent: #8a2742;
 
   /* === Студия: тулбар === */
   --studio-toolbar-bg: #ffffff;
@@ -125,9 +138,9 @@ textarea {
   --studio-callout-success-text: #064e3b;
 
   /* === Кнопки === */
-  --btn-primary-bg: #7d3640;
+  --btn-primary-bg: #8a2742;
   --btn-primary-text: #ffffff;
-  --btn-primary-hover: #5c2830;
+  --btn-primary-hover: #5a1826;
   --btn-success-bg: #059669;
   --btn-success-text: #ffffff;
   --btn-danger-bg: #dc2626;
@@ -160,15 +173,17 @@ html[data-color-theme='dark'] {
   --bg-hover: #32323c;
   --surface: #121214;
   --surface-elevated: #1c1c22;
-  --text: #f4f3f7;
+  /* Тёплый off-white, не #fff — WCAG AA на тёмном фоне */
+  --text: #e9e5dd;
   --text-secondary: #c4c2ce;
   --text-muted: #9b99a8;
+  --ink: #e9e5dd;
   --text-on-primary: #1c1917;
   --border: rgba(255, 255, 255, 0.12);
   --border-hover: rgba(255, 255, 255, 0.2);
   --primary: #e07a8a;
   --primary-dark: #c55f70;
-  --accent: #f87171;
+  --accent: #f2b879;
   --primary-glow: rgba(224, 122, 138, 0.28);
   --accent-glow: rgba(224, 122, 138, 0.16);
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
@@ -461,13 +476,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    'Helvetica Neue',
-    sans-serif;
+  font-family: var(--font-ui, 'Onest', system-ui, sans-serif);
   background: var(--mantine-color-body, var(--surface));
   color: var(--mantine-color-text, var(--text));
   line-height: var(--a11y-line-height, 1.55);

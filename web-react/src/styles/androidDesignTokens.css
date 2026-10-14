@@ -1,0 +1,319 @@
+/**
+ * Phase 8 — Android design tokens as CSS custom properties.
+ * Consumed by Tailwind (`theme.extend`) and mobile shell components.
+ * Mockup HTML/PNG must never be imported from here.
+ */
+
+:root {
+  /* Typography */
+  --font-ui: 'Onest', system-ui, sans-serif;
+  --font-accent: 'Playfair Display', Georgia, 'Times New Roman', serif;
+
+  /* Light church palette */
+  --surface: #fbf6ef;
+  --surface-elevated: #ffffff;
+  --ink: #3a1018;
+  --muted: #6a5555;
+  --wine: #8a2742;
+  --wine-dark: #5a1826;
+  --gold: #f2b879;
+  --text: var(--ink);
+  --text-secondary: var(--muted);
+  --text-muted: var(--muted);
+  --text-on-primary: #ffffff;
+  --primary: var(--wine);
+  --primary-dark: var(--wine-dark);
+  --accent: var(--gold);
+
+  --header-bg: #230810;
+  --header-orb-wine: #8a2342;
+  --header-orb-gold: #f0a25a;
+  --btn-gradient: linear-gradient(135deg, #8a2742 0%, #5a1826 100%);
+  --grain-opacity: 0.08;
+
+  --bg-base: var(--surface);
+  --bg-card: var(--surface-elevated);
+  --bg-elevated: #fff9f2;
+  --bg-interactive: #ffffff;
+  --bg-hover: #f5efe6;
+
+  --border: rgba(58, 16, 24, 0.1);
+  --border-hover: rgba(58, 16, 24, 0.18);
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(58, 16, 24, 0.08);
+
+  --radius-card: 18px;
+  --radius-card-lg: 20px;
+  --radius-leaf: 30px;
+  --radius-chip: 999px;
+  --radius-btn: 16px;
+  --radius-field: 14px;
+  --radius: var(--radius-card);
+
+  --shadow: 0 8px 24px rgba(58, 16, 24, 0.06);
+  --shadow-card: 0 2px 16px rgba(58, 16, 24, 0.06);
+  --shadow-btn: 0 8px 20px rgba(138, 39, 66, 0.28);
+  --shadow-sheet: 0 -12px 40px rgba(35, 8, 16, 0.18);
+  --nav-pill-shadow: 0 -8px 32px rgba(58, 16, 24, 0.09), 0 4px 16px rgba(58, 16, 24, 0.04);
+  --nav-pill-active-bg: var(--gold);
+  --nav-pill-active-ink: var(--ink);
+
+  --size-btn-h: 52px;
+  --size-field-h: 48px;
+  --size-list-row-h: 52px;
+  --size-header-btn: 36px;
+  --size-header-title: 23px;
+  --size-header-subtitle: 12.5px;
+  --size-leaf-overlap: 88px;
+  --size-fab: 56px;
+
+  --app-status-bar-bg: #230810;
+
+  --btn-primary-bg: var(--wine);
+  --btn-primary-text: #ffffff;
+  --btn-primary-hover: var(--wine-dark);
+  --btn-ghost-bg: transparent;
+  --btn-ghost-text: var(--ink);
+  --btn-ghost-hover: rgba(138, 39, 66, 0.08);
+
+  --studio-nav-active-text: var(--wine);
+  --studio-editor-accent: var(--wine);
+}
+
+/* Mobile + Capacitor shell: mockup nav height 84px */
+@media (max-width: 430px) {
+  :root {
+    --app-bottom-nav-bar-height: 84px;
+    --app-bottom-nav-row-pad-y: 0.35rem;
+  }
+}
+
+html.app-native-shell {
+  --app-bottom-nav-bar-height: 84px;
+  --app-bottom-nav-row-pad-y: 0.35rem;
+}
+
+/* Musician / stage surfaces (scoped to song chrome) */
+[data-song-theme='black'],
+.theme-musician[data-song-theme='black'],
+.theme-musician:not([data-song-theme]) {
+  --surface: #0b0b0d;
+  --surface-elevated: #151518;
+  --bg-card: #1e1e22;
+  --bg-base: #0b0b0d;
+  --bg-elevated: #1e1e22;
+  --text: #e9e5dd;
+  --text-secondary: #938e86;
+  --text-muted: #938e86;
+  --ink: #e9e5dd;
+  --muted: #938e86;
+  --primary: #e8b35f;
+  --primary-dark: #c4923a;
+  --accent: #e8b35f;
+  --gold: #e8b35f;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-hover: rgba(255, 255, 255, 0.14);
+  --shadow-card: 0 2px 16px rgba(0, 0, 0, 0.45);
+  --btn-primary-bg: #e8b35f;
+  --btn-primary-text: #0b0b0d;
+  --btn-primary-hover: #f0c57a;
+  --btn-ghost-text: #e9e5dd;
+  --btn-ghost-hover: rgba(255, 255, 255, 0.06);
+  color-scheme: dark;
+}
+
+[data-song-theme='dark'] {
+  --surface: #151518;
+  --surface-elevated: #1e1e22;
+  --bg-card: #1e1e22;
+  --bg-base: #151518;
+  --bg-elevated: #25252a;
+  --text: #e9e5dd;
+  --text-secondary: #938e86;
+  --text-muted: #938e86;
+  --ink: #e9e5dd;
+  --muted: #938e86;
+  --primary: #e8b35f;
+  --primary-dark: #c4923a;
+  --accent: #e8b35f;
+  --gold: #e8b35f;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-hover: rgba(255, 255, 255, 0.14);
+  --btn-primary-bg: #e8b35f;
+  --btn-primary-text: #0b0b0d;
+  color-scheme: dark;
+}
+
+[data-song-theme='light'] {
+  --surface: #fbf6ef;
+  --surface-elevated: #ffffff;
+  --bg-card: #ffffff;
+  --bg-base: #fbf6ef;
+  --text: #3a1018;
+  --text-secondary: #6a5555;
+  --text-muted: #6a5555;
+  --ink: #3a1018;
+  --muted: #6a5555;
+  --primary: #8a2742;
+  --primary-dark: #5a1826;
+  --accent: #f2b879;
+  --gold: #f2b879;
+  --border: rgba(58, 16, 24, 0.1);
+  color-scheme: light;
+}
+
+/* Dark header band with soft orbs (used by AppHeader) */
+.app-header-band {
+  position: relative;
+  overflow: hidden;
+  background: var(--header-bg);
+  color: #fbf6ef;
+  isolation: isolate;
+}
+
+.app-header-band__orb {
+  pointer-events: none;
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(48px);
+  opacity: 0.55;
+  z-index: 0;
+}
+
+.app-header-band__orb--wine {
+  width: 180px;
+  height: 180px;
+  top: -60px;
+  left: -40px;
+  background: var(--header-orb-wine);
+}
+
+.app-header-band__orb--gold {
+  width: 160px;
+  height: 160px;
+  top: -40px;
+  right: -30px;
+  background: var(--header-orb-gold);
+  opacity: 0.4;
+}
+
+.app-header-band__grain {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
+.app-header-band > *:not(.app-header-band__orb):not(.app-header-band__grain) {
+  position: relative;
+  z-index: 2;
+}
+
+/* Rounded content leaf sitting on header */
+.app-leaf {
+  position: relative;
+  z-index: 2;
+  margin-top: calc(-1 * var(--size-leaf-overlap));
+  border-radius: var(--radius-leaf) var(--radius-leaf) 0 0;
+  background: var(--surface);
+  min-height: 120px;
+}
+
+.app-card {
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+}
+
+.app-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 32px;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-chip);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--wine) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wine) 18%, transparent);
+}
+
+.app-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-btn-h);
+  padding: 0 1.25rem;
+  border-radius: var(--radius-btn);
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--btn-primary-text);
+  background: var(--btn-gradient);
+  box-shadow: var(--shadow-btn);
+  border: none;
+  white-space: nowrap;
+}
+
+.app-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-btn-h);
+  padding: 0 1.25rem;
+  border-radius: var(--radius-btn);
+  font-family: var(--font-ui);
+  font-weight: 650;
+  font-size: 15px;
+  color: var(--btn-ghost-text);
+  background: var(--btn-ghost-bg);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.app-field {
+  min-height: var(--size-field-h);
+  border-radius: var(--radius-field);
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  padding: 0 0.875rem;
+}
+
+.app-accent-phrase {
+  font-family: var(--font-accent);
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* Gold active pill for bottom nav (mobile + Capacitor) */
+@media (max-width: 430px) {
+  nav.app-bottom-nav .app-bottom-nav__tab.is-active .app-bottom-nav__icon {
+    background: var(--nav-pill-active-bg);
+    color: var(--nav-pill-active-ink);
+    box-shadow: 0 4px 12px rgba(242, 184, 121, 0.45);
+  }
+
+  nav.app-bottom-nav .app-bottom-nav__tab.is-active {
+    color: var(--ink);
+  }
+}
+
+html.app-native-shell nav.app-bottom-nav .app-bottom-nav__tab.is-active .app-bottom-nav__icon {
+  background: var(--nav-pill-active-bg);
+  color: var(--nav-pill-active-ink);
+  box-shadow: 0 4px 12px rgba(242, 184, 121, 0.45);
+}
+
+html.app-native-shell nav.app-bottom-nav .app-bottom-nav__tab.is-active {
+  color: var(--ink);
+}

@@ -44,3 +44,7 @@ release/web/*
 fix_db.ts
 tmp_logo_process.dart
 new.sh
+
+# Android design mockups (spec only — never ship in bundle)
+_design-android/
+design-android/
