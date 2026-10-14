@@ -373,3 +373,49 @@ html.app-android-native .studio-mobile-nav a {
 html.app-android-native .studio-mobile-nav a[aria-current='page'] {
   color: var(--ac-amber);
 }
+
+/* ───────── Диалог: шапка чата ───────── */
+
+html.app-android-native .chat-header {
+  color: #fff;
+  border-bottom: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background:
+    radial-gradient(120% 160% at 8% -30%, rgba(194, 69, 95, 0.55), transparent 60%),
+    radial-gradient(90% 140% at 100% 10%, rgba(240, 162, 90, 0.3), transparent 62%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+}
+
+html.app-android-native .chat-header .truncate {
+  color: #fff;
+}
+
+html.app-android-native .chat-header .truncate + .truncate,
+html.app-android-native .chat-header .truncate + div .truncate {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+html.app-android-native .chat-header button {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+}
+
+html.app-android-native .chat-header {
+  isolation: isolate;
+  padding-bottom: 16px;
+}
+
+html.app-android-native .chat-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 18px;
+  z-index: -1;
+  background: var(--tg-bg, var(--surface));
+  border-radius: 24px 24px 0 0;
+}
