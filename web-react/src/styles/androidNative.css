@@ -1,0 +1,301 @@
+/*
+ * Оформление Android-приложения «Моя церковь» (макеты «Моя церковь — Android»).
+ * Подключается только в Capacitor/Android (см. lib/androidNativeTheme.ts) и действует
+ * под классом html.app-android-native. Разметка, экраны и логика те же, что в PWA.
+ *
+ * Палитра: бордовый градиент шапки и таб-бара, кремовая шторка контента, янтарный акцент.
+ */
+
+html.app-android-native:not(.dark, [data-mantine-color-scheme='dark'], [data-color-theme='dark']) {
+  --primary: #8a2742;
+  --primary-dark: #5a1826;
+  --surface: #fbf6ef;
+  --text: #3a1018;
+  --text-secondary: #6a5555;
+  --text-muted: #8f7c79;
+  --radius: 20px;
+  --shadow: 0 8px 22px rgba(90, 24, 38, 0.07);
+  --shadow-card: 0 1px 0 rgba(90, 24, 38, 0.05), 0 8px 22px rgba(90, 24, 38, 0.06);
+  --border: rgba(90, 24, 38, 0.1);
+  --border-hover: rgba(90, 24, 38, 0.18);
+  --glass-border: rgba(90, 24, 38, 0.08);
+  --btn-primary-bg: #8a2742;
+  --btn-primary-hover: #5a1826;
+  --studio-nav-active-text: #8a2742;
+  --studio-editor-accent: #8a2742;
+  /* Полоса под статус-баром продолжает градиент шапки. */
+  --app-status-bar-bg: #7a1f3a;
+
+  --ac-amber: #f2b879;
+  --ac-amber-ink: #4b1620;
+  --ac-night: #230810;
+  --ac-badge: #ff5c7a;
+  --ac-font: 'Onest', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ac-serif: 'Playfair Display', Georgia, serif;
+}
+
+html.app-android-native,
+html.app-android-native body,
+html.app-android-native button,
+html.app-android-native input,
+html.app-android-native select,
+html.app-android-native textarea {
+  font-family: var(--ac-font);
+}
+
+html.app-android-native:not(.dark, [data-mantine-color-scheme='dark'], [data-color-theme='dark']) body {
+  background-color: #fbf6ef;
+  color: #3a1018;
+}
+
+/* ───────── Шапка экрана: бордовый градиент и «шторка» контента ───────── */
+
+html.app-android-native .app-page-header {
+  position: relative;
+  isolation: isolate;
+  height: auto;
+  min-height: 68px;
+  align-items: flex-start;
+  padding-top: 14px;
+  padding-bottom: 26px;
+  border-radius: 0;
+  background:
+    radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
+    radial-gradient(90% 120% at 100% 10%, rgba(240, 162, 90, 0.34), transparent 62%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+}
+
+html.app-android-native .app-page-header h1 {
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+/* Кремовая шторка со скруглением 30px наезжает на шапку снизу. */
+html.app-android-native .app-page-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 26px;
+  z-index: -1;
+  background: var(--surface);
+  border-radius: 30px 30px 0 0;
+}
+
+/* ───────── Нижняя панель: тёмное стекло и янтарная «пилюля» активной вкладки ───────── */
+
+html.app-android-native nav.app-bottom-nav {
+  background: rgba(30, 7, 16, 0.97);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 -12px 40px rgba(20, 4, 8, 0.35);
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab.is-active {
+  color: #fff;
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab .app-bottom-nav__label {
+  font-weight: 500;
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab.is-active .app-bottom-nav__label {
+  font-weight: 700;
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab .app-bottom-nav__icon {
+  width: 3.625rem;
+  height: 1.875rem;
+  border-radius: 999px;
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab .app-bottom-nav__icon.is-active {
+  background: var(--ac-amber);
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab .app-bottom-nav__glyph {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab .app-bottom-nav__icon.is-active .app-bottom-nav__glyph,
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab .bottom-nav-active-icon {
+  color: var(--ac-amber-ink);
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell .app-bottom-nav__badge {
+  background: var(--ac-badge);
+  --tw-ring-color: #2a0b15;
+}
+
+/* ───────── Мессенджер: список чатов ───────── */
+
+html.app-android-native:not(.dark, [data-mantine-color-scheme='dark'], [data-color-theme='dark']) {
+  --tg-bg: #fbf6ef;
+  --tg-surface: #ffffff;
+  --tg-surface-elevated: #fbf6ef;
+  --tg-border: rgba(90, 24, 38, 0.08);
+  --tg-border-strong: rgba(90, 24, 38, 0.14);
+  --tg-text: #3a1018;
+  --tg-text-secondary: #6a5555;
+  --tg-text-muted: #8f7c79;
+  --tg-row-divider: rgba(90, 24, 38, 0.08);
+  --messenger-brand: #8a2742;
+  --tg-bubble-out: linear-gradient(145deg, #8a2742 0%, #5a1826 100%);
+  --tg-bubble-out-solid: #8a2742;
+  --tg-bubble-out-shadow: 0 2px 12px rgba(90, 24, 38, 0.2);
+}
+
+html.app-android-native .tg-sidebar-header {
+  position: relative;
+  isolation: isolate;
+  min-height: 68px;
+  align-items: flex-start;
+  padding: 14px 20px 26px;
+  border-bottom: none;
+  background:
+    radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
+    radial-gradient(90% 120% at 100% 10%, rgba(240, 162, 90, 0.34), transparent 62%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+}
+
+html.app-android-native .tg-sidebar-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 26px;
+  z-index: -1;
+  background: var(--surface);
+  border-radius: 30px 30px 0 0;
+}
+
+html.app-android-native .tg-sidebar-title {
+  color: #fff;
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+html.app-android-native .tg-compose-btn-sm {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+html.app-android-native .tg-calls-btn-sm {
+  border-radius: 14px;
+  color: var(--ac-amber-ink);
+  background: linear-gradient(160deg, #f5c48c 0%, #e9a24f 100%);
+  box-shadow: 0 8px 18px rgba(20, 4, 8, 0.35);
+}
+
+html.app-android-native .tg-chatlist-root {
+  background: var(--surface);
+}
+
+html.app-android-native .tg-chatlist-toolbar {
+  padding: 4px 16px 10px;
+  border-bottom: none;
+  background: var(--surface);
+}
+
+html.app-android-native .tg-chatlist-search {
+  min-height: 46px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(90, 24, 38, 0.1);
+}
+
+html.app-android-native .tg-smart-tab {
+  min-height: 40px;
+  background: #fff !important;
+  color: var(--primary-dark) !important;
+  box-shadow: inset 0 0 0 1px rgba(90, 24, 38, 0.1);
+  font-weight: 600;
+}
+
+html.app-android-native .tg-smart-tab--active,
+html.app-android-native .tg-smart-tab--active:hover,
+html.app-android-native .tg-smart-tab--active:focus,
+html.app-android-native .tg-smart-tab--active:focus-visible {
+  background: linear-gradient(135deg, #8a2742, #5a1826) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 18px rgba(90, 24, 38, 0.28);
+}
+
+html.app-android-native .tg-chatlist-scroll {
+  margin: 0 12px;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: var(--shadow-card);
+}
+
+html.app-android-native .tg-chatlist-scroll > ul {
+  background: transparent;
+}
+
+/* ───────── Лента ───────── */
+
+html.app-android-native .app-feed-header {
+  position: relative;
+  isolation: isolate;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  min-height: 68px;
+  padding: 14px 20px 26px;
+  background:
+    radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
+    radial-gradient(90% 120% at 100% 10%, rgba(240, 162, 90, 0.34), transparent 62%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+  color: #fff;
+}
+
+html.app-android-native .app-feed-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 26px;
+  z-index: -1;
+  background: var(--surface);
+  border-radius: 30px 30px 0 0;
+}
+
+html.app-android-native .app-feed-header > *:first-child {
+  order: 2;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+}
+
+html.app-android-native .app-feed-header > *:nth-child(2) {
+  order: 1;
+  justify-self: start;
+}
+
+html.app-android-native .app-feed-header > *:nth-child(n + 3) {
+  display: none;
+}
+
+html.app-android-native .app-feed-header button {
+  color: #fff;
+}
+
+html.app-android-native .app-feed-header__title {
+  font-family: var(--ac-font);
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #fff;
+}

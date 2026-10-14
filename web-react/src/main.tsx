@@ -11,6 +11,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 
 import { scheduleHideNativeSplashAfterPaint } from './lib/hideNativeSplash';
+import { initAndroidNativeTheme } from './lib/androidNativeTheme';
 import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
 import { initTelegramWebApp } from './lib/telegramWebApp';
 import { client } from './lib/appwrite';
@@ -202,6 +203,7 @@ if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_WDYR === 'true') {
     });
 }
 
+initAndroidNativeTheme();
 applyNativeShellViewportLock();
 window.addEventListener('load', () => applyNativeShellViewportLock());
 initTelegramWebApp();

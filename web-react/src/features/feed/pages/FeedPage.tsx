@@ -399,7 +399,7 @@ export function FeedPage() {
 
   return (
     <div className={`${profileShell.profileRoot} ${styles.page}`} data-profile-root>
-      <header className={`${styles.topBar} ${headerScrolled ? styles.topBarScrolled : ''}`}>
+      <header className={`app-feed-header ${styles.topBar} ${headerScrolled ? styles.topBarScrolled : ''}`}>
         <button
           type="button"
           className={styles.iconBtn}
@@ -418,7 +418,7 @@ export function FeedPage() {
             aria-label="Порядок ленты"
             onClick={() => setSortMenuOpen((v) => !v)}
           >
-            <h1 className={styles.brand}>Лента</h1>
+            <h1 className={`app-feed-header__title ${styles.brand}`}>Лента</h1>
             <LuChevronDown
               className={`${styles.brandChevron} ${sortMenuOpen ? styles.brandChevronOpen : ''}`}
               strokeWidth={2.5}
