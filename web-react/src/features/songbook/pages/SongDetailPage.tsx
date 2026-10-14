@@ -164,11 +164,23 @@ export function SongDetailPage() {
       <div className={`${sectionHeroStickyClass} z-30`}>
         <PageHeader title={s.title} subtitle={keyBadge ?? undefined} />
       </div>
-      <div className="sticky top-0 z-20 border-b border-[var(--sd-border)] bg-[var(--sd-surface)]/92 px-3 py-2 backdrop-blur md:px-4">
+      <div
+        className={[
+          'sticky top-0 z-20 border-b px-3 py-2 backdrop-blur md:px-4',
+          stageMode
+            ? 'border-white/[0.07] bg-[#0B0B0D]'
+            : 'border-[var(--sd-border)] bg-[var(--sd-surface)]/92',
+        ].join(' ')}
+      >
         <div className="flex min-h-[44px] items-center gap-2">
           <Link
             to="/songbook"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[var(--sd-text-secondary)] hover:bg-[var(--sd-bg-elevated)]"
+            className={[
+              'inline-flex h-9 w-9 items-center justify-center rounded-xl',
+              stageMode
+                ? 'border border-white/[0.07] bg-[#1E1E22] text-[#E9E5DD]'
+                : 'text-[var(--sd-text-secondary)] hover:bg-[var(--sd-bg-elevated)]',
+            ].join(' ')}
             aria-label="Назад"
           >
             <LuArrowLeft className="h-5 w-5" />
@@ -177,15 +189,36 @@ export function SongDetailPage() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
               {numberLabel ? (
-                <span className="shrink-0 text-xs font-semibold text-[var(--sd-text-muted)]">#{numberLabel}</span>
+                <span
+                  className={[
+                    'shrink-0 text-xs font-semibold',
+                    stageMode ? 'text-[#BDB7AD]' : 'text-[var(--sd-text-muted)]',
+                  ].join(' ')}
+                >
+                  #{numberLabel}
+                </span>
               ) : null}
               {keyBadge ? (
-                <span className="inline-flex items-center rounded-full bg-[var(--sd-bg-elevated)] px-2 py-0.5 text-[10px] font-semibold text-[var(--sd-text-secondary)]">
+                <span
+                  className={[
+                    'inline-flex min-w-[40px] items-center justify-center rounded-[10px] px-2.5 py-1.5 text-[15px] font-extrabold',
+                    stageMode
+                      ? 'border border-[rgba(232,179,95,0.35)] bg-[#2A2216] text-[#E8B35F]'
+                      : 'rounded-full bg-[var(--sd-bg-elevated)] px-2 py-0.5 text-[10px] font-semibold text-[var(--sd-text-secondary)]',
+                  ].join(' ')}
+                >
                   {keyBadge}
                 </span>
               ) : null}
               {s.tempo != null ? (
-                <span className="inline-flex items-center rounded-full bg-[var(--sd-bg-elevated)] px-2 py-0.5 text-[10px] font-semibold text-[var(--sd-text-secondary)]">
+                <span
+                  className={[
+                    'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                    stageMode
+                      ? 'bg-[#1E1E22] text-[#BDB7AD]'
+                      : 'bg-[var(--sd-bg-elevated)] text-[var(--sd-text-secondary)]',
+                  ].join(' ')}
+                >
                   {s.tempo} BPM
                 </span>
               ) : null}
@@ -195,7 +228,12 @@ export function SongDetailPage() {
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--sd-border)] bg-[var(--sd-surface-elevated)] text-[var(--sd-text-secondary)] hover:bg-[var(--sd-bg-elevated)]"
+            className={[
+              'inline-flex h-9 w-9 items-center justify-center rounded-xl border',
+              stageMode
+                ? 'border-white/[0.07] bg-[#1E1E22] text-[#E9E5DD]'
+                : 'border-[var(--sd-border)] bg-[var(--sd-surface-elevated)] text-[var(--sd-text-secondary)] hover:bg-[var(--sd-bg-elevated)]',
+            ].join(' ')}
             aria-label="Настройки"
           >
             <LuSettings2 className="h-5 w-5" />

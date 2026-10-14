@@ -27,7 +27,6 @@ import { AppAvatar } from '../../../components/AppAvatar';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 
 import {
-  ADMIN_SIDEBAR_GROUPS,
   ADMIN_TABS,
   adminTabNavLabel,
   parseAdminTabParam,
@@ -442,46 +441,109 @@ function btnDangerOutline(className = '') {
   return `rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 ${className}`;
 }
 
+const ADMIN_HUB_TINT: Partial<Record<AdminTabId, { bg: string; fg: string }>> = {
+  members: { bg: '#F6E3EA', fg: '#B23A58' },
+  requests: { bg: '#E3F3E8', fg: '#1E8A4C' },
+  calendar: { bg: '#F3E6E4', fg: '#8A2742' },
+  events: { bg: '#FBE9D6', fg: '#C0792E' },
+  roles: { bg: '#ECE9FB', fg: '#6B5BE0' },
+  telegram: { bg: '#DDF1F0', fg: '#12756F' },
+  backup: { bg: '#EDE6DE', fg: '#6A5555' },
+  releases: { bg: '#FCE4E8', fg: '#C0304F' },
+  sections: { bg: '#ECE9FB', fg: '#6B5BE0' },
+  notifications: { bg: '#FBE9D6', fg: '#C0792E' },
+  journal: { bg: '#E3F3E8', fg: '#1E8A4C' },
+};
+
 export function AdminPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = parseAdminTabParam(searchParams.get('tab'));
   const [showAddUser, setShowAddUser] = useState(false);
+  const [hubQuery, setHubQuery] = useState('');
+  const hasExplicitTab = searchParams.has('tab');
+  /** На телефоне без ?tab= — хаб как в Admin.dc.html; с ?tab= или на lg+ — контент раздела. */
+  const showMobileHub = !hasExplicitTab;
 
   const setTab = (next: AdminTabId) => {
-    if (next === 'members') {
-      setSearchParams({}, { replace: true });
-      return;
-    }
     setSearchParams({ tab: next }, { replace: true });
   };
 
   const meta = ADMIN_TABS.find((t) => t.id === tab)!;
+  const hubTabs = useMemo(() => {
+    const q = hubQuery.trim().toLowerCase();
+    if (!q) return ADMIN_TABS;
+    return ADMIN_TABS.filter(
+      (t) =>
+        t.label.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q) ||
+        adminTabNavLabel(t.id).toLowerCase().includes(q),
+    );
+  }, [hubQuery]);
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-6xl px-3 py-3 sm:px-4 sm:py-4 shell:px-6 shell:py-6">
       <div className="min-w-0">
-        {/* На узких экранах разделы в основном меню недоступны — компактный переключатель */}
-        <label className="mb-3 block lg:hidden">
-          <span className="sr-only">Раздел админки</span>
-          <select
-            value={tab}
-            onChange={(e) => setTab(parseAdminTabParam(e.target.value))}
-            className="w-full rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3 py-2.5 text-sm font-medium text-stone-800 shadow-sm"
-          >
-            {ADMIN_SIDEBAR_GROUPS.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.items.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {adminTabNavLabel(item.id)}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
+        {showMobileHub ? (
+          <div className="mb-3 flex flex-col gap-3 lg:hidden">
+            <label className="flex min-h-[48px] items-center gap-2.5 rounded-2xl bg-white px-4 text-[14.5px] text-[#8a7774] shadow-[inset_0_0_0_1px_rgba(90,24,38,0.1)]">
+              <LuSearch className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+              <span className="sr-only">Поиск по разделам админки</span>
+              <input
+                type="search"
+                value={hubQuery}
+                onChange={(e) => setHubQuery(e.target.value)}
+                placeholder="Поиск по разделам админки"
+                className="min-w-0 flex-1 border-0 bg-transparent py-3 text-ink outline-none placeholder:text-[#8a7774]"
+              />
+            </label>
+            <div className="overflow-hidden rounded-[20px] bg-white shadow-[0_1px_0_rgba(90,24,38,0.05),0_8px_22px_rgba(90,24,38,0.06)]">
+              {hubTabs.map((item, idx) => {
+                const Icon = item.Icon;
+                const tint = ADMIN_HUB_TINT[item.id] ?? { bg: '#F6E3EA', fg: '#B23A58' };
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setTab(item.id)}
+                    className={[
+                      'flex w-full items-center gap-3 px-3.5 py-3 text-left',
+                      idx > 0 ? 'border-t border-[rgba(90,24,38,0.07)]' : '',
+                    ].join(' ')}
+                  >
+                    <span
+                      className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[14px]"
+                      style={{ background: tint.bg, color: tint.fg }}
+                      aria-hidden
+                    >
+                      <Icon className="h-[21px] w-[21px]" strokeWidth={1.9} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[15.5px] font-bold text-ink">{adminTabNavLabel(item.id)}</span>
+                      <span className="mt-0.5 block text-[12.5px] leading-snug text-muted">{item.description}</span>
+                    </span>
+                    <LuChevronDown className="h-5 w-5 shrink-0 -rotate-90 text-[#b09a97]" strokeWidth={1.9} aria-hidden />
+                  </button>
+                );
+              })}
+              {hubTabs.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-muted">Ничего не найдено</p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
+        <div className={showMobileHub ? 'hidden lg:block' : ''}>
         <div className="mb-4 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
           <div className="min-w-[11rem] flex-1">
+            {hasExplicitTab ? (
+              <button
+                type="button"
+                className="mb-1 inline-flex items-center gap-1 text-xs font-semibold text-wine lg:hidden"
+                onClick={() => setSearchParams({}, { replace: true })}
+              >
+                ← Все разделы
+              </button>
+            ) : null}
             <h2 className="text-base font-medium tracking-tight text-stone-900">{meta.label}</h2>
             <p className="mt-0.5 truncate text-xs text-stone-500">{meta.description}</p>
           </div>
@@ -513,6 +575,7 @@ export function AdminPage() {
         {tab === 'releases' && <AppReleasesSection />}
         {tab === 'diagnostics' && <DiagnosticsDashboardSection />}
         {tab === 'integrations' && <IntegrationsSection />}
+        </div>
       </div>
     </div>
   );

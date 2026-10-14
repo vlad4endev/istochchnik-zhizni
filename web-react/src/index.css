@@ -777,8 +777,8 @@ html.dark .bottom-nav:not(.app-bottom-nav) .bottom-nav-active-icon {
 }
 
 html.dark .app-bottom-nav .bottom-nav-active-icon {
-  color: var(--primary);
-  filter: drop-shadow(0 0 6px var(--primary-glow));
+  color: #4b1620;
+  filter: none;
 }
 
 /* Global dark-mode bridge for legacy Tailwind light utilities.

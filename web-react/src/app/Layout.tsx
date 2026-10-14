@@ -14,6 +14,7 @@ import {
   LuDisc3,
   LuEllipsis,
   LuLayoutDashboard,
+  LuLogOut,
   LuNewspaper,
   LuMessageCircle,
   LuMic,
@@ -114,14 +115,16 @@ function normalizeMinistryDirection(value: unknown): string {
 
 function navIconClass(isActive: boolean, compact: boolean) {
   return [
-    compact ? 'app-bottom-nav__glyph h-[1.125rem] w-[1.125rem] sm:h-5 sm:w-5' : 'h-5 w-5',
+    compact ? 'app-bottom-nav__glyph h-[1.25rem] w-[1.25rem] sm:h-5 sm:w-5' : 'h-5 w-5',
     'shrink-0 transition-colors duration-200',
     isActive && compact ? 'bottom-nav-active-icon' : '',
     isActive && compact
-      ? 'text-primary max-phone:text-ink'
+      ? 'text-[#4B1620]'
       : isActive
         ? 'text-white'
-        : 'text-gray-400 group-hover:text-primary',
+        : compact
+          ? 'text-[rgba(255,255,255,0.72)]'
+          : 'text-gray-400 group-hover:text-primary',
   ].join(' ');
 }
 
@@ -191,20 +194,18 @@ function navClassName(isActive: boolean, compact = false): string {
     : 'group flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors duration-200 tap-highlight-transparent';
   const active = isActive
     ? compact
-      ? 'is-active text-primary nav-active-glow'
+      ? 'is-active text-white'
       : 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow'
     : compact
-      ? 'text-stone-500 hover:text-stone-700 active:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 dark:active:text-stone-100'
+      ? 'text-[rgba(255,255,255,0.68)] hover:text-white/90 active:text-white'
       : 'text-stone-600 hover:bg-stone-100 shell:hover:bg-stone-50';
   return `${base} ${active}`.replace(/\s+/g, ' ').trim();
 }
 
 function mobileBottomTabIconClass(isActive: boolean): string {
   return [
-    'app-bottom-nav__icon relative z-10 grid h-9 w-9 place-items-center overflow-visible rounded-full transition-colors duration-200 max-phone:h-10 max-phone:w-10',
-    isActive
-      ? 'is-active bg-primary/[0.12] max-phone:bg-gold max-phone:text-ink max-phone:shadow-[0_4px_12px_rgba(242,184,121,0.45)]'
-      : 'group-active:bg-black/[0.05] dark:group-active:bg-white/[0.08]',
+    'app-bottom-nav__icon relative z-10 grid place-items-center overflow-visible transition-colors duration-200',
+    isActive ? 'is-active' : '',
   ].join(' ');
 }
 
@@ -232,21 +233,28 @@ function splitMobileNavTabs(visible: NavItem[]): { primary: NavItem[]; overflow:
   return { primary, overflow };
 }
 
-const MOBILE_MORE_TILE_BASE =
-  'relative flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-2xl border px-1.5 py-2.5 text-center transition-[transform,background-color,border-color,color] duration-150 tap-highlight-transparent motion-reduce:transition-none motion-reduce:active:scale-100 active:scale-[0.97]';
+const MORE_TILE_TINT: Record<string, { bg: string; fg: string }> = {
+  '/songbook': { bg: '#F6E3EA', fg: '#B23A58' },
+  '/service-planner': { bg: '#E3F3E8', fg: '#1E8A4C' },
+  '/schedules': { bg: '#FBE9D6', fg: '#C0792E' },
+  '/studio': { bg: '#ECE9FB', fg: '#6B5BE0' },
+  '/sermons': { bg: '#DDF1F0', fg: '#12756F' },
+  '/my-sermons': { bg: '#F6E3EA', fg: '#B23A58' },
+  '/broadcast': { bg: '#FCE4E8', fg: '#C0304F' },
+  '/resources': { bg: '#E3F3E8', fg: '#1E8A4C' },
+  '/settings': { bg: '#EDE6DE', fg: '#6A5555' },
+  '/events': { bg: '#FBE9D6', fg: '#C0792E' },
+  '/admin': { bg: '#F3E6E4', fg: '#8A2742' },
+  '/analytics': { bg: '#DDF1F0', fg: '#12756F' },
+};
 
-function mobileMoreTileClass(active: boolean): string {
-  return [
-    MOBILE_MORE_TILE_BASE,
-    active
-      ? 'border-primary/25 bg-primary/12 text-primary shadow-sm dark:border-primary/35 dark:bg-primary/20'
-      : 'border-stone-200/70 bg-stone-50/90 text-stone-800 hover:border-stone-300/90 hover:bg-white dark:border-stone-700/80 dark:bg-stone-800/55 dark:text-stone-100 dark:hover:border-stone-600 dark:hover:bg-stone-800/90',
-  ].join(' ');
+function moreTileTint(to: string): { bg: string; fg: string } {
+  return MORE_TILE_TINT[to] ?? { bg: '#F6E3EA', fg: '#B23A58' };
 }
 
 function MobileMoreBadge({ count }: { count: number }) {
   return (
-    <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white dark:ring-stone-900">
+    <span className="absolute -right-1.5 -top-1.5 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#FF5C7A] px-1 text-[10px] font-extrabold leading-none text-white shadow-[0_0_0_2px_#fff]">
       {formatNavBadgeCount(count)}
     </span>
   );
@@ -258,24 +266,29 @@ function MobileNavOverflow({
   feedUnreadCount,
   pathname,
   isAdminRoute,
-  activeAdminTab,
   adminBadgeFor,
+  profileTo,
+  onLogout,
 }: {
   items: NavItem[];
   activityBadgeTotal: number;
   feedUnreadCount: number;
   pathname: string;
   isAdminRoute: boolean;
-  activeAdminTab: AdminTabId;
   adminBadgeFor: (id: AdminTabId) => number | null;
+  profileTo: string;
+  onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(isAdminRoute);
   const menuId = useId();
   const touchStartYRef = useRef<number | null>(null);
 
-  const sectionItems = useMemo(() => items.filter((item) => item.to !== '/admin'), [items]);
+  const sectionItems = useMemo(
+    () => items.filter((item) => item.to !== '/admin' && item.to !== '/analytics'),
+    [items],
+  );
   const hasAdmin = items.some((item) => item.to === '/admin');
+  const hasAnalytics = items.some((item) => item.to === '/analytics');
   const adminBadgeTotal = useMemo(() => {
     if (!hasAdmin) return 0;
     return ADMIN_TABS.reduce((sum, tab) => sum + (adminBadgeFor(tab.id) ?? 0), 0);
@@ -284,10 +297,6 @@ function MobileNavOverflow({
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
-
-  useEffect(() => {
-    if (isAdminRoute) setAdminOpen(true);
-  }, [isAdminRoute]);
 
   useEffect(() => {
     if (!open) return;
@@ -303,7 +312,11 @@ function MobileNavOverflow({
     };
   }, [open]);
 
-  const isMoreTabActive = items.some((item) => mobileBottomRouteActive(pathname, item.to));
+  const isMoreTabActive =
+    open ||
+    items.some((item) => mobileBottomRouteActive(pathname, item.to)) ||
+    pathname.startsWith('/settings') ||
+    pathname.startsWith('/profile');
 
   return (
     <div className="app-bottom-nav__cell relative min-w-0">
@@ -316,7 +329,7 @@ function MobileNavOverflow({
         aria-controls={menuId}
       >
         <span className={mobileBottomTabIconClass(isMoreTabActive)}>
-          <LuEllipsis className={navIconClass(isMoreTabActive, true)} strokeWidth={2} aria-hidden />
+          <LuEllipsis className={navIconClass(isMoreTabActive, true)} strokeWidth={isMoreTabActive ? 3 : 2} aria-hidden />
         </span>
         <span className={mobileBottomTabLabelClass()}>Ещё</span>
       </button>
@@ -325,14 +338,14 @@ function MobileNavOverflow({
           <button
             type="button"
             aria-label="Закрыть дополнительные разделы"
-            className="absolute inset-0 bg-black/45 backdrop-blur-[2px] transition-opacity dark:bg-black/60"
+            className="absolute inset-0 bg-[rgba(20,4,8,0.5)] backdrop-blur-[2px] transition-opacity"
             onClick={() => setOpen(false)}
           />
           <div
             id={menuId}
             role="region"
             aria-label="Дополнительные разделы"
-            className="app-mobile-nav-more-sheet absolute bottom-0 left-0 right-0 mx-auto w-full max-h-[min(78dvh,640px)] max-w-lg overflow-hidden rounded-t-[1.35rem] border border-stone-200/90 border-b-0 bg-[color-mix(in_srgb,var(--surface-elevated)_96%,transparent)] shadow-[0_-12px_48px_rgba(28,25,23,0.14)] backdrop-blur-xl dark:border-stone-700/80 dark:bg-[color-mix(in_srgb,var(--surface-elevated)_94%,transparent)] dark:shadow-[0_-12px_48px_rgba(0,0,0,0.45)]"
+            className="app-mobile-nav-more-sheet absolute bottom-0 left-0 right-0 mx-auto w-full max-h-[min(86dvh,720px)] max-w-lg overflow-hidden rounded-t-[30px] shadow-[0_-18px_50px_rgba(20,4,8,0.35)]"
             onTouchStart={(e) => {
               touchStartYRef.current = e.touches[0]?.clientY ?? null;
             }}
@@ -345,16 +358,17 @@ function MobileNavOverflow({
               }
             }}
           >
-            <div className="flex max-h-[min(78dvh,640px)] flex-col">
+            <div className="flex max-h-[min(86dvh,720px)] flex-col">
               <div className="shrink-0 pt-2">
-                <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-stone-300/90 dark:bg-stone-600" aria-hidden />
+                <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-[rgba(90,24,38,0.18)]" aria-hidden />
                 <div className="flex items-center justify-between gap-3 px-4 pb-2.5 pt-0.5">
-                  <p className="text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100">
-                    Все разделы
-                  </p>
+                  <div className="min-w-0">
+                    <p className="text-[23px] font-extrabold tracking-tight text-ink leading-tight">Ещё</p>
+                    <p className="mt-0.5 text-[12.5px] text-muted truncate">Все разделы приложения</p>
+                  </div>
                   <button
                     type="button"
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-stone-500 transition-colors hover:bg-black/[0.06] hover:text-stone-800 active:scale-95 dark:text-stone-400 dark:hover:bg-white/10 dark:hover:text-stone-100"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-black/[0.06] hover:text-ink active:scale-95"
                     aria-label="Закрыть"
                     onClick={() => setOpen(false)}
                   >
@@ -362,13 +376,15 @@ function MobileNavOverflow({
                   </button>
                 </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(0.75rem,env(safe-area-inset-bottom,12px))] pt-0.5 sm:px-4 [webkit-overflow-scrolling:touch]">
-                <div className="mx-auto flex w-full max-w-full flex-col gap-4">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom,12px))] pt-1 [webkit-overflow-scrolling:touch]">
+                <div className="mx-auto flex w-full max-w-full flex-col gap-3">
                   {sectionItems.length > 0 ? (
-                    <div className="app-mobile-sections-grid grid w-full grid-cols-2 gap-2.5 min-[360px]:grid-cols-3 min-[440px]:grid-cols-4 sm:gap-3">
+                    <div className="grid w-full grid-cols-3 gap-2.5">
                       {sectionItems.map((item) => {
                         const Icon = item.Icon;
+                        const tint = moreTileTint(item.to);
                         const badge = navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount);
+                        const active = mobileBottomRouteActive(pathname, item.to);
                         return (
                           <PrefetchNavLink
                             key={item.to}
@@ -377,17 +393,26 @@ function MobileNavOverflow({
                             queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
                             staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
                             onClick={() => setOpen(false)}
-                            className={({ isActive }) => mobileMoreTileClass(isActive)}
+                            className={() => ['app-more-tile', active ? 'is-active' : ''].join(' ')}
                           >
-                            {({ isActive }) => (
+                            {() => (
                               <>
-                                <span className="relative inline-flex shrink-0">
-                                  <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                                {item.to === '/broadcast' ? (
+                                  <span className="absolute right-2 top-2 rounded-full bg-[#F1E3E0] px-2 py-0.5 text-[11px] font-extrabold tracking-wide text-wine">
+                                    LIVE
+                                  </span>
+                                ) : null}
+                                <span className="relative">
+                                  <span
+                                    className="app-more-tile__icon"
+                                    style={{ background: tint.bg, color: tint.fg }}
+                                    aria-hidden
+                                  >
+                                    <Icon className="h-[21px] w-[21px]" strokeWidth={1.9} />
+                                  </span>
                                   {badge > 0 ? <MobileMoreBadge count={badge} /> : null}
                                 </span>
-                                <span className="line-clamp-2 w-full max-w-[5.5rem] text-[11px] font-semibold leading-snug sm:max-w-none sm:text-xs">
-                                  {item.label}
-                                </span>
+                                <span className="app-more-tile__label line-clamp-2">{item.label}</span>
                               </>
                             )}
                           </PrefetchNavLink>
@@ -396,71 +421,96 @@ function MobileNavOverflow({
                     </div>
                   ) : null}
 
-                  {hasAdmin ? (
-                    <section className="app-mobile-more-admin flex flex-col gap-2.5" aria-label="Админ">
-                      <button
-                        type="button"
-                        onClick={() => setAdminOpen((v) => !v)}
-                        className={[
-                          'flex min-h-[44px] w-full items-center gap-2.5 rounded-xl px-1 py-1 text-left transition-colors',
-                          isAdminRoute ? 'text-primary' : 'text-stone-600 dark:text-stone-300',
-                        ].join(' ')}
-                        aria-expanded={adminOpen}
-                      >
-                        <span
-                          className={[
-                            'grid h-8 w-8 shrink-0 place-items-center rounded-lg',
-                            isAdminRoute
-                              ? 'bg-primary/15 text-primary'
-                              : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400',
-                          ].join(' ')}
-                          aria-hidden
-                        >
-                          <LuShield className="h-4 w-4" strokeWidth={2} />
-                        </span>
-                        <span className="min-w-0 flex-1 text-[13px] font-semibold tracking-tight">Админ</span>
-                        {adminBadgeTotal > 0 && !adminOpen ? (
-                          <span className="inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-extrabold leading-none text-white">
-                            {formatNavBadgeCount(adminBadgeTotal)}
-                          </span>
+                  {hasAdmin || hasAnalytics ? (
+                    <section className="flex flex-col gap-2" aria-label="Администрирование">
+                      <div className="app-more-section-label">ДЛЯ АДМИНИСТРАТОРОВ</div>
+                      <div className="app-more-list">
+                        {hasAdmin ? (
+                          <Link
+                            to="/admin"
+                            onClick={() => setOpen(false)}
+                            className="app-more-list__row"
+                            aria-current={isAdminRoute ? 'page' : undefined}
+                          >
+                            <span
+                              className="app-more-list__icon"
+                              style={{ background: '#F3E6E4', color: '#8A2742' }}
+                              aria-hidden
+                            >
+                              <LuShield className="h-[21px] w-[21px]" strokeWidth={1.9} />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="app-more-list__title">Админ</span>
+                              <span className="app-more-list__sub block">Люди, заявки, роли, рассылки</span>
+                            </span>
+                            {adminBadgeTotal > 0 ? (
+                              <span className="mr-1 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#F1E3E0] px-1.5 text-[11px] font-extrabold text-wine">
+                                {formatNavBadgeCount(adminBadgeTotal)}
+                              </span>
+                            ) : null}
+                            <LuChevronRight className="h-5 w-5 shrink-0 text-[#b09a97]" strokeWidth={1.9} aria-hidden />
+                          </Link>
                         ) : null}
-                        <LuChevronDown
-                          className={[
-                            'h-4 w-4 shrink-0 text-stone-400 transition-transform duration-200',
-                            adminOpen ? 'rotate-0' : '-rotate-90',
-                          ].join(' ')}
-                          strokeWidth={2.25}
-                          aria-hidden
-                        />
-                      </button>
-                      {adminOpen ? (
-                        <div className="app-mobile-sections-grid grid w-full grid-cols-2 gap-2.5 min-[360px]:grid-cols-3 min-[440px]:grid-cols-4 sm:gap-3">
-                          {ADMIN_TABS.map((tab) => {
-                            const Icon = tab.Icon;
-                            const active = isAdminRoute && activeAdminTab === tab.id;
-                            const badge = adminBadgeFor(tab.id);
-                            return (
-                              <Link
-                                key={tab.id}
-                                to={adminTabPath(tab.id)}
-                                onClick={() => setOpen(false)}
-                                aria-current={active ? 'page' : undefined}
-                                className={mobileMoreTileClass(active)}
-                              >
-                                <span className="relative inline-flex shrink-0">
-                                  <Icon className={navIconClass(active, true)} strokeWidth={2} aria-hidden />
-                                  {badge != null ? <MobileMoreBadge count={badge} /> : null}
-                                </span>
-                                <span className="line-clamp-2 w-full max-w-[5.5rem] text-[11px] font-semibold leading-snug sm:max-w-none sm:text-xs">
-                                  {tab.navLabel ?? tab.label}
-                                </span>
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      ) : null}
+                        {hasAnalytics ? (
+                          <Link
+                            to="/analytics"
+                            onClick={() => setOpen(false)}
+                            className="app-more-list__row"
+                            aria-current={pathname.startsWith('/analytics') ? 'page' : undefined}
+                          >
+                            <span
+                              className="app-more-list__icon"
+                              style={{ background: '#DDF1F0', color: '#12756F' }}
+                              aria-hidden
+                            >
+                              <LuChartColumnBig className="h-[21px] w-[21px]" strokeWidth={1.9} />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="app-more-list__title">Аналитика</span>
+                              <span className="app-more-list__sub block">Посещаемость разделов</span>
+                            </span>
+                            <LuChevronRight className="h-5 w-5 shrink-0 text-[#b09a97]" strokeWidth={1.9} aria-hidden />
+                          </Link>
+                        ) : null}
+                      </div>
                     </section>
                   ) : null}
+
+                  <div className="app-more-list">
+                    <Link to={profileTo} onClick={() => setOpen(false)} className="app-more-list__row">
+                      <span
+                        className="app-more-list__icon"
+                        style={{ background: '#FBE9D6', color: '#C0792E' }}
+                        aria-hidden
+                      >
+                        <LuUser className="h-[21px] w-[21px]" strokeWidth={1.9} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="app-more-list__title">Моя страница</span>
+                        <span className="app-more-list__sub block">Профиль, лента, безопасность</span>
+                      </span>
+                      <LuChevronRight className="h-5 w-5 shrink-0 text-[#b09a97]" strokeWidth={1.9} aria-hidden />
+                    </Link>
+                    <button
+                      type="button"
+                      className="app-more-list__row"
+                      onClick={() => {
+                        setOpen(false);
+                        onLogout();
+                      }}
+                    >
+                      <span
+                        className="app-more-list__icon"
+                        style={{ background: '#FCE4E8', color: '#C0304F' }}
+                        aria-hidden
+                      >
+                        <LuLogOut className="h-[21px] w-[21px]" strokeWidth={1.9} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="app-more-list__title">Выйти из аккаунта</span>
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1335,7 +1385,7 @@ export function Layout() {
             <nav
               ref={bottomNavRef}
               className={[
-                'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex w-full min-w-0 max-w-full flex-col border-t border-black/[0.07] bg-[var(--surface-elevated)] pb-[max(0px,env(safe-area-inset-bottom,0px))] shadow-[0_-1px_0_rgba(0,0,0,0.05),0_-10px_40px_rgba(28,25,23,0.08)] lg:hidden transition-opacity duration-150 ease-out dark:border-white/[0.08] dark:shadow-[0_-1px_0_rgba(255,255,255,0.06),0_-12px_40px_rgba(0,0,0,0.35)] [padding-left:max(0px,env(safe-area-inset-left,0px))] [padding-right:max(0px,env(safe-area-inset-right,0px))]',
+                'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex w-full min-w-0 max-w-full flex-col pb-[max(0px,env(safe-area-inset-bottom,0px))] lg:hidden transition-opacity duration-150 ease-out [padding-left:max(0px,env(safe-area-inset-left,0px))] [padding-right:max(0px,env(safe-area-inset-right,0px))]',
                 showMobileBottomNav ? 'opacity-100' : 'pointer-events-none opacity-0',
               ].join(' ')}
               aria-label="Основная навигация"
@@ -1374,7 +1424,7 @@ export function Layout() {
                             <span className={mobileBottomTabIconClass(isActive)}>
                               <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
                               {badge > 0 ? (
-                                <span className="app-bottom-nav__badge absolute -right-1 -top-0.5 z-[5] inline-flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white dark:ring-[color-mix(in_srgb,var(--surface-elevated)_92%,transparent)]">
+                                <span className="app-bottom-nav__badge absolute -right-0.5 -top-1 z-[5] inline-flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-[#FF5C7A] px-1 text-[10.5px] font-bold leading-none text-white shadow-[0_0_0_2px_#2a0b15]">
                                   {formatNavBadgeCount(badge)}
                                 </span>
                               ) : null}
@@ -1394,8 +1444,9 @@ export function Layout() {
                     feedUnreadCount={feedUnreadCount}
                     pathname={location.pathname}
                     isAdminRoute={isAdminRoute}
-                    activeAdminTab={activeAdminTab}
                     adminBadgeFor={adminBadgeFor}
+                    profileTo={publicProfileTo}
+                    onLogout={() => void handleLogout()}
                   />
                 ) : null}
               </div>

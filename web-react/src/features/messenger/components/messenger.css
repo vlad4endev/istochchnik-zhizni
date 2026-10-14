@@ -199,14 +199,14 @@ html[data-mantine-color-scheme='dark'] .tg-chatlist-search {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 36px;
-  padding: 7px 14px;
+  min-height: 38px;
+  padding: 0 16px;
   border: none;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.07) !important;
-  color: #555 !important;
-  font-size: 13px;
-  font-weight: 500;
+  border-radius: 19px;
+  background: #fff !important;
+  color: #3a1018 !important;
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
   touch-action: manipulation;
@@ -216,8 +216,8 @@ html[data-mantine-color-scheme='dark'] .tg-chatlist-search {
   opacity: 1 !important;
   visibility: visible !important;
   transform: translateZ(0);
-  transition: background-color 0.16s ease, color 0.16s ease, transform 0.12s ease;
-  box-shadow: none;
+  transition: background-color 0.16s ease, color 0.16s ease, transform 0.12s ease, box-shadow 0.16s ease;
+  box-shadow: inset 0 0 0 1px rgba(90, 24, 38, 0.12);
 }
 
 html[data-mantine-color-scheme='dark'] .tg-smart-tab {
@@ -249,13 +249,14 @@ html[data-mantine-color-scheme='dark'] .tg-smart-tab:not(.tg-smart-tab--active):
 .tg-smart-tab--active:hover,
 .tg-smart-tab--active:focus,
 .tg-smart-tab--active:focus-visible {
-  background: var(--messenger-brand, #8b1a1a) !important;
+  background: linear-gradient(135deg, #8a2742, #5a1826) !important;
   color: #fff !important;
   font-weight: 600;
+  box-shadow: 0 8px 16px rgba(90, 24, 38, 0.25);
 }
 
 .tg-smart-tab--active:is(:active, .tg-smart-tab--pressed) {
-  background: #741616 !important;
+  background: linear-gradient(135deg, #7a1f38, #4a1420) !important;
   color: #fff !important;
   opacity: 1 !important;
   transform: scale(0.97) translateZ(0) !important;
@@ -667,20 +668,55 @@ html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--presse
     font-weight: 800;
   }
 
-  .tg-compose-btn-sm,
   .tg-calls-btn-sm,
   .tg-density-toggle {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.22);
     color: #fbf6ef;
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+  }
+
+  .tg-compose-btn-sm {
+    background: linear-gradient(135deg, #f2b879, #d9923d);
+    color: #4b1620;
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.3);
+    border-radius: 16px;
+  }
+
+  .tg-compose-btn-sm:hover {
+    background: linear-gradient(135deg, #f5c48a, #e0a04a);
+  }
+
+  .tg-sidebar-title {
+    font-size: 23px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .tg-chatlist-toolbar {
+    background: var(--surface, #fbf6ef);
+    border-bottom: none;
+    padding: 10px 16px 12px;
+    gap: 10px;
+  }
+
+  .tg-chatlist-search {
+    min-height: 48px;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: inset 0 0 0 1px rgba(90, 24, 38, 0.1);
+    padding: 0 16px;
+    color: #8a7774;
   }
 }
 
 .tg-compose-btn-sm {
-  width: 40px;
-  height: 40px;
+  width: 46px;
+  height: 46px;
   min-width: 44px;
   min-height: 44px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: none;
   display: flex;
   align-items: center;
@@ -2575,14 +2611,11 @@ html.dark .msg-reaction-chip--active .msg-reaction-count {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 6px 8px;
-  border-radius: 999px;
-  background: var(--tg-surface);
-  border: 1px solid rgba(28, 25, 23, 0.1);
-  box-shadow:
-    0 12px 40px rgba(28, 25, 23, 0.14),
-    0 2px 10px rgba(28, 25, 23, 0.08),
-    0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  padding: 4px 6px;
+  border-radius: 24px;
+  background: rgba(251, 246, 239, 0.96);
+  border: none;
+  box-shadow: 0 10px 28px rgba(20, 4, 8, 0.22);
   animation: tg-scale-up 0.14s ease-out;
   max-width: min(100vw - 16px, 340px);
   flex-wrap: nowrap;
@@ -2605,12 +2638,12 @@ html.dark .msg-reaction-floating {
 .msg-reaction-floating__emoji {
   display: grid;
   place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2.375rem;
+  height: 2.375rem;
   border: none;
   border-radius: 999px;
   background: transparent;
-  font-size: 1.45rem;
+  font-size: 1.5rem;
   line-height: 1;
   cursor: pointer;
   transition: transform 0.12s ease, background 0.12s ease;
