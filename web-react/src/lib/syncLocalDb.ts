@@ -32,6 +32,7 @@ async function flushOutbox(): Promise<void> {
         method: item.method,
         url: item.url,
         data: item.body,
+        headers: item.idemKey ? { 'Idempotency-Key': item.idemKey } : undefined,
         silentErrorToast: true,
         skipAuthClearOn401: true,
         skipLocalOutbox: true,

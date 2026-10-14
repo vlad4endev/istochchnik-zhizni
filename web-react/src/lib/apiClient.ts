@@ -5,7 +5,7 @@ import { useAuthStore } from '../features/auth/authStore';
 import { performAuthRefresh } from './authRefresh';
 import { COOKIE_ONLY_SESSION_TOKEN, isCookieOnlySessionToken } from './authSessionConstants';
 import { resolveAxiosBaseURL } from './config';
-import { isLocalDbAvailable, isQueueableWrite, localDbGet, localDbPut, outboxAdd } from './localDb';
+import { isLocalDbAvailable, isQueueableWrite, localDbGet, localDbPut, newIdempotencyKey, outboxAdd } from './localDb';
 import { isSessionTeardownActive } from './sessionTeardown';
 import { emitAppToast } from './uiFeedback';
 
@@ -214,6 +214,12 @@ apiClient.interceptors.request.use((config) => {
     // Prevent stale bearer token after logout/session clear.
     delete (next.headers as Record<string, unknown>).Authorization;
   }
+  // Android: действия из очереди получают ключ идемпотентности уже при первой отправке, поэтому
+  // автоповтор после обрыва или отправка из очереди SQLite не выполнит действие на сервере дважды.
+  if (isLocalDbAvailable() && isQueueableWrite(next.method, next.url) && next.headers) {
+    const existing = (next.headers as AxiosHeaders).get?.('Idempotency-Key');
+    if (!existing) next.headers['Idempotency-Key'] = newIdempotencyKey();
+  }
   // FormData: не удалять boundary — убираем только случайный явный Content-Type (multipart без boundary ломает загрузку).
   if (typeof FormData !== 'undefined' && next.data instanceof FormData && next.headers) {
     delete (next.headers as Record<string, unknown>)['Content-Type'];
@@ -266,7 +272,9 @@ apiClient.interceptors.response.use(
       } catch {
         payload = undefined;
       }
-      if (await outboxAdd(cfg.method ?? 'post', cfg.url ?? '', payload)) {
+      const idemRaw = (cfg.headers as AxiosHeaders | undefined)?.get?.('Idempotency-Key');
+      const idemKey = typeof idemRaw === 'string' && idemRaw ? idemRaw : null;
+      if (await outboxAdd(cfg.method ?? 'post', cfg.url ?? '', payload, idemKey)) {
         return {
           data: { queued: true },
           status: 202,

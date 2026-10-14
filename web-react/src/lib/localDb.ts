@@ -64,9 +64,12 @@ async function openDb(): Promise<SqliteDb | null> {
          url        TEXT NOT NULL,
          body       TEXT,
          created_at INTEGER NOT NULL,
-         attempts   INTEGER NOT NULL DEFAULT 0
+         attempts   INTEGER NOT NULL DEFAULT 0,
+         idem_key   TEXT
        );`,
     );
+    // Таблица могла быть создана предыдущей сборкой без колонки ключа.
+    await db.execute('ALTER TABLE outbox ADD COLUMN idem_key TEXT;').catch(() => undefined);
     return db;
   } catch (error) {
     console.warn('[localDb] SQLite недоступна, работаем без локальной базы', error);
@@ -161,7 +164,14 @@ const QUEUEABLE_WRITES: Array<{ method: string; pattern: RegExp }> = [
 
 const MAX_OUTBOX_ATTEMPTS = 8;
 
-export type OutboxItem = { id: number; method: string; url: string; body: unknown };
+export type OutboxItem = { id: number; method: string; url: string; body: unknown; idemKey: string | null };
+
+/** Ключ идемпотентности: сервер по нему узнаёт повтор того же действия и не выполняет его дважды. */
+export function newIdempotencyKey(): string {
+  const c = globalThis.crypto as Crypto | undefined;
+  if (c?.randomUUID) return c.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
 
 export function isQueueableWrite(method: string | undefined, url: string | undefined): boolean {
   const m = (method ?? '').toLowerCase();
@@ -169,15 +179,27 @@ export function isQueueableWrite(method: string | undefined, url: string | undef
   return QUEUEABLE_WRITES.some((w) => w.method === m && w.pattern.test(path));
 }
 
-export async function outboxAdd(method: string, url: string, body: unknown): Promise<boolean> {
+export async function outboxAdd(
+  method: string,
+  url: string,
+  body: unknown,
+  idemKey: string | null,
+): Promise<boolean> {
   const userKey = currentUserKey();
   if (!userKey || !isQueueableWrite(method, url)) return false;
   const db = await getDb();
   if (!db) return false;
   try {
     await db.run(
-      'INSERT INTO outbox (user_key, method, url, body, created_at) VALUES (?, ?, ?, ?, ?)',
-      [userKey, method.toLowerCase(), normalizeCacheUrl(url), body === undefined ? null : JSON.stringify(body), Date.now()],
+      'INSERT INTO outbox (user_key, method, url, body, created_at, idem_key) VALUES (?, ?, ?, ?, ?, ?)',
+      [
+        userKey,
+        method.toLowerCase(),
+        normalizeCacheUrl(url),
+        body === undefined ? null : JSON.stringify(body),
+        Date.now(),
+        idemKey,
+      ],
     );
     return true;
   } catch {
@@ -192,7 +214,7 @@ export async function outboxList(): Promise<OutboxItem[]> {
   if (!db) return [];
   try {
     const res = await db.query(
-      'SELECT id, method, url, body FROM outbox WHERE user_key = ? AND attempts < ? ORDER BY id',
+      'SELECT id, method, url, body, idem_key FROM outbox WHERE user_key = ? AND attempts < ? ORDER BY id',
       [userKey, MAX_OUTBOX_ATTEMPTS],
     );
     return (res.values ?? []).map((r) => ({
@@ -200,6 +222,7 @@ export async function outboxList(): Promise<OutboxItem[]> {
       method: String(r.method),
       url: String(r.url),
       body: typeof r.body === 'string' ? JSON.parse(r.body) : undefined,
+      idemKey: typeof r.idem_key === 'string' ? r.idem_key : null,
     }));
   } catch {
     return [];

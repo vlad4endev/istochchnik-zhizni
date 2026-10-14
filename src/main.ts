@@ -19,6 +19,7 @@ import { ensureTelegramSendLogsSchema } from './services/telegramSendLogService'
 import { ensureAppReleasesSchema } from './services/appReleasesService';
 import { requireAuthSession, resolveAuthSession } from './middleware/authSession';
 import { enforceRoleAccess, resolveUserRole } from './middleware/roleAccess';
+import { idempotencyMiddleware } from './middleware/idempotency';
 import routes from './routes';
 import authRoutes from './routes/authRoutes';
 import calendarRoutes from './routes/calendarRoutes';
@@ -353,6 +354,7 @@ app.use('/diagnostics', express.static(diagnosticsClientPath));
 
 app.use(resolveUserRole);
 app.use(enforceRoleAccess);
+app.use(idempotencyMiddleware);
 
 app.get('/', (req, res) => {
   res.json({ message: 'Server is running' });
