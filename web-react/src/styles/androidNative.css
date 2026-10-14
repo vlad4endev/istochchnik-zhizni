@@ -299,3 +299,8 @@ html.app-android-native .app-feed-header__title {
   letter-spacing: -0.02em;
   color: #fff;
 }
+
+/* Собственный заголовок страницы заменяется общей шапкой (NativeScreenHeader). */
+html.app-android-native .app-native-hide {
+  display: none !important;
+}

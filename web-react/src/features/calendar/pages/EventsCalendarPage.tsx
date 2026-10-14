@@ -58,6 +58,7 @@ import { resolveMediaPlanForChurchEvent } from '../../mediaSchedule/api';
 import { keys } from '@/lib/queryKeys';
 import { resolvePublicUrl } from '@/lib/resolvePublicUrl';
 import type { CalendarSundayService } from '../sundayServiceTypes';
+import { NativeScreenHeader } from '@/components/layout/NativeScreenHeader';
 
 type ViewMode = 'month' | 'week' | 'day' | 'agenda';
 type FilterMode = 'all' | 'sunday' | 'events';
@@ -738,11 +739,13 @@ export function EventsCalendarPage() {
   const weekdayLabelsMonFirst = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
   return (
+    <>
+    <NativeScreenHeader title="Календарь мероприятий" />
     <div className="min-h-full bg-[var(--surface)] px-3 pb-28 pt-3 sm:px-4 sm:pb-12 sm:pt-4 shell:px-6 md:px-8">
       <div className="mx-auto w-full max-w-6xl space-y-3 sm:space-y-4">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h1 className="text-xl font-extrabold tracking-tight text-stone-900 sm:text-2xl">Календарь мероприятий</h1>
+            <h1 className="app-native-hide text-xl font-extrabold tracking-tight text-stone-900 sm:text-2xl">Календарь мероприятий</h1>
             <p className="mt-1 text-[13px] font-semibold leading-snug text-stone-500 sm:text-sm">
               Воскресные служения, разовые и повторяющиеся мероприятия церкви
             </p>
@@ -1330,5 +1333,6 @@ export function EventsCalendarPage() {
         }}
       />
     </div>
+    </>
   );
 }

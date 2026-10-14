@@ -64,6 +64,7 @@ import {
   formatAssemblyViewHeader,
   paginateAssemblyColumns,
 } from '../utils/musicScheduleWeekView';
+import { NativeScreenHeader } from '@/components/layout/NativeScreenHeader';
 
 const WEEKDAY_LABELS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
@@ -338,6 +339,8 @@ export function MusicSchedulePage() {
   }
 
   return (
+    <>
+    <NativeScreenHeader title="Расписание" />
     <div className="min-h-full bg-[var(--surface)] px-3 pb-28 pt-3 sm:px-4 sm:pb-12 sm:pt-4 shell:px-6 md:px-8">
       <div className="mx-auto w-full max-w-6xl space-y-3 sm:space-y-4">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -346,7 +349,7 @@ export function MusicSchedulePage() {
               <LuUsers className="h-3.5 w-3.5" aria-hidden />
               Музыкальная команда
             </div>
-            <h1 className="mt-2 text-xl font-extrabold tracking-tight text-stone-900 sm:text-2xl">
+            <h1 className="app-native-hide mt-2 text-xl font-extrabold tracking-tight text-stone-900 sm:text-2xl">
               Расписание
             </h1>
             <p className="mt-1 text-[13px] font-semibold leading-snug text-stone-500 sm:text-sm">
@@ -1223,5 +1226,6 @@ export function MusicSchedulePage() {
         />
       </div>
     </div>
+    </>
   );
 }

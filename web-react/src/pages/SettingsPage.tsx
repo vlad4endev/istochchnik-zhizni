@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { LuChevronRight, LuSettings, LuUserRound } from 'react-icons/lu';
+import { NativeScreenHeader } from '@/components/layout/NativeScreenHeader';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { useAppearanceStore } from '../stores/useAppearanceStore';
 import { useAccessibilitySettings } from '@/lib/accessibility/AccessibilityProvider';
@@ -10,9 +11,11 @@ export function SettingsPage() {
   const { state, patchA11y } = useAccessibilitySettings();
 
   return (
+    <>
+    <NativeScreenHeader title="Настройки" />
     <div className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6">
       <section className="rounded-3xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow-card)]">
-        <div className="mb-4">
+        <div className="app-native-hide mb-4">
           <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text)]">Настройки</h1>
           <p className="mt-1 text-sm font-medium text-[var(--text-secondary)]">
             Управление параметрами приложения и профиля.
@@ -111,5 +114,6 @@ export function SettingsPage() {
         </div>
       </section>
     </div>
+    </>
   );
 }
