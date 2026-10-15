@@ -1329,6 +1329,21 @@ export interface BackupSettings {
   telegram_bot_ready: boolean;
 }
 
+export interface BackupComponentsSummary {
+  database: boolean;
+  uploads: boolean;
+  secrets: boolean;
+  env_keys: boolean;
+  env_full_encrypted: boolean;
+  inventory: boolean;
+  settings_snapshot: boolean;
+  server_snapshot: boolean;
+  messenger_summary: boolean;
+  storage: boolean;
+  storage_object_count: number;
+  storage_bytes: number;
+}
+
 export interface BackupListItem {
   id: string;
   created_at: string | null;
@@ -1338,6 +1353,46 @@ export interface BackupListItem {
   has_archive: boolean;
   has_manifest: boolean;
   age_days: number;
+  components: BackupComponentsSummary | null;
+  detailed: boolean;
+}
+
+export interface BackupDetailView {
+  id: string;
+  components: BackupComponentsSummary;
+  inventory: {
+    version: number;
+    created_at: string;
+    tables: Record<string, number | null>;
+    messenger: {
+      conversations: number;
+      messages: number;
+      participants: number;
+      reactions: number;
+      poll_votes: number;
+      pins: number;
+    };
+    members: { total: number; active: number; admins: number };
+    notes: string[];
+  } | null;
+  manifest_text: string | null;
+  server: Record<string, unknown> | null;
+  settings_meta: { keys: string[]; redacted_keys: string[] } | null;
+  messenger_summary: {
+    conversation_count: number;
+    total_messages: number;
+    sample: Array<{
+      id: number;
+      title: string | null;
+      kind: string | null;
+      message_count: number;
+      last_message_at: string | null;
+    }>;
+  } | null;
+  storage: {
+    configured: boolean;
+    buckets: Array<{ name: string; objects: number; bytes: number; error?: string }>;
+  } | null;
 }
 
 export async function fetchBackupSettings(): Promise<{
@@ -1367,8 +1422,24 @@ export async function patchBackupSettings(body: {
   return data;
 }
 
-export async function fetchBackupList(): Promise<{ items: BackupListItem[]; running: boolean }> {
-  const { data } = await apiClient.get<{ items: BackupListItem[]; running: boolean }>('/api/backup/list');
+export async function fetchBackupList(): Promise<{
+  items: BackupListItem[];
+  running: boolean;
+  snapshot_includes?: string[];
+}> {
+  const { data } = await apiClient.get<{
+    items: BackupListItem[];
+    running: boolean;
+    snapshot_includes?: string[];
+  }>('/api/backup/list');
+  return data;
+}
+
+export async function fetchBackupDetail(id: string): Promise<{ detail: BackupDetailView }> {
+  const { data } = await apiClient.get<{ detail: BackupDetailView }>(
+    `/api/backup/${encodeURIComponent(id)}/detail`,
+    { timeout: 5 * 60_000 },
+  );
   return data;
 }
 
@@ -1378,6 +1449,7 @@ export async function createBackup(body?: { send_telegram?: boolean }): Promise<
     id: string;
     archive_path: string | null;
     size_bytes: number;
+    components?: BackupComponentsSummary;
     telegram?: { ok: boolean; sent: number; message: string };
   };
 }> {
@@ -1387,6 +1459,7 @@ export async function createBackup(body?: { send_telegram?: boolean }): Promise<
       id: string;
       archive_path: string | null;
       size_bytes: number;
+      components?: BackupComponentsSummary;
       telegram?: { ok: boolean; sent: number; message: string };
     };
   }>('/api/backup/create', body ?? {}, { timeout: 50 * 60_000 });

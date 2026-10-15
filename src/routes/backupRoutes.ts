@@ -3,6 +3,7 @@ import {
   createBackupHandler,
   deleteBackupHandler,
   downloadBackupHandler,
+  getBackupDetailHandler,
   getBackupSettingsHandler,
   listBackupsHandler,
   patchBackupSettingsHandler,
@@ -16,6 +17,7 @@ router.get('/settings', getBackupSettingsHandler);
 router.patch('/settings', patchBackupSettingsHandler);
 router.get('/list', listBackupsHandler);
 router.post('/create', createBackupHandler);
+router.get('/:id/detail', getBackupDetailHandler);
 router.get('/:id/download', downloadBackupHandler);
 router.post('/:id/send-telegram', sendBackupTelegramHandler);
 router.post('/:id/restore', restoreBackupHandler);

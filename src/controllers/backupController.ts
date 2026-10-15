@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   createFullBackup,
   deleteBackup,
+  getBackupDetail,
   getBackupSettingsAdminView,
   isBackupBusy,
   listBackups,
@@ -190,7 +191,28 @@ export async function listBackupsHandler(req: Request, res: Response): Promise<v
     res.json({
       items,
       running: isBackupBusy(),
+      snapshot_includes: [
+        'database',
+        'uploads',
+        'secrets',
+        'settings',
+        'messenger',
+        'server',
+        'storage',
+      ],
     });
+  } catch (error) {
+    const mapped = mapBackupError(error);
+    res.status(mapped.status).json({ error: mapped.error });
+  }
+}
+
+export async function getBackupDetailHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const id = typeof req.params.id === 'string' ? req.params.id : '';
+  try {
+    const detail = await getBackupDetail(id);
+    res.json({ detail });
   } catch (error) {
     const mapped = mapBackupError(error);
     res.status(mapped.status).json({ error: mapped.error });

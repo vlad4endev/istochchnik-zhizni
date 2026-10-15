@@ -18,6 +18,13 @@ import {
   sendTelegramDocumentToChat,
   sendTelegramTextToChat,
 } from './telegramService';
+import {
+  enrichBackupDirectory,
+  readBackupDetail,
+  summarizeComponentsFromDir,
+  type BackupComponentsSummary,
+  type BackupDetailView,
+} from './backupDetailedSnapshot';
 
 const PROJECT_ROOT = resolveProjectRoot();
 const TELEGRAM_DOCUMENT_MAX_BYTES = 49 * 1024 * 1024; // запас до лимита Bot API ~50MB
@@ -87,12 +94,16 @@ export interface BackupListItem {
   has_archive: boolean;
   has_manifest: boolean;
   age_days: number;
+  /** Детальный состав снимка (БД, файлы, переписки, настройки, сервер, Storage). */
+  components: BackupComponentsSummary | null;
+  detailed: boolean;
 }
 
 export interface BackupCreateResult {
   id: string;
   archive_path: string | null;
   size_bytes: number;
+  components?: BackupComponentsSummary;
   telegram?: BackupTelegramSendResult;
 }
 
@@ -266,6 +277,8 @@ export async function listBackups(): Promise<BackupListItem[]> {
       }
     }
 
+    const components = hasDir ? await summarizeComponentsFromDir(dirPath) : null;
+
     items.push({
       id,
       created_at: created ? created.toISOString() : null,
@@ -275,6 +288,8 @@ export async function listBackups(): Promise<BackupListItem[]> {
       has_archive: hasArchive,
       has_manifest: hasManifest,
       age_days: ageDays(created),
+      components,
+      detailed: Boolean(components?.inventory || components?.server_snapshot),
     });
   }
 
@@ -530,6 +545,18 @@ export async function createFullBackup(options?: {
       }
 
       const { id, dirPath } = await runBackupScript(settings.retention_days);
+
+      await updateBackupRunStatus({
+        last_run_at: new Date().toISOString(),
+        last_run_status: 'running',
+        last_run_message: `Детальный снимок: инвентарь, настройки, сервер, Storage…`,
+        last_run_backup_id: id,
+      });
+
+      const components = await enrichBackupDirectory(dirPath, PROJECT_ROOT, {
+        includeStorage: process.env.BACKUP_SKIP_STORAGE !== '1',
+      });
+
       const archivePath = path.join(backupsRoot(), `${id}.tar.gz`);
       await createArchiveFromDir(dirPath, archivePath);
       const size_bytes = await pathSize(archivePath);
@@ -543,14 +570,27 @@ export async function createFullBackup(options?: {
         telegram = await sendBackupViaTelegram(id, settings.telegram_target);
       }
 
+      const detailBits = [
+        components.database ? 'БД' : null,
+        components.uploads ? 'uploads' : null,
+        components.messenger_summary ? 'переписки' : null,
+        components.settings_snapshot ? 'настройки' : null,
+        components.server_snapshot ? 'сервер' : null,
+        components.storage
+          ? `Storage(${components.storage_object_count})`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(', ');
+
       await updateBackupRunStatus({
         last_run_at: new Date().toISOString(),
         last_run_status: 'ok',
-        last_run_message: `Готово: ${id} (${(size_bytes / (1024 * 1024)).toFixed(2)} МБ)`,
+        last_run_message: `Готово: ${id} (${(size_bytes / (1024 * 1024)).toFixed(2)} МБ) — ${detailBits}`,
         last_run_backup_id: id,
       });
 
-      return { id, archive_path: archivePath, size_bytes, telegram };
+      return { id, archive_path: archivePath, size_bytes, components, telegram };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       await updateBackupRunStatus({
@@ -784,4 +824,10 @@ export async function getBackupSettingsAdminView(): Promise<BackupSettingsAdminV
   };
 }
 
-export type { BackupSettingsDocument };
+/** Детальный просмотр состава бекапа (инвентарь, настройки, сервер, Storage). */
+export async function getBackupDetail(id: string): Promise<BackupDetailView> {
+  const dirPath = await ensureBackupDirectory(id);
+  return readBackupDetail(id, dirPath);
+}
+
+export type { BackupSettingsDocument, BackupComponentsSummary, BackupDetailView };

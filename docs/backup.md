@@ -6,14 +6,15 @@
 
 В веб-админке (`/admin?tab=backup`) доступны:
 
-- создание полного архива и скачивание;
+- создание **полного детального снимка** и скачивание;
+- просмотр **состава** копии (инвентарь БД, переписки, настройки, сервер, Storage);
 - список копий, удаление;
 - **восстановление** из выбранной копии (сначала безопасная проверка, затем запись с подтверждением `ВОССТАНОВИТЬ`);
 - хранение **не дольше 30 дней** (настраивается 1–30);
 - автобекап по расписанию (ежедневно / по дням недели);
 - отправка архива администратору через Telegram-бота.
 
-API (только admin): `/api/backup/settings`, `/list`, `/create`, `/:id/download`, `/:id/send-telegram`, `POST /:id/restore`, `DELETE /:id`.
+API (только admin): `/api/backup/settings`, `/list`, `/create`, `/:id/detail`, `/:id/download`, `/:id/send-telegram`, `POST /:id/restore`, `DELETE /:id`.
 
 ### Восстановление из админки
 
@@ -26,11 +27,10 @@ API (только admin): `/api/backup/settings`, `/list`, `/create`, `/:id/down
 
 ## Бекап и восстановление (CLI)
 
-В проекте **не было** готового полного бекапа (только замечания про Docker volumes). Добавлены скрипты:
-
 | Команда | Назначение |
 |---------|------------|
-| `npm run backup` | Полный снимок: PostgreSQL + uploads + secrets |
+| `npm run backup` | Полный снимок: PostgreSQL + uploads + secrets + server.snapshot |
+| `npm run backup:enrich -- backups/latest` | Детализация: inventory, settings, messenger, Storage |
 | `npm run backup:list` | Список каталогов в `backups/` |
 | `npm run backup:verify -- backups/latest` | SHA256 + gzip + заголовок pg_dump |
 | `bash scripts/restore.sh <dir>` | Dry-run проверка |
@@ -38,23 +38,33 @@ API (только admin): `/api/backup/settings`, `/list`, `/create`, `/:id/down
 
 Каталог `backups/` в `.gitignore` — в git не попадает.
 
-## Что сохраняется
+Создание из **админки** всегда выполняет enrich автоматически (полный детальный снимок).
 
-1. **PostgreSQL** — `pg_dump -Fc` (custom format) + gzip. Источник:
-   - запущенный compose-сервис `db`, или
-   - `DATABASE_URL` (локальный Postgres / Supabase) через контейнер `postgres:16-alpine`
+## Что сохраняется (полный детальный снимок)
+
+1. **PostgreSQL** — `pg_dump -Fc` (custom format) + gzip. Включает:
+   - участников, события, молитвы, студию, push;
+   - **переписки** (`conversations`, `messages`, реакции, опросы, пины);
+   - **настройки** (`global_settings` и связанные таблицы).
 2. **uploads/** — legacy-файлы на диске (`UPLOADS_DIR` или `./uploads`)
 3. **secrets/** — по умолчанию да; с `BACKUP_ENCRYPT_PASSPHRASE` шифруется AES-256
 4. **env.keys.txt** — только имена переменных из `.env` (без значений)
 5. Опционально **полный .env** — только при `BACKUP_INCLUDE_ENV=1` + passphrase → `env.full.enc`
+6. **server.snapshot.json** — hostname, ОС, Node, git SHA, число env-ключей, хеши compose/Dockerfile
+7. **inventory.json** — счётчики ключевых таблиц (участники, сообщения, …)
+8. **settings.snapshot.json** — снимок `global_settings` с редaction секретов (токены → `[REDACTED]`)
+9. **messenger.summary.json** — сводка чатов (полные тексты — в дампе БД)
+10. **storage/** — экспорт бакетов Supabase (`chat`, `user-media`) при настроенном Storage
 
-Каждый снимок: `MANIFEST.txt`, `checksums.sha256`, атомарная публикация (`.partial-*` → rename), flock против параллельных запусков, retention (`BACKUP_KEEP_DAYS` / `BACKUP_KEEP_COUNT`).
+Каждый снимок: `MANIFEST.txt`, `components.json`, `checksums.sha256`, атомарная публикация (`.partial-*` → rename), flock против параллельных запусков, retention (`BACKUP_KEEP_DAYS` / `BACKUP_KEEP_COUNT`).
 
-## Что бекап скрипта НЕ покрывает
+## Что бекап НЕ покрывает
 
-- **Supabase Storage** (новые аватары/вложения в облаке) — используйте бэкапы/PITR в панели Supabase или отдельный экспорт buckets.
+- **Redis** — кэш/realtime, не источник истины (пересоздаётся).
 - **Код репозитория** — это git (`git clone` / теги релизов).
-- **Redis** — кэш/realtime, не источник истины.
+- **LiveKit / внешние SaaS** — credentials через secrets/env; состояние звонков эфемерно.
+
+Если Supabase Storage не настроен, в `storage/manifest.json` будет `configured: false`; метаданные переписок всё равно в дампе БД.
 
 ## Безопасное восстановление
 
@@ -69,6 +79,7 @@ API (только admin): `/api/backup/settings`, `/list`, `/create`, `/:id/down
 3. Перед записью скрипт сам делает **safety-бекап** текущего состояния (отключить: `SKIP_SAFETY_BACKUP=1`).
 4. Текущие `uploads/` и `secrets/` перед перезаписью переименовываются в `*.pre-restore-*`.
 5. Полный `.env` из бекапа пишется в `.env.restored`, оригинал не затирается.
+6. Файлы из `storage/` восстанавливайте в бакеты вручную или через отдельный импорт (restore.sh сейчас пишет БД / uploads / secrets).
 
 Опасный полный сброс схемы перед restore (обычно не нужен — есть `--clean`):
 
@@ -85,6 +96,7 @@ BACKUP_BEFORE_UPDATE=1
 BACKUP_KEEP_DAYS=14
 BACKUP_KEEP_COUNT=14
 # BACKUP_ENCRYPT_PASSPHRASE=длинная-случайная-фраза
+# BACKUP_SKIP_STORAGE=1   # если не нужно тянуть облачные файлы
 ```
 
 Cron (пример):

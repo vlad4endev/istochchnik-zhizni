@@ -1,11 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import {
+  LuDatabase,
   LuDownload,
+  LuFileText,
   LuHardDrive,
+  LuInfo,
+  LuMessageSquare,
   LuRefreshCw,
   LuRotateCcw,
   LuSend,
+  LuServer,
+  LuSettings,
   LuTrash2,
   LuX,
 } from 'react-icons/lu';
@@ -15,11 +21,14 @@ import {
   createBackup,
   deleteBackup,
   downloadBackupArchive,
+  fetchBackupDetail,
   fetchBackupList,
   fetchBackupSettings,
   patchBackupSettings,
   restoreBackup,
   sendBackupTelegram,
+  type BackupComponentsSummary,
+  type BackupDetailView,
   type BackupScheduleKind,
   type BackupSettings,
   type BackupTelegramTarget,
@@ -78,6 +87,84 @@ function formatRuDate(iso: string | null): string {
   }
 }
 
+const SNAPSHOT_LAYERS: Array<{
+  key: keyof BackupComponentsSummary | 'members';
+  label: string;
+  hint: string;
+  Icon: typeof LuDatabase;
+}> = [
+  {
+    key: 'database',
+    label: 'База данных',
+    hint: 'PostgreSQL: участники, события, настройки, переписки, студия…',
+    Icon: LuDatabase,
+  },
+  {
+    key: 'messenger_summary',
+    label: 'Переписки',
+    hint: 'Сообщения и чаты в дампе БД + сводка conversations',
+    Icon: LuMessageSquare,
+  },
+  {
+    key: 'uploads',
+    label: 'Файлы uploads',
+    hint: 'Локальные аватары, постеры, релизы, studio-листы',
+    Icon: LuHardDrive,
+  },
+  {
+    key: 'storage',
+    label: 'Облачные файлы',
+    hint: 'Supabase Storage: вложения чата и user-media',
+    Icon: LuFileText,
+  },
+  {
+    key: 'settings_snapshot',
+    label: 'Настройки',
+    hint: 'Снимок global_settings (+ полный ряд в БД)',
+    Icon: LuSettings,
+  },
+  {
+    key: 'server_snapshot',
+    label: 'Сервер',
+    hint: 'ОС, Node, env-ключи, хеши compose/Dockerfile',
+    Icon: LuServer,
+  },
+];
+
+function ComponentChips({ components }: { components: BackupComponentsSummary | null }) {
+  if (!components) {
+    return <span className="text-xs text-stone-400">базовый архив</span>;
+  }
+  const chips: Array<{ on: boolean; label: string }> = [
+    { on: components.database, label: 'БД' },
+    { on: components.messenger_summary, label: 'чаты' },
+    { on: components.uploads, label: 'uploads' },
+    {
+      on: components.storage,
+      label: components.storage
+        ? `Storage ${components.storage_object_count}`
+        : 'Storage',
+    },
+    { on: components.settings_snapshot, label: 'настройки' },
+    { on: components.server_snapshot, label: 'сервер' },
+    { on: components.secrets, label: 'secrets' },
+  ];
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1">
+      {chips.map((c) => (
+        <span
+          key={c.label}
+          className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+            c.on ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-400'
+          }`}
+        >
+          {c.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function BackupSettingsSection() {
   const qc = useQueryClient();
   const settingsQ = useQuery({
@@ -104,6 +191,11 @@ export function BackupSettingsSection() {
   const [restorePassphrase, setRestorePassphrase] = useState('');
   const [restoreLog, setRestoreLog] = useState<string | null>(null);
   const [dryRunOk, setDryRunOk] = useState(false);
+
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<BackupDetailView | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const confirmPhrase = settingsQ.data?.restore_confirm_phrase || DEFAULT_CONFIRM;
 
@@ -225,6 +317,21 @@ export function BackupSettingsSection() {
     setNote(null);
   }
 
+  async function openDetail(id: string) {
+    setDetailId(id);
+    setDetail(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    try {
+      const { detail: d } = await fetchBackupDetail(id);
+      setDetail(d);
+    } catch (e) {
+      setDetailError(apiErrorMessage(e, 'Не удалось загрузить детали бекапа.'));
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
   function toggleWeekday(day: number) {
     if (!draft) return;
     const set = new Set(draft.schedule_weekdays);
@@ -267,11 +374,12 @@ export function BackupSettingsSection() {
           <div>
             <h2 className="flex items-center gap-2 text-lg font-bold text-stone-900">
               <LuHardDrive className="h-5 w-5 text-primary" />
-              Создать резервную копию
+              Полный снимок проекта
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-stone-600">
-              Полный снимок: база PostgreSQL, локальные uploads и secrets. Архив можно скачать,
-              отправить в Telegram или восстановить обратно.
+              Детальная резервная копия: база данных, переписки, локальные и облачные файлы,
+              настройки приложения и снимок конфигурации сервера. Архив можно скачать, отправить в
+              Telegram или восстановить.
             </p>
           </div>
           <button
@@ -281,9 +389,25 @@ export function BackupSettingsSection() {
             onClick={() => createMut.mutate()}
           >
             <LuRefreshCw className={`h-4 w-4 ${running ? 'animate-spin' : ''}`} />
-            {running ? 'Выполняется…' : 'Создать архив сейчас'}
+            {running ? 'Выполняется…' : 'Создать полный снимок'}
           </button>
         </div>
+
+        <ul className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {SNAPSHOT_LAYERS.map(({ key, label, hint, Icon }) => (
+            <li
+              key={key}
+              className="flex gap-3 rounded-xl border border-stone-100 bg-stone-50/80 px-3 py-3"
+            >
+              <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <div>
+                <div className="text-sm font-semibold text-stone-900">{label}</div>
+                <p className="mt-0.5 text-xs leading-relaxed text-stone-500">{hint}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+
         <label className="mt-4 flex items-center gap-2 text-sm text-stone-700">
           <input
             type="checkbox"
@@ -480,9 +604,19 @@ export function BackupSettingsSection() {
                     {formatRuDate(item.created_at)} · {formatBytes(item.size_bytes)} · {item.age_days}{' '}
                     дн.
                     {item.has_archive ? ' · архив готов' : ' · без .tar.gz'}
+                    {item.detailed ? ' · детальный' : ''}
                   </div>
+                  <ComponentChips components={item.components} />
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={btnSecondary()}
+                    onClick={() => void openDetail(item.id)}
+                  >
+                    <LuInfo className="h-4 w-4" />
+                    Состав
+                  </button>
                   <button
                     type="button"
                     className={btnSecondary()}
@@ -532,6 +666,191 @@ export function BackupSettingsSection() {
           </ul>
         )}
       </section>
+
+      {detailId && (
+        <BodyPortal>
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/40 p-4 sm:items-center">
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl sm:p-6"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-bold text-stone-900">Состав резервной копии</h3>
+                  <p className="mt-1 text-sm text-stone-600 font-semibold">{detailId}</p>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-lg p-1 text-stone-500 hover:bg-stone-100"
+                  onClick={() => setDetailId(null)}
+                  aria-label="Закрыть"
+                >
+                  <LuX className="h-5 w-5" />
+                </button>
+              </div>
+
+              {detailLoading && (
+                <p className="mt-4 text-sm text-stone-500">Загрузка деталей…</p>
+              )}
+              {detailError && (
+                <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+                  {detailError}
+                </p>
+              )}
+              {detail && (
+                <div className="mt-4 space-y-5 text-sm">
+                  <ComponentChips components={detail.components} />
+
+                  {detail.inventory && (
+                    <div>
+                      <h4 className="font-bold text-stone-900">Инвентарь данных</h4>
+                      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <div className="rounded-lg bg-stone-50 px-3 py-2">
+                          <div className="text-xs text-stone-500">Участники</div>
+                          <div className="font-semibold">{detail.inventory.members.total}</div>
+                        </div>
+                        <div className="rounded-lg bg-stone-50 px-3 py-2">
+                          <div className="text-xs text-stone-500">Переписки</div>
+                          <div className="font-semibold">
+                            {detail.inventory.messenger.conversations}
+                          </div>
+                        </div>
+                        <div className="rounded-lg bg-stone-50 px-3 py-2">
+                          <div className="text-xs text-stone-500">Сообщения</div>
+                          <div className="font-semibold">
+                            {detail.inventory.messenger.messages}
+                          </div>
+                        </div>
+                        <div className="rounded-lg bg-stone-50 px-3 py-2">
+                          <div className="text-xs text-stone-500">Админы</div>
+                          <div className="font-semibold">{detail.inventory.members.admins}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {detail.messenger_summary && detail.messenger_summary.sample.length > 0 && (
+                    <div>
+                      <h4 className="font-bold text-stone-900">Переписки (сводка)</h4>
+                      <ul className="mt-2 max-h-40 divide-y divide-stone-100 overflow-auto rounded-lg border border-stone-100">
+                        {detail.messenger_summary.sample.map((c) => (
+                          <li key={c.id} className="flex justify-between gap-2 px-3 py-2 text-xs">
+                            <span className="truncate font-medium text-stone-800">
+                              {c.title || `Чат #${c.id}`}
+                              {c.kind ? (
+                                <span className="ml-1 font-normal text-stone-400">({c.kind})</span>
+                              ) : null}
+                            </span>
+                            <span className="shrink-0 text-stone-500">{c.message_count} сообщ.</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {detail.settings_meta && (
+                    <div>
+                      <h4 className="font-bold text-stone-900">Настройки</h4>
+                      <p className="mt-1 text-xs text-stone-600">
+                        Полей в снимке: {detail.settings_meta.keys.length}
+                        {detail.settings_meta.redacted_keys.length > 0
+                          ? ` · секретов скрыто: ${detail.settings_meta.redacted_keys.length}`
+                          : ''}
+                        . Полные значения (включая токены) — внутри дампа БД.
+                      </p>
+                    </div>
+                  )}
+
+                  {detail.server && (
+                    <div>
+                      <h4 className="font-bold text-stone-900">Сервер</h4>
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-stone-600 sm:grid-cols-3">
+                        <div>
+                          <dt className="text-stone-400">Хост</dt>
+                          <dd className="font-medium text-stone-800">
+                            {String(detail.server.hostname ?? '—')}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-stone-400">Node</dt>
+                          <dd className="font-medium text-stone-800">
+                            {String(detail.server.node ?? '—')}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-stone-400">Git</dt>
+                          <dd className="font-medium text-stone-800">
+                            {String(detail.server.git_sha ?? '—')}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-stone-400">ОС</dt>
+                          <dd className="font-medium text-stone-800">
+                            {String(detail.server.platform ?? '—')} {String(detail.server.release ?? '')}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-stone-400">Env-ключей</dt>
+                          <dd className="font-medium text-stone-800">
+                            {String(detail.server.env_key_count ?? '—')}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-stone-400">Пакет</dt>
+                          <dd className="font-medium text-stone-800">
+                            {String(detail.server.package_version ?? '—')}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  )}
+
+                  {detail.storage && (
+                    <div>
+                      <h4 className="font-bold text-stone-900">Облачные файлы (Storage)</h4>
+                      {!detail.storage.configured ? (
+                        <p className="mt-1 text-xs text-amber-700">
+                          Supabase Storage не был настроен на момент бекапа.
+                        </p>
+                      ) : (
+                        <ul className="mt-2 space-y-1 text-xs">
+                          {detail.storage.buckets.map((b) => (
+                            <li key={b.name} className="flex justify-between rounded-lg bg-stone-50 px-3 py-2">
+                              <span className="font-medium text-stone-800">{b.name}</span>
+                              <span className="text-stone-500">
+                                {b.objects} файлов · {formatBytes(b.bytes)}
+                                {b.error ? ` · ${b.error}` : ''}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  {detail.manifest_text && (
+                    <details className="rounded-lg border border-stone-100">
+                      <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-stone-700">
+                        MANIFEST.txt
+                      </summary>
+                      <pre className="max-h-48 overflow-auto border-t border-stone-100 bg-stone-900 p-3 text-[11px] text-stone-100">
+                        {detail.manifest_text}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-5">
+                <button type="button" className={btnSecondary()} onClick={() => setDetailId(null)}>
+                  Закрыть
+                </button>
+              </div>
+            </div>
+          </div>
+        </BodyPortal>
+      )}
 
       {restoreId && (
         <BodyPortal><div className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/40 p-4 sm:items-center">
