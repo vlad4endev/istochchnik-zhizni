@@ -7,6 +7,7 @@ import {
   VideoTrack,
   useLocalParticipant,
   useConnectionState,
+  useConnectionQualityIndicator,
   useRoomContext,
   useParticipants,
   useRemoteParticipants,
@@ -14,6 +15,7 @@ import {
   useIsSpeaking,
 } from '@livekit/components-react';
 import {
+  ConnectionQuality,
   ConnectionState,
   DisconnectReason,
   ParticipantEvent,
@@ -65,6 +67,12 @@ import {
   mapDeviceError,
   type CallTokenResponse,
 } from './callsApi';
+import {
+  connectionQualityAriaLabel,
+  connectionQualityBars,
+  connectionQualityStatusLabel,
+  connectionQualityTone,
+} from './callConnectionQuality';
 import { startCallRing, stopCallRing, unlockCallAudio } from './callRingtone';
 import { copyInviteShare, formatInviteShareText, shareInviteLink } from './inviteShare';
 import { MeetingAvatar } from './MeetingAvatar';
@@ -87,6 +95,48 @@ function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** Индикатор уровня связи (деления), как в Telegram. */
+function CallSignalBars({
+  quality,
+  compact = false,
+}: {
+  quality: ConnectionQuality;
+  compact?: boolean;
+}) {
+  const bars = connectionQualityBars(quality);
+  const tone = connectionQualityTone(quality);
+  return (
+    <span
+      className={[
+        'call-signal',
+        `call-signal--${tone}`,
+        compact ? 'call-signal--compact' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      aria-label={connectionQualityAriaLabel(quality)}
+      title={connectionQualityAriaLabel(quality)}
+      role="img"
+    >
+      {[1, 2, 3, 4].map((level) => (
+        <span
+          key={level}
+          className={[
+            'call-signal__bar',
+            level <= bars ? 'call-signal__bar--on' : 'call-signal__bar--off',
+          ].join(' ')}
+          aria-hidden
+        />
+      ))}
+    </span>
+  );
+}
+
+function useParticipantConnectionQuality(participant?: Participant): ConnectionQuality {
+  const { quality } = useConnectionQualityIndicator({ participant });
+  return quality;
 }
 
 function isMobileUa(): boolean {
@@ -196,6 +246,7 @@ function CallControls({
   const room = useRoomContext();
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
     useLocalParticipant();
+  const connectionQuality = useParticipantConnectionQuality(localParticipant);
   const setMuted = useCallStore((s) => s.setMuted);
   const setVideoOff = useCallStore((s) => s.setVideoOff);
   const setScreenSharing = useCallStore((s) => s.setScreenSharing);
@@ -293,7 +344,18 @@ function CallControls({
       aria-label="Управление звонком"
     >
       {isMeeting && statusLabel ? (
-        <span className="call-controls__timer" aria-live="polite">
+        <span
+          className={[
+            'call-controls__timer',
+            connectionQuality && connectionQualityStatusLabel(connectionQuality)
+              ? 'call-controls__timer--warn'
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          aria-live="polite"
+        >
+          {connectionQuality ? <CallSignalBars quality={connectionQuality} compact /> : null}
           {statusLabel}
         </span>
       ) : null}
@@ -608,6 +670,9 @@ function MeetingParticipantTile({
   const displayName = participant.isLocal ? `${name} (вы)` : name;
   const avatarSrc = participantAvatarUrl(participant);
   const speaking = useIsSpeaking(participant);
+  const quality = useParticipantConnectionQuality(participant);
+  const qualityWarn =
+    quality === ConnectionQuality.Poor || quality === ConnectionQuality.Lost;
   const { micOn, camOn } = useParticipantMediaFlags(participant);
   const isAudio = callType === 'audio';
   const isSpotlight = size === 'spotlight';
@@ -632,6 +697,7 @@ function MeetingParticipantTile({
         !micOn ? 'call-participant-tile--mic-off' : '',
         !isAudio && !showVideo ? 'call-participant-tile--cam-off' : '',
         participant.isLocal ? 'call-participant-tile--local' : '',
+        qualityWarn ? 'call-participant-tile--weak-net' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -686,6 +752,9 @@ function MeetingParticipantTile({
                 {micOn ? <LuMic size={13} strokeWidth={2.4} /> : <LuMicOff size={13} strokeWidth={2.4} />}
               </span>
               <span className="call-participant-tile__label">{displayName}</span>
+              {qualityWarn || participant.isLocal ? (
+                <CallSignalBars quality={quality} compact />
+              ) : null}
             </span>
           </div>
         ) : null}
@@ -696,6 +765,7 @@ function MeetingParticipantTile({
           {isSpotlight ? <SpeakingWaveform active={speaking} variant="bar" /> : null}
           <div className="call-participant-tile__meta">
             <p className="call-participant-tile__name">{displayName}</p>
+            {qualityWarn || participant.isLocal ? <CallSignalBars quality={quality} compact /> : null}
             <span
               className={[
                 'call-participant-tile__mic',
@@ -736,7 +806,8 @@ function RoomStage({
   const participants = useParticipants();
   const remotes = useRemoteParticipants();
   const connectionState = useConnectionState();
-  const { isCameraEnabled } = useLocalParticipant();
+  const { isCameraEnabled, localParticipant: lkLocal } = useLocalParticipant();
+  const localQuality = useParticipantConnectionQuality(lkLocal);
   const peerName = useCallStore((s) => s.activeCall?.peerName ?? 'Собеседник');
   const peerAvatar = useCallStore((s) => s.activeCall?.peerAvatar ?? '');
   const callKind = useCallStore((s) => s.activeCall?.callKind ?? 'direct');
@@ -746,6 +817,8 @@ function RoomStage({
   const connected = connectionState === ConnectionState.Connected;
   const stageRef = useRef<HTMLDivElement | null>(null);
   const isGroup = callKind === 'group';
+  const weakNetLabel =
+    connected && !connectError ? connectionQualityStatusLabel(localQuality) : null;
 
   useEffect(() => {
     if (
@@ -823,11 +896,12 @@ function RoomStage({
   const avatarSrc = peerAvatar ? resolvePublicUrl(peerAvatar) : undefined;
   const disconnectedAfterAttempt =
     connectionState === ConnectionState.Disconnected && connectAttempted;
-  // Прямой звонок: таймер / статусы. Конференция: без таймера (как Телемост).
+  // Прямой звонок: таймер / статусы. Слабая сеть — как в Telegram вместо таймера.
   let statusLabel = 'Соединение…';
   if (connectError) statusLabel = connectError;
-  else if (connectionState === ConnectionState.Connected) statusLabel = formatDuration(elapsed);
-  else if (connectionState === ConnectionState.Connecting) statusLabel = 'Подключение к серверу…';
+  else if (connectionState === ConnectionState.Connected) {
+    statusLabel = weakNetLabel ?? formatDuration(elapsed);
+  } else if (connectionState === ConnectionState.Connecting) statusLabel = 'Подключение к серверу…';
   else if (connectionState === ConnectionState.Reconnecting) {
     statusLabel = 'Переподключение…';
   } else if (disconnectedAfterAttempt) {
@@ -924,7 +998,7 @@ function RoomStage({
   const groupStatusText = connectError
     ? connectError
     : connectionState === ConnectionState.Connected
-      ? formatDuration(elapsed)
+      ? (weakNetLabel ?? formatDuration(elapsed))
       : connectionState === ConnectionState.Reconnecting
         ? 'Переподключение…'
         : 'Подключение…';
@@ -933,6 +1007,28 @@ function RoomStage({
   useEffect(() => {
     setMeetingStatusLabel?.(groupStatusText);
   }, [groupStatusText, setMeetingStatusLabel]);
+
+  // Один toast при переходе в «слабая связь» — без спама на каждом тике.
+  const lastWeakToastRef = useRef<ConnectionQuality | null>(null);
+  useEffect(() => {
+    if (!connected || connectError) {
+      lastWeakToastRef.current = null;
+      return;
+    }
+    if (
+      (localQuality === ConnectionQuality.Poor || localQuality === ConnectionQuality.Lost) &&
+      lastWeakToastRef.current !== localQuality
+    ) {
+      lastWeakToastRef.current = localQuality;
+      emitAppToast(
+        localQuality === ConnectionQuality.Lost ? 'Нет связи с сервером' : 'Слабая связь',
+        'info',
+      );
+    }
+    if (localQuality === ConnectionQuality.Excellent || localQuality === ConnectionQuality.Good) {
+      lastWeakToastRef.current = null;
+    }
+  }, [connected, connectError, localQuality]);
 
   return (
     <div
@@ -952,6 +1048,22 @@ function RoomStage({
             {meetingTitle}
           </h1>
           <div className="call-meeting-topbar__meta">
+            {connected && !connectError ? (
+              <span
+                className={[
+                  'call-meeting-topbar__net',
+                  weakNetLabel ? 'call-meeting-topbar__net--warn' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                title={connectionQualityAriaLabel(localQuality)}
+              >
+                <CallSignalBars quality={localQuality} />
+                {weakNetLabel ? (
+                  <span className="call-meeting-topbar__net-label">{weakNetLabel}</span>
+                ) : null}
+              </span>
+            ) : null}
             <span className="call-meeting-topbar__count" title="Участники">
               <LuUsers size={14} strokeWidth={2.4} aria-hidden />
               {Math.max(1, sortedParticipants.length)}
@@ -1142,7 +1254,19 @@ function RoomStage({
                   <MeetingAvatar mediaType={callType} size="lg" />
                 )}
                 <p className="call-stage__name">{peerName}</p>
-                <p className="call-stage__status">{statusLabel}</p>
+                <p
+                  className={[
+                    'call-stage__status',
+                    weakNetLabel ? 'call-stage__status--warn' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
+                  {connected && !connectError ? (
+                    <CallSignalBars quality={localQuality} compact />
+                  ) : null}
+                  {statusLabel}
+                </p>
               </div>
             ) : null}
             {localVideo ? (
@@ -1164,7 +1288,18 @@ function RoomStage({
         )}
       </div>
       {!isGroup && showRemoteVideo ? (
-        <p className="call-stage__status call-stage__status--bar">{statusLabel}</p>
+        <p
+          className={[
+            'call-stage__status',
+            'call-stage__status--bar',
+            weakNetLabel ? 'call-stage__status--warn' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          {connected && !connectError ? <CallSignalBars quality={localQuality} compact /> : null}
+          {statusLabel}
+        </p>
       ) : null}
       <RoomAudioRenderer />
       <StartAudio label="Нажмите, чтобы включить звук" className="call-start-audio" />
