@@ -428,7 +428,7 @@ function UpcomingPreacherCard({
     hostMemberId != null && hostMemberId > 0 && (currentMemberId == null || currentMemberId !== hostMemberId);
 
   return (
-    <section className="dashboard-service-card dashboard-sermon-card sm:max-w-[460px] lg:max-w-none" aria-label="Карточка служения">
+    <section className="dashboard-service-card dashboard-sermon-card w-full max-w-none" aria-label="Карточка служения">
       <div className="dashboard-service-card__band">
         <span className="dashboard-service-card__eyebrow">Богослужение</span>
         <span className="dashboard-service-card__date">{dateLabel}</span>
@@ -709,9 +709,11 @@ function DashboardQuickActionsStrip({
     <nav
       aria-label="Быстрые переходы"
       className={[
-        'dashboard-quick-actions grid w-full min-w-0 items-stretch gap-1.5 pt-3 pb-1',
+        'dashboard-quick-actions min-w-0 items-stretch gap-1.5 pt-3 pb-1',
+        'grid w-full',
         'sm:gap-2.5 sm:pt-4',
-        'lg:gap-3',
+        /* ПК: компактный ряд по содержимому — без растянутых «резиновых» кнопок на всю ширину */
+        'lg:flex lg:w-auto lg:max-w-full lg:flex-wrap lg:items-center lg:gap-2.5 lg:pt-3 lg:pb-0',
         gridColsClass,
       ].join(' ')}
     >
@@ -730,7 +732,8 @@ function DashboardQuickActionsStrip({
             }}
             className={[
               /* База — нейтральная «капсула» под общую палитру проекта */
-              'group relative flex w-full min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-full',
+              'group relative flex min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-full',
+              'w-full lg:w-auto lg:min-w-0 lg:shrink-0 lg:justify-start',
               /* Телефон: иконка над подписью, подпись в 2 строки — вместо «Меропри…»/«Отправит…» */
               'max-sm:flex-col max-sm:gap-1 max-sm:rounded-2xl max-sm:px-1 max-sm:py-1.5',
               'border border-stone-200/70 bg-[var(--surface-elevated)] text-[var(--text)] max-lg:shadow-none lg:shadow-[var(--shadow-card)]',
@@ -741,16 +744,16 @@ function DashboardQuickActionsStrip({
               'dark:hover:bg-white/[0.04] dark:hover:border-white/[0.12]',
               'focus-visible:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
               'active:translate-y-0 active:scale-[0.98] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100',
-              /* Размер: один ряд на всех ширинах, плотная пилюля на мобильном */
+              /* Размер: плотная пилюля; на ПК — по содержимому, без растягивания */
               'min-h-[40px] px-2 py-1.5',
               'sm:min-h-[44px] sm:gap-2.5 sm:px-3.5 sm:py-2',
-              'lg:min-h-[48px] lg:gap-3 lg:px-5 lg:py-2.5',
+              'lg:min-h-[42px] lg:gap-2 lg:px-3.5 lg:py-2',
             ].join(' ')}
           >
             <span
               className={[
                 'grid shrink-0 place-items-center rounded-full ring-1 ring-inset transition-colors',
-                'h-6 w-6 sm:h-8 sm:w-8 lg:h-9 lg:w-9',
+                'h-6 w-6 sm:h-8 sm:w-8 lg:h-8 lg:w-8',
                 action.chipBg,
                 action.chipRing,
               ].join(' ')}
@@ -758,7 +761,7 @@ function DashboardQuickActionsStrip({
               <Icon
                 className={[
                   action.iconColor,
-                  'h-[13px] w-[13px] sm:h-4 sm:w-4 lg:h-[18px] lg:w-[18px]',
+                  'h-[13px] w-[13px] sm:h-4 sm:w-4 lg:h-4 lg:w-4',
                 ].join(' ')}
                 strokeWidth={2.25}
                 aria-hidden
@@ -771,7 +774,7 @@ function DashboardQuickActionsStrip({
                 'line-clamp-2 break-words text-center text-[11px]',
                 /* sm+: одна строка с многоточием, чуть крупнее */
                 'sm:truncate sm:text-[12.5px] sm:leading-none',
-                'lg:text-[13.5px]',
+                'lg:text-[13px]',
               ].join(' ')}
             >
               {action.label}
@@ -1267,230 +1270,208 @@ function DashboardMain() {
           open={prayerNeedFormOpen}
           onClose={() => setPrayerNeedFormOpen(false)}
         />
-        <div className="dashboard-desktop hidden lg:flex lg:flex-col lg:gap-5 lg:py-4 xl:gap-6">
-          <div className="grid grid-cols-12 items-start gap-4 xl:gap-5">
-            <div className="col-span-7 flex min-w-0 flex-col gap-3">
-              {showNearestPreacherWidget ? (
-                <UpcomingPreacherCard
-                  preacherName={preacherName}
-                  preacherAvatarUrl={preacherAvatarUrl}
-                  preacherDetail="Проповеди"
-                  preacherMemberId={nearestSermonData!.preacherMemberId}
-                  hostName={hostName}
-                  hostAvatarUrl={hostAvatarUrl}
-                  hostMemberId={nearestSermonData!.leaderMemberId}
-                  currentMemberId={resolvedMemberId}
-                  topic={nearestSermonData!.topic}
-                  scripture={nearestSermonData!.scripture}
-                  dateLabel={nearestSermonDateLabel}
-                  canRate={canRateSermon}
-                  onOpenComments={() => navigate(`/service-plan/sermon-comments/${nearestSermonData!.shareToken}`)}
-                  onOpenChat={openMessengerDm}
-                />
-              ) : (
-                <div className="grid h-full min-h-[280px] grid-cols-2 gap-4">
-                  <section className={`${DESKTOP_WIDGET_CARD} flex flex-col p-4`}>
-                    <div className="flex items-center gap-2">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#0E7E6A] text-white">
-                        <LuPlay className="h-4 w-4" strokeWidth={2} aria-hidden />
-                      </span>
-                      <p className={DESKTOP_WIDGET_LABEL}>Медиа</p>
-                    </div>
-                    {latestEpisode ? (
-                      <>
-                        <p className="mt-3 line-clamp-3 flex-1 text-[15px] font-semibold leading-snug text-stone-900">
-                          {latestEpisode.title}
-                        </p>
+        <div className="dashboard-desktop hidden lg:grid lg:grid-cols-12 lg:items-start lg:gap-x-5 lg:gap-y-4 lg:py-3 xl:gap-x-6 xl:gap-y-5">
+          {/* Левая колонка — служение и личное расписание */}
+          <div className="col-span-7 flex min-w-0 flex-col gap-4 xl:col-span-8">
+            {showNearestPreacherWidget ? (
+              <UpcomingPreacherCard
+                preacherName={preacherName}
+                preacherAvatarUrl={preacherAvatarUrl}
+                preacherDetail="Проповеди"
+                preacherMemberId={nearestSermonData!.preacherMemberId}
+                hostName={hostName}
+                hostAvatarUrl={hostAvatarUrl}
+                hostMemberId={nearestSermonData!.leaderMemberId}
+                currentMemberId={resolvedMemberId}
+                topic={nearestSermonData!.topic}
+                scripture={nearestSermonData!.scripture}
+                dateLabel={nearestSermonDateLabel}
+                canRate={canRateSermon}
+                onOpenComments={() => navigate(`/service-plan/sermon-comments/${nearestSermonData!.shareToken}`)}
+                onOpenChat={openMessengerDm}
+              />
+            ) : (
+              <div className="grid min-h-[200px] grid-cols-2 gap-4">
+                <section className={`${DESKTOP_WIDGET_CARD} flex flex-col p-4`}>
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#0E7E6A] text-white">
+                      <LuPlay className="h-4 w-4" strokeWidth={2} aria-hidden />
+                    </span>
+                    <p className={DESKTOP_WIDGET_LABEL}>Медиа</p>
+                  </div>
+                  {latestEpisode ? (
+                    <>
+                      <p className="mt-3 line-clamp-3 flex-1 text-[15px] font-semibold leading-snug text-stone-900">
+                        {latestEpisode.title}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void onPlayLatestClick()}
+                        className="mt-4 inline-flex min-h-[40px] w-fit items-center gap-2 rounded-xl bg-[#0E7E6A] px-4 text-[13px] font-semibold text-white hover:bg-[#0C6E5D]"
+                        aria-label={playWidgetLabel}
+                      >
+                        <PlayWidgetIcon className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                        {playWidgetLabel}
+                      </button>
+                    </>
+                  ) : (
+                    <p className="mt-3 text-sm font-medium text-stone-600">Новая проповедь пока не найдена.</p>
+                  )}
+                </section>
+
+                <button
+                  type="button"
+                  onClick={() => setEventOpen(true)}
+                  className={`${DESKTOP_WIDGET_CARD} flex flex-col p-4 text-left`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#1A9A55] text-white">
+                      <LuCalendarDays className="h-4 w-4" strokeWidth={2} aria-hidden />
+                    </span>
+                    <p className={`${DESKTOP_WIDGET_LABEL} text-[#0F6636]`}>Мероприятие</p>
+                  </div>
+                  <p className="mt-3 line-clamp-2 text-[15px] font-semibold leading-snug text-stone-900">{event.title}</p>
+                  <p className="mt-2 text-sm font-medium text-stone-600">{event.whenLabel}</p>
+                </button>
+              </div>
+            )}
+            <MyServiceWeekWidget
+              memberId={resolvedMemberId}
+              anchorServiceDate={anchorSundayServiceDate}
+            />
+            {displayAnnouncement ? (
+              <section className="rounded-2xl border border-[#F5D99A]/90 bg-gradient-to-br from-[#FFF8EC] to-[#FEF0D6] p-4 shadow-[var(--shadow-card)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow)]">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#E8960F] text-white">
+                      <LuArrowRight className="h-4 w-4 rotate-45" strokeWidth={2} aria-hidden />
+                    </span>
+                    <p className={`${DESKTOP_WIDGET_LABEL} text-[#9A6200]`}>Объявление</p>
+                  </div>
+                  {canManageCoordinatorNotes ? (
+                    <details className="group relative">
+                      <summary className="inline-flex min-h-[28px] min-w-[28px] cursor-pointer list-none items-center justify-center rounded-lg border border-amber-200 bg-white text-sm font-bold text-amber-900 marker:hidden [&::-webkit-details-marker]:hidden">
+                        ⋯
+                      </summary>
+                      <div className="absolute right-0 z-10 mt-1 w-40 space-y-1 rounded-[10px] border border-amber-200 bg-white p-1.5 shadow-lg">
                         <button
                           type="button"
-                          onClick={() => void onPlayLatestClick()}
-                          className="mt-4 inline-flex min-h-[40px] w-fit items-center gap-2 rounded-xl bg-[#0E7E6A] px-4 text-[13px] font-semibold text-white hover:bg-[#0C6E5D]"
-                          aria-label={playWidgetLabel}
+                          className="inline-flex min-h-[34px] w-full items-center justify-start rounded-lg px-2.5 text-xs font-extrabold text-amber-950 hover:bg-amber-50"
+                          onClick={() => requestOpenCoordinatorNoteEditor('announcement')}
                         >
-                          <PlayWidgetIcon className="h-4 w-4" strokeWidth={2.25} aria-hidden />
-                          {playWidgetLabel}
+                          Изменить
                         </button>
-                      </>
-                    ) : (
-                      <p className="mt-3 text-sm font-medium text-stone-600">Новая проповедь пока не найдена.</p>
-                    )}
-                  </section>
-
-                  <button
-                    type="button"
-                    onClick={() => setEventOpen(true)}
-                    className={`${DESKTOP_WIDGET_CARD} flex flex-col p-4 text-left`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#1A9A55] text-white">
-                        <LuCalendarDays className="h-4 w-4" strokeWidth={2} aria-hidden />
-                      </span>
-                      <p className={`${DESKTOP_WIDGET_LABEL} text-[#0F6636]`}>Мероприятие</p>
-                    </div>
-                    <p className="mt-3 line-clamp-2 text-[15px] font-semibold leading-snug text-stone-900">{event.title}</p>
-                    <p className="mt-2 text-sm font-medium text-stone-600">{event.whenLabel}</p>
-                  </button>
-                </div>
-              )}
-              <MyServiceWeekWidget
-                memberId={resolvedMemberId}
-                anchorServiceDate={anchorSundayServiceDate}
-              />
-            </div>
-
-            <div className="col-span-5 flex min-w-0 flex-col gap-4">
-              <div
-                className={[
-                  'grid flex-1 gap-4',
-                  isParishionerGuest ? 'grid-cols-1' : 'grid-cols-2',
-                ].join(' ')}
-              >
-                <div className="min-h-[132px] min-w-0">
-                  {birthdaysThisWeek.length > 0 ? (
-                    <BirthdayBlock
-                      birthdays={birthdaysThisWeek}
-                      onMessage={(person) => openMessengerDm(person.id)}
-                    />
-                  ) : (
-                    <section className="flex h-full flex-col rounded-2xl border border-[#F9C0D0]/80 bg-gradient-to-br from-[#FFF0F3] to-[#FFE4EC] p-4 shadow-[var(--shadow-card)]">
-                      <p className={`${DESKTOP_WIDGET_LABEL} text-[#C23D57]`}>Дни рождения</p>
-                      <p className="mt-3 text-sm font-medium leading-snug text-[#C23D57]">
-                        На этой неделе дней рождения не запланировано.
-                      </p>
-                    </section>
-                  )}
-                </div>
-
-                {!isParishionerGuest ? (
-                  <button
-                    type="button"
-                    onClick={() => navigate('/prayer')}
-                    className="flex h-full min-h-[132px] flex-col rounded-2xl border border-[#BFC9F7]/80 bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] p-4 text-left shadow-[var(--shadow-card)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow)]"
-                  >
-                    <p className={`${DESKTOP_WIDGET_LABEL} text-[#3042A8]`}>Молимся сегодня</p>
-                    <div className="mt-3 flex flex-1 items-start gap-3">
-                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#4A5FD5] text-white">
-                        <LuChurch className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                        <button
+                          type="button"
+                          className="inline-flex min-h-[34px] w-full items-center justify-start rounded-lg px-2.5 text-xs font-extrabold text-red-800 hover:bg-red-50"
+                          onClick={() => void onDeleteAnnouncement()}
+                        >
+                          Удалить
+                        </button>
                       </div>
-                      <div className="min-w-0">
-                        <p className="line-clamp-2 text-[14px] font-semibold leading-snug text-[#1A2560]">
-                          {memberToday?.name ?? 'Не назначен'}
-                        </p>
-                        <p className="mt-1.5 text-xs font-medium text-[#4A5FD5]">{todayLabel}</p>
-                      </div>
-                    </div>
-                  </button>
-                ) : null}
-              </div>
-            </div>
+                    </details>
+                  ) : null}
+                </div>
+                <p className={announcementExpanded ? 'whitespace-pre-wrap text-sm font-semibold leading-relaxed text-[#3D2800]' : 'line-clamp-3 whitespace-pre-wrap text-sm font-semibold leading-relaxed text-[#3D2800]'}>
+                  {announcementNote?.text ?? ''}
+                </p>
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-semibold text-[#B87800] hover:underline"
+                  onClick={() => setAnnouncementExpanded((v) => !v)}
+                >
+                  {announcementExpanded ? 'Свернуть' : 'Читать полностью'}
+                </button>
+              </section>
+            ) : null}
           </div>
 
-          {displayAnnouncement ? (
-            <section className="rounded-2xl border border-[#F5D99A]/90 bg-gradient-to-br from-[#FFF8EC] to-[#FEF0D6] p-4 shadow-[var(--shadow-card)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow)]">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#E8960F] text-white">
-                    <LuArrowRight className="h-4 w-4 rotate-45" strokeWidth={2} aria-hidden />
-                  </span>
-                  <p className={`${DESKTOP_WIDGET_LABEL} text-[#9A6200]`}>Объявление</p>
-                </div>
-                {canManageCoordinatorNotes ? (
-                  <details className="group relative">
-                    <summary className="inline-flex min-h-[28px] min-w-[28px] cursor-pointer list-none items-center justify-center rounded-lg border border-amber-200 bg-white text-sm font-bold text-amber-900 marker:hidden [&::-webkit-details-marker]:hidden">
-                      ⋯
-                    </summary>
-                    <div className="absolute right-0 z-10 mt-1 w-40 space-y-1 rounded-[10px] border border-amber-200 bg-white p-1.5 shadow-lg">
-                      <button
-                        type="button"
-                        className="inline-flex min-h-[34px] w-full items-center justify-start rounded-lg px-2.5 text-xs font-extrabold text-amber-950 hover:bg-amber-50"
-                        onClick={() => requestOpenCoordinatorNoteEditor('announcement')}
-                      >
-                        Изменить
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex min-h-[34px] w-full items-center justify-start rounded-lg px-2.5 text-xs font-extrabold text-red-800 hover:bg-red-50"
-                        onClick={() => void onDeleteAnnouncement()}
-                      >
-                        Удалить
-                      </button>
-                    </div>
-                  </details>
-                ) : null}
-              </div>
-              <p className={announcementExpanded ? 'whitespace-pre-wrap text-sm font-semibold leading-relaxed text-[#3D2800]' : 'line-clamp-3 whitespace-pre-wrap text-sm font-semibold leading-relaxed text-[#3D2800]'}>
-                {announcementNote?.text ?? ''}
-              </p>
-              <button
-                type="button"
-                className="mt-2 text-xs font-semibold text-[#B87800] hover:underline"
-                onClick={() => setAnnouncementExpanded((v) => !v)}
-              >
-                {announcementExpanded ? 'Свернуть' : 'Читать полностью'}
-              </button>
-            </section>
-          ) : null}
-
-          {showNearestPreacherWidget ? (
-            <div
-              className={[
-                'grid gap-4 xl:gap-5',
-                showBroadcastWidget ? 'grid-cols-3' : 'grid-cols-2',
-              ].join(' ')}
-            >
-              <section className={`${DESKTOP_WIDGET_CARD} flex flex-col p-4`}>
-                <div className="flex items-center gap-2">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#0E7E6A] text-white">
-                    <LuPlay className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  </span>
-                  <p className={DESKTOP_WIDGET_LABEL}>Медиа</p>
-                </div>
-                {latestEpisode ? (
-                  <>
-                    <p className="mt-3 line-clamp-2 text-[15px] font-semibold leading-snug text-stone-900">{latestEpisode.title}</p>
-                    <button
-                      type="button"
-                      onClick={() => void onPlayLatestClick()}
-                      className="mt-4 inline-flex min-h-[40px] w-fit items-center gap-2 rounded-xl bg-[#0E7E6A] px-4 text-[13px] font-semibold text-white hover:bg-[#0C6E5D]"
-                      aria-label={playWidgetLabel}
-                    >
-                      <PlayWidgetIcon className="h-4 w-4" strokeWidth={2.25} aria-hidden />
-                      {playWidgetLabel}
-                    </button>
-                  </>
-                ) : (
-                  <p className="mt-3 text-sm font-medium text-stone-600">Новая проповедь пока не найдена.</p>
-                )}
-              </section>
-
-              <button
-                type="button"
-                onClick={() => setEventOpen(true)}
-                className={`${DESKTOP_WIDGET_CARD} flex flex-col p-4 text-left`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#1A9A55] text-white">
-                    <LuCalendarDays className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  </span>
-                  <p className={`${DESKTOP_WIDGET_LABEL} text-[#0F6636]`}>Мероприятие</p>
-                </div>
-                <p className="mt-3 line-clamp-2 text-[15px] font-semibold leading-snug text-stone-900">{event.title}</p>
-                <p className="mt-2 text-sm font-medium text-stone-600">{event.whenLabel}</p>
-              </button>
-
-              {showBroadcastWidget ? (
-                <BroadcastCompactCard
-                  broadcast={activeBroadcast}
-                  timerText={broadcastTimerText}
-                  uiMode={broadcastUiMode}
-                  endsAtFormatted={broadcastEndsLabel}
-                  viewerCount={broadcastViewerCount}
-                  onOpen={() => navigate('/broadcast')}
+          {/* Правая колонка — плотный стек виджетов без «дыры» под днями рождения */}
+          <aside className="col-span-5 flex min-w-0 flex-col gap-3.5 xl:col-span-4">
+            <div className="min-w-0">
+              {birthdaysThisWeek.length > 0 ? (
+                <BirthdayBlock
+                  birthdays={birthdaysThisWeek}
+                  onMessage={(person) => openMessengerDm(person.id)}
                 />
-              ) : null}
+              ) : (
+                <section className="flex flex-col rounded-2xl border border-[#F9C0D0]/80 bg-gradient-to-br from-[#FFF0F3] to-[#FFE4EC] p-4 shadow-[var(--shadow-card)]">
+                  <p className={`${DESKTOP_WIDGET_LABEL} text-[#C23D57]`}>Дни рождения</p>
+                  <p className="mt-3 text-sm font-medium leading-snug text-[#C23D57]">
+                    На этой неделе дней рождения не запланировано.
+                  </p>
+                </section>
+              )}
             </div>
-          ) : showBroadcastWidget ? (
-            <div className="max-w-md">
+
+            {!isParishionerGuest ? (
+              <button
+                type="button"
+                onClick={() => navigate('/prayer')}
+                className="flex min-h-[104px] flex-col rounded-2xl border border-[#BFC9F7]/80 bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] p-4 text-left shadow-[var(--shadow-card)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow)]"
+              >
+                <p className={`${DESKTOP_WIDGET_LABEL} text-[#3042A8]`}>Молимся сегодня</p>
+                <div className="mt-2.5 flex flex-1 items-start gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#4A5FD5] text-white">
+                    <LuChurch className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="line-clamp-2 text-[14px] font-semibold leading-snug text-[#1A2560]">
+                      {memberToday?.name ?? 'Не назначен'}
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-[#4A5FD5]">{todayLabel}</p>
+                  </div>
+                </div>
+              </button>
+            ) : null}
+
+            {showNearestPreacherWidget ? (
+              <>
+                <section className={`${DESKTOP_WIDGET_CARD} flex flex-col p-4`}>
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#0E7E6A] text-white">
+                      <LuPlay className="h-4 w-4" strokeWidth={2} aria-hidden />
+                    </span>
+                    <p className={DESKTOP_WIDGET_LABEL}>Медиа</p>
+                  </div>
+                  {latestEpisode ? (
+                    <>
+                      <p className="mt-2.5 line-clamp-2 text-[14px] font-semibold leading-snug text-stone-900">
+                        {latestEpisode.title}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void onPlayLatestClick()}
+                        className="mt-3 inline-flex min-h-[38px] w-fit items-center gap-2 rounded-xl bg-[#0E7E6A] px-3.5 text-[13px] font-semibold text-white hover:bg-[#0C6E5D]"
+                        aria-label={playWidgetLabel}
+                      >
+                        <PlayWidgetIcon className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                        {playWidgetLabel}
+                      </button>
+                    </>
+                  ) : (
+                    <p className="mt-2.5 text-sm font-medium text-stone-600">Новая проповедь пока не найдена.</p>
+                  )}
+                </section>
+
+                <button
+                  type="button"
+                  onClick={() => setEventOpen(true)}
+                  className={`${DESKTOP_WIDGET_CARD} flex flex-col p-4 text-left`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#1A9A55] text-white">
+                      <LuCalendarDays className="h-4 w-4" strokeWidth={2} aria-hidden />
+                    </span>
+                    <p className={`${DESKTOP_WIDGET_LABEL} text-[#0F6636]`}>Мероприятие</p>
+                  </div>
+                  <p className="mt-2.5 line-clamp-2 text-[14px] font-semibold leading-snug text-stone-900">{event.title}</p>
+                  <p className="mt-1.5 text-sm font-medium text-stone-600">{event.whenLabel}</p>
+                </button>
+              </>
+            ) : null}
+
+            {showBroadcastWidget ? (
               <BroadcastCompactCard
                 broadcast={activeBroadcast}
                 timerText={broadcastTimerText}
@@ -1499,14 +1480,14 @@ function DashboardMain() {
                 viewerCount={broadcastViewerCount}
                 onOpen={() => navigate('/broadcast')}
               />
-            </div>
-          ) : null}
+            ) : null}
+          </aside>
 
           {showPrayerPlanOnDashboard ? (
-            <section className="rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow-card)]">
+            <section className="col-span-12 rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow-card)] xl:p-5">
               <div className="flex flex-wrap items-center justify-between gap-3 gap-y-2">
                 <p className={`${DESKTOP_WIDGET_LABEL} text-[#6B2D3E]`}>Координаторы</p>
-                <div className="flex min-w-[220px] flex-1 items-center gap-3 sm:max-w-sm">
+                <div className="flex min-w-[240px] flex-1 items-center gap-3 sm:max-w-md">
                   <span className="shrink-0 text-xs font-medium text-stone-600">Заполнение нужд</span>
                   <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-stone-200/80">
                     <div
@@ -1524,9 +1505,9 @@ function DashboardMain() {
                 </div>
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-4">
+              <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                 {(isAdmin || isPastor ? unfilledWeekRowsAdmin : coordinatorAssignedRows)
-                  .slice(0, 8)
+                  .slice(0, 10)
                   .map((row) => {
                     const filled = isAdmin || isPastor ? false : isPrayerNeedFilled(row.member);
                     return (
