@@ -122,4 +122,17 @@ describe('mobile call layout', () => {
     expect(css).toMatch(/telemost-join__devices\s*\{[\s\S]*?flex-wrap:\s*nowrap/);
     expect(css).toMatch(/@media \(max-height:\s*700px\)/);
   });
+
+  it('маршрут /call/:id — Telemost-shell для активных/завершённых состояний', () => {
+    const css = readFileSync(join(root, 'src/features/calls/calls.css'), 'utf8');
+    const page = readFileSync(join(root, 'src/features/calls/CallPage.tsx'), 'utf8');
+    expect(page).toMatch(/CallRouteShell/);
+    expect(page).toMatch(/call-route-shell--ended/);
+    expect(page).toMatch(/call-route-shell--active/);
+    expect(page).toMatch(/Звонок завершён/);
+    expect(page).toMatch(/Свернуть в чат/);
+    expect(css).toMatch(/\.call-route-shell\b/);
+    expect(css).toMatch(/--viewport-height,\s*100dvh/);
+    expect(css).toMatch(/call-route-shell__cta--accept/);
+  });
 });

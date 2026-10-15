@@ -327,7 +327,7 @@
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
 }
 
-/* Call route accept/decline (deep link) */
+/* Call route accept/decline (legacy deep-link helpers; shell uses call-route-shell__cta) */
 .call-route-page .btn-reject,
 .call-route-page .btn-accept {
   flex: 1;
@@ -2549,6 +2549,300 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   color: var(--primary, #7d3640);
   font-weight: 600;
   text-decoration: underline;
+}
+
+/* ——— /call/:id route shell (Telemost-like, mobile-first) ——— */
+.call-route-shell {
+  --cr-brand: var(--primary, #7d3640);
+  --cr-brand-dark: var(--primary-dark, #5c2830);
+  --cr-on: var(--text-on-primary, #ffffff);
+  --cr-soft: color-mix(in srgb, var(--cr-brand) 22%, transparent);
+  --cr-mid: color-mix(in srgb, var(--cr-brand) 38%, transparent);
+  --cr-bg-top: color-mix(in srgb, var(--cr-brand-dark) 55%, #1c1917);
+  --cr-bg-bottom: #141210;
+  /* Above bottom nav (z-100), below CallWindow (10040) / IncomingCall (10050). */
+  position: fixed;
+  inset: 0;
+  z-index: 10020;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding:
+    max(12px, env(safe-area-inset-top, 0px))
+    16px
+    max(14px, env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%, var(--cr-soft), transparent 60%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--cr-brand-dark) 35%, transparent),
+      transparent 40%
+    ),
+    linear-gradient(180deg, var(--cr-bg-top), var(--cr-bg-bottom));
+}
+
+.call-route-shell__atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.call-route-shell__glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.5;
+  animation: telemost-drift 12s ease-in-out infinite;
+}
+
+.call-route-shell__glow--a {
+  width: min(420px, 80vw);
+  height: min(420px, 80vw);
+  left: -10%;
+  top: 8%;
+  background: var(--cr-mid);
+}
+
+.call-route-shell__glow--b {
+  width: min(360px, 70vw);
+  height: min(360px, 70vw);
+  right: -12%;
+  bottom: 6%;
+  background: color-mix(in srgb, var(--cr-brand-dark) 45%, transparent);
+  animation-delay: -4s;
+}
+
+.call-route-shell__panel {
+  position: relative;
+  z-index: 1;
+  width: min(26rem, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 20px 18px 16px;
+  border-radius: 22px;
+  background: rgba(18, 16, 18, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  box-sizing: border-box;
+  animation: telemost-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.call-route-shell__eyebrow {
+  margin: 0 0 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, #fff 55%, var(--cr-brand));
+}
+
+.call-route-shell__status-icon {
+  width: 4.25rem;
+  height: 4.25rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+  color: var(--cr-on);
+  background:
+    radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.22), transparent 42%),
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--cr-brand) 72%, #fff) 0%,
+      var(--cr-brand) 52%,
+      var(--cr-brand-dark) 100%
+    );
+  box-shadow: 0 0 0 6px var(--cr-soft);
+}
+
+.call-route-shell__title {
+  margin: 10px 0 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: clamp(1.3rem, 4.4vw, 1.75rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  max-width: 18ch;
+}
+
+.call-route-shell__lead {
+  margin: 6px 0 0;
+  max-width: 22rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.call-route-shell__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.16);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: #bbf7d0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.call-route-shell__badge::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.25);
+  animation: call-route-live-pulse 1.6s ease-out infinite;
+}
+
+@keyframes call-route-live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 8px rgba(74, 222, 128, 0);
+  }
+}
+
+.call-route-shell__spinner {
+  width: 28px;
+  height: 28px;
+  margin-top: 18px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 255, 255, 0.18);
+  border-top-color: #fff;
+  animation: call-route-spin 0.75s linear infinite;
+}
+
+@keyframes call-route-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.call-route-shell__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  max-width: 20rem;
+  margin-top: 18px;
+}
+
+.call-route-shell__actions--row {
+  flex-direction: row;
+  align-items: stretch;
+  max-width: none;
+}
+
+.call-route-shell__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--cr-brand) 82%, #fff) 0%,
+    var(--cr-brand) 45%,
+    var(--cr-brand-dark) 100%
+  );
+  color: var(--cr-on);
+  font: inherit;
+  font-size: 0.98rem;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.22) inset,
+    0 12px 28px color-mix(in srgb, var(--cr-brand) 36%, transparent);
+  box-sizing: border-box;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.call-route-shell__cta:hover {
+  filter: brightness(1.04);
+}
+
+.call-route-shell__cta:active {
+  transform: scale(0.985);
+}
+
+.call-route-shell__cta--ghost {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.call-route-shell__cta--reject {
+  background: #ef4444;
+  box-shadow: 0 10px 24px rgba(239, 68, 68, 0.35);
+  flex: 1;
+}
+
+.call-route-shell__cta--accept {
+  background: #22c55e;
+  box-shadow: 0 10px 24px rgba(34, 197, 94, 0.35);
+  flex: 1;
+}
+
+.call-route-shell--active .meeting-avatar--md {
+  width: 4.5rem;
+  height: 4.5rem;
+}
+
+.call-route-shell--ended .call-route-shell__status-icon {
+  background:
+    radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.18), transparent 42%),
+    linear-gradient(160deg, #6b7280 0%, #4b5563 55%, #374151 100%);
+  box-shadow: 0 0 0 6px rgba(107, 114, 128, 0.22);
+}
+
+@media (max-height: 700px) {
+  .call-route-shell__panel {
+    padding: 14px 14px 12px;
+  }
+
+  .call-route-shell__title {
+    font-size: clamp(1.15rem, 3.8vw, 1.45rem);
+  }
+
+  .call-route-shell__actions {
+    margin-top: 12px;
+    gap: 8px;
+  }
+
+  .call-route-shell__cta {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-route-shell__glow,
+  .call-route-shell__panel,
+  .call-route-shell__spinner,
+  .call-route-shell__badge::before {
+    animation: none;
+  }
 }
 
 .call-window--ringing {

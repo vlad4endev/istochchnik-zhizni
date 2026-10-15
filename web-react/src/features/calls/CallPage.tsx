@@ -1,11 +1,41 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { LuMessageCircle, LuPhoneIncoming, LuPhoneOff } from 'react-icons/lu';
 
 import { emitAppToast } from '../../lib/uiFeedback';
 import { useAuthStore } from '../auth/authStore';
 
 import { acceptCall, fetchCall, type CallPublic } from './callsApi';
+import { MeetingAvatar } from './MeetingAvatar';
 import { useCallStore } from './callStore';
+import './calls.css';
+
+function CallRouteShell({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={['call-route-shell', className].filter(Boolean).join(' ')}
+      role="main"
+    >
+      <div className="call-route-shell__atmosphere" aria-hidden>
+        <span className="call-route-shell__glow call-route-shell__glow--a" />
+        <span className="call-route-shell__glow call-route-shell__glow--b" />
+      </div>
+      <div className="call-route-shell__panel">{children}</div>
+    </div>
+  );
+}
+
+function callTitle(call: CallPublic | null, fallback: string): string {
+  const t = call?.title?.trim();
+  if (t) return t;
+  return fallback;
+}
 
 export function CallPage() {
   const { callId = '' } = useParams();
@@ -91,12 +121,6 @@ export function CallPage() {
     };
   }, [callId, declineFromPush, hydrateFromPublic, userId]);
 
-  useEffect(() => {
-    if (!activeCall && !loading && call && ['ended', 'declined', 'missed', 'cancelled', 'failed'].includes(call.status)) {
-      /* keep error UI */
-    }
-  }, [activeCall, call, loading]);
-
   // Opening /call/:id while minimized restores the full call UI.
   useEffect(() => {
     if (!callId) return;
@@ -104,14 +128,6 @@ export function CallPage() {
     if (!useCallStore.getState().uiMinimized) return;
     useCallStore.getState().expandCall();
   }, [activeCall?.callId, callId]);
-
-  if (loading) {
-    return (
-      <div className="call-route-page">
-        <p>Загрузка звонка…</p>
-      </div>
-    );
-  }
 
   // Link / standalone meetings: invitees are not chat members — never open ?conversationId=…
   const messengerHref =
@@ -122,28 +138,61 @@ export function CallPage() {
       ? `/messenger?conversationId=${call.conversationId}`
       : '/messenger';
 
+  const mediaType: 'audio' | 'video' =
+    activeCall?.callType === 'audio' || call?.mediaType === 'audio' ? 'audio' : 'video';
+  const title = callTitle(
+    call,
+    activeCall?.peerName?.trim() ||
+      (mediaType === 'video' ? 'Видеовстреча' : 'Аудиовстреча'),
+  );
+
+  if (loading) {
+    return (
+      <CallRouteShell className="call-route-shell--loading">
+        <p className="call-route-shell__eyebrow">Источник жизни · встречи</p>
+        <MeetingAvatar mediaType={mediaType} size="md" />
+        <h1 className="call-route-shell__title">Подключение…</h1>
+        <p className="call-route-shell__lead">Загрузка звонка</p>
+        <div className="call-route-shell__spinner" aria-hidden />
+      </CallRouteShell>
+    );
+  }
+
   if (error) {
     return (
-      <div className="call-route-page">
-        <p>{error}</p>
-        <Link to={messengerHref} className="call-route-link">
-          Вернуться в чат
-        </Link>
-      </div>
+      <CallRouteShell className="call-route-shell--ended">
+        <p className="call-route-shell__eyebrow">Источник жизни · встречи</p>
+        <span className="call-route-shell__status-icon" aria-hidden>
+          <LuPhoneOff size={28} strokeWidth={2} />
+        </span>
+        <h1 className="call-route-shell__title">{title}</h1>
+        <p className="call-route-shell__lead">{error}</p>
+        <div className="call-route-shell__actions">
+          <Link to={messengerHref} className="call-route-shell__cta">
+            <LuMessageCircle size={18} strokeWidth={2.2} aria-hidden />
+            В мессенджер
+          </Link>
+          <Link to="/dashboard" className="call-route-shell__cta call-route-shell__cta--ghost">
+            На главную
+          </Link>
+        </div>
+      </CallRouteShell>
     );
   }
 
   if (activeCall?.status === 'ringing_in' && call) {
     return (
-      <div className="call-route-page call-route-page--incoming">
-        <p className="call-stage__name">{activeCall.peerName}</p>
-        <p className="call-stage__status">
-          {activeCall.callType === 'video' ? 'Входящий видеозвонок' : 'Входящий звонок'}
+      <CallRouteShell className="call-route-shell--incoming">
+        <p className="call-route-shell__eyebrow">Входящий вызов</p>
+        <MeetingAvatar mediaType={mediaType} size="md" />
+        <h1 className="call-route-shell__title">{activeCall.peerName}</h1>
+        <p className="call-route-shell__lead">
+          {mediaType === 'video' ? 'Входящий видеозвонок' : 'Входящий звонок'}
         </p>
-        <div className="call-actions" style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+        <div className="call-route-shell__actions call-route-shell__actions--row">
           <button
             type="button"
-            className="btn-reject"
+            className="call-route-shell__cta call-route-shell__cta--reject"
             onClick={() => {
               void import('./callsApi').then(({ declineCall }) =>
                 declineCall(call.id).finally(() => {
@@ -153,11 +202,12 @@ export function CallPage() {
               );
             }}
           >
+            <LuPhoneOff size={18} strokeWidth={2.2} aria-hidden />
             Отклонить
           </button>
           <button
             type="button"
-            className="btn-accept"
+            className="call-route-shell__cta call-route-shell__cta--accept"
             onClick={() => {
               void acceptCall(call.id)
                 .then(() => {
@@ -166,41 +216,80 @@ export function CallPage() {
                 .catch((e) => emitAppToast(e instanceof Error ? e.message : 'Ошибка', 'error'));
             }}
           >
+            <LuPhoneIncoming size={18} strokeWidth={2.2} aria-hidden />
             Принять
           </button>
         </div>
-      </div>
+      </CallRouteShell>
+    );
+  }
+
+  // Call ended / left while still on /call/:id — store cleared, no overlay.
+  if (!activeCall || activeCall.callId !== callId) {
+    return (
+      <CallRouteShell className="call-route-shell--ended">
+        <p className="call-route-shell__eyebrow">Источник жизни · встречи</p>
+        <span className="call-route-shell__status-icon" aria-hidden>
+          <LuPhoneOff size={28} strokeWidth={2} />
+        </span>
+        <h1 className="call-route-shell__title">{title}</h1>
+        <p className="call-route-shell__lead">Звонок завершён</p>
+        <div className="call-route-shell__actions">
+          <Link to={messengerHref} className="call-route-shell__cta">
+            <LuMessageCircle size={18} strokeWidth={2.2} aria-hidden />
+            В мессенджер
+          </Link>
+          <Link to="/dashboard" className="call-route-shell__cta call-route-shell__cta--ghost">
+            На главную
+          </Link>
+        </div>
+      </CallRouteShell>
     );
   }
 
   // CallWindow overlay is mounted in Layout — avoid a second LiveKit room.
-  // If the overlay is minimized, offer a one-tap return; otherwise a link to leave the route.
+  // Underlay matches the dark call UI so Suspense/flash never shows a blank light page.
   return (
-    <div className="call-route-page call-route-page--active">
-      <p className="call-stage__status">
-        {uiMinimized ? 'Звонок свёрнут — продолжается в фоне' : 'Звонок активен'}
+    <CallRouteShell className="call-route-shell--active">
+      <p className="call-route-shell__eyebrow">
+        {uiMinimized ? 'Звонок свёрнут' : 'Идёт звонок'}
       </p>
-      {uiMinimized ? (
-        <button
-          type="button"
-          className="call-route-link"
-          onClick={() => {
-            expandCall();
-          }}
-        >
-          Вернуться в звонок
-        </button>
-      ) : (
-        <Link
-          to="/messenger"
-          className="call-route-link"
-          onClick={() => {
-            minimizeCall();
-          }}
-        >
-          Свернуть и вернуться в чат
-        </Link>
-      )}
-    </div>
+      <MeetingAvatar mediaType={mediaType} size="md" />
+      <h1 className="call-route-shell__title">{title}</h1>
+      <p className="call-route-shell__lead">
+        {uiMinimized
+          ? 'Продолжается в фоне — можно вернуться в любой момент'
+          : mediaType === 'video'
+            ? 'Видеовстреча'
+            : 'Аудиовстреча'}
+      </p>
+      <div className="call-route-shell__badge" aria-hidden>
+        В эфире
+      </div>
+      <div className="call-route-shell__actions">
+        {uiMinimized ? (
+          <button
+            type="button"
+            className="call-route-shell__cta"
+            onClick={() => {
+              expandCall();
+            }}
+          >
+            Вернуться в звонок
+          </button>
+        ) : (
+          <Link
+            to={messengerHref}
+            className="call-route-shell__cta call-route-shell__cta--ghost"
+            onClick={() => {
+              minimizeCall();
+            }}
+          >
+            <LuMessageCircle size={18} strokeWidth={2.2} aria-hidden />
+            Свернуть в чат
+          </Link>
+        )}
+      </div>
+    </CallRouteShell>
   );
 }
