@@ -426,6 +426,7 @@ ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_service_plan_publi
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_coordinator_scenarios_json JSONB;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_music_schedule_mailing_json JSONB;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS notification_settings_json TEXT;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS call_settings_json TEXT;
 
 CREATE TABLE IF NOT EXISTS telegram_chats (
   id SERIAL PRIMARY KEY,

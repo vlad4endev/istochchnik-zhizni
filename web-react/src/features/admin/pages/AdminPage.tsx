@@ -36,6 +36,7 @@ import {
 import { AccessRequestsSection } from '../AccessRequestsSection';
 import { AiAssistantMonitorSection } from '../AiAssistantMonitorSection';
 import { AiSettingsSection } from '../AiSettingsSection';
+import { CallsSettingsSection } from '../CallsSettingsSection';
 import { AppSectionsAccessSection } from '../AppSectionsAccessSection';
 import { RolePermissionsManagerSection } from '../RolePermissionsManagerSection';
 import { AdminMemberEditSheet } from '../AdminMemberEditSheet';
@@ -511,6 +512,7 @@ export function AdminPage() {
         {tab === 'telegram' && <TelegramSettingsSection />}
         {tab === 'backup' && <BackupSettingsSection />}
         {tab === 'releases' && <AppReleasesSection />}
+        {tab === 'calls' && <CallsSettingsSection />}
         {tab === 'diagnostics' && <DiagnosticsDashboardSection />}
         {tab === 'integrations' && <IntegrationsSection />}
       </div>

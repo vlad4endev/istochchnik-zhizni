@@ -14,6 +14,7 @@ import {
   useIsSpeaking,
 } from '@livekit/components-react';
 import {
+  ConnectionQuality,
   ConnectionState,
   DisconnectReason,
   ParticipantEvent,
@@ -63,6 +64,7 @@ import {
   endCall,
   fetchCallToken,
   mapDeviceError,
+  reportCallQuality,
   type CallTokenResponse,
 } from './callsApi';
 import { startCallRing, stopCallRing, unlockCallAudio } from './callRingtone';
@@ -139,6 +141,69 @@ function KeepAliveCallMedia() {
       window.removeEventListener('pageshow', kick);
     };
   }, [room]);
+  return null;
+}
+
+function connectionQualityToScore(q: ConnectionQuality): number | null {
+  switch (q) {
+    case ConnectionQuality.Excellent:
+      return 5;
+    case ConnectionQuality.Good:
+      return 4;
+    case ConnectionQuality.Poor:
+      return 2;
+    case ConnectionQuality.Lost:
+      return 0;
+    default:
+      return null;
+  }
+}
+
+function connectionQualityLabel(q: ConnectionQuality): string | null {
+  switch (q) {
+    case ConnectionQuality.Excellent:
+      return 'excellent';
+    case ConnectionQuality.Good:
+      return 'good';
+    case ConnectionQuality.Poor:
+      return 'poor';
+    case ConnectionQuality.Lost:
+      return 'lost';
+    default:
+      return null;
+  }
+}
+
+/** Собирает ConnectionQuality локального участника и шлёт в API при выходе из комнаты. */
+function ReportCallQuality({ callId }: { callId: string }) {
+  const room = useRoomContext();
+  const samplesRef = useRef<number[]>([]);
+  const lastLabelRef = useRef<string | null>(null);
+  const sentRef = useRef(false);
+
+  useEffect(() => {
+    const onQuality = (quality: ConnectionQuality) => {
+      const score = connectionQualityToScore(quality);
+      if (score != null) samplesRef.current.push(score);
+      lastLabelRef.current = connectionQualityLabel(quality);
+    };
+    room.localParticipant.on(ParticipantEvent.ConnectionQualityChanged, onQuality);
+    onQuality(room.localParticipant.connectionQuality);
+
+    return () => {
+      room.localParticipant.off(ParticipantEvent.ConnectionQualityChanged, onQuality);
+      if (sentRef.current) return;
+      const samples = samplesRef.current;
+      if (samples.length === 0) return;
+      sentRef.current = true;
+      const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
+      void reportCallQuality(callId, {
+        score: Math.round(avg * 10) / 10,
+        connectionQuality: lastLabelRef.current,
+      });
+    };
+  }, [callId, room]);
+
   return null;
 }
 
@@ -1908,6 +1973,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         className="call-lk-room"
       >
         <KeepAliveCallMedia />
+        <ReportCallQuality callId={activeCall.callId} />
         <ApplyLobbyMediaPrefs micOn={preferMicOn} camOn={preferCamOn} videoEnabled={videoEnabled} />
         {activeCall.callKind === 'group' ? (
           <GroupMeetingShell

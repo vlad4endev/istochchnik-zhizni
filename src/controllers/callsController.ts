@@ -15,6 +15,7 @@ import {
   issueCallToken,
   joinViaInvitation,
   listCallHistory,
+  reportCallQuality,
   revokeInvitation,
   type CallAccessMode,
   type CallMediaType,
@@ -231,6 +232,47 @@ export async function callHistoryHandler(req: Request, res: Response): Promise<v
       conversationId,
       cursor,
       limit,
+    });
+    res.json(result);
+  } catch (err) {
+    sendCallsError(res, err);
+  }
+}
+
+export async function reportCallQualityHandler(req: Request, res: Response): Promise<void> {
+  const uid = memberId(req);
+  if (!uid) {
+    res.status(401).json({ error: 'Требуется авторизация' });
+    return;
+  }
+  try {
+    const body = req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>) : {};
+    const score = Number(body.score);
+    if (!Number.isFinite(score)) {
+      res.status(400).json({ error: 'Укажите score (0–5)' });
+      return;
+    }
+    const result = await reportCallQuality(String(req.params.callId ?? ''), uid, {
+      score,
+      connectionQuality:
+        typeof body.connectionQuality === 'string'
+          ? body.connectionQuality
+          : typeof body.connection_quality === 'string'
+            ? body.connection_quality
+            : null,
+      rttMs: body.rttMs != null ? Number(body.rttMs) : body.rtt_ms != null ? Number(body.rtt_ms) : null,
+      packetLoss:
+        body.packetLoss != null
+          ? Number(body.packetLoss)
+          : body.packet_loss != null
+            ? Number(body.packet_loss)
+            : null,
+      jitterMs:
+        body.jitterMs != null
+          ? Number(body.jitterMs)
+          : body.jitter_ms != null
+            ? Number(body.jitter_ms)
+            : null,
     });
     res.json(result);
   } catch (err) {

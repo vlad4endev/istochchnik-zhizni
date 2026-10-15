@@ -7,6 +7,7 @@ import {
   declineCall,
   endCall,
 } from '../services/callsService';
+import { isCallsEnabledSync } from '../services/callSettingsService';
 import type { WsMessengerEvent } from '../types/messenger';
 
 /**
@@ -34,7 +35,7 @@ export function initCallSignaling(d: CallDeps): void {
 }
 
 function isCallsFeatureEnabled(): boolean {
-  return process.env.CALLS_ENABLED === 'true';
+  return isCallsEnabledSync();
 }
 
 /** No in-memory call map — busy state lives in PostgreSQL. */

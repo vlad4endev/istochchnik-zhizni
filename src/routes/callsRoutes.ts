@@ -14,6 +14,7 @@ import {
   getCallHandler,
   invitationJoinHandler,
   invitationPreviewHandler,
+  reportCallQualityHandler,
   revokeInvitationHandler,
 } from '../controllers/callsController';
 
@@ -88,6 +89,7 @@ router.post('/:callId/decline', requireAuthSession, declineCallHandler);
 router.post('/:callId/cancel', requireAuthSession, cancelCallHandler);
 router.post('/:callId/end', requireAuthSession, endCallHandler);
 router.post('/:callId/token', requireAuthSession, callTokenHandler);
+router.post('/:callId/quality', requireAuthSession, reportCallQualityHandler);
 router.post('/:callId/invitations', requireAuthSession, createInvitationHandler);
 router.delete('/:callId/invitations/:invitationId', requireAuthSession, revokeInvitationHandler);
 

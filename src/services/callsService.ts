@@ -23,6 +23,15 @@ import {
   mintLiveKitJoinToken,
   removeLiveKitParticipant,
 } from './livekitService';
+import {
+  getCallRuntimeConfig,
+  peekCallRuntimeConfig,
+} from './callSettingsService';
+import {
+  isAppRoleAllowedForCalls,
+  type CallRuntimeConfig,
+} from '../types/callSettings';
+import type { CallQualityReport } from './callStatsService';
 
 export type CallType = 'direct' | 'group';
 export type CallMediaType = 'audio' | 'video';
@@ -127,20 +136,61 @@ type DbClient = {
   query: (text: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
 };
 
-function isCallsEnabled(): boolean {
-  return process.env.CALLS_ENABLED === 'true';
+async function requireCallsEnabled(): Promise<CallRuntimeConfig> {
+  const cfg = await getCallRuntimeConfig();
+  if (!cfg.enabled) throw new CallsError('disabled', 'Звонки отключены');
+  return cfg;
 }
 
-function ringTimeoutSec(): number {
-  return Math.max(15, Math.min(180, Number(process.env.CALL_RING_TIMEOUT_SEC ?? 60) || 60));
+function ringTimeoutSec(cfg?: CallRuntimeConfig): number {
+  return (cfg ?? peekCallRuntimeConfig()).ring_timeout_sec;
 }
 
-function inviteTtlHours(): number {
-  return Math.max(1, Math.min(168, Number(process.env.CALL_INVITE_TTL_HOURS ?? 24) || 24));
+function inviteTtlHours(cfg?: CallRuntimeConfig): number {
+  return (cfg ?? peekCallRuntimeConfig()).invite_ttl_hours;
 }
 
-function maxGroupParticipants(): number {
-  return Math.max(2, Math.min(200, Number(process.env.CALL_MAX_GROUP_PARTICIPANTS ?? 50) || 50));
+function maxGroupParticipants(cfg?: CallRuntimeConfig): number {
+  return (cfg ?? peekCallRuntimeConfig()).max_group_participants;
+}
+
+async function loadMemberAppRole(memberId: number): Promise<string | null> {
+  const res = await query(
+    `SELECT LOWER(TRIM(COALESCE(app_role, ''))) AS r FROM members WHERE id = $1 LIMIT 1`,
+    [memberId],
+  );
+  const r = String(res.rows[0]?.r ?? '').trim();
+  return r || null;
+}
+
+async function assertCanStartCall(
+  initiatorId: number,
+  opts: {
+    mediaType: CallMediaType;
+    kind: 'direct' | 'group' | 'link';
+  },
+): Promise<CallRuntimeConfig> {
+  const cfg = await requireCallsEnabled();
+  const role = await loadMemberAppRole(initiatorId);
+  if (!isAppRoleAllowedForCalls(role, cfg.allowed_roles)) {
+    throw new CallsError('forbidden', 'Вашей роли запрещено начинать звонки');
+  }
+  if (opts.mediaType === 'audio' && !cfg.features.audio) {
+    throw new CallsError('disabled', 'Аудиозвонки отключены администратором');
+  }
+  if (opts.mediaType === 'video' && !cfg.features.video) {
+    throw new CallsError('disabled', 'Видеозвонки отключены администратором');
+  }
+  if (opts.kind === 'direct' && !cfg.features.direct_calls) {
+    throw new CallsError('disabled', 'Личные звонки отключены администратором');
+  }
+  if (opts.kind === 'group' && !cfg.features.group_calls) {
+    throw new CallsError('disabled', 'Групповые звонки отключены администратором');
+  }
+  if (opts.kind === 'link' && !cfg.features.link_meetings) {
+    throw new CallsError('disabled', 'Встречи по ссылке отключены администратором');
+  }
+  return cfg;
 }
 
 function publicWebOrigin(): string {
@@ -497,7 +547,10 @@ export async function createDirectCall(input: {
   recipientId: number;
   mediaType: CallMediaType;
 }): Promise<CallPublic> {
-  if (!isCallsEnabled()) throw new CallsError('disabled', 'Звонки отключены');
+  const cfg = await assertCanStartCall(input.initiatorId, {
+    mediaType: input.mediaType,
+    kind: 'direct',
+  });
   if (!Number.isFinite(input.recipientId) || input.recipientId === input.initiatorId) {
     throw new CallsError('invalid', 'Некорректный получатель');
   }
@@ -563,7 +616,7 @@ export async function createDirectCall(input: {
         input.conversationId,
         roomName,
         input.initiatorId,
-        ringTimeoutSec(),
+        ringTimeoutSec(cfg),
       ],
     );
     await client.query(
@@ -580,7 +633,7 @@ export async function createDirectCall(input: {
     await ensureLiveKitRoom({
       roomName,
       // Не рвать комнату при кратком reconnect клиента (иначе DeleteRoom mid-call).
-      emptyTimeoutSec: Math.max(900, ringTimeoutSec() + 600),
+      emptyTimeoutSec: Math.max(900, ringTimeoutSec(cfg) + 600),
       maxParticipants: 2,
       metadata: JSON.stringify({ callId: call.id, type: 'direct' }),
     });
@@ -618,7 +671,7 @@ export async function createDirectCall(input: {
     callerName: profile.name,
     callerAvatar: profile.avatarUrl,
     url: `/call/${call.id}`,
-    ttlSec: ringTimeoutSec(),
+    ttlSec: ringTimeoutSec(cfg),
   }).catch((e) => console.warn('[calls] wake failed:', e instanceof Error ? e.message : e));
 
   return toPublicCall(call);
@@ -632,9 +685,12 @@ export async function createGroupCall(input: {
   /** Отображаемое название конференции (шаринг / UI). */
   title?: string | null;
 }): Promise<CallPublic> {
-  if (!isCallsEnabled()) throw new CallsError('disabled', 'Звонки отключены');
-
   const accessMode: CallAccessMode = input.accessMode === 'link' ? 'link' : 'closed';
+  const cfg = await assertCanStartCall(input.initiatorId, {
+    mediaType: input.mediaType,
+    kind: accessMode === 'link' ? 'link' : 'group',
+  });
+
   const callTitle = normalizeCallTitle(input.title, input.mediaType, false);
   const convType = await getConversationType(input.conversationId);
   // closed — только группа/канал; link (как Телемост/Zoom) — любой чат, включая личный.
@@ -692,7 +748,7 @@ export async function createGroupCall(input: {
     await ensureLiveKitRoom({
       roomName,
       emptyTimeoutSec: 3600,
-      maxParticipants: maxGroupParticipants(),
+      maxParticipants: maxGroupParticipants(cfg),
       metadata: JSON.stringify({ callId: call.id, type: 'group', title: callTitle }),
     });
   } catch (e) {
@@ -815,7 +871,10 @@ export async function createStandaloneLinkCall(input: {
   /** Отображаемое название встречи (шаринг / join / UI). */
   title?: string | null;
 }): Promise<CallPublic> {
-  if (!isCallsEnabled()) throw new CallsError('disabled', 'Звонки отключены');
+  const cfg = await assertCanStartCall(input.initiatorId, {
+    mediaType: input.mediaType,
+    kind: 'link',
+  });
 
   const callTitle = normalizeCallTitle(input.title, input.mediaType, true);
   const callId = randomUUID();
@@ -853,7 +912,7 @@ export async function createStandaloneLinkCall(input: {
     await ensureLiveKitRoom({
       roomName,
       emptyTimeoutSec: 3600,
-      maxParticipants: maxGroupParticipants(),
+      maxParticipants: maxGroupParticipants(cfg),
       metadata: JSON.stringify({ callId: call.id, type: 'standalone', title: callTitle }),
     });
   } catch (e) {
@@ -899,7 +958,7 @@ export async function getCallForMember(callId: string, memberId: number): Promis
 }
 
 export async function acceptCall(callId: string, memberId: number): Promise<CallPublic> {
-  if (!isCallsEnabled()) throw new CallsError('disabled', 'Звонки отключены');
+  await requireCallsEnabled();
 
   const updated = await withTransaction(async (client) => {
     const locked = await client.query(
@@ -1204,7 +1263,7 @@ export async function issueCallToken(
   callId: string,
   memberId: number,
 ): Promise<{ token: string; url: string; identity: string; call: CallPublic }> {
-  if (!isCallsEnabled()) throw new CallsError('disabled', 'Звонки отключены');
+  const cfg = await requireCallsEnabled();
   if (!isLiveKitConfigured()) {
     throw new CallsError('livekit_unavailable', 'Сервис звонков не настроен');
   }
@@ -1245,7 +1304,7 @@ export async function issueCallToken(
            WHERE call_id = $1::uuid AND status = 'joined'`,
           [callId],
         );
-        if (Number(joinedCount.rows[0]?.c ?? 0) >= maxGroupParticipants()) {
+        if (Number(joinedCount.rows[0]?.c ?? 0) >= maxGroupParticipants(cfg)) {
           throw new CallsError('full', 'Достигнут лимит участников');
         }
         await client.query(
@@ -1306,13 +1365,14 @@ export async function issueCallToken(
 
   await ensureLiveKitRoom({
     roomName: call.livekit_room_name,
-    maxParticipants: call.type === 'direct' ? 2 : maxGroupParticipants(),
+    maxParticipants: call.type === 'direct' ? 2 : maxGroupParticipants(cfg),
   });
 
   const minted = await mintLiveKitJoinToken({
     roomName: call.livekit_room_name,
     identity: livekitIdentityForMember(memberId),
     displayName: profile.name,
+    ttlSeconds: cfg.token_ttl_sec,
     avatarUrl: profile.avatarUrl,
     canPublish: true,
     canSubscribe: true,
@@ -1490,7 +1550,7 @@ export async function joinViaInvitation(
   rawToken: string,
   memberId: number,
 ): Promise<{ token: string; url: string; identity: string; call: CallPublic }> {
-  if (!isCallsEnabled()) throw new CallsError('disabled', 'Звонки отключены');
+  const cfg = await requireCallsEnabled();
   if (!isLiveKitConfigured()) {
     throw new CallsError('livekit_unavailable', 'Сервис звонков не настроен');
   }
@@ -1543,7 +1603,7 @@ export async function joinViaInvitation(
        WHERE call_id = $1::uuid AND status = 'joined'`,
       [call.id],
     );
-    if (!alreadyJoined && Number(joinedCount.rows[0]?.c ?? 0) >= maxGroupParticipants()) {
+    if (!alreadyJoined && Number(joinedCount.rows[0]?.c ?? 0) >= maxGroupParticipants(cfg)) {
       throw new CallsError('full', 'Достигнут лимит участников');
     }
 
@@ -1636,6 +1696,93 @@ export async function listCallHistory(input: {
   return { items, nextCursor };
 }
 
+export type CallQualityReportInput = {
+  score: number;
+  connectionQuality?: string | null;
+  rttMs?: number | null;
+  packetLoss?: number | null;
+  jitterMs?: number | null;
+};
+
+/**
+ * Сохраняет отчёт качества от участника в `calls.metadata.quality`.
+ * Оценка 0–5 (как LiveKit ConnectionQuality: Lost→0 … Excellent→5).
+ */
+export async function reportCallQuality(
+  callId: string,
+  memberId: number,
+  input: CallQualityReportInput,
+): Promise<{ score: number; reports: CallQualityReport[] }> {
+  await requireCallsEnabled();
+  const score = Math.max(0, Math.min(5, Number(input.score)));
+  if (!Number.isFinite(score)) {
+    throw new CallsError('invalid', 'Некорректная оценка качества');
+  }
+
+  const part = await query(
+    `SELECT 1 FROM call_participants WHERE call_id = $1::uuid AND user_id = $2 LIMIT 1`,
+    [callId, memberId],
+  );
+  if (part.rows.length === 0) {
+    throw new CallsError('forbidden', 'Вы не участник этого звонка');
+  }
+
+  const call = await loadCallById(callId);
+  if (!call) throw new CallsError('not_found', 'Звонок не найден');
+
+  const report: CallQualityReport = {
+    userId: memberId,
+    score,
+    connectionQuality: input.connectionQuality ?? null,
+    rttMs: typeof input.rttMs === 'number' && Number.isFinite(input.rttMs) ? input.rttMs : null,
+    packetLoss:
+      typeof input.packetLoss === 'number' && Number.isFinite(input.packetLoss)
+        ? input.packetLoss
+        : null,
+    jitterMs:
+      typeof input.jitterMs === 'number' && Number.isFinite(input.jitterMs) ? input.jitterMs : null,
+    at: new Date().toISOString(),
+  };
+
+  const prevQuality =
+    call.metadata.quality && typeof call.metadata.quality === 'object'
+      ? (call.metadata.quality as Record<string, unknown>)
+      : {};
+  const prevReports = Array.isArray(prevQuality.reports) ? [...prevQuality.reports] : [];
+  const filtered = prevReports.filter((r) => {
+    if (!r || typeof r !== 'object') return false;
+    return Number((r as Record<string, unknown>).userId) !== memberId;
+  });
+  filtered.push(report);
+
+  const scores = filtered
+    .map((r) => (r && typeof r === 'object' ? Number((r as Record<string, unknown>).score) : NaN))
+    .filter((n) => Number.isFinite(n));
+  const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : score;
+
+  const nextMeta = {
+    ...call.metadata,
+    quality: {
+      score: Math.round(avg * 10) / 10,
+      reports: filtered,
+      updated_at: new Date().toISOString(),
+    },
+  };
+
+  await query(`UPDATE calls SET metadata = $2::jsonb WHERE id = $1::uuid`, [
+    callId,
+    JSON.stringify(nextMeta),
+  ]);
+
+  return {
+    score: Math.round(avg * 10) / 10,
+    reports: filtered.filter(
+      (r): r is CallQualityReport =>
+        Boolean(r && typeof r === 'object' && Number.isFinite(Number((r as CallQualityReport).userId))),
+    ) as CallQualityReport[],
+  };
+}
+
 /** Consecutive LiveKit absences before DB marks left (cron tick ≈ 15s). */
 const ghostMissStreak = new Map<string, number>();
 
@@ -1652,11 +1799,9 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
   let endedEmpty = 0;
   if (!isLiveKitConfigured()) return { cleared, endedEmpty };
 
-  const graceSec = Math.max(60, Math.min(600, Number(process.env.CALL_GHOST_GRACE_SEC ?? 180) || 180));
-  const requiredMisses = Math.max(
-    2,
-    Math.min(8, Number(process.env.CALL_GHOST_MISS_TICKS ?? 3) || 3),
-  );
+  const runtime = peekCallRuntimeConfig();
+  const graceSec = runtime.ghost_grace_sec;
+  const requiredMisses = runtime.ghost_miss_ticks;
 
   const active = await query(
     `SELECT c.*
