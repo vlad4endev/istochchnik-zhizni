@@ -111,16 +111,14 @@ export function DocumentViewerModal({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
 
-  // Блокируем скролл фона на мобиле, пока открыт просмотр.
+  // Блокируем только скролл фона. Не ставим touch-action: none — иначе
+  // на iOS/Android нельзя прокрутить сам документ внутри модалки.
   useEffect(() => {
     if (!open) return undefined;
     const prevOverflow = document.body.style.overflow;
-    const prevTouch = document.body.style.touchAction;
     document.body.style.overflow = 'hidden';
-    document.body.style.touchAction = 'none';
     return () => {
       document.body.style.overflow = prevOverflow;
-      document.body.style.touchAction = prevTouch;
     };
   }, [open]);
 

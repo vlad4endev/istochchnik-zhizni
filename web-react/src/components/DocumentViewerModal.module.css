@@ -170,8 +170,7 @@
   background: #f5f5f4 !important;
 }
 
-.viewerHost :global(#proxy-renderer),
-.viewerHost :global(#pdf-renderer) {
+.viewerHost :global(#proxy-renderer) {
   display: flex !important;
   flex: 1 1 auto !important;
   flex-direction: column !important;
@@ -181,12 +180,28 @@
   overflow: hidden !important;
 }
 
-/* Тулбар PDF: на мобиле — горизонтальный скролл, крупные тач-зоны */
+/* Скролл самого документа — на #pdf-renderer (не на body и не через touch-action: none). */
+.viewerHost :global(#pdf-renderer) {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+/* Тулбар PDF: sticky внутри скролла, на мобиле — горизонтальный свайп кнопок */
 .viewerHost :global(#pdf-controls) {
   position: sticky !important;
   top: 0;
   z-index: 5;
   display: flex !important;
+  flex-shrink: 0 !important;
   flex-wrap: nowrap !important;
   align-items: center !important;
   gap: 0.25rem !important;
@@ -195,6 +210,7 @@
   overflow-x: auto !important;
   overflow-y: hidden !important;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
   scrollbar-width: none;
   padding: 0.4rem 0.5rem !important;
   background: rgba(255, 255, 255, 0.96) !important;
@@ -235,15 +251,12 @@
   }
 }
 
-/* Область страниц PDF: скролл + страницы по ширине контейнера */
+/* Страницы идут потоком внутри #pdf-renderer — скролл у родителя */
 .viewerHost :global(#pdf-renderer > div:last-child),
 .viewerHost :global(.react-pdf__Document) {
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
+  flex: 0 0 auto !important;
   width: 100% !important;
-  overflow: auto !important;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  overflow: visible !important;
 }
 
 .viewerHost :global(#pdf-page-wrapper) {
@@ -301,6 +314,7 @@
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  touch-action: pan-y;
   padding: 0.5rem;
   background: #f5f5f4;
 }
