@@ -428,4 +428,56 @@ describe('messenger chatStore last message preview', () => {
       true,
     );
   });
+
+  it('removes a group from the list when the creator deletes it', async () => {
+    useChatStore.setState((s) => ({
+      ...s,
+      activeConversationId: 'deleted-group',
+      conversationsLoading: false,
+      conversationsLastLoadedAt: 0,
+      totalUnread: 2,
+      conversations: [
+        {
+          id: 'deleted-group',
+          type: 'group',
+          title: 'Удаляемая',
+          avatar_url: null,
+          updated_at: '2026-05-07T11:59:00.000Z',
+          last_message: null,
+          unread_count: 2,
+          other_member: null,
+          my_role: 'owner',
+        },
+      ],
+      messagesByConv: { 'deleted-group': [] },
+    }));
+
+    useChatStore.getState().handleWsMessageBatch([
+      { type: 'conv:deleted', conversationId: 'deleted-group' },
+    ]);
+
+    expect(useChatStore.getState().conversations.some((c) => c.id === 'deleted-group')).toBe(false);
+    expect(useChatStore.getState().messagesByConv['deleted-group']).toBeUndefined();
+    expect(useChatStore.getState().activeConversationId).toBeNull();
+    expect(useChatStore.getState().totalUnread).toBe(0);
+
+    vi.mocked(messengerApi.fetchConversations).mockResolvedValue([
+      {
+        id: 'deleted-group',
+        type: 'group',
+        title: 'Удаляемая',
+        avatar_url: null,
+        updated_at: '2026-05-07T11:59:00.000Z',
+        last_message: null,
+        unread_count: 2,
+        other_member: null,
+        my_role: 'owner',
+      },
+    ] as never);
+
+    await useChatStore.getState().loadConversations({ force: true });
+    expect(useChatStore.getState().conversations.some((c) => String(c.id) === 'deleted-group')).toBe(
+      false,
+    );
+  });
 });

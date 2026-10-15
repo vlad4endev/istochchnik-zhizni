@@ -13,7 +13,7 @@ import { attachConversationFromMessageIdParam, checkChatPermission } from '../mi
 import { ensureValidRequest, validateSendMessage } from '../middleware/messengerValidation';
 import { messengerUpload } from '../middleware/upload';
 import * as svc from '../services/messengerService';
-import { GroupChatTitleError, parsePageLimit, parsePageOffset, MEMBER_LIST_DEFAULT_LIMIT, MEMBER_LIST_MAX_LIMIT, MEMBER_SEARCH_DEFAULT_LIMIT, MEMBER_SEARCH_MAX_LIMIT } from '../utils/groupChatCreate';
+import { GroupChatTitleError, parsePageLimit, parsePageOffset, shouldDeleteOwnedConversation, MEMBER_LIST_DEFAULT_LIMIT, MEMBER_LIST_MAX_LIMIT, MEMBER_SEARCH_DEFAULT_LIMIT, MEMBER_SEARCH_MAX_LIMIT } from '../utils/groupChatCreate';
 import { getLinkPreview } from '../services/linkPreviewService';
 import {
   ensureAssistantConversation,
@@ -1218,6 +1218,24 @@ router.delete('/conversations/:id/participants/:memberId', checkChatPermission('
         return;
       }
     }
+
+    // Создатель удаляет группу/канал целиком, а не только свою строку участника.
+    if (shouldDeleteOwnedConversation(convType, req.chatAuth?.role, targetId === userId)) {
+      const removed = await svc.deleteOwnedConversation(convId, userId);
+      if (removed.deleted) {
+        const event = { type: 'conv:deleted' as const, conversationId: convId };
+        const notified = new Set<number>();
+        for (const memberId of removed.memberIds) {
+          if (!Number.isFinite(memberId) || notified.has(memberId)) continue;
+          notified.add(memberId);
+          sendToMember(memberId, event);
+        }
+        if (!notified.has(userId)) sendToMember(userId, event);
+        res.json({ ok: true, deleted: true });
+        return;
+      }
+    }
+
     await svc.removeParticipant(convId, targetId);
     sendToRoomAll(convId, { type: 'conv:updated', conversationId: convId });
     res.json({ ok: true });

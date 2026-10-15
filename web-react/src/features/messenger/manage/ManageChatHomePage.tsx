@@ -20,6 +20,7 @@ import {
 import * as api from '../api/messengerApi';
 import { compressImageForMessengerUpload } from '../compressImageForUpload';
 import { useChatStore } from '../chatStore';
+import { isConversationRemoved } from '../chatStoreWsBatch';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
@@ -57,6 +58,11 @@ export function ManageChatHomePage() {
     conv?.type === 'private'
       ? (conv.other_member?.first_name ? `${conv.other_member.first_name} ${conv.other_member.last_name ?? ''}`.trim() : conv.other_member?.name) ?? 'Чат'
       : conv?.title ?? meta?.title ?? 'Чат';
+
+  useEffect(() => {
+    if (!chatId || !isConversationRemoved(chatId)) return;
+    navigate('/messenger', { replace: true });
+  }, [chatId, conv, navigate]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -330,13 +336,28 @@ export function ManageChatHomePage() {
           type="button"
           onClick={() => {
             if (!chatId) return;
-            if (!window.confirm('Вы уверены? Вас нужно будет снова пригласить.')) return;
+            const ownerDeletes = meta?.my_role === 'owner';
+            const noun = (conv?.type ?? meta?.type) === 'channel' ? 'канал' : 'группу';
+            const confirmed = ownerDeletes
+              ? window.confirm(
+                  `Удалить ${noun} для всех участников? Переписка будет стёрта, чат пропадёт у всех и из базы.`,
+                )
+              : window.confirm('Вы уверены? Вас нужно будет снова пригласить.');
+            if (!confirmed) return;
             void leaveChat(chatId).then(() => navigate('/messenger'));
           }}
           className="flex w-full items-center gap-3 px-4 py-3 text-left text-red-600"
         >
           <LuDoorOpen size={18} />
-          <span className="text-base font-medium">Покинуть группу</span>
+          <span className="text-base font-medium">
+            {meta?.my_role === 'owner'
+              ? (conv?.type ?? meta?.type) === 'channel'
+                ? 'Удалить канал'
+                : 'Удалить группу'
+              : (conv?.type ?? meta?.type) === 'channel'
+                ? 'Покинуть канал'
+                : 'Покинуть группу'}
+          </span>
         </button>
       </ManageSettingsGroup>
 

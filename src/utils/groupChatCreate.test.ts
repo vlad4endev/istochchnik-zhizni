@@ -9,6 +9,7 @@ import {
   normalizeGroupChatTitle,
   parsePageLimit,
   parsePageOffset,
+  shouldDeleteOwnedConversation,
 } from './groupChatCreate';
 
 function main(): void {
@@ -36,6 +37,13 @@ function main(): void {
     false,
   );
   assert.equal(memberMatchesNameQuery({ name: 'Анна' }, ''), true);
+
+  assert.equal(shouldDeleteOwnedConversation('group', 'owner', true), true);
+  assert.equal(shouldDeleteOwnedConversation('channel', 'owner', true), true);
+  assert.equal(shouldDeleteOwnedConversation('group', 'admin', true), false);
+  assert.equal(shouldDeleteOwnedConversation('group', 'member', true), false);
+  assert.equal(shouldDeleteOwnedConversation('group', 'owner', false), false);
+  assert.equal(shouldDeleteOwnedConversation('private', 'owner', true), false);
 
   assert.equal(parsePageLimit('0', 50, 200), 50);
   assert.equal(parsePageLimit('500', 50, 200), 200);
