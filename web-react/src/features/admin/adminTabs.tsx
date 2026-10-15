@@ -118,7 +118,7 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
   {
     id: 'chats',
     label: 'Группы и каналы',
-    navLabel: 'Чаты',
+    navLabel: 'Группы',
     Icon: LuMessagesSquare,
     short: 'Чаты',
     description:
@@ -210,10 +210,10 @@ export const ADMIN_SIDEBAR_GROUPS: readonly AdminSidebarGroup[] = [
   {
     label: 'Система',
     items: [
+      { id: 'chats' },
       { id: 'sections' },
       { id: 'roles' },
       { id: 'journal' },
-      { id: 'chats' },
       { id: 'notifications' },
       { id: 'telegram' },
       { id: 'backup' },
