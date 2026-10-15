@@ -41,4 +41,16 @@ describe('mobile call layout', () => {
     expect(tg).toMatch(/initTelegramWebApp/);
     expect(callWindow).toMatch(/setTelegramCallPresentation/);
   });
+
+  it('Safari: видео заполняет плитку, окно по visualViewport', () => {
+    const css = readFileSync(join(root, 'src/features/calls/calls.css'), 'utf8');
+    expect(css).toMatch(/--viewport-height,\s*100dvh/);
+    expect(css).toMatch(/call-participant-tile__media > video/);
+    expect(css).toMatch(
+      /\.call-participant-tile__media\s*\{[\s\S]*?display:\s*block/,
+    );
+    expect(css).toMatch(
+      /\.call-participant-tile__video,\s*\n\s*\.call-participant-tile--video \.call-participant-tile__media > video/,
+    );
+  });
 });
