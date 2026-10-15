@@ -1,0 +1,350 @@
+/* Оболочка: на мобиле — почти fullscreen + safe-area; на desktop — центрированная модалка. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5200;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  padding: 0;
+  /* iOS: учитываем вырезы */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+@media (min-width: 640px) {
+  .backdrop {
+    align-items: center;
+    padding: max(0.75rem, env(safe-area-inset-top, 0px))
+      max(1rem, env(safe-area-inset-right, 0px))
+      max(0.75rem, env(safe-area-inset-bottom, 0px))
+      max(1rem, env(safe-area-inset-left, 0px));
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+  border-radius: 0;
+}
+
+@media (min-width: 640px) {
+  .panel {
+    width: min(100%, 1200px);
+    height: min(100%, 92dvh);
+    max-height: min(100%, 92dvh);
+    border-radius: 1rem;
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  min-height: 3rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e7e5e4;
+  background: #fff;
+}
+
+@media (min-width: 640px) {
+  .header {
+    padding: 0.625rem 1rem;
+  }
+}
+
+.title {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #292524;
+}
+
+.headerActions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.iconBtn {
+  display: inline-flex;
+  height: 2.5rem;
+  width: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: #57534e;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.iconBtn:hover {
+  background: #f5f5f4;
+  color: #1c1917;
+}
+
+@media (min-width: 640px) {
+  .iconBtn {
+    height: 2.25rem;
+    width: 2.25rem;
+  }
+}
+
+.body {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f5f5f4;
+}
+
+.status {
+  padding: 1.25rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: #78716c;
+}
+
+.errorBox {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: #57534e;
+}
+
+.downloadBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  background: var(--primary, #7d3640);
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+/* ——— DocViewer / PDF.js ——— */
+.viewerHost {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+.viewerHost :global(#react-doc-viewer) {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  background: #f5f5f4 !important;
+}
+
+.viewerHost :global(#proxy-renderer),
+.viewerHost :global(#pdf-renderer) {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+/* Тулбар PDF: на мобиле — горизонтальный скролл, крупные тач-зоны */
+.viewerHost :global(#pdf-controls) {
+  position: sticky !important;
+  top: 0;
+  z-index: 5;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 0.25rem !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 0.4rem 0.5rem !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-bottom: 1px solid #e7e5e4 !important;
+  box-sizing: border-box !important;
+}
+
+.viewerHost :global(#pdf-controls::-webkit-scrollbar) {
+  display: none;
+}
+
+.viewerHost :global(#pdf-controls button),
+.viewerHost :global(#pdf-controls a) {
+  flex: 0 0 auto !important;
+  min-width: 2.5rem !important;
+  min-height: 2.5rem !important;
+  width: 2.5rem !important;
+  height: 2.5rem !important;
+  padding: 0.35rem !important;
+  box-sizing: border-box !important;
+}
+
+.viewerHost :global(#pdf-page-info),
+.viewerHost :global(#pdf-pagination-info) {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+  font-size: 0.75rem !important;
+  padding: 0 0.35rem !important;
+}
+
+@media (min-width: 640px) {
+  .viewerHost :global(#pdf-controls button),
+  .viewerHost :global(#pdf-controls a) {
+    min-width: 2.25rem !important;
+    min-height: 2.25rem !important;
+    width: 2.25rem !important;
+    height: 2.25rem !important;
+  }
+}
+
+/* Область страниц PDF: скролл + страницы по ширине контейнера */
+.viewerHost :global(#pdf-renderer > div:last-child),
+.viewerHost :global(.react-pdf__Document) {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  overflow: auto !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.viewerHost :global(#pdf-page-wrapper) {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0.5rem !important;
+  margin: 0 !important;
+}
+
+.viewerHost :global(.react-pdf__Page) {
+  margin: 0 auto 0.75rem !important;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.12);
+}
+
+/* Не масштабируем canvas через CSS — иначе уезжает textLayer react-pdf. */
+.viewerHost :global(.react-pdf__Page canvas) {
+  display: block;
+}
+
+/* Картинки / видео / HTML внутри DocViewer */
+.viewerHost :global(img),
+.viewerHost :global(video) {
+  max-width: 100% !important;
+  height: auto !important;
+  object-fit: contain;
+}
+
+.viewerHost :global(iframe) {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: min(70dvh, 640px);
+  border: 0 !important;
+}
+
+/* TXT / CSV */
+.viewerHost :global(pre),
+.viewerHost :global(#txt-renderer),
+.viewerHost :global(#csv-renderer) {
+  max-width: 100% !important;
+  overflow: auto !important;
+  word-break: break-word;
+  white-space: pre-wrap;
+  font-size: 0.875rem !important;
+  padding: 0.75rem !important;
+}
+
+/* ——— docx-preview ——— */
+.docxScroll {
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 0.5rem;
+  background: #f5f5f4;
+}
+
+@media (min-width: 640px) {
+  .docxScroll {
+    padding: 1rem;
+  }
+}
+
+.docxHost {
+  margin: 0 auto;
+  width: 100%;
+  max-width: 900px;
+}
+
+.docxHost :global(.docx-wrapper) {
+  background: transparent !important;
+  padding: 0 !important;
+  width: 100% !important;
+}
+
+.docxHost :global(.docx-wrapper > section.docx) {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: auto !important;
+  margin: 0 0 0.75rem !important;
+  padding: 1rem !important;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.1) !important;
+  overflow-x: auto !important;
+}
+
+@media (min-width: 640px) {
+  .docxHost :global(.docx-wrapper > section.docx) {
+    padding: 1.5rem 2rem !important;
+  }
+}
+
+.docxHost :global(table) {
+  max-width: 100% !important;
+}
+
+.docxHost :global(img) {
+  max-width: 100% !important;
+  height: auto !important;
+}

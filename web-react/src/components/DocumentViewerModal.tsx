@@ -12,6 +12,7 @@ import {
   isDocxDocument,
   isPublicHttpDocumentUrl,
 } from './documentPreviewTypes';
+import styles from './DocumentViewerModal.module.css';
 
 export { canPreviewDocumentInline, canOpenDocumentViewer } from './documentPreviewTypes';
 
@@ -69,6 +70,22 @@ async function downloadViaAuthOrLink(url: string, fileName: string): Promise<voi
   }
 }
 
+function useIsCompactViewport(): boolean {
+  const [compact, setCompact] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 639px)').matches : false,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const onChange = () => setCompact(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  return compact;
+}
+
 export function DocumentViewerModal({
   open,
   fileUrl,
@@ -79,9 +96,11 @@ export function DocumentViewerModal({
 }: DocumentViewerModalProps) {
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
   const docxHostRef = useRef<HTMLDivElement | null>(null);
+  const viewerHostRef = useRef<HTMLDivElement | null>(null);
   const fileType = inferDocumentFileType(fileName, fileMime);
   const isDocx = isDocxDocument(fileName, fileMime);
   const previewUri = (viewUrl && viewUrl.trim()) || fileUrl || '';
+  const isCompact = useIsCompactViewport();
 
   useEffect(() => {
     if (!open) return undefined;
@@ -91,6 +110,19 @@ export function DocumentViewerModal({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
+
+  // Блокируем скролл фона на мобиле, пока открыт просмотр.
+  useEffect(() => {
+    if (!open) return undefined;
+    const prevOverflow = document.body.style.overflow;
+    const prevTouch = document.body.style.touchAction;
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.touchAction = prevTouch;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open || !fileUrl) {
@@ -162,11 +194,13 @@ export function DocumentViewerModal({
         await renderAsync(buffer, docxHostRef.current, undefined, {
           className: 'messenger-docx-preview',
           inWrapper: true,
-          ignoreWidth: false,
-          ignoreHeight: false,
+          // На узких экранах подгоняем страницу под ширину контейнера.
+          ignoreWidth: true,
+          ignoreHeight: true,
           breakPages: true,
           renderHeaders: true,
           renderFooters: true,
+          useBase64URL: true,
         });
       } catch {
         if (!cancelled) setState({ kind: 'error' });
@@ -177,6 +211,28 @@ export function DocumentViewerModal({
       cancelled = true;
     };
   }, [state]);
+
+  // DocViewer мерит rendererRect по контейнеру — после монтирования дергаем resize,
+  // чтобы PDF пересчитал width/height под актуальный размер модалки.
+  useEffect(() => {
+    if (state.kind !== 'docviewer') return undefined;
+    const host = viewerHostRef.current;
+    if (!host) return undefined;
+
+    const kick = () => {
+      window.dispatchEvent(new Event('resize'));
+    };
+    const raf = window.requestAnimationFrame(kick);
+    const t = window.setTimeout(kick, 120);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(kick) : null;
+    ro?.observe(host);
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+      ro?.disconnect();
+    };
+  }, [state.kind, isCompact]);
 
   const documents = useMemo(() => {
     if (state.kind !== 'docviewer') return [];
@@ -189,6 +245,15 @@ export function DocumentViewerModal({
     ];
   }, [state, fileName, fileType]);
 
+  const pdfZoom = useMemo(
+    () => ({
+      // На мобиле чуть меньше стартовый zoom — страница лучше влезает по ширине.
+      defaultZoom: isCompact ? 0.85 : 1,
+      zoomJump: isCompact ? 0.15 : 0.2,
+    }),
+    [isCompact],
+  );
+
   if (!open || !fileUrl) return null;
 
   const downloadTarget = fileUrl;
@@ -196,37 +261,36 @@ export function DocumentViewerModal({
     state.kind === 'docx' ||
     (state.kind === 'docviewer' && (state.blobUrl != null || isMessengerAttachmentFileUrl(downloadTarget)));
 
+  const onDownload = () => {
+    if (state.kind === 'docx') {
+      triggerBlobDownload(state.blobUrl, fileName);
+      return;
+    }
+    if (state.kind === 'docviewer' && state.blobUrl) {
+      triggerBlobDownload(state.blobUrl, fileName);
+      return;
+    }
+    void downloadViaAuthOrLink(downloadTarget, fileName);
+  };
+
   return (
     <BodyPortal>
       <div
-        className="fixed inset-0 z-[5200] bg-black/70 p-3 sm:p-4"
+        className={styles.backdrop}
         role="dialog"
         aria-modal="true"
         aria-label={`Просмотр документа ${fileName}`}
         onClick={onClose}
       >
-        <div
-          className="mx-auto flex h-full w-full max-w-[1200px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-3 py-2.5 sm:px-4">
-            <p className="min-w-0 truncate text-sm font-semibold text-stone-800">{fileName}</p>
-            <div className="flex shrink-0 items-center gap-1">
+        <div className={styles.panel} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.header}>
+            <p className={styles.title}>{fileName}</p>
+            <div className={styles.headerActions}>
               {canQuickDownload ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (state.kind === 'docx') {
-                      triggerBlobDownload(state.blobUrl, fileName);
-                      return;
-                    }
-                    if (state.kind === 'docviewer' && state.blobUrl) {
-                      triggerBlobDownload(state.blobUrl, fileName);
-                      return;
-                    }
-                    void downloadViaAuthOrLink(downloadTarget, fileName);
-                  }}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-100 hover:text-stone-900"
+                  onClick={onDownload}
+                  className={styles.iconBtn}
                   aria-label="Скачать документ"
                 >
                   <LuDownload className="h-5 w-5" />
@@ -235,72 +299,67 @@ export function DocumentViewerModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-100 hover:text-stone-900"
+                className={styles.iconBtn}
                 aria-label="Закрыть просмотр документа"
               >
                 <LuX className="h-5 w-5" />
               </button>
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-hidden bg-stone-100">
+
+          <div className={styles.body}>
             {state.kind === 'loading' || state.kind === 'idle' ? (
-              <p className="p-4 text-center text-sm text-stone-500" role="status">
+              <p className={styles.status} role="status">
                 Загрузка…
               </p>
             ) : null}
+
             {state.kind === 'error' ? (
-              <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-stone-600">
+              <div className={styles.errorBox}>
                 <p>Не удалось показать документ.</p>
-                <button
-                  type="button"
-                  onClick={() => void downloadViaAuthOrLink(downloadTarget, fileName)}
-                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-extrabold text-white"
-                >
+                <button type="button" onClick={onDownload} className={styles.downloadBtn}>
                   <LuDownload className="h-4 w-4" />
                   Скачать файл
                 </button>
               </div>
             ) : null}
+
             {state.kind === 'docx' ? (
-              <div className="h-full overflow-auto p-3 sm:p-4">
-                <div ref={docxHostRef} className="mx-auto max-w-[900px] rounded-lg bg-white shadow-sm" />
+              <div className={styles.docxScroll}>
+                <div ref={docxHostRef} className={styles.docxHost} />
               </div>
             ) : null}
+
             {state.kind === 'docviewer' ? (
-              <DocViewer
-                documents={documents}
-                pluginRenderers={DocViewerRenderers}
-                language="ru"
-                prefetchMethod="GET"
-                className="h-full min-h-0 !bg-stone-100"
-                style={{ height: '100%', width: '100%' }}
-                config={{
-                  header: {
-                    disableHeader: true,
-                    disableFileName: true,
-                  },
-                  pdfVerticalScrollByDefault: true,
-                  pdfZoom: {
-                    defaultZoom: 1,
-                    zoomJump: 0.2,
-                  },
-                  noRenderer: {
-                    overrideComponent: () => (
-                      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-stone-600">
-                        <p>Просмотр этого формата недоступен в браузере.</p>
-                        <button
-                          type="button"
-                          onClick={() => void downloadViaAuthOrLink(downloadTarget, fileName)}
-                          className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-extrabold text-white"
-                        >
-                          <LuDownload className="h-4 w-4" />
-                          Скачать файл
-                        </button>
-                      </div>
-                    ),
-                  },
-                }}
-              />
+              <div ref={viewerHostRef} className={styles.viewerHost}>
+                <DocViewer
+                  key={`doc-${isCompact ? 'm' : 'd'}-${documents[0]?.uri ?? ''}`}
+                  documents={documents}
+                  pluginRenderers={DocViewerRenderers}
+                  language="ru"
+                  prefetchMethod="GET"
+                  style={{ width: '100%', height: '100%' }}
+                  config={{
+                    header: {
+                      disableHeader: true,
+                      disableFileName: true,
+                    },
+                    pdfVerticalScrollByDefault: true,
+                    pdfZoom,
+                    noRenderer: {
+                      overrideComponent: () => (
+                        <div className={styles.errorBox}>
+                          <p>Просмотр этого формата недоступен в браузере.</p>
+                          <button type="button" onClick={onDownload} className={styles.downloadBtn}>
+                            <LuDownload className="h-4 w-4" />
+                            Скачать файл
+                          </button>
+                        </div>
+                      ),
+                    },
+                  }}
+                />
+              </div>
             ) : null}
           </div>
         </div>
