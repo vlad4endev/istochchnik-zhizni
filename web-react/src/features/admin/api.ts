@@ -1769,3 +1769,184 @@ export async function deleteMemberFamilyLink(memberId: number, linkId: number): 
   const { data } = await apiClient.delete<FamilyLink[]>(`${USERS}/${memberId}/family/${linkId}`);
   return data;
 }
+
+/** ——— Настройки и статистика звонков (админ) ——— */
+
+export type CallFeatureFlags = {
+  direct_calls: boolean;
+  group_calls: boolean;
+  link_meetings: boolean;
+  audio: boolean;
+  video: boolean;
+};
+
+export type CallSettingsAdminResponse = {
+  enabled: boolean | null;
+  effective_enabled: boolean;
+  enabled_source: 'db' | 'env';
+  env_calls_enabled: boolean;
+  livekit: {
+    api_key_masked: string | null;
+    has_api_key: boolean;
+    api_key_source: 'db' | 'env' | 'none';
+    has_api_secret: boolean;
+    api_secret_source: 'db' | 'env' | 'none';
+    internal_url: string;
+    internal_url_source: 'db' | 'env' | 'none';
+    public_url: string;
+    public_url_source: 'db' | 'env' | 'none';
+    configured: boolean;
+    probe: { ok: boolean; url?: string; error?: string; configured: boolean } | null;
+  };
+  ring_timeout_sec: number;
+  token_ttl_sec: number;
+  invite_ttl_hours: number;
+  max_group_participants: number;
+  ghost_grace_sec: number;
+  ghost_miss_ticks: number;
+  overrides: {
+    ring_timeout_sec: number | null;
+    token_ttl_sec: number | null;
+    invite_ttl_hours: number | null;
+    max_group_participants: number | null;
+    ghost_grace_sec: number | null;
+    ghost_miss_ticks: number | null;
+    livekit_internal_url: string | null;
+    livekit_public_url: string | null;
+  };
+  features: CallFeatureFlags;
+  allowed_roles: string[];
+  role_catalog: Array<{ id: string; label: string }>;
+  status_catalog: Array<{
+    id: string;
+    label: string;
+    default_label: string;
+    kind: 'call' | 'participant' | 'end_reason';
+    description: string;
+  }>;
+  status_labels: {
+    call: Record<string, string>;
+    participant: Record<string, string>;
+    end_reason: Record<string, string>;
+  };
+  limits: Record<string, { min: number; max: number; default: number }>;
+};
+
+export type CallUsageStatsResponse = {
+  period: { from: string; to: string };
+  summary: {
+    total_calls: number;
+    active_now: number;
+    completed: number;
+    missed: number;
+    declined: number;
+    cancelled: number;
+    failed: number;
+    avg_duration_sec: number | null;
+    total_duration_sec: number;
+    avg_quality_score: number | null;
+    quality_report_count: number;
+    by_media: { audio: number; video: number };
+    by_type: { direct: number; group: number };
+    by_access: { closed: number; link: number };
+  };
+  by_day: Array<{
+    day: string;
+    count: number;
+    avg_duration_sec: number | null;
+    avg_quality: number | null;
+  }>;
+  by_status: Array<{ status: string; label: string; count: number }>;
+  by_end_reason: Array<{ reason: string; label: string; count: number }>;
+  top_users: Array<{
+    member_id: number;
+    name: string;
+    avatar_url: string | null;
+    calls_initiated: number;
+    calls_joined: number;
+    total_duration_sec: number;
+    avg_quality: number | null;
+  }>;
+  recent: Array<{
+    id: string;
+    type: string;
+    media_type: string;
+    status: string;
+    status_label: string;
+    access_mode: string;
+    title: string | null;
+    initiated_by: number;
+    initiator_name: string;
+    initiator_avatar: string | null;
+    conversation_id: string | null;
+    created_at: string;
+    started_at: string | null;
+    ended_at: string | null;
+    duration_seconds: number | null;
+    end_reason: string | null;
+    end_reason_label: string | null;
+    quality_score: number | null;
+    quality_reports: Array<{
+      userId: number;
+      score: number;
+      connectionQuality?: string | null;
+      rttMs?: number | null;
+      packetLoss?: number | null;
+      jitterMs?: number | null;
+      at: string;
+    }>;
+    participants: Array<{
+      user_id: number;
+      name: string;
+      avatar_url: string | null;
+      role: string;
+      status: string;
+      joined_at: string | null;
+      left_at: string | null;
+    }>;
+  }>;
+};
+
+export async function fetchCallSettingsAdmin(): Promise<CallSettingsAdminResponse> {
+  const { data } = await apiClient.get<CallSettingsAdminResponse>('/api/settings/calls/admin');
+  return data;
+}
+
+export async function patchCallSettings(body: {
+  enabled?: boolean | null;
+  livekit_api_key?: string | null;
+  livekit_api_secret?: string | null;
+  clear_livekit_api_key?: boolean;
+  clear_livekit_api_secret?: boolean;
+  livekit_internal_url?: string | null;
+  livekit_public_url?: string | null;
+  ring_timeout_sec?: number | null;
+  token_ttl_sec?: number | null;
+  invite_ttl_hours?: number | null;
+  max_group_participants?: number | null;
+  ghost_grace_sec?: number | null;
+  ghost_miss_ticks?: number | null;
+  features?: Partial<CallFeatureFlags>;
+  allowed_roles?: string[];
+  status_labels?: {
+    call?: Record<string, string | null>;
+    participant?: Record<string, string | null>;
+    end_reason?: Record<string, string | null>;
+  };
+}): Promise<CallSettingsAdminResponse> {
+  const { data } = await apiClient.patch<CallSettingsAdminResponse>('/api/settings/calls', body);
+  return data;
+}
+
+export async function fetchCallUsageStats(params?: {
+  from?: string;
+  to?: string;
+  status?: string;
+  memberId?: number;
+  limit?: number;
+}): Promise<CallUsageStatsResponse> {
+  const { data } = await apiClient.get<CallUsageStatsResponse>('/api/settings/calls/stats', {
+    params,
+  });
+  return data;
+}

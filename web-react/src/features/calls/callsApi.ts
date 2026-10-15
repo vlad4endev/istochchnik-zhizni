@@ -209,6 +209,24 @@ export async function createCallInvitation(callId: string): Promise<{
   }
 }
 
+/** Отчёт качества связи (0–5) для админ-статистики. */
+export async function reportCallQuality(
+  callId: string,
+  body: {
+    score: number;
+    connectionQuality?: string | null;
+    rttMs?: number | null;
+    packetLoss?: number | null;
+    jitterMs?: number | null;
+  },
+): Promise<void> {
+  try {
+    await apiClient.post(`/api/calls/${encodeURIComponent(callId)}/quality`, body);
+  } catch {
+    // best-effort — не мешаем завершению звонка
+  }
+}
+
 export function mapDeviceError(err: unknown): string {
   const name = err && typeof err === 'object' && 'name' in err ? String((err as { name: string }).name) : '';
   const msg = err instanceof Error ? err.message : String(err ?? '');

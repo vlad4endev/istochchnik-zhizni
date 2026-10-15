@@ -12,6 +12,7 @@ import {
   LuPackage,
   LuPalette,
   LuPanelsTopLeft,
+  LuPhone,
   LuShield,
   LuSend,
   LuSparkles,
@@ -34,6 +35,7 @@ export interface AdminTabConfig {
     | 'telegram'
     | 'backup'
     | 'releases'
+    | 'calls'
     | 'integrations'
     | 'diagnostics';
   /** Заголовок раздела в контенте и полная подпись для подсказки в сайдбаре */
@@ -158,6 +160,14 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
       'Публикация Android APK или ссылок на сборки — виджет скачивания на главной странице.',
   },
   {
+    id: 'calls',
+    label: 'Звонки',
+    Icon: LuPhone,
+    short: 'LiveKit',
+    description:
+      'Служба звонков LiveKit: включение, ключи, лимиты, статусы, роли и статистика использования с качеством связи.',
+  },
+  {
     id: 'diagnostics',
     label: 'Диагностика проекта',
     navLabel: 'Диагностика',
@@ -218,6 +228,7 @@ export const ADMIN_SIDEBAR_GROUPS: readonly AdminSidebarGroup[] = [
       { id: 'telegram' },
       { id: 'backup' },
       { id: 'releases' },
+      { id: 'calls' },
       { id: 'diagnostics' },
       { id: 'integrations' },
     ],

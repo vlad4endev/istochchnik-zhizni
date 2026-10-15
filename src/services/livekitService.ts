@@ -12,11 +12,54 @@ export type LiveKitJoinTokenInput = {
   ttlSeconds?: number;
 };
 
+/** Runtime overrides from admin `call_settings_json` (env remains fallback). */
+export type LiveKitSettingsOverride = {
+  apiKey: string | null;
+  apiSecret: string | null;
+  internalUrl: string | null;
+  publicUrl: string | null;
+  tokenTtlSec: number | null;
+};
+
 /** Запомненный рабочий Room Service URL после успешного createRoom/listRooms. */
 let preferredInternalUrl: string | null = null;
 
+let settingsOverride: LiveKitSettingsOverride = {
+  apiKey: null,
+  apiSecret: null,
+  internalUrl: null,
+  publicUrl: null,
+  tokenTtlSec: null,
+};
+
+export function applyLiveKitSettingsOverride(next: Partial<LiveKitSettingsOverride>): void {
+  settingsOverride = {
+    apiKey: next.apiKey !== undefined ? next.apiKey : settingsOverride.apiKey,
+    apiSecret: next.apiSecret !== undefined ? next.apiSecret : settingsOverride.apiSecret,
+    internalUrl: next.internalUrl !== undefined ? next.internalUrl : settingsOverride.internalUrl,
+    publicUrl: next.publicUrl !== undefined ? next.publicUrl : settingsOverride.publicUrl,
+    tokenTtlSec: next.tokenTtlSec !== undefined ? next.tokenTtlSec : settingsOverride.tokenTtlSec,
+  };
+  preferredInternalUrl = null;
+}
+
 function trimEnv(name: string): string {
   return String(process.env[name] ?? '').trim();
+}
+
+function resolveApiKey(): string {
+  return (settingsOverride.apiKey || trimEnv('LIVEKIT_API_KEY')).trim();
+}
+
+function resolveApiSecret(): string {
+  return (settingsOverride.apiSecret || trimEnv('LIVEKIT_API_SECRET')).trim();
+}
+
+function resolveTokenTtlSec(): number {
+  if (settingsOverride.tokenTtlSec != null && Number.isFinite(settingsOverride.tokenTtlSec)) {
+    return Math.max(60, Math.min(28_800, Math.floor(settingsOverride.tokenTtlSec)));
+  }
+  return Math.max(60, Math.min(28_800, Number(process.env.CALL_TOKEN_TTL_SEC ?? 14_400) || 14_400));
 }
 
 /**
@@ -45,7 +88,8 @@ export function normalizeLiveKitInternalUrl(raw: string): string {
  * Внутренний URL Room Service (host-network LiveKit → http://host.docker.internal:7880).
  */
 export function getLiveKitInternalUrl(): string {
-  return normalizeLiveKitInternalUrl(trimEnv('LIVEKIT_URL'));
+  const fromAdmin = (settingsOverride.internalUrl || '').trim();
+  return normalizeLiveKitInternalUrl(fromAdmin || trimEnv('LIVEKIT_URL'));
 }
 
 /** Кандидаты Room Service: preferred → env → docker gateway → loopback. */
@@ -64,16 +108,16 @@ export function getLiveKitInternalUrlCandidates(): string[] {
 }
 
 export function isLiveKitConfigured(): boolean {
-  return Boolean(trimEnv('LIVEKIT_API_KEY') && trimEnv('LIVEKIT_API_SECRET') && getLiveKitInternalUrl());
+  return Boolean(resolveApiKey() && resolveApiSecret() && getLiveKitInternalUrl());
 }
 
 /** Логи при старте API: явные ошибки .env (дубликаты call.*, livekit DNS). */
 export function logLiveKitBootDiagnostics(): void {
   const callsOn = process.env.CALLS_ENABLED === 'true';
-  const key = trimEnv('LIVEKIT_API_KEY');
-  const secret = trimEnv('LIVEKIT_API_SECRET');
-  const rawUrl = trimEnv('LIVEKIT_URL');
-  const pub = trimEnv('LIVEKIT_PUBLIC_URL');
+  const key = resolveApiKey();
+  const secret = resolveApiSecret();
+  const rawUrl = getLiveKitInternalUrl() || trimEnv('LIVEKIT_URL');
+  const pub = (settingsOverride.publicUrl || '').trim() || trimEnv('LIVEKIT_PUBLIC_URL');
   const web = trimEnv('PUBLIC_WEB_ORIGIN');
   const internal = getLiveKitInternalUrl();
   const publicUrl = key && secret && internal ? getLiveKitPublicUrl() : '';
@@ -158,7 +202,8 @@ function rewriteLegacyCallHost(url: string): string | null {
 export function getLiveKitPublicUrl(): string {
   const web = trimEnv('PUBLIC_WEB_ORIGIN');
   const fromWeb = web ? publicUrlFromWebOrigin(web) : null;
-  const pub = trimEnv('LIVEKIT_PUBLIC_URL').replace(/\/$/, '');
+  const overridePub = (settingsOverride.publicUrl || '').trim().replace(/\/$/, '');
+  const pub = (overridePub || trimEnv('LIVEKIT_PUBLIC_URL')).replace(/\/$/, '');
 
   let resolved = '';
   if (pub) {
@@ -202,8 +247,8 @@ export function getLiveKitPublicUrl(): string {
 }
 
 function roomServiceAt(url: string): RoomServiceClient {
-  const apiKey = trimEnv('LIVEKIT_API_KEY');
-  const apiSecret = trimEnv('LIVEKIT_API_SECRET');
+  const apiKey = resolveApiKey();
+  const apiSecret = resolveApiSecret();
   if (!url || !apiKey || !apiSecret) {
     throw new Error('livekit_not_configured');
   }
@@ -371,15 +416,13 @@ export async function mintLiveKitJoinToken(input: LiveKitJoinTokenInput): Promis
   url: string;
   identity: string;
 }> {
-  const apiKey = trimEnv('LIVEKIT_API_KEY');
-  const apiSecret = trimEnv('LIVEKIT_API_SECRET');
+  const apiKey = resolveApiKey();
+  const apiSecret = resolveApiSecret();
   if (!apiKey || !apiSecret) {
     throw new Error('livekit_not_configured');
   }
   // До 8 ч — длинные конференции; reconnect после TTL требует свежий JWT.
-  const ttl =
-    input.ttlSeconds ??
-    Math.max(60, Math.min(28_800, Number(process.env.CALL_TOKEN_TTL_SEC ?? 14_400) || 14_400));
+  const ttl = input.ttlSeconds ?? resolveTokenTtlSec();
 
   const avatar = String(input.avatarUrl ?? '').trim();
   const at = new AccessToken(apiKey, apiSecret, {

@@ -57,6 +57,7 @@ import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
 import { initBackupJob } from './cron/backupJob';
 import { initCallsCleanupJob } from './cron/callsCleanup';
 import { logLiveKitBootDiagnostics, probeLiveKitRoomService } from './services/livekitService';
+import { warmCallSettingsCache } from './services/callSettingsService';
 import callsRoutes, { callInvitationsRouter } from './routes/callsRoutes';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel, ensureMediykaMessengerChannel, ensureServicePlanPlanningMessengerChannel } from './services/messengerService';
@@ -603,7 +604,12 @@ async function start(): Promise<void> {
   initBackupJob();
   initCallsCleanupJob();
   startAnalyticsMaintenance();
-  logLiveKitBootDiagnostics();
+  void warmCallSettingsCache()
+    .then(() => logLiveKitBootDiagnostics())
+    .catch((e) => {
+      console.warn('[calls] warmCallSettingsCache failed:', e instanceof Error ? e.message : e);
+      logLiveKitBootDiagnostics();
+    });
 
   const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
   void cleanupExpiredSessions().catch((e) => console.warn('[auth] cleanupExpiredSessions (boot):', e));

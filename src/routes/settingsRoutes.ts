@@ -26,6 +26,11 @@ import {
   patchRolePermissionsSettingsHandler,
   resetRolePermissionsSettingsHandler,
 } from '../controllers/rolePermissionsSettingsController';
+import {
+  getCallSettingsAdminHandler,
+  getCallUsageStatsHandler,
+  patchCallSettingsHandler,
+} from '../controllers/callSettingsController';
 
 const router = Router();
 
@@ -50,5 +55,10 @@ router.get('/role-permissions', getRolePermissionsSettingsPublic);
 router.get('/role-permissions/admin', getRolePermissionsSettingsAdmin);
 router.patch('/role-permissions', patchRolePermissionsSettingsHandler);
 router.post('/role-permissions/reset', resetRolePermissionsSettingsHandler);
+
+/** Настройки LiveKit-звонков и статистика использования (только админ). */
+router.get('/calls/admin', getCallSettingsAdminHandler);
+router.patch('/calls', patchCallSettingsHandler);
+router.get('/calls/stats', getCallUsageStatsHandler);
 
 export default router;
