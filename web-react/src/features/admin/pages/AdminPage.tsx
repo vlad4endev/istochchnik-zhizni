@@ -483,8 +483,8 @@ export function AdminPage() {
 
         <div className="mb-4 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
           <div className="min-w-[11rem] flex-1">
-            <h2 className="text-base font-medium tracking-tight text-stone-900">{meta.label}</h2>
-            <p className="mt-0.5 truncate text-xs text-stone-500">{meta.description}</p>
+            <h2 className="text-base font-medium tracking-tight text-stone-900 sm:text-lg">{meta.label}</h2>
+            <p className="mt-1 line-clamp-3 text-pretty text-xs leading-relaxed text-stone-500 sm:line-clamp-2">{meta.description}</p>
           </div>
           {tab === 'members' && (
             <button
