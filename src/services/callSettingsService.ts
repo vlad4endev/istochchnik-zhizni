@@ -2,8 +2,10 @@ import { query } from '../config/db';
 import {
   buildCallRuntimeConfig,
   buildCallSettingsAdminView,
+  isCallLiveKitRoutingMode,
   normalizeCallSettingsDocument,
   type CallFeatureFlags,
+  type CallLiveKitRoutingMode,
   type CallRuntimeConfig,
   type CallSettingsAdminView,
   type CallSettingsDocument,
@@ -13,7 +15,14 @@ import {
   isAppRoleAllowedForCalls,
 } from '../types/callSettings';
 import type { AppRole } from '../types/sectionVisibilitySettings';
-import { applyLiveKitSettingsOverride, probeLiveKitRoomService } from './livekitService';
+import {
+  applyLiveKitSettingsOverride,
+  getLiveKitInternalUrl,
+  getLiveKitPublicUrl,
+  probeLiveKitRoomService,
+  probeLiveKitWithDraft,
+  type LiveKitDraftProbeResult,
+} from './livekitService';
 
 let cachedRuntime: CallRuntimeConfig | null = null;
 let cacheAt = 0;
@@ -66,6 +75,18 @@ function pushLiveKitOverride(runtime: CallRuntimeConfig): void {
     internalUrl: runtime.livekit.internal_url || null,
     publicUrl: runtime.livekit.public_url || null,
     tokenTtlSec: runtime.token_ttl_sec,
+    routingMode: runtime.livekit.routing_mode,
+    disableLocalFallbacks: runtime.livekit.disable_local_fallbacks,
+  });
+}
+
+function adminViewWithEffective(
+  doc: CallSettingsDocument,
+  probe: CallSettingsAdminView['livekit']['probe'],
+): CallSettingsAdminView {
+  return buildCallSettingsAdminView(doc, probe, {
+    internal_url: getLiveKitInternalUrl(),
+    public_url: getLiveKitPublicUrl(),
   });
 }
 
@@ -104,7 +125,7 @@ export async function getCallSettingsAdmin(options?: {
   if (options?.probe !== false) {
     probe = await probeLiveKitRoomService();
   }
-  return buildCallSettingsAdminView(doc, probe);
+  return adminViewWithEffective(doc, probe);
 }
 
 export interface CallSettingsPatch {
@@ -113,6 +134,8 @@ export interface CallSettingsPatch {
   livekit_api_secret?: string | null;
   livekit_internal_url?: string | null;
   livekit_public_url?: string | null;
+  livekit_routing_mode?: CallLiveKitRoutingMode;
+  livekit_disable_local_fallbacks?: boolean;
   ring_timeout_sec?: number | null;
   token_ttl_sec?: number | null;
   invite_ttl_hours?: number | null;
@@ -187,6 +210,16 @@ export async function updateCallSettings(patch: CallSettingsPatch): Promise<Call
         ? patch.livekit_public_url.trim()
         : null;
   }
+  if (patch.livekit_routing_mode !== undefined && isCallLiveKitRoutingMode(patch.livekit_routing_mode)) {
+    next.livekit.routing_mode = patch.livekit_routing_mode;
+    // При смене режима без явного флага — разумный default для fallbacks.
+    if (patch.livekit_disable_local_fallbacks === undefined) {
+      next.livekit.disable_local_fallbacks = patch.livekit_routing_mode === 'remote_server';
+    }
+  }
+  if (typeof patch.livekit_disable_local_fallbacks === 'boolean') {
+    next.livekit.disable_local_fallbacks = patch.livekit_disable_local_fallbacks;
+  }
 
   if (patch.ring_timeout_sec !== undefined) next.ring_timeout_sec = patch.ring_timeout_sec;
   if (patch.token_ttl_sec !== undefined) next.token_ttl_sec = patch.token_ttl_sec;
@@ -254,4 +287,29 @@ export async function assertFeatureAllowed(
     throw err;
   }
   return cfg;
+}
+
+export type LiveKitConnectionTestInput = {
+  livekit_api_key?: string | null;
+  livekit_api_secret?: string | null;
+  livekit_internal_url?: string | null;
+  livekit_public_url?: string | null;
+  livekit_routing_mode?: CallLiveKitRoutingMode | null;
+  livekit_disable_local_fallbacks?: boolean | null;
+};
+
+/** Dry-run проверка LiveKit без записи в БД. */
+export async function testLiveKitConnection(
+  input: LiveKitConnectionTestInput = {},
+): Promise<LiveKitDraftProbeResult> {
+  // Убедиться, что текущий override загружен (для fallback ключей из env/БД).
+  await getCallRuntimeConfig();
+  return probeLiveKitWithDraft({
+    apiKey: input.livekit_api_key,
+    apiSecret: input.livekit_api_secret,
+    internalUrl: input.livekit_internal_url,
+    publicUrl: input.livekit_public_url,
+    routingMode: input.livekit_routing_mode ?? undefined,
+    disableLocalFallbacks: input.livekit_disable_local_fallbacks ?? undefined,
+  });
 }

@@ -1780,6 +1780,8 @@ export type CallFeatureFlags = {
   video: boolean;
 };
 
+export type CallLiveKitRoutingMode = 'local_proxy' | 'remote_server';
+
 export type CallSettingsAdminResponse = {
   enabled: boolean | null;
   effective_enabled: boolean;
@@ -1795,6 +1797,12 @@ export type CallSettingsAdminResponse = {
     internal_url_source: 'db' | 'env' | 'none';
     public_url: string;
     public_url_source: 'db' | 'env' | 'none';
+    routing_mode: CallLiveKitRoutingMode;
+    disable_local_fallbacks: boolean;
+    effective_internal_url: string;
+    effective_public_url: string;
+    public_url_honored: boolean;
+    public_url_warning: string | null;
     configured: boolean;
     probe: { ok: boolean; url?: string; error?: string; configured: boolean } | null;
   };
@@ -1813,6 +1821,8 @@ export type CallSettingsAdminResponse = {
     ghost_miss_ticks: number | null;
     livekit_internal_url: string | null;
     livekit_public_url: string | null;
+    livekit_routing_mode: CallLiveKitRoutingMode | null;
+    livekit_disable_local_fallbacks: boolean | null;
   };
   features: CallFeatureFlags;
   allowed_roles: string[];
@@ -1830,6 +1840,16 @@ export type CallSettingsAdminResponse = {
     end_reason: Record<string, string>;
   };
   limits: Record<string, { min: number; max: number; default: number }>;
+};
+
+export type LiveKitConnectionTestResponse = {
+  ok: boolean;
+  configured: boolean;
+  internal_url: string;
+  public_url_effective: string;
+  rooms_reachable: boolean;
+  error?: string;
+  warnings: string[];
 };
 
 export type CallUsageStatsResponse = {
@@ -1920,6 +1940,8 @@ export async function patchCallSettings(body: {
   clear_livekit_api_secret?: boolean;
   livekit_internal_url?: string | null;
   livekit_public_url?: string | null;
+  livekit_routing_mode?: CallLiveKitRoutingMode;
+  livekit_disable_local_fallbacks?: boolean;
   ring_timeout_sec?: number | null;
   token_ttl_sec?: number | null;
   invite_ttl_hours?: number | null;
@@ -1935,6 +1957,22 @@ export async function patchCallSettings(body: {
   };
 }): Promise<CallSettingsAdminResponse> {
   const { data } = await apiClient.patch<CallSettingsAdminResponse>('/api/settings/calls', body);
+  return data;
+}
+
+/** Dry-run проверка LiveKit (без записи в БД). */
+export async function testLiveKitConnection(body: {
+  livekit_api_key?: string | null;
+  livekit_api_secret?: string | null;
+  livekit_internal_url?: string | null;
+  livekit_public_url?: string | null;
+  livekit_routing_mode?: CallLiveKitRoutingMode;
+  livekit_disable_local_fallbacks?: boolean;
+}): Promise<LiveKitConnectionTestResponse> {
+  const { data } = await apiClient.post<LiveKitConnectionTestResponse>(
+    '/api/settings/calls/livekit/test',
+    body,
+  );
   return data;
 }
 

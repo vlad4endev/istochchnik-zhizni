@@ -30,6 +30,7 @@ import {
   getCallSettingsAdminHandler,
   getCallUsageStatsHandler,
   patchCallSettingsHandler,
+  postLiveKitTestHandler,
 } from '../controllers/callSettingsController';
 
 const router = Router();
@@ -59,6 +60,7 @@ router.post('/role-permissions/reset', resetRolePermissionsSettingsHandler);
 /** Настройки LiveKit-звонков и статистика использования (только админ). */
 router.get('/calls/admin', getCallSettingsAdminHandler);
 router.patch('/calls', patchCallSettingsHandler);
+router.post('/calls/livekit/test', postLiveKitTestHandler);
 router.get('/calls/stats', getCallUsageStatsHandler);
 
 export default router;

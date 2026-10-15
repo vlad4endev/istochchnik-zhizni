@@ -12,6 +12,8 @@ export type LiveKitJoinTokenInput = {
   ttlSeconds?: number;
 };
 
+export type LiveKitRoutingMode = 'local_proxy' | 'remote_server';
+
 /** Runtime overrides from admin `call_settings_json` (env remains fallback). */
 export type LiveKitSettingsOverride = {
   apiKey: string | null;
@@ -19,6 +21,8 @@ export type LiveKitSettingsOverride = {
   internalUrl: string | null;
   publicUrl: string | null;
   tokenTtlSec: number | null;
+  routingMode: LiveKitRoutingMode | null;
+  disableLocalFallbacks: boolean | null;
 };
 
 /** Запомненный рабочий Room Service URL после успешного createRoom/listRooms. */
@@ -30,7 +34,13 @@ let settingsOverride: LiveKitSettingsOverride = {
   internalUrl: null,
   publicUrl: null,
   tokenTtlSec: null,
+  routingMode: null,
+  disableLocalFallbacks: null,
 };
+
+export function getLiveKitSettingsOverrideSnapshot(): LiveKitSettingsOverride {
+  return { ...settingsOverride };
+}
 
 export function applyLiveKitSettingsOverride(next: Partial<LiveKitSettingsOverride>): void {
   settingsOverride = {
@@ -39,8 +49,24 @@ export function applyLiveKitSettingsOverride(next: Partial<LiveKitSettingsOverri
     internalUrl: next.internalUrl !== undefined ? next.internalUrl : settingsOverride.internalUrl,
     publicUrl: next.publicUrl !== undefined ? next.publicUrl : settingsOverride.publicUrl,
     tokenTtlSec: next.tokenTtlSec !== undefined ? next.tokenTtlSec : settingsOverride.tokenTtlSec,
+    routingMode: next.routingMode !== undefined ? next.routingMode : settingsOverride.routingMode,
+    disableLocalFallbacks:
+      next.disableLocalFallbacks !== undefined
+        ? next.disableLocalFallbacks
+        : settingsOverride.disableLocalFallbacks,
   };
   preferredInternalUrl = null;
+}
+
+export function resolveLiveKitRoutingMode(): LiveKitRoutingMode {
+  return settingsOverride.routingMode === 'remote_server' ? 'remote_server' : 'local_proxy';
+}
+
+export function resolveDisableLocalFallbacks(): boolean {
+  if (settingsOverride.disableLocalFallbacks != null) {
+    return Boolean(settingsOverride.disableLocalFallbacks);
+  }
+  return resolveLiveKitRoutingMode() === 'remote_server';
 }
 
 function trimEnv(name: string): string {
@@ -92,9 +118,15 @@ export function getLiveKitInternalUrl(): string {
   return normalizeLiveKitInternalUrl(fromAdmin || trimEnv('LIVEKIT_URL'));
 }
 
-/** Кандидаты Room Service: preferred → env → docker gateway → loopback. */
+/** Кандидаты Room Service: preferred → primary → (опционально) docker gateway / loopback. */
 export function getLiveKitInternalUrlCandidates(): string[] {
   const primary = getLiveKitInternalUrl();
+  if (resolveDisableLocalFallbacks()) {
+    const list = [preferredInternalUrl, primary]
+      .map((u) => normalizeLiveKitInternalUrl(u ?? ''))
+      .filter(Boolean);
+    return [...new Set(list)];
+  }
   const list = [
     preferredInternalUrl,
     primary,
@@ -197,13 +229,42 @@ function rewriteLegacyCallHost(url: string): string | null {
 
 /**
  * URL для браузера (LiveKitRoom serverUrl).
- * Предпочитаем same-origin `/lk` на PUBLIC_WEB_ORIGIN — отдельный call.* часто не настроен.
+ * local_proxy: предпочитаем same-origin `/lk` на PUBLIC_WEB_ORIGIN.
+ * remote_server: используем admin/env public_url как есть (перенос на другой хост).
  */
 export function getLiveKitPublicUrl(): string {
   const web = trimEnv('PUBLIC_WEB_ORIGIN');
   const fromWeb = web ? publicUrlFromWebOrigin(web) : null;
   const overridePub = (settingsOverride.publicUrl || '').trim().replace(/\/$/, '');
   const pub = (overridePub || trimEnv('LIVEKIT_PUBLIC_URL')).replace(/\/$/, '');
+  const routingMode = resolveLiveKitRoutingMode();
+
+  // Remote LiveKit host: honor configured public URL (no silent rewrite to app /lk).
+  if (routingMode === 'remote_server') {
+    let resolved = '';
+    if (pub) {
+      const rewrittenCall = rewriteLegacyCallHost(pub);
+      if (rewrittenCall) {
+        console.warn(`[livekit] rewriting legacy LIVEKIT_PUBLIC_URL ${pub} → ${rewrittenCall}`);
+        resolved = rewrittenCall;
+      } else if (/livekit:|127\.0\.0\.1|localhost/i.test(pub)) {
+        console.warn(
+          '[livekit] remote_server public URL looks internal; browsers may not reach it',
+        );
+        resolved = pub;
+      } else {
+        resolved = pub;
+      }
+    }
+    if (!resolved) {
+      // Fallback only if public URL unset — still prefer explicit remote over silent /lk.
+      const internal = getLiveKitInternalUrl();
+      if (internal.startsWith('https://')) resolved = internal.replace(/^https/, 'wss');
+      else if (internal.startsWith('http://')) resolved = internal.replace(/^http/, 'ws');
+      else resolved = internal;
+    }
+    return ensureLiveKitPublicUrlPath(resolved);
+  }
 
   let resolved = '';
   if (pub) {
@@ -318,6 +379,110 @@ export async function probeLiveKitRoomService(): Promise<{
       error: err instanceof Error ? err.message : String(err),
       url: getLiveKitInternalUrl(),
     };
+  }
+}
+
+export type LiveKitDraftProbeInput = {
+  apiKey?: string | null;
+  apiSecret?: string | null;
+  internalUrl?: string | null;
+  publicUrl?: string | null;
+  routingMode?: LiveKitRoutingMode | null;
+  disableLocalFallbacks?: boolean | null;
+};
+
+export type LiveKitDraftProbeResult = {
+  ok: boolean;
+  configured: boolean;
+  internal_url: string;
+  public_url_effective: string;
+  rooms_reachable: boolean;
+  error?: string;
+  warnings: string[];
+};
+
+/**
+ * Временно применяет draft override, пробирует Room Service, восстанавливает предыдущий override.
+ * Не пишет в БД.
+ */
+export async function probeLiveKitWithDraft(
+  draft: LiveKitDraftProbeInput,
+): Promise<LiveKitDraftProbeResult> {
+  const previous = getLiveKitSettingsOverrideSnapshot();
+  const warnings: string[] = [];
+  try {
+    applyLiveKitSettingsOverride({
+      apiKey:
+        draft.apiKey !== undefined
+          ? draft.apiKey && String(draft.apiKey).trim()
+            ? String(draft.apiKey).trim()
+            : previous.apiKey
+          : previous.apiKey,
+      apiSecret:
+        draft.apiSecret !== undefined
+          ? draft.apiSecret && String(draft.apiSecret).trim()
+            ? String(draft.apiSecret).trim()
+            : previous.apiSecret
+          : previous.apiSecret,
+      internalUrl:
+        draft.internalUrl !== undefined
+          ? draft.internalUrl && String(draft.internalUrl).trim()
+            ? String(draft.internalUrl).trim().replace(/\/$/, '')
+            : previous.internalUrl
+          : previous.internalUrl,
+      publicUrl:
+        draft.publicUrl !== undefined
+          ? draft.publicUrl && String(draft.publicUrl).trim()
+            ? String(draft.publicUrl).trim()
+            : previous.publicUrl
+          : previous.publicUrl,
+      routingMode:
+        draft.routingMode !== undefined ? draft.routingMode : previous.routingMode,
+      disableLocalFallbacks:
+        draft.disableLocalFallbacks !== undefined
+          ? draft.disableLocalFallbacks
+          : previous.disableLocalFallbacks,
+    });
+
+    const configured = isLiveKitConfigured();
+    const internal = getLiveKitInternalUrl();
+    const publicEffective = getLiveKitPublicUrl();
+    if (resolveLiveKitRoutingMode() === 'remote_server' && !publicEffective) {
+      warnings.push('Публичный WSS не задан — браузер не сможет подключиться к удалённому LiveKit.');
+    }
+    if (
+      resolveLiveKitRoutingMode() === 'remote_server' &&
+      /^https?:\/\/(127\.|localhost|host\.docker\.internal)/i.test(internal)
+    ) {
+      warnings.push(
+        'Room Service URL выглядит локальным при режиме «удалённый сервер» — проверьте адрес нового хоста.',
+      );
+    }
+
+    if (!configured) {
+      return {
+        ok: false,
+        configured: false,
+        internal_url: internal,
+        public_url_effective: publicEffective,
+        rooms_reachable: false,
+        error: 'not_configured',
+        warnings,
+      };
+    }
+
+    const probe = await probeLiveKitRoomService();
+    return {
+      ok: probe.ok,
+      configured: true,
+      internal_url: probe.url || internal,
+      public_url_effective: publicEffective,
+      rooms_reachable: probe.ok,
+      error: probe.ok ? undefined : probe.error,
+      warnings,
+    };
+  } finally {
+    applyLiveKitSettingsOverride(previous);
   }
 }
 
