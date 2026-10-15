@@ -240,8 +240,9 @@ export async function pushSyncBatch(
 export async function bootstrapSyncSnapshot(
   memberId: number,
 ): Promise<{songs: Record<string, unknown>[]; member: Record<string, unknown> | null}> {
+  // Raised for offline Android bootstrap (WatermelonDB cold start).
   const songsRes = await query(
-    `SELECT * FROM songs WHERE is_published = TRUE AND deleted_at IS NULL ORDER BY title ASC LIMIT 500`,
+    `SELECT * FROM songs WHERE is_published = TRUE AND deleted_at IS NULL ORDER BY title ASC LIMIT 2000`,
   );
   const memberRes = await query(
     `SELECT m.id, m.first_name, m.last_name, m.app_role, m.updated_at, m.deleted_at,

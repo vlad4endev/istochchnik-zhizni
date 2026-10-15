@@ -25,7 +25,8 @@ export function songModelToListItem(song: Song): SongListItem {
 export class SongRepository {
   async getAll(): Promise<SongListItem[]> {
     const rows = await getSongsCollection().query(Q.sortBy('title', Q.asc)).fetch();
-    return rows.filter(s => s.isPublished && !s.isDeleted).map(songModelToListItem);
+    // Include unpublished local drafts so offline creates appear before server publish.
+    return rows.filter(s => !s.isDeleted).map(songModelToListItem);
   }
 
   async getById(id: string): Promise<SongListItem | null> {

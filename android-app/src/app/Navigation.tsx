@@ -7,6 +7,7 @@ import {Screen} from '../components/ui/Screen';
 import {AuthLandingScreen, LoginScreen} from '../screens/auth/AuthScreens';
 import {OfflineScreen} from '../screens/OfflineScreen';
 import {SongDetailScreen} from '../screens/songbook/SongDetailScreen';
+import {SongEditScreen} from '../screens/songbook/SongEditScreen';
 import {useAuthStore} from '../shared/auth/authStore';
 import {memberRepository} from '../repositories/MemberRepository';
 import {useNetworkSync} from '../sync/useNetworkSync';
@@ -43,7 +44,7 @@ function BootstrapScreen() {
 
   if (!hydrated) {
     return (
-      <Screen>
+      <Screen showOfflineBanner={false}>
         <Loading label="Запуск…" />
       </Screen>
     );
@@ -55,6 +56,13 @@ function BootstrapScreen() {
         <>
           <Stack.Screen name="MainTabs" component={MainTabs} options={{headerShown: false}} />
           <Stack.Screen name="SongDetail" component={SongDetailScreen} options={{title: 'Песня'}} />
+          <Stack.Screen
+            name="SongEdit"
+            component={SongEditScreen}
+            options={({route}) => ({
+              title: route.params?.songId ? 'Редактирование' : 'Новая песня',
+            })}
+          />
           <Stack.Screen name="Offline" component={OfflineScreen} options={{title: 'Офлайн'}} />
         </>
       ) : (

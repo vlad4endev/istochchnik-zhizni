@@ -9,6 +9,11 @@ import {pushAllQueueItems} from './pushQueue';
 import {logConflict} from './logConflict';
 import {pickWinnerRecord, resolveConflict} from './resolveConflict';
 import {
+  fetchBootstrapSnapshot,
+  markBootstrapComplete,
+  needsBootstrap,
+} from './bootstrap';
+import {
   getLastSyncedAt,
   listPendingQueueItems,
   markQueueItemFailed,
@@ -17,6 +22,7 @@ import {
 } from './syncQueue';
 import {SYNC_TABLES} from './types';
 import type {SyncPushItem} from '../shared/songbook/types';
+import {refreshFeatureCaches} from './refreshFeatureCaches';
 
 function parseTags(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw.map(String);
@@ -117,6 +123,19 @@ async function applyRemoteRecord(table: LocalTableName, record: Record<string, u
   }
 }
 
+async function runBootstrapIfNeeded(): Promise<void> {
+  if (!(await needsBootstrap())) return;
+
+  const snapshot = await fetchBootstrapSnapshot();
+  for (const song of snapshot.songs) {
+    await applyRemoteSong(song);
+  }
+  if (snapshot.member) {
+    await applyRemoteMember(snapshot.member);
+  }
+  await markBootstrapComplete(snapshot.serverTime);
+}
+
 export async function pullChangesForTable(table: LocalTableName): Promise<void> {
   const lastSynced = await getLastSyncedAt(table);
   const since = lastSynced > 0 ? new Date(lastSynced).toISOString() : null;
@@ -189,7 +208,14 @@ export async function pushPendingQueue(): Promise<void> {
 
 export async function runFullSync(): Promise<void> {
   await pushPendingQueue();
+  await runBootstrapIfNeeded();
   for (const table of SYNC_TABLES) {
     await pullChangesForTable(table);
+  }
+  // Soft-fail feature caches so song sync still succeeds offline-capable.
+  try {
+    await refreshFeatureCaches();
+  } catch (err) {
+    console.warn('[sync] feature cache refresh failed', err);
   }
 }

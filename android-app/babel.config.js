@@ -23,6 +23,8 @@ module.exports = function (api) {
           },
         },
       ],
+      // Must be last (NativeWind / Reanimated).
+      'react-native-reanimated/plugin',
     ],
   };
 };
