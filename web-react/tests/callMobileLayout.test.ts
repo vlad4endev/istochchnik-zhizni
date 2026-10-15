@@ -42,6 +42,32 @@ describe('mobile call layout', () => {
     expect(css).toMatch(/call-window--minimized/);
   });
 
+  it('в чатах есть Stories-кольцо для возврата в свёрнутый звонок', () => {
+    const chip = readFileSync(join(root, 'src/features/calls/ActiveCallStoryChip.tsx'), 'utf8');
+    const chipCss = readFileSync(
+      join(root, 'src/features/calls/ActiveCallStoryChip.module.css'),
+      'utf8',
+    );
+    const chatList = readFileSync(
+      join(root, 'src/features/messenger/components/ChatList.tsx'),
+      'utf8',
+    );
+    const chatWindow = readFileSync(
+      join(root, 'src/features/messenger/components/ChatWindow.tsx'),
+      'utf8',
+    );
+    const callWindow = readFileSync(join(root, 'src/features/calls/CallWindow.tsx'), 'utf8');
+    expect(chip).toMatch(/uiMinimized/);
+    expect(chip).toMatch(/expandCall/);
+    expect(chip).toMatch(/\/call\/\$\{/);
+    expect(chip).toMatch(/Вернуться в звонок/);
+    expect(chipCss).toMatch(/\.ring\b/);
+    expect(chipCss).toMatch(/call-ring-pulse/);
+    expect(chatList).toMatch(/ActiveCallStoryChip/);
+    expect(chatWindow).toMatch(/ActiveCallStoryChip/);
+    expect(callWindow).toMatch(/navigate\('\/messenger'\)/);
+  });
+
   it('резервирует место под кнопки и safe-area на мобиле', () => {
     const css = readFileSync(join(root, 'src/features/calls/calls.css'), 'utf8');
     expect(css).toMatch(/--call-controls-reserve/);
