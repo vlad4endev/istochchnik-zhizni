@@ -4,6 +4,7 @@ import {
   createFullBackup,
   isBackupBusy,
   applyRetention,
+  runDriveRetentionCleanup,
 } from '../services/backupService';
 import { loadBackupSettingsDocument } from '../services/backupSettingsService';
 
@@ -103,11 +104,14 @@ export function initBackupJob(): void {
     { timezone: 'UTC' },
   );
 
-  // Retention cleanup раз в сутки в 04:10
+  // Retention cleanup раз в сутки в 04:10 (локально + Google Drive)
   cron.schedule(
     '10 4 * * *',
     () => {
       void applyRetention().catch((e) => console.error('[CRON] backup retention failed:', e));
+      void runDriveRetentionCleanup().catch((e) =>
+        console.error('[CRON] drive retention failed:', e),
+      );
     },
     { timezone: 'Europe/Moscow' },
   );

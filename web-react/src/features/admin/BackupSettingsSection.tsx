@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import {
+  LuCloud,
   LuDatabase,
   LuDownload,
   LuFileText,
@@ -26,9 +27,11 @@ import {
   fetchBackupSettings,
   patchBackupSettings,
   restoreBackup,
+  sendBackupDrive,
   sendBackupTelegram,
   type BackupComponentsSummary,
   type BackupDetailView,
+  type BackupLocation,
   type BackupScheduleKind,
   type BackupSettings,
   type BackupTelegramTarget,
@@ -165,6 +168,23 @@ function ComponentChips({ components }: { components: BackupComponentsSummary | 
   );
 }
 
+function LocationBadge({ location }: { location: BackupLocation }) {
+  const label =
+    location === 'drive' ? 'Google Drive' : location === 'both' ? 'Локально + Drive' : 'Локально';
+  const cls =
+    location === 'drive'
+      ? 'bg-sky-50 text-sky-800'
+      : location === 'both'
+        ? 'bg-violet-50 text-violet-800'
+        : 'bg-stone-100 text-stone-600';
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${cls}`}>
+      {location !== 'local' ? <LuCloud className="h-3 w-3" /> : <LuHardDrive className="h-3 w-3" />}
+      {label}
+    </span>
+  );
+}
+
 export function BackupSettingsSection() {
   const qc = useQueryClient();
   const settingsQ = useQuery({
@@ -196,13 +216,33 @@ export function BackupSettingsSection() {
   const [detail, setDetail] = useState<BackupDetailView | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [driveSaJson, setDriveSaJson] = useState('');
 
   const confirmPhrase = settingsQ.data?.restore_confirm_phrase || DEFAULT_CONFIRM;
 
   useEffect(() => {
     if (settingsQ.data?.settings) {
-      setDraft({ ...settingsQ.data.settings });
-      setSendTelegramOnCreate(Boolean(settingsQ.data.settings.telegram_send));
+      const s = settingsQ.data.settings;
+      setDraft({
+        ...s,
+        drive_enabled: Boolean(s.drive_enabled),
+        drive_folder_id: s.drive_folder_id ?? null,
+        drive_delete_local_after_upload:
+          typeof s.drive_delete_local_after_upload === 'boolean'
+            ? s.drive_delete_local_after_upload
+            : true,
+        drive_retention_days: s.drive_retention_days ?? s.retention_days ?? 30,
+        drive_ready: Boolean(s.drive_ready),
+        drive_configured: Boolean(s.drive_configured),
+        drive_client_email_masked: s.drive_client_email_masked ?? null,
+        drive_source: s.drive_source ?? null,
+        drive_folder_name: s.drive_folder_name ?? null,
+        last_drive_at: s.last_drive_at ?? null,
+        last_drive_status: s.last_drive_status ?? null,
+        last_drive_message: s.last_drive_message ?? null,
+        last_drive_file_id: s.last_drive_file_id ?? null,
+      });
+      setSendTelegramOnCreate(Boolean(s.telegram_send));
     }
   }, [settingsQ.data]);
 
@@ -218,10 +258,16 @@ export function BackupSettingsSection() {
         telegram_send: draft.telegram_send,
         telegram_target: draft.telegram_target,
         retention_days: draft.retention_days,
+        drive_enabled: draft.drive_enabled,
+        drive_folder_id: draft.drive_folder_id,
+        drive_delete_local_after_upload: draft.drive_delete_local_after_upload,
+        drive_retention_days: draft.drive_retention_days,
+        drive_service_account_json: driveSaJson.trim() ? driveSaJson.trim() : undefined,
       });
     },
     onSuccess: () => {
       setNote({ type: 'ok', text: 'Настройки бекапа сохранены.' });
+      setDriveSaJson('');
       void qc.invalidateQueries({ queryKey: Q_SETTINGS });
       void qc.invalidateQueries({ queryKey: Q_LIST });
     },
@@ -232,10 +278,16 @@ export function BackupSettingsSection() {
     mutationFn: () => createBackup({ send_telegram: sendTelegramOnCreate }),
     onSuccess: (data) => {
       const tg = data.backup.telegram;
-      const tgPart = tg ? ` Telegram: ${tg.message}` : '';
+      const drive = data.backup.drive;
+      const parts = [
+        tg ? `Telegram: ${tg.message}` : null,
+        drive ? `Drive: ${drive.message}` : null,
+      ].filter(Boolean);
       setNote({
-        type: 'ok',
-        text: `Бекап создан: ${data.backup.id} (${formatBytes(data.backup.size_bytes)}).${tgPart}`,
+        type: drive && !drive.ok ? 'err' : 'ok',
+        text: `Бекап создан: ${data.backup.id} (${formatBytes(data.backup.size_bytes)}).${
+          parts.length ? ` ${parts.join(' · ')}` : ''
+        }`,
       });
       void qc.invalidateQueries({ queryKey: Q_SETTINGS });
       void qc.invalidateQueries({ queryKey: Q_LIST });
@@ -260,6 +312,17 @@ export function BackupSettingsSection() {
       void qc.invalidateQueries({ queryKey: Q_SETTINGS });
     },
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось отправить в Telegram.') }),
+  });
+
+  const driveSendMut = useMutation({
+    mutationFn: (id: string) => sendBackupDrive(id),
+    onSuccess: (data) => {
+      setNote({ type: data.ok ? 'ok' : 'err', text: data.message });
+      void qc.invalidateQueries({ queryKey: Q_SETTINGS });
+      void qc.invalidateQueries({ queryKey: Q_LIST });
+    },
+    onError: (e) =>
+      setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось выгрузить на Google Drive.') }),
   });
 
   const downloadMut = useMutation({
@@ -569,6 +632,129 @@ export function BackupSettingsSection() {
       </section>
 
       <section className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-sm sm:p-6">
+        <h2 className="flex items-center gap-2 text-lg font-bold text-stone-900">
+          <LuCloud className="h-5 w-5 text-primary" />
+          Google Drive — основное хранилище
+        </h2>
+        <p className="mt-1 text-sm text-stone-600">
+          Снимки выгружаются в папку на Google Drive. Рекомендуется удалять локальные копии после
+          успешной загрузки — на сервере остаётся только буфер на время создания.
+        </p>
+
+        <div
+          className={`mt-3 rounded-xl px-3 py-2 text-xs ${
+            draft.drive_ready
+              ? 'bg-emerald-50 text-emerald-900'
+              : 'bg-amber-50 text-amber-900'
+          }`}
+        >
+          {draft.drive_ready
+            ? `Подключено${draft.drive_folder_name ? `: «${draft.drive_folder_name}»` : ''}${
+                draft.drive_client_email_masked ? ` · SA ${draft.drive_client_email_masked}` : ''
+              }`
+            : draft.drive_configured
+              ? 'Service account есть, но папка недоступна — проверьте ID и шаринг.'
+              : 'Не настроено: вставьте JSON ключа service account и ID папки ниже.'}
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="flex items-center gap-2 text-sm font-medium text-stone-800 sm:col-span-2">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-stone-300 text-primary"
+              checked={draft.drive_enabled}
+              onChange={(e) => setDraft({ ...draft, drive_enabled: e.target.checked })}
+            />
+            Автоматически выгружать каждый снимок на Google Drive
+          </label>
+          <label className="flex items-center gap-2 text-sm font-medium text-stone-800 sm:col-span-2">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-stone-300 text-primary"
+              checked={draft.drive_delete_local_after_upload}
+              onChange={(e) =>
+                setDraft({ ...draft, drive_delete_local_after_upload: e.target.checked })
+              }
+            />
+            Удалять локальную копию после успешной выгрузки (хранить только на Drive)
+          </label>
+
+          <label className="block text-sm sm:col-span-2">
+            <span className="mb-1 block font-medium text-stone-700">
+              ID папки Drive (или ссылка …/folders/…)
+            </span>
+            <input
+              className={fieldClass()}
+              value={draft.drive_folder_id ?? ''}
+              onChange={(e) =>
+                setDraft({ ...draft, drive_folder_id: e.target.value.trim() || null })
+              }
+              placeholder="1AbC…xyz или https://drive.google.com/drive/folders/…"
+            />
+          </label>
+
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium text-stone-700">
+              Хранить на Drive (дней, макс. {maxDays})
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={maxDays}
+              className={fieldClass()}
+              value={draft.drive_retention_days}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  drive_retention_days: Math.min(
+                    maxDays,
+                    Math.max(1, Number(e.target.value) || 1),
+                  ),
+                })
+              }
+            />
+          </label>
+
+          <label className="block text-sm sm:col-span-2">
+            <span className="mb-1 block font-medium text-stone-700">
+              Service account JSON
+              {draft.drive_client_email_masked
+                ? ` (сейчас: ${draft.drive_client_email_masked})`
+                : ''}
+            </span>
+            <textarea
+              className={`${fieldClass()} min-h-[88px] font-mono text-xs`}
+              value={driveSaJson}
+              onChange={(e) => setDriveSaJson(e.target.value)}
+              placeholder='Вставьте JSON ключа {"type":"service_account","client_email":"…",…} — или задайте GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON в .env'
+              spellCheck={false}
+            />
+            <span className="mt-1 block text-xs text-stone-500">
+              В Google Cloud создайте Service Account → ключ JSON → расшарьте папку Drive на его
+              email с правом «Редактор». Пустое поле при сохранении не меняет уже сохранённый ключ.
+            </span>
+          </label>
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={btnPrimary()}
+            disabled={saveMut.isPending}
+            onClick={() => saveMut.mutate()}
+          >
+            Сохранить настройки Drive
+          </button>
+        </div>
+
+        {draft.last_drive_message && (
+          <p className="mt-3 text-xs text-stone-500">
+            Drive: {formatRuDate(draft.last_drive_at)} — {draft.last_drive_message}
+          </p>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-bold text-stone-900">Сохранённые копии</h2>
           <button
@@ -599,12 +785,28 @@ export function BackupSettingsSection() {
                 className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
-                  <div className="font-semibold text-stone-900">{item.id}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-stone-900">{item.id}</span>
+                    <LocationBadge location={item.location ?? 'local'} />
+                  </div>
                   <div className="text-xs text-stone-500">
                     {formatRuDate(item.created_at)} · {formatBytes(item.size_bytes)} · {item.age_days}{' '}
                     дн.
-                    {item.has_archive ? ' · архив готов' : ' · без .tar.gz'}
+                    {item.has_archive ? ' · архив готов' : ''}
                     {item.detailed ? ' · детальный' : ''}
+                    {item.drive_web_link ? (
+                      <>
+                        {' · '}
+                        <a
+                          href={item.drive_web_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary underline-offset-2 hover:underline"
+                        >
+                          открыть на Drive
+                        </a>
+                      </>
+                    ) : null}
                   </div>
                   <ComponentChips components={item.components} />
                 </div>
@@ -635,6 +837,22 @@ export function BackupSettingsSection() {
                     <LuRotateCcw className="h-4 w-4" />
                     Восстановить
                   </button>
+                  {(item.location === 'local' || item.location === 'both') && (
+                    <button
+                      type="button"
+                      className={btnSecondary()}
+                      disabled={driveSendMut.isPending || !draft.drive_ready}
+                      onClick={() => driveSendMut.mutate(item.id)}
+                      title={
+                        draft.drive_ready
+                          ? 'Выгрузить на Google Drive'
+                          : 'Сначала настройте Google Drive'
+                      }
+                    >
+                      <LuCloud className="h-4 w-4" />
+                      На Drive
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={btnSecondary()}

@@ -1317,6 +1317,10 @@ export interface BackupSettings {
   telegram_send: boolean;
   telegram_target: BackupTelegramTarget;
   retention_days: number;
+  drive_enabled: boolean;
+  drive_folder_id: string | null;
+  drive_delete_local_after_upload: boolean;
+  drive_retention_days: number;
   last_run_at: string | null;
   last_run_status: 'ok' | 'error' | 'running' | null;
   last_run_message: string | null;
@@ -1324,9 +1328,18 @@ export interface BackupSettings {
   last_telegram_at: string | null;
   last_telegram_status: 'ok' | 'error' | 'skipped' | null;
   last_telegram_message: string | null;
+  last_drive_at: string | null;
+  last_drive_status: 'ok' | 'error' | 'skipped' | null;
+  last_drive_message: string | null;
+  last_drive_file_id: string | null;
   backups_dir: string;
   max_retention_days: number;
   telegram_bot_ready: boolean;
+  drive_ready: boolean;
+  drive_configured: boolean;
+  drive_client_email_masked: string | null;
+  drive_source: string | null;
+  drive_folder_name: string | null;
 }
 
 export interface BackupComponentsSummary {
@@ -1344,6 +1357,8 @@ export interface BackupComponentsSummary {
   storage_bytes: number;
 }
 
+export type BackupLocation = 'local' | 'drive' | 'both';
+
 export interface BackupListItem {
   id: string;
   created_at: string | null;
@@ -1355,6 +1370,9 @@ export interface BackupListItem {
   age_days: number;
   components: BackupComponentsSummary | null;
   detailed: boolean;
+  location: BackupLocation;
+  drive_file_id: string | null;
+  drive_web_link: string | null;
 }
 
 export interface BackupDetailView {
@@ -1417,6 +1435,11 @@ export async function patchBackupSettings(body: {
   telegram_send?: boolean;
   telegram_target?: BackupTelegramTarget;
   retention_days?: number;
+  drive_enabled?: boolean;
+  drive_folder_id?: string | null;
+  drive_delete_local_after_upload?: boolean;
+  drive_retention_days?: number;
+  drive_service_account_json?: string | null;
 }): Promise<{ settings: BackupSettings }> {
   const { data } = await apiClient.patch<{ settings: BackupSettings }>('/api/backup/settings', body);
   return data;
@@ -1451,6 +1474,12 @@ export async function createBackup(body?: { send_telegram?: boolean }): Promise<
     size_bytes: number;
     components?: BackupComponentsSummary;
     telegram?: { ok: boolean; sent: number; message: string };
+    drive?: {
+      ok: boolean;
+      message: string;
+      drive_file_id: string | null;
+      deleted_local: boolean;
+    };
   };
 }> {
   const { data } = await apiClient.post<{
@@ -1461,8 +1490,50 @@ export async function createBackup(body?: { send_telegram?: boolean }): Promise<
       size_bytes: number;
       components?: BackupComponentsSummary;
       telegram?: { ok: boolean; sent: number; message: string };
+      drive?: {
+        ok: boolean;
+        message: string;
+        drive_file_id: string | null;
+        deleted_local: boolean;
+      };
     };
   }>('/api/backup/create', body ?? {}, { timeout: 50 * 60_000 });
+  return data;
+}
+
+export async function sendBackupDrive(id: string): Promise<{
+  ok: boolean;
+  message: string;
+  drive_file_id: string | null;
+  deleted_local: boolean;
+}> {
+  const { data } = await apiClient.post<{
+    ok: boolean;
+    message: string;
+    drive_file_id: string | null;
+    deleted_local: boolean;
+  }>(`/api/backup/${encodeURIComponent(id)}/send-drive`, {}, { timeout: 50 * 60_000 });
+  return data;
+}
+
+export async function fetchDriveStatus(): Promise<{
+  status: {
+    configured: boolean;
+    ready: boolean;
+    message: string;
+    client_email_masked: string | null;
+    folder_name: string | null;
+  };
+}> {
+  const { data } = await apiClient.get<{
+    status: {
+      configured: boolean;
+      ready: boolean;
+      message: string;
+      client_email_masked: string | null;
+      folder_name: string | null;
+    };
+  }>('/api/backup/drive/status');
   return data;
 }
 
