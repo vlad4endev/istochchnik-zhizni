@@ -28,6 +28,7 @@ import {
   normalizeGroupChatTitle,
   shouldDeleteOwnedConversation,
 } from '../utils/groupChatCreate';
+import { isSystemChatKind, systemChatKindSqlList } from '../utils/adminMessengerChats';
 import { parsePositiveMemberIds } from '../utils/parsePositiveMemberIds';
 
 export { parsePositiveMemberIds };
@@ -1468,18 +1469,30 @@ export type DeleteOwnedConversationResult =
   | { deleted: true; memberIds: number[] }
   | { deleted: false };
 
+export type PurgedConversation = {
+  deleted: boolean;
+  memberIds: number[];
+  type: string | null;
+  title: string | null;
+};
+
 /**
- * Создатель (owner) удаляет группу или канал целиком: строка conversations и связанные
- * сообщения, участники, прочтения и звонки. Участник, который просто выходит, сюда не попадает.
+ * Стирает чат из базы: сообщения, участники, прочтения, реакции и звонки.
+ * `allowedTypes` не даёт случайно снести личный диалог, когда удаляет создатель группы.
  */
-export async function deleteOwnedConversation(
+export async function purgeConversationRecord(
   conversationId: string,
-  actorId: number,
-): Promise<DeleteOwnedConversationResult> {
-  const type = await getConversationType(conversationId);
-  const role = await getParticipantRole(conversationId, actorId);
-  if (!shouldDeleteOwnedConversation(type, role, true)) {
-    return { deleted: false };
+  allowedTypes: readonly string[],
+): Promise<PurgedConversation> {
+  const meta = await dbQuery(
+    `SELECT type, title FROM conversations WHERE id = $1 LIMIT 1`,
+    [conversationId],
+  );
+  const row = meta.rows[0] as { type?: string; title?: string | null } | undefined;
+  const type = row?.type != null ? String(row.type) : null;
+  const title = row?.title != null ? String(row.title) : null;
+  if (!type || !allowedTypes.includes(type)) {
+    return { deleted: false, memberIds: [], type, title };
   }
 
   const memberIds = await getConversationMemberIds(conversationId);
@@ -1551,16 +1564,16 @@ export async function deleteOwnedConversation(
     );
     const deleted = await client.query(
       `DELETE FROM conversations
-       WHERE id = $1 AND type IN ('group', 'channel')
+       WHERE id = $1 AND type = ANY($2::text[])
        RETURNING id`,
-      [id],
+      [id, allowedTypes],
     );
     if (!deleted.rows[0]) {
       await client.query('ROLLBACK');
-      return { deleted: false };
+      return { deleted: false, memberIds: [], type, title };
     }
     await client.query('COMMIT');
-    return { deleted: true, memberIds };
+    return { deleted: true, memberIds, type, title };
   } catch (e) {
     try {
       await client.query('ROLLBACK');
@@ -1571,6 +1584,264 @@ export async function deleteOwnedConversation(
   } finally {
     client.release();
   }
+}
+
+/**
+ * Создатель (owner) удаляет группу или канал целиком: строка conversations и связанные
+ * сообщения, участники, прочтения и звонки. Участник, который просто выходит, сюда не попадает.
+ */
+export async function deleteOwnedConversation(
+  conversationId: string,
+  actorId: number,
+): Promise<DeleteOwnedConversationResult> {
+  const type = await getConversationType(conversationId);
+  const role = await getParticipantRole(conversationId, actorId);
+  if (!shouldDeleteOwnedConversation(type, role, true)) {
+    return { deleted: false };
+  }
+  const purged = await purgeConversationRecord(conversationId, ['group', 'channel']);
+  if (!purged.deleted) return { deleted: false };
+  return { deleted: true, memberIds: purged.memberIds };
+}
+
+export type AdminChatListFilter = 'rooms' | 'group' | 'channel' | 'private' | 'empty' | 'active' | 'all';
+
+export type AdminChatListItem = {
+  id: string;
+  type: string;
+  title: string | null;
+  display_title: string;
+  created_at: string;
+  updated_at: string;
+  last_message_at: string | null;
+  message_count: number;
+  active_member_count: number;
+  left_member_count: number;
+  owner_label: string | null;
+  peer_label: string | null;
+  kind: string;
+  studio_song_id: string;
+  is_active: boolean;
+  is_system: boolean;
+};
+
+export type AdminChatSummary = {
+  groups: number;
+  channels: number;
+  private: number;
+  active_rooms: number;
+  empty: number;
+  assistant: number;
+};
+
+const ADMIN_CHAT_BASE_SQL = `
+  SELECT
+    c.id::text AS id,
+    c.type,
+    c.title,
+    c.created_at,
+    c.updated_at,
+    COALESCE(c.metadata->>'kind', '') AS kind,
+    COALESCE(c.metadata->>'studio_song_id', '') AS studio_song_id,
+    COALESCE(members.active_member_count, 0)::int AS active_member_count,
+    COALESCE(members.left_member_count, 0)::int AS left_member_count,
+    COALESCE(msgs.message_count, 0)::int AS message_count,
+    msgs.last_message_at,
+    owner.owner_label,
+    peers.peer_label
+  FROM conversations c
+  LEFT JOIN LATERAL (
+    SELECT
+      COUNT(*) FILTER (WHERE cp.left_at IS NULL)::int AS active_member_count,
+      COUNT(*) FILTER (WHERE cp.left_at IS NOT NULL)::int AS left_member_count
+    FROM conversation_participants cp
+    WHERE cp.conversation_id = c.id
+  ) members ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*)::int AS message_count, MAX(m.created_at) AS last_message_at
+    FROM messages m
+    WHERE m.conversation_id = c.id
+  ) msgs ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(
+      NULLIF(TRIM(COALESCE(m.first_name, '') || ' ' || COALESCE(m.last_name, '')), ''),
+      NULLIF(TRIM(m.name), ''),
+      'Без имени'
+    ) AS owner_label
+    FROM conversation_participants cp
+    JOIN members m ON m.id = cp.member_id
+    WHERE cp.conversation_id = c.id AND cp.role = 'owner'
+    ORDER BY cp.left_at NULLS FIRST, cp.joined_at ASC
+    LIMIT 1
+  ) owner ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT string_agg(
+      COALESCE(
+        NULLIF(TRIM(COALESCE(m.first_name, '') || ' ' || COALESCE(m.last_name, '')), ''),
+        NULLIF(TRIM(m.name), ''),
+        'Без имени'
+      ),
+      ' · ' ORDER BY cp.joined_at
+    ) AS peer_label
+    FROM conversation_participants cp
+    JOIN members m ON m.id = cp.member_id
+    WHERE cp.conversation_id = c.id AND c.type IN ('private', 'personal')
+  ) peers ON TRUE
+`;
+
+function adminChatDisplayTitle(row: {
+  id: string;
+  title?: string | null;
+  peer_label?: string | null;
+  kind?: string;
+}): string {
+  const title = row.title != null ? String(row.title).trim() : '';
+  if (title) return title;
+  const peers = row.peer_label != null ? String(row.peer_label).trim() : '';
+  if (peers) return peers;
+  if (row.kind === 'assistant') return 'ИИ помощник';
+  return `Чат #${row.id}`;
+}
+
+function adminChatWhere(
+  filter: AdminChatListFilter,
+  search: string,
+): { sql: string; params: unknown[] } {
+  const where: string[] = [];
+  const params: unknown[] = [];
+  const notAssistant = `COALESCE(kind, '') <> 'assistant'`;
+  const notSystem = `COALESCE(kind, '') NOT IN (${systemChatKindSqlList()})`;
+
+  if (filter === 'rooms' || filter === 'active') {
+    where.push(`type IN ('group', 'channel')`);
+    where.push(notAssistant);
+  }
+  if (filter === 'active') where.push(`active_member_count > 0`);
+  if (filter === 'group' || filter === 'channel') {
+    where.push(`type = $${params.length + 1}`);
+    params.push(filter);
+    where.push(notAssistant);
+  }
+  if (filter === 'private') where.push(`type IN ('private', 'personal')`);
+  if (filter === 'empty') {
+    where.push(`active_member_count = 0`);
+    where.push(notSystem);
+  }
+
+  const q = search.trim().toLowerCase().replace(/[%_\\]/g, '').slice(0, 80);
+  if (q) {
+    params.push(q);
+    const p = `$${params.length}`;
+    where.push(`(
+      strpos(lower(COALESCE(title, '')), ${p}) > 0
+      OR strpos(lower(COALESCE(peer_label, '')), ${p}) > 0
+      OR strpos(lower(COALESCE(owner_label, '')), ${p}) > 0
+      OR strpos(id, ${p}) > 0
+    )`);
+  }
+
+  return { sql: where.length ? where.join(' AND ') : 'TRUE', params };
+}
+
+function mapAdminChatRow(row: Record<string, unknown>): AdminChatListItem {
+  const id = String(row.id);
+  const active = Number(row.active_member_count) || 0;
+  const kind = row.kind != null ? String(row.kind) : '';
+  const title = row.title != null ? String(row.title) : null;
+  const peer = row.peer_label != null ? String(row.peer_label) : null;
+  const last = row.last_message_at;
+  return {
+    id,
+    type: row.type != null ? String(row.type) : 'private',
+    title,
+    display_title: adminChatDisplayTitle({ id, title, peer_label: peer, kind }),
+    created_at: row.created_at != null ? new Date(row.created_at as string).toISOString() : '',
+    updated_at: row.updated_at != null ? new Date(row.updated_at as string).toISOString() : '',
+    last_message_at: last != null ? new Date(last as string).toISOString() : null,
+    message_count: Number(row.message_count) || 0,
+    active_member_count: active,
+    left_member_count: Number(row.left_member_count) || 0,
+    owner_label: row.owner_label != null ? String(row.owner_label) : null,
+    peer_label: peer,
+    kind,
+    studio_song_id: row.studio_song_id != null ? String(row.studio_song_id) : '',
+    is_active: active > 0,
+    is_system: isSystemChatKind(kind),
+  };
+}
+
+export async function listConversationsForAdmin(opts: {
+  filter: AdminChatListFilter;
+  search: string;
+  limit: number;
+  offset: number;
+}): Promise<{ items: AdminChatListItem[]; total: number; summary: AdminChatSummary }> {
+  const summaryResult = await dbQuery(
+    `SELECT
+       COUNT(*) FILTER (WHERE type = 'group' AND COALESCE(kind, '') <> 'assistant')::int AS groups,
+       COUNT(*) FILTER (WHERE type = 'channel' AND COALESCE(kind, '') <> 'assistant')::int AS channels,
+       COUNT(*) FILTER (WHERE type IN ('private', 'personal'))::int AS private,
+       COUNT(*) FILTER (
+         WHERE type IN ('group', 'channel')
+           AND COALESCE(kind, '') <> 'assistant'
+           AND active_member_count > 0
+       )::int AS active_rooms,
+       COUNT(*) FILTER (
+         WHERE active_member_count = 0
+           AND COALESCE(kind, '') NOT IN (${systemChatKindSqlList()})
+       )::int AS empty,
+       COUNT(*) FILTER (WHERE kind = 'assistant')::int AS assistant
+     FROM (${ADMIN_CHAT_BASE_SQL}) base`,
+  );
+  const s = summaryResult.rows[0] ?? {};
+  const summary: AdminChatSummary = {
+    groups: Number(s.groups) || 0,
+    channels: Number(s.channels) || 0,
+    private: Number(s.private) || 0,
+    active_rooms: Number(s.active_rooms) || 0,
+    empty: Number(s.empty) || 0,
+    assistant: Number(s.assistant) || 0,
+  };
+
+  const { sql: whereSql, params } = adminChatWhere(opts.filter, opts.search);
+  const count = await dbQuery(
+    `SELECT COUNT(*)::int AS total FROM (${ADMIN_CHAT_BASE_SQL}) base WHERE ${whereSql}`,
+    params,
+  );
+  const limitParam = params.length + 1;
+  const offsetParam = params.length + 2;
+  const listed = await dbQuery(
+    `SELECT * FROM (${ADMIN_CHAT_BASE_SQL}) base
+     WHERE ${whereSql}
+     ORDER BY
+       CASE WHEN active_member_count > 0 THEN 0 ELSE 1 END,
+       last_message_at DESC NULLS LAST,
+       updated_at DESC
+     LIMIT $${limitParam} OFFSET $${offsetParam}`,
+    [...params, opts.limit, opts.offset],
+  );
+
+  return {
+    items: listed.rows.map((row) => mapAdminChatRow(row as Record<string, unknown>)),
+    total: Number(count.rows[0]?.total) || 0,
+    summary,
+  };
+}
+
+/** Пустые чаты без активных участников. Каналы ИИ не трогаем. */
+export async function listEmptyConversationIdsForAdmin(limit = 200): Promise<
+  Array<{ id: string; memberIds: number[] }>
+> {
+  const result = await dbQuery(
+    `SELECT id FROM (${ADMIN_CHAT_BASE_SQL}) base
+     WHERE active_member_count = 0
+       AND COALESCE(kind, '') NOT IN (${systemChatKindSqlList()})
+     ORDER BY updated_at ASC
+     LIMIT $1`,
+    [Math.min(Math.max(limit, 1), 500)],
+  );
+  const ids = result.rows.map((row) => String(row.id));
+  return ids.map((id) => ({ id, memberIds: [] }));
 }
 
 /**

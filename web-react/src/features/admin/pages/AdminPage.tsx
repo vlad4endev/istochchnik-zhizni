@@ -56,6 +56,7 @@ import {
 import { NotificationsSettingsSection } from '../NotificationsSettingsSection';
 import { TelegramSettingsSection } from '../TelegramSettingsSection';
 import { AppReleasesSection } from '../AppReleasesSection';
+import { MessengerChatsSection } from '../MessengerChatsSection';
 import { BackupSettingsSection } from '../BackupSettingsSection';
 import { ProjectJournalSection } from '../ProjectJournalSection';
 import { DiagnosticsDashboardSection } from '../DiagnosticsDashboardSection';
@@ -507,6 +508,7 @@ export function AdminPage() {
         {tab === 'sections' && <AppSectionsAccessSection />}
         {tab === 'roles' && <RolePermissionsManagerSection />}
         {tab === 'journal' && <ProjectJournalSection />}
+        {tab === 'chats' && <MessengerChatsSection />}
         {tab === 'notifications' && <NotificationsSettingsSection />}
         {tab === 'telegram' && <TelegramSettingsSection />}
         {tab === 'backup' && <BackupSettingsSection />}

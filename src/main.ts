@@ -36,6 +36,7 @@ import songImportRoutes from './routes/songImportRoutes';
 import studioRoutes from './routes/studioRoutes';
 import settingsRoutes from './routes/settingsRoutes';
 import messengerRoutes from './routes/messengerRoutes';
+import adminMessengerRoutes from './routes/adminMessengerRoutes';
 import servicePlannerRoutes from './routes/servicePlannerRoutes';
 import sermonNotesRoutes from './routes/sermonNotesRoutes';
 import mediaScheduleRoutes from './routes/mediaScheduleRoutes';
@@ -385,6 +386,7 @@ app.get('/health/livekit', async (_req, res) => {
 
 // /api/users — раньше общего /api, чтобы спец-маршруты (merge-duplicates, swap-all-…) не пересекались с будущими catch-all.
 app.use('/api/users', userRoutes);
+app.use('/api/admin/messenger', adminMessengerRoutes);
 app.use('/api/admin', impersonationRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/songs', songRoutes);
