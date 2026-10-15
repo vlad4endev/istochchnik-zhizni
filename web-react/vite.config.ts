@@ -136,12 +136,28 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       __WEB_REACT_BUILD_STAMP__: JSON.stringify(buildStamp),
+      /**
+       * Уникален на каждый деплой (GITHUB_SHA / buildStamp). Клиент сравнивает с
+       * `/build-version.txt` и сбрасывает SW/Cache Storage, если залип на старой сборке.
+       */
+      __CLIENT_BUILD_VERSION__: JSON.stringify(runtimeCacheSuffix),
       /** simple-peer / randombytes ожидают Node `global` в браузере. */
       global: 'globalThis',
     },
     plugins: [
       react(),
       inlineAppSplashCss(),
+      {
+        name: 'emit-build-version-txt',
+        apply: 'build',
+        generateBundle() {
+          this.emitFile({
+            type: 'asset',
+            fileName: 'build-version.txt',
+            source: `${runtimeCacheSuffix}\n`,
+          });
+        },
+      },
       moveSourcemapsOutOfDist('dist'),
       VitePWA({
         registerType: 'prompt',
@@ -282,6 +298,8 @@ export default defineConfig(({ mode }) => {
              * SW впустую. В dist они остаются и отдаются обычным HTTP-запросом.
              */
             '**/pwa/apple-splash-*.png',
+            /** Версия деплоя — только с сети, иначе PWA не увидит выкладку. */
+            '**/build-version.txt',
           ],
           /**
            * false — обязательное условие для `registerType: 'prompt'`.
@@ -304,13 +322,24 @@ export default defineConfig(({ mode }) => {
            * Без denylist Workbox отдаёт `index.html` на навигацию по ссылке на файл → React Router
            * ловит «неизвестный» путь и уводит на `/dashboard`.
            */
-          navigateFallbackDenylist: [/^\/api/, /^\/uploads/, /^\/health/, /^\/storage\//],
+          navigateFallbackDenylist: [
+            /^\/api/,
+            /^\/uploads/,
+            /^\/health/,
+            /^\/storage\//,
+            /^\/build-version\.txt(?:\?|$)/,
+          ],
           /**
            * `public/custom-sw.js` — обработчики Web Push (`push`, `notificationclick`, бейдж).
            * Без importScripts файл только прекэшируется и не выполняется в контексте SW.
            */
           importScripts: ['custom-sw.js'],
           runtimeCaching: [
+            {
+              /** Маркер деплоя: не кэшировать в SW — иначе клиенты «не видят» новую выкладку. */
+              urlPattern: /\/build-version\.txt(?:\?.*)?$/,
+              handler: 'NetworkOnly',
+            },
             {
               /** Вложения с Authorization / cookie; не кэшировать в SW (чужие сессии/частные данные). */
               urlPattern: /\/api\/messenger\/messages\/[^/]+\/attachment-file(?:\?.*)?$/,
