@@ -3093,11 +3093,20 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   --tm-bg-top: color-mix(in srgb, var(--tm-brand-dark) 55%, #1c1917);
   --tm-bg-bottom: #141210;
   position: relative;
+  min-height: 100vh;
   min-height: 100dvh;
+  min-height: var(--viewport-height, 100dvh);
+  height: 100vh;
+  height: 100dvh;
+  height: var(--viewport-height, 100dvh);
   width: 100%;
-  display: grid;
-  place-items: center;
-  padding: max(24px, env(safe-area-inset-top, 0px)) 20px max(28px, env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding:
+    max(12px, env(safe-area-inset-top, 0px))
+    16px
+    max(14px, env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
   overflow: hidden;
   color: #fff;
@@ -3147,23 +3156,26 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   position: relative;
   z-index: 1;
   width: min(26rem, 100%);
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 28px 22px 26px;
-  border-radius: 28px;
+  gap: 0;
+  padding: 22px 18px 18px;
+  border-radius: 24px;
   background: rgba(18, 16, 18, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
   animation: telemost-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  box-sizing: border-box;
 }
 
 .telemost-join__eyebrow {
-  margin: 0 0 18px;
-  font-size: 0.78rem;
+  margin: 0 0 10px;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3171,31 +3183,45 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
 }
 
 .telemost-join__title {
-  margin: 16px 0 0;
+  margin: 10px 0 0;
   font-family: Fraunces, Georgia, serif;
-  font-size: clamp(1.7rem, 5.5vw, 2.1rem);
+  font-size: clamp(1.35rem, 4.6vw, 1.85rem);
   font-weight: 600;
   letter-spacing: -0.03em;
-  line-height: 1.1;
+  line-height: 1.15;
+  max-width: 18ch;
 }
 
 .telemost-join__lead {
-  margin: 10px 0 0;
+  margin: 6px 0 0;
   max-width: 21rem;
-  font-size: 1rem;
+  font-size: 0.92rem;
   font-weight: 500;
-  line-height: 1.45;
+  line-height: 1.35;
   color: rgba(255, 255, 255, 0.68);
 }
 
+.telemost-join__chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.telemost-join__chips:empty {
+  display: none;
+}
+
 .telemost-join__pwa-hint {
-  margin: 14px 0 0;
+  margin: 10px 0 0;
   max-width: 22rem;
-  padding: 0.7rem 0.85rem;
-  border-radius: 0.85rem;
-  font-size: 0.82rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
   text-align: left;
   color: rgba(255, 248, 230, 0.92);
   background: rgba(251, 191, 36, 0.14);
@@ -3205,37 +3231,41 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
 .telemost-join__meta {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin: 14px 0 0;
-  padding: 6px 12px;
+  gap: 6px;
+  margin: 0;
+  padding: 5px 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   font-weight: 650;
   color: rgba(255, 255, 255, 0.82);
 }
 
 .telemost-join__devices {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
-  gap: 10px;
-  margin-top: 26px;
+  gap: 8px;
+  margin-top: 14px;
   width: 100%;
 }
 
 .telemost-join__device {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  min-height: 46px;
-  padding: 8px 14px 8px 10px;
+  justify-content: center;
+  gap: 8px;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 42px;
+  max-width: 11rem;
+  padding: 7px 12px 7px 8px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
   font: inherit;
-  font-size: 0.92rem;
+  font-size: 0.86rem;
   font-weight: 650;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
@@ -3259,11 +3289,12 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
 }
 
 .telemost-join__device-icon {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: grid;
   place-items: center;
+  flex-shrink: 0;
   background: rgba(255, 255, 255, 0.12);
 }
 
@@ -3275,9 +3306,9 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
 .telemost-join__cta {
   width: 100%;
   max-width: 20rem;
-  min-height: 54px;
-  margin-top: 26px;
-  padding: 14px 24px;
+  min-height: 48px;
+  margin-top: 14px;
+  padding: 12px 22px;
   border: none;
   border-radius: 999px;
   background: linear-gradient(
@@ -3288,7 +3319,7 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   );
   color: var(--tm-on-brand);
   font: inherit;
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.01em;
   text-decoration: none;
@@ -3301,6 +3332,88 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
     0 14px 32px color-mix(in srgb, var(--tm-brand) 38%, transparent);
   transition: transform 0.15s ease, filter 0.15s ease;
   box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+/* Компактный лобби-вход: всё на одном экране (iPhone SE…Pro Max + Safari chrome). */
+.telemost-join--compact .telemost-join__panel {
+  padding: 16px 16px 14px;
+  border-radius: 22px;
+}
+
+.telemost-join--compact .telemost-join__eyebrow {
+  margin-bottom: 8px;
+}
+
+.telemost-join--compact .meeting-avatar--md {
+  width: 4.5rem;
+  height: 4.5rem;
+}
+
+.telemost-join--compact .telemost-join__title {
+  margin-top: 8px;
+  font-size: clamp(1.25rem, 4.2vw, 1.7rem);
+}
+
+.telemost-join--compact .telemost-join__lead {
+  margin-top: 4px;
+  font-size: 0.86rem;
+}
+
+.telemost-join--compact .telemost-join__chips {
+  margin-top: 8px;
+}
+
+.telemost-join--compact .telemost-join__pwa-hint {
+  margin-top: 8px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.72rem;
+}
+
+.telemost-join--compact .telemost-join__devices {
+  margin-top: 12px;
+}
+
+.telemost-join--compact .telemost-join__cta {
+  margin-top: 12px;
+  min-height: 46px;
+}
+
+@media (max-height: 700px) {
+  .telemost-join--compact .telemost-join__panel {
+    padding: 12px 14px 12px;
+  }
+
+  .telemost-join--compact .meeting-avatar--md {
+    width: 3.75rem;
+    height: 3.75rem;
+  }
+
+  .telemost-join--compact .telemost-join__title {
+    margin-top: 6px;
+    font-size: clamp(1.15rem, 3.8vw, 1.45rem);
+  }
+
+  .telemost-join--compact .telemost-join__pwa-hint {
+    margin-top: 6px;
+    font-size: 0.68rem;
+    line-height: 1.3;
+  }
+
+  .telemost-join--compact .telemost-join__devices {
+    margin-top: 10px;
+  }
+
+  .telemost-join--compact .telemost-join__device {
+    min-height: 38px;
+    font-size: 0.8rem;
+  }
+
+  .telemost-join--compact .telemost-join__cta {
+    margin-top: 10px;
+    min-height: 44px;
+    padding: 10px 18px;
+  }
 }
 
 .telemost-join__cta:hover:not(:disabled) {

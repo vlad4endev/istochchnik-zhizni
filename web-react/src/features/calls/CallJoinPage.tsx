@@ -17,8 +17,8 @@ function IosSafariPwaHint() {
   if (!show) return null;
   return (
     <p className="telemost-join__pwa-hint" role="note">
-      Открыто в Safari. Если «Моя церковь» установлено с домашнего экрана — откройте приложение и
-      нажмите ссылку на встречу в чате: так звонок останется в приложении, а не во вкладке браузера.
+      Safari: откройте «Моя церковь» с домашнего экрана и нажмите ссылку в чате — звонок останется в
+      приложении.
     </p>
   );
 }
@@ -178,7 +178,7 @@ export function CallJoinPage() {
   const subtitle = 'Вас пригласили подключиться по ссылке';
 
   return (
-    <div className="telemost-join" role="main">
+    <div className="telemost-join telemost-join--compact" role="main">
       <div className="telemost-join__atmosphere" aria-hidden>
         <span className="telemost-join__glow telemost-join__glow--a" />
         <span className="telemost-join__glow telemost-join__glow--b" />
@@ -186,36 +186,39 @@ export function CallJoinPage() {
 
       <div className="telemost-join__panel">
         <p className="telemost-join__eyebrow">Источник жизни · встречи</p>
-        <MeetingAvatar mediaType={isVideo ? 'video' : 'audio'} size="lg" />
+        <MeetingAvatar mediaType={isVideo ? 'video' : 'audio'} size="md" />
 
         <h1 className="telemost-join__title">{title}</h1>
         <p className="telemost-join__lead">{subtitle}</p>
-        <IosSafariPwaHint />
 
-        {preview.participantCount != null ? (
-          <p className="telemost-join__meta">
-            <LuUsers size={16} strokeWidth={2.2} aria-hidden />
-            Участников: {preview.participantCount}
-          </p>
-        ) : null}
+        <div className="telemost-join__chips">
+          {preview.participantCount != null ? (
+            <p className="telemost-join__meta">
+              <LuUsers size={15} strokeWidth={2.2} aria-hidden />
+              {preview.participantCount}
+            </p>
+          ) : null}
+        </div>
+
+        <IosSafariPwaHint />
 
         <div className="telemost-join__devices" role="group" aria-label="Устройства перед входом">
           <DeviceToggle
             pressed={micOn}
             onClick={() => setMicOn((v) => !v)}
             labelOn="Микрофон"
-            labelOff="Микрофон выкл."
-            iconOn={<LuMic size={20} strokeWidth={2.1} />}
-            iconOff={<LuMicOff size={20} strokeWidth={2.1} />}
+            labelOff="Микрофон"
+            iconOn={<LuMic size={18} strokeWidth={2.1} />}
+            iconOff={<LuMicOff size={18} strokeWidth={2.1} />}
           />
           {isVideo ? (
             <DeviceToggle
               pressed={camOn}
               onClick={() => setCamOn((v) => !v)}
               labelOn="Камера"
-              labelOff="Камера выкл."
-              iconOn={<LuVideo size={20} strokeWidth={2.1} />}
-              iconOff={<LuVideoOff size={20} strokeWidth={2.1} />}
+              labelOff="Камера"
+              iconOn={<LuVideo size={18} strokeWidth={2.1} />}
+              iconOff={<LuVideoOff size={18} strokeWidth={2.1} />}
             />
           ) : null}
         </div>
@@ -253,6 +256,7 @@ function DeviceToggle({
       type="button"
       className={['telemost-join__device', pressed ? 'is-on' : 'is-off'].join(' ')}
       aria-pressed={pressed}
+      aria-label={pressed ? labelOn : `${labelOff} выкл.`}
       onClick={onClick}
     >
       <span className="telemost-join__device-icon" aria-hidden>
