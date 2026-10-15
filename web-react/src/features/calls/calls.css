@@ -2,12 +2,30 @@
 .incoming-call-overlay {
   --call-accept: #4cd964;
   --call-decline: #ff3b30;
+  /* Каскад safe-area: 0 → constant (iOS 11.0–11.2) → env → TG */
+  --call-safe-top: 0px;
+  --call-safe-top: constant(safe-area-inset-top);
+  --call-safe-top: env(safe-area-inset-top, 0px);
   --call-safe-top: max(env(safe-area-inset-top, 0px), var(--tg-safe-area-inset-top, 0px));
+  --call-safe-bottom: 0px;
+  --call-safe-bottom: constant(safe-area-inset-bottom);
+  --call-safe-bottom: env(safe-area-inset-bottom, 0px);
   --call-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px));
   --call-inset-top: calc(var(--call-safe-top) + var(--tg-content-safe-area-inset-top, 0px));
   --call-inset-bottom: calc(var(--call-safe-bottom) + var(--tg-content-safe-area-inset-bottom, 0px));
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: auto;
+  width: 100%;
+  /* Слои: vh → dvh → visualViewport из nativeShellViewport */
+  height: 100vh;
+  height: 100dvh;
+  height: var(--viewport-height, 100dvh);
+  max-height: 100vh;
+  max-height: 100dvh;
+  max-height: var(--viewport-height, 100dvh);
   z-index: 10050;
   display: flex;
   flex-direction: column;
@@ -335,10 +353,21 @@
   --call-speak: #3b82f6;
   --call-speak-soft: rgba(59, 130, 246, 0.35);
   --call-brand: var(--primary, #7d3640);
-  /* iOS/Android env + Telegram Mini App CSS vars (в TG env(*) часто 0). */
+  --call-safe-top: 0px;
+  --call-safe-top: constant(safe-area-inset-top);
+  --call-safe-top: env(safe-area-inset-top, 0px);
   --call-safe-top: max(env(safe-area-inset-top, 0px), var(--tg-safe-area-inset-top, 0px));
+  --call-safe-bottom: 0px;
+  --call-safe-bottom: constant(safe-area-inset-bottom);
+  --call-safe-bottom: env(safe-area-inset-bottom, 0px);
   --call-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px));
+  --call-safe-left: 0px;
+  --call-safe-left: constant(safe-area-inset-left);
+  --call-safe-left: env(safe-area-inset-left, 0px);
   --call-safe-left: max(env(safe-area-inset-left, 0px), var(--tg-safe-area-inset-left, 0px));
+  --call-safe-right: 0px;
+  --call-safe-right: constant(safe-area-inset-right);
+  --call-safe-right: env(safe-area-inset-right, 0px);
   --call-safe-right: max(env(safe-area-inset-right, 0px), var(--tg-safe-area-inset-right, 0px));
   --call-content-top: var(--tg-content-safe-area-inset-top, 0px);
   --call-content-bottom: var(--tg-content-safe-area-inset-bottom, 0px);
@@ -353,15 +382,22 @@
   /* iOS Safari: inset:0 выше видимой области (под URL-бар) — режем по visualViewport */
   bottom: auto;
   width: 100%;
+  height: 100vh;
+  height: 100dvh;
   height: var(--viewport-height, 100dvh);
+  max-height: 100vh;
+  max-height: 100dvh;
   max-height: var(--viewport-height, 100dvh);
   z-index: 10040;
   /* Над таббаром (z-100 в body) и системными оверлеями приложения */
   overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
   touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--call-bg);
   background:
     radial-gradient(120% 80% at 50% -10%, rgba(59, 130, 246, 0.12), transparent 55%),
-    radial-gradient(90% 60% at 100% 100%, color-mix(in srgb, var(--call-brand) 22%, transparent), transparent 50%),
+    radial-gradient(90% 60% at 100% 100%, rgba(125, 54, 64, 0.22), transparent 50%),
     var(--call-bg);
   display: flex;
   flex-direction: column;
@@ -787,7 +823,12 @@
   position: fixed;
   left: 50%;
   right: auto;
-  bottom: max(16px, calc(12px + var(--call-inset-bottom, env(safe-area-inset-bottom, 0px))));
+  bottom: max(
+    16px,
+    calc(
+      12px + var(--call-inset-bottom, 0px)
+    )
+  );
   z-index: 10045;
   display: flex;
   align-items: flex-end;
@@ -799,7 +840,9 @@
   margin: 0;
   padding: 10px 12px 8px;
   box-sizing: border-box;
-  transform: translateX(-50%);
+  -webkit-transform: translate3d(-50%, 0, 0);
+  transform: translate3d(-50%, 0, 0);
+  background: rgba(22, 24, 32, 0.92);
   background: rgba(22, 24, 32, 0.78);
   backdrop-filter: blur(22px) saturate(1.2);
   -webkit-backdrop-filter: blur(22px) saturate(1.2);
@@ -1160,12 +1203,13 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Когда есть сетка участников — колонка на всю сцену (не крошечный блок по центру). */
+/* Колонка на всю сцену — класс из React (+ :has как progressive enhancement). */
+.call-stage__main--filled,
 .call-stage__main:has(.call-participants),
 .call-stage__main:has(.call-speaker-layout) {
   flex-direction: column;
   align-items: stretch;
-  justify-content: stretch;
+  justify-content: flex-start;
   gap: 10px;
 }
 
@@ -1191,19 +1235,23 @@
   min-height: 0;
   display: flex;
   align-items: stretch;
-  justify-content: center;
+  justify-content: stretch;
 }
 
 .call-speaker-layout__spotlight .call-participant-tile {
   width: 100%;
   max-width: min(1100px, 100%);
+  min-height: 0;
+  height: 100%;
 }
 
 .call-speaker-layout__spotlight .call-participant-tile--video .call-participant-tile__media {
   border-radius: 20px;
   aspect-ratio: auto;
+  flex: 1 1 auto;
+  width: 100%;
   height: 100%;
-  min-height: min(48vh, 420px);
+  min-height: 0;
 }
 
 .call-speaker-layout--audio {
@@ -1334,7 +1382,7 @@
 }
 
 @media (max-width: 720px) {
-  /* Telegram-like: заполняем высоту, без «карточки» с пустотой снизу */
+  /* Ровная колонка на любой WebKit/Blink: flex + min-height:0, без vh-ловушек */
   .call-speaker-layout {
     gap: 8px;
     max-width: none;
@@ -1349,6 +1397,7 @@
     flex: 1 1 auto;
     min-height: 0;
     align-items: stretch;
+    justify-content: stretch;
   }
 
   .call-speaker-layout__spotlight .call-participant-tile {
@@ -1358,6 +1407,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    align-items: stretch;
   }
 
   .call-speaker-layout__spotlight .call-participant-tile--video .call-participant-tile__media {
@@ -1365,60 +1415,50 @@
     flex: 1 1 auto;
     width: 100%;
     height: auto;
-    border-radius: 14px;
+    border-radius: 12px;
   }
 
   .call-speaker-layout__spotlight .call-participant-tile--video .call-participant-tile__media video,
   .call-speaker-layout__spotlight .call-participant-tile__video {
     position: absolute;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    object-position: center;
   }
 
   .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid) {
     justify-content: flex-start;
     gap: 8px;
-    padding: 0 2px;
+    padding: 0 2px 2px;
     -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
   }
 
-  /* Один «второй» участник — почти на всю ширину, как в Telegram */
-  .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid):has(
-      > .call-participant-tile--strip:only-child
-    ),
-  .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid):has(
-      > .call-participant-tile--strip:first-child:nth-last-child(1)
-    ) {
+  .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid) .call-participant-tile--strip {
+    scroll-snap-align: start;
+  }
+
+  /* Один второй участник — класс из React (без :has для старых Safari) */
+  .call-speaker-layout__strip--solo:not(.call-speaker-layout__strip--grid) {
     display: grid;
     grid-template-columns: 1fr;
   }
 
-  .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid):has(
-      > .call-participant-tile--strip:only-child
-    )
-    .call-participant-tile--strip,
-  .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid):has(
-      > .call-participant-tile--strip:first-child:nth-last-child(1)
-    )
-    .call-participant-tile--strip {
+  .call-speaker-layout__strip--solo:not(.call-speaker-layout__strip--grid) .call-participant-tile--strip {
     width: 100%;
     max-width: none;
   }
 
-  .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid):has(
-      > .call-participant-tile--strip:only-child
-    )
-    .call-participant-tile--video
-    .call-participant-tile__media,
-  .call-speaker-layout__strip:not(.call-speaker-layout__strip--grid):has(
-      > .call-participant-tile--strip:first-child:nth-last-child(1)
-    )
+  .call-speaker-layout__strip--solo:not(.call-speaker-layout__strip--grid)
     .call-participant-tile--video
     .call-participant-tile__media {
     aspect-ratio: 16 / 10;
-    max-height: min(28vh, 220px);
+    max-height: min(28dvh, 28vh, 220px);
   }
 
   .call-speaker-layout__strip .call-participant-tile--strip {
@@ -1429,6 +1469,11 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px 6px;
     max-width: none;
+  }
+
+  .call-speaker-layout--audio .call-speaker-layout__spotlight {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 }
 
@@ -1856,8 +1901,8 @@
 
 @media (max-width: 720px) {
   .call-window {
-    /* Telegram-style: компактная панель без подписей */
-    --call-controls-reserve: calc(88px + var(--call-inset-bottom, 0px));
+    /* Компактная панель без подписей + запас под home indicator */
+    --call-controls-reserve: calc(92px + var(--call-inset-bottom, 0px));
   }
 
   .call-meeting-topbar {
@@ -1870,6 +1915,7 @@
     font-size: 0.95rem;
     font-weight: 650;
     -webkit-line-clamp: 1;
+    line-clamp: 1;
   }
 
   .call-meeting-topbar__count,
@@ -1888,10 +1934,13 @@
     height: 28px;
   }
 
-  .call-stage--meeting .call-stage__main {
+  .call-stage--meeting .call-stage__main,
+  .call-stage--meeting .call-stage__main--filled {
     padding: 4px 8px var(--call-controls-reserve);
     align-items: stretch;
-    justify-content: stretch;
+    justify-content: flex-start;
+    min-height: 0;
+    flex: 1 1 auto;
   }
 
   .call-stage__main {
@@ -1904,7 +1953,7 @@
   }
 
   .call-meeting-lobby .call-participant-tile--video .call-participant-tile__media {
-    max-height: min(62vh, 560px);
+    max-height: min(62dvh, 62vh, 560px);
   }
 
   .call-controls {
@@ -1913,7 +1962,7 @@
     gap: 4px;
     padding: 10px 14px;
     border-radius: 999px;
-    background: rgba(20, 22, 30, 0.82);
+    background: rgba(20, 22, 30, 0.92);
   }
 
   /* Как в Telegram: только иконки, без подписей */
@@ -1999,7 +2048,10 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
 .call-participant-tile__video,
 .call-participant-tile--video .call-participant-tile__media > video {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   max-width: none;
@@ -2008,6 +2060,9 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   object-position: center;
   display: block;
   border-radius: inherit;
+  /* Safari: меньше артефактов при paint/rotate устройства */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 
 .call-participant-tile--audio .call-participant-tile__avatar-img {

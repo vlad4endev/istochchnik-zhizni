@@ -53,4 +53,17 @@ describe('mobile call layout', () => {
       /\.call-participant-tile__video,\s*\n\s*\.call-participant-tile--video \.call-participant-tile__media > video/,
     );
   });
+
+  it('кроссбраузер: классы filled/solo + каскад высоты vh/dvh/viewport', () => {
+    const css = readFileSync(join(root, 'src/features/calls/calls.css'), 'utf8');
+    const callWindow = readFileSync(join(root, 'src/features/calls/CallWindow.tsx'), 'utf8');
+    expect(callWindow).toMatch(/call-stage__main--filled/);
+    expect(callWindow).toMatch(/call-speaker-layout__strip--solo/);
+    expect(css).toMatch(/call-stage__main--filled/);
+    expect(css).toMatch(/call-speaker-layout__strip--solo/);
+    expect(css).toMatch(/height:\s*100vh/);
+    expect(css).toMatch(/height:\s*100dvh/);
+    expect(css).toMatch(/constant\(safe-area-inset-top\)/);
+    expect(css).toMatch(/translate3d\(-50%/);
+  });
 });
