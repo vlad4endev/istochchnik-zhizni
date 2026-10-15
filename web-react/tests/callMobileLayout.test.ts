@@ -119,10 +119,15 @@ describe('mobile call layout', () => {
     expect(joinPage).toMatch(/GlassCallShell/);
     expect(joinPage).toMatch(/Присоединиться/);
     expect(joinPage).toMatch(/glass-call__stage/);
+    expect(joinPage).toMatch(/labelOn="Микрофон"/);
     expect(glass).toMatch(/splitGlassTitle/);
     expect(css).toMatch(/\.glass-call\b/);
     expect(css).toMatch(/Playfair Display/);
     expect(css).toMatch(/#120a0e/);
+    expect(css).toMatch(
+      /\.glass-call__stage\s*\{[\s\S]*?display:\s*flex[\s\S]*?flex-direction:\s*column/,
+    );
+    expect(css).toMatch(/\.glass-call__device-cap\s*\{[\s\S]*?white-space:\s*nowrap/);
   });
 
   it('маршрут /call/:id — Glass-shell для завершённых/активных состояний', () => {
