@@ -14,6 +14,8 @@ declare module 'pdfjs-dist/build/pdf.worker.min.mjs?url' {
 }
 
 declare const __WEB_REACT_BUILD_STAMP__: string;
+/** Уникальный id фронтовой сборки (GITHUB_SHA или stamp); см. vite.config.ts */
+declare const __CLIENT_BUILD_VERSION__: string;
 
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string;

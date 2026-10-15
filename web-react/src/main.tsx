@@ -32,6 +32,14 @@ import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { TopLoader } from './components/ui/TopLoader';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
+import {
+  CLIENT_BUILD_RELOAD_KEY,
+  CLIENT_BUILD_VERSION_KEY,
+  fetchRemoteBuildVersion,
+  isDeployVersionMismatch,
+  purgeServiceWorkerAndCaches,
+  resolveClientBuildVersion,
+} from './lib/clientBuildVersion';
 import { SessionKeepAlive } from './hooks/SessionKeepAlive';
 import { useAuthHydrated } from './hooks/useAuthHydrated';
 import { useAuthSessionReady } from './hooks/useAuthSessionReady';
@@ -53,9 +61,7 @@ import './index.css';
 import './styles/mobile.css';
 import './styles/compactIphone.css';
 
-const CLIENT_BUILD_VERSION = '2026-06-18-compact-chat-search';
-const CLIENT_BUILD_VERSION_KEY = 'app:client-build-version';
-const CLIENT_BUILD_RELOAD_KEY = 'app:client-build-reload-once';
+const CLIENT_BUILD_VERSION = resolveClientBuildVersion();
 
 /** Progressier: не в index.html — иначе на iOS PWA конкурирует с первым бандлом и SW. Включать только если в Progressier настроен домен и хостится их скрипт. */
 const PROGRESSIER_SCRIPT_SRC = 'https://progressier.app/j7yZLwkCdnvJhlAZ1Gor/script.js';
@@ -158,38 +164,57 @@ async function forceClientRefreshOnVersionChange(): Promise<void> {
     // ignore storage failures and continue best-effort cleanup
   }
 
-  try {
-    if ('serviceWorker' in navigator) {
-      const registration = await navigator.serviceWorker.getRegistration();
-      if (registration) {
-        /** iOS: unregister() без верхней границы может «висеть» минутами. */
-        await Promise.race([
-          registration.unregister(),
-          new Promise<void>((r) => {
-            window.setTimeout(r, 8000);
-          }),
-        ]);
-      }
-    }
-  } catch {
-    // ignore service worker errors
-  }
-
-  try {
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      await Promise.race([
-        Promise.all(keys.map((key) => caches.delete(key))),
-        new Promise<void>((r) => {
-          window.setTimeout(r, 12_000);
-        }),
-      ]);
-    }
-  } catch {
-    // ignore cache cleanup errors
-  }
-
+  await purgeServiceWorkerAndCaches();
   window.location.reload();
+}
+
+/**
+ * Если edge/CDN долго кэширует sw.js, PWAUpdatePrompt не увидит новый SW.
+ * Сверяем некэшируемый `/build-version.txt` с версией текущего бандла и форсим сброс.
+ */
+function registerDeployVersionWatch(): void {
+  if (typeof window === 'undefined') return;
+  if (import.meta.env.DEV) return;
+
+  let refreshing = false;
+  const check = async (): Promise<void> => {
+    if (refreshing) return;
+    try {
+      const remote = await fetchRemoteBuildVersion();
+      if (remote == null || !isDeployVersionMismatch(CLIENT_BUILD_VERSION, remote)) return;
+
+      try {
+        const alreadyReloaded = sessionStorage.getItem(CLIENT_BUILD_RELOAD_KEY);
+        if (alreadyReloaded === `remote:${remote}`) return;
+        sessionStorage.setItem(CLIENT_BUILD_RELOAD_KEY, `remote:${remote}`);
+      } catch {
+        // continue best-effort
+      }
+
+      refreshing = true;
+      console.warn('[PWA] На сервере новая сборка — сброс кэша и перезагрузка.', {
+        local: CLIENT_BUILD_VERSION,
+        remote,
+      });
+      try {
+        localStorage.setItem(CLIENT_BUILD_VERSION_KEY, remote);
+      } catch {
+        // ignore
+      }
+      await purgeServiceWorkerAndCaches();
+      window.location.reload();
+    } catch {
+      // сеть/404 — тихо, повторим на следующем интервале
+    }
+  };
+
+  void check();
+  window.setInterval(() => {
+    void check();
+  }, 60_000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void check();
+  });
 }
 
 if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_WDYR === 'true') {
@@ -226,6 +251,7 @@ initPwaStandaloneHtmlHint();
 })();
 initAppearance();
 void forceClientRefreshOnVersionChange();
+registerDeployVersionWatch();
 if (client.isConfigured()) {
   void Promise.race([
     client.ping().then(async (response) => {
