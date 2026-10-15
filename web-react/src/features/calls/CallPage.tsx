@@ -20,6 +20,7 @@ import { useCallStore } from './callStore';
 import './calls.css';
 
 function callTitle(call: CallPublic | null, fallback: string): string {
+  // Prefer stored meeting/template name (e.g. «Вечерняя молитвенная стража»).
   const t = call?.title?.trim();
   if (t) return t;
   return fallback;

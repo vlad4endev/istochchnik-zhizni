@@ -216,8 +216,27 @@ export function normalizeCallTitle(
   return t.slice(0, MAX_CALL_TITLE_LEN);
 }
 
-function titleFromCallMetadata(call: Pick<CallRow, 'metadata' | 'media_type' | 'conversation_id'>): string | null {
-  const t = call.metadata?.title;
+/** Parse jsonb / JSON-text metadata from pg into a plain object. */
+export function parseCallMetadata(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      /* ignore malformed metadata */
+    }
+  }
+  return {};
+}
+
+/** Meeting / template name stored in `calls.metadata.title`. */
+export function titleFromCallMetadata(metadata: unknown): string | null {
+  const t = parseCallMetadata(metadata).title;
   if (typeof t === 'string' && t.trim()) return t.trim().slice(0, MAX_CALL_TITLE_LEN);
   return null;
 }
@@ -227,7 +246,6 @@ function hashInviteToken(raw: string): string {
 }
 
 function mapCallRow(row: Record<string, unknown>): CallRow {
-  const meta = row.metadata;
   const convRaw = row.conversation_id;
   return {
     id: String(row.id),
@@ -243,10 +261,7 @@ function mapCallRow(row: Record<string, unknown>): CallRow {
     ended_at: row.ended_at ? new Date(String(row.ended_at)).toISOString() : null,
     duration_seconds: row.duration_seconds != null ? Number(row.duration_seconds) : null,
     end_reason: row.end_reason != null ? String(row.end_reason) : null,
-    metadata:
-      meta && typeof meta === 'object' && !Array.isArray(meta)
-        ? (meta as Record<string, unknown>)
-        : {},
+    metadata: parseCallMetadata(row.metadata),
   };
 }
 
@@ -393,7 +408,7 @@ function toPublicCall(
     mediaType: call.media_type,
     status: call.status,
     conversationId: call.conversation_id,
-    title: titleFromCallMetadata(call),
+    title: titleFromCallMetadata(call.metadata),
     initiatedBy: call.initiated_by,
     accessMode: call.access_mode,
     createdAt: call.created_at,
@@ -1449,6 +1464,9 @@ export async function getInvitationPreview(rawToken: string, memberId: number | 
   reason?: string;
   mediaType?: CallMediaType;
   callStatus?: CallStatus;
+  /** Имя шаблона / название встречи из metadata.title (предпочтительно для UI). */
+  title?: string | null;
+  /** @deprecated alias of title / chat title fallback — keep for older clients */
   conversationTitle?: string | null;
   participantCount?: number;
   requiresAuth: boolean;
@@ -1490,16 +1508,9 @@ export async function getInvitationPreview(rawToken: string, memberId: number | 
   }
 
   const mediaType = row.media_type as CallMediaType;
-  const callMeta =
-    row.call_metadata && typeof row.call_metadata === 'object' && !Array.isArray(row.call_metadata)
-      ? (row.call_metadata as Record<string, unknown>)
-      : {};
-  const namedTitle =
-    typeof callMeta.title === 'string' && callMeta.title.trim()
-      ? callMeta.title.trim().slice(0, MAX_CALL_TITLE_LEN)
-      : null;
+  const namedTitle = titleFromCallMetadata(row.call_metadata);
 
-  let conversationTitle: string | null = namedTitle;
+  let displayTitle: string | null = namedTitle;
   let canJoin = false;
   const convId =
     row.conversation_id != null && String(row.conversation_id).trim() !== ''
@@ -1513,6 +1524,7 @@ export async function getInvitationPreview(rawToken: string, memberId: number | 
         reason: 'no_group_access',
         mediaType,
         callStatus: row.call_status as CallStatus,
+        title: namedTitle,
         conversationTitle: namedTitle,
         requiresAuth: true,
         canJoin: false,
@@ -1520,13 +1532,13 @@ export async function getInvitationPreview(rawToken: string, memberId: number | 
       };
     }
     canJoin = row.access_mode === 'link' || inConv;
-    if (!conversationTitle && inConv && convId) {
+    if (!displayTitle && inConv && convId) {
       const meta = await getConversationMeta(convId);
-      conversationTitle = meta?.title ?? null;
+      displayTitle = meta?.title ?? null;
     }
   }
-  if (!conversationTitle && !convId && row.access_mode === 'link') {
-    conversationTitle = defaultCallTitle(mediaType, true);
+  if (!displayTitle && !convId && row.access_mode === 'link') {
+    displayTitle = defaultCallTitle(mediaType, true);
   }
 
   const countRes = await query(
@@ -1538,7 +1550,8 @@ export async function getInvitationPreview(rawToken: string, memberId: number | 
     valid: true,
     mediaType,
     callStatus: row.call_status as CallStatus,
-    conversationTitle,
+    title: displayTitle,
+    conversationTitle: displayTitle,
     participantCount: Number(countRes.rows[0]?.c ?? 0),
     requiresAuth: true,
     canJoin: memberId != null && canJoin,
