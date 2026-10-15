@@ -30,11 +30,10 @@ function IosSafariPwaHint() {
   if (!show) return null;
   return (
     <div className="glass-call__hint" role="note">
-      <LuCircleAlert size={20} strokeWidth={1.8} aria-hidden />
+      <LuCircleAlert size={18} strokeWidth={1.8} aria-hidden />
       <p>
-        Открыто в Safari. Если «Моя церковь» установлено с домашнего экрана — откройте приложение и
-        нажмите ссылку на встречу в чате: так звонок останется в приложении, а не во вкладке
-        браузера.
+        Открыто в Safari. Для стабильного звонка откройте ссылку из приложения «Моя церковь» на
+        домашнем экране.
       </p>
     </div>
   );
