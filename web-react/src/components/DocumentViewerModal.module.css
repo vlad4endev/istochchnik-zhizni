@@ -177,7 +177,10 @@
   min-height: 0 !important;
   width: 100% !important;
   height: 100% !important;
-  overflow: hidden !important;
+  overflow: auto !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 /* Скролл самого документа — на #pdf-renderer (не на body и не через touch-action: none). */
