@@ -111,4 +111,15 @@ describe('mobile call layout', () => {
     expect(css).toMatch(/constant\(safe-area-inset-top\)/);
     expect(css).toMatch(/translate3d\(-50%/);
   });
+
+  it('лобби входа по ссылке компактное: один экран без прокрутки', () => {
+    const css = readFileSync(join(root, 'src/features/calls/calls.css'), 'utf8');
+    const joinPage = readFileSync(join(root, 'src/features/calls/CallJoinPage.tsx'), 'utf8');
+    expect(joinPage).toMatch(/telemost-join--compact/);
+    expect(joinPage).toMatch(/size="md"/);
+    expect(joinPage).toMatch(/Safari: откройте/);
+    expect(css).toMatch(/\.telemost-join--compact/);
+    expect(css).toMatch(/telemost-join__devices\s*\{[\s\S]*?flex-wrap:\s*nowrap/);
+    expect(css).toMatch(/@media \(max-height:\s*700px\)/);
+  });
 });
