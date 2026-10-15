@@ -21,6 +21,7 @@ import {
   GlassCallShell,
   GlassCallTitle,
 } from './glassCallUi';
+import { meetingTitleFromPreview } from './meetingTitle';
 import { useCallStore } from './callStore';
 import './calls.css';
 
@@ -29,11 +30,10 @@ function IosSafariPwaHint() {
   if (!show) return null;
   return (
     <div className="glass-call__hint" role="note">
-      <LuCircleAlert size={20} strokeWidth={1.8} aria-hidden />
+      <LuCircleAlert size={18} strokeWidth={1.8} aria-hidden />
       <p>
-        Открыто в Safari. Если «Моя церковь» установлено с домашнего экрана — откройте приложение и
-        нажмите ссылку на встречу в чате: так звонок останется в приложении, а не во вкладке
-        браузера.
+        Открыто в Safari. Для стабильного звонка откройте ссылку из приложения «Моя церковь» на
+        домашнем экране.
       </p>
     </div>
   );
@@ -94,10 +94,7 @@ export function CallJoinPage() {
         }
       }
       const result = await joinInvitation(inviteToken);
-      const title =
-        result.call.title?.trim() ||
-        preview.conversationTitle?.trim() ||
-        (preview.mediaType === 'video' ? 'Видеовстреча' : 'Аудиовстреча');
+      const title = meetingTitleFromPreview(preview, result.call.title ?? undefined);
       // Link joins must not deep-link into the host chat: invitees are call participants,
       // not conversation members → otherwise messenger returns «Not a member of this conversation».
       hydrateFromPublic(result.call, {
@@ -121,11 +118,22 @@ export function CallJoinPage() {
     }
   }, [camOn, hydrateFromPublic, inviteToken, joining, micOn, navigate, preview, setLiveKitCreds]);
 
+  if (!preview && !error) {
+    return (
+      <GlassCallShell className="glass-call--simple" closeTo={isAuthenticated ? '/messenger' : '/dashboard'}>
+        <p className="glass-call__lead glass-call__lead--solo">Проверка приглашения…</p>
+        <div className="glass-call__spinner" aria-hidden />
+      </GlassCallShell>
+    );
+  }
+
   if (!isAuthenticated) {
     const from = `/call/join/${encodeURIComponent(inviteToken)}`;
+    const inviteTitle =
+      preview && preview.valid ? meetingTitleFromPreview(preview) : 'Вход во встречу';
     return (
       <GlassCallShell className="glass-call--simple" closeTo="/dashboard">
-        <GlassCallTitle title="Вход во встречу" />
+        <GlassCallTitle title={inviteTitle} />
         <p className="glass-call__lead">Войдите в аккаунт, чтобы подключиться по ссылке.</p>
         <div className="glass-call__spacer" />
         <GlassCallCta to={`${LOGIN_PATH}?from=${encodeURIComponent(from)}`}>Войти</GlassCallCta>
@@ -157,18 +165,20 @@ export function CallJoinPage() {
     );
   }
 
-  if (!preview) {
+  if (!preview || !preview.valid) {
     return (
       <GlassCallShell className="glass-call--simple" closeTo="/messenger">
-        <p className="glass-call__lead glass-call__lead--solo">Проверка приглашения…</p>
-        <div className="glass-call__spinner" aria-hidden />
+        <GlassCallTitle title="Не удалось войти" />
+        <p className="glass-call__lead">{error || 'Приглашение недействительно'}</p>
+        <div className="glass-call__spacer" />
+        <GlassCallCta to="/messenger">В мессенджер</GlassCallCta>
       </GlassCallShell>
     );
   }
 
   const isVideo = preview.mediaType === 'video';
-  const defaultTitle = isVideo ? 'Видеовстреча' : 'Аудиовстреча';
-  const title = preview.conversationTitle?.trim() || defaultTitle;
+  // Template name («Вечерняя молитвенная стража») or custom meeting title from create dialog.
+  const title = meetingTitleFromPreview(preview);
 
   return (
     <GlassCallShell closeTo="/messenger">

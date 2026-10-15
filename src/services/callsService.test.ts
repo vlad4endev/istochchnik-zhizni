@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'crypto';
 
-import { CallsError, defaultCallTitle, normalizeCallTitle } from './callsService';
+import {
+  CallsError,
+  defaultCallTitle,
+  normalizeCallTitle,
+  parseCallMetadata,
+  titleFromCallMetadata,
+} from './callsService';
 
 function hashInviteToken(raw: string): string {
   return createHash('sha256').update(raw, 'utf8').digest('hex');
@@ -30,6 +36,25 @@ async function main(): Promise<void> {
   assert.equal(normalizeCallTitle('  Молитва   вечера  ', 'video', true), 'Молитва вечера');
   assert.equal(normalizeCallTitle('', 'audio', true), 'Аудиовстреча');
   assert.equal(normalizeCallTitle('x'.repeat(100), 'video', true).length, 80);
+
+  assert.deepEqual(parseCallMetadata({ title: 'Вечерняя молитвенная стража', standalone: true }), {
+    title: 'Вечерняя молитвенная стража',
+    standalone: true,
+  });
+  assert.deepEqual(
+    parseCallMetadata('{"title":"Утренняя молитвенная стража","standalone":true}'),
+    { title: 'Утренняя молитвенная стража', standalone: true },
+  );
+  assert.deepEqual(parseCallMetadata('not-json'), {});
+  assert.equal(
+    titleFromCallMetadata({ title: '  Вечерняя молитвенная стража  ' }),
+    'Вечерняя молитвенная стража',
+  );
+  assert.equal(
+    titleFromCallMetadata('{"title":"Моя встреча"}'),
+    'Моя встреча',
+  );
+  assert.equal(titleFromCallMetadata({}), null);
 
   console.log('callsService (unit) ok');
 }

@@ -3744,6 +3744,9 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   inset: 0;
   z-index: 10020;
   width: 100%;
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
   overflow: hidden;
   color: var(--gc-fg);
   font-family: Manrope, system-ui, sans-serif;
@@ -3816,15 +3819,17 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   position: relative;
   z-index: 1;
   height: 100%;
+  min-height: 0;
   max-width: 430px;
   margin: 0 auto;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   padding:
-    max(28px, calc(env(safe-area-inset-top, 0px) + 12px))
-    28px
-    max(22px, calc(env(safe-area-inset-bottom, 0px) + 12px));
+    max(16px, calc(env(safe-area-inset-top, 0px) + 8px))
+    22px
+    max(14px, calc(env(safe-area-inset-bottom, 0px) + 8px));
 }
 
 .glass-call__topbar {
@@ -3880,18 +3885,19 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  gap: 18px;
-  margin-top: 16px;
-  padding: 16px 16px 20px;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 12px 14px 14px;
   min-height: 0;
-  border-radius: 36px;
+  flex: 0 1 auto;
+  border-radius: 28px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.04) 100%);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   box-shadow:
-    0 30px 60px rgba(0, 0, 0, 0.4),
+    0 20px 40px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
   box-sizing: border-box;
 }
@@ -3900,13 +3906,13 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 14px 0 12px;
-  border-radius: 17px;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px 0 10px;
+  border-radius: 15px;
   background: rgba(18, 10, 14, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #efdfe3;
   flex-shrink: 0;
@@ -3914,9 +3920,9 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
 
 .glass-call__avatar {
   position: relative;
-  width: 92px;
-  height: 92px;
-  margin: 8px 0 4px;
+  width: 72px;
+  height: 72px;
+  margin: 2px 0 0;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -3927,19 +3933,24 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   transition: box-shadow 0.3s;
 }
 
+.glass-call__avatar svg {
+  width: 34px;
+  height: 34px;
+}
+
 .glass-call__avatar.is-off {
   box-shadow:
-    0 0 0 6px rgba(255, 255, 255, 0.06),
-    0 0 0 14px rgba(255, 255, 255, 0.03),
-    0 20px 50px rgba(190, 70, 100, 0.3);
+    0 0 0 5px rgba(255, 255, 255, 0.06),
+    0 0 0 11px rgba(255, 255, 255, 0.03),
+    0 14px 36px rgba(190, 70, 100, 0.3);
 }
 
 .glass-call__avatar.is-on,
 .glass-call__stage.is-live .glass-call__avatar {
   box-shadow:
-    0 0 0 6px rgba(242, 169, 187, 0.25),
-    0 0 0 14px rgba(242, 169, 187, 0.1),
-    0 20px 50px rgba(190, 70, 100, 0.5);
+    0 0 0 5px rgba(242, 169, 187, 0.25),
+    0 0 0 11px rgba(242, 169, 187, 0.1),
+    0 14px 36px rgba(190, 70, 100, 0.5);
 }
 
 .glass-call__devices {
@@ -3947,9 +3958,9 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  gap: 36px;
+  gap: 28px;
   width: 100%;
-  margin-top: 4px;
+  margin-top: 0;
   flex-shrink: 0;
 }
 
@@ -3957,8 +3968,8 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  width: 96px;
+  gap: 6px;
+  width: 88px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -3968,8 +3979,8 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
 }
 
 .glass-call__device-icon {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   box-sizing: border-box;
   border-radius: 50%;
   display: flex;
@@ -3993,9 +4004,9 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
 }
 
 .glass-call__device-cap {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.15;
   text-align: center;
   white-space: nowrap;
 }
@@ -4009,12 +4020,20 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
 }
 
 .glass-call__title {
-  margin: 22px 0 0;
-  font-size: clamp(1.7rem, 7.5vw, 2.25rem);
+  margin: 12px 0 0;
+  font-size: clamp(1.45rem, 6.2vw, 1.95rem);
   line-height: 1.08;
   letter-spacing: -0.02em;
   font-weight: 800;
   color: var(--gc-title);
+  flex-shrink: 0;
+}
+
+.glass-call--ended .glass-call__title {
+  margin-top: 16px;
+  font-size: clamp(1.85rem, 8vw, 2.45rem);
+  line-height: 1.05;
+  text-shadow: 0 10px 36px rgba(0, 0, 0, 0.45);
 }
 
 .glass-call__title-head {
@@ -4030,45 +4049,70 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   color: var(--gc-accent);
 }
 
+.glass-call--ended .glass-call__title-accent {
+  color: #f6b8c6;
+}
+
 .glass-call__lead {
-  margin: 10px 0 0;
-  font-size: 15.5px;
-  line-height: 1.4;
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.35;
   color: var(--gc-muted);
+  flex-shrink: 0;
+}
+
+.glass-call__lead--meeting {
+  margin-top: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #e8d5db;
 }
 
 .glass-call__lead--solo {
-  margin-top: 48px;
+  margin-top: 32px;
   text-align: center;
 }
 
 .glass-call__hint {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
-  margin-top: 16px;
-  padding: 14px 16px;
-  border-radius: 20px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
   background: rgba(226, 172, 84, 0.1);
   border: 1px solid rgba(226, 172, 84, 0.3);
   color: #e6b865;
+  flex-shrink: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.glass-call__hint svg {
+  flex: none;
+  margin-top: 1px;
 }
 
 .glass-call__hint p {
   margin: 0;
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.4;
   color: #efdfbd;
   font-weight: 500;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
 
 .glass-call__spacer {
-  flex: 1;
-  min-height: 14px;
+  flex: 1 1 0;
+  min-height: 4px;
 }
 
 .glass-call__cta {
-  height: 60px;
+  flex-shrink: 0;
+  height: 54px;
   box-sizing: border-box;
   border: 0;
   border-radius: 30px;
@@ -4080,7 +4124,7 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   width: 100%;
   cursor: pointer;
   font: inherit;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--gc-cta-fg);
   text-decoration: none;
@@ -4159,27 +4203,28 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
 
 .glass-call__status-card {
   position: relative;
-  margin-top: 28px;
+  margin-top: 14px;
   width: 100%;
-  min-height: 160px;
-  border-radius: 36px;
+  min-height: 120px;
+  flex: 0 1 auto;
+  border-radius: 28px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.04) 100%);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   box-shadow:
-    0 30px 60px rgba(0, 0, 0, 0.4),
+    0 20px 40px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .glass-call__status-icon {
-  width: 92px;
-  height: 92px;
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -4262,73 +4307,206 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
 }
 
 .glass-call--simple .glass-call__title {
-  margin-top: 36px;
+  margin-top: 24px;
 }
 
-@media (max-height: 720px) {
-  .glass-call__inner {
-    padding-left: 20px;
-    padding-right: 20px;
+/* Phone / short viewports: keep whole lobby on one screen (no scroll). */
+@media (max-height: 780px) {
+  .glass-call__topbar {
+    min-height: 40px;
   }
 
-  .glass-call__stage {
-    gap: 12px;
-    padding: 12px 14px 16px;
-    border-radius: 28px;
-  }
-
-  .glass-call__avatar {
-    width: 76px;
-    height: 76px;
-    margin: 2px 0 0;
-  }
-
-  .glass-call__avatar svg {
-    width: 36px;
-    height: 36px;
-  }
-
-  .glass-call__devices {
-    gap: 28px;
-  }
-
-  .glass-call__device {
-    width: 84px;
-    gap: 6px;
-  }
-
-  .glass-call__device-icon {
-    width: 48px;
-    height: 48px;
-  }
-
-  .glass-call__title {
-    margin-top: 14px;
-    font-size: clamp(1.45rem, 6.5vw, 1.85rem);
-  }
-
-  .glass-call__hint {
-    margin-top: 10px;
-    padding: 10px 12px;
-  }
-
-  .glass-call__hint p {
-    font-size: 11.5px;
-  }
-
-  .glass-call__cta {
-    height: 54px;
-    font-size: 16px;
-  }
-
-  .glass-call__cta-arrow {
+  .glass-call__close {
     width: 40px;
     height: 40px;
   }
 
+  .glass-call__stage {
+    gap: 10px;
+    padding: 10px 12px 12px;
+    margin-top: 8px;
+  }
+
+  .glass-call__avatar {
+    width: 64px;
+    height: 64px;
+  }
+
+  .glass-call__avatar svg {
+    width: 30px;
+    height: 30px;
+  }
+
+  .glass-call__devices {
+    gap: 22px;
+  }
+
+  .glass-call__device {
+    width: 78px;
+    gap: 5px;
+  }
+
+  .glass-call__device-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .glass-call__device-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .glass-call__title {
+    margin-top: 10px;
+    font-size: clamp(1.35rem, 5.8vw, 1.7rem);
+  }
+
+  .glass-call--ended .glass-call__title {
+    margin-top: 12px;
+    font-size: clamp(1.7rem, 7.2vw, 2.15rem);
+  }
+
+  .glass-call__lead {
+    margin-top: 4px;
+    font-size: 13px;
+  }
+
+  .glass-call__hint {
+    margin-top: 8px;
+    padding: 8px 10px;
+  }
+
+  .glass-call__hint p {
+    font-size: 11px;
+    -webkit-line-clamp: 2;
+  }
+
+  .glass-call__cta {
+    height: 50px;
+    font-size: 16px;
+  }
+
+  .glass-call__cta-arrow {
+    width: 38px;
+    height: 38px;
+  }
+
   .glass-call__status-card {
-    min-height: 130px;
-    margin-top: 18px;
+    min-height: 100px;
+    margin-top: 10px;
+  }
+
+  .glass-call__status-icon {
+    width: 64px;
+    height: 64px;
+  }
+}
+
+@media (max-height: 680px) {
+  .glass-call__inner {
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: max(10px, calc(env(safe-area-inset-top, 0px) + 4px));
+    padding-bottom: max(10px, calc(env(safe-area-inset-bottom, 0px) + 4px));
+  }
+
+  .glass-call__brand {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+  }
+
+  .glass-call__meta {
+    height: 26px;
+    font-size: 11px;
+  }
+
+  .glass-call__stage {
+    gap: 8px;
+    padding: 8px 10px 10px;
+    border-radius: 22px;
+  }
+
+  .glass-call__avatar {
+    width: 54px;
+    height: 54px;
+  }
+
+  .glass-call__avatar svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .glass-call__avatar.is-off,
+  .glass-call__avatar.is-on,
+  .glass-call__stage.is-live .glass-call__avatar {
+    box-shadow:
+      0 0 0 4px rgba(242, 169, 187, 0.2),
+      0 0 0 8px rgba(242, 169, 187, 0.08),
+      0 10px 24px rgba(190, 70, 100, 0.4);
+  }
+
+  .glass-call__device-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .glass-call__device-cap {
+    font-size: 10px;
+  }
+
+  .glass-call__title {
+    margin-top: 8px;
+    font-size: clamp(1.25rem, 5.4vw, 1.55rem);
+  }
+
+  .glass-call--ended .glass-call__title {
+    font-size: clamp(1.55rem, 6.8vw, 1.95rem);
+  }
+
+  .glass-call__hint {
+    margin-top: 6px;
+    padding: 7px 9px;
+    border-radius: 12px;
+  }
+
+  .glass-call__hint p {
+    font-size: 10.5px;
+    -webkit-line-clamp: 2;
+  }
+
+  .glass-call__cta {
+    height: 48px;
+    font-size: 15px;
+    border-radius: 24px;
+  }
+
+  .glass-call__cta + .glass-call__cta {
+    margin-top: 8px;
+  }
+
+  .glass-call__status-card {
+    min-height: 84px;
+    border-radius: 22px;
+  }
+
+  .glass-call__status-icon {
+    width: 56px;
+    height: 56px;
+  }
+}
+
+/* Very short / landscape phone chrome: drop hint, keep CTA visible. */
+@media (max-height: 560px) {
+  .glass-call__hint {
+    display: none;
+  }
+
+  .glass-call__stage {
+    margin-top: 4px;
+  }
+
+  .glass-call__spacer {
+    min-height: 0;
   }
 }
 

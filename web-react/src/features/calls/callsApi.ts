@@ -175,6 +175,9 @@ export async function previewInvitation(token: string): Promise<{
   reason?: string;
   mediaType?: CallMediaType;
   callStatus?: CallStatus;
+  /** Имя шаблона или название встречи (metadata.title). */
+  title?: string | null;
+  /** @deprecated alias — older API field for the same display title */
   conversationTitle?: string | null;
   participantCount?: number;
   requiresAuth: boolean;
