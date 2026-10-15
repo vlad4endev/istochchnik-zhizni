@@ -7,6 +7,7 @@ import { isMessengerChatReadSurfaceOpen } from '../messengerReadSurface';
 import * as api from '../api/messengerApi';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
+import { MessengerMiniPlayer } from './MessengerMiniPlayer';
 import { SearchChat } from './SearchChat';
 import { LuBot, LuChevronLeft, LuEllipsisVertical, LuPhone, LuSearch, LuVideo } from 'react-icons/lu';
 import { AppAvatar } from '../../../components/AppAvatar';
@@ -1454,6 +1455,7 @@ export function ChatWindow({
       </div>
 
       <div className="tg-chat-window__composer message-input-bar z-20 w-full min-w-0 max-w-full shrink-0 border-t border-transparent bg-[var(--tg-bg)] px-3 pt-2">
+        <MessengerMiniPlayer conversationId={conversationId} />
         {isAccessRequestsChannel ? (
           <div className="pb-1 pt-0.5 text-center">
             <p className="mx-auto max-w-md px-2 text-[13px] leading-snug text-[var(--text-secondary)]">

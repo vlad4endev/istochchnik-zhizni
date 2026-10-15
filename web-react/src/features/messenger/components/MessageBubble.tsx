@@ -1471,6 +1471,15 @@ function MessageBubbleInner({
             variant={isAudioFile ? 'file' : 'voice'}
             title={displayTitle || undefined}
             waveSeed={String(message.id)}
+            ownerId={`msg:${message.id}`}
+            conversationId={String(message.conversation_id)}
+            sortKey={
+              /^\d+$/.test(String(message.id))
+                ? Number(message.id)
+                : Number.isFinite(Date.parse(message.created_at))
+                  ? Date.parse(message.created_at)
+                  : 0
+            }
           />
           {caption ? (
             <div className={['text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
