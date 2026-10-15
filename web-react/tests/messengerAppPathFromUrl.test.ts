@@ -43,4 +43,18 @@ describe('appPathFromAbsoluteUrl', () => {
 
     expect(appPathFromAbsoluteUrl('https://example.com/service-plan/share/x')).toBeNull();
   });
+
+  it('keeps meeting invite links in-app even when host differs (iOS PWA)', () => {
+    vi.stubGlobal('window', {
+      location: {
+        href: 'https://app.church-tambov.ru/messenger',
+        origin: 'https://app.church-tambov.ru',
+      },
+    });
+
+    expect(appPathFromAbsoluteUrl('https://cdn.example.ru/call/join/tok-1')).toBe('/call/join/tok-1');
+    expect(appPathFromAbsoluteUrl('https://app.church-tambov.ru/call/join/tok-2')).toBe(
+      '/call/join/tok-2',
+    );
+  });
 });

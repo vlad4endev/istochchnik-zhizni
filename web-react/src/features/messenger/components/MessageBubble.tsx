@@ -1,7 +1,9 @@
 import { lazy, memo, Suspense, useState, useRef, useMemo, useEffect, useCallback, useLayoutEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
 import { handleMessengerTextCopy, messengerTextForCopy, normalizeChatDisplayText } from '../normalizeChatDisplayText';
 import { renderMessengerPlainText } from '../messengerPlainText';
+import { absoluteAppUrlForShare, appPathFromHref } from '../../pwa/pwaInAppPath';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChatStore } from '../chatStore';
 import {
@@ -949,19 +951,12 @@ function MessageBubbleInner({
       }
       const invitePath = String(payload.invite_path ?? '').trim();
       const inviteUrlRaw = String(payload.invite_url ?? '').trim();
-      const joinHref =
-        invitePath.startsWith('/call/join/')
-          ? invitePath
-          : inviteUrlRaw.includes('/call/join/')
-            ? inviteUrlRaw
-            : '';
-      const copyTarget =
-        inviteUrlRaw ||
-        (joinHref.startsWith('http')
-          ? joinHref
-          : joinHref
-            ? `${typeof window !== 'undefined' ? window.location.origin : ''}${joinHref}`
-            : '');
+      // Always prefer in-app path so iOS PWA does not break out to Safari.
+      const joinAppPath =
+        appPathFromHref(invitePath) ||
+        appPathFromHref(inviteUrlRaw) ||
+        (invitePath.startsWith('/call/join/') ? invitePath : '');
+      const copyTarget = absoluteAppUrlForShare(inviteUrlRaw || joinAppPath);
       return (
         <div
           className={[
@@ -971,17 +966,17 @@ function MessageBubbleInner({
         >
           <div className="min-w-0">
             <div className="font-semibold leading-tight">{title}</div>
-            {joinHref ? (
+            {joinAppPath ? (
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <a
-                  href={joinHref}
+                <Link
+                  to={joinAppPath}
                   className={[
                     'inline-block text-xs font-semibold underline',
                     isMine ? 'text-white/85' : 'text-primary',
                   ].join(' ')}
                 >
                   Присоединиться
-                </a>
+                </Link>
                 {copyTarget ? (
                   <button
                     type="button"

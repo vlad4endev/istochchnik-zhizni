@@ -5,11 +5,23 @@ import { LuMic, LuMicOff, LuUsers, LuVideo, LuVideoOff } from 'react-icons/lu';
 import { LOGIN_PATH } from '../../app/routeGuards';
 import { emitAppToast } from '../../lib/uiFeedback';
 import { useAuthStore } from '../auth/authStore';
+import { isAppleMobileWeb, isInstalledPwa } from '../pwa/utils/pwaEnvironment';
 
 import { joinInvitation, previewInvitation } from './callsApi';
 import { MeetingAvatar } from './MeetingAvatar';
 import { useCallStore } from './callStore';
 import './calls.css';
+
+function IosSafariPwaHint() {
+  const show = isAppleMobileWeb() && !isInstalledPwa();
+  if (!show) return null;
+  return (
+    <p className="telemost-join__pwa-hint" role="note">
+      Открыто в Safari. Если «Моя церковь» установлено с домашнего экрана — откройте приложение и
+      нажмите ссылку на встречу в чате: так звонок останется в приложении, а не во вкладке браузера.
+    </p>
+  );
+}
 
 export function CallJoinPage() {
   const { inviteToken = '' } = useParams();
@@ -178,6 +190,7 @@ export function CallJoinPage() {
 
         <h1 className="telemost-join__title">{title}</h1>
         <p className="telemost-join__lead">{subtitle}</p>
+        <IosSafariPwaHint />
 
         {preview.participantCount != null ? (
           <p className="telemost-join__meta">
