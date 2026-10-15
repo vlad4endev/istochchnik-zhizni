@@ -1868,22 +1868,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     })();
     if (!latestNumericMessageId) return;
     const myReadCursor = String(get().myReadCursorByConv[conversationId] ?? '').trim();
-    if (/^\d+$/.test(myReadCursor) && BigInt(myReadCursor) >= BigInt(latestNumericMessageId)) {
-      // После reconnect не дублируем markRead, если курсор уже зафиксирован ранее.
-      return;
-    }
+    const cursorAlreadyPast =
+      /^\d+$/.test(myReadCursor) && BigInt(myReadCursor) >= BigInt(latestNumericMessageId);
 
-    // Always clear local counter immediately on open.
-    set((s) => ({
-      conversations: s.conversations.map((c) =>
-        c.id === conversationId ? { ...c, unread_count: 0 } : c,
-      ),
-      totalUnread: Math.max(
-        0,
-        s.totalUnread -
-          (s.conversations.find((c) => c.id === conversationId)?.unread_count ?? 0),
-      ),
-    }));
+    // Always clear local counter immediately on open — even if server cursor is already
+    // ahead (иначе бейдж «залипает», когда unread_count > 0 при актуальном курсоре).
+    set((s) => {
+      const prevUnread = s.conversations.find((c) => c.id === conversationId)?.unread_count ?? 0;
+      if (prevUnread <= 0 && cursorAlreadyPast) return s;
+      return {
+        conversations: s.conversations.map((c) =>
+          c.id === conversationId ? { ...c, unread_count: 0 } : c,
+        ),
+        totalUnread: Math.max(0, s.totalUnread - prevUnread),
+      };
+    });
+    if (cursorAlreadyPast) return;
+
     // Best-effort: update server read cursor immediately.
     try {
       await api.markConversationRead(conversationId, {
@@ -2458,9 +2459,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   refreshUnread: async () => {
     try {
       const count = await api.fetchUnreadCount();
-      set({ totalUnread: count });
-      // refreshUnread updates only aggregate badge; while messenger screen is open
-      // we also sync per-chat unread_count values in the conversation list.
+      if (get().conversationsLoaded && !canAccessMessengerAssistantSession()) {
+        // У прихожан ИИ-канал скрыт в списке, но серверный total может его учитывать.
+        const visibleSum = filterConversationsForAssistantAccess(get().conversations).reduce(
+          (sum, c) => sum + (c.unread_count ?? 0),
+          0,
+        );
+        set({ totalUnread: Math.min(count, visibleSum) });
+      } else {
+        set({ totalUnread: count });
+      }
+      // Пока открыт экран чатов — дополнительно синхронизируем per-chat unread.
       if (isMessengerRouteActive()) {
         await get().loadConversations({ force: true });
       }

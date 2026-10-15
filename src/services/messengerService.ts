@@ -3402,9 +3402,13 @@ export async function markRead(
 
 /**
  * Get total unread count across all conversations for a member.
+ * @param excludeAssistant — для прихожан без доступа к ИИ-каналу.
  */
-export async function getTotalUnreadCount(memberId: number): Promise<number> {
-  return getUnreadMessagesCount(memberId);
+export async function getTotalUnreadCount(
+  memberId: number,
+  opts?: { excludeAssistant?: boolean },
+): Promise<number> {
+  return getUnreadMessagesCount(memberId, opts);
 }
 
 // ─── Reactions ────────────────────────────────────────────────

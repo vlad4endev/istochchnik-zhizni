@@ -1,6 +1,7 @@
 import { query } from '../config/db';
 import { getUnreadEventsCount } from './eventsService';
 import { getUnreadMessagesCount } from '../lib/unreadHelpers';
+import { canAccessMessengerAssistant, normalizeAppRoles, type AppRole } from '../types/appRole';
 
 let hasDismissedAtColumnCache: boolean | null = null;
 
@@ -65,10 +66,26 @@ export async function getUnreadNotificationDeliveryCount(memberId: number): Prom
   return Number(result.rows[0]?.n ?? 0);
 }
 
+async function memberRolesForBadge(memberId: number): Promise<AppRole[]> {
+  try {
+    const result = await query(
+      `SELECT app_role, app_roles FROM members WHERE id = $1 LIMIT 1`,
+      [memberId],
+    );
+    const row = result.rows[0] as { app_role?: unknown; app_roles?: unknown } | undefined;
+    if (!row) return [];
+    return normalizeAppRoles(row.app_roles, row.app_role);
+  } catch {
+    return [];
+  }
+}
+
 /** Сумма для бейджа приложения: чаты + неоткрытые push/напоминания из журнала. */
 export async function getCombinedAppBadgeCount(memberId: number): Promise<number> {
+  const roles = await memberRolesForBadge(memberId);
+  const excludeAssistant = !canAccessMessengerAssistant(roles);
   const [chat, deliveries, unreadEvents] = await Promise.all([
-    getUnreadMessagesCount(memberId),
+    getUnreadMessagesCount(memberId, { excludeAssistant }),
     getUnreadNotificationDeliveryCount(memberId),
     getUnreadEventsCount(memberId),
   ]);

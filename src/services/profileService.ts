@@ -1149,12 +1149,15 @@ export async function getFeedUnreadCount(viewerMemberId: number): Promise<number
       [viewerId],
     );
 
+    // То же окно, что у smart-ленты (75 дней): иначе бейдж считает посты,
+    // которых пользователь уже не увидит в разделе.
     const result = await query(
       `SELECT COUNT(*)::int AS n
        FROM profile_posts p
        INNER JOIN user_profiles up ON up.member_id = p.member_id
        WHERE (up.is_private = FALSE OR p.member_id = $1)
          AND p.member_id <> $1
+         AND p.created_at > NOW() - INTERVAL '75 days'
          AND p.created_at > (
            SELECT w.last_seen_at FROM member_feed_watermarks w WHERE w.member_id = $1
          )`,

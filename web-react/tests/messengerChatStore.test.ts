@@ -7,6 +7,8 @@ vi.mock('../src/features/messenger/api/messengerApi', async (importOriginal) => 
     sendMessage: vi.fn(),
     fetchConversations: vi.fn(async () => []),
     fetchMessengerMember: vi.fn(async () => null),
+    markConversationRead: vi.fn(async () => ({ ok: true })),
+    fetchUnreadCount: vi.fn(async () => 0),
   };
 });
 
@@ -427,6 +429,60 @@ describe('messenger chatStore last message preview', () => {
     expect(useChatStore.getState().conversations.some((c) => String(c.id) === 'after-queue')).toBe(
       true,
     );
+  });
+
+  it('clears local unread even when read cursor is already past the latest message', async () => {
+    useChatStore.setState((s) => ({
+      ...s,
+      totalUnread: 3,
+      myReadCursorByConv: { 'conv-1': '100' },
+      conversations: [
+        {
+          id: 'conv-1',
+          type: 'group',
+          title: 'Молодежь',
+          avatar_url: null,
+          updated_at: '2026-05-07T11:59:00.000Z',
+          last_message: {
+            id: '100',
+            content: 'Уже прочитано',
+            sender_id: 2,
+            sender_name: 'Иван',
+            created_at: '2026-05-07T11:59:00.000Z',
+            is_deleted: false,
+          },
+          unread_count: 3,
+          other_member: null,
+        },
+      ],
+      messagesByConv: {
+        'conv-1': [
+          {
+            id: '100',
+            conversation_id: 'conv-1',
+            sender_id: 2,
+            content: 'Уже прочитано',
+            reply_to_message_id: null,
+            is_edited: false,
+            is_deleted: false,
+            created_at: '2026-05-07T11:59:00.000Z',
+            updated_at: '2026-05-07T11:59:00.000Z',
+            sender_name: 'Иван',
+            sender_first_name: 'Иван',
+            sender_last_name: 'Иванов',
+            reply_preview: null,
+            reactions: [],
+          },
+        ],
+      },
+    }));
+
+    await useChatStore.getState().markAsRead('conv-1');
+
+    const state = useChatStore.getState();
+    expect(state.conversations.find((c) => c.id === 'conv-1')?.unread_count).toBe(0);
+    expect(state.totalUnread).toBe(0);
+    expect(messengerApi.markConversationRead).not.toHaveBeenCalled();
   });
 
   it('removes a group from the list when the creator deletes it', async () => {

@@ -1,5 +1,10 @@
 import { query } from '../config/db';
 
+export type UnreadCountOptions = {
+  /** Не учитывать канал «ИИ помощник» (для ролей без доступа). */
+  excludeAssistant?: boolean;
+};
+
 /**
  * Counts unread chat messages for a member using the same rules as chat UI badges.
  *
@@ -7,19 +12,25 @@ import { query } from '../config/db';
  * notifications) are intentionally hidden from the regular chat message list, so including them
  * in the unread SQL would inflate the app badge and create UI inconsistency.
  */
-export async function getUnreadMessagesCount(memberId: number): Promise<number> {
+export async function getUnreadMessagesCount(
+  memberId: number,
+  opts?: UnreadCountOptions,
+): Promise<number> {
+  const excludeAssistant = Boolean(opts?.excludeAssistant);
   const result = await query(
     `
     SELECT COALESCE(SUM(cnt), 0)::int AS total
     FROM (
       SELECT COUNT(*) AS cnt
       FROM conversation_participants cp
+      JOIN conversations c ON c.id = cp.conversation_id
       JOIN messages m ON m.conversation_id = cp.conversation_id
       WHERE cp.member_id = $1
         AND cp.left_at IS NULL
         AND m.id > COALESCE(cp.last_read_message_id, 0)
         AND m.sender_id IS DISTINCT FROM cp.member_id
         AND m.payload_type::text NOT IN ('access_request', 'system', 'notification')
+        ${excludeAssistant ? `AND COALESCE(c.metadata->>'kind', '') <> 'assistant'` : ''}
     ) sub
     `,
     [memberId],

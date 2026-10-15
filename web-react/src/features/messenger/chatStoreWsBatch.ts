@@ -251,13 +251,17 @@ function listPreviewFromMessage(
   };
 }
 
-function messageCountsAsUnreadForCurrentUser(
+/** Совпадает с серверным фильтром unreadHelpers / listConversations. */
+const NON_BADGE_PAYLOAD_TYPES = new Set(['access_request', 'system', 'notification']);
+
+export function messageCountsAsUnreadForCurrentUser(
   msg: Pick<MessageWithSender, 'is_read' | 'sender_id' | 'payload_type'>,
   currentMemberId: number | null,
 ): boolean {
   if (currentMemberId == null) return false;
   if (msg.sender_id != null && Number(msg.sender_id) === Number(currentMemberId)) return false;
-  if (msg.payload_type === 'access_request') return false;
+  const payloadType = String(msg.payload_type ?? '').trim();
+  if (payloadType && NON_BADGE_PAYLOAD_TYPES.has(payloadType)) return false;
   return msg.is_read === false;
 }
 
@@ -415,12 +419,14 @@ export function applyNewMessage(
   const alreadyPresentByClientId =
     msgClientId != null && existing.some((m) => m.client_msg_id === msgClientId);
   const isActiveConversation = s.activeConversationId === idKey;
-  const isPageVisible = typeof document === 'undefined' ? true : document.visibilityState === 'visible';
+  // На мобилке activeConversationId может остаться, пока открыт список чатов —
+  // считаем непрочитанным только если поверхность чтения реально открыта.
+  const viewingThisChat = isActiveConversation && isMessengerChatReadSurfaceOpen();
   const shouldCountUnread =
     !hasProvisionalTwin &&
     !alreadyPresentByClientId &&
     messageCountsAsUnreadForCurrentUser(msg, s.currentMemberId) &&
-    (!isActiveConversation || !isPageVisible);
+    !viewingThisChat;
 
   const merged = hasProvisionalTwin
     ? existing.map((m) => {

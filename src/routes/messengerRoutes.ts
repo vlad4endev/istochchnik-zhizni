@@ -2002,7 +2002,8 @@ router.post('/conversations/:id/read', async (req: Request, res: Response) => {
 router.get('/unread-count', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   try {
-    const count = await svc.getTotalUnreadCount(userId);
+    const excludeAssistant = !canAccessMessengerAssistant(sessionRoles(req));
+    const count = await svc.getTotalUnreadCount(userId, { excludeAssistant });
     res.json({ count });
   } catch (e) {
     console.error('[messenger] unreadCount error:', e);

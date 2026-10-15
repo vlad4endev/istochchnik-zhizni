@@ -163,8 +163,8 @@ function formatNavBadgeCount(n: number): string {
 }
 
 /** Бейдж пункта меню: чаты / новые посты ленты. */
-function navItemBadgeCount(to: string, activityBadgeTotal: number, feedUnreadCount: number): number {
-  if (to === '/messenger') return activityBadgeTotal;
+function navItemBadgeCount(to: string, messengerBadge: number, feedUnreadCount: number): number {
+  if (to === '/messenger') return messengerBadge;
   if (to === '/feed') return feedUnreadCount;
   return 0;
 }
@@ -173,7 +173,7 @@ function navItemBadgeAriaLabel(to: string, count: number): string | undefined {
   if (count <= 0) return undefined;
   const shown = count > 99 ? 'более 99' : String(count);
   if (to === '/messenger') {
-    return `Чаты: непрочитанные сообщения и неоткрытые уведомления, всего: ${shown}`;
+    return `Чаты: непрочитанные сообщения, всего: ${shown}`;
   }
   if (to === '/feed') {
     return `Лента: новых публикаций: ${shown}`;
@@ -248,7 +248,7 @@ function MobileMoreBadge({ count }: { count: number }) {
 
 function MobileNavOverflow({
   items,
-  activityBadgeTotal,
+  messengerNavBadge,
   feedUnreadCount,
   pathname,
   isAdminRoute,
@@ -256,7 +256,7 @@ function MobileNavOverflow({
   adminBadgeFor,
 }: {
   items: NavItem[];
-  activityBadgeTotal: number;
+  messengerNavBadge: number;
   feedUnreadCount: number;
   pathname: string;
   isAdminRoute: boolean;
@@ -362,7 +362,7 @@ function MobileNavOverflow({
                     <div className="app-mobile-sections-grid grid w-full grid-cols-2 gap-2.5 min-[360px]:grid-cols-3 min-[440px]:grid-cols-4 sm:gap-3">
                       {sectionItems.map((item) => {
                         const Icon = item.Icon;
-                        const badge = navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount);
+                        const badge = navItemBadgeCount(item.to, messengerNavBadge, feedUnreadCount);
                         return (
                           <PrefetchNavLink
                             key={item.to}
@@ -674,7 +674,10 @@ export function Layout() {
     refetchOnWindowFocus: true,
   });
   const pendingDeliveries = pendingDeliveriesQ.data ?? 0;
-  const activityBadgeTotal = Math.min(99, unreadMessages + pendingDeliveries);
+  /** Бейдж «Чаты» в меню — только непрочитанные сообщения (как в списке диалогов). */
+  const messengerNavBadge = Math.min(99, Math.max(0, unreadMessages));
+  /** Иконка PWA: чаты + журнал push/напоминаний. */
+  const activityBadgeTotal = Math.min(99, Math.max(0, unreadMessages + pendingDeliveries));
   const feedUnreadQ = useQuery({
     queryKey: keys.feedUnread,
     queryFn: fetchFeedUnreadCount,
@@ -797,6 +800,8 @@ export function Layout() {
   const markAllDeliveriesOpened = useCallback(async () => {
     if (!token) return;
     if (registrationStatus !== 'active') return;
+    // Сразу убираем вклад deliveries из PWA-бейджа — иначе он «висит», пока open-all в полёте.
+    queryClient.setQueryData(UNREAD_DELIVERIES_QK, 0);
     try {
       await apiClient.post('/api/notifications/deliveries/open-all');
       // Пользователь в приложении — убираем накопившиеся уведомления из шторки и сбрасываем бейдж.
@@ -808,7 +813,7 @@ export function Layout() {
       void queryClient.invalidateQueries({ queryKey: UNREAD_DELIVERIES_QK });
       window.dispatchEvent(new CustomEvent('app:notification-deliveries-changed'));
     } catch {
-      /* ignore */
+      void queryClient.invalidateQueries({ queryKey: UNREAD_DELIVERIES_QK });
     }
   }, [token, registrationStatus, queryClient]);
 
@@ -1167,13 +1172,13 @@ export function Layout() {
                     navCollapsed
                       ? navItemBadgeAriaLabel(
                           item.to,
-                          navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount),
+                          navItemBadgeCount(item.to, messengerNavBadge, feedUnreadCount),
                         ) ?? item.label
                       : undefined
                   }
                 >
                   {({ isActive }) => {
-                    const badge = navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount);
+                    const badge = navItemBadgeCount(item.to, messengerNavBadge, feedUnreadCount);
                     return (
                     <>
                       <div className="relative">
@@ -1358,11 +1363,11 @@ export function Layout() {
                         className={({ isActive }) => navClassName(isActive, true)}
                         aria-label={navItemBadgeAriaLabel(
                           item.to,
-                          navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount),
+                          navItemBadgeCount(item.to, messengerNavBadge, feedUnreadCount),
                         )}
                       >
                         {({ isActive }) => {
-                          const badge = navItemBadgeCount(item.to, activityBadgeTotal, feedUnreadCount);
+                          const badge = navItemBadgeCount(item.to, messengerNavBadge, feedUnreadCount);
                           return (
                           <>
                             <span className={mobileBottomTabIconClass(isActive)}>
@@ -1384,7 +1389,7 @@ export function Layout() {
                 {mobileNavSplit.overflow.length > 0 ? (
                   <MobileNavOverflow
                     items={mobileNavSplit.overflow}
-                    activityBadgeTotal={activityBadgeTotal}
+                    messengerNavBadge={messengerNavBadge}
                     feedUnreadCount={feedUnreadCount}
                     pathname={location.pathname}
                     isAdminRoute={isAdminRoute}

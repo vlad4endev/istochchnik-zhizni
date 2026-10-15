@@ -104,11 +104,11 @@ export function FeedPage() {
       const page = await fetchChurchFeed({ limit: 20, sort: sortMode });
       setPosts(page.posts);
       setCursor(page.next_cursor);
-      // Просмотрел ленту → сразу убираем бейдж в меню.
-      const newest = page.posts[0]?.created_at ?? null;
+      // Открыли раздел → сбрасываем бейдж. Не берём posts[0]: в smart-сортировке
+      // первый пост может быть старше новых ниже по ленте, и watermark «залипает».
       qc.setQueryData(keys.feedUnread, 0);
       try {
-        await markFeedSeen(newest);
+        await markFeedSeen(null);
         void qc.invalidateQueries({ queryKey: keys.feedUnread });
       } catch {
         /* бейдж обновится при следующем опросе */
