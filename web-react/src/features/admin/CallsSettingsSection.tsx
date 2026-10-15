@@ -18,9 +18,12 @@ import {
   fetchCallSettingsAdmin,
   fetchCallUsageStats,
   patchCallSettings,
+  testLiveKitConnection,
   type CallFeatureFlags,
+  type CallLiveKitRoutingMode,
   type CallSettingsAdminResponse,
   type CallUsageStatsResponse,
+  type LiveKitConnectionTestResponse,
 } from './api';
 
 const Q_CALLS = ['admin', 'calls', 'settings'] as const;
@@ -175,6 +178,8 @@ function CallsConfigPanel() {
   const [ghostMiss, setGhostMiss] = useState(3);
   const [internalUrl, setInternalUrl] = useState('');
   const [publicUrl, setPublicUrl] = useState('');
+  const [routingMode, setRoutingMode] = useState<CallLiveKitRoutingMode>('local_proxy');
+  const [disableLocalFallbacks, setDisableLocalFallbacks] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
   const [clearKey, setClearKey] = useState(false);
@@ -183,6 +188,7 @@ function CallsConfigPanel() {
   const [participantLabels, setParticipantLabels] = useState<Record<string, string>>({});
   const [endReasonLabels, setEndReasonLabels] = useState<Record<string, string>>({});
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [testResult, setTestResult] = useState<LiveKitConnectionTestResponse | null>(null);
 
   useEffect(() => {
     if (!data) return;
@@ -197,10 +203,13 @@ function CallsConfigPanel() {
     setGhostMiss(data.ghost_miss_ticks);
     setInternalUrl(data.overrides.livekit_internal_url ?? data.livekit.internal_url ?? '');
     setPublicUrl(data.overrides.livekit_public_url ?? data.livekit.public_url ?? '');
+    setRoutingMode(data.livekit.routing_mode ?? 'local_proxy');
+    setDisableLocalFallbacks(Boolean(data.livekit.disable_local_fallbacks));
     setApiKey('');
     setApiSecret('');
     setClearKey(false);
     setClearSecret(false);
+    setTestResult(null);
     const callMap: Record<string, string> = {};
     const partMap: Record<string, string> = {};
     const reasonMap: Record<string, string> = {};
@@ -229,6 +238,8 @@ function CallsConfigPanel() {
         ghost_miss_ticks: ghostMiss,
         livekit_internal_url: internalUrl.trim() || null,
         livekit_public_url: publicUrl.trim() || null,
+        livekit_routing_mode: routingMode,
+        livekit_disable_local_fallbacks: disableLocalFallbacks,
         status_labels: {
           call: callLabels,
           participant: participantLabels,
@@ -243,12 +254,49 @@ function CallsConfigPanel() {
     },
     onSuccess: () => {
       setNote({ type: 'ok', text: 'Настройки звонков сохранены.' });
+      setTestResult(null);
       void qc.invalidateQueries({ queryKey: Q_CALLS });
       void qc.invalidateQueries({ queryKey: Q_STATS });
     },
     onError: (e) =>
       setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить настройки звонков.') }),
   });
+
+  const testMut = useMutation({
+    mutationFn: () => {
+      const body: Parameters<typeof testLiveKitConnection>[0] = {
+        livekit_internal_url: internalUrl.trim() || null,
+        livekit_public_url: publicUrl.trim() || null,
+        livekit_routing_mode: routingMode,
+        livekit_disable_local_fallbacks: disableLocalFallbacks,
+      };
+      if (apiKey.trim()) body.livekit_api_key = apiKey.trim();
+      if (apiSecret.trim()) body.livekit_api_secret = apiSecret.trim();
+      return testLiveKitConnection(body);
+    },
+    onSuccess: (result) => {
+      setTestResult(result);
+      setNote(
+        result.ok
+          ? { type: 'ok', text: 'Подключение к LiveKit успешно.' }
+          : {
+              type: 'err',
+              text: result.error
+                ? `Проверка не прошла: ${result.error}`
+                : 'Проверка не прошла — Room Service недоступен.',
+            },
+      );
+    },
+    onError: (e) =>
+      setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось проверить LiveKit.') }),
+  });
+
+  const hasKey = Boolean(apiKey.trim()) || (Boolean(data?.livekit.has_api_key) && !clearKey);
+  const hasSecret =
+    Boolean(apiSecret.trim()) || (Boolean(data?.livekit.has_api_secret) && !clearSecret);
+  const remoteRequiredMissing =
+    routingMode === 'remote_server' &&
+    (!internalUrl.trim() || !publicUrl.trim() || !hasKey || !hasSecret);
 
   if (isLoading) {
     return <div className="h-56 animate-pulse rounded-2xl bg-stone-200/50" />;
@@ -324,36 +372,117 @@ function CallsConfigPanel() {
         <header>
           <h3 className="text-sm font-semibold text-stone-900 flex items-center gap-2">
             <LuServer className="h-4 w-4" aria-hidden />
-            Служба LiveKit
+            Сервер LiveKit
           </h3>
           <p className="mt-1 text-xs text-stone-500">
-            Те же параметры, что в .env: URL Room Service, публичный WSS для браузера, API-ключи. Пустые
-            поля секретов оставляют текущие значения.
+            Куда приложение отправляет звонки: локальный прокси на этом хосте или отдельный удалённый
+            LiveKit. Секреты в пустых полях не меняются.
           </p>
         </header>
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(
+            [
+              {
+                id: 'local_proxy' as const,
+                title: 'Локальный прокси',
+                desc: 'Браузер → wss://приложение/lk (nginx). Room Service с текущего хоста.',
+              },
+              {
+                id: 'remote_server' as const,
+                title: 'Удалённый сервер LiveKit',
+                desc: 'Браузер и API ходят на новый хост. Нужны Room Service URL, Public WSS, Key и Secret.',
+              },
+            ] as const
+          ).map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              className={
+                routingMode === mode.id
+                  ? 'rounded-xl border border-primary bg-primary/10 px-3 py-3 text-left'
+                  : 'rounded-xl border border-stone-200 px-3 py-3 text-left hover:bg-stone-50'
+              }
+              onClick={() => {
+                setRoutingMode(mode.id);
+                setDisableLocalFallbacks(mode.id === 'remote_server');
+                setTestResult(null);
+              }}
+            >
+              <p
+                className={`text-sm font-semibold ${
+                  routingMode === mode.id ? 'text-primary' : 'text-stone-800'
+                }`}
+              >
+                {mode.title}
+              </p>
+              <p className="mt-1 text-[11px] text-stone-500">{mode.desc}</p>
+            </button>
+          ))}
+        </div>
+
+        <div className="rounded-xl border border-stone-100 bg-stone-50/80 px-3 py-3 space-y-1.5">
+          <p className="text-xs font-semibold text-stone-800">Сейчас реально используется</p>
+          <p className="text-[11px] text-stone-600 break-all">
+            Room Service:{' '}
+            <span className="font-medium text-stone-800">
+              {data.livekit.effective_internal_url || '—'}
+            </span>{' '}
+            <span className="text-stone-400">({sourceHint(data.livekit.internal_url_source)})</span>
+          </p>
+          <p className="text-[11px] text-stone-600 break-all">
+            Public WSS:{' '}
+            <span className="font-medium text-stone-800">
+              {data.livekit.effective_public_url || '—'}
+            </span>{' '}
+            <span className="text-stone-400">({sourceHint(data.livekit.public_url_source)})</span>
+          </p>
+          {data.livekit.public_url_warning ? (
+            <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+              {data.livekit.public_url_warning}
+            </p>
+          ) : null}
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-xs font-medium text-stone-600 sm:col-span-2">
-            Внутренний URL (LIVEKIT_URL)
+            Room Service URL (API → LiveKit)
             <input
               className={`${fieldClass()} mt-1`}
               value={internalUrl}
-              onChange={(e) => setInternalUrl(e.target.value)}
-              placeholder="http://host.docker.internal:7880"
+              onChange={(e) => {
+                setInternalUrl(e.target.value);
+                setTestResult(null);
+              }}
+              placeholder={
+                routingMode === 'remote_server'
+                  ? 'https://livekit.example.com или http://IP:7880'
+                  : 'http://host.docker.internal:7880'
+              }
+              required={routingMode === 'remote_server'}
             />
             <span className="mt-1 block text-[11px] text-stone-400">
-              Источник: {sourceHint(data.livekit.internal_url_source)}
+              Источник сохранённого: {sourceHint(data.livekit.internal_url_source)}
             </span>
           </label>
           <label className="block text-xs font-medium text-stone-600 sm:col-span-2">
-            Публичный URL (LIVEKIT_PUBLIC_URL)
+            Public WSS (браузер)
             <input
               className={`${fieldClass()} mt-1`}
               value={publicUrl}
-              onChange={(e) => setPublicUrl(e.target.value)}
-              placeholder="wss://app.example.com/lk"
+              onChange={(e) => {
+                setPublicUrl(e.target.value);
+                setTestResult(null);
+              }}
+              placeholder={
+                routingMode === 'remote_server'
+                  ? 'wss://livekit.example.com'
+                  : 'wss://app.example.com/lk'
+              }
+              required={routingMode === 'remote_server'}
             />
             <span className="mt-1 block text-[11px] text-stone-400">
-              Источник: {sourceHint(data.livekit.public_url_source)}
+              В режиме «удалённый сервер» этот адрес уходит в браузер как есть (без подмены на /lk).
             </span>
           </label>
           <label className="block text-xs font-medium text-stone-600">
@@ -364,6 +493,7 @@ function CallsConfigPanel() {
               onChange={(e) => {
                 setApiKey(e.target.value);
                 setClearKey(false);
+                setTestResult(null);
               }}
               placeholder={
                 data.livekit.api_key_masked
@@ -374,7 +504,7 @@ function CallsConfigPanel() {
             />
             <label className="mt-2 flex items-center gap-2 text-[11px] font-normal text-stone-500">
               <input type="checkbox" checked={clearKey} onChange={(e) => setClearKey(e.target.checked)} />
-              Сбросить ключ в БД (оставить env)
+              Сбросить ключ к env
             </label>
           </label>
           <label className="block text-xs font-medium text-stone-600">
@@ -386,8 +516,13 @@ function CallsConfigPanel() {
               onChange={(e) => {
                 setApiSecret(e.target.value);
                 setClearSecret(false);
+                setTestResult(null);
               }}
-              placeholder={data.livekit.has_api_secret ? 'Секрет задан — вставьте новый, чтобы заменить' : 'Введите секрет'}
+              placeholder={
+                data.livekit.has_api_secret
+                  ? 'Секрет задан — вставьте новый, чтобы заменить'
+                  : 'Введите секрет'
+              }
               autoComplete="new-password"
             />
             <label className="mt-2 flex items-center gap-2 text-[11px] font-normal text-stone-500">
@@ -396,10 +531,101 @@ function CallsConfigPanel() {
                 checked={clearSecret}
                 onChange={(e) => setClearSecret(e.target.checked)}
               />
-              Сбросить секрет в БД (оставить env)
+              Сбросить секрет к env
             </label>
           </label>
         </div>
+
+        <label className="flex items-start gap-2 text-xs text-stone-600">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={disableLocalFallbacks}
+            onChange={(e) => {
+              setDisableLocalFallbacks(e.target.checked);
+              setTestResult(null);
+            }}
+          />
+          <span>
+            Не пробовать локальные fallback Room Service (docker-gateway / 127.0.0.1). Рекомендуется
+            для удалённого сервера — иначе можно получить ложный OK от старого инстанса.
+          </span>
+        </label>
+
+        {routingMode === 'remote_server' && remoteRequiredMissing ? (
+          <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+            Для удалённого сервера заполните Room Service URL, Public WSS, API Key и Secret (или
+            оставьте уже сохранённые ключи).
+          </p>
+        ) : null}
+
+        {publicUrl.trim().startsWith('http://') || publicUrl.trim().startsWith('ws://') ? (
+          <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+            Публичный URL без TLS (ws/http). На проде обычно нужен wss:// .
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className={btnSecondary()}
+            disabled={testMut.isPending || (routingMode === 'remote_server' && remoteRequiredMissing)}
+            onClick={() => testMut.mutate()}
+          >
+            {testMut.isPending ? 'Проверка…' : 'Проверить подключение'}
+          </button>
+          {testResult ? (
+            <span
+              className={`text-xs font-medium ${
+                testResult.ok ? 'text-emerald-700' : 'text-red-700'
+              }`}
+            >
+              {testResult.ok
+                ? `OK · ${testResult.internal_url || 'Room Service'}`
+                : testResult.error || 'недоступен'}
+            </span>
+          ) : null}
+        </div>
+        {testResult?.warnings?.length ? (
+          <ul className="space-y-1">
+            {testResult.warnings.map((w) => (
+              <li
+                key={w}
+                className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5"
+              >
+                {w}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {testResult?.public_url_effective ? (
+          <p className="text-[11px] text-stone-500 break-all">
+            Effective Public WSS при проверке: {testResult.public_url_effective}
+          </p>
+        ) : null}
+
+        <details className="rounded-xl border border-stone-100 bg-stone-50/60 px-3 py-2">
+          <summary className="cursor-pointer text-xs font-semibold text-stone-800">
+            Чеклист переноса на другой сервер
+          </summary>
+          <div className="mt-2 space-y-2 text-[11px] text-stone-600">
+            <p className="font-medium text-stone-700">Что меняет эта форма (приложение):</p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              <li>Режим маршрутизации (локальный прокси / удалённый сервер)</li>
+              <li>URL Room Service и публичный WSS для браузера</li>
+              <li>API Key / Secret для выдачи токенов и Room Service</li>
+            </ul>
+            <p className="font-medium text-stone-700 pt-1">
+              Что настраивают на новом сервере LiveKit (вне админки):
+            </p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              <li>RTC node IP / advertised addresses</li>
+              <li>TURN (3478 / 50100) и firewall UDP/TCP 7881–7882</li>
+              <li>TLS и DNS для публичного WSS</li>
+              <li>nginx upstream / docker compose на стороне медиа-ноды</li>
+            </ul>
+          </div>
+        </details>
       </section>
 
       <section className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 space-y-4">
@@ -556,7 +782,7 @@ function CallsConfigPanel() {
         <button
           type="button"
           className={btnPrimary()}
-          disabled={saveMut.isPending || roles.length === 0}
+          disabled={saveMut.isPending || roles.length === 0 || remoteRequiredMissing}
           onClick={() => saveMut.mutate()}
         >
           {saveMut.isPending ? 'Сохранение…' : 'Сохранить настройки'}

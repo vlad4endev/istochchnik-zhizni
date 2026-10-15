@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 import {
+  applyLiveKitSettingsOverride,
   getLiveKitInternalUrl,
   getLiveKitInternalUrlCandidates,
   getLiveKitPublicUrl,
@@ -29,6 +30,17 @@ async function main(): Promise<void> {
     PUB: process.env.LIVEKIT_PUBLIC_URL,
     WEB: process.env.PUBLIC_WEB_ORIGIN,
   };
+
+  // Reset override so env-only tests are stable.
+  applyLiveKitSettingsOverride({
+    apiKey: null,
+    apiSecret: null,
+    internalUrl: null,
+    publicUrl: null,
+    tokenTtlSec: null,
+    routingMode: null,
+    disableLocalFallbacks: null,
+  });
 
   delete process.env.LIVEKIT_API_KEY;
   delete process.env.LIVEKIT_API_SECRET;
@@ -79,6 +91,38 @@ async function main(): Promise<void> {
   process.env.LIVEKIT_PUBLIC_URL = 'wss://lk.example.ru';
   assert.equal(getLiveKitPublicUrl(), 'wss://lk.example.ru/');
   delete process.env.LIVEKIT_PUBLIC_URL;
+
+  // local_proxy: foreign public host still prefers PUBLIC_WEB_ORIGIN/lk
+  process.env.PUBLIC_WEB_ORIGIN = 'https://app.example.ru';
+  process.env.LIVEKIT_PUBLIC_URL = 'wss://remote-lk.example.com';
+  applyLiveKitSettingsOverride({ routingMode: 'local_proxy', disableLocalFallbacks: false });
+  assert.equal(getLiveKitPublicUrl(), 'wss://app.example.ru/lk/');
+
+  // remote_server: honor foreign public URL as-is
+  applyLiveKitSettingsOverride({
+    routingMode: 'remote_server',
+    disableLocalFallbacks: true,
+    publicUrl: 'wss://remote-lk.example.com',
+    internalUrl: 'https://remote-lk.example.com',
+  });
+  assert.equal(getLiveKitPublicUrl(), 'wss://remote-lk.example.com/');
+
+  // remote + disable fallbacks → only primary (no docker gateway / loopback)
+  const remoteCandidates = getLiveKitInternalUrlCandidates();
+  assert.deepEqual(remoteCandidates, ['https://remote-lk.example.com']);
+  assert.ok(!remoteCandidates.includes('http://172.17.0.1:7880'));
+  assert.ok(!remoteCandidates.includes('http://127.0.0.1:7880'));
+
+  // Clean override again before restore
+  applyLiveKitSettingsOverride({
+    apiKey: null,
+    apiSecret: null,
+    internalUrl: null,
+    publicUrl: null,
+    tokenTtlSec: null,
+    routingMode: null,
+    disableLocalFallbacks: null,
+  });
 
   // restore
   for (const [k, v] of Object.entries(prev)) {

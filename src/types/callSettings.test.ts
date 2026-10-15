@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildCallRuntimeConfig,
   buildCallSettingsAdminView,
+  buildPublicUrlHonorStatus,
   defaultCallSettingsDocument,
   isAppRoleAllowedForCalls,
   normalizeCallSettingsDocument,
@@ -13,6 +14,8 @@ function run(): void {
   assert.equal(empty.enabled, null);
   assert.equal(empty.features.direct_calls, true);
   assert.ok(empty.allowed_roles.includes('member'));
+  assert.equal(empty.livekit.routing_mode, 'local_proxy');
+  assert.equal(empty.livekit.disable_local_fallbacks, false);
 
   const doc = normalizeCallSettingsDocument({
     enabled: false,
@@ -40,6 +43,41 @@ function run(): void {
   assert.equal((doc.status_labels.call as Record<string, string>).bogus, undefined);
   assert.equal(doc.livekit.api_key, 'key123');
   assert.equal(doc.livekit.internal_url, 'http://host.docker.internal:7880/');
+  assert.equal(doc.livekit.routing_mode, 'local_proxy');
+  assert.equal(doc.livekit.disable_local_fallbacks, false);
+
+  const remoteDoc = normalizeCallSettingsDocument({
+    livekit: {
+      routing_mode: 'remote_server',
+      public_url: 'wss://lk.example.com',
+      internal_url: 'https://lk.example.com',
+    },
+  });
+  assert.equal(remoteDoc.livekit.routing_mode, 'remote_server');
+  assert.equal(remoteDoc.livekit.disable_local_fallbacks, true);
+
+  const remoteExplicit = normalizeCallSettingsDocument({
+    livekit: {
+      routing_mode: 'remote_server',
+      disable_local_fallbacks: false,
+    },
+  });
+  assert.equal(remoteExplicit.livekit.disable_local_fallbacks, false);
+
+  const honorLocal = buildPublicUrlHonorStatus({
+    routing_mode: 'local_proxy',
+    stored_public_url: 'wss://lk.other.com',
+    effective_public_url: 'wss://app.example.ru/lk/',
+  });
+  assert.equal(honorLocal.honored, false);
+  assert.ok(honorLocal.warning && honorLocal.warning.includes('локальный прокси'));
+
+  const honorRemote = buildPublicUrlHonorStatus({
+    routing_mode: 'remote_server',
+    stored_public_url: 'wss://lk.other.com',
+    effective_public_url: 'wss://lk.other.com/',
+  });
+  assert.equal(honorRemote.honored, true);
 
   const prev = process.env.CALLS_ENABLED;
   const prevRing = process.env.CALL_RING_TIMEOUT_SEC;
@@ -59,8 +97,24 @@ function run(): void {
   const view = buildCallSettingsAdminView(forced, { ok: true, configured: true, url: 'http://x' });
   assert.equal(view.effective_enabled, false);
   assert.equal(view.livekit.probe?.ok, true);
+  assert.equal(view.livekit.routing_mode, 'local_proxy');
+  assert.equal(typeof view.livekit.effective_public_url, 'string');
+  assert.equal(typeof view.livekit.public_url_honored, 'boolean');
   assert.ok(view.status_catalog.some((e) => e.kind === 'call' && e.id === 'missed'));
   assert.ok(view.role_catalog.some((r) => r.id === 'admin'));
+
+  const remoteView = buildCallSettingsAdminView(
+    remoteDoc,
+    null,
+    {
+      internal_url: 'https://lk.example.com',
+      public_url: 'wss://lk.example.com/',
+    },
+  );
+  assert.equal(remoteView.livekit.routing_mode, 'remote_server');
+  assert.equal(remoteView.livekit.disable_local_fallbacks, true);
+  assert.equal(remoteView.livekit.effective_public_url, 'wss://lk.example.com/');
+  assert.equal(remoteView.overrides.livekit_routing_mode, 'remote_server');
 
   assert.equal(isAppRoleAllowedForCalls('admin', ['admin']), true);
   assert.equal(isAppRoleAllowedForCalls('member', ['admin']), false);

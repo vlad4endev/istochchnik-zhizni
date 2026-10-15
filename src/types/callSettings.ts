@@ -84,12 +84,31 @@ export interface CallFeatureFlags {
   video: boolean;
 }
 
+/** local_proxy — браузер через PUBLIC_WEB_ORIGIN/lk; remote_server — честный public_url. */
+export type CallLiveKitRoutingMode = 'local_proxy' | 'remote_server';
+
+export const CALL_LIVEKIT_ROUTING_MODES = ['local_proxy', 'remote_server'] as const;
+
+export function isCallLiveKitRoutingMode(raw: unknown): raw is CallLiveKitRoutingMode {
+  return raw === 'local_proxy' || raw === 'remote_server';
+}
+
 export interface CallLiveKitSettings {
   /** null — брать из env */
   api_key: string | null;
   api_secret: string | null;
   internal_url: string | null;
   public_url: string | null;
+  /**
+   * local_proxy (default): same-origin /lk предпочтителен.
+   * remote_server: использовать public_url как есть (перенос на другой хост).
+   */
+  routing_mode: CallLiveKitRoutingMode;
+  /**
+   * Не перебирать docker-gateway / loopback кандидаты Room Service.
+   * По умолчанию true при remote_server, false при local_proxy.
+   */
+  disable_local_fallbacks: boolean;
 }
 
 export interface CallSettingsDocument {
@@ -123,6 +142,8 @@ export interface CallRuntimeConfig {
     api_secret: string;
     internal_url: string;
     public_url: string;
+    routing_mode: CallLiveKitRoutingMode;
+    disable_local_fallbacks: boolean;
     configured: boolean;
     api_key_source: 'db' | 'env' | 'none';
     api_secret_source: 'db' | 'env' | 'none';
@@ -163,10 +184,19 @@ export interface CallSettingsAdminView {
     api_key_source: 'db' | 'env' | 'none';
     has_api_secret: boolean;
     api_secret_source: 'db' | 'env' | 'none';
+    /** Сохранённый/merged URL (до rewrite) */
     internal_url: string;
     internal_url_source: 'db' | 'env' | 'none';
     public_url: string;
     public_url_source: 'db' | 'env' | 'none';
+    routing_mode: CallLiveKitRoutingMode;
+    disable_local_fallbacks: boolean;
+    /** То, что реально использует рантайм после rewrite / normalize */
+    effective_internal_url: string;
+    effective_public_url: string;
+    /** false — сохранённый public_url отличается от того, что получит браузер */
+    public_url_honored: boolean;
+    public_url_warning: string | null;
     configured: boolean;
     probe: { ok: boolean; url?: string; error?: string; configured: boolean } | null;
   };
@@ -186,6 +216,8 @@ export interface CallSettingsAdminView {
     ghost_miss_ticks: number | null;
     livekit_internal_url: string | null;
     livekit_public_url: string | null;
+    livekit_routing_mode: CallLiveKitRoutingMode | null;
+    livekit_disable_local_fallbacks: boolean | null;
   };
   features: CallFeatureFlags;
   allowed_roles: AppRole[];
@@ -265,6 +297,8 @@ export function defaultCallSettingsDocument(): CallSettingsDocument {
       api_secret: null,
       internal_url: null,
       public_url: null,
+      routing_mode: 'local_proxy',
+      disable_local_fallbacks: false,
     },
     ring_timeout_sec: null,
     token_ttl_sec: null,
@@ -359,6 +393,16 @@ export function normalizeCallSettingsDocument(raw: unknown): CallSettingsDocumen
       ? (o.status_labels as Record<string, unknown>)
       : {};
 
+  const routing_mode: CallLiveKitRoutingMode = isCallLiveKitRoutingMode(lkRaw.routing_mode)
+    ? lkRaw.routing_mode
+    : 'local_proxy';
+  let disable_local_fallbacks: boolean;
+  if (typeof lkRaw.disable_local_fallbacks === 'boolean') {
+    disable_local_fallbacks = lkRaw.disable_local_fallbacks;
+  } else {
+    disable_local_fallbacks = routing_mode === 'remote_server';
+  }
+
   return {
     enabled,
     livekit: {
@@ -366,6 +410,8 @@ export function normalizeCallSettingsDocument(raw: unknown): CallSettingsDocumen
       api_secret: optionalString(lkRaw.api_secret),
       internal_url: optionalString(lkRaw.internal_url),
       public_url: optionalString(lkRaw.public_url),
+      routing_mode,
+      disable_local_fallbacks,
     },
     ring_timeout_sec: optionalClampedInt(o.ring_timeout_sec, 15, 180),
     token_ttl_sec: optionalClampedInt(o.token_ttl_sec, 60, 28_800),
@@ -423,6 +469,8 @@ export function buildCallRuntimeConfig(doc: CallSettingsDocument): CallRuntimeCo
   const api_secret = doc.livekit.api_secret || envSecret;
   const internal_url = doc.livekit.internal_url || envInternal;
   const public_url = doc.livekit.public_url || envPublic;
+  const routing_mode = doc.livekit.routing_mode;
+  const disable_local_fallbacks = doc.livekit.disable_local_fallbacks;
 
   return {
     enabled,
@@ -432,6 +480,8 @@ export function buildCallRuntimeConfig(doc: CallSettingsDocument): CallRuntimeCo
       api_secret,
       internal_url,
       public_url,
+      routing_mode,
+      disable_local_fallbacks,
       configured: Boolean(api_key && api_secret && internal_url),
       api_key_source: doc.livekit.api_key ? 'db' : envKey ? 'env' : 'none',
       api_secret_source: doc.livekit.api_secret ? 'db' : envSecret ? 'env' : 'none',
@@ -517,11 +567,57 @@ export function buildCallStatusCatalog(doc: CallSettingsDocument): CallStatusCat
   return entries;
 }
 
+function originHostOf(url: string): string | null {
+  try {
+    return new URL(url).hostname.toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function buildPublicUrlHonorStatus(input: {
+  routing_mode: CallLiveKitRoutingMode;
+  stored_public_url: string;
+  effective_public_url: string;
+}): { honored: boolean; warning: string | null } {
+  const stored = input.stored_public_url.trim().replace(/\/$/, '');
+  const effective = input.effective_public_url.trim().replace(/\/$/, '');
+  if (!stored) {
+    return { honored: true, warning: null };
+  }
+  const storedHost = originHostOf(stored.startsWith('ws') ? stored.replace(/^ws/, 'http') : stored);
+  const effectiveHost = originHostOf(
+    effective.startsWith('ws') ? effective.replace(/^ws/, 'http') : effective,
+  );
+  if (stored === effective || (storedHost && effectiveHost && storedHost === effectiveHost)) {
+    return { honored: true, warning: null };
+  }
+  if (input.routing_mode === 'local_proxy') {
+    return {
+      honored: false,
+      warning:
+        'Режим «локальный прокси»: браузер идёт на PUBLIC_WEB_ORIGIN/lk, сохранённый публичный URL с другим хостом не используется. Переключитесь на «удалённый сервер», чтобы направить звонки на другой LiveKit.',
+    };
+  }
+  return {
+    honored: false,
+    warning: `Сохранённый публичный URL (${stored}) отличается от effective (${effective || 'пусто'}).`,
+  };
+}
+
 export function buildCallSettingsAdminView(
   doc: CallSettingsDocument,
   probe: CallSettingsAdminView['livekit']['probe'] = null,
+  effective?: { internal_url?: string; public_url?: string },
 ): CallSettingsAdminView {
   const runtime = buildCallRuntimeConfig(doc);
+  const effectiveInternal = (effective?.internal_url || runtime.livekit.internal_url).trim();
+  const effectivePublic = (effective?.public_url || runtime.livekit.public_url).trim();
+  const honor = buildPublicUrlHonorStatus({
+    routing_mode: runtime.livekit.routing_mode,
+    stored_public_url: runtime.livekit.public_url,
+    effective_public_url: effectivePublic,
+  });
   return {
     enabled: doc.enabled,
     effective_enabled: runtime.enabled,
@@ -537,6 +633,12 @@ export function buildCallSettingsAdminView(
       internal_url_source: runtime.livekit.internal_url_source,
       public_url: runtime.livekit.public_url,
       public_url_source: runtime.livekit.public_url_source,
+      routing_mode: runtime.livekit.routing_mode,
+      disable_local_fallbacks: runtime.livekit.disable_local_fallbacks,
+      effective_internal_url: effectiveInternal,
+      effective_public_url: effectivePublic,
+      public_url_honored: honor.honored,
+      public_url_warning: honor.warning,
       configured: runtime.livekit.configured,
       probe,
     },
@@ -555,6 +657,8 @@ export function buildCallSettingsAdminView(
       ghost_miss_ticks: doc.ghost_miss_ticks,
       livekit_internal_url: doc.livekit.internal_url,
       livekit_public_url: doc.livekit.public_url,
+      livekit_routing_mode: doc.livekit.routing_mode,
+      livekit_disable_local_fallbacks: doc.livekit.disable_local_fallbacks,
     },
     features: runtime.features,
     allowed_roles: runtime.allowed_roles,

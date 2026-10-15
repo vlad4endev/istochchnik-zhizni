@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 
 import {
   getCallSettingsAdmin,
+  testLiveKitConnection,
   updateCallSettings,
   type CallSettingsPatch,
 } from '../services/callSettingsService';
@@ -10,6 +11,7 @@ import {
   CALL_END_REASON_IDS,
   CALL_PARTICIPANT_STATUS_IDS,
   CALL_STATUS_IDS,
+  isCallLiveKitRoutingMode,
   type CallEndReasonId,
   type CallParticipantStatusId,
   type CallStatusId,
@@ -105,6 +107,22 @@ export async function patchCallSettingsHandler(req: Request, res: Response): Pro
       return;
     }
     patch.livekit_public_url = body.livekit_public_url as string | null;
+  }
+  if (body.livekit_routing_mode !== undefined) {
+    if (!isCallLiveKitRoutingMode(body.livekit_routing_mode)) {
+      res.status(400).json({
+        error: 'Поле livekit_routing_mode: local_proxy | remote_server',
+      });
+      return;
+    }
+    patch.livekit_routing_mode = body.livekit_routing_mode;
+  }
+  if (body.livekit_disable_local_fallbacks !== undefined) {
+    if (typeof body.livekit_disable_local_fallbacks !== 'boolean') {
+      res.status(400).json({ error: 'Поле livekit_disable_local_fallbacks должно быть boolean' });
+      return;
+    }
+    patch.livekit_disable_local_fallbacks = body.livekit_disable_local_fallbacks;
   }
 
   for (const key of [
@@ -247,5 +265,63 @@ export async function getCallUsageStatsHandler(req: Request, res: Response): Pro
   } catch (e) {
     console.error('[call-stats] GET error', e);
     res.status(500).json({ error: 'Не удалось загрузить статистику звонков' });
+  }
+}
+
+/** Dry-run проверка LiveKit (без записи в БД). */
+export async function postLiveKitTestHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
+
+  if (body.livekit_routing_mode !== undefined && !isCallLiveKitRoutingMode(body.livekit_routing_mode)) {
+    res.status(400).json({ error: 'Поле livekit_routing_mode: local_proxy | remote_server' });
+    return;
+  }
+  if (
+    body.livekit_disable_local_fallbacks !== undefined &&
+    typeof body.livekit_disable_local_fallbacks !== 'boolean'
+  ) {
+    res.status(400).json({ error: 'Поле livekit_disable_local_fallbacks должно быть boolean' });
+    return;
+  }
+
+  try {
+    const result = await testLiveKitConnection({
+      livekit_api_key:
+        body.livekit_api_key === undefined
+          ? undefined
+          : typeof body.livekit_api_key === 'string'
+            ? body.livekit_api_key
+            : null,
+      livekit_api_secret:
+        body.livekit_api_secret === undefined
+          ? undefined
+          : typeof body.livekit_api_secret === 'string'
+            ? body.livekit_api_secret
+            : null,
+      livekit_internal_url:
+        body.livekit_internal_url === undefined
+          ? undefined
+          : typeof body.livekit_internal_url === 'string'
+            ? body.livekit_internal_url
+            : null,
+      livekit_public_url:
+        body.livekit_public_url === undefined
+          ? undefined
+          : typeof body.livekit_public_url === 'string'
+            ? body.livekit_public_url
+            : null,
+      livekit_routing_mode: isCallLiveKitRoutingMode(body.livekit_routing_mode)
+        ? body.livekit_routing_mode
+        : undefined,
+      livekit_disable_local_fallbacks:
+        typeof body.livekit_disable_local_fallbacks === 'boolean'
+          ? body.livekit_disable_local_fallbacks
+          : undefined,
+    });
+    res.json(result);
+  } catch (e) {
+    console.error('[call-settings] LiveKit test error', e);
+    res.status(500).json({ error: 'Не удалось проверить LiveKit' });
   }
 }
