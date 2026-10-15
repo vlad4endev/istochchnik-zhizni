@@ -54,6 +54,18 @@ export function parsePageLimit(raw: unknown, fallback: number, max: number): num
   return Math.min(v, max);
 }
 
+/**
+ * The creator (owner) deleting a group or channel removes it for everyone.
+ * A member leaving, or anyone leaving a private chat, only drops their own row.
+ */
+export function shouldDeleteOwnedConversation(
+  type: string | null | undefined,
+  role: string | null | undefined,
+  removingSelf: boolean,
+): boolean {
+  return removingSelf && role === 'owner' && (type === 'group' || type === 'channel');
+}
+
 export function parsePageOffset(raw: unknown): number {
   const n = typeof raw === 'number' ? raw : Number(String(raw ?? '').trim());
   if (!Number.isFinite(n) || n < 0) return 0;

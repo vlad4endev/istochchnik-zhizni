@@ -756,17 +756,25 @@ function ChatRowContextMenu({
           className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm font-semibold text-red-700 hover:bg-red-50"
           onClick={() => {
             onClose();
-            if (
-              window.confirm(
-                'Удалить чат из списка и выйти из беседы? Для групп вы сможете вернуться только по приглашению.',
-              )
-            ) {
-              void leaveChat(conv.id);
-            }
+            const ownerDeletes =
+              conv.my_role === 'owner' && (conv.type === 'group' || conv.type === 'channel');
+            const noun = conv.type === 'channel' ? 'канал' : 'группу';
+            const confirmed = ownerDeletes
+              ? window.confirm(
+                  `Удалить ${noun} для всех участников? Переписка будет стёрта, чат пропадёт у всех и из базы.`,
+                )
+              : window.confirm(
+                  'Удалить чат из списка и выйти из беседы? Для групп вы сможете вернуться только по приглашению.',
+                );
+            if (confirmed) void leaveChat(conv.id);
           }}
         >
           <LuTrash2 className="h-4 w-4 shrink-0" />
-          Удалить чат
+          {conv.my_role === 'owner' && (conv.type === 'group' || conv.type === 'channel')
+            ? conv.type === 'channel'
+              ? 'Удалить канал'
+              : 'Удалить группу'
+            : 'Удалить чат'}
         </button>
       </div>
     </div>

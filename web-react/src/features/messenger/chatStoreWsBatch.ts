@@ -20,6 +20,67 @@ import type { ChatState } from './chatStore';
 
 export type WsInboundMessage = Record<string, unknown> & { type?: string };
 
+/** Чаты, которые в этой сессии уже удалены или покинуты — не возвращать их из устаревшего ответа списка. */
+const removedConversationIds = new Set<string>();
+
+export function noteConversationRemoved(conversationId: string): void {
+  const id = String(conversationId || '').trim();
+  if (id) removedConversationIds.add(id);
+}
+
+export function noteConversationRestored(conversationId: string): void {
+  const id = String(conversationId || '').trim();
+  if (id) removedConversationIds.delete(id);
+}
+
+export function isConversationRemoved(conversationId: string): boolean {
+  return removedConversationIds.has(String(conversationId));
+}
+
+export function dropConversationState(s: ChatState, conversationId: string): ChatState {
+  const id = String(conversationId);
+  const conversations = s.conversations.filter((c) => String(c.id) !== id);
+  const totalUnread = conversations.reduce((sum, c) => sum + (c.unread_count ?? 0), 0);
+  const messagesByConv = { ...s.messagesByConv };
+  delete messagesByConv[id];
+  const messagesLoading = { ...s.messagesLoading };
+  delete messagesLoading[id];
+  const messagesLastLoadedAt = { ...s.messagesLastLoadedAt };
+  delete messagesLastLoadedAt[id];
+  const hasMore = { ...s.hasMore };
+  delete hasMore[id];
+  const readCursorsByConv = { ...s.readCursorsByConv };
+  delete readCursorsByConv[id];
+  const myReadCursorByConv = { ...s.myReadCursorByConv };
+  delete myReadCursorByConv[id];
+  const typingByConv = { ...s.typingByConv };
+  delete typingByConv[id];
+  const assistantThinkingByConv = { ...s.assistantThinkingByConv };
+  delete assistantThinkingByConv[id];
+  const pinnedBumpByConv = { ...s.pinnedBumpByConv };
+  delete pinnedBumpByConv[id];
+  const drafts = { ...s.drafts };
+  delete drafts[id];
+  return {
+    ...s,
+    conversations,
+    totalUnread,
+    messagesByConv,
+    messagesLoading,
+    messagesLastLoadedAt,
+    hasMore,
+    readCursorsByConv,
+    myReadCursorByConv,
+    typingByConv,
+    assistantThinkingByConv,
+    pinnedBumpByConv,
+    drafts,
+    activeConversationId: s.activeConversationId === id ? null : s.activeConversationId,
+    replyToMessage:
+      s.replyToMessage && String(s.replyToMessage.conversation_id) === id ? null : s.replyToMessage,
+  };
+}
+
 export type WsBatchEffect =
   | { type: 'play_receive' }
   | {
@@ -45,7 +106,9 @@ export type WsBatchEffect =
   | { type: 'clear_typing_timer'; convId: string; memberId: number }
   | { type: 'clear_assistant_thinking_timer'; convId: string }
   | { type: 'save_snapshot' }
-  | { type: 'hydrate_cache_if_new_member'; memberId: number; prevMemberId: number | null };
+  | { type: 'hydrate_cache_if_new_member'; memberId: number; prevMemberId: number | null }
+  | { type: 'tombstone_conversation'; conversationId: string }
+  | { type: 'restore_conversation'; conversationId: string };
 
 function normalizeIncomingMessengerMessage(msg: MessageWithSender): MessageWithSender {
   if (msg.payload_type) return msg;
@@ -729,6 +792,7 @@ export function applyWsEvent(s: ChatState, msg: WsInboundMessage, effects: WsBat
       ) {
         return s;
       }
+      effects.push({ type: 'restore_conversation', conversationId: normalized.id });
       const exists = s.conversations.some((c) => String(c.id) === normalized.id);
       const conversations = exists
         ? s.conversations.map((c) => (String(c.id) === normalized.id ? { ...c, ...normalized } : c))
@@ -805,6 +869,17 @@ export function applyWsEvent(s: ChatState, msg: WsInboundMessage, effects: WsBat
       }
       effects.push({ type: 'schedule_conv_fallback' });
       return next;
+    }
+
+    case 'conv:deleted': {
+      const cid =
+        typeof msg.conversationId === 'string' && msg.conversationId
+          ? String(msg.conversationId)
+          : '';
+      if (!cid) return s;
+      effects.push({ type: 'tombstone_conversation', conversationId: cid });
+      effects.push({ type: 'save_snapshot' });
+      return dropConversationState(s, cid);
     }
 
     case 'conv:history_cleared': {
@@ -988,6 +1063,12 @@ export function runWsBatchEffects(effects: WsBatchEffect[], rt: WsBatchRuntime):
         break;
       case 'save_snapshot':
         rt.saveSnapshot();
+        break;
+      case 'tombstone_conversation':
+        noteConversationRemoved(effect.conversationId);
+        break;
+      case 'restore_conversation':
+        noteConversationRestored(effect.conversationId);
         break;
       default:
         break;

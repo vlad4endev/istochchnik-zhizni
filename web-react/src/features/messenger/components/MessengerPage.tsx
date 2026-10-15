@@ -2,6 +2,7 @@ import { useEffect, useCallback, useState, useRef, lazy, Suspense, useLayoutEffe
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LuPhone, LuPlus, LuMessageSquare, LuSlidersHorizontal, LuVideo } from 'react-icons/lu';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
+import { isConversationRemoved } from '../chatStoreWsBatch';
 import { useMessengerWsContext } from '../MessengerWsContext';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
 import { ChatList } from './ChatList';
@@ -170,6 +171,12 @@ export function MessengerPage() {
     const params = new URLSearchParams(location.search);
     const convId = params.get('conversationId')?.trim() ?? '';
     if (!convId) return;
+    if (isConversationRemoved(convId)) {
+      setActive(null);
+      saveActiveMessengerConversation(null);
+      navigate('/messenger', { replace: true });
+      return;
+    }
     setMobileView('chat');
     saveActiveMessengerConversation(convId);
     if (isDraftPrivateConversationId(convId)) {
@@ -177,7 +184,16 @@ export function MessengerPage() {
       return;
     }
     setActive(convId);
-  }, [location.search, setActive, ensurePrivateDraftFromConversationId]);
+  }, [location.search, navigate, setActive, ensurePrivateDraftFromConversationId]);
+
+  const conversations = useChatStore((s) => s.conversations);
+  useEffect(() => {
+    if (!activeId || !isConversationRemoved(activeId)) return;
+    setActive(null);
+    saveActiveMessengerConversation(null);
+    setMobileView('list');
+    navigate('/messenger', { replace: true });
+  }, [activeId, conversations, navigate, setActive]);
 
   // Cold start without query: restore last active chat from localStorage.
   useEffect(() => {

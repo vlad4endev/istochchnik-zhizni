@@ -19,6 +19,9 @@ import { inferMessengerPayloadType } from './payloadMedia';
 import { hasMessengerSenderId, isAssistantBotMessage, isAssistantMessengerChannel } from './messengerChannelKinds';
 import {
   applyNewMessage,
+  dropConversationState,
+  isConversationRemoved,
+  noteConversationRemoved,
   processMessengerWsBatch,
   runWsBatchEffects,
   type WsBatchEffect,
@@ -1115,10 +1118,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const activeAtStart = get().activeConversationId;
     set({ conversationsLoading: true });
     try {
-      const serverList = filterConversationsForAssistantAccess(await api.fetchConversations());
+      const serverList = filterConversationsForAssistantAccess(await api.fetchConversations()).filter(
+        (c) => !isConversationRemoved(String(c.id)),
+      );
       const serverIds = new Set(serverList.map((c) => String(c.id)));
       const localExtras = (get().conversations || []).filter((c) => {
         const id = String(c.id);
+        if (isConversationRemoved(id)) return false;
         if (isDraftPrivateConversationId(id)) return false;
         if (serverIds.has(id)) return false;
         // Appeared while this fetch was in flight (create / WS).
@@ -2441,19 +2447,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (me == null) return;
     try {
       await api.removeParticipant(conversationId, me);
-      set((s) => {
-        const conversations = s.conversations.filter((c) => c.id !== conversationId);
-        const totalUnread = conversations.reduce((sum, c) => sum + (c.unread_count ?? 0), 0);
-        const nextMsgs = { ...s.messagesByConv };
-        delete nextMsgs[conversationId];
-        return {
-          conversations,
-          totalUnread,
-          messagesByConv: nextMsgs,
-          activeConversationId:
-            s.activeConversationId === conversationId ? null : s.activeConversationId,
-        };
-      });
+      noteConversationRemoved(conversationId);
+      set((s) => dropConversationState(s, conversationId));
       saveSnapshot(get());
     } catch {
       emitAppToast('Не удалось удалить чат', 'error');
