@@ -2,8 +2,11 @@
 
 /* Android PWA: системный splash → веб-сплэш без скачка высоты / safe-area */
 html[data-android-pwa='1'] .app-splash {
+  /* 100vh → 100dvh → fill-available: на Safari < 15.4 dvh игнорируется. */
+  min-height: 100vh;
   min-height: 100dvh;
   min-height: -webkit-fill-available;
+  height: 100vh;
   height: 100dvh;
   height: -webkit-fill-available;
 }
@@ -13,6 +16,7 @@ html[data-android-pwa='1'] body {
 }
 
 html[data-pwa-standalone='1'] .app-splash {
+  min-height: 100vh;
   min-height: 100dvh;
   min-height: -webkit-fill-available;
 }
@@ -37,6 +41,7 @@ html[data-pwa-standalone='1'] .app-splash {
   overflow: hidden;
   box-sizing: border-box;
   width: 100%;
+  min-height: 100vh;
   min-height: 100dvh;
   min-height: -webkit-fill-available;
   padding: var(--splash-pad-top) var(--splash-pad-x) var(--splash-pad-bottom);

@@ -422,11 +422,26 @@ export default defineConfig(({ mode }) => {
      * конфига, а не как путь к файлу, поэтому прежнее './postcss.config.cjs' молча
      * игнорировалось. Автопоиск сам находит единственный postcss.config.cjs в корне.
      */
+    /*
+     * Явный target = порог browserslist (iOS/Safari 15.4). Vite 6 по умолчанию
+     * `modules`/baseline может подняться до Safari 16.4+ в следующих мажорах —
+     * тогда синтаксис в бандле снова отрежет iPhone на iOS 15–17.
+     */
+    esbuild: {
+      target: ['es2020', 'safari15.4', 'ios15.4', 'chrome90', 'firefox90', 'edge90'],
+    },
+    optimizeDeps: {
+      esbuildOptions: {
+        target: 'es2020',
+      },
+    },
     build: {
       outDir: 'dist',
       assetsDir: 'assets',
+      target: ['es2020', 'safari15.4', 'ios15.4', 'chrome90', 'firefox90', 'edge90'],
       /* hidden: карты собираются, но без ссылки sourceMappingURL — DevTools посетителей не подтягивает исходники. */
       sourcemap: 'hidden',
+      cssTarget: ['safari15.4', 'ios15.4', 'chrome90'],
       rollupOptions: {
         output: {
           manualChunks: {
@@ -436,6 +451,8 @@ export default defineConfig(({ mode }) => {
             'vendor-icons': ['react-icons'],
             'vendor-emoji-react': ['@emoji-mart/react'],
             'vendor-emoji-data': ['@emoji-mart/data'],
+            /** Отдельно от entry: LiveKit не должен парситься при холодном старте PWA. */
+            'vendor-livekit': ['livekit-client', '@livekit/components-react'],
           },
         },
       },
