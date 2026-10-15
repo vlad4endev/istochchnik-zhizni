@@ -8,6 +8,7 @@ import {
   LuHistory,
   LuInbox,
   LuLink2,
+  LuMessagesSquare,
   LuPackage,
   LuPalette,
   LuPanelsTopLeft,
@@ -28,6 +29,7 @@ export interface AdminTabConfig {
     | 'sections'
     | 'roles'
     | 'journal'
+    | 'chats'
     | 'notifications'
     | 'telegram'
     | 'backup'
@@ -112,6 +114,15 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     Icon: LuHistory,
     short: 'Логи',
     description: 'Системные логи и журнал авторассылки Telegram: кому и что ушло.',
+  },
+  {
+    id: 'chats',
+    label: 'Группы и каналы',
+    navLabel: 'Группы',
+    Icon: LuMessagesSquare,
+    short: 'Чаты',
+    description:
+      'Все группы, каналы и личные диалоги: участники, активность и удаление из базы, включая пустые чаты.',
   },
   {
     id: 'notifications',
@@ -199,6 +210,7 @@ export const ADMIN_SIDEBAR_GROUPS: readonly AdminSidebarGroup[] = [
   {
     label: 'Система',
     items: [
+      { id: 'chats' },
       { id: 'sections' },
       { id: 'roles' },
       { id: 'journal' },

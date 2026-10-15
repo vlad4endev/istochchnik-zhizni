@@ -52,7 +52,7 @@ export function MessengerWsProvider({ children }: { children: ReactNode }) {
         void queryClient.invalidateQueries({ queryKey: ['messenger', 'unread'] });
       }
 
-      if (type === 'conv:created' || type === 'conv:updated') {
+      if (type === 'conv:created' || type === 'conv:updated' || type === 'conv:deleted') {
         void queryClient.invalidateQueries({ queryKey: ['messenger', 'conversations'] });
         void queryClient.invalidateQueries({ queryKey: ['messenger', 'unread'] });
       }
