@@ -1123,7 +1123,14 @@ function RoomStage({
           </div>
         </header>
       ) : null}
-      <div className="call-stage__main">
+      <div
+        className={[
+          'call-stage__main',
+          isGroup && !waitingAlone ? 'call-stage__main--filled' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
         {isGroup ? (
           waitingAlone ? (
             <div className="call-meeting-lobby">
@@ -1166,6 +1173,9 @@ function RoomStage({
                       ? 'call-speaker-layout__strip--grid'
                       : '',
                     layoutMode === 'sidebar' ? 'call-speaker-layout__strip--vertical' : '',
+                    visibleStripParticipants.length + (stripOverflowCount > 0 ? 1 : 0) === 1
+                      ? 'call-speaker-layout__strip--solo'
+                      : '',
                   ]
                     .filter(Boolean)
                     .join(' ')}
