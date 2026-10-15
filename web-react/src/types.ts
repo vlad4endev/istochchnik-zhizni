@@ -45,6 +45,33 @@ export interface PrayerCycleInfo {
   day_index: number;
 }
 
+/** Тема молитвенной стражи на день (цикл тем страж). */
+export interface PrayerWatchTopic {
+  id: number;
+  title: string;
+  bible_verse: string | null;
+  prayer_points: string | null;
+  notes: string | null;
+  is_active: boolean;
+  sort_order: number;
+}
+
+export interface PrayerWatchTopicCycleInfo {
+  index: number;
+  number: number;
+  topic_count: number;
+  start_date: string;
+  end_date: string;
+  day_index: number;
+}
+
+export interface PrayerWatchTopicDayAssignment {
+  date: string;
+  topic: PrayerWatchTopic | null;
+  cycle: PrayerWatchTopicCycleInfo | null;
+  is_override: boolean;
+}
+
 export interface DayPrayerData {
   date: string;
   diffDays: number;
@@ -53,6 +80,8 @@ export interface DayPrayerData {
   ministries: Ministry[];
   backsliders: Backslider[];
   prayer_cycle: PrayerCycleInfo | null;
+  /** Тема для утренней/вечерней молитвенной стражи на эту дату. */
+  watch_topic?: PrayerWatchTopicDayAssignment | null;
 }
 
 /** Один день из `/api/calendar/next-week/members` — молитва за члена на дату. */

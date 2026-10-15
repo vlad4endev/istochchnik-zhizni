@@ -77,6 +77,21 @@ export function userCanUsePrayerWatchMeetingTemplates(me: MeResponse | undefined
   return userCanManageCoordinatorDashboardNotes(me);
 }
 
+/**
+ * Редактирование каталога и цикла молитвенных тем страж:
+ * админ, пастор или право `calendar.watch_topics_edit` в матрице ролей.
+ */
+export function userCanEditWatchTopics(
+  me: MeResponse | undefined,
+  rolePermissions?: RolePermissionsSettingsPublic | null,
+): boolean {
+  if (!me) return false;
+  const roles = meAppRoles(me);
+  if (roles.includes('admin') || roles.includes('pastor')) return true;
+  if (!rolePermissions) return false;
+  return roles.some((role) => roleHasPermission(rolePermissions, [role], 'calendar.watch_topics_edit'));
+}
+
 export const PRAYER_WATCH_MEETING_TEMPLATES = [
   {
     id: 'morning',
