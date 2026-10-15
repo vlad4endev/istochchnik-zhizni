@@ -58,6 +58,7 @@ import { emitAppToast } from '../../lib/uiFeedback';
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 import { subscribeRealtimeMessages } from '../../lib/realtimeWsClient';
 import { setTelegramCallPresentation } from '../../lib/telegramWebApp';
+import { absoluteAppUrlForShare } from '../pwa/pwaInAppPath';
 
 import {
   cancelCall,
@@ -81,15 +82,8 @@ import { useCallStore, type ActiveCallState } from './callStore';
 import './calls.css';
 
 function absoluteInviteUrl(url: string): string {
-  const trimmed = url.trim();
-  if (!trimmed) return '';
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  if (typeof window === 'undefined') return trimmed;
-  try {
-    return new URL(trimmed, window.location.origin).toString();
-  } catch {
-    return trimmed;
-  }
+  // Rewrite /call/join to the current origin so shared links match the installed PWA scope on iOS.
+  return absoluteAppUrlForShare(url);
 }
 
 function formatDuration(sec: number): string {

@@ -18,6 +18,7 @@ import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
 import { initTelegramWebApp } from './lib/telegramWebApp';
 import { client } from './lib/appwrite';
 import { PwaLaunchHandler } from './features/pwa/PwaLaunchHandler';
+import { PwaSameOriginNavGuard } from './features/pwa/PwaSameOriginNavGuard';
 import {
   initPwaStandaloneHtmlHint,
   isAndroidInstalledPwa,
@@ -402,6 +403,7 @@ if (!rootEl) {
               <TopLoader />
               <BrowserRouter>
                 <PwaLaunchHandler />
+                <PwaSameOriginNavGuard />
                 <AccessibilityProvider>
                   <ImpersonationBanner />
                   <SessionKeepAlive />

@@ -1,4 +1,5 @@
 import { emitAppToast } from '../../lib/uiFeedback';
+import { absoluteAppUrlForShare } from '../pwa/pwaInAppPath';
 
 import { createGroupCall, createStandaloneCall, type CallMediaType } from './callsApi';
 import { unlockCallAudio } from './callRingtone';
@@ -67,7 +68,8 @@ export async function startMeetingCall(opts: StartMeetingOptions): Promise<strin
   });
 
   if (opts.copyLink !== false && call.inviteUrl) {
-    const ok = await copyInviteShare(displayName, call.inviteUrl);
+    const shareUrl = absoluteAppUrlForShare(call.inviteUrl);
+    const ok = await copyInviteShare(displayName, shareUrl);
     if (ok) {
       emitAppToast('Название и ссылка скопированы — отправьте участникам', 'success');
     } else {
@@ -129,7 +131,8 @@ export async function startStandaloneMeetingCall(
   });
 
   if (call.inviteUrl) {
-    const ok = await copyInviteShare(title, call.inviteUrl);
+    const shareUrl = absoluteAppUrlForShare(call.inviteUrl);
+    const ok = await copyInviteShare(title, shareUrl);
     if (ok) {
       emitAppToast('Название и ссылка скопированы — отправьте участникам', 'success');
     } else {

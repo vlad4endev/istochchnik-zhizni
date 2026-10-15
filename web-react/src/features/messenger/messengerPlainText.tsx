@@ -1,6 +1,7 @@
 import type { MouseEvent, ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
+import { appPathFromHref } from '../pwa/pwaInAppPath';
 import { normalizeChatDisplayText } from './normalizeChatDisplayText';
 
 const PLAIN_CHUNK_RE = /(https?:\/\/[^\s<>"{}|\\^`[\]]+|\d[\d.:,\/-]*)/g;
@@ -8,17 +9,12 @@ const PLAIN_CHUNK_RE = /(https?:\/\/[^\s<>"{}|\\^`[\]]+|\d[\d.:,\/-]*)/g;
 const DEFAULT_LINK_CLASS =
   'break-all font-semibold text-primary underline decoration-primary/40 underline-offset-2';
 
-/** Same-origin URL → in-app path; otherwise null (open externally). */
+/**
+ * Same-origin URL → in-app path; meeting invites (`/call/join/…`) even across sibling hosts
+ * (so iOS PWA does not escape to Safari via target=_blank).
+ */
 export function appPathFromAbsoluteUrl(url: string): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const parsed = new URL(url, window.location.href);
-    if (parsed.origin !== window.location.origin) return null;
-    if (!parsed.pathname.startsWith('/')) return null;
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-  } catch {
-    return null;
-  }
+  return appPathFromHref(url);
 }
 
 function MessengerAppLink({

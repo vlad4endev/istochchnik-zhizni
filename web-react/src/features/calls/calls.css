@@ -3188,6 +3188,20 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   color: rgba(255, 255, 255, 0.68);
 }
 
+.telemost-join__pwa-hint {
+  margin: 14px 0 0;
+  max-width: 22rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+  color: rgba(255, 248, 230, 0.92);
+  background: rgba(251, 191, 36, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+}
+
 .telemost-join__meta {
   display: inline-flex;
   align-items: center;
