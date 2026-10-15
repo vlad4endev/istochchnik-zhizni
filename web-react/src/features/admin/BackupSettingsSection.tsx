@@ -217,6 +217,7 @@ export function BackupSettingsSection() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [driveSaJson, setDriveSaJson] = useState('');
+  const [clearDriveSa, setClearDriveSa] = useState(false);
 
   const confirmPhrase = settingsQ.data?.restore_confirm_phrase || DEFAULT_CONFIRM;
 
@@ -234,6 +235,7 @@ export function BackupSettingsSection() {
         drive_retention_days: s.drive_retention_days ?? s.retention_days ?? 30,
         drive_ready: Boolean(s.drive_ready),
         drive_configured: Boolean(s.drive_configured),
+        has_drive_service_account: Boolean(s.has_drive_service_account ?? s.drive_configured),
         drive_client_email_masked: s.drive_client_email_masked ?? null,
         drive_source: s.drive_source ?? null,
         drive_folder_name: s.drive_folder_name ?? null,
@@ -243,6 +245,7 @@ export function BackupSettingsSection() {
         last_drive_file_id: s.last_drive_file_id ?? null,
       });
       setSendTelegramOnCreate(Boolean(s.telegram_send));
+      setClearDriveSa(false);
     }
   }, [settingsQ.data]);
 
@@ -262,12 +265,17 @@ export function BackupSettingsSection() {
         drive_folder_id: draft.drive_folder_id,
         drive_delete_local_after_upload: draft.drive_delete_local_after_upload,
         drive_retention_days: draft.drive_retention_days,
-        drive_service_account_json: driveSaJson.trim() ? driveSaJson.trim() : undefined,
+        drive_service_account_json: clearDriveSa
+          ? null
+          : driveSaJson.trim()
+            ? driveSaJson.trim()
+            : undefined,
       });
     },
     onSuccess: () => {
       setNote({ type: 'ok', text: 'Настройки бекапа сохранены.' });
       setDriveSaJson('');
+      setClearDriveSa(false);
       void qc.invalidateQueries({ queryKey: Q_SETTINGS });
       void qc.invalidateQueries({ queryKey: Q_LIST });
     },
@@ -637,8 +645,8 @@ export function BackupSettingsSection() {
           Google Drive — основное хранилище
         </h2>
         <p className="mt-1 text-sm text-stone-600">
-          Снимки выгружаются в папку на Google Drive. Рекомендуется удалять локальные копии после
-          успешной загрузки — на сервере остаётся только буфер на время создания.
+          Все настройки Drive задаются здесь. Снимки уходят в папку на Google Drive; локально на
+          сервере можно не хранить копии.
         </p>
 
         <div
@@ -650,12 +658,18 @@ export function BackupSettingsSection() {
         >
           {draft.drive_ready
             ? `Подключено${draft.drive_folder_name ? `: «${draft.drive_folder_name}»` : ''}${
-                draft.drive_client_email_masked ? ` · SA ${draft.drive_client_email_masked}` : ''
+                draft.drive_client_email_masked ? ` · ${draft.drive_client_email_masked}` : ''
               }`
-            : draft.drive_configured
-              ? 'Service account есть, но папка недоступна — проверьте ID и шаринг.'
-              : 'Не настроено: вставьте JSON ключа service account и ID папки ниже.'}
+            : draft.has_drive_service_account
+              ? 'Ключ сохранён, но папка недоступна — проверьте ID папки и шаринг на email service account.'
+              : 'Не настроено: вставьте JSON ключа и ID папки, затем сохраните.'}
         </div>
+
+        <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs text-stone-500">
+          <li>Google Cloud → IAM → Service Account → создать → скачать JSON-ключ</li>
+          <li>Создайте папку на Google Drive и расшарьте её на email из ключа (право «Редактор»)</li>
+          <li>Вставьте JSON и ID/ссылку папки ниже → Сохранить → Проверить</li>
+        </ol>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="flex items-center gap-2 text-sm font-medium text-stone-800 sm:col-span-2">
@@ -717,23 +731,44 @@ export function BackupSettingsSection() {
 
           <label className="block text-sm sm:col-span-2">
             <span className="mb-1 block font-medium text-stone-700">
-              Service account JSON
-              {draft.drive_client_email_masked
-                ? ` (сейчас: ${draft.drive_client_email_masked})`
-                : ''}
+              Ключ service account (JSON)
+              {draft.has_drive_service_account && draft.drive_client_email_masked
+                ? ` — сохранён: ${draft.drive_client_email_masked}`
+                : draft.has_drive_service_account
+                  ? ' — ключ сохранён'
+                  : ''}
             </span>
             <textarea
-              className={`${fieldClass()} min-h-[88px] font-mono text-xs`}
+              className={`${fieldClass()} min-h-[100px] font-mono text-xs`}
               value={driveSaJson}
-              onChange={(e) => setDriveSaJson(e.target.value)}
-              placeholder='Вставьте JSON ключа {"type":"service_account","client_email":"…",…} — или задайте GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON в .env'
+              onChange={(e) => {
+                setDriveSaJson(e.target.value);
+                if (e.target.value.trim()) setClearDriveSa(false);
+              }}
+              placeholder={
+                draft.has_drive_service_account
+                  ? 'Ключ уже сохранён. Вставьте новый JSON только чтобы заменить его.'
+                  : '{"type":"service_account","project_id":"…","private_key":"…","client_email":"…@….iam.gserviceaccount.com",…}'
+              }
               spellCheck={false}
+              disabled={clearDriveSa}
             />
-            <span className="mt-1 block text-xs text-stone-500">
-              В Google Cloud создайте Service Account → ключ JSON → расшарьте папку Drive на его
-              email с правом «Редактор». Пустое поле при сохранении не меняет уже сохранённый ключ.
-            </span>
           </label>
+
+          {draft.has_drive_service_account && (
+            <label className="flex items-center gap-2 text-sm font-medium text-red-800 sm:col-span-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-stone-300 text-red-600"
+                checked={clearDriveSa}
+                onChange={(e) => {
+                  setClearDriveSa(e.target.checked);
+                  if (e.target.checked) setDriveSaJson('');
+                }}
+              />
+              Удалить сохранённый ключ service account при сохранении
+            </label>
+          )}
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
@@ -744,6 +779,19 @@ export function BackupSettingsSection() {
             onClick={() => saveMut.mutate()}
           >
             Сохранить настройки Drive
+          </button>
+          <button
+            type="button"
+            className={btnSecondary()}
+            disabled={settingsQ.isFetching}
+            onClick={() => {
+              void qc.invalidateQueries({ queryKey: Q_SETTINGS }).then(() => {
+                setNote({ type: 'ok', text: 'Статус подключения Drive обновлён.' });
+              });
+            }}
+          >
+            <LuRefreshCw className={`h-4 w-4 ${settingsQ.isFetching ? 'animate-spin' : ''}`} />
+            Проверить подключение
           </button>
         </div>
 

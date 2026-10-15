@@ -1337,6 +1337,7 @@ export interface BackupSettings {
   telegram_bot_ready: boolean;
   drive_ready: boolean;
   drive_configured: boolean;
+  has_drive_service_account: boolean;
   drive_client_email_masked: string | null;
   drive_source: string | null;
   drive_folder_name: string | null;
@@ -1439,6 +1440,7 @@ export async function patchBackupSettings(body: {
   drive_folder_id?: string | null;
   drive_delete_local_after_upload?: boolean;
   drive_retention_days?: number;
+  /** Новый JSON ключа; `null` — удалить сохранённый ключ. */
   drive_service_account_json?: string | null;
 }): Promise<{ settings: BackupSettings }> {
   const { data } = await apiClient.patch<{ settings: BackupSettings }>('/api/backup/settings', body);

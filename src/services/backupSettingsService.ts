@@ -46,6 +46,8 @@ export type BackupSettingsAdminView = BackupSettingsDocument & {
   telegram_bot_ready: boolean;
   drive_ready: boolean;
   drive_configured: boolean;
+  /** Ключ service account сохранён в БД (через админку). */
+  has_drive_service_account: boolean;
   drive_client_email_masked: string | null;
   drive_source: string | null;
   drive_folder_name: string | null;

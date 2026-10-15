@@ -1,12 +1,8 @@
 /**
  * Авторизация Google Drive для бекапов.
- * Приоритет credentials (как Firebase):
- * 1. GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH
- * 2. GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON
- * 3. GOOGLE_APPLICATION_CREDENTIALS
- * 4. JSON из global_settings.backup_drive_sa_json (админка)
+ * Ключ service account хранится в админке (global_settings.backup_drive_sa_json).
+ * Env-переменные не используются — все настройки в разделе «Резервная копия».
  */
-import fs from 'node:fs';
 import { google } from 'googleapis';
 import type { drive_v3 } from 'googleapis';
 
@@ -35,7 +31,7 @@ async function ensureSaColumn(): Promise<void> {
   );
 }
 
-function parseSaJson(raw: string): DriveServiceAccount | null {
+export function parseDriveServiceAccountJson(raw: string): DriveServiceAccount | null {
   try {
     const parsed = JSON.parse(raw) as DriveServiceAccount;
     if (
@@ -52,15 +48,6 @@ function parseSaJson(raw: string): DriveServiceAccount | null {
   }
 }
 
-function readSaFromFile(filePath: string): DriveServiceAccount | null {
-  try {
-    if (!fs.existsSync(filePath)) return null;
-    return parseSaJson(fs.readFileSync(filePath, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
 export async function loadDriveServiceAccountFromDb(): Promise<DriveServiceAccount | null> {
   await ensureSaColumn();
   const { rows } = await query(
@@ -68,7 +55,11 @@ export async function loadDriveServiceAccountFromDb(): Promise<DriveServiceAccou
   );
   const raw = rows[0]?.backup_drive_sa_json;
   if (typeof raw !== 'string' || !raw.trim()) return null;
-  return parseSaJson(raw);
+  return parseDriveServiceAccountJson(raw);
+}
+
+export async function hasDriveServiceAccountInDb(): Promise<boolean> {
+  return (await loadDriveServiceAccountFromDb()) !== null;
 }
 
 export async function saveDriveServiceAccountJson(
@@ -83,32 +74,13 @@ export async function saveDriveServiceAccountJson(
   );
 }
 
-/** Загрузка SA: env/file → DB. */
+/** Только админка / БД — без .env. */
 export async function resolveDriveServiceAccount(): Promise<{
   sa: DriveServiceAccount | null;
-  source: 'env_path' | 'env_json' | 'adc_path' | 'database' | null;
+  source: 'database' | null;
 }> {
-  const drivePath = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH?.trim();
-  if (drivePath) {
-    const sa = readSaFromFile(drivePath);
-    if (sa) return { sa, source: 'env_path' };
-  }
-
-  const driveJson = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON?.trim();
-  if (driveJson) {
-    const sa = parseSaJson(driveJson);
-    if (sa) return { sa, source: 'env_json' };
-  }
-
-  const adc = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
-  if (adc) {
-    const sa = readSaFromFile(adc);
-    if (sa) return { sa, source: 'adc_path' };
-  }
-
   const fromDb = await loadDriveServiceAccountFromDb();
   if (fromDb) return { sa: fromDb, source: 'database' };
-
   return { sa: null, source: null };
 }
 
@@ -122,7 +94,7 @@ export function maskServiceAccountEmail(email: string | null | undefined): strin
 export async function createDriveClient(): Promise<{
   drive: DriveClient;
   clientEmail: string;
-  source: NonNullable<Awaited<ReturnType<typeof resolveDriveServiceAccount>>['source']>;
+  source: 'database';
 } | null> {
   const { sa, source } = await resolveDriveServiceAccount();
   if (!sa || !source || !sa.client_email || !sa.private_key) return null;

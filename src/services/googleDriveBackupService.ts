@@ -12,6 +12,7 @@ import { Readable } from 'node:stream';
 import {
   createDriveClient,
   maskServiceAccountEmail,
+  parseDriveServiceAccountJson,
   resolveDriveServiceAccount,
   saveDriveServiceAccountJson,
   type DriveClient,
@@ -105,7 +106,7 @@ export async function getDriveStatus(folderId?: string | null): Promise<DriveSta
       folder_ok: null,
       folder_name: null,
       message:
-        'Нет service account. Укажите GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON / PATH или вставьте JSON в админке.',
+        'Нет ключа service account. Вставьте JSON ключа в этом разделе и сохраните.',
     };
   }
 
@@ -120,7 +121,7 @@ export async function getDriveStatus(folderId?: string | null): Promise<DriveSta
       folder_ok: null,
       folder_name: null,
       message:
-        'Укажите ID папки Google Drive и расшарьте её на service account (редактор).',
+        'Укажите ID папки Google Drive ниже и расшарьте её на service account (право «Редактор»).',
     };
   }
 
@@ -480,10 +481,8 @@ export async function setDriveServiceAccountFromAdmin(
     await saveDriveServiceAccountJson(null);
     return { ok: true, client_email_masked: null };
   }
-  let parsed: { client_email?: string; private_key?: string };
-  try {
-    parsed = JSON.parse(json) as { client_email?: string; private_key?: string };
-  } catch {
+  const parsed = parseDriveServiceAccountJson(json);
+  if (!parsed) {
     throw new Error('drive_sa_invalid_json');
   }
   if (!parsed.client_email || !parsed.private_key) {

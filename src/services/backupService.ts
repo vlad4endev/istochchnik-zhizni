@@ -980,6 +980,7 @@ export async function getBackupSettingsAdminView(): Promise<BackupSettingsAdminV
     telegram_bot_ready: Boolean(tg.enabled && tg.has_bot_token),
     drive_ready: Boolean(driveStatus?.ready),
     drive_configured: Boolean(driveStatus?.configured),
+    has_drive_service_account: Boolean(driveStatus?.configured),
     drive_client_email_masked: driveStatus?.client_email_masked ?? null,
     drive_source: driveStatus?.source ?? null,
     drive_folder_name: driveStatus?.folder_name ?? null,

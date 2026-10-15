@@ -101,7 +101,7 @@ function mapBackupError(error: unknown): { status: number; error: string } {
     return {
       status: 400,
       error:
-        'Google Drive не настроен: добавьте service account (JSON) в настройках или через GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON.',
+        'Google Drive не настроен: вставьте JSON ключа service account в разделе «Резервная копия» и сохраните.',
     };
   }
   if (msg === 'drive_folder_missing') {
