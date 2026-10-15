@@ -188,8 +188,8 @@ export function CallJoinPage() {
           <GlassDeviceToggle
             pressed={micOn}
             onClick={() => setMicOn((v) => !v)}
-            labelOn="Микрофон вкл."
-            labelOff="Микрофон выкл."
+            labelOn="Микрофон"
+            labelOff="Микрофон"
             iconOn={<LuMic size={24} strokeWidth={1.8} />}
             iconOff={<LuMicOff size={24} strokeWidth={1.8} />}
           />
@@ -197,8 +197,8 @@ export function CallJoinPage() {
             <GlassDeviceToggle
               pressed={camOn}
               onClick={() => setCamOn((v) => !v)}
-              labelOn="Камера вкл."
-              labelOff="Камера выкл."
+              labelOn="Камера"
+              labelOff="Камера"
               iconOn={<LuVideo size={24} strokeWidth={1.8} />}
               iconOff={<LuVideoOff size={24} strokeWidth={1.8} />}
             />
@@ -249,7 +249,7 @@ function GlassDeviceToggle({
       type="button"
       className={['glass-call__device', pressed ? 'is-on' : 'is-off'].join(' ')}
       aria-pressed={pressed}
-      aria-label={pressed ? labelOn : labelOff}
+      aria-label={pressed ? `${labelOn} включён` : `${labelOff} выключен`}
       onClick={onClick}
     >
       <span className="glass-call__device-icon" aria-hidden>
