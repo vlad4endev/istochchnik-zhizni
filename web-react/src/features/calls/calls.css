@@ -4017,6 +4017,13 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   color: var(--gc-title);
 }
 
+.glass-call--ended .glass-call__title {
+  margin-top: 28px;
+  font-size: clamp(2.05rem, 9vw, 2.75rem);
+  line-height: 1.05;
+  text-shadow: 0 10px 36px rgba(0, 0, 0, 0.45);
+}
+
 .glass-call__title-head {
   display: block;
 }
@@ -4030,11 +4037,22 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   color: var(--gc-accent);
 }
 
+.glass-call--ended .glass-call__title-accent {
+  color: #f6b8c6;
+}
+
 .glass-call__lead {
   margin: 10px 0 0;
   font-size: 15.5px;
   line-height: 1.4;
   color: var(--gc-muted);
+}
+
+.glass-call__lead--meeting {
+  margin-top: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #e8d5db;
 }
 
 .glass-call__lead--solo {

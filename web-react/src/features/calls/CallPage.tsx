@@ -153,8 +153,8 @@ export function CallPage() {
             <LuPhoneOff size={32} strokeWidth={1.7} />
           </span>
         </div>
-        <GlassCallTitle title={title} />
-        <p className="glass-call__lead">{error}</p>
+        <GlassCallTitle title={error} />
+        {title ? <p className="glass-call__lead glass-call__lead--meeting">{title}</p> : null}
         <div className="glass-call__spacer" />
         <GlassCallCta to={messengerHref} icon={<LuMessageCircle size={20} strokeWidth={1.8} />}>
           В мессенджер
@@ -239,8 +239,8 @@ export function CallPage() {
             <LuPhoneOff size={32} strokeWidth={1.7} />
           </span>
         </div>
-        <GlassCallTitle title={title} />
-        <p className="glass-call__lead">Звонок завершён</p>
+        <GlassCallTitle title="Звонок завершён" />
+        {title ? <p className="glass-call__lead glass-call__lead--meeting">{title}</p> : null}
         <div className="glass-call__spacer" />
         <GlassCallCta to={messengerHref} icon={<LuMessageCircle size={20} strokeWidth={1.8} />}>
           В мессенджер
