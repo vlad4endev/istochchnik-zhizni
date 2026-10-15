@@ -75,6 +75,9 @@ restore_pull_blockers() {
     web-react/tsconfig.tsbuildinfo
     web-react/vite.config.ts
     web-react/src/features/resources/pages/PodcastsPage.tsx
+    Dockerfile.web
+    docker/Dockerfile.web.main
+    docker/Dockerfile.web.studio
     docker-compose.yml
     docker-compose.prod.yml
     docker-compose.prod.overlay.yml
