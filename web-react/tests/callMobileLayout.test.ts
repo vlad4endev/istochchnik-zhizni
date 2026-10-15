@@ -112,27 +112,27 @@ describe('mobile call layout', () => {
     expect(css).toMatch(/translate3d\(-50%/);
   });
 
-  it('лобби входа по ссылке компактное: один экран без прокрутки', () => {
+  it('лобби входа — Glass-стиль приглашения', () => {
     const css = readFileSync(join(root, 'src/features/calls/calls.css'), 'utf8');
     const joinPage = readFileSync(join(root, 'src/features/calls/CallJoinPage.tsx'), 'utf8');
-    expect(joinPage).toMatch(/telemost-join--compact/);
-    expect(joinPage).toMatch(/size="md"/);
-    expect(joinPage).toMatch(/Safari: откройте/);
-    expect(css).toMatch(/\.telemost-join--compact/);
-    expect(css).toMatch(/telemost-join__devices\s*\{[\s\S]*?flex-wrap:\s*nowrap/);
-    expect(css).toMatch(/@media \(max-height:\s*700px\)/);
+    const glass = readFileSync(join(root, 'src/features/calls/glassCallUi.tsx'), 'utf8');
+    expect(joinPage).toMatch(/GlassCallShell/);
+    expect(joinPage).toMatch(/Присоединиться/);
+    expect(joinPage).toMatch(/glass-call__stage/);
+    expect(glass).toMatch(/splitGlassTitle/);
+    expect(css).toMatch(/\.glass-call\b/);
+    expect(css).toMatch(/Playfair Display/);
+    expect(css).toMatch(/#120a0e/);
   });
 
-  it('маршрут /call/:id — Telemost-shell для активных/завершённых состояний', () => {
+  it('маршрут /call/:id — Glass-shell для завершённых/активных состояний', () => {
     const css = readFileSync(join(root, 'src/features/calls/calls.css'), 'utf8');
     const page = readFileSync(join(root, 'src/features/calls/CallPage.tsx'), 'utf8');
-    expect(page).toMatch(/CallRouteShell/);
-    expect(page).toMatch(/call-route-shell--ended/);
-    expect(page).toMatch(/call-route-shell--active/);
+    expect(page).toMatch(/GlassCallShell/);
+    expect(page).toMatch(/glass-call--ended/);
     expect(page).toMatch(/Звонок завершён/);
     expect(page).toMatch(/Свернуть в чат/);
-    expect(css).toMatch(/\.call-route-shell\b/);
-    expect(css).toMatch(/--viewport-height,\s*100dvh/);
-    expect(css).toMatch(/call-route-shell__cta--accept/);
+    expect(css).toMatch(/glass-call__status-card/);
+    expect(css).toMatch(/glass-call__cta-arrow/);
   });
 });
