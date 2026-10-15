@@ -1,47 +1,25 @@
-import { useEffect, useRef, useState } from 'react';
-import { LuX } from 'react-icons/lu';
+import { useEffect, useMemo, useState } from 'react';
+import DocViewer, { DocViewerRenderers } from '@cyntler/react-doc-viewer';
+import '@cyntler/react-doc-viewer/dist/index.css';
+import { LuDownload, LuX } from 'react-icons/lu';
+import { pdfjs } from 'react-pdf';
 
-import { ensurePdfjsWorker } from '../lib/pdfjsMainThread';
+import { fetchAuthenticatedBlob } from '../lib/fetchAuthenticatedBlob';
 import { BodyPortal } from './BodyPortal';
+import { inferDocumentFileType } from './documentPreviewTypes';
 
-/** Встроенный просмотр: PDF (pdf.js) и простой текст. Office-форматы открываются во вкладке/скачиваются. */
-const PREVIEWABLE_EXTENSIONS = new Set(['pdf', 'txt', 'csv']);
+export { canPreviewDocumentInline } from './documentPreviewTypes';
 
-const MAX_PDF_PAGES = 100;
-const MAX_TEXT_CHARS = 500_000;
+// Локальный worker (совпадает с pdfjs из react-pdf / @cyntler), без CDN и без проблем MIME у nginx.
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-const MIME_TO_FILE_TYPE: Record<string, string> = {
-  'application/pdf': 'pdf',
-  'text/plain': 'txt',
-  'text/csv': 'csv',
-};
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-function fileExtension(name: string): string {
-  const n = String(name ?? '').trim().toLowerCase();
-  const i = n.lastIndexOf('.');
-  if (i <= 0 || i === n.length - 1) return '';
-  return n.slice(i + 1);
-}
-
-function inferFileType(name: string, mimeRaw: string): string | undefined {
-  const mime = String(mimeRaw ?? '').split(';')[0].trim().toLowerCase();
-  if (mime && MIME_TO_FILE_TYPE[mime]) return MIME_TO_FILE_TYPE[mime];
-  const ext = fileExtension(name);
-  return ext || undefined;
-}
-
-export function canPreviewDocumentInline(name: string, mimeRaw: string): boolean {
-  const mime = String(mimeRaw ?? '').split(';')[0].trim().toLowerCase();
-  if (mime && MIME_TO_FILE_TYPE[mime]) return true;
-  const ext = fileExtension(name);
-  return PREVIEWABLE_EXTENSIONS.has(ext);
-}
-
-type ViewState =
+type LoadState =
+  | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'error' }
-  | { kind: 'text'; text: string; truncated: boolean }
-  | { kind: 'pdf' };
+  | { kind: 'ready'; blobUrl: string; fileType?: string }
+  | { kind: 'error' };
 
 interface DocumentViewerModalProps {
   open: boolean;
@@ -51,6 +29,16 @@ interface DocumentViewerModalProps {
   onClose: () => void;
 }
 
+function triggerBlobDownload(blobUrl: string, fileName: string): void {
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = fileName.trim() || 'file';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 export function DocumentViewerModal({
   open,
   fileUrl,
@@ -58,9 +46,8 @@ export function DocumentViewerModal({
   fileMime = '',
   onClose,
 }: DocumentViewerModalProps) {
-  const [state, setState] = useState<ViewState>({ kind: 'loading' });
-  const pagesRef = useRef<HTMLDivElement | null>(null);
-  const fileType = inferFileType(fileName, fileMime);
+  const [state, setState] = useState<LoadState>({ kind: 'idle' });
+  const fileType = inferDocumentFileType(fileName, fileMime);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -72,132 +59,134 @@ export function DocumentViewerModal({
   }, [open, onClose]);
 
   useEffect(() => {
-    if (!open || !fileUrl) return undefined;
+    if (!open || !fileUrl) {
+      setState({ kind: 'idle' });
+      return undefined;
+    }
+
     let cancelled = false;
-    let destroy: (() => void) | null = null;
+    let objectUrl: string | null = null;
     setState({ kind: 'loading' });
 
-    const run = async () => {
+    void (async () => {
       try {
-        const res = await fetch(fileUrl);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        if (fileType === 'pdf') {
-          const data = new Uint8Array(await res.arrayBuffer());
-          const [pdfjs] = await Promise.all([import('pdfjs-dist'), ensurePdfjsWorker()]);
-          if (cancelled) return;
-          const task = pdfjs.getDocument({ data, useSystemFonts: true });
-          destroy = () => void task.destroy();
-          const pdf = await task.promise;
-          if (cancelled) return;
-          setState({ kind: 'pdf' });
-          // Дожидаемся, пока React смонтирует контейнер страниц.
-          await new Promise<void>((r) => requestAnimationFrame(() => r()));
-          const host = pagesRef.current;
-          if (!host || cancelled) return;
-          host.replaceChildren();
-          const dpr = Math.min(window.devicePixelRatio || 1, 2);
-          const width = Math.max(host.clientWidth, 200);
-          const total = Math.min(pdf.numPages, MAX_PDF_PAGES);
-          for (let n = 1; n <= total; n += 1) {
-            const page = await pdf.getPage(n);
-            if (cancelled) return;
-            const base = page.getViewport({ scale: 1 });
-            const scale = width / base.width;
-            const viewport = page.getViewport({ scale: scale * dpr });
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.floor(viewport.width);
-            canvas.height = Math.floor(viewport.height);
-            canvas.style.width = '100%';
-            canvas.style.height = 'auto';
-            canvas.style.display = 'block';
-            canvas.style.marginBottom = '8px';
-            canvas.style.background = '#fff';
-            const ctx = canvas.getContext('2d');
-            if (!ctx) throw new Error('canvas');
-            host.appendChild(canvas);
-            await page.render({ canvasContext: ctx, viewport }).promise;
-          }
-          return;
-        }
-
-        const raw = await res.text();
+        const blob = await fetchAuthenticatedBlob(fileUrl);
         if (cancelled) return;
-        const truncated = raw.length > MAX_TEXT_CHARS;
-        setState({
-          kind: 'text',
-          text: truncated ? raw.slice(0, MAX_TEXT_CHARS) : raw,
-          truncated,
-        });
+        objectUrl = URL.createObjectURL(blob);
+        setState({ kind: 'ready', blobUrl: objectUrl, fileType });
       } catch {
         if (!cancelled) setState({ kind: 'error' });
       }
-    };
-    void run();
+    })();
 
     return () => {
       cancelled = true;
-      destroy?.();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [open, fileUrl, fileType]);
 
+  const documents = useMemo(() => {
+    if (state.kind !== 'ready') return [];
+    return [
+      {
+        uri: state.blobUrl,
+        fileName: fileName || 'Документ',
+        fileType: state.fileType || fileType,
+      },
+    ];
+  }, [state, fileName, fileType]);
+
   if (!open || !fileUrl) return null;
 
+  const readyBlobUrl = state.kind === 'ready' ? state.blobUrl : null;
+
   return (
-    <BodyPortal><div
-      className="fixed inset-0 z-[5200] bg-black/70 p-3 sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Просмотр документа ${fileName}`}
-      onClick={onClose}
-    >
+    <BodyPortal>
       <div
-        className="mx-auto flex h-full w-full max-w-[1200px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
+        className="fixed inset-0 z-[5200] bg-black/70 p-3 sm:p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Просмотр документа ${fileName}`}
+        onClick={onClose}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-3 py-2.5 sm:px-4">
-          <p className="min-w-0 truncate text-sm font-semibold text-stone-800">{fileName}</p>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-100 hover:text-stone-900"
-            aria-label="Закрыть просмотр документа"
-          >
-            <LuX className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto bg-stone-100 p-2 sm:p-3">
-          {state.kind === 'loading' ? (
-            <p className="p-4 text-center text-sm text-stone-500" role="status">
-              Загрузка…
-            </p>
-          ) : null}
-          {state.kind === 'error' ? (
-            <div className="p-4 text-center text-sm text-stone-600">
-              <p>Не удалось показать документ.</p>
-              <a
-                href={fileUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2 inline-block font-semibold text-primary"
-              >
-                Открыть в новой вкладке
-              </a>
-            </div>
-          ) : null}
-          {state.kind === 'text' ? (
-            <>
-              <pre className="whitespace-pre-wrap break-words rounded-lg bg-white p-3 text-sm text-stone-800">
-                {state.text}
-              </pre>
-              {state.truncated ? (
-                <p className="mt-2 text-center text-xs text-stone-500">Показана только часть файла.</p>
+        <div
+          className="mx-auto flex h-full w-full max-w-[1200px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-3 py-2.5 sm:px-4">
+            <p className="min-w-0 truncate text-sm font-semibold text-stone-800">{fileName}</p>
+            <div className="flex shrink-0 items-center gap-1">
+              {readyBlobUrl ? (
+                <button
+                  type="button"
+                  onClick={() => triggerBlobDownload(readyBlobUrl, fileName)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-100 hover:text-stone-900"
+                  aria-label="Скачать документ"
+                >
+                  <LuDownload className="h-5 w-5" />
+                </button>
               ) : null}
-            </>
-          ) : null}
-          <div ref={pagesRef} />
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-100 hover:text-stone-900"
+                aria-label="Закрыть просмотр документа"
+              >
+                <LuX className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden bg-stone-100">
+            {state.kind === 'loading' || state.kind === 'idle' ? (
+              <p className="p-4 text-center text-sm text-stone-500" role="status">
+                Загрузка…
+              </p>
+            ) : null}
+            {state.kind === 'error' ? (
+              <div className="p-4 text-center text-sm text-stone-600">
+                <p>Не удалось показать документ.</p>
+                <p className="mt-1 text-xs text-stone-500">Попробуйте сохранить файл на устройство.</p>
+              </div>
+            ) : null}
+            {state.kind === 'ready' ? (
+              <DocViewer
+                documents={documents}
+                pluginRenderers={DocViewerRenderers}
+                language="ru"
+                prefetchMethod="GET"
+                className="h-full min-h-0 !bg-stone-100"
+                style={{ height: '100%', width: '100%' }}
+                config={{
+                  header: {
+                    disableHeader: true,
+                    disableFileName: true,
+                  },
+                  pdfVerticalScrollByDefault: true,
+                  pdfZoom: {
+                    defaultZoom: 1,
+                    zoomJump: 0.2,
+                  },
+                  noRenderer: {
+                    overrideComponent: () => (
+                      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-stone-600">
+                        <p>Просмотр этого формата недоступен в браузере.</p>
+                        <button
+                          type="button"
+                          onClick={() => triggerBlobDownload(state.blobUrl, fileName)}
+                          className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-extrabold text-white"
+                        >
+                          <LuDownload className="h-4 w-4" />
+                          Скачать файл
+                        </button>
+                      </div>
+                    ),
+                  },
+                }}
+              />
+            ) : null}
+          </div>
         </div>
       </div>
-    </div></BodyPortal>
+    </BodyPortal>
   );
 }

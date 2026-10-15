@@ -7,6 +7,12 @@ declare module 'pdfjs-dist/build/pdf.worker.min.mjs' {
   export const WorkerMessageHandler: unknown;
 }
 
+// Vite `?url` для workerSrc в DocumentViewerModal (@cyntler / react-pdf).
+declare module 'pdfjs-dist/build/pdf.worker.min.mjs?url' {
+  const url: string;
+  export default url;
+}
+
 declare const __WEB_REACT_BUILD_STAMP__: string;
 
 interface ImportMetaEnv {

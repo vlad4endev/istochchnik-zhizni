@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useMemo, useEffect, useCallback, useLayoutEffect, type ReactNode } from 'react';
+import { lazy, memo, Suspense, useState, useRef, useMemo, useEffect, useCallback, useLayoutEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { handleMessengerTextCopy, messengerTextForCopy, normalizeChatDisplayText } from '../normalizeChatDisplayText';
 import { renderMessengerPlainText } from '../messengerPlainText';
@@ -34,11 +34,16 @@ import { MessengerPollCard } from './MessengerPollCard';
 import { MessageReadersSheet } from './MessageReadersSheet';
 import { ForwardMessageSheet } from './ForwardMessageSheet';
 import { useMediaViewer, type MediaItem } from '../../../components/MediaViewer';
-import { DocumentViewerModal, canPreviewDocumentInline } from '../../../components/DocumentViewerModal';
+import { canPreviewDocumentInline } from '../../../components/documentPreviewTypes';
+import { fetchAuthenticatedBlob } from '../../../lib/fetchAuthenticatedBlob';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import type { PanInfo } from 'framer-motion';
+
+const DocumentViewerModal = lazy(() =>
+  import('../../../components/DocumentViewerModal').then((m) => ({ default: m.DocumentViewerModal })),
+);
 
 function MentionRichText({
   text,
@@ -255,26 +260,11 @@ function initialsFromName(name: string): string {
   return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
 }
 
-/** Сохранение на устройство: сначала blob (как в Telegram), иначе fallback через ссылку. */
+/** Сохранение на устройство: apiClient/Bearer для attachment-file, иначе CORS fetch. */
 async function saveUrlToDevice(url: string, filename: string): Promise<void> {
   const safeName = filename.trim() || 'file';
   try {
-    const sameOrigin =
-      typeof window !== 'undefined' &&
-      (() => {
-        try {
-          return new URL(url, window.location.href).origin === window.location.origin;
-        } catch {
-          return false;
-        }
-      })();
-    const res = await fetch(url, {
-      mode: 'cors',
-      credentials: sameOrigin ? 'include' : 'omit',
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error('bad status');
-    const blob = await res.blob();
+    const blob = await fetchAuthenticatedBlob(url);
     const objectUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = objectUrl;
@@ -789,7 +779,10 @@ function MessageBubbleInner({
       setDocumentViewer({ url, name, mime: mimeHint });
       return;
     }
-    openUrlInNewTab(url);
+    // Office и прочие форматы без локального превью: скачиваем с Bearer (не window.open — 401).
+    void saveUrlToDevice(url, name).catch(() =>
+      emitAppToast({ kind: 'error', message: 'Не удалось открыть файл' }),
+    );
   }, []);
 
   const buildAlbumViewer = useCallback((): {
@@ -2436,13 +2429,17 @@ function MessageBubbleInner({
         : null}
     </div>
 
-    <DocumentViewerModal
-      open={documentViewer != null}
-      fileUrl={documentViewer?.url ?? null}
-      fileName={documentViewer?.name ?? 'Документ'}
-      fileMime={documentViewer?.mime}
-      onClose={() => setDocumentViewer(null)}
-    />
+    {documentViewer ? (
+      <Suspense fallback={null}>
+        <DocumentViewerModal
+          open
+          fileUrl={documentViewer.url}
+          fileName={documentViewer.name || 'Документ'}
+          fileMime={documentViewer.mime}
+          onClose={() => setDocumentViewer(null)}
+        />
+      </Suspense>
+    ) : null}
     {canViewReaders ? (
       <MessageReadersSheet
         open={showReadersSheet}
