@@ -237,6 +237,54 @@ describe('messenger chatStore last message preview', () => {
     expect(useChatStore.getState().privateDraftPeer?.id).toBe(42);
   });
 
+  it('shows a new group when it was created from a tab that hides groups', () => {
+    useChatStore.setState((s) => ({
+      ...s,
+      activeTab: 'notifications',
+      conversations: [],
+    }));
+
+    useChatStore.getState().handleConvCreated({
+      id: '999',
+      type: 'group',
+      title: 'Новая группа',
+      avatar_url: null,
+      updated_at: '2026-05-07T12:05:00.000Z',
+      last_message: null,
+      unread_count: 0,
+      other_member: null,
+    } as never);
+
+    expect(useChatStore.getState().activeTab).toBe('all');
+    expect(useChatStore.getState().getConversationsForActiveTab().some((c) => String(c.id) === '999')).toBe(
+      true,
+    );
+  });
+
+  it('keeps the personal tab when a group is created there', () => {
+    useChatStore.setState((s) => ({
+      ...s,
+      activeTab: 'personal',
+      conversations: [],
+    }));
+
+    useChatStore.getState().handleConvCreated({
+      id: '1000',
+      type: 'group',
+      title: 'Домашняя группа',
+      avatar_url: null,
+      updated_at: '2026-05-07T12:05:00.000Z',
+      last_message: null,
+      unread_count: 0,
+      other_member: null,
+    } as never);
+
+    expect(useChatStore.getState().activeTab).toBe('personal');
+    expect(useChatStore.getState().getConversationsForActiveTab().some((c) => String(c.id) === '1000')).toBe(
+      true,
+    );
+  });
+
   it('does not drop a group created while loadConversations is in flight', async () => {
     let resolveFetch: ((value: unknown) => void) | null = null;
     vi.mocked(messengerApi.fetchConversations).mockImplementation(

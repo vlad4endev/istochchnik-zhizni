@@ -249,12 +249,24 @@ export async function createPersonalChat(otherMemberId: number) {
   return data;
 }
 
+export function messengerApiErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data as { error?: unknown } | undefined;
+    if (typeof data?.error === 'string' && data.error.trim()) return data.error.trim();
+  }
+  return fallback;
+}
+
 export async function createGroupChat(title: string, type: ConversationType, memberIds: number[]) {
   const { data } = await apiClient.post<{
     conversationId: string;
     conversation: ConversationListItem | null;
     addedMemberIds?: number[];
-  }>(`${BASE}/conversations/group`, { title, type, memberIds });
+  }>(
+    `${BASE}/conversations/group`,
+    { title, type, memberIds },
+    { silentErrorToast: true },
+  );
   return data;
 }
 
@@ -632,9 +644,15 @@ export async function forwardMessage(
   return data;
 }
 
-export async function searchMembers(q: string): Promise<SearchMember[]> {
-  const { data } = await apiClient.get<SearchMember[]>(`${BASE}/members/search`, { params: { q } });
-  return data;
+export async function searchMembers(
+  q: string,
+  opts?: { limit?: number; offset?: number },
+): Promise<SearchMember[]> {
+  const params: Record<string, string> = { q };
+  if (opts?.limit != null) params.limit = String(opts.limit);
+  if (opts?.offset != null) params.offset = String(opts.offset);
+  const { data } = await apiClient.get<SearchMember[]>(`${BASE}/members/search`, { params });
+  return data ?? [];
 }
 
 export async function fetchMessengerMember(memberId: number): Promise<SearchMember | null> {

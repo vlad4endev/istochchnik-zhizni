@@ -13,6 +13,7 @@ import { attachConversationFromMessageIdParam, checkChatPermission } from '../mi
 import { ensureValidRequest, validateSendMessage } from '../middleware/messengerValidation';
 import { messengerUpload } from '../middleware/upload';
 import * as svc from '../services/messengerService';
+import { GroupChatTitleError, parsePageLimit, parsePageOffset, MEMBER_LIST_DEFAULT_LIMIT, MEMBER_LIST_MAX_LIMIT, MEMBER_SEARCH_DEFAULT_LIMIT, MEMBER_SEARCH_MAX_LIMIT } from '../utils/groupChatCreate';
 import { getLinkPreview } from '../services/linkPreviewService';
 import {
   ensureAssistantConversation,
@@ -755,7 +756,7 @@ router.post('/conversations/group', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const { title, type, memberIds } = req.body;
   if (!title || typeof title !== 'string' || !title.trim()) {
-    res.status(400).json({ error: 'title is required' });
+    res.status(400).json({ error: 'Укажите название' });
     return;
   }
   const convType = type === 'channel' ? 'channel' : 'group';
@@ -817,8 +818,17 @@ router.post('/conversations/group', async (req: Request, res: Response) => {
       addedMemberIds: notifiedIds,
     });
   } catch (e) {
+    if (e instanceof GroupChatTitleError) {
+      res.status(400).json({ error: e.message });
+      return;
+    }
+    const code = e && typeof e === 'object' && 'code' in e ? String((e as { code?: unknown }).code ?? '') : '';
+    if (code === '22001') {
+      res.status(400).json({ error: 'Название слишком длинное' });
+      return;
+    }
     console.error('[messenger] createGroupConversation error:', e);
-    res.status(500).json({ error: 'Failed to create group' });
+    res.status(500).json({ error: 'Не удалось создать группу. Попробуйте ещё раз.' });
   }
 });
 
@@ -2006,12 +2016,15 @@ router.delete('/messages/:id/reactions/:emoji', async (req: Request, res: Respon
 router.get('/members/search', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const q = (req.query.q as string || '').trim();
+  const offset = parsePageOffset(req.query.offset);
   try {
     if (q.length < 1) {
-      const members = await svc.listRegisteredMembers(userId);
+      const limit = parsePageLimit(req.query.limit, MEMBER_LIST_DEFAULT_LIMIT, MEMBER_LIST_MAX_LIMIT);
+      const members = await svc.listRegisteredMembers(userId, limit, offset);
       res.json(members.map((m) => ({ ...m, is_online: isMemberOnline(m.id) })));
     } else {
-      const members = await svc.searchMembers(q, userId);
+      const limit = parsePageLimit(req.query.limit, MEMBER_SEARCH_DEFAULT_LIMIT, MEMBER_SEARCH_MAX_LIMIT);
+      const members = await svc.searchMembers(q, userId, limit, offset);
       res.json(members.map((m) => ({ ...m, is_online: isMemberOnline(m.id) })));
     }
   } catch (e) {

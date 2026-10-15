@@ -26,6 +26,10 @@ interface NewChatDialogProps {
 
 type GroupWizardStep = 'members' | 'details';
 
+/** Совпадает с лимитом названия на сервере (как в Telegram). */
+const GROUP_TITLE_MAX = 128;
+const MEMBER_PAGE = 50;
+
 const DIALOG_STYLES = `
   .tg-dialog-overlay {
     position: fixed;
@@ -102,6 +106,59 @@ const DIALOG_STYLES = `
     line-height: 1.35;
     color: var(--tg-text-muted);
   }
+  .tg-picked-row {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 10px 12px 2px;
+    flex-shrink: 0;
+  }
+  .tg-picked-chip {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 68px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--tg-text);
+    flex-shrink: 0;
+    padding: 0;
+  }
+  .tg-picked-chip-x {
+    position: absolute;
+    top: -2px;
+    right: 4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.55);
+    color: white;
+    display: grid;
+    place-items: center;
+  }
+  .tg-picked-name {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    max-width: 68px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tg-load-more {
+    width: calc(100% - 32px);
+    margin: 4px 16px 12px;
+    padding: 10px;
+    border: none;
+    border-radius: 10px;
+    background: var(--tg-surface-elevated);
+    color: var(--tg-primary);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .tg-load-more:disabled { opacity: 0.6; cursor: default; }
   .tg-group-avatar-wrap {
     position: relative;
     width: 96px; height: 96px; border-radius: 50%; margin: 0 auto 10px;
@@ -152,6 +209,8 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchMember[]>([]);
   const [searching, setSearching] = useState(false);
+  const [hasMoreMembers, setHasMoreMembers] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [mode, setMode] = useState<'contact' | 'group' | 'channel'>('contact');
   const [groupWizardStep, setGroupWizardStep] = useState<GroupWizardStep>('members');
   const [title, setTitle] = useState('');
@@ -162,6 +221,7 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   /** Участники группы/канала при создании (id → карточка поиска). */
   const [groupPick, setGroupPick] = useState<Record<number, SearchMember>>({});
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchGenRef = useRef(0);
   const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
   const conversations = useChatStore((s) => s.conversations);
   const currentMemberId = useChatStore((s) => s.currentMemberId);
@@ -240,15 +300,34 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
     };
   }, [vvRect]);
 
-  const performSearch = useCallback(async (q: string) => {
-    setSearching(true);
+  const performSearch = useCallback(async (q: string, offset = 0, append = false) => {
+    const gen = append ? searchGenRef.current : (searchGenRef.current += 1);
+    if (append) setLoadingMore(true);
+    else setSearching(true);
     try {
-      const results = await api.searchMembers(q);
-      setSearchResults(results);
+      const results = await api.searchMembers(q, { limit: MEMBER_PAGE, offset });
+      if (gen !== searchGenRef.current) return;
+      setHasMoreMembers(results.length >= MEMBER_PAGE);
+      setSearchResults((prev) => {
+        if (!append) return results;
+        const seen = new Set(prev.map((m) => m.id));
+        const next = [...prev];
+        for (const row of results) {
+          if (seen.has(row.id)) continue;
+          seen.add(row.id);
+          next.push(row);
+        }
+        return next;
+      });
     } catch {
-      setSearchResults([]);
+      if (gen !== searchGenRef.current) return;
+      if (!append) setSearchResults([]);
+      setHasMoreMembers(false);
     } finally {
-      setSearching(false);
+      if (gen === searchGenRef.current) {
+        setSearching(false);
+        setLoadingMore(false);
+      }
     }
   }, []);
 
@@ -297,12 +376,15 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
     });
   }, [conversations, searchResults]);
 
-  const pickedCount = useMemo(() => {
-    return Object.keys(groupPick).filter((k) => {
-      const id = Number(k);
-      return currentMemberId == null || id !== currentMemberId;
-    }).length;
+  const pickedMembers = useMemo(() => {
+    return Object.values(groupPick).filter(
+      (m) => currentMemberId == null || m.id !== currentMemberId,
+    );
   }, [groupPick, currentMemberId]);
+  const pickedCount = pickedMembers.length;
+
+  const memberLabel = (m: SearchMember) =>
+    (m.first_name ? `${m.first_name} ${m.last_name || ''}` : m.name).trim() || m.name;
 
   const handleOpenChat = (member: SearchMember) => {
     openPrivateDraft(member);
@@ -334,19 +416,15 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   };
 
   const goWizardNext = () => {
-    if (pickedCount === 0) {
-      emitAppToast('Выберите хотя бы одного участника', 'error');
-      return;
-    }
+    if (pickedCount === 0) return;
     setGroupWizardStep('details');
     setTitleError(null);
   };
 
   const handleCreateGroup = async () => {
-    const trimmed = title.trim();
+    const trimmed = title.trim().replace(/\s+/g, ' ').slice(0, GROUP_TITLE_MAX);
     if (!trimmed) {
       setTitleError(mode === 'group' ? 'Введите название группы' : 'Введите название канала');
-      emitAppToast(mode === 'group' ? 'Укажите название группы' : 'Укажите название канала', 'error');
       return;
     }
     setTitleError(null);
@@ -416,7 +494,8 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
       setGroupWizardStep('members');
       onCreated(convId);
     } catch (e) {
-      emitAppToast('Не удалось создать чат. Попробуйте ещё раз.', 'error');
+      const fallback = mode === 'group' ? 'Не удалось создать группу. Попробуйте ещё раз.' : 'Не удалось создать канал. Попробуйте ещё раз.';
+      emitAppToast(api.messengerApiErrorMessage(e, fallback), 'error');
     } finally {
       setCreating(false);
     }
@@ -524,6 +603,16 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
               {!searching && searchQuery && searchResults.length === 0 && (
                 <div className="tg-empty-state">Участники не найдены</div>
               )}
+              {hasMoreMembers && !searching ? (
+                <button
+                  type="button"
+                  className="tg-load-more"
+                  disabled={loadingMore}
+                  onClick={() => void performSearch(searchQuery.trim(), searchResults.length, true)}
+                >
+                  {loadingMore ? 'Загрузка…' : 'Показать ещё'}
+                </button>
+              ) : null}
             </div>
           </>
         ) : (
@@ -538,10 +627,37 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
           >
             {groupWizardStep === 'members' ? (
               <>
-                <p className="tg-group-hint" style={{ padding: '12px 16px 8px', margin: 0 }}>
-                  Шаг 1 из 2 — кого добавить. На следующем шаге укажите название — без него чат не создать.
-                </p>
-                <div className="tg-dialog-search" style={{ margin: '0 12px', border: '1px solid var(--tg-border)', borderRadius: '10px' }}>
+                {pickedMembers.length > 0 ? (
+                  <div className="tg-picked-row" aria-label="Выбранные участники">
+                    {pickedMembers.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        className="tg-picked-chip"
+                        onClick={() => toggleGroupMember(m)}
+                        aria-label={`Убрать ${memberLabel(m)}`}
+                      >
+                        <div className="tg-member-avatar" style={{ background: getAvatarColor(String(m.id)) }}>
+                          <AppAvatar
+                            src={m.avatar_url ?? null}
+                            fallback={m.first_name?.[0] || m.name[0]}
+                            className="grid h-full w-full place-items-center"
+                            imgClassName="h-full w-full rounded-full object-cover"
+                          />
+                        </div>
+                        <span className="tg-picked-chip-x" aria-hidden>
+                          <LuX size={12} strokeWidth={2.6} />
+                        </span>
+                        <span className="tg-picked-name">{memberLabel(m).split(' ')[0]}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="tg-group-hint" style={{ padding: '12px 16px 4px', margin: 0 }}>
+                    Выберите, кого добавить. Себя добавлять не нужно — вы создатель.
+                  </p>
+                )}
+                <div className="tg-dialog-search" style={{ margin: '8px 12px 0', border: '1px solid var(--tg-border)', borderRadius: '10px' }}>
                   <LuSearch size={20} className="text-stone-400" aria-hidden />
                   <input
                     className="tg-dialog-input"
@@ -553,6 +669,8 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                 <div style={{ flex: 1, minHeight: '140px', overflowY: 'auto', padding: '8px 0' }}>
                   {searching ? (
                     <div className="tg-empty-state">Поиск…</div>
+                  ) : sortedContacts.length === 0 ? (
+                    <div className="tg-empty-state">Участники не найдены</div>
                   ) : (
                     sortedContacts.map((u) => {
                       const isSelf = currentMemberId != null && u.id === currentMemberId;
@@ -563,7 +681,14 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                           key={u.id}
                           type="button"
                           className="tg-member-item"
-                          onClick={() => canPick && toggleGroupMember(u)}
+                          onClick={() => {
+                            if (isSelf) return;
+                            if (!canPick) {
+                              emitAppToast(memberStatusLine(u), 'info');
+                              return;
+                            }
+                            toggleGroupMember(u);
+                          }}
                           style={{ opacity: isSelf || !canPick ? 0.45 : 1, cursor: canPick ? 'pointer' : 'default' }}
                         >
                           <div
@@ -586,27 +711,36 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                           </div>
                           <div className="tg-member-info">
                             <div className="tg-member-name">
-                              {u.first_name ? `${u.first_name} ${u.last_name || ''}` : u.name}
+                              {memberLabel(u)}
                               {isSelf ? ' (вы)' : ''}
                             </div>
                             <div className="tg-member-status">
-                              {picked ? 'Выбран(а)' : canPick ? 'Нажмите, чтобы выбрать' : memberStatusLine(u)}
+                              {picked ? 'Выбран(а)' : memberStatusLine(u)}
                             </div>
                           </div>
                         </button>
                       );
                     })
                   )}
+                  {hasMoreMembers && !searching ? (
+                    <button
+                      type="button"
+                      className="tg-load-more"
+                      disabled={loadingMore}
+                      onClick={() => void performSearch(searchQuery.trim(), searchResults.length, true)}
+                    >
+                      {loadingMore ? 'Загрузка…' : 'Показать ещё'}
+                    </button>
+                  ) : null}
                 </div>
                 <div className="tg-group-footer">
                   <p className="tg-group-hint" style={{ marginBottom: 10 }}>
-                    {pickedCount === 0
-                      ? 'Выберите участников — кнопка «Далее» подскажет, если список пуст.'
-                      : `Выбрано: ${pickedCount}`}
+                    {pickedCount === 0 ? 'Отметьте хотя бы одного человека' : `Выбрано: ${pickedCount}`}
                   </p>
                   <button
                     type="button"
                     className="tg-compose-btn"
+                    disabled={pickedCount === 0}
                     style={{
                       width: '100%',
                       padding: '12px',
@@ -616,6 +750,8 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                       borderRadius: '10px',
                       fontWeight: 700,
                       fontSize: '0.9375rem',
+                      opacity: pickedCount === 0 ? 0.45 : 1,
+                      cursor: pickedCount === 0 ? 'default' : 'pointer',
                     }}
                     onClick={goWizardNext}
                   >
@@ -671,7 +807,9 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                     )}
                   </div>
                   <p className="tg-group-hint" style={{ textAlign: 'center', marginBottom: 14 }}>
-                    Шаг 2 из 2 — как чат будет называться в списке.
+                    {pickedCount > 0
+                      ? `Участников: ${pickedCount}. Название видно всем в списке чатов.`
+                      : 'Название видно всем в списке чатов.'}
                   </p>
                   <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500" style={{ marginBottom: 6 }}>
                     {mode === 'group' ? 'Название группы' : 'Название канала'}
@@ -680,6 +818,7 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                     <input
                       autoFocus
                       className="tg-dialog-input"
+                      maxLength={GROUP_TITLE_MAX}
                       placeholder={mode === 'group' ? 'Например: Молодёжное служение' : 'Например: Объявления'}
                       value={title}
                       onChange={(e) => {
@@ -700,17 +839,18 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                   <button
                     type="button"
                     className="tg-compose-btn"
+                    disabled={creating || !title.trim()}
                     style={{
                       width: '100%',
                       padding: '12px',
-                      background: creating ? 'var(--tg-text-muted)' : 'var(--tg-primary)',
+                      background: creating || !title.trim() ? 'var(--tg-text-muted)' : 'var(--tg-primary)',
                       color: 'white',
                       border: 'none',
                       borderRadius: '10px',
                       fontWeight: 700,
                       fontSize: '0.9375rem',
+                      cursor: creating || !title.trim() ? 'default' : 'pointer',
                     }}
-                    disabled={creating}
                     onClick={() => void handleCreateGroup()}
                   >
                     {creating ? 'Создание…' : mode === 'group' ? 'Создать группу' : 'Создать канал'}

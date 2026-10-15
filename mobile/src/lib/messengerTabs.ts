@@ -6,6 +6,9 @@ export function classifyConversation(conv: ConversationListItem): Exclude<ChatTa
   if (conv.my_ui_folder === 'personal') return 'personal';
   if (conv.my_ui_folder === 'ministry') return 'services';
   if (conv.type === 'private') return 'personal';
+  // User-created groups sit with people chats. Filing them under «Служения»
+  // made a just-created group look like it had vanished.
+  if (conv.type === 'group') return 'personal';
   if (conv.type === 'channel') return 'notifications';
   return 'services';
 }

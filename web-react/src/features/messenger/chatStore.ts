@@ -2291,9 +2291,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const ls = om?.last_seen_at;
       const memberLastSeenAt =
         om && ls ? { ...s.memberLastSeenAt, [om.id]: ls } : s.memberLastSeenAt;
-      // Prefer «Все»/«Личные» so a new group is not hidden under another tab filter.
-      const nextTab =
-        s.activeTab === 'services' || s.activeTab === 'notifications' ? 'all' : s.activeTab;
+      // A new group lives under «Личные»/«Все». Leave the current tab only when it would hide the chat.
+      const visibleHere = s.activeTab === 'all' || classifyConversation(normalized) === s.activeTab;
+      const nextTab = visibleHere ? s.activeTab : 'all';
       return { conversations, memberLastSeenAt, activeTab: nextTab };
     });
     saveSnapshot(get());

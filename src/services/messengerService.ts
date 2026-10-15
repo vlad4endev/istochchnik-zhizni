@@ -22,6 +22,11 @@ import {
   isMessageEncryptionEnabled,
 } from '../lib/messageCrypto';
 import { normalizeChatDisplayText } from '../utils/normalizeChatDisplayText';
+import {
+  defaultGroupPermissions,
+  nameSearchTokens,
+  normalizeGroupChatTitle,
+} from '../utils/groupChatCreate';
 import { parsePositiveMemberIds } from '../utils/parsePositiveMemberIds';
 
 export { parsePositiveMemberIds };
@@ -1078,16 +1083,34 @@ export type CreateGroupConversationResult = {
  * Create a group or channel conversation atomically (conversation + all participants).
  * Invalid / inactive member ids are skipped so one bad id cannot abort the whole create.
  */
+async function withSavepoint(
+  client: { query: (sql: string, params?: unknown[]) => Promise<unknown> },
+  name: string,
+  fn: () => Promise<void>,
+): Promise<boolean> {
+  await client.query(`SAVEPOINT ${name}`);
+  try {
+    await fn();
+    await client.query(`RELEASE SAVEPOINT ${name}`);
+    return true;
+  } catch (e) {
+    try {
+      await client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+    } catch {
+      /* transaction already aborted */
+    }
+    console.warn(`[messenger] ${name} failed, group create continues:`, e);
+    return false;
+  }
+}
+
 export async function createGroupConversation(
   creatorId: number,
   title: string,
   type: 'group' | 'channel',
   memberIds: number[],
 ): Promise<CreateGroupConversationResult> {
-  const trimmedTitle = title.trim();
-  if (!trimmedTitle) {
-    throw new Error('title is required');
-  }
+  const trimmedTitle = normalizeGroupChatTitle(title);
   if (!Number.isFinite(creatorId) || creatorId < 1) {
     throw new Error('creatorId is required');
   }
@@ -1102,12 +1125,21 @@ export async function createGroupConversation(
   try {
     await client.query('BEGIN');
 
-    const conv = await client.query(
-      `INSERT INTO conversations (type, title, updated_at)
-       VALUES ($1, $2, NOW())
-       RETURNING id`,
-      [type, trimmedTitle],
-    );
+    // Groups match Telegram: every member can write and invite. Channels keep DB defaults.
+    const conv =
+      type === 'group'
+        ? await client.query(
+            `INSERT INTO conversations (type, title, updated_at, default_permissions)
+             VALUES ('group', $1, NOW(), $2::jsonb)
+             RETURNING id`,
+            [trimmedTitle, JSON.stringify(defaultGroupPermissions())],
+          )
+        : await client.query(
+            `INSERT INTO conversations (type, title, updated_at)
+             VALUES ('channel', $1, NOW())
+             RETURNING id`,
+            [trimmedTitle],
+          );
     const convId = bigint(conv.rows[0].id);
 
     await client.query(
@@ -1118,13 +1150,27 @@ export async function createGroupConversation(
 
     let addedMemberIds: number[] = [];
     if (requested.length > 0) {
-      // Only attach real active members — avoids FK failures and silent empty invites.
-      const existing = await client.query<{ id: number }>(
-        `SELECT id FROM members
-         WHERE id = ANY($1::int[])
-           AND is_active = TRUE`,
-        [requested],
-      );
+      // Active members with messenger access. Unknown registration values stay addable
+      // (same rule as the picker). A missing column must not abort the whole create.
+      let existing: { rows: Array<{ id: number }> } = { rows: [] };
+      const lookedUp = await withSavepoint(client, 'member_lookup', async () => {
+        existing = await client.query<{ id: number }>(
+          `SELECT id FROM members
+           WHERE id = ANY($1::int[])
+             AND is_active = TRUE
+             AND COALESCE(NULLIF(TRIM(registration_status), ''), 'active')
+                 NOT IN ('pending_review', 'rejected')`,
+          [requested],
+        );
+      });
+      if (!lookedUp) {
+        existing = await client.query<{ id: number }>(
+          `SELECT id FROM members
+           WHERE id = ANY($1::int[])
+             AND is_active = TRUE`,
+          [requested],
+        );
+      }
       const validIds = existing.rows
         .map((r) => Number(r.id))
         .filter((id) => Number.isFinite(id) && id >= 1 && id !== creatorId);
@@ -1133,37 +1179,44 @@ export async function createGroupConversation(
       addedMemberIds = requested.filter((id) => validSet.has(id));
 
       if (addedMemberIds.length > 0) {
-        await client.query(
-          `INSERT INTO conversation_participants (conversation_id, member_id, role)
-           SELECT $1::bigint, m_id, 'member'
-           FROM unnest($2::int[]) AS m_id
-           ON CONFLICT (conversation_id, member_id) DO UPDATE
-             SET left_at = NULL,
-                 role = EXCLUDED.role,
-                 joined_at = NOW()`,
-          [convId, addedMemberIds],
-        );
+        const inserted = await withSavepoint(client, 'add_members', async () => {
+          await client.query(
+            `INSERT INTO conversation_participants (conversation_id, member_id, role)
+             SELECT $1::bigint, m_id, 'member'
+             FROM unnest($2::int[]) AS m_id
+             ON CONFLICT (conversation_id, member_id) DO UPDATE
+               SET left_at = NULL,
+                   role = EXCLUDED.role,
+                   joined_at = NOW()`,
+            [convId, addedMemberIds],
+          );
+        });
+        if (!inserted) addedMemberIds = [];
       }
     }
 
-    // Seed list preview so empty groups still sort near the top after create.
-    const createdLabel = type === 'channel' ? 'Канал создан' : 'Группа создана';
-    await client.query(
-      `INSERT INTO messages (conversation_id, sender_id, content, payload_type, payload)
-       VALUES (
-         $1::bigint,
-         $2,
-         $3,
-         'text'::message_payload_type,
-         $4::jsonb
-       )`,
-      [
-        convId,
-        creatorId,
-        createdLabel,
-        JSON.stringify({ kind: 'group_created', system_like: true }),
-      ],
-    );
+    // Seed list preview so an empty group still sorts to the top. A message-table
+    // mismatch must not roll back the conversation the user just created.
+    const createdLabel =
+      type === 'channel' ? `Канал «${trimmedTitle}» создан` : `Группа «${trimmedTitle}» создана`;
+    await withSavepoint(client, 'seed_message', async () => {
+      await client.query(
+        `INSERT INTO messages (conversation_id, sender_id, content, payload_type, payload)
+         VALUES (
+           $1::bigint,
+           $2,
+           $3,
+           'text'::message_payload_type,
+           $4::jsonb
+         )`,
+        [
+          convId,
+          creatorId,
+          encryptMessageText(createdLabel),
+          JSON.stringify({ kind: 'group_created', system_like: true }),
+        ],
+      );
+    });
 
     await client.query('COMMIT');
     return { conversationId: convId, addedMemberIds };
@@ -3155,21 +3208,39 @@ function mapMemberSearchRow(r: Record<string, unknown>) {
 export async function searchMembers(
   searchTerm: string,
   excludeMemberId: number,
-  limit: number = 20,
+  limit: number = 50,
+  offset: number = 0,
 ) {
+  const tokens = nameSearchTokens(searchTerm);
+  const safeLimit = Math.min(Math.max(Math.trunc(limit) || 50, 1), 200);
+  const safeOffset = Math.min(Math.max(Math.trunc(offset) || 0, 0), 10_000);
+  const nameFilter =
+    tokens.length > 0
+      ? `AND NOT EXISTS (
+           SELECT 1
+           FROM unnest($2::text[]) AS tok
+           WHERE strpos(lower(coalesce(m.name, '')), tok) = 0
+             AND strpos(lower(coalesce(m.first_name, '')), tok) = 0
+             AND strpos(lower(coalesce(m.last_name, '')), tok) = 0
+             AND strpos(lower(trim(coalesce(m.first_name, '') || ' ' || coalesce(m.last_name, ''))), tok) = 0
+             AND strpos(lower(trim(coalesce(m.last_name, '') || ' ' || coalesce(m.first_name, ''))), tok) = 0
+         )`
+      : '';
+  const params: unknown[] =
+    tokens.length > 0
+      ? [excludeMemberId, tokens, safeLimit, safeOffset]
+      : [excludeMemberId, safeLimit, safeOffset];
+  const limitParam = tokens.length > 0 ? '$3' : '$2';
+  const offsetParam = tokens.length > 0 ? '$4' : '$3';
   const result = await dbQuery(
     `SELECT ${MEMBER_SEARCH_SELECT}
      FROM members m
      WHERE m.is_active = TRUE
        AND m.id != $1
-       AND (
-         LOWER(m.name) LIKE '%' || LOWER($2) || '%'
-         OR LOWER(COALESCE(m.first_name, '')) LIKE '%' || LOWER($2) || '%'
-         OR LOWER(COALESCE(m.last_name, '')) LIKE '%' || LOWER($2) || '%'
-       )
+       ${nameFilter}
      ORDER BY ${MEMBER_SEARCH_ORDER}
-     LIMIT $3`,
-    [excludeMemberId, searchTerm.trim(), limit],
+     LIMIT ${limitParam} OFFSET ${offsetParam}`,
+    params,
   );
   return result.rows.map((row) => mapMemberSearchRow(row as Record<string, unknown>));
 }
@@ -3179,16 +3250,19 @@ export async function searchMembers(
  */
 export async function listRegisteredMembers(
   excludeMemberId: number,
-  limit: number = 50,
+  limit: number = 80,
+  offset: number = 0,
 ) {
+  const safeLimit = Math.min(Math.max(Math.trunc(limit) || 80, 1), 200);
+  const safeOffset = Math.min(Math.max(Math.trunc(offset) || 0, 0), 10_000);
   const result = await dbQuery(
     `SELECT ${MEMBER_SEARCH_SELECT}
      FROM members m
      WHERE m.is_active = TRUE
        AND m.id != $1
      ORDER BY ${MEMBER_SEARCH_ORDER}
-     LIMIT $2`,
-    [excludeMemberId, limit],
+     LIMIT $2 OFFSET $3`,
+    [excludeMemberId, safeLimit, safeOffset],
   );
   return result.rows.map((row) => mapMemberSearchRow(row as Record<string, unknown>));
 }
