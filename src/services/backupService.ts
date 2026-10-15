@@ -18,6 +18,22 @@ import {
   sendTelegramDocumentToChat,
   sendTelegramTextToChat,
 } from './telegramService';
+import {
+  enrichBackupDirectory,
+  readBackupDetail,
+  summarizeComponentsFromDir,
+  type BackupComponentsSummary,
+  type BackupDetailView,
+} from './backupDetailedSnapshot';
+import {
+  applyDriveRetention,
+  buildDriveMetaSidecar,
+  downloadDriveBackupToFile,
+  getDriveStatus,
+  listDriveBackups,
+  uploadBackupArchiveToDrive,
+  type DriveUploadResult,
+} from './googleDriveBackupService';
 
 const PROJECT_ROOT = resolveProjectRoot();
 const TELEGRAM_DOCUMENT_MAX_BYTES = 49 * 1024 * 1024; // запас до лимита Bot API ~50MB
@@ -78,6 +94,8 @@ export interface BackupRestoreOptions {
   skipSafetyBackup?: boolean;
 }
 
+export type BackupLocation = 'local' | 'drive' | 'both';
+
 export interface BackupListItem {
   id: string;
   created_at: string | null;
@@ -87,13 +105,22 @@ export interface BackupListItem {
   has_archive: boolean;
   has_manifest: boolean;
   age_days: number;
+  /** Детальный состав снимка (БД, файлы, переписки, настройки, сервер, Storage). */
+  components: BackupComponentsSummary | null;
+  detailed: boolean;
+  /** Где лежит снимок: локально, на Google Drive или в обоих местах. */
+  location: BackupLocation;
+  drive_file_id: string | null;
+  drive_web_link: string | null;
 }
 
 export interface BackupCreateResult {
   id: string;
   archive_path: string | null;
   size_bytes: number;
+  components?: BackupComponentsSummary;
   telegram?: BackupTelegramSendResult;
+  drive?: DriveUploadResult;
 }
 
 export interface BackupTelegramSendResult {
@@ -266,6 +293,8 @@ export async function listBackups(): Promise<BackupListItem[]> {
       }
     }
 
+    const components = hasDir ? await summarizeComponentsFromDir(dirPath) : null;
+
     items.push({
       id,
       created_at: created ? created.toISOString() : null,
@@ -275,7 +304,50 @@ export async function listBackups(): Promise<BackupListItem[]> {
       has_archive: hasArchive,
       has_manifest: hasManifest,
       age_days: ageDays(created),
+      components,
+      detailed: Boolean(components?.inventory || components?.server_snapshot),
+      location: 'local',
+      drive_file_id: null,
+      drive_web_link: null,
     });
+  }
+
+  // Merge Google Drive remotes (primary off-site store)
+  try {
+    const settings = await loadBackupSettingsDocument();
+    if (settings.drive_folder_id) {
+      const remotes = await listDriveBackups(settings.drive_folder_id);
+      const byId = new Map(items.map((i) => [i.id, i]));
+      for (const r of remotes) {
+        const existing = byId.get(r.id);
+        if (existing) {
+          existing.location = 'both';
+          existing.drive_file_id = r.drive_file_id;
+          existing.drive_web_link = r.web_view_link;
+          if (!existing.size_bytes && r.size_bytes) existing.size_bytes = r.size_bytes;
+        } else {
+          const stamp = stampFromId(r.id);
+          const created = stamp ? parseStampToDate(stamp) : null;
+          items.push({
+            id: r.id,
+            created_at: r.created_at ?? (created ? created.toISOString() : null),
+            dir_path: '',
+            archive_path: null,
+            size_bytes: r.size_bytes,
+            has_archive: false,
+            has_manifest: r.has_meta,
+            age_days: ageDays(created ?? (r.created_at ? new Date(r.created_at) : null)),
+            components: null,
+            detailed: r.has_meta,
+            location: 'drive',
+            drive_file_id: r.drive_file_id,
+            drive_web_link: r.web_view_link,
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[backup] drive list merge skipped:', e instanceof Error ? e.message : e);
   }
 
   items.sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
@@ -334,17 +406,31 @@ export async function resolveDownloadPath(id: string): Promise<{ filePath: strin
       return { filePath: archivePath, fileName: `${id}.tar.gz` };
     }
   } catch {
-    /* create on the fly from dir */
+    /* create on the fly from dir or Drive */
   }
   const dirPath = path.join(root, id);
   try {
     const st = await fsp.stat(dirPath);
-    if (!st.isDirectory()) throw new Error('backup_not_found');
+    if (st.isDirectory()) {
+      await createArchiveFromDir(dirPath, archivePath);
+      return { filePath: archivePath, fileName: `${id}.tar.gz` };
+    }
   } catch {
-    throw new Error('backup_not_found');
+    /* try Google Drive */
   }
-  await createArchiveFromDir(dirPath, archivePath);
-  return { filePath: archivePath, fileName: `${id}.tar.gz` };
+
+  // Скачать с Google Drive во временный/локальный архив
+  try {
+    await fsp.mkdir(root, { recursive: true });
+    await downloadDriveBackupToFile(id, archivePath);
+    return { filePath: archivePath, fileName: `${id}.tar.gz` };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === 'drive_backup_not_found' || msg === 'drive_not_configured' || msg === 'drive_folder_missing') {
+      throw new Error('backup_not_found');
+    }
+    throw e;
+  }
 }
 
 async function getAdminTelegramChatIds(): Promise<string[]> {
@@ -530,27 +616,126 @@ export async function createFullBackup(options?: {
       }
 
       const { id, dirPath } = await runBackupScript(settings.retention_days);
+
+      await updateBackupRunStatus({
+        last_run_at: new Date().toISOString(),
+        last_run_status: 'running',
+        last_run_message: `Детальный снимок: инвентарь, настройки, сервер, Storage…`,
+        last_run_backup_id: id,
+      });
+
+      const components = await enrichBackupDirectory(dirPath, PROJECT_ROOT, {
+        includeStorage: process.env.BACKUP_SKIP_STORAGE !== '1',
+      });
+
       const archivePath = path.join(backupsRoot(), `${id}.tar.gz`);
       await createArchiveFromDir(dirPath, archivePath);
-      const size_bytes = await pathSize(archivePath);
+      let size_bytes = await pathSize(archivePath);
 
       await applyRetention(settings.retention_days);
+
+      let drive: DriveUploadResult | undefined;
+      if (settings.drive_enabled) {
+        await updateBackupRunStatus({
+          last_run_at: new Date().toISOString(),
+          last_run_status: 'running',
+          last_run_message: `Выгрузка ${id} на Google Drive…`,
+          last_run_backup_id: id,
+        });
+        try {
+          const metaPath = path.join(backupsRoot(), `${id}.meta.json`);
+          await buildDriveMetaSidecar(dirPath, metaPath);
+          drive = await uploadBackupArchiveToDrive({
+            backupId: id,
+            archivePath,
+            metaPath,
+            deleteLocalAfter: false,
+          });
+          if (settings.drive_delete_local_after_upload && drive.ok) {
+            await deleteBackup(id);
+            drive = { ...drive, deleted_local: true, message: `${drive.message} Локальная копия удалена.` };
+            await updateBackupRunStatus({
+              last_drive_at: new Date().toISOString(),
+              last_drive_status: 'ok',
+              last_drive_message: drive.message,
+              last_drive_file_id: drive.drive_file_id,
+            });
+          }
+          await fsp.rm(metaPath, { force: true }).catch(() => undefined);
+          void applyDriveRetention(settings.drive_retention_days).catch((e) =>
+            console.warn('[backup] drive retention:', e),
+          );
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          await updateBackupRunStatus({
+            last_drive_at: new Date().toISOString(),
+            last_drive_status: 'error',
+            last_drive_message: msg.slice(0, 800),
+            last_drive_file_id: null,
+          });
+          // Не валим весь бекап — локальная копия остаётся
+          drive = {
+            ok: false,
+            backup_id: id,
+            drive_file_id: null,
+            web_view_link: null,
+            size_bytes,
+            message: `Drive: ${msg.slice(0, 400)}`,
+            deleted_local: false,
+          };
+        }
+      }
 
       let telegram: BackupTelegramSendResult | undefined;
       const shouldSend =
         typeof options?.sendTelegram === 'boolean' ? options.sendTelegram : settings.telegram_send;
+      // После delete local архива для TG нужно скачать с Drive или пропустить
       if (shouldSend) {
-        telegram = await sendBackupViaTelegram(id, settings.telegram_target);
+        try {
+          telegram = await sendBackupViaTelegram(id, settings.telegram_target);
+        } catch (e) {
+          telegram = {
+            ok: false,
+            sent: 0,
+            message: e instanceof Error ? e.message : String(e),
+            recipients: [],
+          };
+        }
       }
 
+      const detailBits = [
+        components.database ? 'БД' : null,
+        components.uploads ? 'uploads' : null,
+        components.messenger_summary ? 'переписки' : null,
+        components.settings_snapshot ? 'настройки' : null,
+        components.server_snapshot ? 'сервер' : null,
+        components.storage
+          ? `Storage(${components.storage_object_count})`
+          : null,
+        drive?.ok ? 'Drive' : null,
+      ]
+        .filter(Boolean)
+        .join(', ');
+
+      size_bytes = drive?.size_bytes || size_bytes;
+      const localGone = Boolean(drive?.deleted_local);
       await updateBackupRunStatus({
         last_run_at: new Date().toISOString(),
         last_run_status: 'ok',
-        last_run_message: `Готово: ${id} (${(size_bytes / (1024 * 1024)).toFixed(2)} МБ)`,
+        last_run_message: `Готово: ${id} (${(size_bytes / (1024 * 1024)).toFixed(2)} МБ) — ${detailBits}${
+          localGone ? ' · локально очищено' : ''
+        }`,
         last_run_backup_id: id,
       });
 
-      return { id, archive_path: archivePath, size_bytes, telegram };
+      return {
+        id,
+        archive_path: localGone ? null : archivePath,
+        size_bytes,
+        components,
+        telegram,
+        drive,
+      };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       await updateBackupRunStatus({
@@ -582,7 +767,7 @@ export function isBackupBusy(): boolean {
   return createInFlight !== null || restoreInFlight !== null;
 }
 
-/** Гарантирует наличие каталога бекапа (распакует .tar.gz при необходимости). */
+/** Гарантирует наличие каталога бекапа (распакует .tar.gz при необходимости; при отсутствии — скачает с Drive). */
 export async function ensureBackupDirectory(id: string): Promise<string> {
   if (!stampFromId(id)) throw new Error('invalid_backup_id');
   const root = backupsRoot();
@@ -600,9 +785,15 @@ export async function ensureBackupDirectory(id: string): Promise<string> {
   const archivePath = path.join(root, `${id}.tar.gz`);
   try {
     const st = await fsp.stat(archivePath);
-    if (!st.isFile()) throw new Error('backup_not_found');
+    if (!st.isFile()) throw new Error('need_archive');
   } catch {
-    throw new Error('backup_not_found');
+    // Нет локального архива — пробуем Google Drive
+    try {
+      await fsp.mkdir(root, { recursive: true });
+      await downloadDriveBackupToFile(id, archivePath);
+    } catch {
+      throw new Error('backup_not_found');
+    }
   }
 
   const stage = path.join(root, `.extract-${id}-${Date.now()}`);
@@ -776,12 +967,100 @@ export async function restoreFullBackup(
 export async function getBackupSettingsAdminView(): Promise<BackupSettingsAdminView> {
   const doc = await loadBackupSettingsDocument();
   const tg = await getTelegramSettings();
+  let driveStatus;
+  try {
+    driveStatus = await getDriveStatus(doc.drive_folder_id);
+  } catch {
+    driveStatus = null;
+  }
   return {
     ...doc,
     backups_dir: backupsRoot(),
     max_retention_days: BACKUP_RETENTION_DAYS_MAX,
     telegram_bot_ready: Boolean(tg.enabled && tg.has_bot_token),
+    drive_ready: Boolean(driveStatus?.ready),
+    drive_configured: Boolean(driveStatus?.configured),
+    has_drive_service_account: Boolean(driveStatus?.configured),
+    drive_client_email_masked: driveStatus?.client_email_masked ?? null,
+    drive_source: driveStatus?.source ?? null,
+    drive_folder_name: driveStatus?.folder_name ?? null,
   };
 }
 
-export type { BackupSettingsDocument };
+/** Детальный просмотр состава бекапа (инвентарь, настройки, сервер, Storage). */
+export async function getBackupDetail(id: string): Promise<BackupDetailView> {
+  try {
+    const dirPath = await ensureBackupDirectory(id);
+    return readBackupDetail(id, dirPath);
+  } catch {
+    // Только на Drive — минимальный detail
+    const remotes = await listDriveBackups();
+    const remote = remotes.find((r) => r.id === id);
+    if (!remote) throw new Error('backup_not_found');
+    return {
+      id,
+      components: {
+        database: true,
+        uploads: true,
+        secrets: false,
+        env_keys: false,
+        env_full_encrypted: false,
+        inventory: remote.has_meta,
+        settings_snapshot: remote.has_meta,
+        server_snapshot: remote.has_meta,
+        messenger_summary: remote.has_meta,
+        storage: false,
+        storage_object_count: 0,
+        storage_bytes: 0,
+      },
+      inventory: null,
+      manifest_text: `location=google_drive\ndrive_file_id=${remote.drive_file_id}\nsize_bytes=${remote.size_bytes}\n`,
+      server: null,
+      settings_meta: null,
+      messenger_summary: null,
+      storage: null,
+    };
+  }
+}
+
+/** Ручная выгрузка существующего локального бекапа на Drive. */
+export async function sendBackupToDrive(id: string): Promise<DriveUploadResult> {
+  if (!stampFromId(id)) throw new Error('invalid_backup_id');
+  const settings = await loadBackupSettingsDocument();
+  if (!settings.drive_folder_id) throw new Error('drive_folder_missing');
+
+  const { filePath } = await resolveDownloadPath(id);
+  const root = backupsRoot();
+  const dirPath = path.join(root, id);
+  const metaPath = path.join(root, `${id}.meta.json`);
+  try {
+    if (fs.existsSync(dirPath)) {
+      await buildDriveMetaSidecar(dirPath, metaPath);
+    }
+  } catch {
+    /* optional */
+  }
+
+  const result = await uploadBackupArchiveToDrive({
+    backupId: id,
+    archivePath: filePath,
+    metaPath: fs.existsSync(metaPath) ? metaPath : null,
+  });
+
+  if (settings.drive_delete_local_after_upload && result.ok) {
+    await deleteBackup(id);
+    result.deleted_local = true;
+    result.message = `${result.message} Локальная копия удалена.`;
+    await updateBackupRunStatus({
+      last_drive_message: result.message,
+    });
+  }
+  await fsp.rm(metaPath, { force: true }).catch(() => undefined);
+  return result;
+}
+
+export async function runDriveRetentionCleanup(): Promise<{ deleted: string[] }> {
+  return applyDriveRetention();
+}
+
+export type { BackupSettingsDocument, BackupComponentsSummary, BackupDetailView, DriveUploadResult };

@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # Полный безопасный бекап проекта «Источник жизни»:
-#   - PostgreSQL (pg_dump custom format + gzip)
+#   - PostgreSQL (pg_dump custom format + gzip) — участники, переписки, настройки…
 #   - локальные uploads (legacy-файлы)
 #   - secrets/ (опционально, с шифрованием если задан BACKUP_ENCRYPT_PASSPHRASE)
 #   - снимок .env без секретных значений (имена ключей) + опционально зашифрованный .env
+#   - server.snapshot.json — ОС, Node, хеши compose/Dockerfile, имена env-ключей
 #   - MANIFEST + SHA256 checksums + проверка целостности
+#
+# Детальный снимок (инвентарь таблиц, сводка чатов, settings.snapshot, Supabase Storage)
+# дополнительно собирает API при создании из админки (enrichBackupDirectory).
+# CLI: после create можно вызвать npm run backup:enrich -- <dir>
 #
 # Запуск из корня репозитория:
 #   bash scripts/backup.sh
@@ -21,6 +26,7 @@
 #   BACKUP_ENCRYPT_PASSPHRASE=…   — AES-256 шифрование чувствительных частей
 #   BACKUP_SKIP_UPLOADS=1         — не архивировать uploads
 #   BACKUP_SKIP_DB=1              — не дампить БД (не рекомендуется)
+#   BACKUP_SKIP_STORAGE=1         — не экспортировать Supabase Storage (в API-enrich)
 #   UPDATE_COMPOSE_FILES / COMPOSE_FILE — как в server-update.sh
 #   DATABASE_URL                  — из .env; для remote/Supabase
 set -euo pipefail
@@ -311,6 +317,37 @@ snapshot_env() {
   fi
 }
 
+# Базовый снимок сервера (без БД/Storage) — всегда доступен из CLI.
+snapshot_server() {
+  local out="$WORK_DIR/server.snapshot.json"
+  local git_sha host node_v
+  git_sha="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  host="$(hostname 2>/dev/null || echo unknown)"
+  node_v="$(node -v 2>/dev/null || echo unknown)"
+  local env_count=0
+  if [[ -f "$ROOT/.env" ]]; then
+    env_count="$(grep -cE '^[A-Za-z_][A-Za-z0-9_]*=' "$ROOT/.env" 2>/dev/null || true)"
+    [[ -n "$env_count" ]] || env_count=0
+  fi
+  cat >"$out" <<EOF
+{
+  "version": 1,
+  "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "source": "backup.sh",
+  "hostname": "$host",
+  "platform": "$(uname -s 2>/dev/null || echo unknown)",
+  "release": "$(uname -r 2>/dev/null || echo unknown)",
+  "arch": "$(uname -m 2>/dev/null || echo unknown)",
+  "node": "$node_v",
+  "git_sha": "$git_sha",
+  "project_root": "$ROOT",
+  "env_key_count": $env_count,
+  "note": "Полный детальный снимок (инвентарь, чаты, Storage) — через админку или npm run backup:enrich"
+}
+EOF
+  backup_log "server.snapshot.json записан"
+}
+
 write_manifest() {
   local stamp="${1:?}"
   local git_sha
@@ -336,8 +373,10 @@ write_manifest() {
     echo "uploads_included=$([[ -f $WORK_DIR/uploads.tar.gz ]] && echo yes || echo no)"
     echo "secrets_included=$([[ -f $WORK_DIR/secrets.tar.gz || -f $WORK_DIR/secrets.tar.gz.enc ]] && echo yes || echo no)"
     echo "env_full_encrypted=$([[ -f $WORK_DIR/env.full.enc ]] && echo yes || echo no)"
+    echo "server_snapshot=$([[ -f $WORK_DIR/server.snapshot.json ]] && echo yes || echo no)"
     echo "encrypted=$([[ -n ${BACKUP_ENCRYPT_PASSPHRASE:-} ]] && echo yes || echo no)"
     echo "database_host_hint=$db_hint"
+    echo "covers=database,uploads,secrets,env_keys,server,settings_in_db,messenger_in_db"
     echo "restore=bash scripts/restore.sh $BACKUPS_ROOT/istochnik-backup-$stamp"
     if [[ -f "$WORK_DIR/notes.txt" ]]; then
       echo "--- notes ---"
@@ -371,6 +410,9 @@ cmd_create() {
 
   # Env keys / optional encrypted env
   snapshot_env
+
+  # Server config snapshot (CLI baseline; API enrich расширяет)
+  snapshot_server
 
   write_manifest "$stamp"
 

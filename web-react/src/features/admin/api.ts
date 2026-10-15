@@ -1317,6 +1317,10 @@ export interface BackupSettings {
   telegram_send: boolean;
   telegram_target: BackupTelegramTarget;
   retention_days: number;
+  drive_enabled: boolean;
+  drive_folder_id: string | null;
+  drive_delete_local_after_upload: boolean;
+  drive_retention_days: number;
   last_run_at: string | null;
   last_run_status: 'ok' | 'error' | 'running' | null;
   last_run_message: string | null;
@@ -1324,10 +1328,37 @@ export interface BackupSettings {
   last_telegram_at: string | null;
   last_telegram_status: 'ok' | 'error' | 'skipped' | null;
   last_telegram_message: string | null;
+  last_drive_at: string | null;
+  last_drive_status: 'ok' | 'error' | 'skipped' | null;
+  last_drive_message: string | null;
+  last_drive_file_id: string | null;
   backups_dir: string;
   max_retention_days: number;
   telegram_bot_ready: boolean;
+  drive_ready: boolean;
+  drive_configured: boolean;
+  has_drive_service_account: boolean;
+  drive_client_email_masked: string | null;
+  drive_source: string | null;
+  drive_folder_name: string | null;
 }
+
+export interface BackupComponentsSummary {
+  database: boolean;
+  uploads: boolean;
+  secrets: boolean;
+  env_keys: boolean;
+  env_full_encrypted: boolean;
+  inventory: boolean;
+  settings_snapshot: boolean;
+  server_snapshot: boolean;
+  messenger_summary: boolean;
+  storage: boolean;
+  storage_object_count: number;
+  storage_bytes: number;
+}
+
+export type BackupLocation = 'local' | 'drive' | 'both';
 
 export interface BackupListItem {
   id: string;
@@ -1338,6 +1369,49 @@ export interface BackupListItem {
   has_archive: boolean;
   has_manifest: boolean;
   age_days: number;
+  components: BackupComponentsSummary | null;
+  detailed: boolean;
+  location: BackupLocation;
+  drive_file_id: string | null;
+  drive_web_link: string | null;
+}
+
+export interface BackupDetailView {
+  id: string;
+  components: BackupComponentsSummary;
+  inventory: {
+    version: number;
+    created_at: string;
+    tables: Record<string, number | null>;
+    messenger: {
+      conversations: number;
+      messages: number;
+      participants: number;
+      reactions: number;
+      poll_votes: number;
+      pins: number;
+    };
+    members: { total: number; active: number; admins: number };
+    notes: string[];
+  } | null;
+  manifest_text: string | null;
+  server: Record<string, unknown> | null;
+  settings_meta: { keys: string[]; redacted_keys: string[] } | null;
+  messenger_summary: {
+    conversation_count: number;
+    total_messages: number;
+    sample: Array<{
+      id: number;
+      title: string | null;
+      kind: string | null;
+      message_count: number;
+      last_message_at: string | null;
+    }>;
+  } | null;
+  storage: {
+    configured: boolean;
+    buckets: Array<{ name: string; objects: number; bytes: number; error?: string }>;
+  } | null;
 }
 
 export async function fetchBackupSettings(): Promise<{
@@ -1362,13 +1436,35 @@ export async function patchBackupSettings(body: {
   telegram_send?: boolean;
   telegram_target?: BackupTelegramTarget;
   retention_days?: number;
+  drive_enabled?: boolean;
+  drive_folder_id?: string | null;
+  drive_delete_local_after_upload?: boolean;
+  drive_retention_days?: number;
+  /** Новый JSON ключа; `null` — удалить сохранённый ключ. */
+  drive_service_account_json?: string | null;
 }): Promise<{ settings: BackupSettings }> {
   const { data } = await apiClient.patch<{ settings: BackupSettings }>('/api/backup/settings', body);
   return data;
 }
 
-export async function fetchBackupList(): Promise<{ items: BackupListItem[]; running: boolean }> {
-  const { data } = await apiClient.get<{ items: BackupListItem[]; running: boolean }>('/api/backup/list');
+export async function fetchBackupList(): Promise<{
+  items: BackupListItem[];
+  running: boolean;
+  snapshot_includes?: string[];
+}> {
+  const { data } = await apiClient.get<{
+    items: BackupListItem[];
+    running: boolean;
+    snapshot_includes?: string[];
+  }>('/api/backup/list');
+  return data;
+}
+
+export async function fetchBackupDetail(id: string): Promise<{ detail: BackupDetailView }> {
+  const { data } = await apiClient.get<{ detail: BackupDetailView }>(
+    `/api/backup/${encodeURIComponent(id)}/detail`,
+    { timeout: 5 * 60_000 },
+  );
   return data;
 }
 
@@ -1378,7 +1474,14 @@ export async function createBackup(body?: { send_telegram?: boolean }): Promise<
     id: string;
     archive_path: string | null;
     size_bytes: number;
+    components?: BackupComponentsSummary;
     telegram?: { ok: boolean; sent: number; message: string };
+    drive?: {
+      ok: boolean;
+      message: string;
+      drive_file_id: string | null;
+      deleted_local: boolean;
+    };
   };
 }> {
   const { data } = await apiClient.post<{
@@ -1387,9 +1490,52 @@ export async function createBackup(body?: { send_telegram?: boolean }): Promise<
       id: string;
       archive_path: string | null;
       size_bytes: number;
+      components?: BackupComponentsSummary;
       telegram?: { ok: boolean; sent: number; message: string };
+      drive?: {
+        ok: boolean;
+        message: string;
+        drive_file_id: string | null;
+        deleted_local: boolean;
+      };
     };
   }>('/api/backup/create', body ?? {}, { timeout: 50 * 60_000 });
+  return data;
+}
+
+export async function sendBackupDrive(id: string): Promise<{
+  ok: boolean;
+  message: string;
+  drive_file_id: string | null;
+  deleted_local: boolean;
+}> {
+  const { data } = await apiClient.post<{
+    ok: boolean;
+    message: string;
+    drive_file_id: string | null;
+    deleted_local: boolean;
+  }>(`/api/backup/${encodeURIComponent(id)}/send-drive`, {}, { timeout: 50 * 60_000 });
+  return data;
+}
+
+export async function fetchDriveStatus(): Promise<{
+  status: {
+    configured: boolean;
+    ready: boolean;
+    message: string;
+    client_email_masked: string | null;
+    folder_name: string | null;
+  };
+}> {
+  const { data } = await apiClient.get<{
+    status: {
+      configured: boolean;
+      ready: boolean;
+      message: string;
+      client_email_masked: string | null;
+      folder_name: string | null;
+    };
+  }>('/api/backup/drive/status');
   return data;
 }
 

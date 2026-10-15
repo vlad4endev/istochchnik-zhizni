@@ -78,6 +78,7 @@
     "backup": "bash scripts/backup.sh",
     "backup:list": "bash scripts/backup.sh list",
     "backup:verify": "bash scripts/backup.sh verify",
+    "backup:enrich": "npx ts-node --transpile-only src/cli/enrichBackupSnapshot.ts",
     "restore": "bash scripts/restore.sh"
   },
   "keywords": [],
@@ -90,6 +91,7 @@
     "express": "^4.21.0",
     "express-validator": "^7.3.1",
     "firebase-admin": "^13.8.0",
+    "googleapis": "^186.0.0",
     "ioredis": "^5.10.1",
     "livekit-server-sdk": "^2.19.1",
     "multer": "^2.1.1",

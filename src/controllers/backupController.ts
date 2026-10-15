@@ -5,12 +5,15 @@ import path from 'node:path';
 import {
   createFullBackup,
   deleteBackup,
+  getBackupDetail,
   getBackupSettingsAdminView,
   isBackupBusy,
   listBackups,
   resolveDownloadPath,
   sendBackupViaTelegram,
+  sendBackupToDrive,
   applyRetention,
+  runDriveRetentionCleanup,
   restoreFullBackup,
   RESTORE_CONFIRM_PHRASE,
 } from '../services/backupService';
@@ -19,6 +22,12 @@ import {
   type BackupSettingsPatch,
   type BackupTelegramTarget,
 } from '../services/backupSettingsService';
+import {
+  deleteDriveBackup,
+  getDriveStatus,
+  listDriveBackups,
+  setDriveServiceAccountFromAdmin,
+} from '../services/googleDriveBackupService';
 
 type AuthRequest = Request & { authUserId?: number; authUserRole?: string; authUserRoles?: string[] };
 
@@ -87,6 +96,25 @@ function mapBackupError(error: unknown): { status: number; error: string } {
   }
   if (msg.startsWith('telegram_')) {
     return { status: 400, error: `Telegram: ${msg}` };
+  }
+  if (msg === 'drive_not_configured') {
+    return {
+      status: 400,
+      error:
+        'Google Drive не настроен: вставьте JSON ключа service account в разделе «Резервная копия» и сохраните.',
+    };
+  }
+  if (msg === 'drive_folder_missing') {
+    return { status: 400, error: 'Укажите ID папки Google Drive в настройках бекапа' };
+  }
+  if (msg === 'drive_backup_not_found') {
+    return { status: 404, error: 'Бекап не найден на Google Drive' };
+  }
+  if (msg === 'drive_sa_invalid_json') {
+    return { status: 400, error: 'Некорректный JSON service account' };
+  }
+  if (msg === 'drive_sa_missing_fields') {
+    return { status: 400, error: 'В JSON нужны поля client_email и private_key' };
   }
   console.error('[backup]', error);
   return { status: 500, error: 'Операция с бекапом не удалась' };
@@ -169,11 +197,59 @@ export async function patchBackupSettingsHandler(req: Request, res: Response): P
     }
     patch.retention_days = body.retention_days;
   }
+  if (body.drive_enabled !== undefined) {
+    if (typeof body.drive_enabled !== 'boolean') {
+      res.status(400).json({ error: 'drive_enabled должен быть boolean' });
+      return;
+    }
+    patch.drive_enabled = body.drive_enabled;
+  }
+  if (body.drive_folder_id !== undefined) {
+    if (body.drive_folder_id !== null && typeof body.drive_folder_id !== 'string') {
+      res.status(400).json({ error: 'drive_folder_id должен быть строкой или null' });
+      return;
+    }
+    patch.drive_folder_id = body.drive_folder_id;
+  }
+  if (body.drive_delete_local_after_upload !== undefined) {
+    if (typeof body.drive_delete_local_after_upload !== 'boolean') {
+      res.status(400).json({ error: 'drive_delete_local_after_upload должен быть boolean' });
+      return;
+    }
+    patch.drive_delete_local_after_upload = body.drive_delete_local_after_upload;
+  }
+  if (body.drive_retention_days !== undefined) {
+    if (typeof body.drive_retention_days !== 'number') {
+      res.status(400).json({ error: 'drive_retention_days должен быть числом (1–30)' });
+      return;
+    }
+    patch.drive_retention_days = body.drive_retention_days;
+  }
+
+  // Опционально: сохранить / очистить service account JSON
+  if (body.drive_service_account_json !== undefined) {
+    if (body.drive_service_account_json !== null && typeof body.drive_service_account_json !== 'string') {
+      res.status(400).json({ error: 'drive_service_account_json: строка JSON или null' });
+      return;
+    }
+    try {
+      await setDriveServiceAccountFromAdmin(
+        body.drive_service_account_json as string | null,
+      );
+    } catch (error) {
+      const mapped = mapBackupError(error);
+      res.status(mapped.status).json({ error: mapped.error });
+      return;
+    }
+  }
 
   try {
     const doc = await patchBackupSettings(patch);
     if (patch.retention_days !== undefined) {
       await applyRetention(doc.retention_days);
+    }
+    if (patch.drive_retention_days !== undefined || patch.drive_enabled) {
+      await runDriveRetentionCleanup().catch(() => undefined);
     }
     const settings = await getBackupSettingsAdminView();
     res.json({ settings });
@@ -190,7 +266,28 @@ export async function listBackupsHandler(req: Request, res: Response): Promise<v
     res.json({
       items,
       running: isBackupBusy(),
+      snapshot_includes: [
+        'database',
+        'uploads',
+        'secrets',
+        'settings',
+        'messenger',
+        'server',
+        'storage',
+      ],
     });
+  } catch (error) {
+    const mapped = mapBackupError(error);
+    res.status(mapped.status).json({ error: mapped.error });
+  }
+}
+
+export async function getBackupDetailHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const id = typeof req.params.id === 'string' ? req.params.id : '';
+  try {
+    const detail = await getBackupDetail(id);
+    res.json({ detail });
   } catch (error) {
     const mapped = mapBackupError(error);
     res.status(mapped.status).json({ error: mapped.error });
@@ -239,8 +336,47 @@ export async function deleteBackupHandler(req: Request, res: Response): Promise<
   if (!ensureAdmin(req, res)) return;
   const id = typeof req.params.id === 'string' ? req.params.id : '';
   try {
-    await deleteBackup(id);
+    await deleteBackup(id).catch((e) => {
+      if (e instanceof Error && e.message === 'invalid_backup_id') throw e;
+      /* локальной копии может уже не быть (только Drive) */
+    });
+    // Удаляем и с Google Drive — единый список снимков
+    await deleteDriveBackup(id).catch(() => undefined);
     res.json({ ok: true });
+  } catch (error) {
+    const mapped = mapBackupError(error);
+    res.status(mapped.status).json({ error: mapped.error });
+  }
+}
+
+export async function sendBackupDriveHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const id = typeof req.params.id === 'string' ? req.params.id : '';
+  try {
+    const result = await sendBackupToDrive(id);
+    res.json(result);
+  } catch (error) {
+    const mapped = mapBackupError(error);
+    res.status(mapped.status).json({ error: mapped.error });
+  }
+}
+
+export async function listDriveBackupsHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    const items = await listDriveBackups();
+    res.json({ items, running: isBackupBusy() });
+  } catch (error) {
+    const mapped = mapBackupError(error);
+    res.status(mapped.status).json({ error: mapped.error });
+  }
+}
+
+export async function driveStatusHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    const status = await getDriveStatus();
+    res.json({ status });
   } catch (error) {
     const mapped = mapBackupError(error);
     res.status(mapped.status).json({ error: mapped.error });

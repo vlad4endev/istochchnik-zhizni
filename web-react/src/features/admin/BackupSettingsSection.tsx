@@ -1,11 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import {
+  LuCloud,
+  LuDatabase,
   LuDownload,
+  LuFileText,
   LuHardDrive,
+  LuInfo,
+  LuMessageSquare,
   LuRefreshCw,
   LuRotateCcw,
   LuSend,
+  LuServer,
+  LuSettings,
   LuTrash2,
   LuX,
 } from 'react-icons/lu';
@@ -15,11 +22,16 @@ import {
   createBackup,
   deleteBackup,
   downloadBackupArchive,
+  fetchBackupDetail,
   fetchBackupList,
   fetchBackupSettings,
   patchBackupSettings,
   restoreBackup,
+  sendBackupDrive,
   sendBackupTelegram,
+  type BackupComponentsSummary,
+  type BackupDetailView,
+  type BackupLocation,
   type BackupScheduleKind,
   type BackupSettings,
   type BackupTelegramTarget,
@@ -78,6 +90,101 @@ function formatRuDate(iso: string | null): string {
   }
 }
 
+const SNAPSHOT_LAYERS: Array<{
+  key: keyof BackupComponentsSummary | 'members';
+  label: string;
+  hint: string;
+  Icon: typeof LuDatabase;
+}> = [
+  {
+    key: 'database',
+    label: 'База данных',
+    hint: 'PostgreSQL: участники, события, настройки, переписки, студия…',
+    Icon: LuDatabase,
+  },
+  {
+    key: 'messenger_summary',
+    label: 'Переписки',
+    hint: 'Сообщения и чаты в дампе БД + сводка conversations',
+    Icon: LuMessageSquare,
+  },
+  {
+    key: 'uploads',
+    label: 'Файлы uploads',
+    hint: 'Локальные аватары, постеры, релизы, studio-листы',
+    Icon: LuHardDrive,
+  },
+  {
+    key: 'storage',
+    label: 'Облачные файлы',
+    hint: 'Supabase Storage: вложения чата и user-media',
+    Icon: LuFileText,
+  },
+  {
+    key: 'settings_snapshot',
+    label: 'Настройки',
+    hint: 'Снимок global_settings (+ полный ряд в БД)',
+    Icon: LuSettings,
+  },
+  {
+    key: 'server_snapshot',
+    label: 'Сервер',
+    hint: 'ОС, Node, env-ключи, хеши compose/Dockerfile',
+    Icon: LuServer,
+  },
+];
+
+function ComponentChips({ components }: { components: BackupComponentsSummary | null }) {
+  if (!components) {
+    return <span className="text-xs text-stone-400">базовый архив</span>;
+  }
+  const chips: Array<{ on: boolean; label: string }> = [
+    { on: components.database, label: 'БД' },
+    { on: components.messenger_summary, label: 'чаты' },
+    { on: components.uploads, label: 'uploads' },
+    {
+      on: components.storage,
+      label: components.storage
+        ? `Storage ${components.storage_object_count}`
+        : 'Storage',
+    },
+    { on: components.settings_snapshot, label: 'настройки' },
+    { on: components.server_snapshot, label: 'сервер' },
+    { on: components.secrets, label: 'secrets' },
+  ];
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1">
+      {chips.map((c) => (
+        <span
+          key={c.label}
+          className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+            c.on ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-400'
+          }`}
+        >
+          {c.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function LocationBadge({ location }: { location: BackupLocation }) {
+  const label =
+    location === 'drive' ? 'Google Drive' : location === 'both' ? 'Локально + Drive' : 'Локально';
+  const cls =
+    location === 'drive'
+      ? 'bg-sky-50 text-sky-800'
+      : location === 'both'
+        ? 'bg-violet-50 text-violet-800'
+        : 'bg-stone-100 text-stone-600';
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${cls}`}>
+      {location !== 'local' ? <LuCloud className="h-3 w-3" /> : <LuHardDrive className="h-3 w-3" />}
+      {label}
+    </span>
+  );
+}
+
 export function BackupSettingsSection() {
   const qc = useQueryClient();
   const settingsQ = useQuery({
@@ -105,12 +212,40 @@ export function BackupSettingsSection() {
   const [restoreLog, setRestoreLog] = useState<string | null>(null);
   const [dryRunOk, setDryRunOk] = useState(false);
 
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<BackupDetailView | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [driveSaJson, setDriveSaJson] = useState('');
+  const [clearDriveSa, setClearDriveSa] = useState(false);
+
   const confirmPhrase = settingsQ.data?.restore_confirm_phrase || DEFAULT_CONFIRM;
 
   useEffect(() => {
     if (settingsQ.data?.settings) {
-      setDraft({ ...settingsQ.data.settings });
-      setSendTelegramOnCreate(Boolean(settingsQ.data.settings.telegram_send));
+      const s = settingsQ.data.settings;
+      setDraft({
+        ...s,
+        drive_enabled: Boolean(s.drive_enabled),
+        drive_folder_id: s.drive_folder_id ?? null,
+        drive_delete_local_after_upload:
+          typeof s.drive_delete_local_after_upload === 'boolean'
+            ? s.drive_delete_local_after_upload
+            : true,
+        drive_retention_days: s.drive_retention_days ?? s.retention_days ?? 30,
+        drive_ready: Boolean(s.drive_ready),
+        drive_configured: Boolean(s.drive_configured),
+        has_drive_service_account: Boolean(s.has_drive_service_account ?? s.drive_configured),
+        drive_client_email_masked: s.drive_client_email_masked ?? null,
+        drive_source: s.drive_source ?? null,
+        drive_folder_name: s.drive_folder_name ?? null,
+        last_drive_at: s.last_drive_at ?? null,
+        last_drive_status: s.last_drive_status ?? null,
+        last_drive_message: s.last_drive_message ?? null,
+        last_drive_file_id: s.last_drive_file_id ?? null,
+      });
+      setSendTelegramOnCreate(Boolean(s.telegram_send));
+      setClearDriveSa(false);
     }
   }, [settingsQ.data]);
 
@@ -126,10 +261,21 @@ export function BackupSettingsSection() {
         telegram_send: draft.telegram_send,
         telegram_target: draft.telegram_target,
         retention_days: draft.retention_days,
+        drive_enabled: draft.drive_enabled,
+        drive_folder_id: draft.drive_folder_id,
+        drive_delete_local_after_upload: draft.drive_delete_local_after_upload,
+        drive_retention_days: draft.drive_retention_days,
+        drive_service_account_json: clearDriveSa
+          ? null
+          : driveSaJson.trim()
+            ? driveSaJson.trim()
+            : undefined,
       });
     },
     onSuccess: () => {
       setNote({ type: 'ok', text: 'Настройки бекапа сохранены.' });
+      setDriveSaJson('');
+      setClearDriveSa(false);
       void qc.invalidateQueries({ queryKey: Q_SETTINGS });
       void qc.invalidateQueries({ queryKey: Q_LIST });
     },
@@ -140,10 +286,16 @@ export function BackupSettingsSection() {
     mutationFn: () => createBackup({ send_telegram: sendTelegramOnCreate }),
     onSuccess: (data) => {
       const tg = data.backup.telegram;
-      const tgPart = tg ? ` Telegram: ${tg.message}` : '';
+      const drive = data.backup.drive;
+      const parts = [
+        tg ? `Telegram: ${tg.message}` : null,
+        drive ? `Drive: ${drive.message}` : null,
+      ].filter(Boolean);
       setNote({
-        type: 'ok',
-        text: `Бекап создан: ${data.backup.id} (${formatBytes(data.backup.size_bytes)}).${tgPart}`,
+        type: drive && !drive.ok ? 'err' : 'ok',
+        text: `Бекап создан: ${data.backup.id} (${formatBytes(data.backup.size_bytes)}).${
+          parts.length ? ` ${parts.join(' · ')}` : ''
+        }`,
       });
       void qc.invalidateQueries({ queryKey: Q_SETTINGS });
       void qc.invalidateQueries({ queryKey: Q_LIST });
@@ -168,6 +320,17 @@ export function BackupSettingsSection() {
       void qc.invalidateQueries({ queryKey: Q_SETTINGS });
     },
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось отправить в Telegram.') }),
+  });
+
+  const driveSendMut = useMutation({
+    mutationFn: (id: string) => sendBackupDrive(id),
+    onSuccess: (data) => {
+      setNote({ type: data.ok ? 'ok' : 'err', text: data.message });
+      void qc.invalidateQueries({ queryKey: Q_SETTINGS });
+      void qc.invalidateQueries({ queryKey: Q_LIST });
+    },
+    onError: (e) =>
+      setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось выгрузить на Google Drive.') }),
   });
 
   const downloadMut = useMutation({
@@ -225,6 +388,21 @@ export function BackupSettingsSection() {
     setNote(null);
   }
 
+  async function openDetail(id: string) {
+    setDetailId(id);
+    setDetail(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    try {
+      const { detail: d } = await fetchBackupDetail(id);
+      setDetail(d);
+    } catch (e) {
+      setDetailError(apiErrorMessage(e, 'Не удалось загрузить детали бекапа.'));
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
   function toggleWeekday(day: number) {
     if (!draft) return;
     const set = new Set(draft.schedule_weekdays);
@@ -267,11 +445,12 @@ export function BackupSettingsSection() {
           <div>
             <h2 className="flex items-center gap-2 text-lg font-bold text-stone-900">
               <LuHardDrive className="h-5 w-5 text-primary" />
-              Создать резервную копию
+              Полный снимок проекта
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-stone-600">
-              Полный снимок: база PostgreSQL, локальные uploads и secrets. Архив можно скачать,
-              отправить в Telegram или восстановить обратно.
+              Детальная резервная копия: база данных, переписки, локальные и облачные файлы,
+              настройки приложения и снимок конфигурации сервера. Архив можно скачать, отправить в
+              Telegram или восстановить.
             </p>
           </div>
           <button
@@ -281,9 +460,25 @@ export function BackupSettingsSection() {
             onClick={() => createMut.mutate()}
           >
             <LuRefreshCw className={`h-4 w-4 ${running ? 'animate-spin' : ''}`} />
-            {running ? 'Выполняется…' : 'Создать архив сейчас'}
+            {running ? 'Выполняется…' : 'Создать полный снимок'}
           </button>
         </div>
+
+        <ul className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {SNAPSHOT_LAYERS.map(({ key, label, hint, Icon }) => (
+            <li
+              key={key}
+              className="flex gap-3 rounded-xl border border-stone-100 bg-stone-50/80 px-3 py-3"
+            >
+              <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <div>
+                <div className="text-sm font-semibold text-stone-900">{label}</div>
+                <p className="mt-0.5 text-xs leading-relaxed text-stone-500">{hint}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+
         <label className="mt-4 flex items-center gap-2 text-sm text-stone-700">
           <input
             type="checkbox"
@@ -445,6 +640,169 @@ export function BackupSettingsSection() {
       </section>
 
       <section className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-sm sm:p-6">
+        <h2 className="flex items-center gap-2 text-lg font-bold text-stone-900">
+          <LuCloud className="h-5 w-5 text-primary" />
+          Google Drive — основное хранилище
+        </h2>
+        <p className="mt-1 text-sm text-stone-600">
+          Все настройки Drive задаются здесь. Снимки уходят в папку на Google Drive; локально на
+          сервере можно не хранить копии.
+        </p>
+
+        <div
+          className={`mt-3 rounded-xl px-3 py-2 text-xs ${
+            draft.drive_ready
+              ? 'bg-emerald-50 text-emerald-900'
+              : 'bg-amber-50 text-amber-900'
+          }`}
+        >
+          {draft.drive_ready
+            ? `Подключено${draft.drive_folder_name ? `: «${draft.drive_folder_name}»` : ''}${
+                draft.drive_client_email_masked ? ` · ${draft.drive_client_email_masked}` : ''
+              }`
+            : draft.has_drive_service_account
+              ? 'Ключ сохранён, но папка недоступна — проверьте ID папки и шаринг на email service account.'
+              : 'Не настроено: вставьте JSON ключа и ID папки, затем сохраните.'}
+        </div>
+
+        <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs text-stone-500">
+          <li>Google Cloud → IAM → Service Account → создать → скачать JSON-ключ</li>
+          <li>Создайте папку на Google Drive и расшарьте её на email из ключа (право «Редактор»)</li>
+          <li>Вставьте JSON и ID/ссылку папки ниже → Сохранить → Проверить</li>
+        </ol>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="flex items-center gap-2 text-sm font-medium text-stone-800 sm:col-span-2">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-stone-300 text-primary"
+              checked={draft.drive_enabled}
+              onChange={(e) => setDraft({ ...draft, drive_enabled: e.target.checked })}
+            />
+            Автоматически выгружать каждый снимок на Google Drive
+          </label>
+          <label className="flex items-center gap-2 text-sm font-medium text-stone-800 sm:col-span-2">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-stone-300 text-primary"
+              checked={draft.drive_delete_local_after_upload}
+              onChange={(e) =>
+                setDraft({ ...draft, drive_delete_local_after_upload: e.target.checked })
+              }
+            />
+            Удалять локальную копию после успешной выгрузки (хранить только на Drive)
+          </label>
+
+          <label className="block text-sm sm:col-span-2">
+            <span className="mb-1 block font-medium text-stone-700">
+              ID папки Drive (или ссылка …/folders/…)
+            </span>
+            <input
+              className={fieldClass()}
+              value={draft.drive_folder_id ?? ''}
+              onChange={(e) =>
+                setDraft({ ...draft, drive_folder_id: e.target.value.trim() || null })
+              }
+              placeholder="1AbC…xyz или https://drive.google.com/drive/folders/…"
+            />
+          </label>
+
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium text-stone-700">
+              Хранить на Drive (дней, макс. {maxDays})
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={maxDays}
+              className={fieldClass()}
+              value={draft.drive_retention_days}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  drive_retention_days: Math.min(
+                    maxDays,
+                    Math.max(1, Number(e.target.value) || 1),
+                  ),
+                })
+              }
+            />
+          </label>
+
+          <label className="block text-sm sm:col-span-2">
+            <span className="mb-1 block font-medium text-stone-700">
+              Ключ service account (JSON)
+              {draft.has_drive_service_account && draft.drive_client_email_masked
+                ? ` — сохранён: ${draft.drive_client_email_masked}`
+                : draft.has_drive_service_account
+                  ? ' — ключ сохранён'
+                  : ''}
+            </span>
+            <textarea
+              className={`${fieldClass()} min-h-[100px] font-mono text-xs`}
+              value={driveSaJson}
+              onChange={(e) => {
+                setDriveSaJson(e.target.value);
+                if (e.target.value.trim()) setClearDriveSa(false);
+              }}
+              placeholder={
+                draft.has_drive_service_account
+                  ? 'Ключ уже сохранён. Вставьте новый JSON только чтобы заменить его.'
+                  : '{"type":"service_account","project_id":"…","private_key":"…","client_email":"…@….iam.gserviceaccount.com",…}'
+              }
+              spellCheck={false}
+              disabled={clearDriveSa}
+            />
+          </label>
+
+          {draft.has_drive_service_account && (
+            <label className="flex items-center gap-2 text-sm font-medium text-red-800 sm:col-span-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-stone-300 text-red-600"
+                checked={clearDriveSa}
+                onChange={(e) => {
+                  setClearDriveSa(e.target.checked);
+                  if (e.target.checked) setDriveSaJson('');
+                }}
+              />
+              Удалить сохранённый ключ service account при сохранении
+            </label>
+          )}
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={btnPrimary()}
+            disabled={saveMut.isPending}
+            onClick={() => saveMut.mutate()}
+          >
+            Сохранить настройки Drive
+          </button>
+          <button
+            type="button"
+            className={btnSecondary()}
+            disabled={settingsQ.isFetching}
+            onClick={() => {
+              void qc.invalidateQueries({ queryKey: Q_SETTINGS }).then(() => {
+                setNote({ type: 'ok', text: 'Статус подключения Drive обновлён.' });
+              });
+            }}
+          >
+            <LuRefreshCw className={`h-4 w-4 ${settingsQ.isFetching ? 'animate-spin' : ''}`} />
+            Проверить подключение
+          </button>
+        </div>
+
+        {draft.last_drive_message && (
+          <p className="mt-3 text-xs text-stone-500">
+            Drive: {formatRuDate(draft.last_drive_at)} — {draft.last_drive_message}
+          </p>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-bold text-stone-900">Сохранённые копии</h2>
           <button
@@ -475,14 +833,40 @@ export function BackupSettingsSection() {
                 className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
-                  <div className="font-semibold text-stone-900">{item.id}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-stone-900">{item.id}</span>
+                    <LocationBadge location={item.location ?? 'local'} />
+                  </div>
                   <div className="text-xs text-stone-500">
                     {formatRuDate(item.created_at)} · {formatBytes(item.size_bytes)} · {item.age_days}{' '}
                     дн.
-                    {item.has_archive ? ' · архив готов' : ' · без .tar.gz'}
+                    {item.has_archive ? ' · архив готов' : ''}
+                    {item.detailed ? ' · детальный' : ''}
+                    {item.drive_web_link ? (
+                      <>
+                        {' · '}
+                        <a
+                          href={item.drive_web_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary underline-offset-2 hover:underline"
+                        >
+                          открыть на Drive
+                        </a>
+                      </>
+                    ) : null}
                   </div>
+                  <ComponentChips components={item.components} />
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={btnSecondary()}
+                    onClick={() => void openDetail(item.id)}
+                  >
+                    <LuInfo className="h-4 w-4" />
+                    Состав
+                  </button>
                   <button
                     type="button"
                     className={btnSecondary()}
@@ -501,6 +885,22 @@ export function BackupSettingsSection() {
                     <LuRotateCcw className="h-4 w-4" />
                     Восстановить
                   </button>
+                  {(item.location === 'local' || item.location === 'both') && (
+                    <button
+                      type="button"
+                      className={btnSecondary()}
+                      disabled={driveSendMut.isPending || !draft.drive_ready}
+                      onClick={() => driveSendMut.mutate(item.id)}
+                      title={
+                        draft.drive_ready
+                          ? 'Выгрузить на Google Drive'
+                          : 'Сначала настройте Google Drive'
+                      }
+                    >
+                      <LuCloud className="h-4 w-4" />
+                      На Drive
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={btnSecondary()}
@@ -532,6 +932,191 @@ export function BackupSettingsSection() {
           </ul>
         )}
       </section>
+
+      {detailId && (
+        <BodyPortal>
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/40 p-4 sm:items-center">
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl sm:p-6"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-bold text-stone-900">Состав резервной копии</h3>
+                  <p className="mt-1 text-sm text-stone-600 font-semibold">{detailId}</p>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-lg p-1 text-stone-500 hover:bg-stone-100"
+                  onClick={() => setDetailId(null)}
+                  aria-label="Закрыть"
+                >
+                  <LuX className="h-5 w-5" />
+                </button>
+              </div>
+
+              {detailLoading && (
+                <p className="mt-4 text-sm text-stone-500">Загрузка деталей…</p>
+              )}
+              {detailError && (
+                <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+                  {detailError}
+                </p>
+              )}
+              {detail && (
+                <div className="mt-4 space-y-5 text-sm">
+                  <ComponentChips components={detail.components} />
+
+                  {detail.inventory && (
+                    <div>
+                      <h4 className="font-bold text-stone-900">Инвентарь данных</h4>
+                      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <div className="rounded-lg bg-stone-50 px-3 py-2">
+                          <div className="text-xs text-stone-500">Участники</div>
+                          <div className="font-semibold">{detail.inventory.members.total}</div>
+                        </div>
+                        <div className="rounded-lg bg-stone-50 px-3 py-2">
+                          <div className="text-xs text-stone-500">Переписки</div>
+                          <div className="font-semibold">
+                            {detail.inventory.messenger.conversations}
+                          </div>
+                        </div>
+                        <div className="rounded-lg bg-stone-50 px-3 py-2">
+                          <div className="text-xs text-stone-500">Сообщения</div>
+                          <div className="font-semibold">
+                            {detail.inventory.messenger.messages}
+                          </div>
+                        </div>
+                        <div className="rounded-lg bg-stone-50 px-3 py-2">
+                          <div className="text-xs text-stone-500">Админы</div>
+                          <div className="font-semibold">{detail.inventory.members.admins}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {detail.messenger_summary && detail.messenger_summary.sample.length > 0 && (
+                    <div>
+                      <h4 className="font-bold text-stone-900">Переписки (сводка)</h4>
+                      <ul className="mt-2 max-h-40 divide-y divide-stone-100 overflow-auto rounded-lg border border-stone-100">
+                        {detail.messenger_summary.sample.map((c) => (
+                          <li key={c.id} className="flex justify-between gap-2 px-3 py-2 text-xs">
+                            <span className="truncate font-medium text-stone-800">
+                              {c.title || `Чат #${c.id}`}
+                              {c.kind ? (
+                                <span className="ml-1 font-normal text-stone-400">({c.kind})</span>
+                              ) : null}
+                            </span>
+                            <span className="shrink-0 text-stone-500">{c.message_count} сообщ.</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {detail.settings_meta && (
+                    <div>
+                      <h4 className="font-bold text-stone-900">Настройки</h4>
+                      <p className="mt-1 text-xs text-stone-600">
+                        Полей в снимке: {detail.settings_meta.keys.length}
+                        {detail.settings_meta.redacted_keys.length > 0
+                          ? ` · секретов скрыто: ${detail.settings_meta.redacted_keys.length}`
+                          : ''}
+                        . Полные значения (включая токены) — внутри дампа БД.
+                      </p>
+                    </div>
+                  )}
+
+                  {detail.server && (
+                    <div>
+                      <h4 className="font-bold text-stone-900">Сервер</h4>
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-stone-600 sm:grid-cols-3">
+                        <div>
+                          <dt className="text-stone-400">Хост</dt>
+                          <dd className="font-medium text-stone-800">
+                            {String(detail.server.hostname ?? '—')}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-stone-400">Node</dt>
+                          <dd className="font-medium text-stone-800">
+                            {String(detail.server.node ?? '—')}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-stone-400">Git</dt>
+                          <dd className="font-medium text-stone-800">
+                            {String(detail.server.git_sha ?? '—')}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-stone-400">ОС</dt>
+                          <dd className="font-medium text-stone-800">
+                            {String(detail.server.platform ?? '—')} {String(detail.server.release ?? '')}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-stone-400">Env-ключей</dt>
+                          <dd className="font-medium text-stone-800">
+                            {String(detail.server.env_key_count ?? '—')}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-stone-400">Пакет</dt>
+                          <dd className="font-medium text-stone-800">
+                            {String(detail.server.package_version ?? '—')}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  )}
+
+                  {detail.storage && (
+                    <div>
+                      <h4 className="font-bold text-stone-900">Облачные файлы (Storage)</h4>
+                      {!detail.storage.configured ? (
+                        <p className="mt-1 text-xs text-amber-700">
+                          Supabase Storage не был настроен на момент бекапа.
+                        </p>
+                      ) : (
+                        <ul className="mt-2 space-y-1 text-xs">
+                          {detail.storage.buckets.map((b) => (
+                            <li key={b.name} className="flex justify-between rounded-lg bg-stone-50 px-3 py-2">
+                              <span className="font-medium text-stone-800">{b.name}</span>
+                              <span className="text-stone-500">
+                                {b.objects} файлов · {formatBytes(b.bytes)}
+                                {b.error ? ` · ${b.error}` : ''}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  {detail.manifest_text && (
+                    <details className="rounded-lg border border-stone-100">
+                      <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-stone-700">
+                        MANIFEST.txt
+                      </summary>
+                      <pre className="max-h-48 overflow-auto border-t border-stone-100 bg-stone-900 p-3 text-[11px] text-stone-100">
+                        {detail.manifest_text}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-5">
+                <button type="button" className={btnSecondary()} onClick={() => setDetailId(null)}>
+                  Закрыть
+                </button>
+              </div>
+            </div>
+          </div>
+        </BodyPortal>
+      )}
 
       {restoreId && (
         <BodyPortal><div className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/40 p-4 sm:items-center">
