@@ -1923,14 +1923,16 @@ export function ChatInput({
               title={pending.displayTitle || audioDisplayTitle(pending.file.name)}
               durationHintSec={pending.durationSec}
               waveSeed={`draft-${pending.file.name}-${pending.file.size}`}
+              ownerId={`draft:${conversationId}:${pending.file.name}:${pending.file.size}`}
+              registerInQueue={false}
             />
             <p className="tg-audio-draft__hint">
               {formatBytes(pending.file.size)}
               {pending.durationSec
-                ? ` · ${Math.floor(pending.durationSec / 60)}:${String(pending.durationSec % 60).padStart(2, '0')}`
+                ? ` · ${Math.floor(pending.durationSec / 60)}:${String(Math.floor(pending.durationSec % 60)).padStart(2, '0')}`
                 : ''}
               {' · '}
-              Добавьте описание ниже и нажмите отправить
+              Прослушайте перед отправкой · описание ниже
             </p>
           </div>
           <button

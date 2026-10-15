@@ -3,6 +3,7 @@ import { LuPause, LuPlay } from 'react-icons/lu';
 
 import {
   getMessengerAudioSnapshot,
+  registerMessengerAudioTrack,
   seekMessengerAudio,
   setMessengerAudioRate,
   subscribeMessengerAudio,
@@ -67,6 +68,10 @@ export function VoiceMessageAttachment({
   title,
   variant = 'voice',
   waveSeed,
+  ownerId: ownerIdProp,
+  conversationId,
+  sortKey,
+  registerInQueue = true,
 }: {
   audioSrc: string | null;
   isMine: boolean;
@@ -78,8 +83,20 @@ export function VoiceMessageAttachment({
   variant?: 'voice' | 'file';
   /** Семя для стабильной волны (обычно id сообщения). */
   waveSeed?: string;
+  /**
+   * Стабильный id владельца в хосте плеера (напр. `msg:123`).
+   * Без него используется ephemeral useId — пауза/автоплей ломаются при ремаунте.
+   */
+  ownerId?: string;
+  /** Чат для очереди автоплея следующего голосового. */
+  conversationId?: string;
+  /** Порядок в чате (обычно numeric message id). */
+  sortKey?: number;
+  /** Черновик перед отправкой — не регистрировать в очереди чата. */
+  registerInQueue?: boolean;
 }) {
-  const instanceId = useId();
+  const reactId = useId();
+  const ownerId = ownerIdProp || reactId;
   const trackRef = useRef<HTMLDivElement | null>(null);
   const seekingRef = useRef(false);
   const [rate, setRate] = useState<PlaybackRate>(() => readStoredRate());
@@ -92,13 +109,13 @@ export function VoiceMessageAttachment({
   const [loading, setLoading] = useState(false);
 
   const bars = useMemo(
-    () => buildVoiceWaveBars(waveSeed || title || audioSrc || instanceId, variant === 'file' ? 38 : 44),
-    [waveSeed, title, audioSrc, instanceId, variant],
+    () => buildVoiceWaveBars(waveSeed || title || audioSrc || ownerId, variant === 'file' ? 38 : 44),
+    [waveSeed, title, audioSrc, ownerId, variant],
   );
 
   const applySnap = useCallback(
     (snap: MessengerAudioSnapshot) => {
-      if (snap.ownerId !== instanceId) {
+      if (snap.ownerId !== ownerId) {
         setPlaying(false);
         setLoading(false);
         return;
@@ -111,10 +128,37 @@ export function VoiceMessageAttachment({
       }
       if (snap.duration > 0) setDuration(snap.duration);
     },
-    [instanceId],
+    [ownerId],
   );
 
   useEffect(() => subscribeMessengerAudio(applySnap), [applySnap]);
+
+  useEffect(() => {
+    if (!registerInQueue || !audioSrc || !conversationId) return;
+    const key =
+      typeof sortKey === 'number' && Number.isFinite(sortKey)
+        ? sortKey
+        : Number.parseInt(String(waveSeed || '').replace(/\D/g, ''), 10) || 0;
+    return registerMessengerAudioTrack({
+      ownerId,
+      src: audioSrc,
+      title: title?.trim() || (variant === 'file' ? 'Аудиофайл' : 'Голосовое сообщение'),
+      conversationId,
+      variant,
+      sortKey: key,
+      durationHintSec,
+    });
+  }, [
+    registerInQueue,
+    audioSrc,
+    conversationId,
+    ownerId,
+    title,
+    variant,
+    sortKey,
+    waveSeed,
+    durationHintSec,
+  ]);
 
   useEffect(() => {
     if (typeof durationHintSec === 'number' && durationHintSec > 0) {
@@ -126,21 +170,38 @@ export function VoiceMessageAttachment({
     if (!audioSrc) return;
     const snap = getMessengerAudioSnapshot();
     const resumeFrom =
-      snap.ownerId === instanceId && snap.current > 0
+      snap.ownerId === ownerId && snap.current > 0
         ? snap.current
         : current > 0
           ? current
           : undefined;
     toggleMessengerAudio({
-      ownerId: instanceId,
+      ownerId,
       src: audioSrc,
       title: title?.trim() || (variant === 'file' ? 'Аудиофайл' : 'Голосовое сообщение'),
       artist: 'Источник жизни',
       durationHintSec,
       rate,
       startAtSec: resumeFrom,
+      conversationId,
+      variant,
+      sortKey:
+        typeof sortKey === 'number' && Number.isFinite(sortKey)
+          ? sortKey
+          : Number.parseInt(String(waveSeed || '').replace(/\D/g, ''), 10) || undefined,
     });
-  }, [audioSrc, current, durationHintSec, instanceId, rate, title, variant]);
+  }, [
+    audioSrc,
+    current,
+    durationHintSec,
+    ownerId,
+    rate,
+    title,
+    variant,
+    conversationId,
+    sortKey,
+    waveSeed,
+  ]);
 
   const cycleRate = useCallback(
     (e: React.MouseEvent) => {
@@ -155,13 +216,13 @@ export function VoiceMessageAttachment({
           /* ignore */
         }
         const snap = getMessengerAudioSnapshot();
-        if (snap.ownerId === instanceId) {
-          setMessengerAudioRate(instanceId, next);
+        if (snap.ownerId === ownerId) {
+          setMessengerAudioRate(ownerId, next);
         }
         return next;
       });
     },
-    [instanceId],
+    [ownerId],
   );
 
   const seekFromClientX = useCallback(
@@ -180,9 +241,9 @@ export function VoiceMessageAttachment({
       const next = ratio * total;
       setCurrent(next);
       setProgress(ratio);
-      seekMessengerAudio(instanceId, next);
+      seekMessengerAudio(ownerId, next);
     },
-    [audioSrc, duration, durationHintSec, instanceId],
+    [audioSrc, duration, durationHintSec, ownerId],
   );
 
   const onTrackPointerDown = useCallback(
@@ -290,16 +351,16 @@ export function VoiceMessageAttachment({
             const step = Math.max(1, total * 0.05);
             if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
               e.preventDefault();
-              seekMessengerAudio(instanceId, Math.min(total, current + step));
+              seekMessengerAudio(ownerId, Math.min(total, current + step));
             } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
               e.preventDefault();
-              seekMessengerAudio(instanceId, Math.max(0, current - step));
+              seekMessengerAudio(ownerId, Math.max(0, current - step));
             } else if (e.key === 'Home') {
               e.preventDefault();
-              seekMessengerAudio(instanceId, 0);
+              seekMessengerAudio(ownerId, 0);
             } else if (e.key === 'End') {
               e.preventDefault();
-              seekMessengerAudio(instanceId, total);
+              seekMessengerAudio(ownerId, total);
             } else if (e.key === ' ' || e.key === 'Enter') {
               e.preventDefault();
               toggle();

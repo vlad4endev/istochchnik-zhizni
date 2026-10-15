@@ -28,6 +28,11 @@ export type MessengerAudioSnapshot = {
   duration: number;
   progress: number;
   rate: number;
+  title: string | null;
+  variant: 'voice' | 'file' | null;
+  conversationId: string | null;
+  /** Есть ли следующее аудио в очереди текущего чата. */
+  hasNext: boolean;
 };
 
 export type MessengerAudioPlayRequest = {
@@ -40,20 +45,41 @@ export type MessengerAudioPlayRequest = {
   rate?: number;
   /** Продолжить с позиции (после seek до старта). */
   startAtSec?: number;
+  conversationId?: string;
+  variant?: 'voice' | 'file';
+  /** Числовой ключ порядка в чате (обычно id сообщения). */
+  sortKey?: number;
+};
+
+export type MessengerAudioTrackRegistration = {
+  ownerId: string;
+  src: string;
+  title?: string;
+  conversationId: string;
+  variant?: 'voice' | 'file';
+  sortKey: number;
+  durationHintSec?: number;
 };
 
 type Listener = (snap: MessengerAudioSnapshot) => void;
 
 const listeners = new Set<Listener>();
+/** Треки, смонтированные в текущем чате (для автоплея следующего). */
+const registeredTracks = new Map<string, MessengerAudioTrackRegistration>();
 
 let audio: HTMLAudioElement | null = null;
 let ownedBlobUrl: string | null = null;
 let ownedBlobSrcKey: string | null = null;
 let activeOwnerId: string | null = null;
 let activeSrcKey: string | null = null;
+let activeTitle: string | null = null;
+let activeVariant: 'voice' | 'file' | null = null;
+let activeConversationId: string | null = null;
+let activeSortKey: number | null = null;
 let loading = false;
 let playGeneration = 0;
 let mediaSessionBound = false;
+let autoplayNextEnabled = true;
 
 function samePageOriginBaseURL(): string {
   if (typeof window !== 'undefined' && window.location?.origin) {
@@ -89,6 +115,36 @@ function revokeOwnedBlob(): void {
   ownedBlobSrcKey = null;
 }
 
+/** Сортировка очереди аудио в чате (экспорт для тестов). */
+export function sortMessengerAudioTracks(
+  tracks: MessengerAudioTrackRegistration[],
+): MessengerAudioTrackRegistration[] {
+  return [...tracks].sort((a, b) => a.sortKey - b.sortKey);
+}
+
+/** Следующий трек после ownerId в том же чате (экспорт для тестов / автоплея). */
+export function findNextMessengerAudioTrack(
+  tracks: MessengerAudioTrackRegistration[],
+  ownerId: string | null,
+  conversationId: string | null,
+): MessengerAudioTrackRegistration | null {
+  if (!ownerId || !conversationId) return null;
+  const list = sortMessengerAudioTracks(
+    tracks.filter((t) => t.conversationId === conversationId),
+  );
+  const idx = list.findIndex((t) => t.ownerId === ownerId);
+  if (idx < 0) return null;
+  return list[idx + 1] ?? null;
+}
+
+function findNextTrack(ownerId: string | null, conversationId: string | null): MessengerAudioTrackRegistration | null {
+  return findNextMessengerAudioTrack(
+    Array.from(registeredTracks.values()),
+    ownerId,
+    conversationId,
+  );
+}
+
 function getAudio(): HTMLAudioElement {
   if (audio) return audio;
   audio = new Audio();
@@ -114,11 +170,27 @@ function getAudio(): HTMLAudioElement {
     emit();
   });
   audio.addEventListener('ended', () => {
+    const next =
+      autoplayNextEnabled && activeVariant === 'voice'
+        ? findNextTrack(activeOwnerId, activeConversationId)
+        : null;
     if (audio) {
       audio.currentTime = 0;
     }
     syncMediaSession();
     emit();
+    if (next) {
+      void loadAndPlay({
+        ownerId: next.ownerId,
+        src: next.src,
+        title: next.title,
+        conversationId: next.conversationId,
+        variant: next.variant ?? 'voice',
+        sortKey: next.sortKey,
+        durationHintSec: next.durationHintSec,
+        rate: audio?.playbackRate && audio.playbackRate > 0 ? audio.playbackRate : 1,
+      });
+    }
   });
   audio.addEventListener('error', () => {
     loading = false;
@@ -147,6 +219,7 @@ function snapshot(): MessengerAudioSnapshot {
       ? el.duration
       : 0;
   const current = el ? el.currentTime : 0;
+  const next = findNextTrack(activeOwnerId, activeConversationId);
   return {
     ownerId: activeOwnerId,
     playing: Boolean(el && !el.paused && !el.ended),
@@ -155,6 +228,10 @@ function snapshot(): MessengerAudioSnapshot {
     duration,
     progress: duration > 0 ? current / duration : 0,
     rate: el?.playbackRate && el.playbackRate > 0 ? el.playbackRate : 1,
+    title: activeTitle,
+    variant: activeVariant,
+    conversationId: activeConversationId,
+    hasNext: Boolean(next),
   };
 }
 
@@ -215,6 +292,9 @@ function syncMediaSession(): void {
         if (details.seekTime == null) return;
         el.currentTime = details.seekTime;
         emit();
+      });
+      ms.setActionHandler('nexttrack', () => {
+        playNextMessengerAudio();
       });
     } catch {
       /* some WebViews reject handlers */
@@ -284,6 +364,10 @@ async function loadAndPlay(req: MessengerAudioPlayRequest): Promise<void> {
   const el = getAudio();
   const gen = ++playGeneration;
   activeOwnerId = req.ownerId;
+  activeTitle = (req.title && req.title.trim()) || (req.variant === 'file' ? 'Аудиофайл' : 'Голосовое сообщение');
+  activeVariant = req.variant ?? 'voice';
+  activeConversationId = req.conversationId ?? activeConversationId;
+  activeSortKey = typeof req.sortKey === 'number' && Number.isFinite(req.sortKey) ? req.sortKey : activeSortKey;
   loading = true;
   emit();
 
@@ -316,7 +400,7 @@ async function loadAndPlay(req: MessengerAudioPlayRequest): Promise<void> {
       el.addEventListener('loadedmetadata', applyStart, { once: true });
     }
 
-    setMediaMetadata(req.title, req.artist);
+    setMediaMetadata(activeTitle ?? undefined, req.artist);
     loading = false;
     emit();
     await el.play();
@@ -327,13 +411,11 @@ async function loadAndPlay(req: MessengerAudioPlayRequest): Promise<void> {
   try {
     await tryPlay(req.src);
   } catch {
-    // Fallback: Safari не смог сыграть webm/ogg — повторяем через server-side AAC.
     const fallback = withM4aTranscodeQuery(req.src);
     if (fallback && gen === playGeneration && activeOwnerId === req.ownerId) {
       try {
         loading = true;
         emit();
-        // Сбрасываем кэш blob, чтобы не переиспользовать битый/неподходящий object URL.
         revokeOwnedBlob();
         activeSrcKey = null;
         el.removeAttribute('src');
@@ -364,6 +446,23 @@ export function getMessengerAudioSnapshot(): MessengerAudioSnapshot {
   return snapshot();
 }
 
+/** Регистрация аудиосообщения в очереди чата (для автоплея следующего голосового). */
+export function registerMessengerAudioTrack(track: MessengerAudioTrackRegistration): () => void {
+  registeredTracks.set(track.ownerId, track);
+  emit();
+  return () => {
+    const cur = registeredTracks.get(track.ownerId);
+    if (cur && cur.src === track.src) {
+      registeredTracks.delete(track.ownerId);
+      emit();
+    }
+  };
+}
+
+export function setMessengerAudioAutoplayNext(enabled: boolean): void {
+  autoplayNextEnabled = enabled;
+}
+
 /** Play/pause для конкретного вложения. Src принадлежит хосту на время воспроизведения. */
 export function toggleMessengerAudio(req: MessengerAudioPlayRequest): void {
   const el = getAudio();
@@ -390,6 +489,16 @@ export function pauseMessengerAudio(): void {
   emit();
 }
 
+/** Возобновить текущий трек без повторной загрузки (мини-плеер). */
+export function playActiveMessengerAudio(): void {
+  const el = audio;
+  if (!el || !activeOwnerId || !el.src) return;
+  void el.play().catch(() => {
+    /* autoplay policy / decode */
+  });
+  emit();
+}
+
 export function seekMessengerAudio(ownerId: string, timeSec: number): void {
   const el = audio;
   if (!el || activeOwnerId !== ownerId) return;
@@ -399,11 +508,59 @@ export function seekMessengerAudio(ownerId: string, timeSec: number): void {
   syncMediaSession();
 }
 
+/** Seek без проверки owner — для мини-плеера. */
+export function seekActiveMessengerAudio(timeSec: number): void {
+  const el = audio;
+  if (!el || !activeOwnerId) return;
+  seekMessengerAudio(activeOwnerId, timeSec);
+}
+
 export function setMessengerAudioRate(ownerId: string, rate: number): void {
   const el = audio;
   if (!el || activeOwnerId !== ownerId) return;
   if (!(rate > 0)) return;
   el.playbackRate = rate;
+  emit();
+  syncMediaSession();
+}
+
+export function setActiveMessengerAudioRate(rate: number): void {
+  if (!activeOwnerId) return;
+  setMessengerAudioRate(activeOwnerId, rate);
+}
+
+export function playNextMessengerAudio(): boolean {
+  const next = findNextTrack(activeOwnerId, activeConversationId);
+  if (!next) return false;
+  void loadAndPlay({
+    ownerId: next.ownerId,
+    src: next.src,
+    title: next.title,
+    conversationId: next.conversationId,
+    variant: next.variant ?? 'voice',
+    sortKey: next.sortKey,
+    durationHintSec: next.durationHintSec,
+    rate: audio?.playbackRate && audio.playbackRate > 0 ? audio.playbackRate : 1,
+  });
+  return true;
+}
+
+export function stopMessengerAudio(): void {
+  const el = audio;
+  if (el) {
+    el.pause();
+    try {
+      el.currentTime = 0;
+    } catch {
+      /* ignore */
+    }
+  }
+  activeOwnerId = null;
+  activeSrcKey = null;
+  activeTitle = null;
+  activeVariant = null;
+  // conversationId оставляем — очередь чата ещё актуальна
+  loading = false;
   emit();
   syncMediaSession();
 }

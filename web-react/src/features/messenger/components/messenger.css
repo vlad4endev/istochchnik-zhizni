@@ -4347,6 +4347,186 @@ html.dark .msg-videonote-circle--placeholder {
   color: rgba(255, 255, 255, 0.78);
 }
 
+/* Sticky mini-player above composer */
+.tg-mini-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 8px 8px 8px 10px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--tg-primary) 8%, var(--tg-surface, #fff));
+  border: 1px solid color-mix(in srgb, var(--tg-primary) 16%, transparent);
+  box-shadow: 0 1px 4px rgba(28, 25, 23, 0.05);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  animation: tg-mini-player-in 180ms ease-out;
+}
+
+@keyframes tg-mini-player-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tg-mini-player__play,
+.tg-mini-player__next,
+.tg-mini-player__close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  color: var(--tg-primary);
+  background: transparent;
+}
+
+.tg-mini-player__play {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--tg-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.tg-mini-player__play:disabled {
+  opacity: 0.55;
+}
+
+.tg-mini-player__play:active {
+  transform: scale(0.94);
+}
+
+.tg-mini-player__play-icon {
+  margin-left: 2px;
+}
+
+.tg-mini-player__play svg,
+.tg-mini-player__next svg,
+.tg-mini-player__close svg {
+  display: block;
+  color: inherit;
+  stroke: currentColor;
+  fill: none;
+  pointer-events: none;
+}
+
+.tg-mini-player__body {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tg-mini-player__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tg-mini-player__title {
+  margin: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--tg-text);
+  letter-spacing: -0.01em;
+}
+
+.tg-mini-player__rate {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  min-width: 32px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  color: var(--tg-primary);
+  background: color-mix(in srgb, var(--tg-primary) 12%, transparent);
+  cursor: pointer;
+}
+
+.tg-mini-player__rate--active {
+  filter: brightness(1.06);
+}
+
+.tg-mini-player__seek {
+  padding: 2px 0;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+
+.tg-mini-player__seek-track {
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tg-primary) 18%, #d6d3d1);
+  overflow: hidden;
+}
+
+.tg-mini-player__seek-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--tg-primary);
+  transition: width 80ms linear;
+}
+
+.tg-mini-player__meta {
+  min-height: 14px;
+}
+
+.tg-mini-player__time {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--tg-text-muted, var(--tg-text-secondary));
+}
+
+.tg-mini-player__time-total {
+  opacity: 0.78;
+  font-weight: 550;
+}
+
+.tg-mini-player__next,
+.tg-mini-player__close {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  color: var(--tg-text-secondary);
+}
+
+.tg-mini-player__next:hover,
+.tg-mini-player__close:hover {
+  background: color-mix(in srgb, var(--tg-text) 6%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tg-mini-player {
+    animation: none;
+  }
+  .tg-mini-player__seek-fill {
+    transition: none;
+  }
+}
+
 /* Pending audio draft above composer */
 .tg-audio-draft {
   display: flex;
