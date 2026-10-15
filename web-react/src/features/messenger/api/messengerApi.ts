@@ -90,6 +90,8 @@ export interface ConversationListItem {
   my_ui_pinned?: boolean;
   my_ui_pinned_at?: string | null;
   my_ui_folder?: 'personal' | 'ministry' | null;
+  /** Роль текущего участника. Создатель группы — owner. */
+  my_role?: ParticipantRole;
 }
 
 export type ConversationListRow = ConversationListItem & { avatarUrl?: string | null };

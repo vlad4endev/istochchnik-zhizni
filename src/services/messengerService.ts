@@ -26,6 +26,7 @@ import {
   defaultGroupPermissions,
   nameSearchTokens,
   normalizeGroupChatTitle,
+  shouldDeleteOwnedConversation,
 } from '../utils/groupChatCreate';
 import { parsePositiveMemberIds } from '../utils/parsePositiveMemberIds';
 
@@ -83,6 +84,41 @@ function pgErrorCode(e: unknown): string | undefined {
 
 function isPgUndefinedColumnError(e: unknown): boolean {
   return pgErrorCode(e) === '42703';
+}
+
+function isPgMissingRelationError(e: unknown): boolean {
+  return pgErrorCode(e) === '42P01';
+}
+
+/**
+ * Старые БД могут не иметь части таблиц или колонок.
+ * Ошибка внутри транзакции абортирует её, поэтому необязательный шаг идёт через SAVEPOINT.
+ */
+async function queryIgnoringMissingSchema(
+  client: { query: (sql: string, params?: unknown[]) => Promise<unknown> },
+  sql: string,
+  params: unknown[],
+): Promise<void> {
+  await client.query('SAVEPOINT optional_cleanup');
+  try {
+    await client.query(sql, params);
+    await client.query('RELEASE SAVEPOINT optional_cleanup');
+  } catch (e) {
+    try {
+      await client.query('ROLLBACK TO SAVEPOINT optional_cleanup');
+      await client.query('RELEASE SAVEPOINT optional_cleanup');
+    } catch {
+      /* transaction already aborted */
+    }
+    if (isPgUndefinedColumnError(e) || isPgMissingRelationError(e)) return;
+    throw e;
+  }
+}
+
+function mapMyRole(raw: unknown): ParticipantRole | undefined {
+  const role = raw != null ? String(raw) : '';
+  if (role === 'owner' || role === 'admin' || role === 'member') return role;
+  return undefined;
 }
 
 /**
@@ -267,6 +303,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
       c.default_permissions,
       c.settings,
       c.metadata,
+      cp.role         AS my_role,
       cp.muted_until,
       cp.ui_pinned,
       cp.ui_pinned_at,
@@ -424,6 +461,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
             public_key: r.om_public_key != null ? String(r.om_public_key) : null,
           }
         : null,
+      my_role: mapMyRole(r.my_role),
       ...mapParticipantUiExtras({
         muted_until: r.muted_until,
         ui_pinned: r.ui_pinned,
@@ -800,6 +838,7 @@ export async function getConversationListItem(
       c.default_permissions,
       c.settings,
       c.metadata,
+      cp.role         AS my_role,
       cp.muted_until,
       cp.ui_pinned,
       cp.ui_pinned_at,
@@ -946,6 +985,7 @@ export async function getConversationListItem(
         public_key: r.om_public_key != null ? String(r.om_public_key) : null,
         }
       : null,
+    my_role: mapMyRole(r.my_role),
     ...mapParticipantUiExtras({
       muted_until: r.muted_until,
       ui_pinned: r.ui_pinned,
@@ -1422,6 +1462,115 @@ export async function removeParticipant(
      WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL`,
     [conversationId, memberId],
   );
+}
+
+export type DeleteOwnedConversationResult =
+  | { deleted: true; memberIds: number[] }
+  | { deleted: false };
+
+/**
+ * Создатель (owner) удаляет группу или канал целиком: строка conversations и связанные
+ * сообщения, участники, прочтения и звонки. Участник, который просто выходит, сюда не попадает.
+ */
+export async function deleteOwnedConversation(
+  conversationId: string,
+  actorId: number,
+): Promise<DeleteOwnedConversationResult> {
+  const type = await getConversationType(conversationId);
+  const role = await getParticipantRole(conversationId, actorId);
+  if (!shouldDeleteOwnedConversation(type, role, true)) {
+    return { deleted: false };
+  }
+
+  const memberIds = await getConversationMemberIds(conversationId);
+  if (!pool) {
+    throw new Error('DATABASE_URL is not defined in .env');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const id = conversationId;
+    await queryIgnoringMissingSchema(
+      client,
+      `UPDATE messages SET reply_to_message_id = NULL WHERE conversation_id = $1`,
+      [id],
+    );
+    await queryIgnoringMissingSchema(
+      client,
+      `UPDATE conversation_participants SET last_read_message_id = NULL WHERE conversation_id = $1`,
+      [id],
+    );
+    await queryIgnoringMissingSchema(
+      client,
+      `UPDATE read_receipts SET last_read_message_id = NULL WHERE conversation_id = $1`,
+      [id],
+    );
+    await queryIgnoringMissingSchema(
+      client,
+      `DELETE FROM message_reactions
+       WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = $1)`,
+      [id],
+    );
+    await queryIgnoringMissingSchema(
+      client,
+      `DELETE FROM message_poll_votes
+       WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = $1)`,
+      [id],
+    );
+    await queryIgnoringMissingSchema(
+      client,
+      `DELETE FROM message_interactions
+       WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = $1)`,
+      [id],
+    );
+    await queryIgnoringMissingSchema(
+      client,
+      `DELETE FROM chat_pins WHERE conversation_id = $1`,
+      [id],
+    );
+    await queryIgnoringMissingSchema(
+      client,
+      `DELETE FROM read_receipts WHERE conversation_id = $1`,
+      [id],
+    );
+    await queryIgnoringMissingSchema(
+      client,
+      `DELETE FROM calls WHERE conversation_id = $1`,
+      [id],
+    );
+    await queryIgnoringMissingSchema(
+      client,
+      `DELETE FROM messages WHERE conversation_id = $1`,
+      [id],
+    );
+    await queryIgnoringMissingSchema(
+      client,
+      `DELETE FROM conversation_participants WHERE conversation_id = $1`,
+      [id],
+    );
+    const deleted = await client.query(
+      `DELETE FROM conversations
+       WHERE id = $1 AND type IN ('group', 'channel')
+       RETURNING id`,
+      [id],
+    );
+    if (!deleted.rows[0]) {
+      await client.query('ROLLBACK');
+      return { deleted: false };
+    }
+    await client.query('COMMIT');
+    return { deleted: true, memberIds };
+  } catch (e) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      /* ignore rollback errors */
+    }
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 /**

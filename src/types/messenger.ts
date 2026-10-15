@@ -126,6 +126,8 @@ export interface ConversationListItem {
   my_ui_pinned_at?: string | null;
   /** Ручная папка: переопределяет вкладку «Личные» / «Служения»; null = авто по типу чата. */
   my_ui_folder?: 'personal' | 'ministry' | null;
+  /** Роль текущего участника. Создатель группы — owner. */
+  my_role?: ParticipantRole;
 }
 
 export interface MessageWithSender extends MessageRow {
@@ -209,6 +211,8 @@ export type WsMessengerEvent =
       conversation?: Partial<Pick<ConversationListItem, 'avatar_url' | 'title' | 'updated_at'>>;
     }
   | { type: 'conv:history_cleared'; conversationId: string }
+  /** Группа или канал удалены создателем — строки в БД больше нет. */
+  | { type: 'conv:deleted'; conversationId: string }
   | { type: 'messages_read'; chatId: string; userId: number; lastReadMessageId: string }
   | { type: 'read:updated'; conversationId: string; memberId: number; lastReadMessageId: string }
   | { type: 'presence:online'; memberId: number }
