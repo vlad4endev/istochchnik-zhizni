@@ -164,7 +164,12 @@ DB_SSL_REJECT_UNAUTHORIZED=false
 SKIP_DB_INIT_ON_START=true
 ```
 
-Web runtime: локально `bash scripts/package-web-for-server.sh` → `rsync` в `WEB_DIST_PATH` → стек с `WEB_PORT` и `WEB_DIST_PATH`.
+Web runtime: задайте `WEB_DIST_PATH` (например `/opt/istochik-web`) в `.env` / Portainer.
+Тогда `npm run server:update` сам соберёт `web-react` и сделает `rsync` в этот каталог
+(иначе volume mount продолжает отдавать старый фронт после `docker compose build web`).
+
+Вручную: `bash scripts/package-web-for-server.sh` (подхватит `WEB_DIST_PATH` из `.env`) →
+перезапуск контейнера `web`.
 
 ## React: URL API при сборке
 

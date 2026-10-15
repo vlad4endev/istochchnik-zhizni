@@ -25,6 +25,9 @@
 #   SERVICES=api web       — какие сервисы пересобирать (по умолчанию весь стек)
 #   BACKUP_BEFORE_UPDATE=1 — полный бекап БД+uploads перед обновлением (рекомендуется)
 #   SKIP_BACKUP=1          — не делать бекап даже если BACKUP_BEFORE_UPDATE=1
+#   WEB_DIST_PATH=/opt/…   — каталог статики для Portainer web-runtime (volume mount).
+#                            Если задан — всегда пересобираем web на хосте и rsync сюда,
+#                            иначе `docker compose build web` не меняет отдаваемые файлы.
 #
 # При CALLS_ENABLED=true в .env автоматически подключается
 # docker-compose.livekit-addon.yml (иначе server:update ломает LiveKit).
@@ -215,6 +218,54 @@ run_cli_migrate() {
   fi
 }
 
+resolve_web_dist_path() {
+  if [[ -n "${WEB_DIST_PATH:-}" ]]; then
+    printf '%s' "$WEB_DIST_PATH"
+    return 0
+  fi
+  if [[ -f ".env" ]]; then
+    local val
+    val="$(sed -n 's/^[[:space:]]*WEB_DIST_PATH[[:space:]]*=[[:space:]]*//p' .env | tail -n 1 | tr -d '"'\''[:space:]')"
+    if [[ -n "$val" ]]; then
+      printf '%s' "$val"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+sync_web_dist_path() {
+  local dest="$1"
+  local src="$ROOT/release/web"
+
+  if [[ ! -d "$src" ]] || [[ ! -f "$src/index.html" ]]; then
+    die "Нет собранной статики в release/web/ (нужен package-web-for-server.sh). WEB_DIST_PATH=$dest"
+  fi
+
+  if [[ ! -d "$dest" ]]; then
+    log "Создаю WEB_DIST_PATH=$dest"
+    mkdir -p "$dest" || die "Не удалось создать $dest"
+  fi
+
+  if ! command -v rsync >/dev/null 2>&1; then
+    die "нужен rsync для синхронизации в WEB_DIST_PATH=$dest"
+  fi
+
+  log "rsync release/web/ → $dest (иначе volume/runtime отдаёт старый фронт)"
+  rsync -a --delete "$src/" "$dest/"
+
+  if [[ ! -f "$dest/index.html" ]]; then
+    die "После rsync нет $dest/index.html"
+  fi
+
+  # Маркер админки — быстрая проверка, что билд не «заглушка».
+  if [[ -f "$dest/admin-panel.txt" ]]; then
+    log "Проверка admin-panel.txt: $(tr -d '\n' <"$dest/admin-panel.txt")"
+  fi
+
+  log "WEB_DIST_PATH обновлён: $dest (index $(stat -c '%y' "$dest/index.html" 2>/dev/null || stat -f '%Sm' "$dest/index.html" 2>/dev/null || echo ok))"
+}
+
 host_install_and_build() {
   log "npm ci — корень (API)"
   if [[ -f package-lock.json ]]; then
@@ -230,6 +281,14 @@ host_install_and_build() {
     log "npm ci + build — web-react → release/web/"
     bash "$ROOT/scripts/package-web-for-server.sh"
   fi
+}
+
+host_build_web_only() {
+  if [[ ! -f web-react/package.json ]]; then
+    die "web-react/package.json не найден"
+  fi
+  log "Сборка только web-react → release/web/ (для WEB_DIST_PATH)"
+  bash "$ROOT/scripts/package-web-for-server.sh"
 }
 
 run_migrations() {
@@ -276,8 +335,13 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "help" ]]; then
   UPDATE_COMPOSE_FILES=  свои -f флаги compose (отключает авто-addons)
   BACKUP_BEFORE_UPDATE=1 полный бекап БД+uploads до обновления
   SKIP_BACKUP=1          отключить бекап
+  WEB_DIST_PATH=/opt/…   каталог статики (Portainer web-runtime). Если задан в .env —
+                         скрипт сам соберёт web и сделает rsync (иначе сайт не обновится)
 
 При CALLS_ENABLED=true автоматически: -f docker-compose.livekit-addon.yml
+
+Если после деплоя главная «как раньше» — скорее всего WEB_DIST_PATH не обновили:
+  WEB_DIST_PATH=/opt/istochik-web SERVICES=web npm run server:update
 EOF
   exit 0
 fi
@@ -330,14 +394,31 @@ else
   log "Git: пропуск (OFFLINE=1 или нет .git), SHA=${GITHUB_SHA}"
 fi
 
+WEB_DIST_RESOLVED=""
+if WEB_DIST_RESOLVED="$(resolve_web_dist_path)"; then
+  log "Обнаружен WEB_DIST_PATH=$WEB_DIST_RESOLVED — статика отдаётся с диска (volume), не из Docker layer"
+else
+  WEB_DIST_RESOLVED=""
+fi
+
 # 2) Зависимости / сборка на хосте (опционально)
+# WEB_DIST_PATH ⇒ обязательно пересобрать web на хосте и rsync (иначе compose build бесполезен).
 if [[ "${HOST_BUILD:-0}" == "1" || "${PREBUILT_WEB:-0}" == "1" || "${SKIP_DOCKER:-0}" == "1" ]]; then
   host_install_and_build
+elif [[ -n "$WEB_DIST_RESOLVED" ]]; then
+  host_build_web_only
+fi
+
+if [[ -n "$WEB_DIST_RESOLVED" ]]; then
+  sync_web_dist_path "$WEB_DIST_RESOLVED"
 fi
 
 # 3) Docker: deps обновляются через npm ci в Dockerfile при --build
 if [[ "${SKIP_DOCKER:-0}" == "1" ]]; then
   log "Docker пропущен (SKIP_DOCKER=1). Локальная сборка уже выполнена."
+  if [[ -n "$WEB_DIST_RESOLVED" ]]; then
+    log "Статика уже в WEB_DIST_PATH=$WEB_DIST_RESOLVED — перезапустите контейнер web при необходимости."
+  fi
   log "Готово (без контейнеров)."
   exit 0
 fi
@@ -354,6 +435,14 @@ if [[ -n "${SERVICES:-}" ]]; then
   compose up -d --build --force-recreate --no-deps $SERVICES
 else
   compose up -d --build --force-recreate
+fi
+
+# Volume mount: recreate мог стартовать до rsync на медленном диске — ещё раз подстрахуем
+# и перезапустим nginx, чтобы сбросить in-memory кэш/открытые fd на старые файлы.
+if [[ -n "$WEB_DIST_RESOLVED" ]]; then
+  sync_web_dist_path "$WEB_DIST_RESOLVED"
+  log "Перезапуск web после обновления WEB_DIST_PATH"
+  compose restart web || compose up -d --force-recreate --no-deps web || true
 fi
 
 # 4) Миграции
