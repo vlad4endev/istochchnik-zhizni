@@ -1,7 +1,14 @@
-/** Параметры для `MediaRecorder` в голосовых сообщениях (как в мессенджерах: webm/opus или m4a в Safari). */
+/** Параметры для `MediaRecorder` в голосовых сообщениях.
+ * Сначала m4a/mp4 (Safari/iOS и кросс-платформенное воспроизведение), затем webm/opus (Chrome). */
 export function voiceRecorderOptions(): MediaRecorderOptions | undefined {
   if (typeof MediaRecorder === 'undefined') return undefined;
-  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+  const candidates = [
+    'audio/mp4',
+    'audio/aac',
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+  ];
   for (const mimeType of candidates) {
     try {
       if (MediaRecorder.isTypeSupported(mimeType)) return { mimeType };

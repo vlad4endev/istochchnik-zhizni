@@ -5,8 +5,10 @@ import {
   isChatAudioFile,
   isGeneratedStorageFileName,
   isMessengerAudioFilePayload,
+  isSafariHostileAudioMimeOrName,
   isVoiceRecordingFileName,
   messengerAudioListPreview,
+  needsMessengerAudioM4aTranscode,
   parseId3v2Title,
   resolveMessengerAudioFileTitle,
 } from '../src/features/messenger/chatAudio';
@@ -70,6 +72,16 @@ describe('chatAudio helpers', () => {
         originalName: 'Worship Night.mp3',
       }),
     ).toBe('Worship Night');
+  });
+
+  it('detects Safari-hostile voice formats that need m4a transcode', () => {
+    expect(isSafariHostileAudioMimeOrName('audio/webm', 'voice-1.webm')).toBe(true);
+    expect(isSafariHostileAudioMimeOrName('audio/ogg', 'note.ogg')).toBe(true);
+    expect(isSafariHostileAudioMimeOrName('audio/mpeg', 'song.mp3')).toBe(false);
+    expect(isSafariHostileAudioMimeOrName('audio/mp4', 'voice-1.m4a')).toBe(false);
+    // In jsdom Audio.canPlayType is empty → treat hostile formats as needing transcode.
+    expect(needsMessengerAudioM4aTranscode('audio/webm', 'voice-99.webm')).toBe(true);
+    expect(needsMessengerAudioM4aTranscode('audio/mpeg', 'a.mp3')).toBe(false);
   });
 
   it('parses ID3v2 TIT2 title', () => {

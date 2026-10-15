@@ -3,6 +3,23 @@ import { resolveAxiosBaseURL } from '../../lib/config';
 
 export const MESSENGER_AUDIO_PLAY_EVENT = 'messenger-audio-play';
 
+/** axios иногда отдаёт blob без type — Safari тогда не играет. */
+function blobWithMime(data: Blob, contentTypeHeader?: string): Blob {
+  const headerType = String(contentTypeHeader ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  const existing = String(data.type || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  if (existing && existing !== 'application/octet-stream') return data;
+  if (headerType && headerType !== 'application/octet-stream') {
+    return new Blob([data], { type: headerType });
+  }
+  return data;
+}
+
 export type MessengerAudioSnapshot = {
   ownerId: string | null;
   playing: boolean;
@@ -237,15 +254,30 @@ async function resolvePlayableSrc(src: string): Promise<string> {
   if (ownedBlobUrl && ownedBlobSrcKey === src) return ownedBlobUrl;
 
   const path = toRequestPath(src);
-  const { data } = await apiClient.get(path, {
+  const response = await apiClient.get(path, {
     responseType: 'blob',
     baseURL: samePageOriginBaseURL(),
+    silentErrorToast: true,
   });
-  const objectUrl = URL.createObjectURL(data as Blob);
+  const headerCt =
+    typeof response.headers?.['content-type'] === 'string'
+      ? response.headers['content-type']
+      : typeof response.headers?.['Content-Type'] === 'string'
+        ? response.headers['Content-Type']
+        : undefined;
+  const blob = blobWithMime(response.data as Blob, headerCt);
+  const objectUrl = URL.createObjectURL(blob);
   revokeOwnedBlob();
   ownedBlobUrl = objectUrl;
   ownedBlobSrcKey = src;
   return objectUrl;
+}
+
+function withM4aTranscodeQuery(src: string): string | null {
+  if (!needsAuthBlobFetch(src)) return null;
+  if (/[?&]transcode=/i.test(src)) return null;
+  const join = src.includes('?') ? '&' : '?';
+  return `${src}${join}transcode=m4a`;
 }
 
 async function loadAndPlay(req: MessengerAudioPlayRequest): Promise<void> {
@@ -255,13 +287,13 @@ async function loadAndPlay(req: MessengerAudioPlayRequest): Promise<void> {
   loading = true;
   emit();
 
-  try {
-    const playable = await resolvePlayableSrc(req.src);
+  const tryPlay = async (src: string): Promise<void> => {
+    const playable = await resolvePlayableSrc(src);
     if (gen !== playGeneration || activeOwnerId !== req.ownerId) return;
 
-    const sameSrc = activeSrcKey === req.src && Boolean(el.src);
+    const sameSrc = activeSrcKey === src && Boolean(el.src);
     if (!sameSrc) {
-      activeSrcKey = req.src;
+      activeSrcKey = src;
       el.src = playable;
       el.load();
     }
@@ -290,7 +322,28 @@ async function loadAndPlay(req: MessengerAudioPlayRequest): Promise<void> {
     await el.play();
     syncMediaSession();
     emit();
+  };
+
+  try {
+    await tryPlay(req.src);
   } catch {
+    // Fallback: Safari не смог сыграть webm/ogg — повторяем через server-side AAC.
+    const fallback = withM4aTranscodeQuery(req.src);
+    if (fallback && gen === playGeneration && activeOwnerId === req.ownerId) {
+      try {
+        loading = true;
+        emit();
+        // Сбрасываем кэш blob, чтобы не переиспользовать битый/неподходящий object URL.
+        revokeOwnedBlob();
+        activeSrcKey = null;
+        el.removeAttribute('src');
+        el.load();
+        await tryPlay(fallback);
+        return;
+      } catch {
+        /* fall through */
+      }
+    }
     if (gen === playGeneration) {
       loading = false;
       emit();

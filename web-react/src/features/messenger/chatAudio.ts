@@ -1,6 +1,64 @@
 /** Расширения аудио, которые принимает мессенджер (совпадает с backend upload allowlist). */
 export const AUDIO_NAME_EXT_RE = /\.(mp3|m4a|aac|ogg|oga|opus|wav|webm|caf)$/i;
 
+/** Форматы, которые Safari/iOS обычно не умеют играть (нужен transcode=m4a). */
+export function isSafariHostileAudioMimeOrName(mimeRaw?: string, nameRaw?: string): boolean {
+  const mime = String(mimeRaw ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  const name = String(nameRaw ?? '').trim().toLowerCase();
+  if (mime.startsWith('audio/webm') || mime === 'audio/ogg' || mime === 'application/ogg') return true;
+  if (mime.startsWith('video/webm') && /^voice-\d+\./i.test(name)) return true;
+  return /\.(webm|ogg|oga|opus)$/i.test(name);
+}
+
+/**
+ * Может ли текущий браузер воспроизвести этот MIME.
+ * `null` — нет HTMLAudioElement / canPlayType (тесты, SSR) — вызывающий решает сам.
+ */
+export function browserCanPlayAudioMime(mimeRaw: string): boolean | null {
+  if (typeof Audio === 'undefined') return null;
+  const mime = String(mimeRaw ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  if (!mime) return null;
+  try {
+    const audio = new Audio();
+    if (typeof audio.canPlayType !== 'function') return null;
+    const rank = audio.canPlayType(mime) || audio.canPlayType(`${mime}; codecs=opus`);
+    // Пустая строка = точно не умеет; 'maybe'/'probably' = умеет.
+    if (!rank) return false;
+    return rank === 'probably' || rank === 'maybe';
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Нужен ли серверный transcode в M4A/AAC для воспроизведения на этом устройстве.
+ * Chrome/Android пишет webm/opus; Safari/iOS его не играет.
+ */
+export function needsMessengerAudioM4aTranscode(mimeRaw?: string, nameRaw?: string): boolean {
+  if (!isSafariHostileAudioMimeOrName(mimeRaw, nameRaw)) return false;
+  const mime = String(mimeRaw ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  const probeMime =
+    mime ||
+    (/\.webm$/i.test(String(nameRaw ?? ''))
+      ? 'audio/webm'
+      : /\.(ogg|oga|opus)$/i.test(String(nameRaw ?? ''))
+        ? 'audio/ogg'
+        : '');
+  const can = probeMime ? browserCanPlayAudioMime(probeMime) : null;
+  // Явно умеет (Chrome) — оставляем оригинал. Иначе (Safari / неизвестно) — m4a.
+  if (can === true) return false;
+  return true;
+}
+
 export const CHAT_AUDIO_ACCEPT =
   'audio/*,.mp3,.m4a,.aac,.ogg,.oga,.opus,.wav,.webm,.caf';
 

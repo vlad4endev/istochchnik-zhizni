@@ -126,6 +126,81 @@ async function transcodeWebmBufferToMp4(input: Buffer): Promise<Buffer | null> {
   }
 }
 
+/** Голосовые с Chrome (webm/opus, ogg) → AAC/M4A для Safari/iOS. */
+async function transcodeAudioBufferToM4a(input: Buffer, inputExt = '.webm'): Promise<Buffer | null> {
+  const token = randomUUID();
+  const safeExt = /^\.[a-z0-9]{1,8}$/i.test(inputExt) ? inputExt.toLowerCase() : '.webm';
+  const inPath = path.join(os.tmpdir(), `messenger-audio-${token}${safeExt}`);
+  const outPath = path.join(os.tmpdir(), `messenger-audio-${token}.m4a`);
+  try {
+    await fsp.writeFile(inPath, input);
+    await new Promise<void>((resolve, reject) => {
+      const ff = spawn(
+        'ffmpeg',
+        [
+          '-y',
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          '-i',
+          inPath,
+          '-vn',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '128k',
+          '-movflags',
+          '+faststart',
+          outPath,
+        ],
+        { stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      let errText = '';
+      ff.stderr?.on('data', (d) => {
+        errText += String(d);
+      });
+      ff.on('error', (e) => reject(e));
+      ff.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        reject(new Error(errText.trim() || `ffmpeg exit code ${String(code)}`));
+      });
+    });
+    return await fsp.readFile(outPath);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn('[messenger] audio->m4a transcode skipped:', msg);
+    return null;
+  } finally {
+    await Promise.allSettled([fsp.unlink(inPath), fsp.unlink(outPath)]);
+  }
+}
+
+function withM4aExtension(fileName: string): string {
+  const base = String(fileName || 'audio').trim() || 'audio';
+  const idx = base.lastIndexOf('.');
+  if (idx <= 0) return `${base}.m4a`;
+  return `${base.slice(0, idx)}.m4a`;
+}
+
+function isSafariHostileAudio(mimeType: string, fileName: string): boolean {
+  const mime = String(mimeType || '').split(';')[0].trim().toLowerCase();
+  const name = String(fileName || '').trim().toLowerCase();
+  if (mime.startsWith('audio/webm') || mime === 'audio/ogg' || mime === 'application/ogg') return true;
+  if (mime.startsWith('video/webm') && name.startsWith('voice-')) return true;
+  return /\.(webm|ogg|oga|opus)$/i.test(name);
+}
+
+function audioInputExtForTranscode(mimeType: string, fileName: string): string {
+  const name = String(fileName || '').trim().toLowerCase();
+  const mime = String(mimeType || '').split(';')[0].trim().toLowerCase();
+  if (name.endsWith('.ogg') || name.endsWith('.oga') || mime === 'audio/ogg') return '.ogg';
+  if (name.endsWith('.opus') || mime.includes('opus')) return '.opus';
+  return '.webm';
+}
+
 async function loadMessengerAttachmentBytesForProxy(
   item: NonNullable<Awaited<ReturnType<typeof svc.getMessageAttachmentForMember>>>,
 ): Promise<{ buffer: Buffer; contentType: string }> {
@@ -1715,6 +1790,7 @@ router.get('/messages/:id/attachment-file', async (req: Request, res: Response) 
   const forceDownload = dlRaw === '1' || dlRaw === 'true' || dlRaw === 'yes';
   const transcodeRaw = String(req.query.transcode ?? '').trim().toLowerCase();
   const wantsMp4Transcode = transcodeRaw === 'mp4';
+  const wantsM4aTranscode = transcodeRaw === 'm4a' || transcodeRaw === 'aac';
   try {
     const slotRaw = req.query.slot;
     let slot: number | undefined;
@@ -1742,6 +1818,20 @@ router.get('/messages/:id/attachment-file', async (req: Request, res: Response) 
           fileName = withMp4Extension(fileName);
         } else {
           console.warn('[messenger] transcoded mp4 is too large for proxy response');
+        }
+      }
+    } else if (wantsM4aTranscode && isSafariHostileAudio(origType, origName)) {
+      const m4a = await transcodeAudioBufferToM4a(
+        buffer,
+        audioInputExtForTranscode(origType, origName),
+      );
+      if (m4a) {
+        if (m4a.length <= MESSENGER_ATTACHMENT_PROXY_MAX_BYTES) {
+          buffer = m4a;
+          contentType = 'audio/mp4';
+          fileName = withM4aExtension(fileName);
+        } else {
+          console.warn('[messenger] transcoded m4a is too large for proxy response');
         }
       }
     }

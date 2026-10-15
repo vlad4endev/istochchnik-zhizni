@@ -25,7 +25,11 @@ import {
   assistantMarkdownToPlainText,
   renderAssistantMessageContent,
 } from '../assistantMessageFormat';
-import { isMessengerAudioFilePayload, resolveMessengerAudioFileTitle } from '../chatAudio';
+import {
+  isMessengerAudioFilePayload,
+  needsMessengerAudioM4aTranscode,
+  resolveMessengerAudioFileTitle,
+} from '../chatAudio';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { ChatVideoAttachmentPreview } from './ChatVideoAttachmentPreview';
@@ -1436,8 +1440,12 @@ function MessageBubbleInner({
     if (payloadType === 'audio') {
       const rawUrl = attachmentRawUrl;
       const fallbackHref = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
+      const audioMime = String(payload.mimeType ?? payload.mimetype ?? '').trim();
+      const audioName = String(payload.name ?? payload.filename ?? '').trim();
+      // Safari/iOS не играет webm/opus с Chrome — просим сервер отдать AAC/M4A.
+      const wantsM4a = needsMessengerAudioM4aTranscode(audioMime, audioName || rawUrl);
       const href = persistedNumericId
-        ? buildMessengerAttachmentFileUrl(String(message.id))
+        ? buildMessengerAttachmentFileUrl(String(message.id), wantsM4a ? { transcode: 'm4a' } : undefined)
         : fallbackHref;
       const caption = String(message.content ?? '').trim();
       const durRaw = payload.durationSec ?? payload.duration_sec;
