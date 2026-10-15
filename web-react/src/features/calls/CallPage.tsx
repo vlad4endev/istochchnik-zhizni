@@ -192,7 +192,7 @@ export function CallPage() {
         </button>
       ) : (
         <Link
-          to={messengerHref}
+          to="/messenger"
           className="call-route-link"
           onClick={() => {
             minimizeCall();

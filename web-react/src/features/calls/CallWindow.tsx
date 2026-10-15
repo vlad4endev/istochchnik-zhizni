@@ -90,7 +90,6 @@ import './calls.css';
 function MinimizeCallButton({ className }: { className?: string }) {
   const navigate = useNavigate();
   const minimizeCall = useCallStore((s) => s.minimizeCall);
-  const activeCall = useCallStore((s) => s.activeCall);
 
   return (
     <button
@@ -98,15 +97,8 @@ function MinimizeCallButton({ className }: { className?: string }) {
       className={['call-minimize-btn', className].filter(Boolean).join(' ')}
       onClick={() => {
         minimizeCall();
-        const conversationId = String(activeCall?.conversationId ?? '').trim();
-        if (conversationId) {
-          void navigate(`/messenger?conversationId=${encodeURIComponent(conversationId)}`);
-          return;
-        }
-        // Leave /call/:id so the rest of the app is usable under the return bar.
-        if (typeof window !== 'undefined' && window.location.pathname.startsWith('/call/')) {
-          void navigate('/messenger');
-        }
+        // Open chats list (not a conversation) so the Stories-style call ring is visible on mobile.
+        void navigate('/messenger');
       }}
       aria-label="Свернуть звонок и продолжить пользоваться приложением"
       title="Свернуть"

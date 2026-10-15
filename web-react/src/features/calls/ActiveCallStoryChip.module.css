@@ -1,0 +1,163 @@
+.bar {
+  display: flex;
+  gap: 0.85rem;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 0.45rem 0.75rem 0.55rem;
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle, #e7e5e4) 80%, transparent);
+  background: var(--surface-elevated, #fff);
+}
+
+.bar::-webkit-scrollbar {
+  display: none;
+}
+
+.item {
+  flex: 0 0 auto;
+  width: 4.6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.item:active .ring {
+  transform: scale(0.96);
+}
+
+.ring {
+  width: 4.1rem;
+  height: 4.1rem;
+  border-radius: 9999px;
+  padding: 2.5px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  transition: transform 0.15s ease;
+  background: conic-gradient(
+    from 210deg,
+    #22c55e 0%,
+    #16a34a 35%,
+    #4ade80 55%,
+    #15803d 80%,
+    #22c55e 100%
+  );
+  box-shadow: 0 0 0 0 color-mix(in srgb, #22c55e 45%, transparent);
+  animation: call-ring-pulse 2.2s ease-out infinite;
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring {
+    animation: none;
+  }
+}
+
+@keyframes call-ring-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, #22c55e 42%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.avatarWrap {
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: var(--surface-elevated, #f4f1ed);
+  border: 2.5px solid var(--surface-elevated, #fff);
+  display: grid;
+  place-items: center;
+  position: relative;
+  box-sizing: border-box;
+  z-index: 1;
+}
+
+.avatarMedia {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatarMark {
+  display: grid;
+  place-items: center;
+  color: #15803d;
+  width: 100%;
+  height: 100%;
+  background: color-mix(in srgb, #22c55e 14%, var(--surface-elevated, #fff));
+}
+
+.liveDot {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 9999px;
+  background: #22c55e;
+  border: 2.5px solid var(--surface-elevated, #fff);
+  z-index: 2;
+  pointer-events: none;
+  box-shadow: 0 0 0 0 color-mix(in srgb, #22c55e 55%, transparent);
+  animation: call-dot-blink 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liveDot {
+    animation: none;
+  }
+}
+
+@keyframes call-dot-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.label {
+  max-width: 100%;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary, #1c1917);
+}
+
+.sublabel {
+  max-width: 100%;
+  font-size: 0.625rem;
+  font-weight: 500;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #16a34a;
+}
