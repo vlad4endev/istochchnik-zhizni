@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { LuMic, LuMicOff, LuUsers, LuVideo, LuVideoOff } from 'react-icons/lu';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  LuCircleAlert,
+  LuMic,
+  LuMicOff,
+  LuUsers,
+  LuUser,
+  LuVideo,
+  LuVideoOff,
+} from 'react-icons/lu';
 
 import { LOGIN_PATH } from '../../app/routeGuards';
 import { emitAppToast } from '../../lib/uiFeedback';
@@ -8,7 +16,11 @@ import { useAuthStore } from '../auth/authStore';
 import { isAppleMobileWeb, isInstalledPwa } from '../pwa/utils/pwaEnvironment';
 
 import { joinInvitation, previewInvitation } from './callsApi';
-import { MeetingAvatar } from './MeetingAvatar';
+import {
+  GlassCallCta,
+  GlassCallShell,
+  GlassCallTitle,
+} from './glassCallUi';
 import { useCallStore } from './callStore';
 import './calls.css';
 
@@ -16,10 +28,14 @@ function IosSafariPwaHint() {
   const show = isAppleMobileWeb() && !isInstalledPwa();
   if (!show) return null;
   return (
-    <p className="telemost-join__pwa-hint" role="note">
-      Safari: откройте «Моя церковь» с домашнего экрана и нажмите ссылку в чате — звонок останется в
-      приложении.
-    </p>
+    <div className="glass-call__hint" role="note">
+      <LuCircleAlert size={20} strokeWidth={1.8} aria-hidden />
+      <p>
+        Открыто в Safari. Если «Моя церковь» установлено с домашнего экрана — откройте приложение и
+        нажмите ссылку на встречу в чате: так звонок останется в приложении, а не во вкладке
+        браузера.
+      </p>
+    </div>
   );
 }
 
@@ -108,21 +124,12 @@ export function CallJoinPage() {
   if (!isAuthenticated) {
     const from = `/call/join/${encodeURIComponent(inviteToken)}`;
     return (
-      <div className="telemost-join" role="main">
-        <div className="telemost-join__atmosphere" aria-hidden>
-          <span className="telemost-join__glow telemost-join__glow--a" />
-          <span className="telemost-join__glow telemost-join__glow--b" />
-        </div>
-        <div className="telemost-join__panel">
-          <p className="telemost-join__eyebrow">Источник жизни · встречи</p>
-          <MeetingAvatar mediaType="video" size="md" />
-          <h1 className="telemost-join__title">Вход во встречу</h1>
-          <p className="telemost-join__lead">Войдите в аккаунт, чтобы подключиться по ссылке.</p>
-          <Link className="telemost-join__cta" to={`${LOGIN_PATH}?from=${encodeURIComponent(from)}`}>
-            Войти
-          </Link>
-        </div>
-      </div>
+      <GlassCallShell className="glass-call--simple" closeTo="/dashboard">
+        <GlassCallTitle title="Вход во встречу" />
+        <p className="glass-call__lead">Войдите в аккаунт, чтобы подключиться по ссылке.</p>
+        <div className="glass-call__spacer" />
+        <GlassCallCta to={`${LOGIN_PATH}?from=${encodeURIComponent(from)}`}>Войти</GlassCallCta>
+      </GlassCallShell>
     );
   }
 
@@ -141,102 +148,88 @@ export function CallJoinPage() {
                 ? 'Лимит использований приглашения исчерпан'
                 : error || 'Приглашение недействительно';
     return (
-      <div className="telemost-join" role="main">
-        <div className="telemost-join__atmosphere" aria-hidden>
-          <span className="telemost-join__glow telemost-join__glow--a" />
-          <span className="telemost-join__glow telemost-join__glow--b" />
-        </div>
-        <div className="telemost-join__panel">
-          <p className="telemost-join__eyebrow">Источник жизни · встречи</p>
-          <h1 className="telemost-join__title">Не удалось войти</h1>
-          <p className="telemost-join__lead">{msg}</p>
-          <Link className="telemost-join__cta telemost-join__cta--ghost" to="/messenger">
-            В мессенджер
-          </Link>
-        </div>
-      </div>
+      <GlassCallShell className="glass-call--simple" closeTo="/messenger">
+        <GlassCallTitle title="Не удалось войти" />
+        <p className="glass-call__lead">{msg}</p>
+        <div className="glass-call__spacer" />
+        <GlassCallCta to="/messenger">В мессенджер</GlassCallCta>
+      </GlassCallShell>
     );
   }
 
   if (!preview) {
     return (
-      <div className="telemost-join" role="main">
-        <div className="telemost-join__atmosphere" aria-hidden>
-          <span className="telemost-join__glow telemost-join__glow--a" />
-          <span className="telemost-join__glow telemost-join__glow--b" />
-        </div>
-        <div className="telemost-join__panel">
-          <p className="telemost-join__lead">Проверка приглашения…</p>
-        </div>
-      </div>
+      <GlassCallShell className="glass-call--simple" closeTo="/messenger">
+        <p className="glass-call__lead glass-call__lead--solo">Проверка приглашения…</p>
+        <div className="glass-call__spinner" aria-hidden />
+      </GlassCallShell>
     );
   }
 
   const isVideo = preview.mediaType === 'video';
   const defaultTitle = isVideo ? 'Видеовстреча' : 'Аудиовстреча';
   const title = preview.conversationTitle?.trim() || defaultTitle;
-  const subtitle = 'Вас пригласили подключиться по ссылке';
 
   return (
-    <div className="telemost-join telemost-join--compact" role="main">
-      <div className="telemost-join__atmosphere" aria-hidden>
-        <span className="telemost-join__glow telemost-join__glow--a" />
-        <span className="telemost-join__glow telemost-join__glow--b" />
-      </div>
+    <GlassCallShell closeTo="/messenger">
+      <div className={['glass-call__stage', camOn && isVideo ? 'is-live' : ''].filter(Boolean).join(' ')}>
+        {preview.participantCount != null ? (
+          <div className="glass-call__meta">
+            <LuUsers size={17} strokeWidth={1.8} aria-hidden />
+            Участников: {preview.participantCount}
+          </div>
+        ) : null}
 
-      <div className="telemost-join__panel">
-        <p className="telemost-join__eyebrow">Источник жизни · встречи</p>
-        <MeetingAvatar mediaType={isVideo ? 'video' : 'audio'} size="md" />
-
-        <h1 className="telemost-join__title">{title}</h1>
-        <p className="telemost-join__lead">{subtitle}</p>
-
-        <div className="telemost-join__chips">
-          {preview.participantCount != null ? (
-            <p className="telemost-join__meta">
-              <LuUsers size={15} strokeWidth={2.2} aria-hidden />
-              {preview.participantCount}
-            </p>
-          ) : null}
+        <div className={['glass-call__avatar', camOn && isVideo ? 'is-on' : 'is-off'].join(' ')} aria-hidden>
+          {isVideo ? <LuVideo size={44} strokeWidth={1.6} /> : <LuUser size={44} strokeWidth={1.6} />}
         </div>
 
-        <IosSafariPwaHint />
-
-        <div className="telemost-join__devices" role="group" aria-label="Устройства перед входом">
-          <DeviceToggle
+        <div className="glass-call__devices" role="group" aria-label="Устройства перед входом">
+          <GlassDeviceToggle
             pressed={micOn}
             onClick={() => setMicOn((v) => !v)}
-            labelOn="Микрофон"
-            labelOff="Микрофон"
-            iconOn={<LuMic size={18} strokeWidth={2.1} />}
-            iconOff={<LuMicOff size={18} strokeWidth={2.1} />}
+            labelOn="Микрофон вкл."
+            labelOff="Микрофон выкл."
+            iconOn={<LuMic size={24} strokeWidth={1.8} />}
+            iconOff={<LuMicOff size={24} strokeWidth={1.8} />}
           />
           {isVideo ? (
-            <DeviceToggle
+            <GlassDeviceToggle
               pressed={camOn}
               onClick={() => setCamOn((v) => !v)}
-              labelOn="Камера"
-              labelOff="Камера"
-              iconOn={<LuVideo size={18} strokeWidth={2.1} />}
-              iconOff={<LuVideoOff size={18} strokeWidth={2.1} />}
+              labelOn="Камера вкл."
+              labelOff="Камера выкл."
+              iconOn={<LuVideo size={24} strokeWidth={1.8} />}
+              iconOff={<LuVideoOff size={24} strokeWidth={1.8} />}
             />
           ) : null}
         </div>
-
-        <button
-          type="button"
-          className="telemost-join__cta"
-          disabled={!preview.canJoin || joining}
-          onClick={() => void onJoin()}
-        >
-          {joining ? 'Подключение…' : preview.canJoin ? 'Подключиться' : 'Нет доступа'}
-        </button>
       </div>
-    </div>
+
+      <GlassCallTitle title={title} />
+      <p className="glass-call__lead">Вас пригласили подключиться по ссылке</p>
+      <IosSafariPwaHint />
+
+      <div className="glass-call__spacer" />
+
+      <GlassCallCta
+        disabled={!preview.canJoin || joining}
+        onClick={() => void onJoin()}
+        icon={
+          isVideo ? (
+            <LuVideo size={22} strokeWidth={1.8} aria-hidden />
+          ) : (
+            <LuMic size={22} strokeWidth={1.8} aria-hidden />
+          )
+        }
+      >
+        {joining ? 'Подключение…' : preview.canJoin ? 'Присоединиться' : 'Нет доступа'}
+      </GlassCallCta>
+    </GlassCallShell>
   );
 }
 
-function DeviceToggle({
+function GlassDeviceToggle({
   pressed,
   onClick,
   labelOn,
@@ -254,15 +247,15 @@ function DeviceToggle({
   return (
     <button
       type="button"
-      className={['telemost-join__device', pressed ? 'is-on' : 'is-off'].join(' ')}
+      className={['glass-call__device', pressed ? 'is-on' : 'is-off'].join(' ')}
       aria-pressed={pressed}
-      aria-label={pressed ? labelOn : `${labelOff} выкл.`}
+      aria-label={pressed ? labelOn : labelOff}
       onClick={onClick}
     >
-      <span className="telemost-join__device-icon" aria-hidden>
+      <span className="glass-call__device-icon" aria-hidden>
         {pressed ? iconOn : iconOff}
       </span>
-      <span>{pressed ? labelOn : labelOff}</span>
+      <span className="glass-call__device-cap">{pressed ? labelOn : labelOff}</span>
     </button>
   );
 }

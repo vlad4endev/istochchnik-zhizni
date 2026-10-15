@@ -1,35 +1,23 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { LuMessageCircle, LuPhoneIncoming, LuPhoneOff } from 'react-icons/lu';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  LuMessageCircle,
+  LuPhoneIncoming,
+  LuPhoneOff,
+  LuVideo,
+} from 'react-icons/lu';
 
 import { emitAppToast } from '../../lib/uiFeedback';
 import { useAuthStore } from '../auth/authStore';
 
 import { acceptCall, fetchCall, type CallPublic } from './callsApi';
-import { MeetingAvatar } from './MeetingAvatar';
+import {
+  GlassCallCta,
+  GlassCallShell,
+  GlassCallTitle,
+} from './glassCallUi';
 import { useCallStore } from './callStore';
 import './calls.css';
-
-function CallRouteShell({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={['call-route-shell', className].filter(Boolean).join(' ')}
-      role="main"
-    >
-      <div className="call-route-shell__atmosphere" aria-hidden>
-        <span className="call-route-shell__glow call-route-shell__glow--a" />
-        <span className="call-route-shell__glow call-route-shell__glow--b" />
-      </div>
-      <div className="call-route-shell__panel">{children}</div>
-    </div>
-  );
-}
 
 function callTitle(call: CallPublic | null, fallback: string): string {
   const t = call?.title?.trim();
@@ -148,51 +136,68 @@ export function CallPage() {
 
   if (loading) {
     return (
-      <CallRouteShell className="call-route-shell--loading">
-        <p className="call-route-shell__eyebrow">Источник жизни · встречи</p>
-        <MeetingAvatar mediaType={mediaType} size="md" />
-        <h1 className="call-route-shell__title">Подключение…</h1>
-        <p className="call-route-shell__lead">Загрузка звонка</p>
-        <div className="call-route-shell__spinner" aria-hidden />
-      </CallRouteShell>
+      <GlassCallShell className="glass-call--simple" closeTo={messengerHref}>
+        <GlassCallTitle title="Подключение…" />
+        <p className="glass-call__lead">Загрузка звонка</p>
+        <div className="glass-call__spinner" aria-hidden />
+      </GlassCallShell>
     );
   }
 
   if (error) {
     return (
-      <CallRouteShell className="call-route-shell--ended">
-        <p className="call-route-shell__eyebrow">Источник жизни · встречи</p>
-        <span className="call-route-shell__status-icon" aria-hidden>
-          <LuPhoneOff size={28} strokeWidth={2} />
-        </span>
-        <h1 className="call-route-shell__title">{title}</h1>
-        <p className="call-route-shell__lead">{error}</p>
-        <div className="call-route-shell__actions">
-          <Link to={messengerHref} className="call-route-shell__cta">
-            <LuMessageCircle size={18} strokeWidth={2.2} aria-hidden />
-            В мессенджер
-          </Link>
-          <Link to="/dashboard" className="call-route-shell__cta call-route-shell__cta--ghost">
-            На главную
-          </Link>
+      <GlassCallShell className="glass-call--ended" closeTo={messengerHref}>
+        <div className="glass-call__status-card" aria-hidden>
+          <span className="glass-call__status-icon">
+            <LuPhoneOff size={32} strokeWidth={1.7} />
+          </span>
         </div>
-      </CallRouteShell>
+        <GlassCallTitle title={title} />
+        <p className="glass-call__lead">{error}</p>
+        <div className="glass-call__spacer" />
+        <GlassCallCta to={messengerHref} icon={<LuMessageCircle size={20} strokeWidth={1.8} />}>
+          В мессенджер
+        </GlassCallCta>
+        <GlassCallCta to="/dashboard" variant="ghost">
+          На главную
+        </GlassCallCta>
+      </GlassCallShell>
     );
   }
 
   if (activeCall?.status === 'ringing_in' && call) {
     return (
-      <CallRouteShell className="call-route-shell--incoming">
-        <p className="call-route-shell__eyebrow">Входящий вызов</p>
-        <MeetingAvatar mediaType={mediaType} size="md" />
-        <h1 className="call-route-shell__title">{activeCall.peerName}</h1>
-        <p className="call-route-shell__lead">
+      <GlassCallShell
+        className="glass-call--incoming"
+        brand="Входящий вызов"
+        closeTo={messengerHref}
+        onClose={() => {
+          void import('./callsApi').then(({ declineCall }) =>
+            declineCall(call.id).finally(() => {
+              closeCall();
+              void navigate(messengerHref);
+            }),
+          );
+        }}
+      >
+        <div className="glass-call__status-card glass-call__status-card--live" aria-hidden>
+          <span className="glass-call__status-icon">
+            {mediaType === 'video' ? (
+              <LuVideo size={32} strokeWidth={1.7} />
+            ) : (
+              <LuPhoneIncoming size={32} strokeWidth={1.7} />
+            )}
+          </span>
+        </div>
+        <GlassCallTitle title={activeCall.peerName} />
+        <p className="glass-call__lead">
           {mediaType === 'video' ? 'Входящий видеозвонок' : 'Входящий звонок'}
         </p>
-        <div className="call-route-shell__actions call-route-shell__actions--row">
+        <div className="glass-call__spacer" />
+        <div className="glass-call__actions-row">
           <button
             type="button"
-            className="call-route-shell__cta call-route-shell__cta--reject"
+            className="glass-call__pill glass-call__pill--reject"
             onClick={() => {
               void import('./callsApi').then(({ declineCall }) =>
                 declineCall(call.id).finally(() => {
@@ -207,7 +212,7 @@ export function CallPage() {
           </button>
           <button
             type="button"
-            className="call-route-shell__cta call-route-shell__cta--accept"
+            className="glass-call__pill glass-call__pill--accept"
             onClick={() => {
               void acceptCall(call.id)
                 .then(() => {
@@ -220,76 +225,62 @@ export function CallPage() {
             Принять
           </button>
         </div>
-      </CallRouteShell>
+      </GlassCallShell>
     );
   }
 
   // Call ended / left while still on /call/:id — store cleared, no overlay.
   if (!activeCall || activeCall.callId !== callId) {
     return (
-      <CallRouteShell className="call-route-shell--ended">
-        <p className="call-route-shell__eyebrow">Источник жизни · встречи</p>
-        <span className="call-route-shell__status-icon" aria-hidden>
-          <LuPhoneOff size={28} strokeWidth={2} />
-        </span>
-        <h1 className="call-route-shell__title">{title}</h1>
-        <p className="call-route-shell__lead">Звонок завершён</p>
-        <div className="call-route-shell__actions">
-          <Link to={messengerHref} className="call-route-shell__cta">
-            <LuMessageCircle size={18} strokeWidth={2.2} aria-hidden />
-            В мессенджер
-          </Link>
-          <Link to="/dashboard" className="call-route-shell__cta call-route-shell__cta--ghost">
-            На главную
-          </Link>
+      <GlassCallShell className="glass-call--ended" closeTo={messengerHref}>
+        <div className="glass-call__status-card" aria-hidden>
+          <span className="glass-call__status-icon">
+            <LuPhoneOff size={32} strokeWidth={1.7} />
+          </span>
         </div>
-      </CallRouteShell>
+        <GlassCallTitle title={title} />
+        <p className="glass-call__lead">Звонок завершён</p>
+        <div className="glass-call__spacer" />
+        <GlassCallCta to={messengerHref} icon={<LuMessageCircle size={20} strokeWidth={1.8} />}>
+          В мессенджер
+        </GlassCallCta>
+        <GlassCallCta to="/dashboard" variant="ghost">
+          На главную
+        </GlassCallCta>
+      </GlassCallShell>
     );
   }
 
   // CallWindow overlay is mounted in Layout — avoid a second LiveKit room.
-  // Underlay matches the dark call UI so Suspense/flash never shows a blank light page.
   return (
-    <CallRouteShell className="call-route-shell--active">
-      <p className="call-route-shell__eyebrow">
-        {uiMinimized ? 'Звонок свёрнут' : 'Идёт звонок'}
-      </p>
-      <MeetingAvatar mediaType={mediaType} size="md" />
-      <h1 className="call-route-shell__title">{title}</h1>
-      <p className="call-route-shell__lead">
+    <GlassCallShell className="glass-call--active" closeTo={messengerHref}>
+      <div className="glass-call__status-card glass-call__status-card--live" aria-hidden>
+        <span className="glass-call__status-icon">
+          <LuVideo size={32} strokeWidth={1.7} />
+        </span>
+        <span className="glass-call__live-badge">В эфире</span>
+      </div>
+      <GlassCallTitle title={title} />
+      <p className="glass-call__lead">
         {uiMinimized
           ? 'Продолжается в фоне — можно вернуться в любой момент'
           : mediaType === 'video'
             ? 'Видеовстреча'
             : 'Аудиовстреча'}
       </p>
-      <div className="call-route-shell__badge" aria-hidden>
-        В эфире
-      </div>
-      <div className="call-route-shell__actions">
-        {uiMinimized ? (
-          <button
-            type="button"
-            className="call-route-shell__cta"
-            onClick={() => {
-              expandCall();
-            }}
-          >
-            Вернуться в звонок
-          </button>
-        ) : (
-          <Link
-            to={messengerHref}
-            className="call-route-shell__cta call-route-shell__cta--ghost"
-            onClick={() => {
-              minimizeCall();
-            }}
-          >
-            <LuMessageCircle size={18} strokeWidth={2.2} aria-hidden />
-            Свернуть в чат
-          </Link>
-        )}
-      </div>
-    </CallRouteShell>
+      <div className="glass-call__spacer" />
+      {uiMinimized ? (
+        <GlassCallCta onClick={() => expandCall()}>Вернуться в звонок</GlassCallCta>
+      ) : (
+        <GlassCallCta
+          to={messengerHref}
+          variant="ghost"
+          onClick={() => minimizeCall()}
+          icon={<LuMessageCircle size={20} strokeWidth={1.8} />}
+        >
+          Свернуть в чат
+        </GlassCallCta>
+      )}
+    </GlassCallShell>
   );
 }
