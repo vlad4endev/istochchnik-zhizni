@@ -699,10 +699,10 @@ export function Layout() {
   const [navCollapsed, setNavCollapsed] = useState(false);
   /** Скрытие сайдбара и нижнего таббара (режим чтения песен и т.п.). */
   const [mainChromeVisible, setMainChromeVisible] = useState(true);
-  /** Во время звонка таббар прячем — иначе на iOS/Android он перекрывает кнопки управления. */
+  /** Полноэкранный UI звонка: таббар прячем. Свёрнутый звонок — таббар остаётся. */
   const callUiOpen = useCallStore((s) => {
     const c = s.activeCall;
-    return Boolean(c && c.status !== 'ended');
+    return Boolean(c && c.status !== 'ended' && !s.uiMinimized);
   });
   const showMobileBottomNav = mainChromeVisible && !callUiOpen;
 
@@ -866,12 +866,22 @@ export function Layout() {
     return () => observer.disconnect();
   }, [showMobileBottomNav, mobileNavSplit.primary.length, mobileNavSplit.overflow.length]);
 
+  const callMinimized = useCallStore((s) => {
+    const c = s.activeCall;
+    return Boolean(c && c.status !== 'ended' && s.uiMinimized);
+  });
+
   useEffect(() => {
     const root = document.documentElement;
     if (callUiOpen) root.setAttribute('data-call-active', '1');
     else root.removeAttribute('data-call-active');
-    return () => root.removeAttribute('data-call-active');
-  }, [callUiOpen]);
+    if (callMinimized) root.setAttribute('data-call-minimized', '1');
+    else root.removeAttribute('data-call-minimized');
+    return () => {
+      root.removeAttribute('data-call-active');
+      root.removeAttribute('data-call-minimized');
+    };
+  }, [callUiOpen, callMinimized]);
 
   function toggleNavCollapsed() {
     setNavCollapsed((prev) => {

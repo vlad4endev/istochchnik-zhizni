@@ -38,6 +38,7 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  LuChevronsDown,
   LuCopy,
   LuGalleryHorizontalEnd,
   LuLayoutGrid,
@@ -52,6 +53,7 @@ import {
   LuVideoOff,
   LuX,
 } from 'react-icons/lu';
+import { useNavigate } from 'react-router-dom';
 
 import { BodyPortal } from '../../components/BodyPortal';
 import { emitAppToast } from '../../lib/uiFeedback';
@@ -59,6 +61,10 @@ import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 import { subscribeRealtimeMessages } from '../../lib/realtimeWsClient';
 import { setTelegramCallPresentation } from '../../lib/telegramWebApp';
 
+import {
+  ActiveCallMinimizedBar,
+  ActiveCallMinimizedBarSimple,
+} from './ActiveCallMinimizedBar';
 import {
   cancelCall,
   createCallInvitation,
@@ -79,6 +85,35 @@ import { copyInviteShare, formatInviteShareText, shareInviteLink } from './invit
 import { MeetingAvatar } from './MeetingAvatar';
 import { useCallStore, type ActiveCallState } from './callStore';
 import './calls.css';
+
+function MinimizeCallButton({ className }: { className?: string }) {
+  const navigate = useNavigate();
+  const minimizeCall = useCallStore((s) => s.minimizeCall);
+  const activeCall = useCallStore((s) => s.activeCall);
+
+  return (
+    <button
+      type="button"
+      className={['call-minimize-btn', className].filter(Boolean).join(' ')}
+      onClick={() => {
+        minimizeCall();
+        const conversationId = String(activeCall?.conversationId ?? '').trim();
+        if (conversationId) {
+          void navigate(`/messenger?conversationId=${encodeURIComponent(conversationId)}`);
+          return;
+        }
+        // Leave /call/:id so the rest of the app is usable under the return bar.
+        if (typeof window !== 'undefined' && window.location.pathname.startsWith('/call/')) {
+          void navigate('/messenger');
+        }
+      }}
+      aria-label="Свернуть звонок и продолжить пользоваться приложением"
+      title="Свернуть"
+    >
+      <LuChevronsDown size={20} strokeWidth={2.3} aria-hidden />
+    </button>
+  );
+}
 
 function absoluteInviteUrl(url: string): string {
   const trimmed = url.trim();
@@ -1108,9 +1143,12 @@ function RoomStage({
     >
       {isGroup ? (
         <header className="call-meeting-topbar" aria-label="Информация о встрече">
-          <h1 className="call-meeting-topbar__title" title={meetingTitle}>
-            {meetingTitle}
-          </h1>
+          <div className="call-meeting-topbar__title-wrap">
+            <MinimizeCallButton className="call-minimize-btn--topbar" />
+            <h1 className="call-meeting-topbar__title" title={meetingTitle}>
+              {meetingTitle}
+            </h1>
+          </div>
           <div className="call-meeting-topbar__meta">
             {connected && !connectError ? (
               <span
@@ -1741,6 +1779,7 @@ function GroupMeetingShell({
 function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; onCancel: () => void }) {
   const avatarSrc = activeCall.peerAvatar ? resolvePublicUrl(activeCall.peerAvatar) : undefined;
   const showMeetingMark = activeCall.callKind === 'group' || !avatarSrc;
+  const uiMinimized = useCallStore((s) => s.uiMinimized);
 
   useEffect(() => {
     unlockCallAudio();
@@ -1751,8 +1790,19 @@ function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; o
     };
   }, [activeCall.callId]);
 
+  if (uiMinimized) {
+    return (
+      <ActiveCallMinimizedBarSimple
+        activeCall={activeCall}
+        onHangup={onCancel}
+        hangupLabel="Отменить вызов"
+      />
+    );
+  }
+
   return (
     <div className="call-window call-window--ringing" role="dialog" aria-label="Исходящий звонок">
+      <MinimizeCallButton className="call-minimize-btn--overlay" />
       <div className="call-stage">
         <div className="call-stage__main">
           <div className="call-stage__avatar-block">
@@ -1817,11 +1867,11 @@ function CallShell({
 }) {
   return (
     <div className="call-window" role="dialog">
+      {children}
       <div className="call-stage">
         <div className="call-stage__main">
           <div className="call-stage__avatar-block">
             <p className="call-stage__status">{status}</p>
-            {children}
           </div>
         </div>
       </div>
@@ -1839,6 +1889,7 @@ function CallShell({
 
 function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const closeCall = useCallStore((s) => s.closeCall);
+  const uiMinimized = useCallStore((s) => s.uiMinimized);
   const setStatus = useCallStore((s) => s.setStatus);
   const setLiveKitCreds = useCallStore((s) => s.setLiveKitCreds);
   const [creds, setCreds] = useState<CallTokenResponse | null>(() =>
@@ -2053,9 +2104,17 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   }
 
   if (tokenError) {
+    if (uiMinimized) {
+      return (
+        <ActiveCallMinimizedBarSimple
+          activeCall={activeCall}
+          onHangup={() => void hangup()}
+        />
+      );
+    }
     return (
       <CallShell onHangup={() => void hangup()} status={tokenError}>
-        {null}
+        <MinimizeCallButton className="call-minimize-btn--overlay" />
       </CallShell>
     );
   }
@@ -2063,15 +2122,29 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const roomToken = roomTokenRef.current;
   const roomUrl = roomUrlRef.current;
   if (!roomToken || !roomUrl) {
+    if (uiMinimized) {
+      return (
+        <ActiveCallMinimizedBarSimple
+          activeCall={activeCall}
+          onHangup={() => void hangup()}
+        />
+      );
+    }
     return (
       <CallShell onHangup={() => void hangup()} status="Получение доступа к комнате…">
-        {null}
+        <MinimizeCallButton className="call-minimize-btn--overlay" />
       </CallShell>
     );
   }
 
   return (
-    <div className="call-window" role="dialog" aria-label="Активный звонок">
+    <div
+      className={['call-window', uiMinimized ? 'call-window--minimized' : '']
+        .filter(Boolean)
+        .join(' ')}
+      role={uiMinimized ? 'presentation' : 'dialog'}
+      aria-label={uiMinimized ? undefined : 'Активный звонок'}
+    >
       <LiveKitRoom
         key={activeCall.callId}
         token={roomToken}
@@ -2119,7 +2192,14 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         <KeepAliveCallMedia />
         <ReportCallQuality callId={activeCall.callId} />
         <ApplyLobbyMediaPrefs micOn={preferMicOn} camOn={preferCamOn} videoEnabled={videoEnabled} />
-        {activeCall.callKind === 'group' ? (
+        {uiMinimized ? (
+          <>
+            {/* RoomStage unmounted while minimized — keep remote audio alive. */}
+            <RoomAudioRenderer />
+            <StartAudio label="Нажмите, чтобы включить звук" className="call-start-audio" />
+            <ActiveCallMinimizedBar activeCall={activeCall} onHangup={() => void hangup()} />
+          </>
+        ) : activeCall.callKind === 'group' ? (
           <GroupMeetingShell
             callId={activeCall.callId}
             videoEnabled={videoEnabled}
@@ -2131,6 +2211,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
           />
         ) : (
           <>
+            <MinimizeCallButton className="call-minimize-btn--overlay" />
             <RoomStage callType={activeCall.callType} connectError={connectError} />
             <CallControls videoEnabled={videoEnabled} onHangup={() => void hangup()} />
           </>
@@ -2142,15 +2223,22 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
 
 export function CallWindow() {
   const activeCall = useCallStore((s) => s.activeCall);
-  const callUiOpen = Boolean(
-    activeCall && activeCall.status !== 'ringing_in' && activeCall.status !== 'ended',
+  const uiMinimized = useCallStore((s) => s.uiMinimized);
+  const callUiExpanded = Boolean(
+    activeCall &&
+      activeCall.status !== 'ringing_in' &&
+      activeCall.status !== 'ended' &&
+      !uiMinimized,
   );
 
   useEffect(() => {
-    if (!callUiOpen) return;
+    if (!callUiExpanded) {
+      setTelegramCallPresentation(false);
+      return;
+    }
     setTelegramCallPresentation(true);
     return () => setTelegramCallPresentation(false);
-  }, [callUiOpen]);
+  }, [callUiExpanded]);
 
   // ringing_in: Accept UI lives on IncomingCallOverlay / CallPage — do not cover it.
   if (!activeCall) return null;
