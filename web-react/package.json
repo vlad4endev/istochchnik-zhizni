@@ -3,15 +3,13 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
-  "//browserslist": "Порог iOS/Safari 15.4 — первая версия, где появились :has(), dialog и обновлённый env(). Без явного списка Autoprefixer брал дефолтный запрос и целился только в ios_saf 18.5+/26.x, то есть на iPhone с iOS 15-17 CSS уезжал без -webkit-префиксов. Android-порог держим на Chrome 90 под Capacitor-сборку.",
+  "//browserslist": "Пол PWA: iOS/Safari 15.4 (первая с :has(), dvh/lvh, dialog, Object.hasOwn). Без явного списка Autoprefixer целился только в ios_saf 18.5+/26.x — на iPhone 15–17 CSS уезжал без -webkit-. Vite build.target в vite.config.ts должен совпадать. Android — Chrome 90 под Capacitor.",
   "browserslist": [
-    "> 0.5%",
-    "last 2 versions",
-    "Firefox ESR",
-    "not dead",
     "iOS >= 15.4",
     "Safari >= 15.4",
-    "Chrome >= 90"
+    "Chrome >= 90",
+    "Firefox ESR",
+    "not dead"
   ],
   "scripts": {
     "dev": "vite",

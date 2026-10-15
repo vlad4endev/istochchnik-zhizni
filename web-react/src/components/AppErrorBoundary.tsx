@@ -25,7 +25,8 @@ export class AppErrorBoundary extends Component<Props, State> {
       <div
         style={{
           boxSizing: 'border-box',
-          minHeight: '100dvh',
+          /* 100vh: работает и на Safari < 15.4 (без dvh); для error-UI точности dvh не нужно. */
+          minHeight: '100vh',
           padding: 24,
           fontFamily: 'system-ui, sans-serif',
           background: '#f4f1ed',

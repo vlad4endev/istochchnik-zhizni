@@ -88,9 +88,12 @@ describe('index.html: viewport без interactive-widget на iOS', () => {
     expect(html).toMatch(/Android[\s\S]{0,400}interactive-widget=resizes-content/);
   });
 
-  it('до React ставит app-ios-lvh-shell на iOS 3+', () => {
+  it('до React ставит app-ios-lvh-shell на любом Apple UA (CSS: 100vh→100lvh)', () => {
     expect(html).toMatch(/app-ios-lvh-shell/);
-    expect(html).toMatch(/major > 3 \|\| \(major === 3 && minor >= 0\)/);
+    expect(html).toMatch(/classList\.add\(\s*['"]app-ios-lvh-shell['"]\s*\)/);
+    /* Bootstrap без optional catch — иначе SyntaxError на старых WebKit блокирует head. */
+    expect(html).not.toMatch(/catch\s*\{/);
+    expect(html).toMatch(/catch\s*\(\s*\w+\s*\)/);
   });
 });
 

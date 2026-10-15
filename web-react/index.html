@@ -2,14 +2,16 @@
 <html lang="ru" class="app-native-shell">
   <head>
     <script>
+      /* ES5-совместимый bootstrap: без optional catch / const — на очень старых WebKit
+         SyntaxError здесь блокирует весь head до React (белый экран PWA). */
       (function () {
         try {
-          const stored = localStorage.getItem('mantine-color-scheme-value');
-          const scheme =
+          var stored = localStorage.getItem('mantine-color-scheme-value');
+          var scheme =
             stored ||
             (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
           document.documentElement.setAttribute('data-mantine-color-scheme', scheme);
-        } catch {
+        } catch (e1) {
           document.documentElement.setAttribute('data-mantine-color-scheme', 'light');
         }
         try {
@@ -18,31 +20,29 @@
             window.matchMedia('(display-mode: fullscreen)').matches ||
             window.matchMedia('(display-mode: minimal-ui)').matches;
           if (standalone) {
-            document.documentElement.dataset.pwaStandalone = '1';
+            document.documentElement.setAttribute('data-pwa-standalone', '1');
             var android = /Android/i.test(navigator.userAgent);
             if (android) {
-              document.documentElement.dataset.androidPwa = '1';
-              document.querySelectorAll('meta[name="theme-color"]').forEach(function (meta) {
-                meta.setAttribute('content', '#f0ebe3');
-              });
+              document.documentElement.setAttribute('data-android-pwa', '1');
+              var metas = document.querySelectorAll('meta[name="theme-color"]');
+              for (var mi = 0; mi < metas.length; mi++) {
+                metas[mi].setAttribute('content', '#f0ebe3');
+              }
             }
           }
-          /* iOS 3+: оболочка 100vh/100lvh до первого кадра React (иначе dvh/px даёт таббар посредине). */
+          /*
+           * iOS: класс оболочки. CSS сам кладёт 100vh → 100lvh (cascade), поэтому
+           * на Safari < 15.4 остаётся 100vh, на 15.4+ — 100lvh. Не завязываемся на
+           * major>=17.5 (старый порог ломал iOS 15–17).
+           */
           var ua = navigator.userAgent || '';
           var apple =
             /iPad|iPhone|iPod/i.test(ua) ||
             (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
           if (apple) {
-            var ios = ua.match(/(?:iPhone )?OS (\d+)[._](\d+)/);
-            var lvhShell = true;
-            if (ios) {
-              var major = Number(ios[1]);
-              var minor = Number(ios[2]);
-              lvhShell = major > 3 || (major === 3 && minor >= 0);
-            }
-            document.documentElement.classList.toggle('app-ios-lvh-shell', lvhShell);
+            document.documentElement.classList.add('app-ios-lvh-shell');
           }
-        } catch {
+        } catch (e2) {
           /* ignore */
         }
       })();

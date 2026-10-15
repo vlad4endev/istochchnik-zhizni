@@ -42,7 +42,7 @@ import { PrefetchNavLink } from '../components/PrefetchNavLink';
 import { ScrollRestoration } from '../components/ScrollRestoration';
 import { isDraftPrivateConversationId, useChatStore } from '../features/messenger/chatStore';
 import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
-import { CallWindow } from '../features/calls/CallWindow';
+import { CallWindowHost } from '../features/calls/CallWindowHost';
 import { useCallStore } from '../features/calls/callStore';
 import { IncomingCallOverlay } from '../features/calls/IncomingCallOverlay';
 import { SermonPlaybackProvider } from '../features/resources/sermonPlayback/SermonPlaybackContext';
@@ -1327,7 +1327,7 @@ export function Layout() {
         fixed привязан к body/viewport полной высоты.
         На iOS idle оболочка — 100lvh, а bottom панели — --app-keyboard-inset
         (хром Safari), чтобы панель не оказалась посреди экрана и не уехала под хром.
-        Во время звонка скрываем (showMobileBottomNav) — CallWindow тоже в body.
+        Во время звонка скрываем (showMobileBottomNav) — CallWindowHost тоже в body.
       */}
       {typeof document !== 'undefined'
         ? createPortal(
@@ -1411,7 +1411,7 @@ export function Layout() {
       <NotificationPrompt />
       <PermissionsRequestModal />
       <IncomingCallOverlay />
-      <CallWindow />
+      <CallWindowHost />
       <SermonPlayer />
     </div>
     </SermonPlaybackProvider>

@@ -74,8 +74,10 @@ textarea {
     --app-bottom-nav-measured-height,
     calc(var(--app-bottom-nav-main-gutter) + var(--app-safe-bottom, 0px))
   );
-  /* До первого кадра JS — fallback. На iOS idle nativeShellViewport ставит 100lvh или 100vh, не px. */
+  /* До первого кадра JS — fallback. 100vh для Safari < 15.4 (нет dvh), затем 100dvh. */
+  --viewport-height: 100vh;
   --viewport-height: 100dvh;
+  --vh: 100vh;
   --vh: 100dvh;
   /*
    * Высота области под контент. #root — flex-колонка с overflow:hidden и распоркой #root::before на

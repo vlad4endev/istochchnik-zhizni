@@ -14,7 +14,10 @@ export const IOS_BROWSER_CHROME_MAX_PX = 160;
 /** Предпочтительно 100lvh (Safari 15.4+). На более старых WebKit — 100vh, см. iosIdleViewportCss(). */
 export const IOS_IDLE_VIEWPORT_CSS = '100lvh';
 export const IOS_IDLE_VIEWPORT_CSS_FALLBACK = '100vh';
-/** iPhone OS 3+ / любой современный iOS. Ниже в природе не встречается, но порог явный. */
+/**
+ * Порог класса idle-shell. Реальная единица (100lvh vs 100vh) выбирается через
+ * CSS.supports / cascade; major здесь только «любой iOS», не Safari 17.5+.
+ */
 export const IOS_LVH_SHELL_MIN_MAJOR = 3;
 export const IOS_LVH_SHELL_MIN_MINOR = 0;
 

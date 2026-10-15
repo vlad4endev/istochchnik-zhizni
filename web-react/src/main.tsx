@@ -1,3 +1,6 @@
+/** До остальных импортов: Object.hasOwn / Array.at и т.п. для Safari < 15.4 и старых WebKit. */
+import './lib/legacyBrowserPolyfills';
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
