@@ -34,7 +34,10 @@ import { MessengerPollCard } from './MessengerPollCard';
 import { MessageReadersSheet } from './MessageReadersSheet';
 import { ForwardMessageSheet } from './ForwardMessageSheet';
 import { useMediaViewer, type MediaItem } from '../../../components/MediaViewer';
-import { canPreviewDocumentInline } from '../../../components/documentPreviewTypes';
+import {
+  canOpenDocumentViewer,
+  isOfficeDocumentNeedingPublicUrl,
+} from '../../../components/documentPreviewTypes';
 import { fetchAuthenticatedBlob } from '../../../lib/fetchAuthenticatedBlob';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
@@ -446,7 +449,12 @@ function MessageBubbleInner({
   const [showReactionBar, setShowReactionBar] = useState(false);
   const [showReadersSheet, setShowReadersSheet] = useState(false);
   const [showForwardSheet, setShowForwardSheet] = useState(false);
-  const [documentViewer, setDocumentViewer] = useState<{ url: string; name: string; mime: string } | null>(null);
+  const [documentViewer, setDocumentViewer] = useState<{
+    url: string;
+    viewUrl?: string;
+    name: string;
+    mime: string;
+  } | null>(null);
   const [mainImageLoaded, setMainImageLoaded] = useState(false);
   const [albumSlotLoaded, setAlbumSlotLoaded] = useState<Record<number, boolean>>({});
   const longPressTimer = useRef<number | null>(null);
@@ -773,17 +781,40 @@ function MessageBubbleInner({
     console.log('[messenger] pray click', { messageId: message.id });
   };
 
-  const openDocument = useCallback((url: string, name: string, mimeHint: string) => {
-    if (!url) return;
-    if (canPreviewDocumentInline(name, mimeHint)) {
-      setDocumentViewer({ url, name, mime: mimeHint });
-      return;
-    }
-    // Office и прочие форматы без локального превью: скачиваем с Bearer (не window.open — 401).
-    void saveUrlToDevice(url, name).catch(() =>
-      emitAppToast({ kind: 'error', message: 'Не удалось открыть файл' }),
-    );
-  }, []);
+  const openDocument = useCallback(
+    (url: string, name: string, mimeHint: string) => {
+      if (!url) return;
+
+      // PDF/docx/текст/картинки и Office — в модалку (не скачивание).
+      if (canOpenDocumentViewer(name, mimeHint)) {
+        if (isOfficeDocumentNeedingPublicUrl(name, mimeHint) && /^\d+$/.test(String(message.id))) {
+          void (async () => {
+            try {
+              const { url: signed } = await fetchMessageAttachmentUrl(String(message.id));
+              setDocumentViewer({
+                url,
+                viewUrl: signed || undefined,
+                name,
+                mime: mimeHint,
+              });
+            } catch {
+              // Без подписанного URL Office Online не откроет — всё равно покажем модалку с ошибкой/скачиванием.
+              setDocumentViewer({ url, name, mime: mimeHint });
+            }
+          })();
+          return;
+        }
+        setDocumentViewer({ url, name, mime: mimeHint });
+        return;
+      }
+
+      // Неизвестные форматы: скачиваем с Bearer.
+      void saveUrlToDevice(url, name).catch(() =>
+        emitAppToast({ kind: 'error', message: 'Не удалось открыть файл' }),
+      );
+    },
+    [message.id],
+  );
 
   const buildAlbumViewer = useCallback((): {
     items: MediaItem[];
@@ -2434,6 +2465,7 @@ function MessageBubbleInner({
         <DocumentViewerModal
           open
           fileUrl={documentViewer.url}
+          viewUrl={documentViewer.viewUrl}
           fileName={documentViewer.name || 'Документ'}
           fileMime={documentViewer.mime}
           onClose={() => setDocumentViewer(null)}
