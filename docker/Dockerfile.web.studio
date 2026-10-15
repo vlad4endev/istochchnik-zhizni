@@ -19,6 +19,8 @@ RUN cd web-react \
   && npm rebuild esbuild
 
 COPY web-react ./web-react/
+# Vite + tsc на большом SPA упираются в дефолтный heap ~2 ГБ (exit 134).
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN cd web-react && npm run build
 
 FROM public.ecr.aws/docker/library/nginx:alpine

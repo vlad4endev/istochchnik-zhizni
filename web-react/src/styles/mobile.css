@@ -518,7 +518,7 @@
   select {
     font-size: 16px !important;
   }
-  /* Tap-target ≥44px, но не раздуваем узкие icon-кнопки с явным w-*/h-*. */
+  /* Tap-target ≥44px, но не раздуваем узкие icon-кнопки с явным классом w-* или h-*. */
   button:not([class*='w-']):not([class*='h-']):not(.tap-compact):not([role='switch']),
   .btn {
     min-height: 44px !important;
