@@ -24,6 +24,8 @@ export interface ActiveCallState {
 
 interface CallStore {
   activeCall: ActiveCallState | null;
+  /** Full-screen call UI hidden; LiveKit stays connected — show return bar. */
+  uiMinimized: boolean;
   isMuted: boolean;
   isVideoOff: boolean;
   isScreenSharing: boolean;
@@ -34,12 +36,15 @@ interface CallStore {
   setMuted: (v: boolean) => void;
   setVideoOff: (v: boolean) => void;
   setScreenSharing: (v: boolean) => void;
+  minimizeCall: () => void;
+  expandCall: () => void;
   closeCall: () => void;
   hydrateFromPublic: (call: CallPublic, extras: Partial<ActiveCallState>) => void;
 }
 
 export const useCallStore = create<CallStore>((set) => ({
   activeCall: null,
+  uiMinimized: false,
   isMuted: false,
   isVideoOff: false,
   isScreenSharing: false,
@@ -53,6 +58,7 @@ export const useCallStore = create<CallStore>((set) => ({
         initialMicOn: call.initialMicOn ?? true,
         initialCamOn: call.initialCamOn ?? call.callType === 'video',
       },
+      uiMinimized: false,
       isMuted: call.initialMicOn === false,
       isVideoOff: call.initialCamOn === false || call.callType === 'audio',
       isScreenSharing: false,
@@ -73,9 +79,19 @@ export const useCallStore = create<CallStore>((set) => ({
   setVideoOff: (isVideoOff) => set({ isVideoOff }),
   setScreenSharing: (isScreenSharing) => set({ isScreenSharing }),
 
+  minimizeCall: () =>
+    set((s) => {
+      if (!s.activeCall) return s;
+      if (s.activeCall.status === 'ringing_in' || s.activeCall.status === 'ended') return s;
+      return { uiMinimized: true };
+    }),
+
+  expandCall: () => set({ uiMinimized: false }),
+
   closeCall: () =>
     set({
       activeCall: null,
+      uiMinimized: false,
       isMuted: false,
       isVideoOff: false,
       isScreenSharing: false,
@@ -85,6 +101,7 @@ export const useCallStore = create<CallStore>((set) => ({
     set((s) => {
       const sameCall = s.activeCall?.callId === call.id;
       return {
+        uiMinimized: sameCall ? s.uiMinimized : false,
         activeCall: {
           callId: call.id,
           // extras.conversationId wins (e.g. link-join clears chat id so guests aren't sent into a foreign group)

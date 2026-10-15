@@ -16,6 +16,9 @@ export function CallPage() {
   const activeCall = useCallStore((s) => s.activeCall);
   const hydrateFromPublic = useCallStore((s) => s.hydrateFromPublic);
   const closeCall = useCallStore((s) => s.closeCall);
+  const uiMinimized = useCallStore((s) => s.uiMinimized);
+  const expandCall = useCallStore((s) => s.expandCall);
+  const minimizeCall = useCallStore((s) => s.minimizeCall);
   const [call, setCall] = useState<CallPublic | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,6 +97,14 @@ export function CallPage() {
     }
   }, [activeCall, call, loading]);
 
+  // Opening /call/:id while minimized restores the full call UI.
+  useEffect(() => {
+    if (!callId) return;
+    if (activeCall?.callId !== callId) return;
+    if (!useCallStore.getState().uiMinimized) return;
+    useCallStore.getState().expandCall();
+  }, [activeCall?.callId, callId]);
+
   if (loading) {
     return (
       <div className="call-route-page">
@@ -163,12 +174,33 @@ export function CallPage() {
   }
 
   // CallWindow overlay is mounted in Layout — avoid a second LiveKit room.
+  // If the overlay is minimized, offer a one-tap return; otherwise a link to leave the route.
   return (
     <div className="call-route-page call-route-page--active">
-      <p className="call-stage__status">Звонок активен</p>
-      <Link to={messengerHref} className="call-route-link">
-        Вернуться в чат
-      </Link>
+      <p className="call-stage__status">
+        {uiMinimized ? 'Звонок свёрнут — продолжается в фоне' : 'Звонок активен'}
+      </p>
+      {uiMinimized ? (
+        <button
+          type="button"
+          className="call-route-link"
+          onClick={() => {
+            expandCall();
+          }}
+        >
+          Вернуться в звонок
+        </button>
+      ) : (
+        <Link
+          to={messengerHref}
+          className="call-route-link"
+          onClick={() => {
+            minimizeCall();
+          }}
+        >
+          Свернуть и вернуться в чат
+        </Link>
+      )}
     </div>
   );
 }

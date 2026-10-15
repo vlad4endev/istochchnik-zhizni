@@ -3322,3 +3322,433 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   box-shadow: none;
   border: 1px solid rgba(255, 255, 255, 0.18);
 }
+
+/* ── Minimize call + floating return bar ─────────────────────────────── */
+
+.call-minimize-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease, opacity 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.call-minimize-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.call-minimize-btn:active {
+  transform: scale(0.94);
+}
+
+.call-minimize-btn--overlay {
+  position: absolute;
+  top: calc(10px + var(--call-inset-top, 0px));
+  right: calc(12px + var(--call-safe-right, 0px));
+  z-index: 30;
+}
+
+.call-minimize-btn--topbar {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+}
+
+.call-window--minimized {
+  top: auto;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: auto;
+  max-height: none;
+  background: transparent;
+  pointer-events: none;
+  z-index: 10030;
+  overflow: visible;
+}
+
+.call-window--minimized .call-lk-room {
+  flex: 0 0 auto;
+  height: auto !important;
+  min-height: 0;
+  overflow: visible;
+  background: transparent !important;
+  pointer-events: none;
+}
+
+.call-window--minimized .lk-room-container {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+.active-call-bar-host {
+  pointer-events: auto;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--app-bottom-nav-total-height, 0px) + 0.55rem);
+  z-index: 10035;
+  display: flex;
+  align-items: stretch;
+  gap: 0.45rem;
+  /* Bottom offset already includes nav + home-indicator via --app-bottom-nav-total-height. */
+  padding: 0 max(0.75rem, env(safe-area-inset-right, 0px)) 0
+    max(0.75rem, env(safe-area-inset-left, 0px));
+  animation: active-call-bar-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (min-width: 1024px) {
+  .active-call-bar-host {
+    left: 50%;
+    right: auto;
+    bottom: 1.25rem;
+    width: min(28rem, calc(100vw - 2rem));
+    transform: translateX(-50%);
+    padding-left: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+  }
+}
+
+@keyframes active-call-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (min-width: 1024px) {
+  @keyframes active-call-bar-in {
+    from {
+      opacity: 0;
+      transform: translateX(-50%) translateY(18px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0) scale(1);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .active-call-bar-host {
+    animation: none;
+  }
+}
+
+.active-call-bar {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.65rem 0.55rem 0.55rem;
+  border: 0;
+  border-radius: 1.15rem;
+  text-align: left;
+  color: #fff;
+  cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--primary, #7d3640) 88%, #1a1012) 0%,
+      #16131a 52%,
+      #0d0c10 100%
+    );
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+    0 14px 40px rgba(12, 10, 14, 0.45),
+    0 0 0 1px color-mix(in srgb, var(--primary, #7d3640) 35%, transparent);
+  transition: transform 0.15s ease, filter 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.active-call-bar:hover {
+  filter: brightness(1.05);
+}
+
+.active-call-bar:active {
+  transform: scale(0.985);
+}
+
+.active-call-bar__glow {
+  position: absolute;
+  inset: -40% -20% auto auto;
+  width: 55%;
+  height: 140%;
+  background: radial-gradient(circle, rgba(52, 211, 153, 0.28), transparent 68%);
+  pointer-events: none;
+  z-index: 0;
+  animation: active-call-glow 3.2s ease-in-out infinite;
+}
+
+.active-call-bar__pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.35);
+  pointer-events: none;
+  z-index: 0;
+  animation: active-call-ring 2.4s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .active-call-bar__glow,
+  .active-call-bar__pulse {
+    animation: none;
+  }
+}
+
+@keyframes active-call-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translate(0, 0);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-8%, 6%);
+  }
+}
+
+@keyframes active-call-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 14px rgba(52, 211, 153, 0);
+  }
+}
+
+.active-call-bar__avatar {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: 2.65rem;
+  height: 2.65rem;
+  border-radius: 0.95rem;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.active-call-bar__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.active-call-bar__avatar-mark {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: #fff;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--primary, #7d3640) 80%, #fff), #3a1c22);
+}
+
+.active-call-bar__live-dot {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #34d399;
+  box-shadow:
+    0 0 0 2px #16131a,
+    0 0 10px rgba(52, 211, 153, 0.85);
+  animation: active-call-dot 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .active-call-bar__live-dot {
+    animation: none;
+  }
+}
+
+@keyframes active-call-dot {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.85);
+    opacity: 0.75;
+  }
+}
+
+.active-call-bar__copy {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.active-call-bar__title {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.active-call-bar__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-width: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.2;
+}
+
+.active-call-bar__live-label {
+  color: #6ee7b7;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+}
+
+.active-call-bar__dot {
+  opacity: 0.55;
+}
+
+.active-call-bar__dot--wide {
+  display: none;
+}
+
+.active-call-bar__timer {
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.active-call-bar__hint {
+  display: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (min-width: 420px) {
+  .active-call-bar__dot--wide,
+  .active-call-bar__hint {
+    display: inline;
+  }
+}
+
+.active-call-bar__cta {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  height: 2rem;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: #0f172a;
+  background: linear-gradient(180deg, #ecfdf5, #6ee7b7);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.28);
+}
+
+@media (min-width: 480px) {
+  .active-call-bar__cta {
+    display: inline-flex;
+  }
+}
+
+.active-call-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.active-call-bar__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(22, 19, 26, 0.92);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12) inset,
+    0 10px 24px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.active-call-bar__action:hover {
+  background: rgba(40, 36, 48, 0.96);
+}
+
+.active-call-bar__action:active {
+  transform: scale(0.94);
+}
+
+.active-call-bar__action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.active-call-bar__action--warn {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fde68a;
+  box-shadow:
+    0 0 0 1px rgba(251, 191, 36, 0.35) inset,
+    0 10px 24px rgba(0, 0, 0, 0.28);
+}
+
+.active-call-bar__action--hangup {
+  background: #ef4444;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12) inset,
+    0 10px 24px rgba(239, 68, 68, 0.35);
+}
+
+.active-call-bar__action--hangup:hover {
+  background: #f87171;
+}
+
+html[data-call-minimized='1'] .app-bottom-nav {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  visibility: visible;
+}

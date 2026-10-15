@@ -23,6 +23,25 @@ describe('mobile call layout', () => {
     expect(layout).toMatch(/!callUiOpen/);
   });
 
+  it('свёрнутый звонок оставляет таббар и показывает панель возврата', () => {
+    const layout = readFileSync(join(root, 'src/app/Layout.tsx'), 'utf8');
+    const callWindow = readFileSync(join(root, 'src/features/calls/CallWindow.tsx'), 'utf8');
+    const store = readFileSync(join(root, 'src/features/calls/callStore.ts'), 'utf8');
+    const css = readFileSync(join(root, 'src/features/calls/calls.css'), 'utf8');
+    const bar = readFileSync(join(root, 'src/features/calls/ActiveCallMinimizedBar.tsx'), 'utf8');
+    expect(store).toMatch(/uiMinimized/);
+    expect(store).toMatch(/minimizeCall/);
+    expect(store).toMatch(/expandCall/);
+    expect(layout).toMatch(/uiMinimized/);
+    expect(layout).toMatch(/data-call-minimized/);
+    expect(callWindow).toMatch(/MinimizeCallButton/);
+    expect(callWindow).toMatch(/call-window--minimized/);
+    expect(callWindow).toMatch(/ActiveCallMinimizedBar/);
+    expect(bar).toMatch(/Вернуться/);
+    expect(css).toMatch(/\.active-call-bar\b/);
+    expect(css).toMatch(/call-window--minimized/);
+  });
+
   it('резервирует место под кнопки и safe-area на мобиле', () => {
     const css = readFileSync(join(root, 'src/features/calls/calls.css'), 'utf8');
     expect(css).toMatch(/--call-controls-reserve/);
