@@ -232,6 +232,8 @@ const MOBILE_MORE_TILE_BASE =
 function mobileMoreTileClass(active: boolean): string {
   return [
     MOBILE_MORE_TILE_BASE,
+    'app-more-tile',
+    active ? 'is-active' : '',
     active
       ? 'border-primary/25 bg-primary/12 text-primary shadow-sm dark:border-primary/35 dark:bg-primary/20'
       : 'border-stone-200/70 bg-stone-50/90 text-stone-800 hover:border-stone-300/90 hover:bg-white dark:border-stone-700/80 dark:bg-stone-800/55 dark:text-stone-100 dark:hover:border-stone-600 dark:hover:bg-stone-800/90',
