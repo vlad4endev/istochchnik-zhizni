@@ -2249,3 +2249,95 @@ button {
   color: var(--primary);
   text-decoration: underline;
 }
+
+/*
+ * iOS/iPadOS: нижняя панель и «Ещё» в стиле «жидкого стекла» (плавающая капсула).
+ * Только Apple-устройства (`data-apple-mobile`) и только там, где панель вообще видна (< lg).
+ *
+ * Размытие кладём на ::before ряда, а НЕ на сам ряд: backdrop-filter/filter у предка делает его
+ * containing block для position:fixed потомков, а шторка «Ещё» (fixed inset-0) лежит внутри ряда.
+ * Сама nav остаётся прозрачной полноширинной обёрткой — Layout/JS меряют её высоту для отступа контента.
+ */
+@media (max-width: 1023px) {
+  html[data-apple-mobile='1'] nav.app-bottom-nav.bottom-nav {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    padding-bottom: max(0.25rem, calc(env(safe-area-inset-bottom, 0px) - 0.5rem));
+  }
+
+  html[data-apple-mobile='1'] nav.app-bottom-nav .app-bottom-nav__row {
+    position: relative;
+    isolation: isolate;
+    box-sizing: border-box;
+    width: calc(100% - 1.5rem);
+    max-width: 26rem;
+    min-height: 62px;
+    margin: 0 auto;
+    padding: 4px;
+    gap: 2px;
+  }
+
+  html[data-apple-mobile='1'] nav.app-bottom-nav .app-bottom-nav__row::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface-elevated) 58%, transparent);
+    -webkit-backdrop-filter: blur(26px) saturate(190%);
+    backdrop-filter: blur(26px) saturate(190%);
+    border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+    box-shadow:
+      0 10px 32px rgba(0, 0, 0, 0.14),
+      0 2px 8px rgba(0, 0, 0, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    pointer-events: none;
+  }
+
+  html[data-apple-mobile='1'] nav.app-bottom-nav .app-bottom-nav__tab {
+    min-height: 54px;
+    border-radius: 999px;
+    gap: 0.0625rem;
+  }
+
+  /* Активная вкладка — стеклянная капсула вокруг иконки и подписи, а не кружок под иконкой. */
+  html[data-apple-mobile='1'] nav.app-bottom-nav .app-bottom-nav__tab.is-active {
+    background: color-mix(in srgb, var(--primary) 14%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 10%, transparent);
+  }
+
+  html[data-apple-mobile='1'] nav.app-bottom-nav .app-bottom-nav__icon.is-active {
+    background: transparent;
+  }
+
+  /* Шторка «Ещё»: плавающая стеклянная карточка с отступами от краёв, а не плашка на всю ширину. */
+  html[data-apple-mobile='1'] .app-mobile-nav-more-sheet {
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+    width: auto;
+    max-width: 30rem;
+    border-radius: 1.75rem;
+    border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+    background: color-mix(in srgb, var(--surface-elevated) 66%, transparent);
+    -webkit-backdrop-filter: blur(30px) saturate(190%);
+    backdrop-filter: blur(30px) saturate(190%);
+    box-shadow:
+      0 18px 56px rgba(0, 0, 0, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  }
+
+  html[data-apple-mobile='1'] .app-mobile-nav-more-sheet .app-more-tile {
+    border-radius: 1.25rem;
+    border-color: color-mix(in srgb, var(--text) 8%, transparent);
+    background: color-mix(in srgb, var(--surface-elevated) 50%, transparent);
+  }
+
+  html[data-apple-mobile='1'] .app-mobile-nav-more-sheet .app-more-tile.is-active {
+    border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+    background: color-mix(in srgb, var(--primary) 16%, transparent);
+  }
+}
