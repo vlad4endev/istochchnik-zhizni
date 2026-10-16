@@ -9,6 +9,19 @@ textarea {
   font-size: max(16px, 1em);
 }
 
+/*
+ * Правило выше проигрывает классам Tailwind (text-sm / text-xs на <input> и т.п.) по специфичности,
+ * а зум уже разрешён в viewport (a11y) — iOS увеличивал страницу при фокусе таких полей.
+ * Только WebKit на iOS/iPadOS; кнопочные и переключающие типы зума не вызывают.
+ */
+@supports (-webkit-touch-callout: none) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not([type='button']):not([type='submit']):not([type='reset']):not([type='image']),
+  select,
+  textarea {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
 :root {
   --primary: #7d3640;
   --primary-dark: #5c2830;
