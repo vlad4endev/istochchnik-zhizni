@@ -2341,3 +2341,22 @@ button {
     background: color-mix(in srgb, var(--primary) 16%, transparent);
   }
 }
+
+/*
+ * iOS 15.4–16.1 не знает color-mix(): без запасных фонов «стеклянные» панели ниже остались бы
+ * прозрачными, и текст списка просвечивал бы сквозь шапку и таббар. Тут — сплошные цвета темы.
+ */
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  @media (max-width: 1023px) {
+    html[data-apple-mobile='1'] nav.app-bottom-nav .app-bottom-nav__row::before,
+    html[data-apple-mobile='1'] .app-mobile-nav-more-sheet,
+    html[data-apple-mobile='1'] .app-mobile-nav-more-sheet .app-more-tile {
+      background: var(--surface-elevated, #ffffff);
+    }
+
+    html[data-apple-mobile='1'] nav.app-bottom-nav .app-bottom-nav__tab.is-active,
+    html[data-apple-mobile='1'] .app-mobile-nav-more-sheet .app-more-tile.is-active {
+      background: rgba(125, 54, 64, 0.14);
+    }
+  }
+}

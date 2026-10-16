@@ -4745,6 +4745,11 @@ html.dark .msg-videonote-circle--placeholder {
       border: 1px solid color-mix(in srgb, var(--tg-text, #1c1917) 8%, transparent);
     }
 
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search__input {
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-smart-tabs-scroll {
       margin-inline: 0;
       scroll-padding-inline: 4px;
@@ -4778,16 +4783,31 @@ html.dark .msg-videonote-circle--placeholder {
     }
 
     @media (prefers-reduced-transparency: reduce) {
-      html[data-apple-mobile='1'][data-messenger-open='1'] :is(
-          .tg-sidebar-header::before,
-          .tg-chatlist-toolbar::before,
-          .tg-sidebar-actions,
-          .tg-chatlist-search,
-          .tg-smart-tabs-scroll
-        ) {
+      html[data-apple-mobile='1'][data-messenger-open='1'] .tg-sidebar-header::before,
+      html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-toolbar::before,
+      html[data-apple-mobile='1'][data-messenger-open='1'] .tg-sidebar-actions,
+      html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search,
+      html[data-apple-mobile='1'][data-messenger-open='1'] .tg-smart-tabs-scroll {
         -webkit-backdrop-filter: none;
         backdrop-filter: none;
       }
+    }
+  }
+}
+
+/* iOS < 16.2 без color-mix(): сплошные фоны вместо стекла (см. блок «Telegram iOS 26» выше). */
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  @media (max-width: 768px) {
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-sidebar-header::before,
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-toolbar::before,
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-sidebar-actions,
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search,
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-smart-tabs-scroll {
+      background: var(--tg-surface-elevated, #fafaf9);
+    }
+
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-smart-tab.tg-smart-tab--active {
+      background: rgba(125, 54, 64, 0.14) !important;
     }
   }
 }
