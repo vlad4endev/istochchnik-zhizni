@@ -4645,7 +4645,8 @@ html.dark .msg-videonote-circle--placeholder {
 
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-sidebar .tg-chatlist-root {
       flex: 0 0 auto;
-      min-height: 0;
+      /* +высота поиска: даже короткий список можно прокрутить так, чтобы поиск спрятался над ним */
+      min-height: calc(100% + var(--tg-search-h, 54px));
       overflow: visible;
     }
 
@@ -4672,20 +4673,20 @@ html.dark .msg-videonote-circle--placeholder {
     }
 
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-sidebar-header::before,
-    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-toolbar::before {
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-tabs-slot::before {
       content: '';
       position: absolute;
       inset: 0;
       z-index: -1;
-      background: color-mix(in srgb, var(--tg-surface-elevated, #fafaf9) 72%, transparent);
+      background: color-mix(in srgb, var(--surface-elevated, #fff) 72%, transparent);
       -webkit-backdrop-filter: blur(18px) saturate(170%);
       backdrop-filter: blur(18px) saturate(170%);
       pointer-events: none;
     }
 
-    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-toolbar::before {
-      -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
-      mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-tabs-slot::before {
+      -webkit-mask-image: linear-gradient(to bottom, transparent, #000 10px, #000 calc(100% - 14px), transparent);
+      mask-image: linear-gradient(to bottom, transparent, #000 10px, #000 calc(100% - 14px), transparent);
     }
 
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-sidebar-title {
@@ -4724,25 +4725,52 @@ html.dark .msg-videonote-circle--placeholder {
     }
 
     /* ── Поиск и фильтры ── */
+    /* Тулбар «растворяется»: поиск едет вместе со списком, фильтры (слот) липнут под шапкой. */
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-toolbar {
+      display: contents;
+    }
+
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-tabs-slot {
       position: sticky;
       top: calc(env(safe-area-inset-top, 0px) + 52px);
       z-index: 40;
       isolation: isolate;
-      gap: 8px;
       padding: 2px 12px 12px;
-      border-bottom: none;
-      background: transparent;
     }
 
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search {
+      --r: var(--tg-search-reveal, 1);
       min-height: 40px;
+      margin: 4px 12px 10px;
       padding: 6px 14px;
       border-radius: 999px;
+      /* Прогресс «потянули» (0→1) из useIosPullSearch: проявление, лёгкий сдвиг и рост. */
+      opacity: var(--r);
+      transform-origin: 50% 0;
+      transform: translate3d(0, calc((1 - var(--r)) * -16px), 0) scale(calc(0.9 + 0.1 * var(--r)));
+      will-change: transform, opacity;
       background: color-mix(in srgb, var(--tg-surface-elevated, #fafaf9) 62%, transparent);
       -webkit-backdrop-filter: blur(20px) saturate(180%);
       backdrop-filter: blur(20px) saturate(180%);
       border: 1px solid color-mix(in srgb, var(--tg-text, #1c1917) 8%, transparent);
+    }
+
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search__icon {
+      transform: scale(calc(0.6 + 0.4 * var(--r, 1))) rotate(calc((1 - var(--r, 1)) * -50deg));
+      transition: color 0.2s ease;
+    }
+
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search {
+      transition: box-shadow 0.25s ease, border-color 0.25s ease;
+    }
+
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search:focus-within {
+      border-color: color-mix(in srgb, var(--tg-primary, #7d3640) 45%, transparent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--tg-primary, #7d3640) 16%, transparent);
+    }
+
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search:focus-within .tg-chatlist-search__icon {
+      color: var(--tg-primary, #7d3640);
     }
 
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search__input {
@@ -4782,9 +4810,20 @@ html.dark .msg-videonote-circle--placeholder {
       color: #fff;
     }
 
+    @media (prefers-reduced-motion: reduce) {
+      html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search {
+        transform: none;
+        transition: none;
+      }
+
+      html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search__icon {
+        transform: none;
+      }
+    }
+
     @media (prefers-reduced-transparency: reduce) {
       html[data-apple-mobile='1'][data-messenger-open='1'] .tg-sidebar-header::before,
-      html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-toolbar::before,
+      html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-tabs-slot::before,
       html[data-apple-mobile='1'][data-messenger-open='1'] .tg-sidebar-actions,
       html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search,
       html[data-apple-mobile='1'][data-messenger-open='1'] .tg-smart-tabs-scroll {
@@ -4799,7 +4838,7 @@ html.dark .msg-videonote-circle--placeholder {
 @supports not (color: color-mix(in srgb, red 50%, blue)) {
   @media (max-width: 768px) {
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-sidebar-header::before,
-    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-toolbar::before,
+    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-tabs-slot::before,
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-sidebar-actions,
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search,
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-smart-tabs-scroll {
