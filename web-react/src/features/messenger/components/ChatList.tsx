@@ -1,4 +1,5 @@
 import { memo, useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { useIosPullSearch } from '../useIosPullSearch';
 import { createPortal } from 'react-dom';
 import { useChatStore, EMPTY_ARRAY, type ChatTab } from '../chatStore';
 import type { ConversationListItem, PatchMyConversationUiBody } from '../api/messengerApi';
@@ -60,6 +61,9 @@ export const ChatList = memo(function ChatList({ onSelect, activeId }: ChatListP
   const getUnreadForTab = useChatStore((s) => s.getUnreadForTab);
   const getConversationsForActiveTab = useChatStore((s) => s.getConversationsForActiveTab);
   const [listSearchQuery, setListSearchQuery] = useState('');
+  const listRootRef = useRef<HTMLDivElement | null>(null);
+  const listReady = !(conversationsLoading && !conversationsLoaded) && conversations.length > 0;
+  useIosPullSearch(listRootRef, listReady, listSearchQuery.trim() !== '');
 
   const filtered = useMemo(() => getConversationsForActiveTab() || EMPTY_ARRAY, [getConversationsForActiveTab, conversations, activeTab]);
   const unreadByTab = useMemo(
@@ -118,17 +122,19 @@ export const ChatList = memo(function ChatList({ onSelect, activeId }: ChatListP
   }
 
   return (
-    <div className="tg-chatlist-root flex min-h-0 flex-1 flex-col bg-[var(--surface-elevated)]">
+    <div ref={listRootRef} className="tg-chatlist-root flex min-h-0 flex-1 flex-col bg-[var(--surface-elevated)]">
       <div className="tg-chatlist-toolbar shrink-0">
         <ChatListSearch value={listSearchQuery} onChange={setListSearchQuery} />
-        <SmartTabs
-          activeTab={activeTab}
-          onChange={setActiveTab}
-          unreadAll={unreadByTab.all}
-          unreadPersonal={unreadByTab.personal}
-          unreadServices={unreadByTab.services}
-          unreadNotifications={unreadByTab.notifications}
-        />
+        <div className="tg-chatlist-tabs-slot">
+          <SmartTabs
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            unreadAll={unreadByTab.all}
+            unreadPersonal={unreadByTab.personal}
+            unreadServices={unreadByTab.services}
+            unreadNotifications={unreadByTab.notifications}
+          />
+        </div>
       </div>
 
       <ActiveCallStoryChip />

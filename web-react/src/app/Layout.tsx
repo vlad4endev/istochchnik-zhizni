@@ -1317,6 +1317,8 @@ export function Layout() {
       >
         <div key={location.pathname} className="page-enter flex min-h-0 w-full max-w-full flex-1 flex-col">
           <Outlet />
+          {/* Только iOS (см. index.css): запас под плавающую панель внутри скролла страницы. */}
+          <div className="app-ios-end-room" aria-hidden="true" />
         </div>
       </main>
 

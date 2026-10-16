@@ -2286,14 +2286,15 @@ button {
     inset: 0;
     z-index: -1;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--surface-elevated) 58%, transparent);
-    -webkit-backdrop-filter: blur(26px) saturate(190%);
-    backdrop-filter: blur(26px) saturate(190%);
-    border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+    /* Сильно прозрачное «жидкое стекло»: контент читается сквозь панель, размытие держит подписи. */
+    background: color-mix(in srgb, var(--surface-elevated) 30%, transparent);
+    -webkit-backdrop-filter: blur(30px) saturate(210%);
+    backdrop-filter: blur(30px) saturate(210%);
+    border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
     box-shadow:
-      0 10px 32px rgba(0, 0, 0, 0.14),
-      0 2px 8px rgba(0, 0, 0, 0.06),
-      inset 0 1px 0 rgba(255, 255, 255, 0.45);
+      0 10px 30px rgba(0, 0, 0, 0.12),
+      0 2px 8px rgba(0, 0, 0, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5);
     pointer-events: none;
   }
 
@@ -2339,5 +2340,60 @@ button {
   html[data-apple-mobile='1'] .app-mobile-nav-more-sheet .app-more-tile.is-active {
     border-color: color-mix(in srgb, var(--primary) 28%, transparent);
     background: color-mix(in srgb, var(--primary) 16%, transparent);
+  }
+}
+
+/*
+ * iOS 15.4–16.1 не знает color-mix(): без запасных фонов «стеклянные» панели ниже остались бы
+ * прозрачными, и текст списка просвечивал бы сквозь шапку и таббар. Тут — сплошные цвета темы.
+ */
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  @media (max-width: 1023px) {
+    html[data-apple-mobile='1'] nav.app-bottom-nav .app-bottom-nav__row::before,
+    html[data-apple-mobile='1'] .app-mobile-nav-more-sheet,
+    html[data-apple-mobile='1'] .app-mobile-nav-more-sheet .app-more-tile {
+      background: var(--surface-elevated, #ffffff);
+    }
+
+    html[data-apple-mobile='1'] nav.app-bottom-nav .app-bottom-nav__tab.is-active,
+    html[data-apple-mobile='1'] .app-mobile-nav-more-sheet .app-more-tile.is-active {
+      background: rgba(125, 54, 64, 0.14);
+    }
+  }
+}
+
+
+.app-ios-end-room {
+  display: none;
+}
+
+/*
+ * iOS: контент всех разделов уходит ПОД прозрачную нижнюю панель.
+ * Раньше `.app-bottom-nav-spacer` стоял ПОСЛЕ <main> и укорачивал его, поэтому под панелью была
+ * пустая полоса фона и прозрачность ничего не показывала. Теперь спейсер отключён, а такой же
+ * запас по высоте лежит ВНУТРИ скролла страницы (блок `.app-ios-end-room` в конце оболочки страницы): последний блок страницы всё так же
+ * поднимается над панелью, но при прокрутке контент виден сквозь стекло.
+ * Только когда панель показана (`opacity-100` ставит Layout) и не открыт чат; с клавиатурой запас снимается,
+ * как раньше у спейсера.
+ */
+@media (max-width: 1023px) {
+  html[data-apple-mobile='1'] .app-bottom-nav-spacer {
+    display: none;
+  }
+
+  html[data-apple-mobile='1']:has(nav.app-bottom-nav.opacity-100):not([data-chat-open='1']):not(.app-keyboard-open)
+    .app-ios-end-room {
+    display: block;
+    flex: 0 0 auto;
+    width: 100%;
+    height: calc(
+      var(--app-bottom-nav-total-height) + var(--app-keyboard-inset, 0px) +
+        var(--app-bottom-nav-content-gap, 16px)
+    );
+  }
+
+  /* Липкие нижние панели действий (админка) садятся НАД панелью, а не под неё. */
+  html[data-apple-mobile='1'] main.app-main-content .sticky.bottom-0 {
+    bottom: calc(var(--app-bottom-nav-total-height) + var(--app-keyboard-inset, 0px));
   }
 }
