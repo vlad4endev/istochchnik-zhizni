@@ -95,8 +95,8 @@
     <!-- Иконки и favicon (public/assets; см. npm run pwa:icons) -->
     <link rel="icon" href="/assets/favicon.ico" sizes="any" />
     <link rel="icon" href="/assets/logo.svg" type="image/svg+xml" />
-    <!-- Одна иконка 180×180: Apple сам масштабирует; дубли с «левыми» sizes давали лишний шум и путаницу для WebKit. -->
-    <link rel="apple-touch-icon" href="/assets/apple-touch-icon-180x180.png" sizes="180x180" />
+    <!-- Одна иконка 180×180: ОБЯЗАТЕЛЬНО непрозрачная и без скруглений/тени (iOS заливает прозрачность чёрным и сам режет маску); ?v= сбрасывает кэш iOS. Apple сам масштабирует; дубли с «левыми» sizes давали лишний шум и путаницу для WebKit. -->
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon-180x180.png?v=2" sizes="180x180" />
     <!--
       Сплэш при запуске с экрана Домой (public/pwa; см. npm run pwa:splash).
       Обе ориентации: без ссылки на landscape iOS показывает вместо сплэша белый
