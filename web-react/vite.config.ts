@@ -186,6 +186,13 @@ export default defineConfig(({ mode }) => {
           dir: 'ltr',
           categories: ['lifestyle', 'utilities'],
           icons: [
+            /** Непрозрачная иконка без скруглений: iOS 26 при «Открыть как веб-приложение» берёт иконку из манифеста. */
+            {
+              src: 'apple-touch-icon.png',
+              sizes: '180x180',
+              type: 'image/png',
+              purpose: 'any',
+            },
             {
               src: 'assets/pwa-64x64.png',
               sizes: '64x64',
