@@ -528,6 +528,17 @@ html[data-color-theme='blue'] {
   --app-status-bar-bg: var(--surface);
 }
 
+/*
+ * iOS 26+ (Safari 26 первым получил animation-timeline): статус-бар сам подбирает цвет значков под
+ * фон и размывает край под ним. Бордовая полоса, нужная старым iOS ради белых глифов, на новых
+ * превращалась в размытое розовое пятно над шапкой — красим её в цвет страницы.
+ */
+@supports (animation-timeline: scroll()) {
+  html[data-pwa-standalone='1'][data-apple-mobile='1'] {
+    --app-status-bar-bg: var(--surface);
+  }
+}
+
 html[data-pwa-standalone='1'][data-apple-mobile='1'] body::before {
   content: '';
   position: fixed;
