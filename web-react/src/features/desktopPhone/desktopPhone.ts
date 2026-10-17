@@ -61,3 +61,10 @@ export function shouldUseDesktopPhoneShell(): boolean {
   if (params.get('phone') === '1') setDesktopPhonePreferred(true);
   return isDesktopPhonePreferred();
 }
+
+/** Внутри любой рамки: помечает html, чтобы CSS мог заменить недостающий safe-area. */
+export function markPhoneFrame(): void {
+  if (typeof document !== 'undefined' && isInsideFrame()) {
+    document.documentElement.setAttribute('data-phone-frame', '1');
+  }
+}

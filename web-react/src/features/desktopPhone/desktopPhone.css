@@ -110,3 +110,8 @@
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.14);
 }
+
+/* Внутри рамки телефона нет home indicator и safe-area: даём нижний отступ вручную (композер чата, кнопки у скруглённых углов). */
+html[data-phone-frame='1'] {
+  --app-bottom-nav-safe-pad: 16px;
+}
