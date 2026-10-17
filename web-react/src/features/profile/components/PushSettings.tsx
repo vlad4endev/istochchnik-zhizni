@@ -12,6 +12,8 @@ import { notificationPermissionSettingsHint } from '../../../lib/deviceNotificat
 import profileShell from '../profileShell.module.css';
 
 const FCM_ERROR_HINTS: Record<string, string> = {
+  'fcm-not-configured':
+    'На сервере не настроен ключ Firebase (secrets/firebase-sa.json или FIREBASE_SERVICE_ACCOUNT_JSON) — пуши на телефоны не отправляются. Сообщите администратору.',
   'messaging/third-party-auth-error':
     'Firebase не принимает ключ APNs (iOS): загрузите APNs Auth Key в Firebase → Cloud Messaging.',
   'messaging/registration-token-not-registered': 'Устройство удалено из Firebase — переподключите уведомления.',

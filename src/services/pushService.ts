@@ -558,6 +558,13 @@ async function sendFcmToMember(
   const summary = emptyChannel();
   const messaging = getFirebaseMessaging();
   if (!messaging) {
+    // Устройства зарегистрированы, а ключа Firebase на сервере нет — это нужно видеть в тесте, а не «0 устройств».
+    const registered = await getFcmTokensForMember(memberId);
+    if (registered.length > 0) {
+      summary.attempted += registered.length;
+      summary.failed += registered.length;
+      addChannelError(summary, 'fcm-not-configured');
+    }
     return summary;
   }
 

@@ -96,16 +96,20 @@ export function getFirebaseMessaging(): messaging.Messaging | null {
     }
   }
 
+  // Без явного ключа (файл / JSON) не инициализируемся «по умолчанию»: такой клиент молча создаётся,
+  // но не может ничего отправить — и диагностика ошибочно показывала «FCM настроен».
+  // Application Default Credentials (GCP) включаются явно: FIREBASE_USE_ADC=1.
+  if (process.env.FIREBASE_USE_ADC?.trim() !== '1') {
+    initAttempted = true;
+    return null;
+  }
   try {
     admin.initializeApp();
     initAttempted = true;
     return admin.messaging();
   } catch (e) {
     initAttempted = true;
-    console.warn(
-      '[fcm] Firebase Admin not configured (set FIREBASE_SERVICE_ACCOUNT_PATH, FIREBASE_SERVICE_ACCOUNT_JSON, or GOOGLE_APPLICATION_CREDENTIALS):',
-      e,
-    );
+    console.warn('[fcm] Firebase Admin (ADC) not configured:', e);
     return null;
   }
 }

@@ -594,7 +594,7 @@ async function start(): Promise<void> {
   console.log(
     fcmOk
       ? '[push] FCM (Android/iOS native) configured'
-      : '[push] FCM NOT configured — Android/iOS push will not work. Проверьте secrets/firebase-sa.json (монтируется как ./secrets) или FIREBASE_SERVICE_ACCOUNT_JSON.',
+      : '[push] FCM NOT configured — Android/iOS push will not work. Нет ключа: положите secrets/firebase-sa.json (монтируется как ./secrets) или задайте FIREBASE_SERVICE_ACCOUNT_JSON.',
   );
 
   if (!process.env.SUPABASE_URL?.trim() || !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
