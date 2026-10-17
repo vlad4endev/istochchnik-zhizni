@@ -2594,9 +2594,9 @@ button {
     box-sizing: border-box;
     width: calc(100% - 1.5rem);
     max-width: 26rem;
-    min-height: 62px;
+    min-height: calc(58px * var(--ui-scale, 1));
     margin: 0 auto;
-    padding: 4px;
+    padding: 3px;
     gap: 2px;
   }
 
@@ -2619,7 +2619,7 @@ button {
   }
 
   html[data-apple-mobile='1'] nav.app-bottom-nav .app-bottom-nav__tab {
-    min-height: 54px;
+    min-height: calc(50px * var(--ui-scale, 1));
     border-radius: 999px;
     gap: 0.0625rem;
   }

@@ -324,7 +324,7 @@ export function MessengerPage() {
               <button
                 type="button"
                 ref={callsBtnRef}
-                className="tg-calls-btn-sm"
+                className="tg-calls-btn-sm tap-compact"
                 onClick={() => setCallsMenuOpen((v) => !v)}
                 aria-label="Новая встреча"
                 title="Новая встреча"
@@ -336,7 +336,7 @@ export function MessengerPage() {
             ) : null}
             <button
               type="button"
-              className="tg-compose-btn-sm"
+              className="tg-compose-btn-sm tap-compact"
               onClick={() => {
                 setCallsMenuOpen(false);
                 setShowNewChat(true);
