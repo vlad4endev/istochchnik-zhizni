@@ -257,7 +257,7 @@ function corsOptions(): Parameters<typeof cors>[0] | undefined {
 app.use(cors(corsOptions()));
 app.use((req, res, next) => {
   // SECURITY FIX: базовые security headers для снижения XSS/clickjacking/MIME sniffing рисков.
-  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   // camera/microphone нужны для звонков и видеозаметок; () полностью запрещает API.
@@ -267,7 +267,7 @@ app.use((req, res, next) => {
   }
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; " +
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; " +
       "img-src 'self' data: blob: https:; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
       "connect-src 'self' https: wss: ws:; frame-src 'self' https://rutube.ru https://www.youtube.com https://vk.com; form-action 'self'",
   );
