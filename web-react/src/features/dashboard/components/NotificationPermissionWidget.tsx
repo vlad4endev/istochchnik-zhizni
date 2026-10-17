@@ -1,5 +1,6 @@
 import { LuBellOff } from 'react-icons/lu';
 
+import { openNativeNotificationSettings } from '../../../lib/nativeApp';
 import { useDeviceNotificationPermission } from '../../../hooks/useDeviceNotificationPermission';
 import {
   NOTIFICATION_PERMISSION_WIDGET_COPY,
@@ -87,7 +88,12 @@ export function NotificationPermissionWidget() {
         permission={state}
         busy={busy}
         onAllow={() => {
-          void request();
+          void (async () => {
+            // Отказ уже получен — повторный системный запрос не появится, ведём прямо в настройки телефона.
+            if (state === 'denied' && (await openNativeNotificationSettings())) return;
+            const next = await request();
+            if (next === 'denied') await openNativeNotificationSettings();
+          })();
         }}
       />
     </div>

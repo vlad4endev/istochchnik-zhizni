@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { emitAppToast } from '../lib/uiFeedback';
+import { initMessengerPushNotifications } from '../features/messenger/push/webPush';
 import {
   isCapacitorNative,
+  openNativeNotificationSettings,
   type NativePermissionState,
 } from '../lib/nativeApp';
 import { useAuthStore } from '../features/auth/authStore';
@@ -109,12 +111,18 @@ export function PermissionsRequestModal() {
     if (busy) return;
     setBusy(true);
     try {
+      // Уведомления первыми и без await до них: iOS/Safari дают системный запрос только в рамках жеста
+      // пользователя, а запрос камеры его «расходует». Отказ/отсутствие камеры не должны отменять пуши.
+      const n = await requestDeviceNotificationPermission();
+      setNotif(n);
+      if (n === 'granted' && !isCapacitorNative()) {
+        void initMessengerPushNotifications({ force: true }).catch(() => undefined);
+      }
+
       if (navigator.mediaDevices?.getUserMedia) {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
         stream.getTracks().forEach((t) => t.stop());
       }
-
-      const n = await requestDeviceNotificationPermission();
 
       const [c, m] = await Promise.all([queryPermission('camera'), queryPermission('microphone')]);
       setCam(c);
@@ -126,6 +134,7 @@ export function PermissionsRequestModal() {
         emitAppToast('Разрешения получены', 'success');
         dismiss();
       } else if (n !== 'granted') {
+        if (n === 'denied') void openNativeNotificationSettings();
         emitAppToast(
           isCapacitorNative()
             ? 'Без уведомлений на устройстве вы не узнаете, когда пишут в чате. Настройки → Приложения → Источник жизни → Уведомления.'

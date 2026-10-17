@@ -101,7 +101,8 @@ public class AppFirebaseMessagingService extends FirebaseMessagingService {
       this,
       isChat ? CHANNEL_MESSAGES_ID : CHANNEL_GENERAL_ID
     )
-      .setSmallIcon(R.mipmap.ic_launcher)
+      .setSmallIcon(R.drawable.ic_stat_notify)
+      .setColor(getColor(R.color.notification_accent))
       .setContentTitle(title)
       .setContentText(body)
       .setPriority(isChat ? NotificationCompat.PRIORITY_HIGH : NotificationCompat.PRIORITY_DEFAULT)

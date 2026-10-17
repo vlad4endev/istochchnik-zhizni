@@ -10,6 +10,7 @@ import { emitAppToast } from '../lib/uiFeedback';
 import { randomUuid } from '../lib/randomId';
 
 const DEVICE_ID_KEY = 'fcm_push_device_id';
+const LAST_TOKEN_KEY = 'fcm_push_last_token';
 const MESSAGES_CHANNEL_ID = 'messages';
 const MESSAGES_CHANNEL_NAME = 'Сообщения';
 const MESSAGES_CHANNEL_DESCRIPTION = 'Личные и групповые сообщения';
@@ -178,10 +179,8 @@ export function useFCM(): void {
       if (cancelled) return;
       if (!(await ensureNotificationPermission())) {
         console.warn('[fcm] notification permission not granted');
-        emitAppToast(
-          'Уведомления отключены. Настройки → Приложения → Источник жизни → Уведомления → разрешить.',
-          'error',
-        );
+        // Без повторных тостов на каждый возврат в приложение: путь к настройкам есть в профиле и в баннере.
+        window.dispatchEvent(new CustomEvent('app:notification-permission-changed'));
         return;
       }
       if (lastRegisteredFcmToken) {
@@ -201,7 +200,16 @@ export function useFCM(): void {
           lastRegisteredFcmToken = fcmToken;
           const ok = await saveFcmTokenToServer(fcmToken, deviceId);
           if (ok) {
-            emitAppToast('Push-уведомления подключены', 'success');
+            // Тост только при новом токене (первое подключение / ротация), а не на каждом запуске.
+            let changed = true;
+            try {
+              changed = localStorage.getItem(LAST_TOKEN_KEY) !== fcmToken;
+              localStorage.setItem(LAST_TOKEN_KEY, fcmToken);
+            } catch {
+              /* ignore */
+            }
+            if (changed) emitAppToast('Push-уведомления подключены', 'success');
+            window.dispatchEvent(new CustomEvent('app:native-push-registered'));
           }
         });
         removeListeners.push(() => {

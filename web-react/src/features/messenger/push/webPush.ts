@@ -1,6 +1,7 @@
 import { apiClient } from '../../../lib/apiClient';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { fetchVapidPublicKey } from '../../profile/api';
+import { isInsideFrame } from '../../desktopPhone/desktopPhone';
 
 /** Последний известный публичный VAPID с сервера — чтобы при смене ключей пересоздать подписку. */
 const LS_VAPID_PUBLIC_KEY = 'web_push_vapid_public_key';
@@ -107,6 +108,14 @@ export async function enableWebPush(): Promise<WebPushResult> {
   if (Notification.permission !== 'granted') {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
+      // В рамке телефона (вид для компьютера) браузер часто не показывает системный запрос.
+      if (permission === 'default' && isInsideFrame()) {
+        return {
+          ok: false,
+          error:
+            'В рамке телефона браузер не показывает запрос на уведомления. Нажмите «Полная версия» вверху и включите уведомления там.',
+        };
+      }
       return { ok: false, error: 'Разрешение на уведомления не предоставлено.' };
     }
   }

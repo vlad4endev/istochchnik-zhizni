@@ -1,6 +1,8 @@
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 
+import { NativeCall } from '../plugins/nativeCall';
+
 export type NativePermissionState = 'granted' | 'denied' | 'prompt' | 'unknown';
 
 export function isCapacitorNative(): boolean {
@@ -33,5 +35,19 @@ export async function requestNativePushPermission(): Promise<NativePermissionSta
     return 'prompt';
   } catch {
     return 'unknown';
+  }
+}
+
+/**
+ * Системные настройки уведомлений приложения. После отказа Android 13+ и iOS больше не показывают
+ * запрос — единственный путь включить пуши это настройки. Возвращает false, если открыть не удалось.
+ */
+export async function openNativeNotificationSettings(): Promise<boolean> {
+  if (!isCapacitorNative()) return false;
+  try {
+    await NativeCall.openNotificationSettings?.();
+    return true;
+  } catch {
+    return false;
   }
 }

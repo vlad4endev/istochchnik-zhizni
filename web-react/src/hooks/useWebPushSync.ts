@@ -26,18 +26,61 @@ export function useWebPushSync(): void {
     // Подписка может тихо «протухнуть» (iOS вытесняет, сервер удалил по 410): при возврате в приложение
     // не чаще раза в 6 часов перепроверяем и пересоздаём её.
     let lastResyncMs = Date.now();
+    let lastLocalCheckMs = 0;
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
       const now = Date.now();
-      if (now - lastResyncMs < 6 * 3600_000) return;
-      lastResyncMs = now;
-      void initMessengerPushNotifications({ force: true });
+      if (now - lastResyncMs >= 6 * 3600_000) {
+        lastResyncMs = now;
+        void initMessengerPushNotifications({ force: true });
+        return;
+      }
+      // Дёшево (локально, без сети): разрешение выдали в системных настройках или iOS вытеснил подписку —
+      // не ждём 6 часов, а восстанавливаем сразу при возврате в приложение.
+      if (now - lastLocalCheckMs < 30_000) return;
+      lastLocalCheckMs = now;
+      void (async () => {
+        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+        try {
+          const reg = await navigator.serviceWorker?.getRegistration();
+          const sub = await reg?.pushManager?.getSubscription();
+          if (!sub) {
+            lastResyncMs = Date.now();
+            await initMessengerPushNotifications({ force: true });
+          }
+        } catch {
+          /* следующая проверка при очередном возврате */
+        }
+      })();
     };
     document.addEventListener('visibilitychange', onVisible);
 
+    // Пользователь включил уведомления в настройках браузера, не покидая вкладку.
+    let permStatus: PermissionStatus | null = null;
+    const onPermChange = () => {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        void initMessengerPushNotifications({ force: true });
+      }
+    };
+    try {
+      void navigator.permissions
+        ?.query({ name: 'notifications' as PermissionName })
+        .then((st) => {
+          permStatus = st;
+          st.addEventListener('change', onPermChange);
+        })
+        .catch(() => undefined);
+    } catch {
+      /* Permissions API недоступен */
+    }
+
+    const removeBase = () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      permStatus?.removeEventListener('change', onPermChange);
+    };
     const sw = navigator.serviceWorker;
     if (!sw?.addEventListener) {
-      return () => document.removeEventListener('visibilitychange', onVisible);
+      return removeBase;
     }
 
     const resyncAfterSwChange = () => {
@@ -51,7 +94,7 @@ export function useWebPushSync(): void {
 
     sw.addEventListener('controllerchange', resyncAfterSwChange);
     return () => {
-      document.removeEventListener('visibilitychange', onVisible);
+      removeBase();
       sw.removeEventListener('controllerchange', resyncAfterSwChange);
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
