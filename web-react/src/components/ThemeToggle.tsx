@@ -4,7 +4,7 @@ import { useAccessibilitySettings } from '@/lib/accessibility/AccessibilityProvi
 
 export function ThemeToggle() {
   const { state, patchA11y } = useAccessibilitySettings();
-  const isDark = state.colorTheme !== 'standard';
+  const isDark = state.colorTheme === 'dark' || state.colorTheme === 'high-contrast' || state.colorTheme === 'blue';
 
   return (
     <Tooltip label={isDark ? 'Светлая тема' : 'Тёмная тема'} withArrow>

@@ -29,8 +29,8 @@ export class AppErrorBoundary extends Component<Props, State> {
           minHeight: '100vh',
           padding: 24,
           fontFamily: 'system-ui, sans-serif',
-          background: '#f4f1ed',
-          color: '#1c1917',
+          background: 'var(--surface, #f4f1ed)',
+          color: 'var(--text, #1c1917)',
         }}
       >
         <h1 style={{ fontSize: '1.125rem', fontWeight: 600, margin: '0 0 12px' }}>
@@ -48,8 +48,9 @@ export class AppErrorBoundary extends Component<Props, State> {
             padding: '10px 16px',
             fontSize: '0.875rem',
             borderRadius: 8,
-            border: '1px solid #a8a29e',
-            background: '#fff',
+            border: '1px solid var(--border-hover, #a8a29e)',
+            background: 'var(--bg-interactive, #fff)',
+            color: 'var(--text, #1c1917)',
             cursor: 'pointer',
           }}
         >

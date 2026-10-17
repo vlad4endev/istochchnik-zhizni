@@ -32,7 +32,7 @@
   height: 100%;
   max-height: 100%;
   overflow: hidden;
-  background: #fff;
+  background: var(--bg-card, #fff);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
   border-radius: 0;
 }
@@ -54,8 +54,8 @@
   flex-shrink: 0;
   min-height: 3rem;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #e7e5e4;
-  background: #fff;
+  border-bottom: 1px solid var(--border, #e7e5e4);
+  background: var(--bg-card, #fff);
 }
 
 @media (min-width: 640px) {
@@ -73,7 +73,7 @@
   white-space: nowrap;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #292524;
+  color: var(--text, #292524);
 }
 
 .headerActions {
@@ -90,13 +90,13 @@
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  color: #57534e;
+  color: var(--text-secondary, #57534e);
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .iconBtn:hover {
-  background: #f5f5f4;
-  color: #1c1917;
+  background: var(--bg-elevated, #f5f5f4);
+  color: var(--text, #1c1917);
 }
 
 @media (min-width: 640px) {
@@ -113,14 +113,14 @@
   flex: 1;
   flex-direction: column;
   overflow: hidden;
-  background: #f5f5f4;
+  background: var(--bg-elevated, #f5f5f4);
 }
 
 .status {
   padding: 1.25rem;
   text-align: center;
   font-size: 0.875rem;
-  color: #78716c;
+  color: var(--text-muted, #78716c);
 }
 
 .errorBox {
@@ -133,7 +133,7 @@
   padding: 1.5rem;
   text-align: center;
   font-size: 0.875rem;
-  color: #57534e;
+  color: var(--text-secondary, #57534e);
 }
 
 .downloadBtn {
@@ -141,11 +141,11 @@
   align-items: center;
   gap: 0.5rem;
   border-radius: 9999px;
-  background: var(--primary, #7d3640);
+  background: var(--brand-solid, #7d3640);
   padding: 0.5rem 1rem;
   font-size: 0.75rem;
   font-weight: 800;
-  color: #fff;
+  color: var(--text-on-primary, #fff);
 }
 
 /* ——— DocViewer / PDF.js ——— */
@@ -167,7 +167,7 @@
   height: 100% !important;
   min-height: 0 !important;
   overflow: hidden !important;
-  background: #f5f5f4 !important;
+  background: var(--bg-elevated, #f5f5f4) !important;
 }
 
 .viewerHost :global(#proxy-renderer) {
@@ -216,8 +216,8 @@
   touch-action: pan-x;
   scrollbar-width: none;
   padding: 0.4rem 0.5rem !important;
-  background: rgba(255, 255, 255, 0.96) !important;
-  border-bottom: 1px solid #e7e5e4 !important;
+  background: color-mix(in srgb, var(--bg-card, #fff) 96%, transparent) !important;
+  border-bottom: 1px solid var(--border, #e7e5e4) !important;
   box-sizing: border-box !important;
 }
 
@@ -319,7 +319,7 @@
   overscroll-behavior: contain;
   touch-action: pan-y;
   padding: 0.5rem;
-  background: #f5f5f4;
+  background: var(--bg-elevated, #f5f5f4);
 }
 
 @media (min-width: 640px) {

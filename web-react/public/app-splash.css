@@ -447,3 +447,47 @@ html[data-pwa-standalone='1'] .app-splash {
     transform: translateX(-50%) !important;
   }
 }
+
+
+/*
+ * Темы приложения (класс/атрибут на <html> ставит inline-скрипт в index.html до первого кадра):
+ * сплэш не должен вспыхивать светлым у пользователей тёмных тем.
+ */
+html.dark .app-splash:not(.app-splash--auth) {
+  --splash-surface: #121214;
+  --splash-surface-deep: #0b0b0d;
+  --splash-text: #f4f3f7;
+  --splash-text-muted: #b4b2c0;
+  background:
+    radial-gradient(130% 70% at 50% -8%, rgba(224, 122, 138, 0.16) 0%, transparent 58%),
+    radial-gradient(90% 55% at 100% 100%, rgba(196, 133, 77, 0.1) 0%, transparent 52%),
+    linear-gradient(180deg, #17171a 0%, var(--splash-surface) 42%, var(--splash-surface-deep) 100%);
+}
+
+html[data-color-theme='high-contrast'] .app-splash:not(.app-splash--auth) {
+  --splash-surface: #000000;
+  --splash-surface-deep: #000000;
+  --splash-text: #ffff00;
+  --splash-text-muted: #f5e000;
+  background: #000000;
+}
+
+html[data-color-theme='blue'] .app-splash:not(.app-splash--auth) {
+  --splash-surface: #0b1628;
+  --splash-surface-deep: #07101d;
+  --splash-text: #f8fafc;
+  --splash-text-muted: #cbd5e1;
+  background: linear-gradient(180deg, #102039 0%, var(--splash-surface) 45%, var(--splash-surface-deep) 100%);
+}
+
+html.theme-sepia .app-splash:not(.app-splash--auth) {
+  --splash-surface: #f2e8d5;
+  --splash-surface-deep: #e8dcc4;
+  --splash-text: #3d2b1f;
+  --splash-text-muted: #6b4c3b;
+}
+
+html.dark body,
+html[data-color-theme='high-contrast'] body {
+  background: var(--surface, #121214);
+}

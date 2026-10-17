@@ -366,7 +366,7 @@ export function PostEditor(props: {
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={!canAddMore}
-            className="inline-flex items-center gap-2 rounded-full bg-[color:var(--profile-primary)] px-4 py-2 text-xs font-extrabold text-white shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_20%,transparent)] disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-full bg-[color:var(--profile-fill)] px-4 py-2 text-xs font-extrabold text-[color:var(--profile-on-fill)] shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_20%,transparent)] disabled:opacity-60"
           >
             <LuImagePlus className="h-4 w-4" aria-hidden />
             Добавить медиа

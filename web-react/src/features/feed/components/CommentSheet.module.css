@@ -480,8 +480,8 @@
   padding: 0 !important;
   border: none;
   border-radius: 9999px;
-  background: var(--primary, #7d3640);
-  color: #fff;
+  background: var(--brand-solid, #7d3640);
+  color: var(--on-brand, #fff);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: transform 0.12s ease, opacity 0.15s ease;

@@ -1,11 +1,31 @@
+import { bdPalette, bgPalette, fgPalette, themePalettePlugin } from './tailwind.palette.js';
+
+/** Акцент: текст/границы следуют теме (в тёмных — светлый розовый), заливка `bg-primary` остаётся фирменной. */
+const primaryRef = { DEFAULT: 'rgb(var(--primary-rgb) / <alpha-value>)', dark: 'rgb(var(--primary-dark-rgb) / <alpha-value>)' };
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
   /** hover:-утилиты только при (hover: hover): на тач-экранах нет «залипшего» hover после тапа. */
   future: { hoverOnlyWhenSupported: true },
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  plugins: [themePalettePlugin],
   theme: {
+    // Свойство-специфичные палитры: тёмный текст 600–950 и пастельные фоны 50–300 переключаются темой.
+    backgroundColor: ({ theme }) => ({ ...theme('colors'), ...bgPalette }),
+    gradientColorStops: ({ theme }) => ({ ...theme('colors'), ...bgPalette }),
+    textColor: ({ theme }) => ({ ...theme('colors'), ...fgPalette, primary: primaryRef }),
+    placeholderColor: ({ theme }) => ({ ...theme('colors'), ...fgPalette }),
+    borderColor: ({ theme }) => ({ ...theme('colors'), ...bdPalette, DEFAULT: '#e5e7eb', primary: primaryRef }),
+    divideColor: ({ theme }) => ({ ...theme('borderColor') }),
+    ringColor: ({ theme }) => ({ ...theme('colors'), ...bdPalette, primary: primaryRef, DEFAULT: 'rgb(59 130 246 / 0.5)' }),
+    outlineColor: ({ theme }) => ({ ...theme('borderColor') }),
     extend: {
+      /**
+       * Любое целое 0–100: в вёрстке полно `bg-primary/12`, `dark:bg-[#1A9A55]/14` и т.п. — шкала
+       * Tailwind по умолчанию (шаг 5) такие классы молча не генерирует, и они «не работали».
+       */
+      opacity: Object.fromEntries(Array.from({ length: 101 }, (_, i) => [String(i), String(i / 100)])),
       /** `h-screen` / `min-h-screen` / `max-h-screen` → visual viewport на iOS PWA (см. nativeShellViewport.ts). */
       height: {
         screen: 'var(--viewport-height, 100dvh)',
@@ -95,5 +115,4 @@ export default {
       },
     },
   },
-  plugins: [],
 };

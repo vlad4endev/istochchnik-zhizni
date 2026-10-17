@@ -17,6 +17,11 @@
   --profile-primary: var(--primary, #7d3640);
   --profile-primary-mid: color-mix(in srgb, var(--primary, #7d3640) 74%, white);
   --profile-primary-dark: var(--primary-dark, #5c2830);
+  /* Заливки под текст: насыщенные во всех темах (см. --brand-solid в index.css) */
+  --profile-fill: var(--brand-solid, #7d3640);
+  --profile-fill-dark: var(--brand-solid-dark, #5c2830);
+  --profile-on-fill: var(--on-brand, #ffffff);
+  --profile-banner-mid: var(--profile-fill);
 
   --profile-card-bg: color-mix(in srgb, var(--profile-surface-elevated) 86%, transparent);
   --profile-card-bg-soft: color-mix(in srgb, var(--profile-surface-elevated) 68%, transparent);
@@ -26,6 +31,25 @@
 
   --profile-gradient-from: #4a1e26;
   --profile-gradient-to: #a25260;
+}
+
+:global(html.dark) .profileRoot {
+  --profile-gradient-from: #1d0c10;
+  --profile-gradient-to: #6b2d3e;
+}
+
+:global(html[data-color-theme='high-contrast']) .profileRoot {
+  --profile-gradient-from: #000000;
+  --profile-gradient-to: #1a1a00;
+  --profile-banner-mid: #3d3d00;
+}
+
+:global(html[data-color-theme='blue']) .profileRoot {
+  --profile-gradient-from: #0b1628;
+  --profile-gradient-to: #1f4a85;
+}
+
+.profileRoot {
 
   --profile-danger: #b91c1c;
   --profile-success: #047857;
