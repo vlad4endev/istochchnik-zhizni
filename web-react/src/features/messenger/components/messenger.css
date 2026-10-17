@@ -5347,3 +5347,116 @@ html.dark .tg-rec__lock {
   line-height: 1.2;
   pointer-events: none;
 }
+
+/* ── Аудиофайл как в Telegram: круглая кнопка с кольцом, название, «время · размер», тонкая шкала ── */
+.tg-voice-playwrap {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.tg-voice-ring {
+  position: absolute;
+  inset: -3px;
+  width: calc(100% + 6px);
+  height: calc(100% + 6px);
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+
+.tg-voice-ring__bg,
+.tg-voice-ring__arc {
+  fill: none;
+  stroke-width: 2.2;
+}
+
+.tg-voice-ring__bg {
+  stroke: var(--voice-bar);
+}
+
+.tg-voice-ring__arc {
+  stroke: var(--voice-bar-played);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.25s linear;
+}
+
+.tg-voice-player--file {
+  align-items: center;
+  gap: 14px;
+}
+
+.tg-voice-player--file .tg-voice-play {
+  width: 46px;
+  height: 46px;
+}
+
+.tg-voice-player--file .tg-voice-body {
+  gap: 2px;
+}
+
+.tg-voice-player--file .tg-voice-title {
+  order: -2;
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 700;
+}
+
+.tg-voice-player--file .tg-voice-meta {
+  order: -1;
+  margin: 0;
+  min-height: 0;
+}
+
+.tg-voice-player--file .tg-voice-time {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tg-voice-wave--line {
+  height: 14px;
+  padding: 0;
+  margin-top: 3px;
+  align-items: center;
+}
+
+.tg-voice-line {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--voice-bar);
+}
+
+.tg-voice-line__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--voice-bar-played);
+  transition: width 0.2s linear;
+}
+
+.tg-voice-line__knob {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--voice-bar-played);
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 0.15s ease;
+}
+
+.tg-voice-player--playing .tg-voice-line__knob,
+.tg-voice-wave--line:active .tg-voice-line__knob {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.tg-voice-player .tg-voice-speed {
+  min-width: 36px;
+  min-height: 0;
+  height: 22px;
+  padding: 0 9px;
+  line-height: 22px;
+}

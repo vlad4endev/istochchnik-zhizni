@@ -1933,6 +1933,7 @@ export function ChatInput({
               variant="file"
               title={pending.displayTitle || audioDisplayTitle(pending.file.name)}
               durationHintSec={pending.durationSec}
+              sizeBytes={pending.file.size}
               waveSeed={`draft-${pending.file.name}-${pending.file.size}`}
               ownerId={`draft:${conversationId}:${pending.file.name}:${pending.file.size}`}
               registerInQueue={false}

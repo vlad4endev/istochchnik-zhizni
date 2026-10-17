@@ -57,6 +57,15 @@ function markPlayed(ownerId: string) {
   }
 }
 
+function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} КБ`;
+  return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} МБ`;
+}
+
+const FILE_RING_R = 22;
+const FILE_RING_LEN = 2 * Math.PI * FILE_RING_R;
+
 function stopMsgMenu(e: { stopPropagation: () => void; preventDefault?: () => void }) {
   e.stopPropagation();
 }
@@ -92,6 +101,7 @@ export function VoiceMessageAttachment({
   conversationId,
   sortKey,
   registerInQueue = true,
+  sizeBytes,
 }: {
   audioSrc: string | null;
   isMine: boolean;
@@ -114,6 +124,8 @@ export function VoiceMessageAttachment({
   sortKey?: number;
   /** Черновик перед отправкой — не регистрировать в очереди чата. */
   registerInQueue?: boolean;
+  /** Размер файла (байты) — для подписи под названием аудиофайла. */
+  sizeBytes?: number;
 }) {
   const reactId = useId();
   const ownerId = ownerIdProp || reactId;
@@ -314,7 +326,9 @@ export function VoiceMessageAttachment({
 
   const total = duration > 0 ? duration : typeof durationHintSec === 'number' ? durationHintSec : 0;
   const timeLeft = playing || current > 0 ? formatVoiceTime(current) : formatVoiceTime(total > 0 ? total : 0);
-  const showTitle = variant === 'file' && Boolean(title?.trim());
+  const isFile = variant === 'file';
+  const showTitle = isFile && Boolean(title?.trim());
+  const sizeLabel = sizeBytes ? formatFileSize(sizeBytes) : '';
   const activeBars = Math.round(progress * bars.length);
 
   return (
@@ -333,6 +347,20 @@ export function VoiceMessageAttachment({
         e.stopPropagation();
       }}
     >
+      <div className="tg-voice-playwrap">
+      {isFile ? (
+        <svg className="tg-voice-ring" viewBox="0 0 50 50" aria-hidden>
+          <circle className="tg-voice-ring__bg" cx="25" cy="25" r={FILE_RING_R} />
+          <circle
+            className="tg-voice-ring__arc"
+            cx="25"
+            cy="25"
+            r={FILE_RING_R}
+            strokeDasharray={FILE_RING_LEN}
+            strokeDashoffset={FILE_RING_LEN * (1 - (playing || progress > 0 ? progress : 0))}
+          />
+        </svg>
+      ) : null}
       <button
         type="button"
         data-no-msg-menu
@@ -353,6 +381,7 @@ export function VoiceMessageAttachment({
           <LuPlay size={20} strokeWidth={2.5} className="tg-voice-play__icon" aria-hidden />
         )}
       </button>
+      </div>
 
       <div className="tg-voice-body">
         {showTitle ? (
@@ -391,8 +420,15 @@ export function VoiceMessageAttachment({
               toggle();
             }
           }}
-          className="tg-voice-wave"
+          className={['tg-voice-wave', isFile ? 'tg-voice-wave--line' : ''].join(' ')}
         >
+          {isFile ? (
+            <span className="tg-voice-line" aria-hidden>
+              <span className="tg-voice-line__fill" style={{ width: `${Math.round(progress * 100)}%` }} />
+              <span className="tg-voice-line__knob" style={{ left: `${Math.round(progress * 100)}%` }} />
+            </span>
+          ) : (
+            <>
           {bars.map((h, i) => (
             <span
               key={i}
@@ -400,18 +436,22 @@ export function VoiceMessageAttachment({
               style={{ height: `${Math.round(h * 100)}%` }}
             />
           ))}
+            </>
+          )}
         </div>
 
         <div className="tg-voice-meta">
           <span className="tg-voice-time">
             {loading && !playing ? 'Загрузка…' : timeLeft}
+            {isFile && !loading && total > 0 && (playing || current > 0) ? ` / ${formatVoiceTime(total)}` : ''}
+            {isFile && sizeLabel ? ` · ${sizeLabel}` : ''}
             {!played && variant === 'voice' && !isMine ? <span className="tg-voice-unread" aria-label="Не прослушано" /> : null}
           </span>
           {playing || rate !== 1 ? (
           <button
             type="button"
             data-no-msg-menu
-            className={['tg-voice-speed', rate !== 1 ? 'tg-voice-speed--active' : ''].join(' ')}
+            className={['tg-voice-speed', 'tap-compact', rate !== 1 ? 'tg-voice-speed--active' : ''].join(' ')}
             onPointerDown={stopMsgMenu}
             onClick={cycleRate}
             aria-label={`Скорость ${formatRate(rate)}. Нажмите, чтобы изменить`}
