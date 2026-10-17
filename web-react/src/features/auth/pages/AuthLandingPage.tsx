@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuthSessionReady } from '../../../hooks/useAuthSessionReady';
@@ -6,8 +6,8 @@ import { defaultPostLoginPath } from '../../../lib/appVariant';
 import { useAuthStore } from '../authStore';
 import { AppSplash } from '@/components/AppSplash';
 
-const DEFAULT_APP_NAME = 'МОЯ ЦЕРКОВЬ';
-const DEFAULT_DESCRIPTION = 'Цифровая платформа';
+const DEFAULT_APP_NAME = 'Моя церковь';
+const DEFAULT_DESCRIPTION = 'Чаты, звонки и служения вашей церкви — в одном приложении';
 
 export function AuthLandingPage() {
   const navigate = useNavigate();
@@ -38,49 +38,74 @@ export function AuthLandingPage() {
   }
 
   return (
-      <div className="flex h-full min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-y-auto overscroll-y-none bg-[#5c2830] bg-gradient-to-b from-primary via-primary to-[#5c2830] text-white [min-height:var(--app-content-height,100dvh)] [max-height:var(--app-content-height,100dvh)]">
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-lg flex-1 flex-col pt-6 [padding-left:max(1.25rem,env(safe-area-inset-left,0px))] [padding-right:max(1.25rem,env(safe-area-inset-right,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] sm:py-6">
-        <div className="flex-[2] min-h-[2rem]" />
+    <div className="flex h-full min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-hidden bg-[#fbf5ef] [min-height:var(--app-content-height,100dvh)] [max-height:var(--app-content-height,100dvh)]">
+      <div className="landing-hero relative min-h-[8rem] flex-1 overflow-hidden text-white">
+        <img
+          src="/assets/landing-hero.webp"
+          alt=""
+          aria-hidden
+          fetchPriority="high"
+          decoding="async"
+          draggable={false}
+          className="absolute inset-0 h-full w-full select-none object-cover [object-position:50%_62%]"
+        />
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#3a0f20]/70 to-transparent"
+          aria-hidden
+        />
 
-        <div className="flex flex-col items-center">
-          <div
-            className="flex h-40 w-40 shrink-0 items-center justify-center rounded-[2rem] bg-white/5 p-2 text-white shadow-[0_18px_44px_rgba(0,0,0,0.24)] ring-1 ring-white/15 sm:h-48 sm:w-48 sm:p-3"
+        <div
+          className="landing-rise relative flex items-center gap-3 px-6 [padding-top:max(1.5rem,calc(env(safe-area-inset-top,0px)+0.75rem))]"
+          style={{ '--d': '40ms' } as CSSProperties}
+        >
+          <img
+            src="/assets/logo.svg"
+            alt=""
             aria-hidden
-          >
-            <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain drop-shadow-[0_8px_22px_rgba(0,0,0,0.26)]" />
-          </div>
+            className="h-11 w-11 rounded-xl shadow-[0_6px_18px_rgba(0,0,0,0.3)]"
+          />
+          <span className="text-xl font-extrabold tracking-tight">{DEFAULT_APP_NAME}</span>
+        </div>
+      </div>
 
-          <h1 className="mt-9 text-center text-2xl font-extrabold tracking-tight text-white sm:mt-10 sm:text-3xl md:text-4xl">
-            {DEFAULT_APP_NAME}
+      <div
+        className="landing-sheet landing-rise relative -mt-8 shrink-0 rounded-t-[2rem] px-6 pt-8 [padding-bottom:max(1.25rem,env(safe-area-inset-bottom,0px))]"
+        style={{ '--d': '180ms' } as CSSProperties}
+      >
+        <div className="mx-auto w-full max-w-lg">
+          <h1 className="text-[2rem] font-extrabold leading-[1.1] tracking-tight text-[#2b0d16] sm:text-4xl">
+            Будьте на связи
+            <span className="landing-accent block text-[2.15rem] sm:text-[2.5rem]">со своей общиной</span>
           </h1>
 
-          {DEFAULT_DESCRIPTION.trim().length > 0 && (
-            <p className="mt-2.5 text-center text-sm leading-snug text-white/88 sm:text-base">
-              {DEFAULT_DESCRIPTION}
-            </p>
-          )}
+          <p className="mt-4 text-base leading-snug text-[#6b5a5e]">{DEFAULT_DESCRIPTION}</p>
+
+          <div className="mt-6 flex flex-col gap-3">
+            <Link
+              to={loginFormPath}
+              state={{ mode: 'signIn' as const, from: fromQuery || undefined }}
+              className="landing-btn-primary touch-manipulation flex h-16 w-full items-center justify-between rounded-[1.4rem] pl-6 pr-2.5 text-base font-bold text-white transition-transform active:scale-[0.98]"
+            >
+              Войти
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f2b479] text-[#6b1a30]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </span>
+            </Link>
+            <Link
+              to={loginFormPath}
+              state={{ mode: 'signUp' as const, from: fromQuery || undefined }}
+              className="touch-manipulation flex h-14 w-full items-center justify-center rounded-[1.4rem] border border-[#e3d3cc] bg-white/60 text-center text-base font-bold text-[#5a1830] transition-[transform,background-color] active:scale-[0.98] hover:bg-white"
+            >
+              Зарегистрироваться
+            </Link>
+          </div>
+
+          <p className="mt-5 text-center text-xs leading-snug text-[#7a6a6e]">
+            Продолжая, вы принимаете условия использования и политику конфиденциальности
+          </p>
         </div>
-
-        <div className="flex-[1.5] min-h-[3rem]" />
-
-        <div className="flex flex-col gap-3 pb-2">
-          <Link
-            to={loginFormPath}
-            state={{ mode: 'signIn' as const, from: fromQuery || undefined }}
-            className="touch-manipulation flex h-14 w-full items-center justify-center rounded-2xl bg-white text-center text-base font-bold text-primary shadow-lg shadow-stone-900/15 transition-[transform,opacity] active:scale-[0.98] hover:opacity-95"
-          >
-            Войти
-          </Link>
-          <Link
-            to={loginFormPath}
-            state={{ mode: 'signUp' as const, from: fromQuery || undefined }}
-            className="touch-manipulation flex h-14 w-full items-center justify-center rounded-2xl border border-white/25 bg-white/10 text-center text-base font-bold text-white shadow-inner backdrop-blur-sm transition-[transform,opacity] active:scale-[0.98] hover:bg-white/15"
-          >
-            Зарегистрироваться
-          </Link>
-        </div>
-
-        <div className="flex-[1] min-h-[2rem]" />
       </div>
     </div>
   );
