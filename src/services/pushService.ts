@@ -327,14 +327,15 @@ export async function sendNotificationToSubscription(
       await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
       return 'removed';
     } else if (
-      statusCode === 403 &&
+      // Apple отвечает 400 {"reason":"VapidPkHashMismatch"}, Mozilla/Google — 401/403.
+      (statusCode === 403 || statusCode === 400 || statusCode === 401) &&
       (/vapid|UnauthorizedRegistration|InvalidToken|mismatch/i.test(body) ||
         /vapid|UnauthorizedRegistration|InvalidToken|mismatch/i.test(
           err instanceof Error ? err.message : String(err ?? ''),
         ))
     ) {
       // VAPID key rotated or subscription bound to another applicationServerKey
-      console.warn('[push] VAPID/auth mismatch (403). Removing subscription.', {
+      console.warn('[push] VAPID/auth mismatch. Removing subscription.', {
         endpointHost: (() => {
           try {
             return new URL(sub.endpoint).host;
