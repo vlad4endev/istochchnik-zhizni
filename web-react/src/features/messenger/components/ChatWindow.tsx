@@ -1,4 +1,5 @@
 import { useEffect, useRef, useMemo, useCallback, useState, useLayoutEffect } from 'react';
+import { useIosChatInsets } from '../useIosChatInsets';
 import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNavigate } from 'react-router-dom';
@@ -85,6 +86,8 @@ export function ChatWindow({
   const [chatHeadReady, setChatHeadReady] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const chatWindowRef = useRef<HTMLDivElement>(null);
+  useIosChatInsets(chatWindowRef);
   const restoredChatScrollRef = useRef(false);
   const nearBottomRef = useRef(true);
   const restoreScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
@@ -1081,7 +1084,7 @@ export function ChatWindow({
   const showHeaderSkeleton = !isDraft && (conv?.type === 'group' || conv?.type === 'channel') && !chatHeadReady;
 
   return (
-    <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
+    <div ref={chatWindowRef} className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
       <header className="chat-header sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-[color:var(--tg-border)] bg-[var(--tg-surface,var(--surface-elevated))]">
         <div className="chat-header__row mx-auto flex min-h-[56px] w-full min-w-0 max-w-full items-center gap-1.5 py-1.5 pl-[max(0.5rem,env(safe-area-inset-left,0px))] pr-[max(0.5rem,env(safe-area-inset-right,0px))] sm:gap-2 sm:py-2">
