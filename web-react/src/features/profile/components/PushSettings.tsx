@@ -11,6 +11,23 @@ import { openNativeNotificationSettings } from '../../../lib/nativeApp';
 import { notificationPermissionSettingsHint } from '../../../lib/deviceNotificationPermission';
 import profileShell from '../profileShell.module.css';
 
+
+/** Ошибка самого запроса /api/notifications/test (не доставки): показываем код, чтобы было видно, где обрыв. */
+function describeTestRequestError(e: unknown): string {
+  const err = e as { response?: { status?: number; data?: { error?: string } }; code?: string };
+  const status = err?.response?.status;
+  if (status === 429) return 'Подождите несколько секунд перед повторной проверкой.';
+  if (status === 401) return 'Сессия истекла. Войдите заново и повторите проверку.';
+  if (status === 502 || status === 503 || status === 504) {
+    return `Сервер временно недоступен (HTTP ${status}). Это не ошибка вашего устройства — повторите через минуту.`;
+  }
+  if (status) {
+    const detail = err.response?.data?.error;
+    return `Не удалось отправить тест (HTTP ${status}${detail ? `: ${detail}` : ''}).`;
+  }
+  return 'Нет связи с сервером. Проверьте интернет и повторите проверку.';
+}
+
 const FCM_ERROR_HINTS: Record<string, string> = {
   'fcm-not-configured':
     'На сервере не настроен ключ Firebase (secrets/firebase-sa.json или FIREBASE_SERVICE_ACCOUNT_JSON) — пуши на телефоны не отправляются. Сообщите администратору.',
@@ -100,11 +117,7 @@ function NativePushSettings({ isParishioner }: { isParishioner: boolean }) {
       }
       void loadStatus();
     } catch (e) {
-      const code = (e as { response?: { status?: number } })?.response?.status;
-      setMsg({
-        kind: 'err',
-        text: code === 429 ? 'Подождите несколько секунд перед повторной проверкой.' : 'Не удалось отправить тест.',
-      });
+      setMsg({ kind: 'err', text: describeTestRequestError(e) });
     } finally {
       setTesting(false);
     }
@@ -236,11 +249,7 @@ export function PushSettings() {
       }
       void refreshServerStatus();
     } catch (e) {
-      const code = (e as { response?: { status?: number } })?.response?.status;
-      setMsg({
-        kind: 'err',
-        text: code === 429 ? 'Подождите несколько секунд перед повторной проверкой.' : 'Не удалось отправить тест.',
-      });
+      setMsg({ kind: 'err', text: describeTestRequestError(e) });
     } finally {
       setTesting(false);
     }
