@@ -1,6 +1,7 @@
 import { Button, Group, Paper, Text } from '@mantine/core';
 import { useEffect, useMemo, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { scheduleServiceWorkerRegistrationRetry } from '../features/pwa/ensureServiceWorker';
 
 /**
  * Показ при registerType: 'prompt' — пользователь сам решает, когда активировать новый SW.
@@ -15,6 +16,8 @@ export function PWAUpdatePrompt() {
     immediate: true,
     onRegisterError(error) {
       console.warn('SW registration failed:', error);
+      // sw.js мог отдать 5xx во время передеплоя — без повтора push не заработает до перезагрузки.
+      scheduleServiceWorkerRegistrationRetry();
     },
   });
   const [updateInProgress, setUpdateInProgress] = useState(false);

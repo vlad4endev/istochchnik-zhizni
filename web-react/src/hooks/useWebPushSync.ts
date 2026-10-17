@@ -21,8 +21,18 @@ export function useWebPushSync(): void {
     if (Capacitor.isNativePlatform()) return;
     if (typeof window === 'undefined') return;
 
-    // Один раз после входа / смены токена.
-    void initMessengerPushNotifications({ force: true });
+    // Один раз после входа / смены токена. Если SW не готов (передеплой, sw.js отдал 5xx) — повторяем
+    // с нарастающей паузой, а не ждём ручной перезагрузки.
+    let cancelled = false;
+    const retryTimers: ReturnType<typeof setTimeout>[] = [];
+    const syncWithRetry = async (attempt = 0): Promise<void> => {
+      const result = await initMessengerPushNotifications({ force: true });
+      if (cancelled || result.ok || result.code !== 'sw-not-ready') return;
+      const delays = [20_000, 60_000, 180_000, 600_000];
+      if (attempt >= delays.length) return;
+      retryTimers.push(setTimeout(() => void syncWithRetry(attempt + 1), delays[attempt]));
+    };
+    void syncWithRetry();
 
     // После передеплоя сервер мог потерять подписку (новые VAPID-ключи → 403/410 → удаление, пересоздание БД),
     // а браузер продолжает считать себя подписанным. Спрашиваем сервер и при расхождении подписываемся заново.
@@ -99,6 +109,8 @@ export function useWebPushSync(): void {
     }
 
     const removeBase = () => {
+      cancelled = true;
+      retryTimers.forEach(clearTimeout);
       document.removeEventListener('visibilitychange', onVisible);
       permStatus?.removeEventListener('change', onPermChange);
     };

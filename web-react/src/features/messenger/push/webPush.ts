@@ -1,10 +1,11 @@
 import { apiClient } from '../../../lib/apiClient';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { fetchVapidPublicKey } from '../../profile/api';
+import { ensureServiceWorkerRegistered } from '../../pwa/ensureServiceWorker';
 
 /** Последний известный публичный VAPID с сервера — чтобы при смене ключей пересоздать подписку. */
 const LS_VAPID_PUBLIC_KEY = 'web_push_vapid_public_key';
-export type WebPushResult = { ok: boolean; error?: string };
+export type WebPushResult = { ok: boolean; error?: string; code?: 'sw-not-ready' };
 let pushSyncInFlight: Promise<WebPushResult> | null = null;
 /** Endpoint, успешно сохранённый на сервере в этой вкладке. */
 let lastSyncedEndpoint: string | null = null;
@@ -80,14 +81,13 @@ function readPushSubscribeError(err: unknown): string {
   return 'Не удалось сохранить подписку на сервере.';
 }
 
-export async function initMessengerPushNotifications(opts?: { force?: boolean }): Promise<void> {
+export async function initMessengerPushNotifications(opts?: { force?: boolean }): Promise<WebPushResult> {
   if (pushSyncInFlight) {
-    await pushSyncInFlight;
-    return;
+    return pushSyncInFlight;
   }
   pushSyncInFlight = initMessengerPushNotificationsInternal(opts?.force === true);
   try {
-    await pushSyncInFlight;
+    return await pushSyncInFlight;
   } finally {
     pushSyncInFlight = null;
   }
@@ -158,6 +158,8 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<W
   if (Notification.permission !== 'granted') return { ok: false, error: 'Нет разрешения на уведомления.' };
 
   try {
+    // Нет регистрации (sw.js отдал 5xx при передеплое) — пробуем зарегистрировать сами, иначе ready не наступит.
+    await ensureServiceWorkerRegistered();
     // ready никогда не резолвится, если SW не зарегистрирован (dev/блокировка) — не вешаем синк навсегда.
     const registration = await Promise.race([
       navigator.serviceWorker.ready,
@@ -244,6 +246,14 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<W
   } catch (err) {
     console.error('[push] initMessengerPushNotifications failed:', err);
     lastSyncedEndpoint = null;
+    if (err instanceof Error && err.message === 'Service worker not ready') {
+      // Фоновый сбой (обычно идёт передеплой): без всплывающей ошибки, вызывающий повторит позже.
+      return {
+        ok: false,
+        code: 'sw-not-ready',
+        error: 'Service Worker ещё не готов, повторим автоматически.',
+      };
+    }
     const message =
       'Не удалось включить push в браузере. Проверьте интернет и откройте сайт по HTTPS; на iPhone — ярлык с экрана «Домой».';
     emitAppToast({ message, kind: 'error' });
