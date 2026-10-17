@@ -2381,15 +2381,33 @@ button {
     display: none;
   }
 
-  html[data-apple-mobile='1']:has(nav.app-bottom-nav.opacity-100):not([data-chat-open='1']):not(.app-keyboard-open)
-    .app-ios-end-room {
-    display: block;
-    flex: 0 0 auto;
-    width: 100%;
-    height: calc(
+  /* Высота запаса под панель; 0, пока панели нет, открыт чат или клавиатура. */
+  html[data-apple-mobile='1']:has(nav.app-bottom-nav.opacity-100):not([data-chat-open='1']):not(.app-keyboard-open) {
+    --app-ios-nav-room: calc(
       var(--app-bottom-nav-total-height) + var(--app-keyboard-inset, 0px) +
         var(--app-bottom-nav-content-gap, 16px)
     );
+  }
+
+  html[data-apple-mobile='1'] .app-ios-end-room {
+    display: block;
+    flex: 0 0 auto;
+    width: 100%;
+    height: var(--app-ios-nav-room, 0px);
+  }
+
+  /*
+   * Страницы «шапка + свой скролл» (Главная, Молитва): блок прокрутки сам заполняет страницу, поэтому
+   * общий запас в конце сжимал бы его, и под панелью оставалась пустая полоса. Для таких страниц
+   * запас отменяем (отрицательный отступ) и кладём его padding-bottom внутрь самого скроллера —
+   * контент уходит под стекло, а последний блок всё равно можно прокрутить выше панели.
+   */
+  html[data-apple-mobile='1'] .page-enter:has(.ios-under-nav-scroll) > .app-ios-end-room {
+    margin-top: calc(-1 * var(--app-ios-nav-room, 0px));
+  }
+
+  html[data-apple-mobile='1'] .ios-under-nav-scroll {
+    padding-bottom: var(--app-ios-nav-room, 0px);
   }
 
   /* Липкие нижние панели действий (админка) садятся НАД панелью, а не под неё. */

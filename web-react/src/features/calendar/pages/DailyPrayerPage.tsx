@@ -1006,7 +1006,7 @@ export function DailyPrayerPage() {
       </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch]">
+      <div className="ios-under-nav-scroll min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch]">
       <div className="px-3 pt-4 sm:px-4 shell:px-6 md:px-6 lg:px-8 xl:px-10">
         {userCanViewNextWeekPrayerPlan(me, rolePermissionsQ.data) ? (
           <NextWeekPrayerPlanSection
