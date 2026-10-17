@@ -82,9 +82,15 @@ describe('mobile layout invariants', () => {
     expect(css).toMatch(/\.tg-send-btn[^{]*\{[^}]*align-self:\s*flex-end\s*!important/);
   });
 
-  it('шапка чата: кнопки не меньше 44px', () => {
+  it('шапка чата: кнопки гибкие (≥40px визуально), область нажатия ≥44px за счёт tap-compact', () => {
     const css = strip(read('src/features/messenger/components/messenger.css'));
-    expect(css).toMatch(/\.chat-header__btn[^{]*\{[^}]*min-(width|height):\s*44px/);
+    const m = css.match(/--chat-ctl:\s*clamp\((\d+)px/);
+    expect(Number(m?.[1])).toBeGreaterThanOrEqual(40);
+    expect(css).toMatch(/\.chat-header__btn[^{]*\{[^}]*min-(width|height):\s*var\(--chat-ctl\)/);
+    const tsx = read('src/features/messenger/components/ChatWindow.tsx');
+    const btns = tsx.match(/className="[^"]*chat-header__btn[^"]*"|'[^']*chat-header__btn[^']*'/g) ?? [];
+    expect(btns.length).toBeGreaterThan(0);
+    for (const b of btns) expect(b).toMatch(/tap-compact/);
   });
   it('список чатов (мобайл) ниже «Ещё»-листа и модалок: z-index сайдбара < 60', () => {
     const css = strip(read('src/features/messenger/components/messenger.css'));

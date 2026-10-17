@@ -4598,14 +4598,45 @@ html.dark .msg-videonote-circle--placeholder {
   box-shadow: 0 1px 10px rgba(28, 25, 23, 0.04);
 }
 
+/*
+ * Шапка чата гибкая по ширине экрана: размеры кнопок и аватара плавно меняются от ~320px (iPhone SE) до ~430px
+ * (Pro Max) и фиксируются на планшете/ПК. Имя собеседника получает всё освободившееся место.
+ */
+.chat-header {
+  --chat-ctl: clamp(40px, 10.8vw, 46px);
+  --chat-ava: clamp(34px, 9.6vw, 42px);
+  --chat-hgap: clamp(4px, 1.6vw, 8px);
+}
+
+@media (min-width: 769px) {
+  .chat-header {
+    --chat-ctl: 44px;
+    --chat-ava: 40px;
+    --chat-hgap: 8px;
+  }
+}
+
 .chat-header .chat-header__btn,
 .chat-header .tg-icon-btn {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
+  width: var(--chat-ctl);
+  height: var(--chat-ctl);
+  min-width: var(--chat-ctl);
+  min-height: var(--chat-ctl);
   padding: 0;
   flex-shrink: 0;
+}
+
+.chat-header .chat-header__avatar {
+  width: var(--chat-ava);
+  height: var(--chat-ava);
+}
+
+.chat-header .chat-header__title {
+  font-size: clamp(15px, 4.2vw, 17px);
+}
+
+.chat-header .chat-header__sub {
+  font-size: clamp(12px, 3.3vw, 13px);
 }
 
 .chat-header .chat-header__btn {
@@ -4866,7 +4897,7 @@ html.dark .msg-videonote-circle--placeholder {
 @supports (-webkit-touch-callout: none) {
   @media (max-width: 768px) {
     html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window {
-      --tg-chat-head-h: 60px;
+      --tg-chat-head-h: calc(clamp(40px, 10.8vw, 46px) + 16px);
       --tg-glass-bg: color-mix(in srgb, var(--tg-surface-elevated, #fff) 62%, transparent);
       --tg-glass-line: color-mix(in srgb, var(--tg-text, #1c1917) 9%, transparent);
     }
@@ -4897,17 +4928,17 @@ html.dark .msg-videonote-circle--placeholder {
     html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > header.chat-header .chat-header__row {
       height: var(--tg-chat-head-h);
       min-height: 0;
-      gap: 8px;
+      gap: var(--chat-hgap, 8px);
       padding-top: 0;
       padding-bottom: 0;
       align-items: center;
     }
 
     html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window .chat-back-btn {
-      width: 44px;
-      height: 44px;
-      min-width: 44px;
-      min-height: 44px;
+      width: var(--chat-ctl, 44px);
+      height: var(--chat-ctl, 44px);
+      min-width: var(--chat-ctl, 44px);
+      min-height: var(--chat-ctl, 44px);
       border-radius: 999px;
       background: var(--tg-glass-bg);
       -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -4919,8 +4950,9 @@ html.dark .msg-videonote-circle--placeholder {
 
     /* Собеседник: аватар + имя + статус в одной капсуле. */
     html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > header.chat-header .chat-header__row > [role='button'] {
-      min-height: 48px;
-      padding: 3px 16px 3px 4px;
+      min-height: calc(var(--chat-ctl, 44px) + 4px);
+      gap: clamp(8px, 2.4vw, 12px);
+      padding: 3px clamp(10px, 3.2vw, 16px) 3px 4px;
       border-radius: 999px;
       background: var(--tg-glass-bg);
       -webkit-backdrop-filter: blur(20px) saturate(180%);

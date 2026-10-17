@@ -408,6 +408,17 @@ html {
   transition: background-color 0.3s ease, color 0.2s ease;
 }
 
+/*
+ * Гибкий масштаб интерфейса на телефонах: базовый размер (а значит всё, что в rem) плавно меняется от 14.4px на самых
+ * узких экранах (320px, iPhone SE) через 16px на 390px (iPhone 13/14/15) до ~17px на 430px (Pro Max) и больших Android.
+ * Планшеты и ПК (от 768px) остаются на 16px; масштаб из панели доступности применяется поверх.
+ */
+@media (max-width: 767px) {
+  html {
+    font-size: calc(clamp(14.4px, calc(14.4px + (100vw - 320px) * 0.0229), 17px) * var(--a11y-font-scale, 1));
+  }
+}
+
 /* Монохром только для приложения (#root); панель доступности рендерится вне #root */
 html[data-a11y-monochrome='true'] #root {
   filter: grayscale(1) contrast(1.04);
