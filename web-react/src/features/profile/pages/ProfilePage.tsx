@@ -410,7 +410,7 @@ export function ProfilePage() {
           <button
             type="button"
             onClick={() => void loadProfile()}
-            className="mt-5 min-h-[44px] rounded-2xl bg-[color:var(--profile-primary)] px-6 py-2.5 text-sm font-extrabold text-white shadow-[0_10px_30px_color-mix(in_srgb,var(--profile-primary)_25%,transparent)]"
+            className="mt-5 min-h-[44px] rounded-2xl bg-[color:var(--profile-fill)] px-6 py-2.5 text-sm font-extrabold text-[color:var(--profile-on-fill)] shadow-[0_10px_30px_color-mix(in_srgb,var(--profile-primary)_25%,transparent)]"
           >
             Повторить
           </button>
@@ -431,7 +431,7 @@ export function ProfilePage() {
          ═══════════════════════════════════════════════════════ */}
       <div className="relative">
         {/* Gradient banner */}
-        <div className="relative h-44 overflow-hidden bg-gradient-to-br from-[var(--profile-gradient-from)] via-[color:var(--profile-primary)] to-[var(--profile-gradient-to)] sm:h-52 md:h-56">
+        <div className="relative h-44 overflow-hidden bg-gradient-to-br from-[var(--profile-gradient-from)] via-[color:var(--profile-banner-mid)] to-[var(--profile-gradient-to)] sm:h-52 md:h-56">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_20%_-20%,rgba(255,255,255,0.13),transparent)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_90%_120%,rgba(255,255,255,0.08),transparent)]" />
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/[0.04]" />
@@ -498,7 +498,7 @@ export function ProfilePage() {
             {messengerWebOrigin ? (
               <a
                 href={`${messengerWebOrigin}/messenger`}
-                className="inline-flex items-center gap-2.5 rounded-full bg-[color:var(--profile-primary)] px-7 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_20%,transparent)] transition-all hover:bg-[color:var(--profile-primary-dark)] active:scale-[0.97]"
+                className="inline-flex items-center gap-2.5 rounded-full bg-[color:var(--profile-fill)] px-7 py-2.5 text-sm font-bold text-[color:var(--profile-on-fill)] shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_20%,transparent)] transition-all hover:bg-[color:var(--profile-primary-dark)] active:scale-[0.97]"
               >
                 <LuSend className="h-4 w-4 -rotate-12" aria-hidden />
                 Написать сообщение
@@ -506,7 +506,7 @@ export function ProfilePage() {
             ) : (
               <Link
                 to="/messenger"
-                className="inline-flex items-center gap-2.5 rounded-full bg-[color:var(--profile-primary)] px-7 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_20%,transparent)] transition-all hover:bg-[color:var(--profile-primary-dark)] active:scale-[0.97]"
+                className="inline-flex items-center gap-2.5 rounded-full bg-[color:var(--profile-fill)] px-7 py-2.5 text-sm font-bold text-[color:var(--profile-on-fill)] shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_20%,transparent)] transition-all hover:bg-[color:var(--profile-primary-dark)] active:scale-[0.97]"
               >
                 <LuSend className="h-4 w-4 -rotate-12" aria-hidden />
                 Написать сообщение
@@ -624,7 +624,7 @@ export function ProfilePage() {
                 type="button"
                 disabled={savingPublic}
                 onClick={() => void savePublicProfile()}
-                className="inline-flex min-h-[48px] items-center justify-center rounded-2xl bg-[color:var(--profile-primary)] px-5 text-sm font-extrabold text-white shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_22%,transparent)] disabled:opacity-50"
+                className="inline-flex min-h-[48px] items-center justify-center rounded-2xl bg-[color:var(--profile-fill)] px-5 text-sm font-extrabold text-[color:var(--profile-on-fill)] shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_22%,transparent)] disabled:opacity-50"
               >
                 {savingPublic ? 'Сохраняем…' : 'Сохранить ленту'}
               </button>
@@ -662,7 +662,7 @@ export function ProfilePage() {
                   type="button"
                   disabled={savingProfile}
                   onClick={() => void saveProfile()}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--profile-primary)] px-3.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-white shadow-[0_6px_20px_color-mix(in_srgb,var(--profile-primary)_22%,transparent)] transition disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--profile-fill)] px-3.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-[color:var(--profile-on-fill)] shadow-[0_6px_20px_color-mix(in_srgb,var(--profile-primary)_22%,transparent)] transition disabled:opacity-60"
                 >
                   <LuSave className="h-3.5 w-3.5" aria-hidden />
                   {savingProfile ? 'Сохраняем…' : 'Сохранить'}
@@ -824,7 +824,7 @@ export function ProfilePage() {
                   type="button"
                   disabled={phoneSaving}
                   onClick={() => void savePhone()}
-                  className="min-h-[48px] rounded-2xl bg-[color:var(--profile-primary)] px-5 py-3 text-sm font-extrabold text-white shadow-[0_10px_30px_color-mix(in_srgb,var(--profile-primary)_25%,transparent)] transition disabled:opacity-60"
+                  className="min-h-[48px] rounded-2xl bg-[color:var(--profile-fill)] px-5 py-3 text-sm font-extrabold text-[color:var(--profile-on-fill)] shadow-[0_10px_30px_color-mix(in_srgb,var(--profile-primary)_25%,transparent)] transition disabled:opacity-60"
                 >
                   {phoneSaving ? 'Обновляем…' : 'Обновить номер'}
                 </button>

@@ -5,6 +5,21 @@ import { useAppearanceStore } from '../stores/useAppearanceStore';
 import { useAccessibilitySettings } from '@/lib/accessibility/AccessibilityProvider';
 import type { AccessibilityColorTheme } from '@/lib/accessibility/types';
 
+const THEME_SWATCHES: {
+  key: AccessibilityColorTheme;
+  label: string;
+  bg: string;
+  border: string;
+  dot: string;
+  fg: string;
+}[] = [
+  { key: 'standard', label: 'Светлая', bg: '#f4f1ed', border: '#d6d3d1', dot: '#7d3640', fg: '#1c1917' },
+  { key: 'sepia', label: 'Сепия', bg: '#f2e8d5', border: '#d9c9ab', dot: '#7d3640', fg: '#3d2b1f' },
+  { key: 'dark', label: 'Тёмная', bg: 'linear-gradient(145deg,#111114 0%,#15151a 62%,#1b1b20 100%)', border: 'rgba(255,255,255,0.18)', dot: '#e895a0', fg: '#f4f3f7' },
+  { key: 'high-contrast', label: 'Контраст', bg: '#000000', border: '#ffff00', dot: '#ffff00', fg: '#ffff00' },
+  { key: 'blue', label: 'Синяя', bg: 'linear-gradient(145deg,#0b1628 0%,#0f2137 100%)', border: '#60a5fa', dot: '#93c5fd', fg: '#f8fafc' },
+];
+
 export function SettingsPage() {
   const { fontSize, setFontSize } = useAppearanceStore();
   const { state, patchA11y } = useAccessibilitySettings();
@@ -48,32 +63,31 @@ export function SettingsPage() {
               <h3 className="text-base font-semibold text-[var(--text)]">Тема оформления</h3>
               <ThemeToggle />
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {([
-                { key: 'standard', label: 'Светлая', preview: 'bg-white border-gray-200' },
-                {
-                  key: 'dark',
-                  label: 'Тёмная',
-                  preview:
-                    'border-[rgba(255,255,255,0.12)] bg-[linear-gradient(145deg,#111114_0%,#15151a_62%,#1b1b20_100%)] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]',
-                },
-                { key: 'high-contrast', label: 'Контраст', preview: 'bg-black border-yellow-300' },
-                { key: 'blue', label: 'Синяя', preview: 'bg-gradient-to-br from-[#0b1628] to-[#0f2137] border-[#60a5fa]' },
-              ] as const).map((t: { key: AccessibilityColorTheme; label: string; preview: string }) => (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              {THEME_SWATCHES.map((t) => (
                 <button
                   key={t.key}
                   onClick={() => patchA11y({ colorTheme: t.key })}
+                  aria-pressed={state.colorTheme === t.key}
                   className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-3 transition-all ${
                     state.colorTheme === t.key ? 'border-[var(--primary)]' : 'border-transparent bg-[var(--surface)]'
                   }`}
                 >
-                  <div className={`relative h-8 w-12 overflow-hidden rounded-lg border ${t.preview}`}>
-                    {t.key !== 'standard' ? (
-                      <>
-                        <span className="absolute left-2 top-2 h-1.5 w-1.5 rounded-full bg-[var(--primary)] shadow-[0_0_8px_var(--primary)]" />
-                        <span className="absolute bottom-1.5 left-2 text-[0.5rem] font-semibold text-white/95">Aa</span>
-                      </>
-                    ) : null}
+                  {/* Превью задаём цветами напрямую: оно должно выглядеть одинаково в любой активной теме. */}
+                  <div
+                    className="relative h-8 w-12 overflow-hidden rounded-lg border"
+                    style={{ background: t.bg, borderColor: t.border }}
+                  >
+                    <span
+                      className="absolute left-2 top-2 h-1.5 w-1.5 rounded-full"
+                      style={{ background: t.dot }}
+                    />
+                    <span
+                      className="absolute bottom-1.5 left-2 text-[0.5rem] font-semibold"
+                      style={{ color: t.fg }}
+                    >
+                      Aa
+                    </span>
                   </div>
                   <span className="text-xs text-[var(--text-secondary)]">{t.label}</span>
                 </button>

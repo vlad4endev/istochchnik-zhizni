@@ -9,6 +9,7 @@ import {
 import { useAccessibilitySettings } from '@/lib/accessibility/AccessibilityProvider';
 import type { AccessibilityColorTheme } from '@/lib/accessibility/types';
 import {
+  LuBookOpen,
   LuCircle,
   LuContrast,
   LuImageOff,
@@ -23,6 +24,7 @@ import {
 
 const THEMES: { id: AccessibilityColorTheme; label: string; hint: string }[] = [
   { id: 'standard', label: 'Стандарт', hint: 'Светлая тема приложения' },
+  { id: 'sepia', label: 'Сепия', hint: 'Тёплый бумажный фон, мягче для глаз' },
   { id: 'dark', label: 'Тёмная', hint: 'Приглушённые фоны' },
   { id: 'high-contrast', label: 'Контраст', hint: 'Жёлтый текст на чёрном' },
   { id: 'blue', label: 'Синяя', hint: 'Светлый текст на тёмно-синем' },
@@ -83,6 +85,8 @@ export function AccessibilityControls({ dense, stackThemes, formIdPrefix = 'a11y
               >
                 {t.id === 'standard' ? (
                   <LuSun className="h-4 w-4 shrink-0 opacity-80" strokeWidth={2} aria-hidden />
+                ) : t.id === 'sepia' ? (
+                  <LuBookOpen className="h-4 w-4 shrink-0 opacity-80" strokeWidth={2} aria-hidden />
                 ) : t.id === 'dark' ? (
                   <LuMoon className="h-4 w-4 shrink-0 opacity-80" strokeWidth={2} aria-hidden />
                 ) : t.id === 'high-contrast' ? (

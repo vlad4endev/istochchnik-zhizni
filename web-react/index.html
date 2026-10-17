@@ -14,6 +14,29 @@
         } catch (e1) {
           document.documentElement.setAttribute('data-mantine-color-scheme', 'light');
         }
+        /*
+         * Тема из панели доступности применяется ДО первого кадра: иначе сплэш и экран
+         * «не удалось открыть приложение» вспыхивают светлыми у тех, кто выбрал тёмную тему.
+         * Логика зеркалит applyDocumentAccessibility.ts.
+         */
+        try {
+          var a11y = JSON.parse(localStorage.getItem('istoch-life-a11y-v1') || 'null');
+          var ct = a11y && a11y.colorTheme;
+          var de = document.documentElement;
+          var bg = { sepia: '#f2e8d5', dark: '#121214', 'high-contrast': '#000000', blue: '#0b1628' };
+          var chrome = { sepia: '#5c4330', dark: '#121214', 'high-contrast': '#000000', blue: '#0b1628' };
+          if (ct && bg[ct]) {
+            de.setAttribute('data-color-theme', ct);
+            if (ct === 'sepia') de.classList.add('theme-sepia');
+            else de.classList.add('dark');
+            de.setAttribute('data-mantine-color-scheme', ct === 'sepia' ? 'light' : 'dark');
+            de.style.backgroundColor = bg[ct];
+            var slot = document.querySelector('meta[name="theme-color"][data-app-managed="true"]');
+            if (slot) slot.setAttribute('content', chrome[ct]);
+          }
+        } catch (e0) {
+          /* ignore */
+        }
         try {
           var standalone =
             window.matchMedia('(display-mode: standalone)').matches ||
@@ -154,7 +177,7 @@
     <link rel="stylesheet" href="/app-splash.css" />
     <!-- Progressier (push): подключается из main.tsx после первого кадра — не блокировать парсинг/сеть PWA. -->
   </head>
-  <body style="margin:0;background:#f0ebe3">
+  <body style="margin:0">
     <!-- До загрузки React: анимированный сплэш вместо пустого фона. -->
     <!--
       Без inline min-height на #root: style="" перекрывает `#root { min-height: 0 }`

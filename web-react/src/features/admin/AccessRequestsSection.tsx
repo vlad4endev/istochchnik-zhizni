@@ -183,7 +183,7 @@ function AccessRequestRow(props: {
             type="button"
             disabled={busy}
             onClick={onApprove}
-            className="rounded-md bg-[var(--primary)] px-3.5 py-1.5 text-sm font-medium text-white transition hover:opacity-95 disabled:opacity-50"
+            className="rounded-md bg-[var(--brand-solid)] px-3.5 py-1.5 text-sm font-medium text-[var(--on-brand)] transition hover:opacity-95 disabled:opacity-50"
           >
             Принять
           </button>

@@ -1,4 +1,4 @@
-export type AccessibilityColorTheme = 'standard' | 'dark' | 'high-contrast' | 'blue';
+export type AccessibilityColorTheme = 'standard' | 'sepia' | 'dark' | 'high-contrast' | 'blue';
 
 export type AccessibilityState = {
   colorTheme: AccessibilityColorTheme;
