@@ -1,168 +1,114 @@
 /**
- * Векторная иллюстрация для начальной страницы: община вокруг креста.
- * Образы: «Я есмь лоза, а вы ветви» (лоза с листьями и гроздьями), «где двое или трое
- * собраны во имя Моё» (люди вокруг креста), голубь, свет, овцы («Я есмь пастырь добрый»)
- * и колосья пшеницы («жатва многа»). Всё в SVG, без внешних файлов.
+ * Векторная иллюстрация начальной страницы в духе «рассвета над холмами»:
+ * солнце за крестом на вершине, община силуэтами, пастух с отарой («Я есмь пастырь добрый»),
+ * колосья пшеницы на переднем плане («жатва многа»). Всё в SVG, без внешних файлов.
+ * Глубина строится слоями: дальние холмы светлее и теплее, ближние темнее.
  */
 
-type Person = { x: number; base: number; h: number; fill: string; staff?: boolean };
-
-const PEOPLE: Person[] = [
-  { x: 58, base: 300, h: 84, fill: '#f2b479' },
-  { x: 100, base: 296, h: 98, fill: '#f6e3cf' },
-  { x: 140, base: 292, h: 76, fill: '#d98aa0' },
-  { x: 160, base: 304, h: 46, fill: '#f6e3cf' },
-  { x: 240, base: 304, h: 50, fill: '#f2b479' },
-  { x: 262, base: 292, h: 90, fill: '#f6e3cf' },
-  { x: 302, base: 296, h: 78, fill: '#d98aa0', staff: true },
-  { x: 344, base: 300, h: 94, fill: '#f2b479' },
-];
-
-function personPaths(p: Person) {
-  const w = p.h * 0.26;
-  const headR = p.h * 0.1;
-  const headY = p.base - p.h + headR;
-  const shoulderY = headY + headR + p.h * 0.06;
-  const body =
-    `M${p.x - w} ${p.base} ` +
-    `Q${p.x - w * 0.95} ${shoulderY + p.h * 0.3} ${p.x - w * 0.5} ${shoulderY + p.h * 0.04} ` +
-    `Q${p.x} ${shoulderY - p.h * 0.05} ${p.x + w * 0.5} ${shoulderY + p.h * 0.04} ` +
-    `Q${p.x + w * 0.95} ${shoulderY + p.h * 0.3} ${p.x + w} ${p.base} Z`;
-  return { body, headR, headY };
+/** Детерминированный «шум», чтобы колосья отличались, но не прыгали между рендерами. */
+function jitter(i: number, k: number) {
+  const v = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453;
+  return v - Math.floor(v);
 }
 
-/** Точки вдоль квадратичной кривой — листья лозы. */
-function along(p0: [number, number], p1: [number, number], p2: [number, number], n: number) {
-  return Array.from({ length: n }, (_, i) => {
-    const t = (i + 0.7) / (n + 0.4);
-    const x = (1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t ** 2 * p2[0];
-    const y = (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t ** 2 * p2[1];
-    const dx = 2 * (1 - t) * (p1[0] - p0[0]) + 2 * t * (p2[0] - p1[0]);
-    const dy = 2 * (1 - t) * (p1[1] - p0[1]) + 2 * t * (p2[1] - p1[1]);
-    return { x, y, a: (Math.atan2(dy, dx) * 180) / Math.PI };
-  });
-}
-
-const VINE_L = { p0: [-10, 150] as [number, number], p1: [30, 60] as [number, number], p2: [150, 70] as [number, number] };
-const VINE_R = { p0: [410, 120] as [number, number], p1: [380, 50] as [number, number], p2: [270, 64] as [number, number] };
-
-function Vine({ v, flip }: { v: typeof VINE_L; flip?: boolean }) {
-  const leaves = along(v.p0, v.p1, v.p2, 7);
+/** Маленький человек-силуэт (даль): голова, плечи, ряса. */
+function Figure({ x, y, h, tone = '#1f0a13' }: { x: number; y: number; h: number; tone?: string }) {
+  const w = h * 0.2;
+  const hr = h * 0.12;
   return (
-    <g>
+    <g fill={tone}>
+      <circle cx={x} cy={y - h + hr} r={hr} />
       <path
-        d={`M${v.p0[0]} ${v.p0[1]} Q${v.p1[0]} ${v.p1[1]} ${v.p2[0]} ${v.p2[1]}`}
-        fill="none"
-        stroke="#e9a8a0"
-        strokeOpacity="0.55"
-        strokeWidth="2.4"
-        strokeLinecap="round"
+        d={`M${x - w} ${y} C${x - w} ${y - h * 0.5} ${x - w * 0.55} ${y - h * 0.74} ${x} ${y - h * 0.76} C${x + w * 0.55} ${y - h * 0.74} ${x + w} ${y - h * 0.5} ${x + w} ${y} Z`}
       />
-      {leaves.map((l, i) => {
-        const side = i % 2 === 0 ? 1 : -1;
-        return (
-          <g key={i} transform={`translate(${l.x} ${l.y}) rotate(${l.a + side * 62})`}>
-            <path d="M0 0 C6 -9 18 -9 24 0 C18 9 6 9 0 0Z" fill="#f2b479" fillOpacity={0.55 + (i % 3) * 0.1} />
-          </g>
-        );
-      })}
-      {/* гроздь винограда */}
-      <g transform={`translate(${v.p2[0] + (flip ? 4 : -4)} ${v.p2[1] + 4})`} fill="#c25a7e" fillOpacity="0.9">
-        {[
-          [0, 6],
-          [-7, 12],
-          [7, 12],
-          [0, 18],
-          [-13, 18],
-          [13, 18],
-          [-6, 25],
-          [6, 25],
-          [0, 32],
-        ].map(([cx, cy], i) => (
-          <circle key={i} cx={cx} cy={cy} r="5.2" />
-        ))}
-      </g>
     </g>
   );
 }
 
-
-/** Овца: пушистое «облако» из кругов, тёмная мордочка и ножки. Смотрит вправо, flip — влево. */
+/** Овца, силуэт со светлой шерстью (подсвечена рассветом). Начало координат — у копыт. */
 function Sheep({ x, y, s = 1, flip }: { x: number; y: number; s?: number; flip?: boolean }) {
   return (
     <g transform={`translate(${x} ${y}) scale(${flip ? -s : s} ${s})`}>
-      <ellipse cx="0" cy="1" rx="19" ry="3" fill="#000" fillOpacity="0.28" />
-      {/* ножки */}
-      {[-9, -3, 5, 11].map((lx, i) => (
-        <rect key={i} x={lx - 1.3} y="-6" width="2.6" height="7" rx="1.3" fill="#4a1d2c" />
-      ))}
-      {/* шерсть */}
-      <g fill="#fbf1e4">
-        <ellipse cx="0" cy="-12" rx="15" ry="9" />
-        {[
-          [-11, -14, 7.5],
-          [-5, -19, 8],
-          [3, -19.5, 8],
-          [10, -15, 7.5],
-          [-13, -8, 6.5],
-          [12, -8, 6.5],
-          [0, -7, 7],
-        ].map(([cx, cy, r], i) => (
-          <circle key={i} cx={cx} cy={cy} r={r} />
-        ))}
+      <ellipse cx="0" cy="0.5" rx="16" ry="2" fill="#12040a" fillOpacity="0.55" />
+      <g fill="#2a0f18">
+        <rect x="-9" y="-7" width="2" height="7.4" rx="1" />
+        <rect x="-4.5" y="-7" width="2" height="7.4" rx="1" />
+        <rect x="4" y="-7" width="2" height="7.4" rx="1" />
+        <rect x="8.5" y="-7" width="2" height="7.4" rx="1" />
       </g>
-      <g fill="#e8d3c0" fillOpacity="0.9">
-        <circle cx="-4" cy="-9" r="5" />
-        <circle cx="6" cy="-10" r="4.5" />
+      <g fill="#f1dcc8">
+        <ellipse cx="0" cy="-12" rx="13.5" ry="7.5" />
+        <circle cx="-9" cy="-13" r="5.6" />
+        <circle cx="-3.5" cy="-17.2" r="6.2" />
+        <circle cx="3.8" cy="-17" r="6" />
+        <circle cx="9.5" cy="-13.2" r="5.4" />
+        <circle cx="-8" cy="-8.6" r="4.6" />
+        <circle cx="8" cy="-8.4" r="4.6" />
       </g>
-      {/* голова */}
-      <ellipse cx="18" cy="-11" rx="5.2" ry="6.3" fill="#4a1d2c" />
-      <ellipse cx="14.5" cy="-15.5" rx="4.2" ry="2.2" fill="#4a1d2c" transform="rotate(-25 14.5 -15.5)" />
-      <circle cx="19.6" cy="-12.6" r="0.9" fill="#fbf1e4" />
+      <g fill="#c9a98f" fillOpacity="0.55">
+        <ellipse cx="0" cy="-8" rx="10" ry="3.4" />
+      </g>
+      <g fill="#2a0f18">
+        <ellipse cx="15.6" cy="-12.2" rx="4.4" ry="5.2" transform="rotate(14 15.6 -12.2)" />
+        <ellipse cx="12.2" cy="-16.2" rx="3.4" ry="1.8" transform="rotate(-35 12.2 -16.2)" />
+      </g>
     </g>
   );
 }
 
-/** Колос пшеницы: изогнутый стебель, зёрна парами и усики. */
-function Wheat({ x, base, h, lean, color, delay }: { x: number; base: number; h: number; lean: number; color: string; delay: number }) {
-  const topX = x + lean;
-  const topY = base - h;
-  const grains = Array.from({ length: 7 }, (_, i) => i);
+/** Пастух с посохом, силуэт; свет с левой стороны (там солнце). */
+function Shepherd({ x, y, s = 1 }: { x: number; y: number; s?: number }) {
   return (
-    <g className="landing-sway" style={{ animationDelay: `${delay}s` }}>
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <ellipse cx="0" cy="0.6" rx="10" ry="2" fill="#12040a" fillOpacity="0.55" />
+      {/* посох */}
+      <path d="M11 0 V-46 q0 -6 6 -6 q5 0 5 5" fill="none" stroke="#e8c79a" strokeWidth="1.6" strokeLinecap="round" />
+      {/* одежда */}
+      <path d="M-8 0 C-8.5 -16 -7 -28 -4 -33 L4 -33 C7 -28 8.5 -16 8.5 0 Z" fill="#c98a5c" />
+      <path d="M-8 0 C-8.5 -16 -7 -28 -4 -33 L-1 -33 C-3 -22 -3.5 -10 -3 0 Z" fill="#e8b98a" fillOpacity="0.7" />
+      {/* накидка */}
+      <path d="M-5 -33 Q0 -37 5 -33 L7 -24 Q0 -21 -7 -24 Z" fill="#7a2a42" />
+      {/* голова и покрывало */}
+      <circle cx="0" cy="-39.5" r="4.2" fill="#e8c4a4" />
+      <path d="M-5 -39 Q-4.5 -46 0 -46 Q4.5 -46 5 -39 Q3 -41.5 0 -41.5 Q-3 -41.5 -5 -39 Z" fill="#f3e3cc" />
+      {/* рука с посохом */}
+      <path d="M4 -29 L10 -24" stroke="#c98a5c" strokeWidth="2.4" strokeLinecap="round" />
+    </g>
+  );
+}
+
+/** Колос: тонкий стебель, зёрна парами и остья. */
+function Ear({ x, base, h, lean }: { x: number; base: number; h: number; lean: number }) {
+  const tx = x + lean;
+  const ty = base - h;
+  return (
+    <g>
+      <path d={`M${x} ${base} Q${x + lean * 0.15} ${base - h * 0.6} ${tx} ${ty}`} fill="none" stroke="url(#li-wheat)" strokeWidth="0.9" />
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <g key={i} fill="url(#li-wheat)">
+          <ellipse cx={tx - 1.7} cy={ty + i * 3.3 + 2} rx="1.1" ry="2.1" transform={`rotate(-24 ${tx - 1.7} ${ty + i * 3.3 + 2})`} />
+          <ellipse cx={tx + 1.7} cy={ty + i * 3.3 + 2} rx="1.1" ry="2.1" transform={`rotate(24 ${tx + 1.7} ${ty + i * 3.3 + 2})`} />
+        </g>
+      ))}
       <path
-        d={`M${x} ${base} Q${x + lean * 0.2} ${base - h * 0.55} ${topX} ${topY}`}
-        stroke={color}
-        strokeWidth="1.8"
+        d={`M${tx} ${ty + 1} V${ty - 9} M${tx - 1.4} ${ty + 2} L${tx - 3.6} ${ty - 7} M${tx + 1.4} ${ty + 2} L${tx + 3.6} ${ty - 7}`}
+        stroke="url(#li-wheat)"
+        strokeWidth="0.5"
         strokeLinecap="round"
-        fill="none"
-      />
-      {grains.map((i) => {
-        const gy = topY + 4 + i * 6.2;
-        const gx = topX - lean * (i * 6.2) / h * 0.4;
-        const sc = 1 - i * 0.05;
-        return (
-          <g key={i} fill={color}>
-            <ellipse cx={gx - 3.2} cy={gy} rx={2.1 * sc} ry={4.4 * sc} transform={`rotate(-28 ${gx - 3.2} ${gy})`} />
-            <ellipse cx={gx + 3.2} cy={gy} rx={2.1 * sc} ry={4.4 * sc} transform={`rotate(28 ${gx + 3.2} ${gy})`} />
-          </g>
-        );
-      })}
-      <ellipse cx={topX} cy={topY - 1} rx="2" ry="4.6" fill={color} />
-      <path
-        d={`M${topX} ${topY - 5} V${topY - 15} M${topX - 3} ${topY - 3} L${topX - 7} ${topY - 12} M${topX + 3} ${topY - 3} L${topX + 7} ${topY - 12}`}
-        stroke={color}
-        strokeWidth="0.9"
-        strokeLinecap="round"
-        strokeOpacity="0.8"
         fill="none"
       />
     </g>
   );
 }
+
+const WHEAT = Array.from({ length: 46 }, (_, i) => {
+  const x = (i / 45) * 410 - 5;
+  const edge = Math.abs(x - 200) / 200; // 0 в центре, 1 по краям
+  const h = 34 + edge * edge * 62 + jitter(i, 1) * 26;
+  return { x, h, lean: (jitter(i, 2) - 0.5) * 14, group: i % 3 };
+});
 
 export function LandingIllustration({ className }: { className?: string }) {
-  const rays = Array.from({ length: 14 }, (_, i) => i * (360 / 14));
   return (
     <svg
       viewBox="0 0 400 372"
@@ -172,122 +118,104 @@ export function LandingIllustration({ className }: { className?: string }) {
       focusable="false"
     >
       <defs>
-        <radialGradient id="li-glow" cx="50%" cy="50%" r="50%">
-          <stop offset="0" stopColor="#ffe3b8" stopOpacity="0.95" />
-          <stop offset="0.45" stopColor="#f2b479" stopOpacity="0.45" />
-          <stop offset="1" stopColor="#f2b479" stopOpacity="0" />
+        <radialGradient id="li-sun-glow" cx="50%" cy="50%" r="50%">
+          <stop offset="0" stopColor="#ffe9c8" stopOpacity="1" />
+          <stop offset="0.25" stopColor="#f7b97a" stopOpacity="0.7" />
+          <stop offset="0.6" stopColor="#c2556f" stopOpacity="0.25" />
+          <stop offset="1" stopColor="#7d1f3f" stopOpacity="0" />
         </radialGradient>
-        <linearGradient id="li-cross" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#fff4de" />
-          <stop offset="1" stopColor="#f2b479" />
+        <linearGradient id="li-far" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#c2587a" stopOpacity="0.85" />
+          <stop offset="1" stopColor="#7a2748" stopOpacity="0.9" />
         </linearGradient>
-        <linearGradient id="li-hill-back" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#b5405f" stopOpacity="0.55" />
-          <stop offset="1" stopColor="#5a1830" stopOpacity="0.2" />
+        <linearGradient id="li-mid" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#7a2748" />
+          <stop offset="1" stopColor="#4a1630" />
         </linearGradient>
-        <linearGradient id="li-hill-front" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#4a1226" />
-          <stop offset="1" stopColor="#2b0d16" />
+        <linearGradient id="li-near" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#4a1628" />
+          <stop offset="1" stopColor="#1f0912" />
         </linearGradient>
+        <linearGradient id="li-wheat" gradientUnits="userSpaceOnUse" x1="0" y1="250" x2="0" y2="360">
+          <stop offset="0" stopColor="#f6c68c" />
+          <stop offset="0.55" stopColor="#a8613c" />
+          <stop offset="1" stopColor="#2a0e18" />
+        </linearGradient>
+        <filter id="li-soft" x="-30%" y="-100%" width="160%" height="300%">
+          <feGaussianBlur stdDeviation="5" />
+        </filter>
       </defs>
 
-      {/* свет */}
-      <circle cx="200" cy="200" r="150" fill="url(#li-glow)" />
-      <g className="landing-rays" stroke="#ffe3b8" strokeLinecap="round">
-        {rays.map((a) => (
-          <line
-            key={a}
-            x1="200"
-            y1="200"
-            x2="200"
-            y2="40"
-            strokeWidth="1.6"
-            strokeOpacity="0.18"
-            transform={`rotate(${a} 200 200)`}
-          />
-        ))}
+      {/* свет восхода */}
+      <circle cx="200" cy="228" r="190" fill="url(#li-sun-glow)" />
+      <circle cx="200" cy="228" r="30" fill="#fff1d8" />
+      <circle cx="200" cy="228" r="38" fill="#ffe3b8" fillOpacity="0.35" />
+
+      {/* облака */}
+      <g filter="url(#li-soft)" fill="#f7b98a">
+        <ellipse cx="70" cy="196" rx="70" ry="6" fillOpacity="0.28" />
+        <ellipse cx="318" cy="182" rx="80" ry="7" fillOpacity="0.3" />
+        <ellipse cx="190" cy="168" rx="60" ry="4" fillOpacity="0.22" />
+        <ellipse cx="350" cy="228" rx="50" ry="5" fillOpacity="0.25" />
       </g>
 
-      {/* звёзды */}
-      <g fill="#ffe3b8">
+      {/* птицы */}
+      <g fill="none" stroke="#2a0e18" strokeOpacity="0.75" strokeWidth="1.3" strokeLinecap="round">
+        <path d="M96 128 q5 -5 10 0 q5 -5 10 0" />
+        <path d="M122 112 q4 -4 8 0 q4 -4 8 0" />
+        <path d="M284 140 q4 -4 8 0 q4 -4 8 0" />
+        <path d="M262 118 q3 -3 6 0 q3 -3 6 0" />
+      </g>
+
+      {/* дальние холмы, дымка */}
+      <path d="M0 252 Q50 226 110 244 T230 236 T330 242 T400 232 V372 H0Z" fill="url(#li-far)" />
+      <path d="M0 262 Q80 244 150 256 T300 250 T400 258 V372 H0Z" fill="#a63f66" fillOpacity="0.35" />
+
+      {/* холм с крестом */}
+      <path d="M0 276 Q80 250 160 262 Q184 252 200 246 Q216 252 240 262 Q320 252 400 274 V372 H0Z" fill="url(#li-mid)" />
+      <g fill="#1d0710">
+        <rect x="198.4" y="212" width="3.2" height="36" rx="1.2" />
+        <rect x="190.5" y="221" width="19" height="3.2" rx="1.2" />
+      </g>
+
+      {/* община у креста */}
+      <g>
         {[
-          [36, 40, 1.6],
-          [120, 24, 1.2],
-          [318, 30, 1.6],
-          [370, 84, 1.2],
-          [84, 108, 1.1],
-          [300, 110, 1.1],
-        ].map(([x, y, r], i) => (
-          <circle key={i} cx={x} cy={y} r={r} opacity="0.7" />
+          [138, 266, 17],
+          [150, 262, 20],
+          [162, 259, 15],
+          [172, 257, 19],
+          [230, 257, 18],
+          [242, 260, 15],
+          [254, 263, 20],
+          [267, 267, 16],
+        ].map(([x, y, h], i) => (
+          <Figure key={i} x={x} y={y} h={h} />
         ))}
       </g>
 
-      {/* лоза и ветви */}
-      <Vine v={VINE_L} />
-      <Vine v={VINE_R} flip />
+      {/* передний холм */}
+      <path d="M0 312 Q100 292 210 304 T400 296 V372 H0Z" fill="url(#li-near)" />
 
-      {/* холмы */}
-      <path d="M0 262 Q70 214 150 244 T290 236 T400 250 V372 H0Z" fill="url(#li-hill-back)" />
-      <path d="M0 300 Q100 262 200 276 T400 268 V372 H0Z" fill="url(#li-hill-front)" />
+      {/* пастух с отарой слева */}
+      <Shepherd x={86} y={308} s={1} />
+      <Sheep x={118} y={314} s={0.92} />
+      <Sheep x={144} y={320} s={0.7} />
+      <Sheep x={52} y={318} s={0.78} flip />
 
-      {/* голубь */}
-      <g transform="translate(200 112)" fill="#fff4de">
-        <ellipse cx="0" cy="4" rx="13" ry="6.5" />
-        <circle cx="-12" cy="0" r="5" />
-        <path d="M-17 -1 L-24 1 L-17 3Z" fill="#f2b479" />
-        <path d="M-2 0 C-8 -16 -22 -22 -34 -20 C-26 -12 -16 -4 -6 4Z" />
-        <path d="M2 0 C10 -16 24 -22 36 -18 C27 -11 17 -3 7 4Z" />
-        <path d="M12 6 L30 12 L12 10Z" />
-      </g>
-      {/* оливковая ветвь в клюве */}
-      <path d="M-24 1 Q-34 8 -40 6" transform="translate(200 112)" stroke="#f2b479" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+      {/* отара справа */}
+      <Sheep x={298} y={312} s={0.9} flip />
+      <Sheep x={326} y={320} s={0.7} flip />
+      <Sheep x={268} y={322} s={0.55} flip />
 
-      {/* крест */}
-      <g>
-        <rect x="195.5" y="196" width="9" height="86" rx="4.5" fill="url(#li-cross)" />
-        <rect x="178" y="214" width="44" height="9" rx="4.5" fill="url(#li-cross)" />
-      </g>
-
-      {/* люди вокруг креста */}
-      <g>
-        {PEOPLE.map((p, i) => {
-          const { body, headR, headY } = personPaths(p);
-          return (
-            <g key={i} fillOpacity="0.96">
-              {p.staff && (
-                <path
-                  d={`M${p.x + p.h * 0.3} ${p.base} V${p.base - p.h * 0.95} q9 -2 9 7`}
-                  stroke="#f2b479"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  fill="none"
-                />
-              )}
-              <path d={body} fill={p.fill} />
-              <circle cx={p.x} cy={headY} r={headR} fill={p.fill} />
-            </g>
-          );
-        })}
-      </g>
-
-      {/* передний план: травинки */}
-      <path d="M0 318 Q100 296 200 306 T400 300 V372 H0Z" fill="#1d0710" fillOpacity="0.9" />
-
-      {/* овцы: «Я есмь пастырь добрый» */}
-      <Sheep x={112} y={320} s={1.05} />
-      <Sheep x={150} y={330} s={0.62} />
-      <Sheep x={290} y={323} s={1} flip />
-      <Sheep x={252} y={332} s={0.58} flip />
-
-      {/* колосья пшеницы */}
-      <g>
-        <Wheat x={14} base={352} h={96} lean={10} color="#f2b479" delay={0} />
-        <Wheat x={30} base={354} h={74} lean={-6} color="#ffd9a0" delay={0.8} />
-        <Wheat x={44} base={352} h={88} lean={8} color="#e9a05f" delay={1.6} />
-        <Wheat x={386} base={352} h={96} lean={-10} color="#f2b479" delay={0.4} />
-        <Wheat x={370} base={354} h={72} lean={6} color="#ffd9a0" delay={1.2} />
-        <Wheat x={356} base={352} h={86} lean={-8} color="#e9a05f" delay={2} />
-      </g>
+      {/* колосья на переднем плане */}
+      {[0, 1, 2].map((g) => (
+        <g key={g} className="landing-sway" style={{ animationDelay: `${g * 0.9}s` }}>
+          {WHEAT.filter((w) => w.group === g).map((w, i) => (
+            <Ear key={i} x={w.x} base={372} h={w.h} lean={w.lean} />
+          ))}
+        </g>
+      ))}
     </svg>
   );
 }
