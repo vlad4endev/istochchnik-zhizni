@@ -24,12 +24,6 @@ import {
   isAndroidInstalledPwa,
   restorePwaAppThemeColor,
 } from './features/pwa/utils/pwaEnvironment';
-import {
-  DesktopPhonePathReporter,
-  DesktopPhoneShell,
-  DesktopPhoneSwitch,
-} from './features/desktopPhone/DesktopPhoneShell';
-import { markPhoneFrame, shouldUseDesktopPhoneShell } from './features/desktopPhone/desktopPhone';
 import { AppRouter } from './app/Router';
 import { AppRouterMain } from './app/RouterMain';
 import { AppRouterStudio } from './app/RouterStudio';
@@ -386,18 +380,10 @@ if (typeof window !== 'undefined') {
   window.addEventListener('touchstart', unlockOnce, { passive: true });
 }
 
-markPhoneFrame();
-
 const rootEl = document.getElementById('root');
 if (!rootEl) {
   document.body.innerHTML =
     '<p style="font-family:system-ui;padding:16px">Не найден #root — проверьте сборку index.html.</p>';
-} else if (shouldUseDesktopPhoneShell()) {
-  createRoot(rootEl).render(
-    <StrictMode>
-      <DesktopPhoneShell />
-    </StrictMode>,
-  );
 } else {
   createRoot(rootEl).render(
     <StrictMode>
@@ -418,8 +404,6 @@ if (!rootEl) {
               <BrowserRouter>
                 <PwaLaunchHandler />
                 <PwaSameOriginNavGuard />
-                <DesktopPhonePathReporter />
-                <DesktopPhoneSwitch />
                 <AccessibilityProvider>
                   <ImpersonationBanner />
                   <SessionKeepAlive />

@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
@@ -7,8 +7,6 @@ import {
   LuBookOpen,
   LuCalendarClock,
   LuChevronDown,
-  LuChevronLeft,
-  LuChevronRight,
   LuCalendarDays,
   LuChurch,
   LuDisc3,
@@ -22,7 +20,6 @@ import {
   LuShield,
   LuChartColumnBig,
   LuTv,
-  LuUser,
   LuWifiOff,
   LuX,
 } from 'react-icons/lu';
@@ -53,6 +50,12 @@ import { canAccessStudio } from '../features/auth/studioAccess';
 import { canAccessMySermons } from '../features/mySermons/mySermonsAccess';
 import { canViewAnySchedule } from '../features/schedules/ministryScheduleAccess';
 import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
+import {
+  DesktopSidebar,
+  SIDEBAR_WIDTH_COLLAPSED,
+  SIDEBAR_WIDTH_EXPANDED,
+  useSidebarCollapsed,
+} from './DesktopSidebar';
 import { syncBottomNavMeasuredHeight } from '../lib/bottomNavInset';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
 import { apiClient } from '../lib/apiClient';
@@ -68,9 +71,7 @@ import {
   type AppSectionId,
 } from '../features/settings/sectionVisibilityApi';
 import {
-  ADMIN_SIDEBAR_GROUPS,
   ADMIN_TABS,
-  adminTabNavLabel,
   adminTabPath,
   parseAdminTabParam,
   type AdminTabId,
@@ -509,145 +510,6 @@ function useAdminNavBadges(enabled: boolean) {
   };
 }
 
-function AdminSidebarAccordion({
-  navCollapsed,
-  isAdminRoute,
-  activeTab,
-  badgeFor,
-}: {
-  navCollapsed: boolean;
-  isAdminRoute: boolean;
-  activeTab: AdminTabId;
-  badgeFor: (id: AdminTabId) => number | null;
-}) {
-  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
-  const expanded = manualOpen ?? isAdminRoute;
-
-  useEffect(() => {
-    if (isAdminRoute) setManualOpen(null);
-  }, [isAdminRoute]);
-
-  if (navCollapsed) {
-    return (
-      <PrefetchNavLink
-        to="/admin"
-        className={({ isActive }) =>
-          [
-            'group flex min-h-[52px] w-full items-center justify-center rounded-2xl transition-colors',
-            isActive || isAdminRoute
-              ? 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow'
-              : 'text-stone-600 hover:bg-stone-100',
-          ].join(' ')
-        }
-        title="Админ"
-        aria-label="Админ"
-      >
-        {({ isActive }) => (
-          <LuShield
-            className={navIconClass(isActive || isAdminRoute, true)}
-            strokeWidth={2}
-            aria-hidden
-          />
-        )}
-      </PrefetchNavLink>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-0.5">
-      <div
-        className={[
-          'flex min-h-[44px] items-stretch overflow-hidden rounded-xl transition-colors',
-          isAdminRoute ? 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow' : 'text-stone-600 hover:bg-stone-100',
-        ].join(' ')}
-      >
-        <PrefetchNavLink
-          to="/admin"
-          onClick={() => setManualOpen(true)}
-          className="group flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left text-sm font-semibold"
-          aria-current={isAdminRoute ? 'page' : undefined}
-        >
-          <LuShield className={navIconClass(isAdminRoute, false)} strokeWidth={2} aria-hidden />
-          <span className="truncate">Админ</span>
-        </PrefetchNavLink>
-        <button
-          type="button"
-          className={[
-            'flex w-10 shrink-0 items-center justify-center border-l transition-colors',
-            isAdminRoute ? 'border-white/20 hover:bg-white/10' : 'border-stone-200/80 hover:bg-stone-200/50',
-          ].join(' ')}
-          aria-expanded={expanded}
-          aria-label={expanded ? 'Свернуть разделы админки' : 'Развернуть разделы админки'}
-          onClick={() => setManualOpen((prev) => !(prev ?? isAdminRoute))}
-        >
-          <LuChevronDown
-            className={[
-              'h-4 w-4 transition-transform duration-200',
-              expanded ? 'rotate-0' : '-rotate-90',
-              isAdminRoute ? 'text-white' : 'text-stone-400',
-            ].join(' ')}
-            strokeWidth={2.25}
-            aria-hidden
-          />
-        </button>
-      </div>
-      {expanded ? (
-        <div className="ml-3 flex flex-col gap-2 border-l border-stone-200/90 pl-2" role="group" aria-label="Разделы админки">
-          {ADMIN_SIDEBAR_GROUPS.map((group) => (
-            <div key={group.label}>
-              <p className="mb-1 px-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-stone-400">
-                {group.label}
-              </p>
-              <div className="flex flex-col gap-0.5">
-                {group.items.map((item) => {
-                  const tabCfg = ADMIN_TABS.find((t) => t.id === item.id)!;
-                  const ItemIcon = tabCfg.Icon;
-                  const active = isAdminRoute && activeTab === item.id;
-                  const badge = item.hasBadge ? badgeFor(item.id) : null;
-                  const navText = adminTabNavLabel(item.id);
-                  return (
-                    <Link
-                      key={item.id}
-                      to={adminTabPath(item.id)}
-                      title={tabCfg.label}
-                      aria-current={active ? 'page' : undefined}
-                      className={[
-                        'group flex min-h-[36px] items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] transition-colors',
-                        active
-                          ? 'bg-[#F3EEF0] font-medium text-[#7B2D3F]'
-                          : 'font-normal text-stone-600 hover:bg-stone-100 hover:text-stone-900',
-                      ].join(' ')}
-                    >
-                      <ItemIcon
-                        className={`h-3.5 w-3.5 shrink-0 ${active ? 'opacity-100' : 'opacity-55'}`}
-                        strokeWidth={2}
-                        aria-hidden
-                      />
-                      <span className="min-w-0 flex-1 truncate">{navText}</span>
-                      {badge != null ? (
-                        <span
-                          className={[
-                            'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none',
-                            item.badgeRed && badge > 0
-                              ? 'bg-red-500 text-white'
-                              : 'bg-stone-200 text-stone-600',
-                          ].join(' ')}
-                        >
-                          {badge}
-                        </span>
-                      ) : null}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 export function Layout() {
   useSyncServerRole();
   useWebPushSync();
@@ -698,7 +560,7 @@ export function Layout() {
     enabled: Boolean(token),
   });
   const logout = useAuthStore((s) => s.logout);
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const { collapsed: navCollapsed, toggle: toggleNavCollapsed } = useSidebarCollapsed();
   /** Скрытие сайдбара и нижнего таббара (режим чтения песен и т.п.). */
   const [mainChromeVisible, setMainChromeVisible] = useState(true);
   /** Полноэкранный UI звонка: таббар прячем. Свёрнутый звонок — таббар остаётся. */
@@ -712,8 +574,6 @@ export function Layout() {
   const description = useBrandingStore((s) => s.description);
   const customLogoDataUrl = useBrandingStore((s) => s.customLogoDataUrl);
   const logoScalePercent = useBrandingStore((s) => s.logoScalePercent);
-  /** В сайдбаре не увеличиваем выше 100% — иначе transform вылезает из клетки и перекрывает соседей */
-  const sidebarLogoScalePercent = Math.min(100, logoScalePercent);
 
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const [searchParams] = useSearchParams();
@@ -739,6 +599,14 @@ export function Layout() {
   const publicProfileTo = publicProfileSlug
     ? `/profile/${encodeURIComponent(publicProfileSlug)}`
     : '/dashboard';
+
+  const authFirstName = useAuthStore((s) => s.firstName);
+  const authLastName = useAuthStore((s) => s.lastName);
+  const sidebarUserName =
+    (meQ.data?.name || [meQ.data?.first_name ?? authFirstName, meQ.data?.last_name ?? authLastName].filter(Boolean).join(' ')).trim();
+  const sidebarUserHint = (
+    meQ.data?.email || (isAdmin ? 'Администратор' : meQ.data?.ministry_role || '')
+  ).trim();
 
   const isParishionerGuest = (role ?? 'member').toLowerCase() === 'parishioner';
 
@@ -828,15 +696,7 @@ export function Layout() {
   }
 
   useEffect(() => {
-    try {
-      setNavCollapsed(localStorage.getItem('app_nav_collapsed') === '1');
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  useEffect(() => {
-    const sidebarWidth = navCollapsed ? '88px' : '272px';
+    const sidebarWidth = `${navCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED}px`;
     document.documentElement.style.setProperty('--sidebar-width', sidebarWidth);
     document.documentElement.dataset.sidebar = navCollapsed ? 'collapsed' : 'expanded';
   }, [navCollapsed]);
@@ -884,18 +744,6 @@ export function Layout() {
       root.removeAttribute('data-call-minimized');
     };
   }, [callUiOpen, callMinimized]);
-
-  function toggleNavCollapsed() {
-    setNavCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('app_nav_collapsed', next ? '1' : '0');
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  }
 
   useEffect(() => {
     const onOpenConversation = (e: Event) => {
@@ -1099,212 +947,28 @@ export function Layout() {
       <ConnectivityBanner />
       <div className="relative flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-x-hidden">
       {/* Десктоп (lg+): фиксированный сайдбар. До lg — нижняя навигация (как мобильная сетка дашборда). */}
-      <aside
-        className={[
-          /* lg+: сайдбар; до lg — только нижний таббар */
-          'hidden shrink-0 flex-col overflow-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] lg:fixed lg:bottom-0 lg:left-0 lg:top-0 lg:z-30 lg:flex [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)]',
-          navCollapsed ? 'w-[88px] max-w-[88px]' : 'w-[260px] max-w-[260px] xl:w-[272px] xl:max-w-[272px]',
-        ].join(' ')}
-      >
-        <div className={navCollapsed ? 'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-4' : 'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-6'}>
-          <div className={navCollapsed ? 'mb-4 flex items-center justify-center' : 'mb-6 flex items-start gap-3'}>
-            <div className={navCollapsed ? 'flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-primary/10 p-1 text-primary' : 'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/10 text-primary p-1 xl:rounded-[0.9rem]'}>
-              {customLogoDataUrl ? (
-                <img
-                  src={customLogoDataUrl}
-                  alt=""
-                  className="max-h-full max-w-full object-contain"
-                  style={{ transform: `scale(${sidebarLogoScalePercent / 100})` }}
-                />
-              ) : (
-                <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain drop-shadow-sm" />
-              )}
-            </div>
-            {!navCollapsed ? (
-              <div className="min-w-0">
-                <p className="text-base font-extrabold leading-tight text-stone-900">{appName}</p>
-                <p className="mt-0.5 text-xs text-stone-500">{description}</p>
-              </div>
-            ) : null}
-          </div>
-
-          <button
-            type="button"
-            onClick={toggleNavCollapsed}
-            className={[
-              'mb-3 flex min-h-[44px] items-center justify-center rounded-2xl border border-stone-200/80 bg-white/60 text-stone-600 transition hover:bg-stone-50 hover:text-primary',
-              navCollapsed ? 'w-full' : 'w-full justify-between px-3',
-            ].join(' ')}
-            aria-label={navCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-            title={navCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-          >
-            {navCollapsed ? (
-              <LuChevronRight className="h-5 w-5" strokeWidth={2.25} aria-hidden />
-            ) : (
-              <>
-                <span className="text-xs font-extrabold uppercase tracking-[0.14em]">Меню</span>
-                <LuChevronLeft className="h-5 w-5" strokeWidth={2.25} aria-hidden />
-              </>
-            )}
-          </button>
-
-          <nav className={navCollapsed ? 'flex flex-col gap-2' : 'flex flex-col gap-1'} data-web-nav="react-icons">
-            {sidebarItems.map((item) => {
-              if (item.to === '/admin') {
-                return (
-                  <AdminSidebarAccordion
-                    key={item.to}
-                    navCollapsed={navCollapsed}
-                    isAdminRoute={isAdminRoute}
-                    activeTab={activeAdminTab}
-                    badgeFor={adminBadgeFor}
-                  />
-                );
-              }
-              const Icon = item.Icon;
-              return (
-                <PrefetchNavLink
-                  key={item.to}
-                  to={item.to}
-                  queryKey={NAV_PREFETCH_BY_PATH[item.to]?.queryKey}
-                  queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
-                  staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
-                  className={({ isActive }) =>
-                    navCollapsed
-                      ? [
-                          'group flex min-h-[52px] w-full items-center justify-center rounded-2xl transition-colors',
-                          isActive
-                            ? 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow'
-                            : 'text-stone-600 hover:bg-stone-100',
-                        ].join(' ')
-                      : navClassName(isActive)
-                  }
-                  title={navCollapsed ? item.label : undefined}
-                  aria-label={
-                    navCollapsed
-                      ? navItemBadgeAriaLabel(
-                          item.to,
-                          navItemBadgeCount(item.to, messengerNavBadge, feedUnreadCount),
-                        ) ?? item.label
-                      : undefined
-                  }
-                >
-                  {({ isActive }) => {
-                    const badge = navItemBadgeCount(item.to, messengerNavBadge, feedUnreadCount);
-                    return (
-                    <>
-                      <div className="relative">
-                        <Icon className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
-                        {badge > 0 && navCollapsed ? (
-                          <span className="absolute -right-1 -top-1 z-[5] inline-flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-rose-500 px-0.5 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                            {formatNavBadgeCount(badge)}
-                          </span>
-                        ) : null}
-                      </div>
-                      {!navCollapsed ? (
-                        <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
-                          <span className="truncate">{item.label}</span>
-                          {badge > 0 ? (
-                            <span className={['inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-extrabold', isActive ? 'bg-white/90 text-primary' : 'bg-primary text-white'].join(' ')}>
-                              {formatNavBadgeCount(badge)}
-                            </span>
-                          ) : null}
-                        </span>
-                      ) : null}
-                    </>
-                    );
-                  }}
-                </PrefetchNavLink>
-              );
-            })}
-          </nav>
-        </div>
-
-        <div className="flex-shrink-0 border-t border-stone-200/80 p-4">
-          {registrationStatus === 'active' ? (
-            <>
-              <NavLink
-                to={publicProfileTo}
-                className={({ isActive }) =>
-                  [
-                    'mb-2 flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold transition-colors',
-                    navCollapsed ? 'justify-center px-0' : 'px-4',
-                    isActive
-                      ? 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow'
-                      : 'text-stone-600 hover:bg-stone-100',
-                  ].join(' ')
-                }
-                title={navCollapsed ? 'Моя страница' : undefined}
-                aria-label={
-                  navCollapsed
-                    ? hasProfilePostDraft
-                      ? 'Моя страница, есть несохранённый черновик поста'
-                      : 'Моя страница'
-                    : undefined
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <div className="relative">
-                      <LuUser className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
-                      {hasProfilePostDraft && navCollapsed ? (
-                        <span
-                          className="absolute -right-0.5 -top-0.5 z-[5] h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-white"
-                          aria-hidden
-                        />
-                      ) : null}
-                    </div>
-                    {!navCollapsed ? (
-                      <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
-                        <span className="truncate">Моя страница</span>
-                        {hasProfilePostDraft ? (
-                          <span
-                            className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500"
-                            title="Черновик поста"
-                            aria-hidden
-                          />
-                        ) : null}
-                      </span>
-                    ) : null}
-                  </>
-                )}
-              </NavLink>
-              <NavLink
-                to="/settings"
-                end
-                className={({ isActive }) =>
-                  [
-                    'mb-2 flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold transition-colors',
-                    navCollapsed ? 'justify-center px-0' : 'px-4',
-                    isActive
-                      ? 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow'
-                      : 'text-stone-600 hover:bg-stone-100',
-                  ].join(' ')
-                }
-                title={navCollapsed ? 'Настройки' : undefined}
-                aria-label={navCollapsed ? 'Настройки' : undefined}
-              >
-                {({ isActive }) => (
-                  <>
-                    <LuSettings className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
-                    {!navCollapsed ? 'Настройки' : null}
-                  </>
-                )}
-              </NavLink>
-            </>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void handleLogout()}
-            className={[
-              'flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold text-stone-600 transition-colors hover:bg-stone-100',
-              navCollapsed ? 'justify-center px-0' : 'px-4',
-            ].join(' ')}
-          >
-            {navCollapsed ? '⎋' : 'Выйти'}
-          </button>
-        </div>
-      </aside>
+      <DesktopSidebar
+        collapsed={navCollapsed}
+        onToggle={toggleNavCollapsed}
+        items={sidebarItems}
+        prefetchByPath={NAV_PREFETCH_BY_PATH}
+        badgeFor={(to) => navItemBadgeCount(to, messengerNavBadge, feedUnreadCount)}
+        badgeAria={navItemBadgeAriaLabel}
+        isAdminRoute={isAdminRoute}
+        activeAdminTab={activeAdminTab}
+        adminBadgeFor={adminBadgeFor}
+        appName={appName}
+        description={description}
+        logoSrc={customLogoDataUrl || null}
+        logoScalePercent={logoScalePercent}
+        showAccount={registrationStatus === 'active'}
+        profileTo={publicProfileTo}
+        hasProfileDraft={hasProfilePostDraft}
+        userName={sidebarUserName}
+        userHint={sidebarUserHint}
+        userAvatarUrl={meQ.data?.avatar_url ?? null}
+        onLogout={() => void handleLogout()}
+      />
 
       {/* Main: слева отступ от сайдбара; снизу на мобиле место резервирует .app-bottom-nav-spacer (padding на overflow:auto iOS игнорирует). */}
       <main

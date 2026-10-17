@@ -73,7 +73,7 @@ textarea {
    * high-contrast, #e895a0 в тёмной) — белые глифы на нём не читались бы.
    */
   --app-status-bar-bg: #7d3640;
-  --sidebar-width: 88px;
+  --sidebar-width: 80px;
   --app-safe-bottom: env(safe-area-inset-bottom, 0px);
   /*
    * Нижний safe-area. JS (nativeShellViewport) перезаписывает --app-safe-bottom в px —
@@ -1258,8 +1258,8 @@ nav.app-bottom-nav .app-bottom-nav__label {
 /* Совпадает с сайдбаром в Layout.tsx: левый отступ только когда колонка меню видна (`lg:flex`). */
 @media (min-width: 1024px) {
   .app-main-content {
-    margin-left: var(--sidebar-width, 88px);
-    width: calc(100% - var(--sidebar-width, 88px));
+    margin-left: var(--sidebar-width, 80px);
+    width: calc(100% - var(--sidebar-width, 80px));
     transition: margin-left 0.2s ease, width 0.2s ease;
   }
 }
