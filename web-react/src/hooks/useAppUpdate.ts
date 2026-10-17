@@ -42,6 +42,9 @@ export function useAppUpdate() {
           message.includes('when fetching the script') ||
           message.includes('An unknown error occurred when fetching the script') ||
           message.includes('bad HTTP response code') ||
+          /** Регистрация в промежуточном состоянии после неудачной загрузки sw.js — проходит сама. */
+          message.includes('InvalidStateError') ||
+          message.includes('invalid state') ||
           message.includes('504') ||
           (message.includes('ServiceWorker') && message.includes('fetch'));
         if (isSwScriptFetchError) {
