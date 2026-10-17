@@ -5075,3 +5075,275 @@ html[data-apple-mobile='1'] .tg-chat-window__composer .sendBtn.sendBtn--voice:no
     background: var(--tg-surface-elevated, #fff) !important;
   }
 }
+
+/* ── Запись голосового / кружка (как в Telegram iOS) ── */
+.tg-rec {
+  margin: 0 0 8px;
+  animation: tg-rec-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes tg-rec-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tg-rec__circle {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.tg-rec__circle .tg-capture-hud-videonote-ring {
+  width: min(190px, 52vw);
+  height: min(190px, 52vw);
+  background: #1a1a1c;
+  box-shadow:
+    0 0 0 3px #ff3b30,
+    0 10px 30px rgba(0, 0, 0, 0.28);
+  animation: tg-rec-ring 1.4s ease-in-out infinite;
+}
+
+@keyframes tg-rec-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px #ff3b30, 0 10px 30px rgba(0, 0, 0, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(255, 59, 48, 0.55), 0 10px 30px rgba(0, 0, 0, 0.28);
+  }
+}
+
+.tg-rec__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(28, 25, 23, 0.08);
+  background: var(--surface-elevated, #fff);
+  color: var(--text, #1c1917);
+}
+
+.tg-rec__dot {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #ff3b30;
+  animation: tg-rec-dot 1s ease-in-out infinite;
+}
+
+@keyframes tg-rec-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
+.tg-rec__timer {
+  min-width: 42px;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tg-rec__levels {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  min-width: 0;
+}
+
+.tg-rec__levels span {
+  width: 3px;
+  height: 5px;
+  border-radius: 2px;
+  background: #ff3b30;
+  opacity: 0.8;
+  animation: tg-vn-wave 0.9s ease-in-out infinite;
+}
+
+.tg-rec__levels span:nth-child(2n) {
+  animation-delay: 0.14s;
+}
+.tg-rec__levels span:nth-child(3n) {
+  animation-delay: 0.28s;
+}
+
+.tg-rec__slide {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  font-size: 15px;
+  color: var(--text-secondary, #78716c);
+  white-space: nowrap;
+  animation: tg-rec-nudge 1.6s ease-in-out infinite;
+}
+
+.tg-rec--video .tg-rec__slide {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+@keyframes tg-rec-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-5px);
+  }
+}
+
+.tg-rec__cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 59, 48, 0.12);
+  color: #ff3b30;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tg-rec__cancel:active {
+  transform: scale(0.95);
+}
+
+.tg-rec__lock {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 14px);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 38px;
+  padding: 10px 0 8px;
+  border-radius: 19px;
+  border: 1px solid rgba(28, 25, 23, 0.08);
+  background: var(--surface-elevated, #fff);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+  color: var(--text-secondary, #78716c);
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: tg-rec-in 0.22s ease-out both;
+}
+
+.tg-rec__lock-arrow {
+  animation: tg-rec-up 1.2s ease-in-out infinite;
+}
+
+@keyframes tg-rec-up {
+  0%,
+  100% {
+    transform: translateY(2px);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+html.dark .tg-rec__bar,
+html.dark .tg-rec__lock {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tg-rec,
+  .tg-rec__dot,
+  .tg-rec__slide,
+  .tg-rec__lock-arrow,
+  .tg-rec__levels span,
+  .tg-rec__circle .tg-capture-hud-videonote-ring {
+    animation: none;
+  }
+}
+
+/* ── Плеер: голосовые и кружки как в Telegram ── */
+.tg-voice-unread {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--voice-bar-played);
+  vertical-align: middle;
+}
+
+.tg-voice-wave {
+  height: 30px;
+}
+
+.tg-voice-bar {
+  max-width: 2.5px;
+  min-width: 2px;
+}
+
+.tg-voice-play {
+  width: 44px;
+  height: 44px;
+}
+
+.msg-videonote-progress-track {
+  display: none;
+}
+
+.msg-videonote-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+
+.msg-videonote-ring__arc {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.95);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.45));
+  transition: stroke-dashoffset 0.25s linear;
+}
+
+.msg-videonote-duration {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.42);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  pointer-events: none;
+}

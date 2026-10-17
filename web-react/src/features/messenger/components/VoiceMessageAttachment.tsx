@@ -37,6 +37,26 @@ function readStoredRate(): PlaybackRate {
   return 1;
 }
 
+const PLAYED_KEY = 'messenger-voice-played';
+
+function readPlayed(ownerId: string): boolean {
+  try {
+    return (localStorage.getItem(PLAYED_KEY) ?? '').split(',').includes(ownerId);
+  } catch {
+    return false;
+  }
+}
+
+function markPlayed(ownerId: string) {
+  try {
+    const list = (localStorage.getItem(PLAYED_KEY) ?? '').split(',').filter(Boolean);
+    if (list.includes(ownerId)) return;
+    localStorage.setItem(PLAYED_KEY, [...list.slice(-399), ownerId].join(','));
+  } catch {
+    /* ignore */
+  }
+}
+
 function stopMsgMenu(e: { stopPropagation: () => void; preventDefault?: () => void }) {
   e.stopPropagation();
 }
@@ -107,6 +127,7 @@ export function VoiceMessageAttachment({
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [played, setPlayed] = useState(() => isMine || readPlayed(ownerId));
 
   const bars = useMemo(
     () => buildVoiceWaveBars(waveSeed || title || audioSrc || ownerId, variant === 'file' ? 38 : 44),
@@ -122,6 +143,10 @@ export function VoiceMessageAttachment({
       }
       setPlaying(snap.playing);
       setLoading(snap.loading);
+      if (snap.playing) {
+        markPlayed(ownerId);
+        setPlayed(true);
+      }
       if (!seekingRef.current) {
         setCurrent(snap.current);
         setProgress(snap.progress);
@@ -380,10 +405,9 @@ export function VoiceMessageAttachment({
         <div className="tg-voice-meta">
           <span className="tg-voice-time">
             {loading && !playing ? 'Загрузка…' : timeLeft}
-            {!loading && total > 0 && (playing || current > 0) ? (
-              <span className="tg-voice-time--total"> / {formatVoiceTime(total)}</span>
-            ) : null}
+            {!played && variant === 'voice' && !isMine ? <span className="tg-voice-unread" aria-label="Не прослушано" /> : null}
           </span>
+          {playing || rate !== 1 ? (
           <button
             type="button"
             data-no-msg-menu
@@ -395,6 +419,7 @@ export function VoiceMessageAttachment({
           >
             {formatRate(rate)}
           </button>
+          ) : null}
         </div>
       </div>
     </div>
