@@ -12,6 +12,7 @@ import {
   LuSearch,
   LuSettings,
   LuShield,
+  LuUserPen,
   LuUser,
 } from 'react-icons/lu';
 
@@ -629,11 +630,9 @@ export function DesktopSidebar(props: Props) {
                 <span className="dsb-menu__name">{userName || 'Профиль'}</span>
                 {userHint ? <span className="dsb-menu__hint">{userHint}</span> : null}
               </div>
-              <Link role="menuitem" to={profileTo} className="dsb-menu__item" onClick={() => setMenu(null)}>
-                <LuUser aria-hidden /> Моя страница
-              </Link>
-              <Link role="menuitem" to="/settings" className="dsb-menu__item" onClick={() => setMenu(null)}>
-                <LuSettings aria-hidden /> Настройки
+              {/* «Моя страница» и «Настройки» уже в блоке «Аккаунт» — здесь только то, чего там нет. */}
+              <Link role="menuitem" to="/profile" className="dsb-menu__item" onClick={() => setMenu(null)}>
+                <LuUserPen aria-hidden /> Редактировать профиль
               </Link>
               <button
                 type="button"
