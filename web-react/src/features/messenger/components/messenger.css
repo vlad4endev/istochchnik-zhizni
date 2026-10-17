@@ -4850,3 +4850,181 @@ html.dark .msg-videonote-circle--placeholder {
     }
   }
 }
+
+/*
+ * iOS (iPhone), открытый чат — «как в Telegram на iOS 26».
+ * — шапка: три стеклянные капсулы (назад · собеседник · действия), сама шапка прозрачная;
+ * — сообщения уходят под шапку и под композер (композер лежит поверх списка);
+ * — композер: фон убран, стеклянными остаются поле-капсула и кнопки.
+ * Высота шапки задана здесь (`--tg-chat-head-h`), высоту композера измеряет useIosChatInsets.
+ * Только Apple-телефон (`data-apple-mobile`, ≤768px).
+ */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 768px) {
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window {
+      --tg-chat-head-h: 60px;
+      --tg-glass-bg: color-mix(in srgb, var(--tg-surface-elevated, #fff) 62%, transparent);
+      --tg-glass-line: color-mix(in srgb, var(--tg-text, #1c1917) 9%, transparent);
+    }
+
+    /* ── Шапка ── */
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > header.chat-header {
+      position: relative !important;
+      z-index: 60;
+      isolation: isolate;
+      height: var(--tg-chat-head-h);
+      border: 0;
+      background: transparent;
+    }
+
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > header.chat-header::before {
+      content: '';
+      position: absolute;
+      inset: 0 0 -12px;
+      z-index: -1;
+      background: color-mix(in srgb, var(--tg-bg, #fff) 55%, transparent);
+      -webkit-backdrop-filter: blur(16px) saturate(170%);
+      backdrop-filter: blur(16px) saturate(170%);
+      -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+      mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+      pointer-events: none;
+    }
+
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > header.chat-header .chat-header__row {
+      height: var(--tg-chat-head-h);
+      min-height: 0;
+      gap: 8px;
+      padding-top: 0;
+      padding-bottom: 0;
+      align-items: center;
+    }
+
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window .chat-back-btn {
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      border-radius: 999px;
+      background: var(--tg-glass-bg);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid var(--tg-glass-line);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+      color: var(--tg-text, #1c1917);
+    }
+
+    /* Собеседник: аватар + имя + статус в одной капсуле. */
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > header.chat-header .chat-header__row > [role='button'] {
+      min-height: 48px;
+      padding: 3px 16px 3px 4px;
+      border-radius: 999px;
+      background: var(--tg-glass-bg);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid var(--tg-glass-line);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    }
+
+    /* Действия (звонок, управление, поиск) — одна капсула справа. */
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window .chat-header__actions {
+      padding: 2px;
+      border-radius: 999px;
+      background: var(--tg-glass-bg);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid var(--tg-glass-line);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    }
+
+    /* ── Сообщения под шапкой и под композером ── */
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > .tg-chat-window__body {
+      /* тело заходит под шапку: сообщения видны сквозь стекло */
+      margin-top: calc(-1 * var(--tg-chat-head-h));
+      position: relative;
+      z-index: 1;
+    }
+
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > .tg-chat-window__body [role='log'] {
+      padding-top: calc(var(--tg-chat-head-h) + 8px);
+      padding-bottom: calc(var(--tg-chat-composer-h, 64px) + 8px);
+      scroll-padding-bottom: calc(var(--tg-chat-composer-h, 64px) + 8px);
+    }
+
+    /* Закреплённые сообщения (если есть) начинаются под шапкой, а у списка тогда нет двойного отступа. */
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > .tg-chat-window__body > .shrink-0.border-b {
+      margin-top: var(--tg-chat-head-h);
+    }
+
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > .tg-chat-window__body:has(> .shrink-0.border-b) [role='log'] {
+      padding-top: 12px;
+    }
+
+    /* ── Композер поверх списка, без собственного фона ── */
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-main--visible .tg-chat-window > .tg-chat-window__composer.message-input-bar,
+    html[data-apple-mobile='1'][data-chat-open='1'][data-mantine-color-scheme='dark'] .tg-main--visible .tg-chat-window > .tg-chat-window__composer.message-input-bar {
+      position: absolute !important;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 60;
+      background: transparent !important;
+      background-color: transparent !important;
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      border-top: 0 !important;
+      box-shadow: none !important;
+    }
+
+    /* Поле ввода плотнее, чтобы сообщения под ним не мешали читать набираемый текст. */
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-main--visible .tg-chat-window__composer.message-input-bar .tg-input-container.tg-composer-pill-layout,
+    html[data-apple-mobile='1'][data-chat-open='1'][data-mantine-color-scheme='dark'] .tg-main--visible .tg-chat-window__composer.message-input-bar .tg-input-container.tg-composer-pill-layout {
+      background: color-mix(in srgb, var(--tg-surface-elevated, #fff) 80%, transparent) !important;
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid var(--tg-glass-line) !important;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
+    }
+
+    /* Круглая стеклянная кнопка «вложения» слева от поля. */
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window__composer .tg-input-area > .shrink-0 > button[aria-label='Вложения'] {
+      width: 44px;
+      height: 44px;
+      border-radius: 999px;
+      background: var(--tg-glass-bg);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid var(--tg-glass-line);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    }
+
+    @media (prefers-reduced-transparency: reduce) {
+      html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > header.chat-header::before {
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        background: var(--tg-bg, #fff);
+      }
+
+      html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window .chat-back-btn,
+      html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > header.chat-header .chat-header__row > [role='button'],
+      html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window .chat-header__actions,
+      html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window__composer .tg-input-area > .shrink-0 > button[aria-label='Вложения'] {
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+      }
+    }
+  }
+}
+
+/* iOS < 16.2 без color-mix(): сплошные фоны вместо стекла в открытом чате. */
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  @media (max-width: 768px) {
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window {
+      --tg-glass-bg: var(--tg-surface-elevated, #fff);
+      --tg-glass-line: rgba(0, 0, 0, 0.09);
+    }
+
+    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > header.chat-header::before {
+      background: var(--tg-bg, #fff);
+    }
+  }
+}
