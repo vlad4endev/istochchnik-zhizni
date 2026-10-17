@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LuArrowLeft,
@@ -640,39 +640,57 @@ export function LoginPage() {
   };
 
   const inputClass =
-    'min-h-[52px] w-full rounded-2xl border border-stone-200/90 bg-stone-50/80 px-4 py-3 text-base text-stone-900 outline-none transition-[border-color,box-shadow,background-color] placeholder:text-stone-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 dark:border-[var(--border)] dark:bg-[var(--bg-interactive)] dark:text-[var(--text)] dark:placeholder:text-[var(--text-muted)] dark:focus:bg-[var(--bg-elevated)] sm:min-h-[48px] sm:text-[15px]';
+    'min-h-[52px] w-full rounded-2xl border border-[#e6d6cf] bg-white px-4 py-3 text-base text-stone-900 outline-none transition-[border-color,box-shadow,background-color] placeholder:text-stone-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 dark:border-[var(--border)] dark:bg-[var(--bg-interactive)] dark:text-[var(--text)] dark:placeholder:text-[var(--text-muted)] dark:focus:bg-[var(--bg-elevated)] sm:min-h-[48px] sm:text-[15px]';
   const labelClass =
     'mb-1.5 block text-[13px] font-semibold tracking-wide text-stone-600 dark:text-[var(--text-secondary)]';
   const eyeBtnClass =
     'absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary';
 
   return (
-    <div className="app-auth-screen relative min-h-dvh w-full max-w-[100vw] overflow-y-auto bg-[var(--surface)] [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[42vh] bg-gradient-to-b from-primary/[0.12] via-primary/[0.04] to-transparent"
-        aria-hidden
-      />
-      <div className="relative flex min-h-dvh flex-col py-5 [padding-left:max(1rem,env(safe-area-inset-left,0px))] [padding-right:max(1rem,env(safe-area-inset-right,0px))] sm:py-6">
-        <Link
-          to="/login"
-          className="mb-3 inline-flex min-h-[44px] items-center gap-1.5 self-start rounded-full px-1 text-sm font-semibold text-stone-500 transition hover:text-primary active:text-primary"
-        >
-          <LuArrowLeft className="h-4 w-4" strokeWidth={2.25} aria-hidden />
-          Назад
-        </Link>
+    <div className="auth-screen relative flex min-h-dvh w-full max-w-[100vw] flex-col overflow-y-auto bg-[#fbf5ef] dark:bg-[var(--surface)]">
+      <div className="landing-hero relative h-[11.5rem] shrink-0 overflow-hidden text-white sm:h-60">
+        <img
+          src="/assets/landing-hero.webp"
+          alt=""
+          aria-hidden
+          decoding="async"
+          draggable={false}
+          className="absolute inset-0 h-full w-full select-none object-cover [object-position:50%_62%]"
+        />
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[#3a0f20]/70 to-transparent"
+          aria-hidden
+        />
+        <div className="relative flex items-center justify-between px-5 [padding-top:max(1rem,calc(env(safe-area-inset-top,0px)+0.5rem))]">
+          <Link
+            to="/login"
+            aria-label="Назад"
+            className="touch-manipulation flex h-11 w-11 items-center justify-center rounded-full bg-black/25 text-white ring-1 ring-white/30 backdrop-blur-md transition active:scale-95"
+          >
+            <LuArrowLeft className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+          </Link>
+          <img
+            src="/assets/logo.svg"
+            alt=""
+            aria-hidden
+            className="h-11 w-11 rounded-xl shadow-[0_6px_18px_rgba(0,0,0,0.3)]"
+          />
+        </div>
+      </div>
 
-        <div className="flex flex-1 flex-col justify-start pb-4 sm:justify-center">
-          <div className="app-auth-card mx-auto w-full max-w-[min(100%,480px)] overflow-hidden rounded-[1.5rem] bg-[var(--surface-elevated)]/95 p-5 shadow-[0_18px_50px_rgba(28,25,23,0.08)] ring-1 ring-stone-900/[0.06] backdrop-blur-sm sm:rounded-[1.75rem] sm:p-7">
-            <div className="flex items-center gap-3.5">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 p-2.5 ring-1 ring-primary/15">
-                <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-[1.4rem] font-extrabold leading-tight tracking-tight text-stone-900 sm:text-2xl">
-                  {title}
-                </h1>
-                <p className="mt-0.5 text-sm leading-snug text-stone-500 sm:text-[15px]">{subtitle}</p>
-              </div>
+      <div
+        className="landing-rise relative -mt-8 flex-1 rounded-t-[2rem] bg-[#fbf5ef] px-5 pt-7 shadow-[0_-18px_50px_rgba(20,5,10,0.3)] [padding-bottom:max(1.25rem,env(safe-area-inset-bottom,0px))] dark:bg-[var(--surface)] sm:px-7"
+        style={{ '--d': '60ms' } as CSSProperties}
+      >
+        <div className="mx-auto w-full max-w-[min(100%,480px)]">
+            <div className="min-w-0">
+              <p className="landing-accent text-xl leading-none">
+                {isRegisterMode ? 'Добро пожаловать' : 'С возвращением'}
+              </p>
+              <h1 className="mt-2 text-[1.9rem] font-extrabold leading-[1.1] tracking-tight text-[#2b0d16] dark:text-[var(--text)] sm:text-4xl">
+                {title}
+              </h1>
+              <p className="mt-2 text-[15px] leading-snug text-[#6b5a5e] dark:text-[var(--text-secondary)]">{subtitle}</p>
             </div>
 
             {apiMismatch && (
@@ -688,11 +706,11 @@ export function LoginPage() {
               </div>
             )}
 
-            <div className="mt-5 rounded-2xl bg-stone-100/90 p-1 ring-1 ring-stone-200/70">
-              <div className="grid grid-cols-2 gap-0.5">
+            <div className="mt-6 rounded-2xl bg-[#f1e6dd] p-1 ring-1 ring-[#e6d6cf]/80">
+              <div className="flex gap-0.5">
                 <button
                   type="button"
-                  className={`touch-manipulation rounded-[0.9rem] py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
+                  className={`touch-manipulation flex-1 rounded-[0.9rem] py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
                     !isRegisterMode
                       ? 'bg-white text-stone-900 shadow-sm ring-1 ring-stone-200/80'
                       : 'bg-transparent text-stone-500'
@@ -703,9 +721,9 @@ export function LoginPage() {
                 </button>
                 <button
                   type="button"
-                  className={`touch-manipulation rounded-[0.9rem] py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
+                  className={`touch-manipulation flex-1 rounded-[0.9rem] py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
                     isRegisterMode
-                      ? 'bg-primary text-white shadow-sm shadow-primary/25'
+                      ? 'bg-gradient-to-r from-[#8a2444] to-[#6b1a30] text-white shadow-md shadow-primary/30'
                       : 'bg-transparent text-stone-500'
                   }`}
                   onClick={() => switchMode(true)}
@@ -729,14 +747,14 @@ export function LoginPage() {
                               ? 'bg-primary text-white'
                               : current
                                 ? 'bg-primary/15 text-primary ring-2 ring-primary/30'
-                                : 'bg-stone-100 text-stone-400'
+                                : 'bg-[#efe3da] text-[#a8928a]'
                           }`}
                         >
                           {done ? <LuCheck className="h-4 w-4" strokeWidth={2.5} aria-hidden /> : index + 1}
                         </div>
                         {index < REGISTER_STEPS.length - 1 ? (
                           <div
-                            className={`h-0.5 flex-1 rounded-full ${done ? 'bg-primary/70' : 'bg-stone-200'}`}
+                            className={`h-0.5 flex-1 rounded-full ${done ? 'bg-primary/70' : 'bg-[#e6d6cf]'}`}
                             aria-hidden
                           />
                         ) : null}
@@ -1103,7 +1121,7 @@ export function LoginPage() {
                 <button
                   type="button"
                   disabled={submitting}
-                  className="touch-manipulation flex min-h-[52px] w-[7.5rem] shrink-0 items-center justify-center gap-1.5 rounded-2xl border border-stone-200 bg-white text-sm font-bold text-stone-700 transition active:scale-[0.99] disabled:opacity-60"
+                  className="touch-manipulation flex min-h-[52px] w-[7.5rem] shrink-0 items-center justify-center gap-1.5 rounded-[1.4rem] border border-[#e3d3cc] bg-white/70 text-sm font-bold text-[#5a1830] transition active:scale-[0.98] disabled:opacity-60"
                   onClick={goRegisterBack}
                 >
                   <LuArrowLeft className="h-4 w-4" strokeWidth={2.25} aria-hidden />
@@ -1113,7 +1131,7 @@ export function LoginPage() {
               <button
                 type="button"
                 disabled={submitting}
-                className="touch-manipulation flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-white shadow-lg shadow-primary/25 transition-[opacity,transform] hover:opacity-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+                className="landing-btn-primary touch-manipulation flex min-h-[56px] w-full items-center justify-center gap-2 rounded-[1.4rem] text-base font-bold text-white transition-[opacity,transform] hover:opacity-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
                 onClick={() => {
                   if (isRegisterMode) goRegisterNext();
                   else void submitLogin();
@@ -1141,7 +1159,6 @@ export function LoginPage() {
                 )}
               </button>
             </div>
-          </div>
         </div>
       </div>
       <style>{`
