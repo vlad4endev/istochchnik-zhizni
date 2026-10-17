@@ -186,3 +186,8 @@ VITE_API_BASE_URL=https://your-api-domain.com npm run build
 ```
 
 GitHub Actions (`.github/workflows/web-react.yml`) проверяет сборку на `main`.
+
+### Push: сервер не видит fcm.googleapis.com
+
+Симптом: `curl -4 https://fcm.googleapis.com/` с хоста — таймаут, в логах API «Socket timeout» при отправке FCM / Web Push на Android.
+Решение — исходящий HTTP(S)-прокси только для Google: `PUSH_PROXY_URL=http://user:pass@host:port` в `.env` (по умолчанию через него идёт `*.googleapis.com`; `PUSH_PROXY_ALL=1` — весь push-трафик). Применяется к web-push и firebase-admin.

@@ -1,5 +1,6 @@
 import fs from 'fs';
 
+import { createPushProxyAgent } from '../lib/pushProxy';
 import type { messaging, ServiceAccount } from 'firebase-admin';
 
 type FirebaseAdminModule = typeof import('firebase-admin');
@@ -44,9 +45,19 @@ function initWithServiceAccount(
   admin: FirebaseAdminModule,
   creds: ServiceAccount,
 ): messaging.Messaging | null {
-  admin.initializeApp({ credential: admin.credential.cert(creds) });
+  // initAttempted выставляем до попытки: повреждённый ключ бросает из cert() и иначе пробовался бы заново на каждую отправку.
   initAttempted = true;
-  return admin.messaging();
+  try {
+    const httpAgent = createPushProxyAgent();
+    admin.initializeApp({ credential: admin.credential.cert(creds, httpAgent), httpAgent });
+    return admin.messaging();
+  } catch (e) {
+    console.warn(
+      '[fcm] service account is invalid (FCM disabled):',
+      e instanceof Error ? e.message : e,
+    );
+    return null;
+  }
 }
 
 /**
@@ -87,16 +98,20 @@ export function getFirebaseMessaging(): messaging.Messaging | null {
     }
   }
 
+  // Без явного ключа (файл / JSON) не инициализируемся «по умолчанию»: такой клиент молча создаётся,
+  // но не может ничего отправить — и диагностика ошибочно показывала «FCM настроен».
+  // Application Default Credentials (GCP) включаются явно: FIREBASE_USE_ADC=1.
+  if (process.env.FIREBASE_USE_ADC?.trim() !== '1') {
+    initAttempted = true;
+    return null;
+  }
   try {
     admin.initializeApp();
     initAttempted = true;
     return admin.messaging();
   } catch (e) {
     initAttempted = true;
-    console.warn(
-      '[fcm] Firebase Admin not configured (set FIREBASE_SERVICE_ACCOUNT_PATH, FIREBASE_SERVICE_ACCOUNT_JSON, or GOOGLE_APPLICATION_CREDENTIALS):',
-      e,
-    );
+    console.warn('[fcm] Firebase Admin (ADC) not configured:', e);
     return null;
   }
 }

@@ -584,11 +584,17 @@ async function start(): Promise<void> {
   } catch (e) {
     console.warn('[push] initPushVapid failed:', e);
   }
-  const fcmOk = getFirebaseMessaging() != null;
+  let fcmOk = false;
+  try {
+    fcmOk = getFirebaseMessaging() != null;
+  } catch (e) {
+    // Диагностика старта не должна ронять API: битый ключ Firebase = отключённый FCM, а не краш-луп.
+    console.warn('[push] FCM check failed:', e instanceof Error ? e.message : e);
+  }
   console.log(
     fcmOk
       ? '[push] FCM (Android/iOS native) configured'
-      : '[push] FCM NOT configured — Android/iOS push will not work. Проверьте secrets/firebase-sa.json (монтируется как ./secrets) или FIREBASE_SERVICE_ACCOUNT_JSON.',
+      : '[push] FCM NOT configured — Android/iOS push will not work. Нет ключа: положите secrets/firebase-sa.json (монтируется как ./secrets) или задайте FIREBASE_SERVICE_ACCOUNT_JSON.',
   );
 
   if (!process.env.SUPABASE_URL?.trim() || !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {

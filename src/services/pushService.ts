@@ -1,3 +1,4 @@
+import { pushProxyForEndpoint } from '../lib/pushProxy';
 import webpush from 'web-push';
 import { getFirebaseMessaging } from '../config/firebaseAdmin';
 import { query } from '../config/db';
@@ -309,7 +310,7 @@ export async function sendNotificationToSubscription(
       },
       serializeWebPushPayload(payload),
       // urgency high — иначе Android в Doze и iOS откладывают доставку (вплоть до минут/часов).
-      { TTL: 86400, urgency: 'high', timeout: WEB_PUSH_HTTP_TIMEOUT_MS },
+      { TTL: 86400, urgency: 'high', timeout: WEB_PUSH_HTTP_TIMEOUT_MS, proxy: pushProxyForEndpoint(sub.endpoint) },
     );
     // Mark as used
     query(`UPDATE push_subscriptions SET last_used_at = NOW() WHERE endpoint = $1`, [sub.endpoint]).catch(e => {
@@ -327,14 +328,15 @@ export async function sendNotificationToSubscription(
       await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
       return 'removed';
     } else if (
-      statusCode === 403 &&
+      // Apple отвечает 400 {"reason":"VapidPkHashMismatch"}, Mozilla/Google — 401/403.
+      (statusCode === 403 || statusCode === 400 || statusCode === 401) &&
       (/vapid|UnauthorizedRegistration|InvalidToken|mismatch/i.test(body) ||
         /vapid|UnauthorizedRegistration|InvalidToken|mismatch/i.test(
           err instanceof Error ? err.message : String(err ?? ''),
         ))
     ) {
       // VAPID key rotated or subscription bound to another applicationServerKey
-      console.warn('[push] VAPID/auth mismatch (403). Removing subscription.', {
+      console.warn('[push] VAPID/auth mismatch. Removing subscription.', {
         endpointHost: (() => {
           try {
             return new URL(sub.endpoint).host;
@@ -558,6 +560,13 @@ async function sendFcmToMember(
   const summary = emptyChannel();
   const messaging = getFirebaseMessaging();
   if (!messaging) {
+    // Устройства зарегистрированы, а ключа Firebase на сервере нет — это нужно видеть в тесте, а не «0 устройств».
+    const registered = await getFcmTokensForMember(memberId);
+    if (registered.length > 0) {
+      summary.attempted += registered.length;
+      summary.failed += registered.length;
+      addChannelError(summary, 'fcm-not-configured');
+    }
     return summary;
   }
 
