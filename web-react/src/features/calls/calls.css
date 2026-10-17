@@ -642,7 +642,7 @@
 .call-stage__local-video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   background: #000;
 }
 
@@ -1427,7 +1427,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     object-position: center;
   }
 
@@ -2044,6 +2044,7 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
     0 14px 36px rgba(0, 0, 0, 0.35);
 }
 
+/* contain: камера целиком в кадре (cover на узком экране сильно «зумит» и обрезает) */
 .call-participant-tile__avatar-img,
 .call-participant-tile__video,
 .call-participant-tile--video .call-participant-tile__media > video {
@@ -2056,13 +2057,18 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   height: 100%;
   max-width: none;
   max-height: none;
-  object-fit: cover;
+  object-fit: contain;
+  background: #000;
   object-position: center;
   display: block;
   border-radius: inherit;
   /* Safari: меньше артефактов при paint/rotate устройства */
   -webkit-transform: translateZ(0);
   transform: translateZ(0);
+}
+
+.call-participant-tile__avatar-img {
+  object-fit: cover;
 }
 
 .call-participant-tile--audio .call-participant-tile__avatar-img {
