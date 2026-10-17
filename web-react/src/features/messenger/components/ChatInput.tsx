@@ -2417,6 +2417,7 @@ export function ChatInput({
                 'tg-send-btn sendBtn relative !flex !h-11 !w-11 !min-h-[44px] !min-w-[44px] shrink-0 touch-none select-none items-center justify-center !rounded-full',
                 isRecording ? 'recording' : '',
                 isRecording && captureKind === 'video_note' ? 'videoMode' : '',
+                iconMode === 'mic' || iconMode === 'video' ? 'sendBtn--voice' : '',
                 textOnly && !hasSendAction ? 'opacity-45' : '',
               ].join(' ')}
               onPointerDown={!editing && !textOnly ? onSendOrMicPointerDown : undefined}
@@ -2503,10 +2504,10 @@ export function ChatInput({
                 aria-hidden
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                  <rect x="9" y="2" width="6" height="12" rx="3" fill="white" />
+                  <rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor" />
                   <path
                     d="M5 10a7 7 0 0014 0M12 19v3M9 22h6"
-                    stroke="white"
+                    stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                   />
@@ -2517,8 +2518,8 @@ export function ChatInput({
                 aria-hidden
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                  <rect x="2" y="6" width="13" height="12" rx="2.5" fill="white" />
-                  <path d="M15 10l5-3v10l-5-3V10z" fill="white" />
+                  <rect x="2" y="6" width="13" height="12" rx="2.5" fill="currentColor" />
+                  <path d="M15 10l5-3v10l-5-3V10z" fill="currentColor" />
                 </svg>
               </span>
             </button>

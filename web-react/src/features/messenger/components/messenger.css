@@ -3949,6 +3949,10 @@ html.dark .msg-videonote-circle--placeholder {
   will-change: background-color;
 }
 
+.sendBtn {
+  color: #fff;
+}
+
 .sendBtn:hover:not(:disabled):not(.recording):not(.videoMode) {
   /* Sticky :hover на таче не должен обесцвечивать кнопку отправки. */
   background-color: var(--tg-primary, #7d3640);
@@ -5026,5 +5030,39 @@ html.dark .msg-videonote-circle--placeholder {
     html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > header.chat-header::before {
       background: var(--tg-bg, #fff);
     }
+  }
+}
+
+
+/*
+ * iOS: кнопка микрофона/видеокружка — белое стекло с цветной иконкой (как в Telegram), чтобы она не
+ * сливалась с исходящими сообщениями цвета темы. Стрелка «отправить» остаётся цветной кнопкой.
+ * Во время записи (`.recording`) кнопка по-прежнему красная.
+ */
+html[data-apple-mobile='1'] .tg-chat-window__composer .sendBtn.sendBtn--voice:not(.recording),
+html[data-apple-mobile='1'] .tg-chat-window__composer .sendBtn.sendBtn--voice:not(.recording):hover:not(:disabled),
+html[data-apple-mobile='1'] .tg-chat-window__composer .sendBtn.sendBtn--voice:not(.recording):active:not(:disabled),
+html[data-apple-mobile='1'] .tg-chat-window__composer .sendBtn.sendBtn--voice:not(.recording):disabled {
+  background: color-mix(in srgb, var(--tg-surface-elevated, #fff) 86%, transparent) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid color-mix(in srgb, var(--tg-text, #1c1917) 10%, transparent);
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  color: var(--tg-primary, #7d3640);
+}
+
+html[data-apple-mobile='1'] .tg-chat-window__composer .sendBtn.sendBtn--voice:not(.recording):disabled {
+  color: color-mix(in srgb, var(--tg-primary, #7d3640) 45%, transparent);
+}
+
+/* iOS < 16.2 без color-mix(): сплошной белый фон. */
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  html[data-apple-mobile='1'] .tg-chat-window__composer .sendBtn.sendBtn--voice:not(.recording),
+  html[data-apple-mobile='1'] .tg-chat-window__composer .sendBtn.sendBtn--voice:not(.recording):hover:not(:disabled),
+  html[data-apple-mobile='1'] .tg-chat-window__composer .sendBtn.sendBtn--voice:not(.recording):active:not(:disabled),
+  html[data-apple-mobile='1'] .tg-chat-window__composer .sendBtn.sendBtn--voice:not(.recording):disabled {
+    background: var(--tg-surface-elevated, #fff) !important;
   }
 }
