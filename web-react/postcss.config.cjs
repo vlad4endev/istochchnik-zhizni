@@ -15,9 +15,9 @@
  * `@tailwind`, автопрефиксер идёт последним, чтобы видеть итоговый CSS.
  */
 module.exports = {
-  plugins: {
-    'postcss-preset-mantine': {},
-    'postcss-simple-vars': {
+  plugins: [
+    require('postcss-preset-mantine')(),
+    require('postcss-simple-vars')({
       variables: {
         'mantine-breakpoint-xs': '36em',
         'mantine-breakpoint-sm': '48em',
@@ -25,8 +25,10 @@ module.exports = {
         'mantine-breakpoint-lg': '75em',
         'mantine-breakpoint-xl': '88em',
       },
-    },
-    tailwindcss: {},
-    autoprefixer: {},
-  },
+    }),
+    require('tailwindcss')(),
+    // После Tailwind: масштабирует и его утилиты `text-[Npx]`. Подробности — в файле плагина.
+    require('./postcss.px-font-scale.cjs')(),
+    require('autoprefixer')(),
+  ],
 };

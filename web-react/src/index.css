@@ -404,18 +404,95 @@ html {
   -webkit-tap-highlight-color: transparent;
   /* На полноэкранных экранах входа без полос по краям */
   background-color: var(--surface);
-  font-size: calc(16px * var(--a11y-font-scale, 1));
+  font-size: calc(16px * var(--ui-scale, 1) * var(--a11y-font-scale, 1));
   transition: background-color 0.3s ease, color 0.2s ease;
 }
 
 /*
- * Гибкий масштаб интерфейса на телефонах: базовый размер (а значит всё, что в rem) плавно меняется от 14.4px на самых
- * узких экранах (320px, iPhone SE) через 16px на 390px (iPhone 13/14/15) до ~17px на 430px (Pro Max) и больших Android.
- * Планшеты и ПК (от 768px) остаются на 16px; масштаб из панели доступности применяется поверх.
+ * Гибкий масштаб интерфейса на телефонах. `--ui-scale` плавно растёт от 0.86 на самых узких экранах (320px)
+ * через ~0.93 на 375px (iPhone mini) и ~0.95 на 390px до 1 на 430px (Pro Max) и больше; планшеты и ПК — 1.
+ * На него домножаются и базовый размер (всё, что в rem), и шрифты в px (см. postcss.px-font-scale.cjs).
+ * Масштаб из панели доступности применяется поверх.
  */
+:root {
+  --ui-scale: 1;
+}
+
 @media (max-width: 767px) {
-  html {
-    font-size: calc(clamp(14.4px, calc(14.4px + (100vw - 320px) * 0.0229), 17px) * var(--a11y-font-scale, 1));
+  :root {
+    --ui-scale: 0.86;
+  }
+}
+
+@media (min-width: 330px) and (max-width: 767px) {
+  :root {
+    --ui-scale: 0.873;
+  }
+}
+
+@media (min-width: 340px) and (max-width: 767px) {
+  :root {
+    --ui-scale: 0.885;
+  }
+}
+
+@media (min-width: 350px) and (max-width: 767px) {
+  :root {
+    --ui-scale: 0.898;
+  }
+}
+
+@media (min-width: 360px) and (max-width: 767px) {
+  :root {
+    --ui-scale: 0.911;
+  }
+}
+
+@media (min-width: 370px) and (max-width: 767px) {
+  :root {
+    --ui-scale: 0.923;
+  }
+}
+
+@media (min-width: 380px) and (max-width: 767px) {
+  :root {
+    --ui-scale: 0.936;
+  }
+}
+
+@media (min-width: 390px) and (max-width: 767px) {
+  :root {
+    --ui-scale: 0.949;
+  }
+}
+
+@media (min-width: 400px) and (max-width: 767px) {
+  :root {
+    --ui-scale: 0.962;
+  }
+}
+
+@media (min-width: 410px) and (max-width: 767px) {
+  :root {
+    --ui-scale: 0.974;
+  }
+}
+
+@media (min-width: 420px) and (max-width: 767px) {
+  :root {
+    --ui-scale: 0.987;
+  }
+}
+
+@media (min-width: 430px) and (max-width: 767px) {
+  :root {
+    --ui-scale: 1.0;
+  }
+}
+
+@media (min-width: 430px) and (max-width: 767px) {
+  :root {
+    --ui-scale: 1;
   }
 }
 
