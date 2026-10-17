@@ -409,90 +409,173 @@ html {
 }
 
 /*
- * Гибкий масштаб интерфейса на телефонах. `--ui-scale` плавно растёт от 0.86 на самых узких экранах (320px)
- * через ~0.93 на 375px (iPhone mini) и ~0.95 на 390px до 1 на 430px (Pro Max) и больше; планшеты и ПК — 1.
- * На него домножаются и базовый размер (всё, что в rem), и шрифты в px (см. postcss.px-font-scale.cjs).
+ * Гибкий масштаб интерфейса на телефонах. `--ui-scale` = масштаб по ширине × масштаб по высоте экрана.
+ * По ширине (CSS-пиксели iPhone): 320px (режим «Увеличение», SE 1) ≈ 0.86, 375px (mini, X–11 Pro, SE 2–3) ≈ 0.94,
+ * 390–393px (12–16) ≈ 0.96–0.97, 402px (16/17 Pro) ≈ 0.98, 414px (Plus, XR) ≈ 0.99, 420–440px и шире = 1.
+ * По высоте (только портрет): низкие экраны SE/6/7/8 (568–667px) и «Увеличение» (693px) сжимаются ещё немного,
+ * чтобы на них помещалось больше. Планшеты и ПК — 1.
+ * На `--ui-scale` домножаются и базовый размер (всё, что в rem), и шрифты в px (см. postcss.px-font-scale.cjs).
  * Масштаб из панели доступности применяется поверх.
  */
 :root {
-  --ui-scale: 1;
+  --ui-scale-w: 1;
+  --ui-scale-h: 1;
+  --ui-scale: calc(var(--ui-scale-w) * var(--ui-scale-h));
 }
 
 @media (max-width: 767px) {
   :root {
-    --ui-scale: 0.86;
+    --ui-scale-w: 0.86;
+  }
+}
+
+@media (min-width: 325px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.868;
   }
 }
 
 @media (min-width: 330px) and (max-width: 767px) {
   :root {
-    --ui-scale: 0.873;
+    --ui-scale-w: 0.876;
+  }
+}
+
+@media (min-width: 335px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.884;
   }
 }
 
 @media (min-width: 340px) and (max-width: 767px) {
   :root {
-    --ui-scale: 0.885;
+    --ui-scale-w: 0.892;
+  }
+}
+
+@media (min-width: 345px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.9;
   }
 }
 
 @media (min-width: 350px) and (max-width: 767px) {
   :root {
-    --ui-scale: 0.898;
+    --ui-scale-w: 0.907;
+  }
+}
+
+@media (min-width: 355px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.915;
   }
 }
 
 @media (min-width: 360px) and (max-width: 767px) {
   :root {
-    --ui-scale: 0.911;
+    --ui-scale-w: 0.922;
+  }
+}
+
+@media (min-width: 365px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.929;
   }
 }
 
 @media (min-width: 370px) and (max-width: 767px) {
   :root {
-    --ui-scale: 0.923;
+    --ui-scale-w: 0.936;
+  }
+}
+
+@media (min-width: 375px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.943;
   }
 }
 
 @media (min-width: 380px) and (max-width: 767px) {
   :root {
-    --ui-scale: 0.936;
+    --ui-scale-w: 0.95;
+  }
+}
+
+@media (min-width: 385px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.956;
   }
 }
 
 @media (min-width: 390px) and (max-width: 767px) {
   :root {
-    --ui-scale: 0.949;
+    --ui-scale-w: 0.962;
+  }
+}
+
+@media (min-width: 395px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.968;
   }
 }
 
 @media (min-width: 400px) and (max-width: 767px) {
   :root {
-    --ui-scale: 0.962;
+    --ui-scale-w: 0.974;
+  }
+}
+
+@media (min-width: 405px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.98;
   }
 }
 
 @media (min-width: 410px) and (max-width: 767px) {
   :root {
-    --ui-scale: 0.974;
+    --ui-scale-w: 0.985;
+  }
+}
+
+@media (min-width: 415px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.989;
   }
 }
 
 @media (min-width: 420px) and (max-width: 767px) {
   :root {
-    --ui-scale: 0.987;
+    --ui-scale-w: 0.994;
+  }
+}
+
+@media (min-width: 425px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.997;
   }
 }
 
 @media (min-width: 430px) and (max-width: 767px) {
   :root {
-    --ui-scale: 1.0;
+    --ui-scale-w: 1;
   }
 }
 
-@media (min-width: 430px) and (max-width: 767px) {
+@media (max-width: 767px) and (orientation: portrait) and (max-height: 740px) {
   :root {
-    --ui-scale: 1;
+    --ui-scale-h: 0.985;
+  }
+}
+
+@media (max-width: 767px) and (orientation: portrait) and (max-height: 680px) {
+  :root {
+    --ui-scale-h: 0.97;
+  }
+}
+
+@media (max-width: 767px) and (orientation: portrait) and (max-height: 600px) {
+  :root {
+    --ui-scale-h: 0.94;
   }
 }
 
