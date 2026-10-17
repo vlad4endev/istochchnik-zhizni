@@ -1258,7 +1258,7 @@ function DashboardMain() {
         <PageHeader title="Главная" />
       </div>
       <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-3 sm:px-4 shell:px-6 md:px-8 xl:px-10 2xl:max-w-[1480px]">
-        <div className="dashboard-scroll-pane min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pt-2 max-lg:pb-24 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
+        <div className="dashboard-scroll-pane ios-under-nav-scroll min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pt-2 max-lg:pb-24 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
         <AndroidAppReleaseWidget />
         <NotificationPermissionWidget />
         <DashboardQuickActionsStrip
