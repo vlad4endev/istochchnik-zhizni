@@ -778,7 +778,7 @@ export function LoginPage() {
                         className={inputClass}
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="Влад"
+                        placeholder="Иван"
                         autoComplete="given-name"
                         autoFocus
                       />
@@ -789,7 +789,7 @@ export function LoginPage() {
                         className={inputClass}
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
-                        placeholder="Чендев"
+                        placeholder="Иванов"
                         autoComplete="family-name"
                       />
                     </label>
