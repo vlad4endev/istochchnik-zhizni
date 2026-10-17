@@ -42,25 +42,12 @@ html[data-color-theme='blue'] .pcp {
   color: #fff;
   text-align: center;
   padding: 12px 16px 22px;
-  background: var(--pcp-color, #7d3640);
-  background: linear-gradient(
-    165deg,
-    var(--pcp-color, #7d3640) 0%,
-    color-mix(in srgb, var(--pcp-color, #7d3640) 58%, #000) 100%
-  );
+  background: #6b2f3a;
+  background:
+    radial-gradient(120% 70% at 50% -10%, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 60%),
+    linear-gradient(165deg, #8a3d49 0%, #7d3640 38%, #5c2830 100%);
   border-radius: 0 0 28px 28px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
-}
-
-.pcp-hero__pattern {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  opacity: 0.17;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72' viewBox='0 0 72 72'%3E%3Cg fill='%23fff'%3E%3Crect x='17' y='8' width='4' height='16' rx='2'/%3E%3Crect x='11' y='14' width='16' height='4' rx='2'/%3E%3Crect x='53' y='44' width='4' height='16' rx='2'/%3E%3Crect x='47' y='50' width='16' height='4' rx='2'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 72px 72px;
-  -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent 92%);
-  mask-image: linear-gradient(to bottom, #000 30%, transparent 92%);
 }
 
 .pcp-hero__bar {
@@ -152,7 +139,7 @@ html[data-color-theme='blue'] .pcp {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #34d17a;
+  background: #e8c9a0;
   box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.92);
 }
 
@@ -174,7 +161,7 @@ html[data-color-theme='blue'] .pcp {
 }
 
 .pcp-hero__status--online {
-  color: #c4f7da;
+  color: #fff;
   font-weight: 600;
 }
 
@@ -304,20 +291,9 @@ html[data-color-theme='blue'] .pcp {
   background: color-mix(in srgb, var(--pcp-tint) 14%, transparent);
 }
 
-.pcp-row__icon--phone {
-  --pcp-tint: #2e9e5b;
-}
-
-.pcp-row__icon--birthday {
-  --pcp-tint: #e0527f;
-}
-
-.pcp-row__icon--direction {
-  --pcp-tint: #2f7fd1;
-}
-
+.pcp-row__icon--birthday,
 .pcp-row__icon--role {
-  --pcp-tint: #c58a1a;
+  --pcp-tint: #b8733a;
 }
 
 .pcp-row__main {
@@ -369,8 +345,8 @@ html[data-color-theme='blue'] .pcp {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
-  color: #b8326a;
-  background: rgba(224, 82, 127, 0.14);
+  color: #9a5a28;
+  background: rgba(184, 115, 58, 0.16);
 }
 
 .pcp-chips {
@@ -513,8 +489,8 @@ html[data-color-theme='blue'] .pcp {
 }
 
 .pcp-file__icon--link {
-  color: #2f7fd1;
-  background: rgba(47, 127, 209, 0.14);
+  color: #b8733a;
+  background: rgba(184, 115, 58, 0.14);
 }
 
 .pcp-file__text {

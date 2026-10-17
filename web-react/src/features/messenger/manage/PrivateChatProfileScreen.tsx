@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
   LuBell,
@@ -30,7 +30,7 @@ import { appRoleLabel } from '../../settings/sectionVisibilityApi';
 import type { AppRole } from '../../settings/sectionVisibilityApi';
 import { requestCallNotificationsFromUserGesture } from '../../calls/incomingCallBackground';
 import { useCallStore } from '../../calls/callStore';
-import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
+import { getAvatarInitial } from '../avatarUtils';
 import type { PrivateChatProfile } from '../api/messengerApi';
 import { useConversationSharedMedia } from './useConversationSharedMedia';
 import './privateChatProfile.css';
@@ -38,6 +38,9 @@ import './privateChatProfile.css';
 const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
 
 type MediaTab = 'media' | 'files' | 'links';
+
+/** Верх фирменного градиента шапки (см. --primary проекта); литерал — акцент темы бывает светлым. */
+const HERO_TOP_COLOR = '#7d3640';
 
 const MEDIA_PREVIEW = 18;
 const FILES_PREVIEW = 6;
@@ -129,18 +132,17 @@ export function PrivateChatProfileScreen({
   onClose,
   profilePath,
 }: PrivateChatProfileScreenProps) {
-  const heroColor = useMemo(() => getAvatarColor(String(peer?.id ?? fullName)), [peer?.id, fullName]);
   const [tab, setTab] = useState<MediaTab>('media');
   const { loading, err, mediaItems, fileItems, linkItems } = useConversationSharedMedia(chatId);
 
-  /** Пока экран открыт, полоса под статус-баром iOS-PWA красится в цвет шапки, а не в фон страницы. */
+  /** Пока экран открыт, полоса под статус-баром iOS-PWA красится в цвет верха шапки, а не в фон страницы. */
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty('--app-status-bar-bg', heroColor);
+    root.style.setProperty('--app-status-bar-bg', HERO_TOP_COLOR);
     return () => {
       root.style.removeProperty('--app-status-bar-bg');
     };
-  }, [heroColor]);
+  }, []);
 
   const phone = profile?.phone_number?.trim() || '';
   const birthText = formatBirthDateDisplay(profile?.birth_date);
@@ -188,9 +190,8 @@ export function PrivateChatProfileScreen({
   };
 
   return (
-    <div className="pcp" style={{ ['--pcp-color' as string]: heroColor }}>
+    <div className="pcp">
       <header className="pcp-hero">
-        <div className="pcp-hero__pattern" aria-hidden />
         <div className="pcp-hero__bar">
           <button type="button" className="pcp-glass-btn" onClick={onBack} aria-label="Назад к чату">
             <LuChevronLeft size={24} strokeWidth={2.4} aria-hidden />
