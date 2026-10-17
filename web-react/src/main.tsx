@@ -29,7 +29,7 @@ import {
   DesktopPhoneShell,
   DesktopPhoneSwitch,
 } from './features/desktopPhone/DesktopPhoneShell';
-import { shouldUseDesktopPhoneShell } from './features/desktopPhone/desktopPhone';
+import { markPhoneFrame, shouldUseDesktopPhoneShell } from './features/desktopPhone/desktopPhone';
 import { AppRouter } from './app/Router';
 import { AppRouterMain } from './app/RouterMain';
 import { AppRouterStudio } from './app/RouterStudio';
@@ -385,6 +385,8 @@ if (typeof window !== 'undefined') {
   window.addEventListener('keydown', unlockOnce);
   window.addEventListener('touchstart', unlockOnce, { passive: true });
 }
+
+markPhoneFrame();
 
 const rootEl = document.getElementById('root');
 if (!rootEl) {

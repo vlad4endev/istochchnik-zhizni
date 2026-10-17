@@ -5452,3 +5452,15 @@ html.dark .tg-rec__lock {
   padding: 0 9px;
   line-height: 22px;
 }
+
+/*
+ * Длинное слово без пробелов должно переноситься внутри поля, а не уезжать вбок с горизонтальным
+ * скроллом: глобальное `main.app-main-content textarea { overflow-wrap: normal }` (mobile.css)
+ * отключало перенос, из-за этого высота считалась по одной строке и поле «ломалось».
+ */
+textarea.tg-input-textarea.tg-composer-textarea {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+  overflow-x: hidden;
+}

@@ -2365,7 +2365,7 @@ button {
 
 /*
  * Android / остальные устройства < lg: нижняя панель — плавающая белая «таблетка» с мягкой тенью,
- * активный пункт — светло-голубая капсула с синими иконкой и подписью (как в Android-приложениях).
+ * активный пункт — капсула с мягкой заливкой цвета бренда (--primary), иконка и подпись того же цвета.
  * iOS остаётся на своём стеклянном варианте выше. Сама nav — прозрачная полноширинная обёртка:
  * Layout/JS меряют её высоту для отступа контента, backdrop-filter на ряд не вешаем (шторка «Ещё» — fixed внутри ряда).
  */
@@ -2373,24 +2373,32 @@ button {
   html:not([data-apple-mobile='1']) {
     --app-nav-panel-bg: var(--surface-elevated, #ffffff);
     --app-nav-ink: #6b7280;
-    --app-nav-active-ink: #1d63f0;
-    --app-nav-active-bg: #e7f0ff;
+    /* Активный пункт — цвет бренда приложения (--primary), как на iOS и во всём интерфейсе. */
+    --app-nav-active-ink: var(--primary, #7d3640);
+    --app-nav-active-bg: rgba(125, 54, 64, 0.14);
+  }
+
+  @supports (color: color-mix(in srgb, red 50%, blue)) {
+    html:not([data-apple-mobile='1']) {
+      --app-nav-active-bg: color-mix(in srgb, var(--primary, #7d3640) 14%, transparent);
+    }
   }
 
   html.dark:not([data-apple-mobile='1']) {
     --app-nav-ink: #a3a8b8;
-    --app-nav-active-ink: #8ab4ff;
-    --app-nav-active-bg: rgba(96, 144, 255, 0.2);
   }
 
   html:not([data-apple-mobile='1']) nav.app-bottom-nav.bottom-nav {
     background: transparent;
     border: 0;
     box-shadow: none;
+    /* `isolate` из Layout делает nav корнем backdrop-filter: размытие видело бы только содержимое панели, а не страницу под ней. */
+    isolation: auto;
     padding-bottom: max(0.5rem, calc(env(safe-area-inset-bottom, 0px) * 0.6));
   }
 
   html:not([data-apple-mobile='1']) nav.app-bottom-nav .app-bottom-nav__row {
+    position: relative;
     box-sizing: border-box;
     width: calc(100% - 1.5rem);
     max-width: 28rem;
@@ -2398,19 +2406,42 @@ button {
     margin: 0 auto;
     padding: 6px;
     gap: 2px;
-    border-radius: 28px;
-    background: var(--app-nav-panel-bg);
-    border: 1px solid rgba(15, 23, 42, 0.05);
-    box-shadow:
-      0 8px 28px rgba(15, 23, 42, 0.12),
-      0 1px 3px rgba(15, 23, 42, 0.06);
   }
 
-  html.dark:not([data-apple-mobile='1']) nav.app-bottom-nav .app-bottom-nav__row {
-    border-color: rgba(255, 255, 255, 0.08);
+  /*
+   * Стекло: размытие и заливка на ::before, а не на самом ряду. backdrop-filter у предка делает его
+   * containing block для fixed-потомков, а шторка «Ещё» (fixed inset-0) лежит внутри ряда.
+   */
+  html:not([data-apple-mobile='1']) nav.app-bottom-nav .app-bottom-nav__row::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: 28px;
+    background: color-mix(in srgb, var(--app-nav-panel-bg) 74%, transparent);
+    -webkit-backdrop-filter: blur(30px) saturate(190%);
+    backdrop-filter: blur(30px) saturate(190%);
+    border: 1px solid color-mix(in srgb, var(--text, #1c1917) 8%, transparent);
     box-shadow:
-      0 8px 28px rgba(0, 0, 0, 0.5),
-      0 1px 3px rgba(0, 0, 0, 0.3);
+      0 10px 30px rgba(15, 23, 42, 0.14),
+      0 2px 8px rgba(15, 23, 42, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    pointer-events: none;
+  }
+
+  html.dark:not([data-apple-mobile='1']) nav.app-bottom-nav .app-bottom-nav__row::before {
+    background: color-mix(in srgb, var(--app-nav-panel-bg) 72%, transparent);
+    box-shadow:
+      0 10px 30px rgba(0, 0, 0, 0.5),
+      0 2px 8px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* Без color-mix (старые WebView): сплошная панель. */
+  @supports not (color: color-mix(in srgb, red 50%, blue)) {
+    html:not([data-apple-mobile='1']) nav.app-bottom-nav .app-bottom-nav__row::before {
+      background: var(--app-nav-panel-bg);
+    }
   }
 
   html:not([data-apple-mobile='1']) nav.app-bottom-nav .app-bottom-nav__tab {
@@ -2504,7 +2535,7 @@ button {
 }
 
 /*
- * iOS: контент всех разделов уходит ПОД прозрачную нижнюю панель.
+ * iOS и Android: контент всех разделов уходит ПОД прозрачную нижнюю панель.
  * Раньше `.app-bottom-nav-spacer` стоял ПОСЛЕ <main> и укорачивал его, поэтому под панелью была
  * пустая полоса фона и прозрачность ничего не показывала. Теперь спейсер отключён, а такой же
  * запас по высоте лежит ВНУТРИ скролла страницы (блок `.app-ios-end-room` в конце оболочки страницы): последний блок страницы всё так же
@@ -2513,19 +2544,19 @@ button {
  * как раньше у спейсера.
  */
 @media (max-width: 1023px) {
-  html[data-apple-mobile='1'] .app-bottom-nav-spacer {
+  html .app-bottom-nav-spacer {
     display: none;
   }
 
   /* Высота запаса под панель; 0, пока панели нет, открыт чат или клавиатура. */
-  html[data-apple-mobile='1']:has(nav.app-bottom-nav.opacity-100):not([data-chat-open='1']):not(.app-keyboard-open) {
+  html:has(nav.app-bottom-nav.opacity-100):not([data-chat-open='1']):not(.app-keyboard-open) {
     --app-ios-nav-room: calc(
       var(--app-bottom-nav-total-height) + var(--app-keyboard-inset, 0px) +
         var(--app-bottom-nav-content-gap, 16px)
     );
   }
 
-  html[data-apple-mobile='1'] .app-ios-end-room {
+  html .app-ios-end-room {
     display: block;
     flex: 0 0 auto;
     width: 100%;
@@ -2538,16 +2569,16 @@ button {
    * запас отменяем (отрицательный отступ) и кладём его padding-bottom внутрь самого скроллера —
    * контент уходит под стекло, а последний блок всё равно можно прокрутить выше панели.
    */
-  html[data-apple-mobile='1'] .page-enter:has(.ios-under-nav-scroll) > .app-ios-end-room {
+  html .page-enter:has(.ios-under-nav-scroll) > .app-ios-end-room {
     margin-top: calc(-1 * var(--app-ios-nav-room, 0px));
   }
 
-  html[data-apple-mobile='1'] .ios-under-nav-scroll {
+  html .ios-under-nav-scroll {
     padding-bottom: var(--app-ios-nav-room, 0px);
   }
 
   /* Липкие нижние панели действий (админка) садятся НАД панелью, а не под неё. */
-  html[data-apple-mobile='1'] main.app-main-content .sticky.bottom-0 {
+  html main.app-main-content .sticky.bottom-0 {
     bottom: calc(var(--app-bottom-nav-total-height) + var(--app-keyboard-inset, 0px));
   }
 }

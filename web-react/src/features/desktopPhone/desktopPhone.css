@@ -61,7 +61,7 @@
 }
 
 .desktop-phone__btn:focus-visible {
-  outline: 3px solid #1d63f0;
+  outline: 3px solid #7d3640;
   outline-offset: 2px;
 }
 
@@ -109,4 +109,9 @@
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.14);
+}
+
+/* Внутри рамки телефона нет home indicator и safe-area: даём нижний отступ вручную (композер чата, кнопки у скруглённых углов). */
+html[data-phone-frame='1'] {
+  --app-bottom-nav-safe-pad: 16px;
 }
