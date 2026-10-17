@@ -1,10 +1,10 @@
 import { format, isToday, isValid, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { LuClock3, LuEye, LuSearch, LuUsers, LuX } from 'react-icons/lu';
+import { LuClock3, LuEye, LuSearch, LuUsers } from 'react-icons/lu';
 
 import { AppAvatar } from '../../../components/AppAvatar';
+import { AppSheet } from '../../../components/ui/AppSheet';
 import { memberRosterName } from '../../../lib/memberRosterName';
 import type { PrayerSectionViewer } from '../api';
 
@@ -42,31 +42,12 @@ export function PrayerSectionViewersModal(props: {
   isLoading?: boolean;
 }) {
   const { open, onClose, dateYmd, viewers, isLoading = false } = props;
-  const titleId = useId();
   const searchId = useId();
   const [query, setQuery] = useState('');
 
   useEffect(() => {
     if (!open) setQuery('');
   }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase().replace(/ё/g, 'е');
@@ -108,7 +89,7 @@ export function PrayerSectionViewersModal(props: {
       </p>
     </div>
   ) : (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex flex-col gap-3">
       <div className="flex shrink-0 items-center justify-between gap-3 rounded-xl border border-primary/15 bg-gradient-to-r from-primary/[0.07] via-[var(--surface-elevated)] to-[var(--surface-elevated)] px-3.5 py-2.5">
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-primary/80">Сегодня</p>
@@ -136,7 +117,7 @@ export function PrayerSectionViewersModal(props: {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Найти по имени…"
             autoComplete="off"
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] py-2.5 pl-10 pr-3 text-sm font-medium text-[var(--text)] outline-none ring-primary/30 placeholder:text-[var(--text-muted)] focus:border-primary/40 focus:ring-2"
+            className="w-full rounded-xl border-0 bg-black/[0.06] py-2.5 pl-10 pr-3 text-base font-medium text-[var(--text)] outline-none ring-primary/30 placeholder:text-[var(--text-muted)] focus:ring-2 dark:bg-white/[0.08]"
           />
         </label>
       ) : null}
@@ -146,14 +127,14 @@ export function PrayerSectionViewersModal(props: {
           Никого не найдено по запросу «{query.trim()}»
         </p>
       ) : (
-        <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pb-1 [-webkit-overflow-scrolling:touch]">
+        <ul className="divide-y divide-[var(--border)]/70 overflow-hidden rounded-2xl bg-[var(--surface-elevated)] shadow-sm ring-1 ring-black/[0.04]">
           {filtered.map((v, index) => {
             const displayName = viewerDisplayName(v);
             const timeLabel = formatVisitTime(v.first_seen_at);
             return (
               <li
                 key={v.member_id}
-                className="flex items-center gap-3 rounded-xl border border-[var(--border)]/70 bg-[var(--surface-elevated)]/80 px-3 py-2.5 transition-colors hover:border-primary/25 hover:bg-primary/[0.04]"
+                className="flex items-center gap-3 px-3.5 py-2.5 transition-colors active:bg-primary/[0.06]"
               >
                 <AppAvatar
                   src={v.avatar_url}
@@ -189,46 +170,14 @@ export function PrayerSectionViewersModal(props: {
     </div>
   );
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+  return (
+    <AppSheet
+      title="Кто открыл раздел"
+      subtitle="Молитва · уникальные визиты за день"
+      icon={<LuEye className="h-[18px] w-[18px]" strokeWidth={2.25} aria-hidden />}
+      onClose={onClose}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="flex max-h-[min(92dvh,720px)] w-full max-w-md flex-col rounded-t-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl sm:rounded-2xl"
-      >
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)]/80 px-3 py-3 sm:px-4">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <LuEye className="h-[18px] w-[18px]" strokeWidth={2.25} aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <h2 id={titleId} className="truncate text-[15px] font-extrabold text-[var(--text)]">
-                Кто открыл раздел
-              </h2>
-              <p className="mt-0.5 truncate text-[12px] font-medium text-[var(--text-muted)]">
-                Молитва · уникальные визиты за день
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="tap-highlight-transparent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text)]"
-            aria-label="Закрыть"
-          >
-            <LuX className="h-5 w-5" strokeWidth={2} />
-          </button>
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col px-3 py-3 sm:px-4">{body}</div>
-      </div>
-    </div>,
-    document.body,
+      {body}
+    </AppSheet>
   );
 }

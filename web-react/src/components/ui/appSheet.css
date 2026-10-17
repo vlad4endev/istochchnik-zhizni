@@ -1,0 +1,238 @@
+/* Нижний лист (AppSheet): телефон — снизу поверх нижней панели; ≥640px — по центру. iOS — стекло, Android — плотнее. */
+.app-sheet-root {
+  position: fixed;
+  inset: 0;
+  z-index: 4200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.42);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  animation: app-sheet-fade 0.22s ease-out both;
+}
+
+.app-sheet-root--closing {
+  animation: app-sheet-fade-out 0.22s ease-in both;
+}
+
+.app-sheet-root--closing .app-sheet {
+  animation: app-sheet-down 0.22s ease-in both;
+}
+
+.app-sheet {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 34rem;
+  max-height: min(92dvh, 820px);
+  overflow: hidden;
+  border-radius: 22px 22px 0 0;
+  background: var(--surface, #f4f1ed);
+  color: var(--text, #1c1917);
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.22);
+  animation: app-sheet-up 0.32s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  transition: transform 0.22s ease;
+}
+
+.app-sheet--wide {
+  max-width: 42rem;
+}
+
+.app-sheet__head {
+  flex-shrink: 0;
+  padding: 8px 14px 10px;
+  border-bottom: 1px solid var(--border, rgba(28, 25, 23, 0.1));
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.app-sheet__grabber {
+  display: block;
+  width: 38px;
+  height: 5px;
+  margin: 0 auto 10px;
+  border-radius: 999px;
+  background: rgba(120, 113, 108, 0.4);
+}
+
+.app-sheet__bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-sheet__icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  color: var(--primary, #7d3640);
+  background: rgba(125, 54, 64, 0.12);
+  background: color-mix(in srgb, var(--primary, #7d3640) 13%, transparent);
+}
+
+.app-sheet__titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-sheet__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.app-sheet__subtitle {
+  margin: 2px 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: var(--text-secondary, #78716c);
+}
+
+.app-sheet__close {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(120, 113, 108, 0.16);
+  color: var(--text-secondary, #78716c);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-sheet__close:active {
+  transform: scale(0.92);
+}
+
+.app-sheet__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 14px calc(env(safe-area-inset-bottom, 0px) + 20px);
+}
+
+@keyframes app-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes app-sheet-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes app-sheet-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes app-sheet-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Планшет / ПК: окно по центру, без ручки. */
+@media (min-width: 640px) {
+  .app-sheet-root {
+    align-items: center;
+    padding: 24px;
+  }
+
+  .app-sheet {
+    max-height: min(88dvh, 780px);
+    border-radius: 24px;
+    animation-name: app-sheet-pop;
+  }
+
+  .app-sheet__grabber {
+    display: none;
+  }
+
+  .app-sheet__head {
+    padding-top: 14px;
+    cursor: default;
+  }
+}
+
+@keyframes app-sheet-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Android: чуть меньше радиус и плотнее, как Material bottom sheet. */
+@media (max-width: 639px) {
+  html:not([data-apple-mobile='1']) .app-sheet {
+    border-radius: 16px 16px 0 0;
+  }
+}
+
+/* iOS: стекло и крупные радиусы. */
+@media (max-width: 639px) {
+  html[data-apple-mobile='1'] .app-sheet {
+    border-radius: 28px 28px 0 0;
+    background: rgba(244, 241, 237, 0.94);
+    background: color-mix(in srgb, var(--surface, #f4f1ed) 90%, transparent);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    backdrop-filter: blur(28px) saturate(180%);
+    box-shadow: 0 -12px 44px rgba(0, 0, 0, 0.24);
+  }
+
+  html[data-apple-mobile='1'] .app-sheet__head {
+    border-bottom-color: transparent;
+    padding-bottom: 12px;
+  }
+}
+
+html.dark .app-sheet__grabber,
+html[data-color-theme='dark'] .app-sheet__grabber {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-sheet-root,
+  .app-sheet {
+    animation-duration: 0.01ms;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .app-sheet-root,
+  .app-sheet {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
