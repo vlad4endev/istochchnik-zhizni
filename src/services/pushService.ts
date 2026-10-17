@@ -11,6 +11,7 @@ import {
   insertMemberNotificationDelivery,
 } from './notificationDeliveryService';
 import { isParishionerAllowedPushKindOrType } from '../lib/parishionerPushAllowlist';
+import { fitFcmPayload } from '../lib/fcmPayload';
 import { sendApnsVoipPush, isApnsVoipConfigured } from './apnsVoipPush';
 import { deleteVoipToken, getVoipTokensForMember } from './voipTokenService';
 
@@ -84,7 +85,14 @@ type SaveSubscriptionRow = {
   user_agent: string | null;
 };
 
-export type PushChannelSummary = { attempted: number; sent: number; removed: number; failed: number };
+export type PushChannelSummary = {
+  attempted: number;
+  sent: number;
+  removed: number;
+  failed: number;
+  /** Уникальные коды ошибок канала (для диагностики «Отправить тест»). */
+  errors?: string[];
+};
 export type PushSendSummary = { web: PushChannelSummary; fcm: PushChannelSummary };
 export type WebSendOutcome = 'sent' | 'removed' | 'failed' | 'skipped';
 
@@ -372,8 +380,13 @@ export async function sendNotificationToMember(
     if (o === 'skipped') continue;
     summary.attempted += 1;
     if (o === 'sent') summary.sent += 1;
-    else if (o === 'removed') summary.removed += 1;
-    else summary.failed += 1;
+    else if (o === 'removed') {
+      summary.removed += 1;
+      addChannelError(summary, 'subscription-expired');
+    } else {
+      summary.failed += 1;
+      addChannelError(summary, 'web-push-failed');
+    }
   }
   return summary;
 }
@@ -499,6 +512,12 @@ export async function sendPush(
   return summary;
 }
 
+function addChannelError(summary: PushChannelSummary, code: string | undefined): void {
+  const c = (code ?? 'unknown').trim() || 'unknown';
+  if (!summary.errors) summary.errors = [];
+  if (!summary.errors.includes(c)) summary.errors.push(c);
+}
+
 /** FCM data-значения обязаны быть строками; null/undefined отбрасываем. */
 function toFcmDataStrings(
   title: string,
@@ -540,7 +559,10 @@ async function sendFcmToMember(
     return summary;
   }
 
-  const dataStrings = toFcmDataStrings(title, body, data, deliveryId, badgeCount);
+  const fitted = fitFcmPayload(title, body, toFcmDataStrings(title, body, data, deliveryId, badgeCount));
+  title = fitted.title;
+  body = fitted.body;
+  const dataStrings = fitted.data;
   const isMessengerLikePush =
     (typeof dataStrings.conversationId === 'string' && dataStrings.conversationId.trim().length > 0) ||
     (typeof dataStrings.tag === 'string' && dataStrings.tag.startsWith('chat-'));
@@ -568,6 +590,9 @@ async function sendFcmToMember(
             sound: 'default',
             priority: 'high',
             defaultVibrateTimings: true,
+            color: '#7D3640',
+            // Один тег на чат: новое сообщение заменяет предыдущее уведомление, а не копится стопкой.
+            ...(typeof dataStrings.tag === 'string' && dataStrings.tag ? { tag: dataStrings.tag } : {}),
           },
         },
         apns: {
@@ -601,6 +626,7 @@ async function sendFcmToMember(
       });
       summary.attempted += slice.length;
       summary.failed += slice.length;
+      addChannelError(summary, (e as { code?: string })?.code ?? 'request-failed');
       continue;
     }
     summary.attempted += slice.length;
@@ -612,6 +638,7 @@ async function sendFcmToMember(
       }
       const t = slice[j];
       const code = r.error?.code;
+      addChannelError(summary, code);
       const message = r.error?.message;
       if (isUnrecoverableFcmErrorCode(code)) {
         console.warn('[push] FCM token invalid — removing', {

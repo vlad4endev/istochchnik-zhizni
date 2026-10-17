@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { emitAppToast } from '../lib/uiFeedback';
 import {
   isCapacitorNative,
+  openNativeNotificationSettings,
   type NativePermissionState,
 } from '../lib/nativeApp';
 import { useAuthStore } from '../features/auth/authStore';
@@ -126,6 +127,7 @@ export function PermissionsRequestModal() {
         emitAppToast('Разрешения получены', 'success');
         dismiss();
       } else if (n !== 'granted') {
+        if (n === 'denied') void openNativeNotificationSettings();
         emitAppToast(
           isCapacitorNative()
             ? 'Без уведомлений на устройстве вы не узнаете, когда пишут в чате. Настройки → Приложения → Источник жизни → Уведомления.'

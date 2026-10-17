@@ -5,7 +5,174 @@ import { fetchPushStatus, sendTestPush, unsubscribeFromPushApi, type PushStatus 
 import { isAppleMobileWeb, isInstalledPwa } from '../../pwa/utils/pwaEnvironment';
 import { useNotificationManager } from '../../pwa';
 import { useAuthStore } from '../../auth/authStore';
+import { useDeviceNotificationPermission } from '../../../hooks/useDeviceNotificationPermission';
+import { openNativeNotificationSettings } from '../../../lib/nativeApp';
+import { notificationPermissionSettingsHint } from '../../../lib/deviceNotificationPermission';
 import profileShell from '../profileShell.module.css';
+
+const FCM_ERROR_HINTS: Record<string, string> = {
+  'messaging/third-party-auth-error':
+    'Firebase не принимает ключ APNs (iOS): загрузите APNs Auth Key в Firebase → Cloud Messaging.',
+  'messaging/registration-token-not-registered': 'Устройство удалено из Firebase — переподключите уведомления.',
+  'messaging/invalid-argument': 'Firebase отклонил сообщение (неверный токен или формат).',
+  'messaging/mismatched-credential': 'Ключ сервера Firebase относится к другому проекту, чем приложение.',
+  'messaging/unavailable': 'Firebase временно недоступен, повторите через минуту.',
+};
+
+function describePushFailure(errors: string[] | undefined): string {
+  const known = (errors ?? []).map((c) => FCM_ERROR_HINTS[c]).filter(Boolean);
+  if (known.length > 0) return known.join(' ');
+  const codes = (errors ?? []).filter((c) => c !== 'unknown');
+  return codes.length > 0
+    ? `Сервер не смог доставить уведомление (${codes.join(', ')}). Переподключите уведомления.`
+    : 'Сервер не смог доставить уведомление. Выключите и включите уведомления заново.';
+}
+
+function NativePushSettings({ isParishioner }: { isParishioner: boolean }) {
+  const { state, busy, request, refresh } = useDeviceNotificationPermission();
+  const [serverStatus, setServerStatus] = useState<PushStatus | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const loadStatus = useCallback(async () => {
+    try {
+      setServerStatus(await fetchPushStatus());
+    } catch {
+      setServerStatus(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadStatus();
+    const onRegistered = () => void loadStatus();
+    window.addEventListener('app:native-push-registered', onRegistered);
+    return () => window.removeEventListener('app:native-push-registered', onRegistered);
+  }, [loadStatus]);
+
+  const granted = state === 'granted';
+  const denied = state === 'denied';
+  const registered = (serverStatus?.nativeDevices ?? 0) > 0;
+
+  async function openSettings() {
+    const ok = await openNativeNotificationSettings();
+    if (!ok) setMsg({ kind: 'err', text: notificationPermissionSettingsHint() });
+  }
+
+  async function handleEnable() {
+    setMsg(null);
+    const next = await request();
+    if (next === 'granted') {
+      window.dispatchEvent(new CustomEvent('app:native-push-permissions-granted'));
+      setMsg({ kind: 'ok', text: 'Разрешение получено, подключаем устройство…' });
+      window.setTimeout(() => void loadStatus(), 2500);
+      return;
+    }
+    // После отказа система больше не показывает запрос — ведём в настройки.
+    setMsg({ kind: 'err', text: notificationPermissionSettingsHint() });
+    await openSettings();
+  }
+
+  function handleReconnect() {
+    setMsg({ kind: 'ok', text: 'Переподключаем устройство…' });
+    window.dispatchEvent(new CustomEvent('app:native-push-permissions-granted'));
+    window.setTimeout(() => {
+      void loadStatus();
+      void refresh();
+    }, 2500);
+  }
+
+  async function handleTest() {
+    setMsg(null);
+    setTesting(true);
+    try {
+      const summary = await sendTestPush();
+      const sent = summary.web.sent + summary.fcm.sent;
+      const attempted = summary.web.attempted + summary.fcm.attempted;
+      if (attempted === 0) {
+        setMsg({ kind: 'err', text: 'Устройство не зарегистрировано на сервере. Нажмите «Переподключить».' });
+      } else if (sent === 0) {
+        setMsg({ kind: 'err', text: describePushFailure([...(summary.fcm.errors ?? []), ...(summary.web.errors ?? [])]) });
+      } else {
+        setMsg({ kind: 'ok', text: `Тест отправлен на устройств: ${sent}. Уведомление придёт через несколько секунд.` });
+      }
+      void loadStatus();
+    } catch (e) {
+      const code = (e as { response?: { status?: number } })?.response?.status;
+      setMsg({
+        kind: 'err',
+        text: code === 429 ? 'Подождите несколько секунд перед повторной проверкой.' : 'Не удалось отправить тест.',
+      });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  const btn =
+    'rounded-lg border border-[color:var(--profile-card-ring)] px-3 py-1.5 text-xs font-semibold text-[color:var(--profile-text-heading)] disabled:opacity-50';
+
+  return (
+    <div className={profileShell.profileRoot} data-profile-root>
+      <h3 className="flex items-center gap-2 text-sm font-bold text-[color:var(--profile-text-heading)]">
+        {granted && registered ? (
+          <FiBell className="h-4 w-4 text-teal-600" aria-hidden />
+        ) : (
+          <FiBellOff className="h-4 w-4 text-[color:var(--profile-text-faint)]" aria-hidden />
+        )}
+        Push-уведомления
+      </h3>
+      <p className="mt-1 text-sm text-[color:var(--profile-text-muted)]">
+        {state === 'loading'
+          ? 'Проверяем разрешение…'
+          : granted
+            ? registered
+              ? 'Включены: сообщения, трансляции и напоминания приходят даже когда приложение закрыто.'
+              : 'Разрешение есть, но устройство ещё не подключено к серверу. Нажмите «Переподключить».'
+            : denied
+              ? 'Уведомления запрещены в настройках телефона. Откройте настройки и включите их для приложения.'
+              : 'Разрешите уведомления, чтобы получать сообщения и напоминания.'}
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {!granted && !denied ? (
+          <button type="button" onClick={() => void handleEnable()} disabled={busy} className={btn}>
+            {busy ? 'Запрос…' : 'Включить уведомления'}
+          </button>
+        ) : null}
+        {denied || (!granted && state !== 'loading') ? (
+          <button type="button" onClick={() => void openSettings()} className={btn}>
+            Открыть настройки телефона
+          </button>
+        ) : null}
+        {granted ? (
+          <>
+            <button type="button" onClick={handleReconnect} className={btn}>
+              Переподключить
+            </button>
+            <button type="button" onClick={() => void handleTest()} disabled={testing} className={btn}>
+              {testing ? 'Отправка…' : 'Отправить тест'}
+            </button>
+          </>
+        ) : null}
+      </div>
+
+      {serverStatus && !serverStatus.fcmConfigured ? (
+        <p className="mt-2 text-xs text-red-600">Сервер не настроен для push на телефоны (Firebase).</p>
+      ) : null}
+      {msg ? (
+        <p className={`mt-3 text-sm font-medium ${msg.kind === 'ok' ? 'text-teal-700' : 'text-red-600'}`}>
+          {msg.text}
+        </p>
+      ) : null}
+      {isParishioner ? (
+        <p className="mt-2 text-xs text-[color:var(--profile-text-faint)]">
+          Для роли «прихожанин» приходят: чаты, трансляции, лента (новые посты, лайки, комментарии, репосты),
+          напоминание о молитве, дни рождения, новые проповеди и события. Служебные назначения координаторам не
+          отправляются.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export function PushSettings() {
   const role = useAuthStore((s) => s.role);
@@ -51,7 +218,7 @@ export function PushSettings() {
       if (attempted === 0) {
         setMsg({ kind: 'err', text: 'На сервере нет ни одной подписки. Включите уведомления переключателем выше.' });
       } else if (sent === 0) {
-        setMsg({ kind: 'err', text: 'Сервер не смог доставить уведомление. Выключите и включите уведомления заново.' });
+        setMsg({ kind: 'err', text: describePushFailure([...(summary.web.errors ?? []), ...(summary.fcm.errors ?? [])]) });
       } else {
         setMsg({ kind: 'ok', text: `Тест отправлен на устройств: ${sent}. Уведомление должно появиться через несколько секунд.` });
       }
@@ -67,23 +234,9 @@ export function PushSettings() {
     }
   }
 
-  // Native Capacitor uses FCM via useFCM — this toggle is for browser / PWA only.
+  // Native Capacitor uses FCM via useFCM — отдельная панель со статусом и ссылкой в настройки телефона.
   if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
-    return (
-      <div className={profileShell.profileRoot} data-profile-root>
-        <p className="text-sm text-[color:var(--profile-text-muted)]">
-          Уведомления в приложении включаются через системный запрос при входе. Проверьте Настройки →
-          Уведомления → Источник жизни.
-        </p>
-        {isParishioner ? (
-          <p className="mt-2 text-xs text-[color:var(--profile-text-faint)]">
-            Для роли «прихожанин» приходят: чаты, трансляции, лента (новые посты, лайки,
-            комментарии, репосты), напоминание о молитве, дни рождения, новые проповеди и события.
-            Служебные назначения координаторам не отправляются.
-          </p>
-        ) : null}
-      </div>
-    );
+    return <NativePushSettings isParishioner={isParishioner} />;
   }
 
   const loading = managerLoading || localLoading;

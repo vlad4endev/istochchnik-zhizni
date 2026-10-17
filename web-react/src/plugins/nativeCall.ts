@@ -16,6 +16,8 @@ export type NativeCallActionPayload = {
 
 export interface NativeCallPlugin {
   isSupported(): Promise<{ supported: boolean }>;
+  /** Открыть системные настройки уведомлений приложения (Android / iOS). */
+  openNotificationSettings?(): Promise<void>;
   endCall(options: { callId: string }): Promise<void>;
   /** Системный рингтон (обходит autoplay Web Audio). */
   playRingtone(): Promise<void>;
@@ -31,6 +33,9 @@ const NativeCall = registerPlugin<NativeCallPlugin>('NativeCall', {
   web: () => ({
     async isSupported() {
       return { supported: false };
+    },
+    async openNotificationSettings() {
+      /* no-op on web */
     },
     async endCall() {
       /* no-op on web */
