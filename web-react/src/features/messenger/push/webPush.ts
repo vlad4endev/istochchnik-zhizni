@@ -80,6 +80,37 @@ function readPushSubscribeError(err: unknown): string {
   return 'Не удалось сохранить подписку на сервере.';
 }
 
+/**
+ * Понятная причина, почему не удалось включить push, — по типу исключения браузера.
+ * Общий текст «проверьте интернет» скрывал реальные случаи: SW не поднялся, push-сервис браузера
+ * недоступен (AbortError) или VAPID-ключ на сервере повреждён.
+ */
+export function describePushEnableError(err: unknown): string {
+  const name = err instanceof Error || (err && typeof err === 'object' && 'name' in err)
+    ? String((err as { name?: unknown }).name ?? '')
+    : '';
+  const text = err instanceof Error ? err.message : '';
+  if (/service worker not ready/i.test(text)) {
+    return 'Service worker ещё не запущен. Обновите страницу (Ctrl+Shift+R) и попробуйте снова; в режиме разработки push не работает.';
+  }
+  if (name === 'AbortError') {
+    return 'Браузер не смог связаться со своим push-сервисом (Google FCM / Apple). Проверьте доступ в интернет, отключите блокировщики и VPN; в Brave включите «Использовать сервисы Google для push-сообщений».';
+  }
+  if (name === 'NotAllowedError') {
+    return 'Браузер не разрешил уведомления для этого сайта. Проверьте настройки сайта (значок замка в адресной строке).';
+  }
+  if (name === 'InvalidCharacterError' || name === 'InvalidAccessError') {
+    return 'Ключ push-сервера (VAPID) на сервере повреждён. Обратитесь к администратору.';
+  }
+  if (name === 'InvalidStateError') {
+    return 'Старая push-подписка конфликтует с новой. Обновите страницу и повторите.';
+  }
+  if (name === 'NotSupportedError' || name === 'SecurityError') {
+    return 'Push работает только по HTTPS, а на iPhone — из ярлыка на экране «Домой».';
+  }
+  return `Не удалось включить push в браузере${name ? ` (${name})` : ''}. Проверьте интернет и откройте сайт по HTTPS; на iPhone — ярлык с экрана «Домой».`;
+}
+
 export async function initMessengerPushNotifications(opts?: { force?: boolean }): Promise<void> {
   if (pushSyncInFlight) {
     await pushSyncInFlight;
@@ -244,8 +275,7 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<W
   } catch (err) {
     console.error('[push] initMessengerPushNotifications failed:', err);
     lastSyncedEndpoint = null;
-    const message =
-      'Не удалось включить push в браузере. Проверьте интернет и откройте сайт по HTTPS; на iPhone — ярлык с экрана «Домой».';
+    const message = describePushEnableError(err);
     emitAppToast({ message, kind: 'error' });
     return { ok: false, error: message };
   }
