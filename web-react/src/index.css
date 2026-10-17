@@ -2415,3 +2415,97 @@ button {
     bottom: calc(var(--app-bottom-nav-total-height) + var(--app-keyboard-inset, 0px));
   }
 }
+
+/* ── Начальная страница (AuthLandingPage): одинакова на iOS и Android ── */
+.landing-bg {
+  background:
+    radial-gradient(120% 70% at 50% 0%, #a4505c 0%, rgba(164, 80, 92, 0) 60%),
+    linear-gradient(180deg, #7d3640 0%, #5c2830 55%, #3d1a20 100%);
+}
+.landing-orb {
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+  will-change: transform;
+}
+.landing-orb--gold {
+  width: 22rem;
+  height: 22rem;
+  top: 6%;
+  right: -9rem;
+  background: radial-gradient(circle, rgba(214, 148, 95, 0.5) 0%, rgba(214, 148, 95, 0) 68%);
+  animation: landing-drift-a 16s ease-in-out infinite;
+}
+.landing-orb--rose {
+  width: 26rem;
+  height: 26rem;
+  bottom: -6rem;
+  left: -11rem;
+  background: radial-gradient(circle, rgba(154, 61, 102, 0.6) 0%, rgba(154, 61, 102, 0) 68%);
+  animation: landing-drift-b 20s ease-in-out infinite;
+}
+.landing-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(70% 50% at 50% 38%, #000 0%, transparent 100%);
+  -webkit-mask-image: radial-gradient(70% 50% at 50% 38%, #000 0%, transparent 100%);
+}
+.landing-halo {
+  position: absolute;
+  inset: -2.25rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(255, 214, 170, 0.55) 0%, rgba(255, 214, 170, 0) 66%);
+  animation: landing-breathe 5s ease-in-out infinite;
+}
+.landing-logo {
+  animation: landing-float 6s ease-in-out infinite;
+}
+.landing-rise {
+  opacity: 0;
+  animation: landing-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--d, 0ms);
+}
+.landing-btn-primary {
+  position: relative;
+  overflow: hidden;
+}
+.landing-btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(125, 54, 64, 0.16) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: landing-shine 4.5s ease-in-out 1.6s infinite;
+}
+@keyframes landing-rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes landing-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes landing-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(0.96); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+@keyframes landing-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-2.5rem, 2rem, 0); }
+}
+@keyframes landing-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(3rem, -2.5rem, 0); }
+}
+@keyframes landing-shine {
+  0%, 55% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-orb, .landing-halo, .landing-logo, .landing-btn-primary::after { animation: none; }
+  .landing-rise { animation: none; opacity: 1; }
+}
