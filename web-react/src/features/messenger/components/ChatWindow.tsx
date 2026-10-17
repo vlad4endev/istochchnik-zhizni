@@ -1105,7 +1105,7 @@ export function ChatWindow({
               type="button"
               onClick={onBack}
               aria-label="Назад к списку чатов"
-              className="chat-back-btn tg-header-back tg-icon-btn"
+              className="chat-back-btn tg-header-back tg-icon-btn tap-compact"
             >
               <LuChevronLeft size={28} strokeWidth={2.2} aria-hidden />
             </button>
@@ -1136,7 +1136,7 @@ export function ChatWindow({
               </>
             ) : (
               <>
-                <div className="relative h-10 w-10 shrink-0">
+                <div className="chat-header__avatar relative h-10 w-10 shrink-0">
                   <div
                     className="grid h-full w-full place-items-center overflow-hidden rounded-full text-sm font-semibold text-white"
                     style={{
@@ -1167,7 +1167,7 @@ export function ChatWindow({
                   ) : null}
                 </div>
                 <div className="min-w-0 flex-1 overflow-hidden">
-                  <div className="truncate text-[17px] font-semibold leading-[1.2] tracking-[-0.01em] text-[var(--text)] sm:text-lg">{displayName}</div>
+                  <div className="chat-header__title truncate text-[17px] font-semibold leading-[1.2] tracking-[-0.01em] text-[var(--text)] sm:text-lg">{displayName}</div>
                   {typingUsers.length > 0 ? (
                     <div
                       className={['truncate text-[13px] leading-tight sm:text-sm', headerStatusClass].join(' ')}
@@ -1193,7 +1193,7 @@ export function ChatWindow({
                       </span>
                     </div>
                   ) : headerSubtitle ? (
-                    <div className={['last-seen user-status truncate text-[13px] leading-tight sm:text-sm', headerStatusClass].join(' ')}>
+                    <div className={['chat-header__sub last-seen user-status truncate text-[13px] leading-tight sm:text-sm', headerStatusClass].join(' ')}>
                       {headerSubtitle}
                     </div>
                   ) : null}
@@ -1217,7 +1217,7 @@ export function ChatWindow({
                     onClick={() => firstUnreadMessageId && jumpToMessage(firstUnreadMessageId)}
                     aria-label="К первому непрочитанному"
                     title="К непрочитанным"
-                    className="chat-header__btn inline-flex h-11 min-w-11 items-center justify-center rounded-full px-1.5 text-base font-bold text-primary transition-colors hover:bg-primary/10 active:bg-primary/15"
+                    className="chat-header__btn tap-compact inline-flex h-11 min-w-11 items-center justify-center rounded-full px-1.5 text-base font-bold text-primary transition-colors hover:bg-primary/10 active:bg-primary/15"
                   >
                     ↓
                   </button>
@@ -1232,7 +1232,7 @@ export function ChatWindow({
                       aria-haspopup="menu"
                       aria-expanded={callHeaderMenuOpen}
                       className={[
-                        'tg-chat-header-call-btn chat-header__btn inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors duration-200',
+                        'tg-chat-header-call-btn chat-header__btn tap-compact inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors duration-200',
                         'text-primary bg-primary/[0.08]',
                         'hover:bg-primary/[0.14] active:scale-[0.96]',
                         callHeaderMenuOpen ? 'bg-primary/[0.16]' : '',
@@ -1291,7 +1291,7 @@ export function ChatWindow({
                   type="button"
                   onClick={() => setShowSearch(true)}
                   aria-label="Поиск по сообщениям"
-                  className="chat-header__btn inline-flex h-11 w-11 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors active:bg-[var(--surface)]"
+                  className="chat-header__btn tap-compact inline-flex h-11 w-11 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors active:bg-[var(--surface)]"
                 >
                   <LuSearch size={22} strokeWidth={2.2} aria-hidden />
                 </button>
