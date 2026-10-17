@@ -6,8 +6,8 @@ import { defaultPostLoginPath } from '../../../lib/appVariant';
 import { useAuthStore } from '../authStore';
 import { AppSplash } from '@/components/AppSplash';
 
-const DEFAULT_APP_NAME = 'МОЯ ЦЕРКОВЬ';
-const DEFAULT_DESCRIPTION = 'Цифровая платформа';
+const DEFAULT_APP_NAME = 'Моя церковь';
+const DEFAULT_DESCRIPTION = 'Чаты, звонки и служения вашей церкви — в одном приложении';
 
 export function AuthLandingPage() {
   const navigate = useNavigate();
@@ -38,76 +38,63 @@ export function AuthLandingPage() {
   }
 
   return (
-    <div className="landing-bg relative flex h-full min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-hidden overflow-y-auto overscroll-y-none text-white [min-height:var(--app-content-height,100dvh)] [max-height:var(--app-content-height,100dvh)]">
-      <div className="landing-orb landing-orb--gold" aria-hidden />
-      <div className="landing-orb landing-orb--rose" aria-hidden />
-      <div className="landing-grain" aria-hidden />
-
-      <div className="relative mx-auto flex h-full min-h-0 w-full max-w-lg flex-1 flex-col pt-6 [padding-left:max(1.25rem,env(safe-area-inset-left,0px))] [padding-right:max(1.25rem,env(safe-area-inset-right,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] sm:py-6">
-        <div className="flex-[2] min-h-[2rem]" />
-
-        <div className="flex flex-col items-center">
-          <div className="landing-rise relative" style={{ '--d': '60ms' } as CSSProperties} aria-hidden>
-            <div className="landing-halo" />
-            <div className="landing-logo relative flex h-36 w-36 shrink-0 items-center justify-center rounded-[2.1rem] bg-white/10 p-2 shadow-[0_24px_60px_rgba(0,0,0,0.35)] ring-1 ring-white/25 sm:h-44 sm:w-44">
-              <img
-                src="/assets/logo.svg"
-                alt=""
-                className="h-full w-full rounded-[1.6rem] object-contain"
-              />
-            </div>
-          </div>
-
-          <h1
-            className="landing-rise mt-10 bg-gradient-to-b from-white to-white/75 bg-clip-text text-center text-3xl font-black uppercase tracking-[0.04em] text-transparent sm:text-4xl md:text-5xl"
-            style={{ '--d': '200ms' } as CSSProperties}
-          >
-            {DEFAULT_APP_NAME}
-          </h1>
-
-          <div
-            className="landing-rise mt-4 flex items-center gap-3"
-            style={{ '--d': '320ms' } as CSSProperties}
-            aria-hidden
-          >
-            <span className="h-px w-8 bg-gradient-to-r from-transparent to-white/50" />
-            <span className="h-1.5 w-1.5 rotate-45 bg-[#e8b27d]" />
-            <span className="h-px w-8 bg-gradient-to-l from-transparent to-white/50" />
-          </div>
-
-          {DEFAULT_DESCRIPTION.trim().length > 0 && (
-            <p
-              className="landing-rise mt-4 text-center text-sm font-medium uppercase tracking-[0.28em] text-white/80 sm:text-base"
-              style={{ '--d': '400ms' } as CSSProperties}
-            >
-              {DEFAULT_DESCRIPTION}
-            </p>
-          )}
-        </div>
-
-        <div className="flex-[1.5] min-h-[3rem]" />
+    <div className="flex h-full min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-hidden bg-[#fbf5ef] [min-height:var(--app-content-height,100dvh)] [max-height:var(--app-content-height,100dvh)]">
+      <div className="landing-hero relative min-h-[8rem] flex-1 overflow-hidden text-white">
+        <div className="landing-orb landing-orb--rose" aria-hidden />
+        <div className="landing-orb landing-orb--gold" aria-hidden />
 
         <div
-          className="landing-rise flex flex-col gap-3 rounded-[1.75rem] bg-black/15 p-3 ring-1 ring-white/15 backdrop-blur-md"
-          style={{ '--d': '520ms' } as CSSProperties}
+          className="landing-rise relative flex items-center gap-3 px-6 [padding-top:max(1.5rem,calc(env(safe-area-inset-top,0px)+0.75rem))]"
+          style={{ '--d': '40ms' } as CSSProperties}
         >
-          <Link
-            to={loginFormPath}
-            state={{ mode: 'signIn' as const, from: fromQuery || undefined }}
-            className="landing-btn-primary touch-manipulation flex h-14 w-full items-center justify-center rounded-2xl bg-white text-center text-base font-bold text-primary shadow-[0_10px_28px_rgba(0,0,0,0.28)] transition-transform active:scale-[0.97]"
-          >
-            Войти
-          </Link>
-          <Link
-            to={loginFormPath}
-            state={{ mode: 'signUp' as const, from: fromQuery || undefined }}
-            className="touch-manipulation flex h-14 w-full items-center justify-center rounded-2xl border border-white/30 bg-white/10 text-center text-base font-bold text-white transition-[transform,background-color] active:scale-[0.97] hover:bg-white/20"
-          >
-            Зарегистрироваться
-          </Link>
+          <img
+            src="/assets/logo.svg"
+            alt=""
+            aria-hidden
+            className="h-11 w-11 rounded-xl shadow-[0_6px_18px_rgba(0,0,0,0.3)]"
+          />
+          <span className="text-xl font-extrabold tracking-tight">{DEFAULT_APP_NAME}</span>
         </div>
+      </div>
 
-        <div className="flex-[1] min-h-[2rem]" />
+      <div
+        className="landing-sheet landing-rise relative -mt-8 shrink-0 rounded-t-[2rem] px-6 pt-8 [padding-bottom:max(1.25rem,env(safe-area-inset-bottom,0px))]"
+        style={{ '--d': '180ms' } as CSSProperties}
+      >
+        <div className="mx-auto w-full max-w-lg">
+          <h1 className="text-[2rem] font-extrabold leading-[1.1] tracking-tight text-[#2b0d16] sm:text-4xl">
+            Будьте на связи
+            <span className="landing-accent block text-[2.15rem] sm:text-[2.5rem]">со своей общиной</span>
+          </h1>
+
+          <p className="mt-4 text-base leading-snug text-[#6b5a5e]">{DEFAULT_DESCRIPTION}</p>
+
+          <div className="mt-6 flex flex-col gap-3">
+            <Link
+              to={loginFormPath}
+              state={{ mode: 'signIn' as const, from: fromQuery || undefined }}
+              className="landing-btn-primary touch-manipulation flex h-16 w-full items-center justify-between rounded-[1.4rem] pl-6 pr-2.5 text-base font-bold text-white transition-transform active:scale-[0.98]"
+            >
+              Войти
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f2b479] text-[#6b1a30]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </span>
+            </Link>
+            <Link
+              to={loginFormPath}
+              state={{ mode: 'signUp' as const, from: fromQuery || undefined }}
+              className="touch-manipulation flex h-14 w-full items-center justify-center rounded-[1.4rem] border border-[#e3d3cc] bg-white/60 text-center text-base font-bold text-[#5a1830] transition-[transform,background-color] active:scale-[0.98] hover:bg-white"
+            >
+              Зарегистрироваться
+            </Link>
+          </div>
+
+          <p className="mt-5 text-center text-xs leading-snug text-[#7a6a6e]">
+            Продолжая, вы принимаете условия использования и политику конфиденциальности
+          </p>
+        </div>
       </div>
     </div>
   );
