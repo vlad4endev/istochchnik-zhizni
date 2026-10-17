@@ -708,7 +708,7 @@ function ContentEditorModal(props: {
       onClick={onClose}
     >
       <div
-        className="max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+        className="max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom,0px)] shadow-2xl sm:rounded-2xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="prayer-content-editor-title"

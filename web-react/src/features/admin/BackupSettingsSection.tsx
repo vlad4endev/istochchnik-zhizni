@@ -935,7 +935,7 @@ export function BackupSettingsSection() {
 
       {detailId && (
         <BodyPortal>
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/40 p-4 sm:items-center">
+          <div className="fixed inset-0 z-[4200] flex items-end justify-center bg-stone-900/40 p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:items-center">
             <div
               role="dialog"
               aria-modal="true"
@@ -1119,7 +1119,7 @@ export function BackupSettingsSection() {
       )}
 
       {restoreId && (
-        <BodyPortal><div className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/40 p-4 sm:items-center">
+        <BodyPortal><div className="fixed inset-0 z-[4200] flex items-end justify-center bg-stone-900/40 p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:items-center">
           <div
             role="dialog"
             aria-modal="true"

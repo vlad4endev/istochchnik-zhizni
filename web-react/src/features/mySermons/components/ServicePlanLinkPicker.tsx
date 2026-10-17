@@ -103,7 +103,7 @@ export function ServicePlanLinkPicker({ value, selectedLabel, onChange, disabled
       </div>
 
       {open ? (
-        <BodyPortal><div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
+        <BodyPortal><div className="fixed inset-0 z-[4200] flex items-end justify-center bg-black/40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:items-center">
           <button
             type="button"
             className="absolute inset-0 cursor-default"

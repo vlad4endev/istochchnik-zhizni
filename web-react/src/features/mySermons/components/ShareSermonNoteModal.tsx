@@ -42,7 +42,7 @@ export function ShareSermonNoteModal({ note, open, onClose, onUpdated }: Props) 
   if (!open) return null;
 
   return (
-    <BodyPortal><div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
+    <BodyPortal><div className="fixed inset-0 z-[4200] flex items-end justify-center bg-black/40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:items-center">
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Закрыть" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md rounded-2xl border border-stone-200 bg-white p-4 shadow-xl sm:p-5">
         <div className="mb-3 flex items-start justify-between gap-3">
