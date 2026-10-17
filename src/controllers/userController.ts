@@ -19,6 +19,7 @@ import {
   adminForceResetMemberPassword,
   listMinistryRoleTemplates,
   listUsers,
+  resolveUserRef,
   MemberNameDuplicateError,
   setMinistryDirectionTemplateRoles,
   anchorPrayerCycleMemberOnDate,
@@ -52,6 +53,7 @@ import {
   uploadBufferToPublicBucket,
   userMediaBucket,
 } from '../lib/supabaseStorage';
+import { parseMemberRef } from '../utils/memberIdentity';
 
 type AuthRequest = Request & { authUserId?: number; authUserRole?: string };
 
@@ -318,25 +320,27 @@ export async function clearMemberAvatarHandler(req: Request, res: Response): Pro
 }
 
 export async function getUser(req: Request, res: Response): Promise<void> {
-  const userId = parseUserId(req.params.id);
-  if (!userId) {
-    res.status(400).json({ error: 'Invalid user id' });
-    return;
-  }
-
   const auth = ensureAuthenticated(req, res);
   if (!auth) {
     return;
   }
-  if (auth.authUserRole !== 'admin' && auth.authUserId !== userId) {
-    res.status(403).json({ error: 'Access denied' });
+
+  const rawId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+  const ref = parseMemberRef(rawId);
+  if (!ref) {
+    res.status(400).json({ error: 'Invalid user id' });
     return;
   }
 
   try {
-    const user = await getUserById(userId);
+    // Числовой members.id или публичный UUID members.user_id — оба валидны для поиска.
+    const user = await resolveUserRef(rawId);
     if (!user) {
       res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    if (auth.authUserRole !== 'admin' && auth.authUserId !== user.id) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
     res.json(user);

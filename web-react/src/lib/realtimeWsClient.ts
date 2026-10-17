@@ -255,6 +255,7 @@ async function refreshAccessToken(): Promise<'refreshed' | 'unchanged' | 'unauth
       registrationStatus: auth.registrationStatus,
       username: auth.username,
       memberId: auth.memberId,
+      userId: auth.userId,
     });
     authToken = result.token;
     // Профиль подтянем лениво; для WS достаточно нового access token.
@@ -270,6 +271,7 @@ async function refreshAccessToken(): Promise<'refreshed' | 'unchanged' | 'unauth
         if (userResponse.status === 200) {
           const user = (await userResponse.json()) as {
             id?: number;
+            user_id?: string;
             first_name?: string | null;
             last_name?: string | null;
             app_role?: string;
@@ -286,6 +288,8 @@ async function refreshAccessToken(): Promise<'refreshed' | 'unchanged' | 'unauth
             registrationStatus: normalizeRegistrationStatus(user.registration_status),
             username: (user.username ?? '').trim(),
             memberId: typeof user.id === 'number' ? user.id : null,
+            userId:
+              typeof user.user_id === 'string' && user.user_id.trim() ? user.user_id.trim() : null,
           });
           authToken = useAuthStore.getState().token;
         }

@@ -19,6 +19,7 @@ const LS_FIRST = 'auth_first_name';
 const LS_LAST = 'auth_last_name';
 const LS_ROLE = 'auth_role';
 const LS_REG = 'auth_registration_status';
+const LS_USER_ID = 'auth_user_id';
 
 export type AuthRole =
   | 'parishioner'
@@ -42,6 +43,11 @@ export interface AuthProfile {
   username: string;
   /** Числовой id участника — запасной слаг `member-{id}` до первого `/me`. */
   memberId: number | null;
+  /**
+   * Стабильный публичный UUID (`members.user_id`).
+   * Им клиенты находят пользователя и привязывают данные; внутренний PK — `memberId`.
+   */
+  userId: string | null;
 }
 
 interface AuthState extends AuthProfile {
@@ -95,18 +101,27 @@ export function normalizeRegistrationStatus(raw: string | undefined | null): Reg
 function readLegacyFlutterKeys(): Partial<
   Pick<
     AuthState,
-    'token' | 'firstName' | 'lastName' | 'role' | 'registrationStatus' | 'username' | 'memberId'
+    | 'token'
+    | 'firstName'
+    | 'lastName'
+    | 'role'
+    | 'registrationStatus'
+    | 'username'
+    | 'memberId'
+    | 'userId'
   >
 > | null {
   if (typeof localStorage === 'undefined') return null;
   const token = localStorage.getItem(LS_TOKEN);
   if (!token) return null;
+  const storedUserId = localStorage.getItem(LS_USER_ID)?.trim() || null;
   return {
     token,
     firstName: localStorage.getItem(LS_FIRST) ?? '',
     lastName: localStorage.getItem(LS_LAST) ?? '',
     role: normalizeRole(localStorage.getItem(LS_ROLE) ?? undefined),
     registrationStatus: normalizeRegistrationStatus(localStorage.getItem(LS_REG)),
+    userId: storedUserId,
   };
 }
 
@@ -130,6 +145,7 @@ const flutterCompatibleStorage: StateStorage = {
         ),
         username: legacy?.username ?? '',
         memberId: legacy?.memberId ?? null,
+        userId: legacy?.userId ?? (localStorage.getItem(LS_USER_ID)?.trim() || null),
       },
       version: 0,
     });
@@ -149,6 +165,12 @@ const flutterCompatibleStorage: StateStorage = {
       localStorage.setItem(LS_LAST, s.lastName ?? '');
       localStorage.setItem(LS_ROLE, normalizeRole(s.role as string));
       localStorage.setItem(LS_REG, normalizeRegistrationStatus(s.registrationStatus as string));
+      const uid = typeof s.userId === 'string' ? s.userId.trim() : '';
+      if (uid) {
+        localStorage.setItem(LS_USER_ID, uid);
+      } else {
+        localStorage.removeItem(LS_USER_ID);
+      }
     } catch {
       /* ignore */
     }
@@ -160,6 +182,7 @@ const flutterCompatibleStorage: StateStorage = {
     localStorage.removeItem(LS_LAST);
     localStorage.removeItem(LS_ROLE);
     localStorage.removeItem(LS_REG);
+    localStorage.removeItem(LS_USER_ID);
   },
 };
 
@@ -213,9 +236,10 @@ export const useAuthStore = create<AuthState>()(
       registrationStatus: 'active',
       username: '',
       memberId: null,
+      userId: null,
 
       setSession: (
-        { token, firstName, lastName, role, roles, registrationStatus, username, memberId },
+        { token, firstName, lastName, role, roles, registrationStatus, username, memberId, userId },
         opts,
       ) => {
         // Новый вход начинается с Bearer; cookie-режим включится только после проверки (adoptCookieSession).
@@ -234,6 +258,7 @@ export const useAuthStore = create<AuthState>()(
           registrationStatus: normalizeRegistrationStatus(registrationStatus),
           username: (username ?? '').trim(),
           memberId: memberId ?? null,
+          userId: typeof userId === 'string' && userId.trim() ? userId.trim() : null,
         });
         if (opts?.freshLogin) void get().adoptCookieSession();
       },
@@ -246,6 +271,7 @@ export const useAuthStore = create<AuthState>()(
         registrationStatus,
         username,
         memberId,
+        userId,
       }) => {
         if (!get().token) return;
         const normalizedRole = normalizeRole(role);
@@ -260,6 +286,7 @@ export const useAuthStore = create<AuthState>()(
           registrationStatus: normalizeRegistrationStatus(registrationStatus),
           username: (username ?? '').trim(),
           memberId: memberId ?? null,
+          userId: typeof userId === 'string' && userId.trim() ? userId.trim() : null,
         });
       },
 
@@ -273,6 +300,7 @@ export const useAuthStore = create<AuthState>()(
           registrationStatus: 'active',
           username: '',
           memberId: null,
+          userId: null,
         });
       },
 
@@ -283,6 +311,7 @@ export const useAuthStore = create<AuthState>()(
             token?: string;
             user?: {
               id?: number;
+              user_id?: string;
               first_name?: string;
               last_name?: string;
               app_role?: string;
@@ -324,6 +353,7 @@ export const useAuthStore = create<AuthState>()(
             registrationStatus: normalizeRegistrationStatus(user.registration_status),
             username: (user.username ?? '').trim(),
             memberId: typeof user.id === 'number' ? user.id : null,
+            userId: typeof user.user_id === 'string' && user.user_id.trim() ? user.user_id.trim() : null,
           }, { freshLogin: true });
 
           return { ok: true };
@@ -391,6 +421,7 @@ export const useAuthStore = create<AuthState>()(
           registrationStatus: now.registrationStatus,
           username: now.username,
           memberId: now.memberId,
+          userId: now.userId,
         });
       },
 
@@ -403,6 +434,7 @@ export const useAuthStore = create<AuthState>()(
 
         type MeUser = {
           id?: number;
+          user_id?: string;
           first_name?: string | null;
           last_name?: string | null;
           app_role?: string;
@@ -421,6 +453,7 @@ export const useAuthStore = create<AuthState>()(
             registrationStatus: normalizeRegistrationStatus(user.registration_status),
             username: (user.username ?? '').trim(),
             memberId: typeof user.id === 'number' ? user.id : null,
+            userId: typeof user.user_id === 'string' && user.user_id.trim() ? user.user_id.trim() : null,
           });
         };
 
@@ -450,6 +483,7 @@ export const useAuthStore = create<AuthState>()(
                   registrationStatus: auth.registrationStatus,
                   username: auth.username,
                   memberId: auth.memberId,
+                  userId: auth.userId,
                 });
               }
               return;
@@ -522,6 +556,7 @@ export const useAuthStore = create<AuthState>()(
         registrationStatus: s.registrationStatus,
         username: s.username,
         memberId: s.memberId,
+        userId: s.userId,
       }),
     },
   ),
@@ -588,6 +623,7 @@ export function initAuthCrossTabLocalStorageSync(): void {
       registrationStatus: normalizeRegistrationStatus(read(LS_REG) ?? prev.registrationStatus),
       username: prev.username,
       memberId: prev.memberId,
+      userId: (read(LS_USER_ID) ?? prev.userId)?.trim() || null,
     });
   };
 
