@@ -33,6 +33,7 @@ import { notifyRealtime } from '../realtime/notify';
 import { sendPush } from '../services/pushService';
 import { notifyCoordinatorTelegramAssignment } from '../services/coordinatorTelegramScenariosService';
 import { DistributionService, getNextIsoWeekRef } from '../services/DistributionService';
+import { getWatchTopicForDate } from '../services/prayerWatchTopicsService';
 
 function isValidDateInput(value: unknown): value is string {
   if (typeof value !== 'string') {
@@ -65,7 +66,13 @@ export async function getPrayerData(req: Request, res: Response): Promise<void> 
     }
 
     const data = await getPrayerDataByDate(date);
-    res.json(data);
+    let watch_topic: Awaited<ReturnType<typeof getWatchTopicForDate>> | null = null;
+    try {
+      watch_topic = await getWatchTopicForDate(date);
+    } catch (watchErr) {
+      console.warn('[calendar] watch topic for date failed (best-effort):', watchErr);
+    }
+    res.json({ ...data, watch_topic });
   } catch (err) {
     console.error('Calendar controller error:', err);
     res.status(500).json({ error: 'Database error' });

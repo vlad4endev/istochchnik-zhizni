@@ -458,6 +458,11 @@ function normalizeDayPrayer(raw: unknown): DayPrayerData {
     const row = normalizeMemberRow(m);
     if (row) members.push(row);
   }
+  let watch_topic: DayPrayerData['watch_topic'] = null;
+  if (raw.watch_topic && typeof raw.watch_topic === 'object') {
+    watch_topic = raw.watch_topic as DayPrayerData['watch_topic'];
+  }
+
   return {
     date,
     diffDays,
@@ -468,6 +473,7 @@ function normalizeDayPrayer(raw: unknown): DayPrayerData {
     ministries: Array.isArray(raw.ministries) ? (raw.ministries as DayPrayerData['ministries']) : [],
     backsliders: Array.isArray(raw.backsliders) ? (raw.backsliders as DayPrayerData['backsliders']) : [],
     prayer_cycle: pc,
+    watch_topic,
   };
 }
 
