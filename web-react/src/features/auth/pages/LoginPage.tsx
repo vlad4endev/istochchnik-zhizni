@@ -1066,7 +1066,7 @@ export function LoginPage() {
               </div>
             )}
 
-            <div className="mt-auto flex gap-2.5 pt-5">
+            <div className="flex gap-2.5 pt-6">
               {isRegisterMode && registerStep > 0 ? (
                 <button
                   type="button"
