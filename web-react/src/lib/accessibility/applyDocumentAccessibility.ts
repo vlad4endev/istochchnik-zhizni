@@ -10,9 +10,17 @@ import type { AccessibilityState } from './types';
  * тестах). Там элемент уезжает в конец head и приоритет уже не тот, но цвет
  * статус-бара в тестах никто не читает.
  */
-function syncThemeColorMeta(isDarkLike: boolean): void {
+const THEME_COLOR: Record<AccessibilityState['colorTheme'], string> = {
+  standard: '#7d3640',
+  sepia: '#5c4330',
+  dark: '#121214',
+  'high-contrast': '#000000',
+  blue: '#0b1628',
+};
+
+function syncThemeColorMeta(colorTheme: AccessibilityState['colorTheme']): void {
   if (typeof document === 'undefined') return;
-  const content = isDarkLike ? '#121214' : '#7d3640';
+  const content = THEME_COLOR[colorTheme];
   let meta = document.querySelector('meta[name="theme-color"][data-app-managed="true"]');
   if (!meta) {
     meta = document.createElement('meta');
@@ -46,16 +54,16 @@ export function applyAccessibilityToDocument(state: AccessibilityState): void {
     root.classList.remove('theme-sepia');
   } else {
     root.classList.remove('dark');
-    root.classList.remove('theme-sepia');
+    root.classList.toggle('theme-sepia', state.colorTheme === 'sepia');
   }
 
   // Sync Zustand without calling setTheme() — avoids re-running applyTheme and fighting a11y.
-  const appearanceTheme = isDarkLike ? 'dark' : 'light';
+  const appearanceTheme = isDarkLike ? 'dark' : state.colorTheme === 'sepia' ? 'sepia' : 'light';
   if (useAppearanceStore.getState().theme !== appearanceTheme) {
     useAppearanceStore.setState({ theme: appearanceTheme });
   }
 
-  syncThemeColorMeta(isDarkLike);
+  syncThemeColorMeta(state.colorTheme);
 
   root.style.setProperty('--a11y-font-scale', String(state.fontScale));
   root.style.setProperty('--a11y-line-height', String(state.lineHeight));

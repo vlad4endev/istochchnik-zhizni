@@ -86,7 +86,7 @@
   font-weight: 800;
   color: #fff;
   cursor: pointer;
-  background: linear-gradient(135deg, var(--profile-primary, #7d3640), var(--profile-gradient-to, #a25260));
+  background: linear-gradient(135deg, var(--profile-fill, #7d3640), var(--profile-gradient-to, #a25260));
 }
 
 .btnPrimary:disabled {

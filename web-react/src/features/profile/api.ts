@@ -142,8 +142,8 @@ export async function fetchPushStatus(endpoint?: string): Promise<PushStatus> {
 }
 
 export type PushTestSummary = {
-  web: { attempted: number; sent: number; removed: number; failed: number };
-  fcm: { attempted: number; sent: number; removed: number; failed: number };
+  web: { attempted: number; sent: number; removed: number; failed: number; errors?: string[] };
+  fcm: { attempted: number; sent: number; removed: number; failed: number; errors?: string[] };
 };
 
 export async function sendTestPush(): Promise<PushTestSummary> {

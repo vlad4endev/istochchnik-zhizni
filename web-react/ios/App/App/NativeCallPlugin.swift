@@ -9,6 +9,7 @@ public class NativeCallPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "NativeCall"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "isSupported", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openNotificationSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "endCall", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "registerVoip", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "playRingtone", returnType: CAPPluginReturnPromise),
@@ -50,6 +51,19 @@ public class NativeCallPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func isSupported(_ call: CAPPluginCall) {
         call.resolve(["supported": true])
+    }
+
+    /// Экран настроек приложения: после отказа iOS больше не показывает системный запрос.
+    @objc func openNotificationSettings(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard let url = URL(string: UIApplication.openSettingsURLString) else {
+                call.reject("settings url unavailable")
+                return
+            }
+            UIApplication.shared.open(url, options: [:]) { ok in
+                if ok { call.resolve() } else { call.reject("cannot open settings") }
+            }
+        }
     }
 
     @objc func endCall(_ call: CAPPluginCall) {

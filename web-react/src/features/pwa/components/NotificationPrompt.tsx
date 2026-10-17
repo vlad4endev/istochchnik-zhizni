@@ -10,6 +10,7 @@ import {
   wasNotificationPromptDismissedThisSession,
 } from '../../../lib/deviceNotificationPermission';
 import { emitAppToast } from '../../../lib/uiFeedback';
+import { openNativeNotificationSettings } from '../../../lib/nativeApp';
 
 export function NotificationPrompt() {
   const token = useAuthStore((s) => s.token);
@@ -43,6 +44,7 @@ export function NotificationPrompt() {
       setVisible(false);
       return;
     }
+    if (result === 'denied' && (await openNativeNotificationSettings())) return;
     emitAppToast(
       result === 'denied'
         ? notificationPermissionSettingsHint()

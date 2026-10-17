@@ -6,7 +6,7 @@ function clamp(n: number, min: number, max: number): number {
 }
 
 function isColorTheme(v: unknown): v is AccessibilityColorTheme {
-  return v === 'standard' || v === 'dark' || v === 'high-contrast' || v === 'blue';
+  return v === 'standard' || v === 'sepia' || v === 'dark' || v === 'high-contrast' || v === 'blue';
 }
 
 export function loadAccessibilityState(): AccessibilityState {

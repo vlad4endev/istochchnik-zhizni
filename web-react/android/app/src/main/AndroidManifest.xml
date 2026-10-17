@@ -55,7 +55,10 @@
             android:value="general" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@mipmap/ic_launcher" />
+            android:resource="@drawable/ic_stat_notify" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_accent" />
 
         <!-- Один FCM-сервис: показ data-only пушей + Capacitor JS -->
         <service android:name=".AppFirebaseMessagingService" android:exported="false">

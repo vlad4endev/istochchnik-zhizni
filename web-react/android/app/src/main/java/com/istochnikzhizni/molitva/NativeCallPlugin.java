@@ -1,6 +1,8 @@
 package com.istochnikzhizni.molitva;
 
 import android.content.Context;
+import android.content.Intent;
+import android.provider.Settings;
 import android.media.AudioAttributes;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
@@ -52,6 +54,31 @@ public class NativeCallPlugin extends Plugin {
     final JSObject ret = new JSObject();
     ret.put("supported", true);
     call.resolve(ret);
+  }
+
+  /** Системный экран «Уведомления» приложения: после отказа в разрешении повторный запрос недоступен. */
+  @PluginMethod
+  public void openNotificationSettings(PluginCall call) {
+    final Context ctx = getContext();
+    if (ctx == null) {
+      call.reject("no context");
+      return;
+    }
+    try {
+      final Intent intent = new Intent();
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        intent.setAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+        intent.putExtra(Settings.EXTRA_APP_PACKAGE, ctx.getPackageName());
+      } else {
+        intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+        intent.setData(Uri.parse("package:" + ctx.getPackageName()));
+      }
+      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      ctx.startActivity(intent);
+      call.resolve();
+    } catch (Exception e) {
+      call.reject("openNotificationSettings failed: " + e.getMessage());
+    }
   }
 
   @PluginMethod
