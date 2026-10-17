@@ -1071,16 +1071,17 @@ export function ChatWindow({
       y: currentTop,
       nearBottom: near,
     });
-    const backTo = `/messenger?conversationId=${encodeURIComponent(conversationId)}`;
-    if (interlocutorProfilePath) {
+    // Профиль собеседника открывается внутри мессенджера (карточка контакта), а не страницей из ленты.
+    // Черновик (чат ещё не создан): карточки нет — единственный вариант страница собеседника.
+    if (isDraft && interlocutorProfilePath) {
+      const backTo = `/messenger?conversationId=${encodeURIComponent(conversationId)}`;
       navigate(interlocutorProfilePath, { state: { backTo, backLabel: 'В чат' } });
       return;
     }
     navigate(`/messenger/chat/${conversationId}/manage`);
-  }, [interlocutorProfilePath, navigate, conversationId]);
+  }, [interlocutorProfilePath, isDraft, navigate, conversationId]);
 
-  const headerInfoAriaLabel =
-    interlocutorProfilePath != null ? 'Открыть страницу собеседника' : 'Сведения о чате';
+  const headerInfoAriaLabel = isDraft && interlocutorProfilePath != null ? 'Открыть страницу собеседника' : 'Сведения о чате';
   const showHeaderSkeleton = !isDraft && (conv?.type === 'group' || conv?.type === 'channel') && !chatHeadReady;
 
   return (
@@ -1112,7 +1113,7 @@ export function ChatWindow({
               }
             }}
             aria-label={headerInfoAriaLabel}
-            title={interlocutorProfilePath != null ? 'Открыть страницу пользователя' : undefined}
+            title={isDraft && interlocutorProfilePath != null ? 'Открыть страницу пользователя' : 'Сведения о чате'}
             className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-xl py-0.5 pr-1 text-left transition-colors active:bg-[var(--surface)] sm:pr-2"
           >
             {showHeaderSkeleton ? (

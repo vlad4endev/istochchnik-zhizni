@@ -1,15 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { formatBirthDateDisplay } from '../../../lib/birthDate';
 import {
   LuBell,
-  LuCake,
   LuChevronRight,
   LuCopy,
   LuDoorOpen,
   LuFileImage,
   LuLink2,
-  LuPhone,
   LuPencil,
   LuRefreshCw,
   LuSettings2,
@@ -26,9 +23,9 @@ import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
 import { ManageDialogShell } from './ManageDialogShell';
+import { PrivateChatProfileScreen } from './PrivateChatProfileScreen';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
-import { getAvatarInitial } from '../avatarUtils';
 import { isAssistantMessengerChannel } from '../messengerChannelKinds';
 
 export function ManageChatHomePage() {
@@ -175,34 +172,26 @@ export function ManageChatHomePage() {
     const statusText = isOnline
       ? 'в сети'
       : formatMessengerLastSeen(privateProfile ? memberLastSeenAt[privateProfile.id] ?? privateProfile.last_seen_at : null);
+    const other = conv?.other_member ?? null;
+    const peerId = privateProfile?.id ?? other?.id ?? null;
     return (
-      <ManageScreenShell>
-        <ManageSettingsGroup className="mt-4">
-          <div className="flex flex-col items-center px-5 pb-4 pt-6">
-            <div className="relative h-[72px] w-[72px] overflow-hidden rounded-full bg-primary/10 ring-2 ring-white shadow-sm">
-              <AppAvatar
-                src={privateAvatarUrl}
-                className="h-full w-full"
-                imgClassName="h-full w-full object-cover"
-                fallback={<div className="grid h-full w-full place-items-center text-2xl font-semibold text-primary">{getAvatarInitial(fullName, 'U')}</div>}
-              />
-            </div>
-            <p className="mt-3 text-center text-lg font-semibold text-[var(--text)]">{fullName}</p>
-            <p className="mt-1 text-sm text-blue-500">{statusText}</p>
-          </div>
-        </ManageSettingsGroup>
-        <ManageSettingsGroup className="mt-3">
-          <InfoRow Icon={LuPhone} label="Телефон" value={privateProfile?.phone_number ?? '—'} isFirst />
-          <InfoRow label="Роль в проекте" value={privateProfile?.app_role ?? '—'} />
-          <InfoRow label="Роль (служение)" value={privateProfile?.ministry_role ?? '—'} />
-          <InfoRow label="Направление" value={privateProfile?.ministry_direction ?? '—'} />
-          <InfoRow
-            Icon={LuCake}
-            label="День и месяц рождения"
-            value={formatBirthDateDisplay(privateProfile?.birth_date) || '—'}
-          />
-        </ManageSettingsGroup>
-      </ManageScreenShell>
+      <PrivateChatProfileScreen
+        chatId={chatId ?? ''}
+        peer={peerId != null ? { id: peerId, name: fullName, avatarUrl: privateAvatarUrl } : null}
+        fullName={fullName}
+        avatarUrl={privateAvatarUrl}
+        statusText={statusText}
+        isOnline={isOnline}
+        profile={privateProfile}
+        muted={isMuted}
+        onToggleMute={() => {
+          if (!chatId) return;
+          void patchChatMyUi(chatId, { muted: !isMuted });
+        }}
+        onBack={() => navigate(-1)}
+        onClose={() => navigate('/messenger')}
+        profilePath={peerId != null ? `/profile/member-${peerId}` : null}
+      />
     );
   }
 
@@ -409,37 +398,6 @@ function ManageCardSkeleton({ rows = 3 }: { rows?: number }) {
         ))}
       </div>
     </ManageSettingsGroup>
-  );
-}
-
-function InfoRow({
-  Icon,
-  label,
-  value,
-  isFirst,
-}: {
-  Icon?: (p: { size?: number; className?: string }) => React.ReactNode;
-  label: string;
-  value: string;
-  isFirst?: boolean;
-}) {
-  return (
-    <div
-      className={[
-        'flex min-h-[48px] items-center gap-3 px-4 py-2.5',
-        !isFirst ? 'border-t border-stone-200/70' : '',
-      ].filter(Boolean).join(' ')}
-    >
-      {Icon ? (
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-[var(--surface)] text-[var(--text-secondary)]">
-          <Icon size={16} />
-        </span>
-      ) : (
-        <span className="w-7 shrink-0" aria-hidden />
-      )}
-      <span className="min-w-0 flex-1 text-base text-[var(--text)]">{label}</span>
-      <span className="max-w-[55%] shrink-0 text-right text-base text-[var(--text-secondary)]">{value}</span>
-    </div>
   );
 }
 
