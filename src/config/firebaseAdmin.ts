@@ -44,9 +44,18 @@ function initWithServiceAccount(
   admin: FirebaseAdminModule,
   creds: ServiceAccount,
 ): messaging.Messaging | null {
-  admin.initializeApp({ credential: admin.credential.cert(creds) });
+  // initAttempted выставляем до попытки: повреждённый ключ бросает из cert() и иначе пробовался бы заново на каждую отправку.
   initAttempted = true;
-  return admin.messaging();
+  try {
+    admin.initializeApp({ credential: admin.credential.cert(creds) });
+    return admin.messaging();
+  } catch (e) {
+    console.warn(
+      '[fcm] service account is invalid (FCM disabled):',
+      e instanceof Error ? e.message : e,
+    );
+    return null;
+  }
 }
 
 /**

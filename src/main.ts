@@ -584,7 +584,13 @@ async function start(): Promise<void> {
   } catch (e) {
     console.warn('[push] initPushVapid failed:', e);
   }
-  const fcmOk = getFirebaseMessaging() != null;
+  let fcmOk = false;
+  try {
+    fcmOk = getFirebaseMessaging() != null;
+  } catch (e) {
+    // Диагностика старта не должна ронять API: битый ключ Firebase = отключённый FCM, а не краш-луп.
+    console.warn('[push] FCM check failed:', e instanceof Error ? e.message : e);
+  }
   console.log(
     fcmOk
       ? '[push] FCM (Android/iOS native) configured'
