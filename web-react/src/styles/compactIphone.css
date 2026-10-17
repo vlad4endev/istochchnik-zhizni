@@ -160,7 +160,7 @@
   }
 
   nav.app-bottom-nav .app-bottom-nav__label {
-    font-size: 0.5rem; /* 8px — иначе «Главная» не влезает в ~64px колонку */
+    font-size: max(9px, 0.5rem); /* ~8px — иначе «Главная» не влезает в ~64px колонку; но не меньше 9px при масштабе --ui-scale */
     max-width: 100%;
   }
 

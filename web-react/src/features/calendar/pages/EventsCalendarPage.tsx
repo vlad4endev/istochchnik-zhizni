@@ -871,12 +871,9 @@ export function EventsCalendarPage() {
 
         {mode === 'month' ? (
           <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)]">
-            <p className="border-b border-stone-100 bg-stone-50/50 px-3 py-2 text-center text-[11px] font-semibold text-stone-400 sm:hidden">
-              Свайпните таблицу, чтобы увидеть все дни
-            </p>
-            <div className="max-sm:overflow-x-auto max-sm:overscroll-x-contain max-sm:pb-1 sm:overflow-visible">
+            <div className="overflow-visible">
               <div>
-                <div className="grid min-w-[560px] grid-cols-7 border-b border-stone-100 bg-stone-50/90 sm:min-w-0">
+                <div className="grid grid-cols-7 border-b border-stone-100 bg-stone-50/90">
                   {weekdayLabelsMonFirst.map((wd) => (
                     <div
                       key={wd}
@@ -889,7 +886,7 @@ export function EventsCalendarPage() {
                     </div>
                   ))}
                 </div>
-                <div className="grid min-w-[560px] grid-cols-7 gap-px bg-stone-100 sm:min-w-0">
+                <div className="grid grid-cols-7 gap-px bg-stone-100">
                   {monthGridDays.map((day) => {
                     const inMonth = isSameMonth(day, cursorDate);
                     const today = isToday(day);
@@ -914,7 +911,7 @@ export function EventsCalendarPage() {
                           }
                         }}
                         className={[
-                          'tap-highlight-transparent flex min-h-[104px] cursor-pointer flex-col items-stretch gap-1 bg-white p-1.5 text-left transition-colors active:bg-stone-50 sm:min-h-[132px] sm:hover:bg-emerald-50/40 sm:p-2',
+                          'tap-highlight-transparent flex min-h-[60px] min-w-0 cursor-pointer flex-col items-stretch gap-1 bg-white p-1 text-left transition-colors active:bg-stone-50 sm:min-h-[132px] sm:p-2 sm:hover:bg-emerald-50/40',
                           !inMonth ? 'opacity-40' : '',
                           today ? 'ring-1 ring-inset ring-[#1A9A55]/40' : '',
                           sunday && inMonth ? 'bg-[#FBF7F8]/70' : '',
@@ -922,13 +919,23 @@ export function EventsCalendarPage() {
                       >
                         <span
                           className={[
-                            'flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-extrabold sm:h-8 sm:w-8 sm:text-sm',
+                            'mx-auto flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-extrabold sm:mx-0 sm:h-8 sm:w-8 sm:text-sm',
                             today ? 'bg-[#1A9A55] text-white' : sunday ? 'text-[#6B2D3E]' : 'text-stone-800',
                           ].join(' ')}
                         >
                           {format(day, 'd')}
                         </span>
-                        <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden sm:gap-1">
+                        <div className="flex flex-wrap justify-center gap-0.5 sm:hidden" aria-hidden>
+                          {!loading
+                            ? occ.slice(0, 4).map((row) => (
+                                <span
+                                  key={`dot-${row.key}`}
+                                  className={`h-1.5 w-1.5 rounded-full ${row.kind === 'sunday' ? 'bg-[#6B2D3E]' : 'bg-[#1A9A55]'}`}
+                                />
+                              ))
+                            : null}
+                        </div>
+                        <div className="hidden min-h-0 flex-1 flex-col gap-0.5 overflow-hidden sm:flex sm:gap-1">
                           {loading ? (
                             <span className="text-[10px] font-semibold text-stone-400">…</span>
                           ) : (
