@@ -1,17 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
-  LuBell,
-  LuChevronRight,
-  LuCopy,
-  LuDoorOpen,
-  LuFileImage,
-  LuLink2,
-  LuPencil,
-  LuRefreshCw,
-  LuSettings2,
-  LuShield,
-  LuUsers,
   LuX,
 } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
@@ -22,9 +11,11 @@ import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
+import { GroupChatProfileScreen } from './GroupChatProfileScreen';
+import { useAuthStore } from '../../auth/authStore';
+import { canAddParticipantsToGroup, canManageGroupMessenger, isAppAdministratorRole } from './messengerManageAccess';
 import { ManageDialogShell } from './ManageDialogShell';
 import { PrivateChatProfileScreen } from './PrivateChatProfileScreen';
-import { AppAvatar } from '../../../components/AppAvatar';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { isAssistantMessengerChannel } from '../messengerChannelKinds';
 
@@ -36,6 +27,9 @@ export function ManageChatHomePage() {
   const conversations = useChatStore((s) => s.conversations);
   const patchChatMyUi = useChatStore((s) => s.patchChatMyUi);
   const leaveChat = useChatStore((s) => s.leaveChat);
+  const authRole = useAuthStore((s) => s.role);
+  const authRoles = useAuthStore((s) => s.roles);
+  const isAppAdministrator = useMemo(() => isAppAdministratorRole(authRole, authRoles), [authRole, authRoles]);
   const conv = useMemo(() => conversations.find((c) => c.id === chatId) ?? null, [conversations, chatId]);
   const [meta, setMeta] = useState<api.ConversationMeta | null>(null);
   const [privateProfile, setPrivateProfile] = useState<api.PrivateChatProfile | null>(null);
@@ -44,7 +38,6 @@ export function ManageChatHomePage() {
   const [titleDraft, setTitleDraft] = useState('');
   const [descriptionDraft, setDescriptionDraft] = useState('');
   const [inviteToken, setInviteToken] = useState('');
-  const [muteDuration, setMuteDuration] = useState<'1h' | '8h' | '1d' | 'forever'>('forever');
   const [showTitleEditor, setShowTitleEditor] = useState(false);
   const [showDescriptionEditor, setShowDescriptionEditor] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -161,7 +154,6 @@ export function ManageChatHomePage() {
   };
 
   const inviteLink = `https://app.church-tambov.ru/join/${inviteToken}`;
-  const mediaHintCount = Number((meta?.settings as { media_count?: unknown } | undefined)?.media_count ?? 0);
 
   if (isPrivate) {
     const privateAvatarUrl = resolvePublicUrl(privateProfile?.avatar_url ?? conv?.other_member?.avatar_url ?? null);
@@ -212,145 +204,58 @@ export function ManageChatHomePage() {
     );
   }
 
+  const isStaffRole = meta?.my_role === 'owner' || meta?.my_role === 'admin';
+  const canEdit = isStaffRole || canManageGroupMessenger(meta?.my_effective_permissions, isAppAdministrator);
+  const canAddMembers = canAddParticipantsToGroup(meta?.my_effective_permissions, isAppAdministrator);
+
+  const copyInvite = () => {
+    void navigator.clipboard?.writeText(inviteLink);
+    emitAppToast('Ссылка скопирована', 'success');
+  };
+
   return (
-    <ManageScreenShell>
-      <ManageSettingsGroup className="mt-4 overflow-hidden">
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => void updateAvatar(e.target.files?.[0] ?? null)} />
-        <div className="flex flex-col items-center px-4 pb-5 pt-6 text-center">
-          <button type="button" onClick={() => fileRef.current?.click()} className="group relative mx-auto h-[6.5rem] w-[6.5rem] overflow-hidden rounded-full bg-gradient-to-br from-primary/15 to-primary/5 shadow-md ring-2 ring-white">
-            <AppAvatar
-              src={resolvePublicUrl(conv?.avatar_url ?? meta?.avatar_url ?? null)}
-              className="h-full w-full"
-              imgClassName="h-full w-full object-cover"
-              fallback={<div className="grid h-full w-full place-items-center text-primary"><LuUsers size={34} /></div>}
-            />
-            <span className="absolute inset-x-0 bottom-0 bg-black/45 py-1 text-xs font-semibold text-white opacity-0 transition group-hover:opacity-100">Изменить</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowTitleEditor(true)}
-            className="mt-3 inline-flex max-w-full items-center gap-1 text-2xl font-bold text-[var(--text)]"
-          >
-            <span className="line-clamp-2 break-words">{title}</span>
-            <LuPencil size={14} className="shrink-0 text-[var(--text-muted)]" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowDescriptionEditor(true)}
-            className="mt-1 block w-full text-sm text-[var(--text-secondary)]"
-          >
-            {descriptionDraft || 'Добавить описание'}
-          </button>
-          <p className="mt-2 text-xs font-medium text-[var(--text-secondary)]">{loading ? '...' : subtitleFromMeta(meta)}</p>
-        </div>
-      </ManageSettingsGroup>
-
-      <SectionLabel>Приглашение</SectionLabel>
-      <ManageSettingsGroup className="mt-3">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><LuLink2 size={18} /></div>
-          <div className="min-w-0 flex-1">
-            <p className="text-base font-medium text-[var(--text)]">Ссылка-приглашение</p>
-            <p className="truncate text-sm text-[var(--text-secondary)]">{inviteLink}</p>
-          </div>
-          <button type="button" onClick={() => { void navigator.clipboard.writeText(inviteLink); emitAppToast('Ссылка скопирована', 'success'); }} className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--surface)] text-[var(--text-secondary)]">
-            <LuCopy size={16} />
-          </button>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            const next = randomInviteToken();
-            setInviteToken(next);
-            void persistMetaSettings({ invite_token: next }).catch(() => emitAppToast('Не удалось сбросить ссылку', 'error'));
-          }}
-          className="flex w-full items-center gap-3 border-t border-gray-200/70 px-4 py-3 text-left text-red-600"
-        >
-          <LuRefreshCw size={18} />
-          <span className="text-base font-medium">Сбросить ссылку</span>
-        </button>
-      </ManageSettingsGroup>
-
-      <SectionLabel>Управление</SectionLabel>
-      <ManageSettingsGroup className="mt-3">
-        <SectionCard title="Участники" description="Список и управление" Icon={LuUsers} to={chatId ? `/messenger/chat/${chatId}/manage/members` : '/messenger'} />
-        <SectionCard title="Администраторы" description="Назначение и ограничения" Icon={LuShield} to={chatId ? `/messenger/chat/${chatId}/manage/admins` : '/messenger'} />
-        <SectionCard title="Разрешения" description="Кто может писать и приглашать" Icon={LuSettings2} to={chatId ? `/messenger/chat/${chatId}/manage/permissions` : '/messenger'} />
-        <SectionCard title="Медиа, файлы и ссылки" description={`${mediaHintCount} элементов`} Icon={LuFileImage} to={chatId ? `/messenger/chat/${chatId}/manage/media` : '/messenger'} isLast />
-      </ManageSettingsGroup>
-
-      <SectionLabel>Уведомления</SectionLabel>
-      <ManageSettingsGroup className="mt-3">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><LuBell size={18} /></div>
-          <span className="min-w-0 flex-1 text-base font-medium text-[var(--text)]">Уведомления</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={!isMuted}
-            onClick={() => {
-              if (!chatId) return;
-              void patchChatMyUi(chatId, { muted: !isMuted });
-            }}
-            className={['relative h-7 w-12 rounded-full p-1 transition', !isMuted ? 'bg-primary' : 'bg-stone-300'].join(' ')}
-          >
-            <span className={['block h-5 w-5 rounded-full bg-white shadow transition', !isMuted ? 'translate-x-5' : 'translate-x-0'].join(' ')} />
-          </button>
-        </div>
-        {!isMuted ? (
-          <div className="border-t border-gray-200/70 px-4 py-2.5">
-            <div className="flex flex-wrap gap-2">
-              {(['1h', '8h', '1d', 'forever'] as const).map((dur) => (
-                <button
-                  key={dur}
-                  type="button"
-                  onClick={() => {
-                    setMuteDuration(dur);
-                    if (!chatId) return;
-                    void patchChatMyUi(chatId, { muted: true });
-                  }}
-                  className={['rounded-full px-3 py-1.5 text-xs font-semibold', muteDuration === dur ? 'bg-primary text-white' : 'bg-[var(--surface)] text-[var(--text-secondary)]'].join(' ')}
-                >
-                  {dur === '1h' ? '1 час' : dur === '8h' ? '8 часов' : dur === '1d' ? '1 день' : 'навсегда'}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </ManageSettingsGroup>
-
-      <SectionLabel>Опасная зона</SectionLabel>
-      <ManageSettingsGroup className="mt-3">
-        <button
-          type="button"
-          onClick={() => {
-            if (!chatId) return;
-            const ownerDeletes = meta?.my_role === 'owner';
-            const noun = (conv?.type ?? meta?.type) === 'channel' ? 'канал' : 'группу';
-            const confirmed = ownerDeletes
-              ? window.confirm(
-                  `Удалить ${noun} для всех участников? Переписка будет стёрта, чат пропадёт у всех и из базы.`,
-                )
-              : window.confirm('Вы уверены? Вас нужно будет снова пригласить.');
-            if (!confirmed) return;
-            void leaveChat(chatId).then(() => navigate('/messenger'));
-          }}
-          className="flex w-full items-center gap-3 px-4 py-3 text-left text-red-600"
-        >
-          <LuDoorOpen size={18} />
-          <span className="text-base font-medium">
-            {meta?.my_role === 'owner'
-              ? (conv?.type ?? meta?.type) === 'channel'
-                ? 'Удалить канал'
-                : 'Удалить группу'
-              : (conv?.type ?? meta?.type) === 'channel'
-                ? 'Покинуть канал'
-                : 'Покинуть группу'}
-          </span>
-        </button>
-      </ManageSettingsGroup>
-
-      {err ? <p className="mt-3 text-sm font-medium text-red-600">{err}</p> : null}
+    <>
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => void updateAvatar(e.target.files?.[0] ?? null)} />
+      <GroupChatProfileScreen
+        chatId={chatId ?? ''}
+        title={title}
+        description={descriptionDraft}
+        avatarUrl={resolvePublicUrl(conv?.avatar_url ?? meta?.avatar_url ?? null)}
+        isChannel={(conv?.type ?? meta?.type) === 'channel'}
+        myRole={meta?.my_role}
+        canEdit={canEdit}
+        canAddMembers={canAddMembers}
+        muted={isMuted}
+        inviteLink={inviteLink}
+        onBack={() => navigate(-1)}
+        onToggleMute={() => {
+          if (!chatId) return;
+          void patchChatMyUi(chatId, { muted: !isMuted });
+        }}
+        onCopyInvite={copyInvite}
+        onResetInvite={() => {
+          const next = randomInviteToken();
+          setInviteToken(next);
+          void persistMetaSettings({ invite_token: next }).then(
+            () => emitAppToast('Ссылка сброшена', 'success'),
+            () => emitAppToast('Не удалось сбросить ссылку', 'error'),
+          );
+        }}
+        onEditTitle={() => setShowTitleEditor(true)}
+        onEditDescription={() => setShowDescriptionEditor(true)}
+        onEditAvatar={() => fileRef.current?.click()}
+        onLeave={() => {
+          if (!chatId) return;
+          const ownerDeletes = meta?.my_role === 'owner';
+          const noun = (conv?.type ?? meta?.type) === 'channel' ? 'канал' : 'группу';
+          const confirmed = ownerDeletes
+            ? window.confirm(`Удалить ${noun} для всех участников? Переписка будет стёрта, чат пропадёт у всех и из базы.`)
+            : window.confirm('Вы уверены? Вас нужно будет снова пригласить.');
+          if (!confirmed) return;
+          void leaveChat(chatId).then(() => navigate('/messenger'));
+        }}
+      />
+      {err ? <p className="px-4 pb-4 text-sm font-medium text-red-600">{err}</p> : null}
 
       {showTitleEditor ? (
         <InlineEditorModal
@@ -374,15 +279,8 @@ export function ManageChatHomePage() {
           multiline
         />
       ) : null}
-    </ManageScreenShell>
+    </>
   );
-}
-
-function subtitleFromMeta(meta: api.ConversationMeta | null): string {
-  if (!meta) return 'Группа';
-  if (meta.type === 'channel') return 'Канал';
-  if (meta.type === 'group') return 'Группа';
-  return 'Личный чат';
 }
 
 function randomInviteToken(): string {
@@ -398,49 +296,6 @@ function ManageCardSkeleton({ rows = 3 }: { rows?: number }) {
         ))}
       </div>
     </ManageSettingsGroup>
-  );
-}
-
-function SectionCard({
-  title,
-  description,
-  Icon,
-  to,
-  isLast,
-}: {
-  title: string;
-  description: string;
-  Icon: (p: { size?: number; className?: string }) => React.ReactNode;
-  to: string;
-  isLast?: boolean;
-}) {
-  return (
-    <Link
-      to={to}
-      className={[
-        'group flex min-h-[54px] items-center gap-3 px-4 py-3 transition-colors active:bg-[var(--surface)]',
-        !isLast ? 'border-b border-stone-200/70' : '',
-      ].filter(Boolean).join(' ')}
-    >
-      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-        <Icon size={18} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-base font-medium text-[var(--text)]">{title}</p>
-        <p className="mt-0.5 text-xs text-[var(--text-secondary)]">{description}</p>
-      </div>
-      <LuChevronRight className="h-[18px] w-[18px] shrink-0 text-[var(--text-muted)]" aria-hidden />
-    </Link>
-  );
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="sticky top-[56px] z-[5] mt-4 px-1">
-      <p className="rounded-full bg-[var(--surface)] px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)] backdrop-blur">
-        {children}
-      </p>
-    </div>
   );
 }
 

@@ -10,7 +10,7 @@ import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { MessengerMiniPlayer } from './MessengerMiniPlayer';
 import { SearchChat } from './SearchChat';
-import { LuBot, LuChevronLeft, LuEllipsisVertical, LuPhone, LuSearch, LuVideo } from 'react-icons/lu';
+import { LuBot, LuChevronLeft, LuPhone, LuSearch, LuVideo } from 'react-icons/lu';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { groupMessages } from '../groupMessages';
@@ -1276,17 +1276,6 @@ export function ChatWindow({
                       </div>
                     ) : null}
                   </div>
-                ) : null}
-                {!isAssistantChannel ? (
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
-                    aria-label="Управление чатом"
-                    title="Управление"
-                    className="chat-header__btn inline-flex h-11 w-11 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors active:bg-[var(--surface)]"
-                  >
-                    <LuEllipsisVertical size={22} strokeWidth={2.2} aria-hidden />
-                  </button>
                 ) : null}
                 <button
                   type="button"
