@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { getVapidPublicKeyValue } from '../services/vapidKeys';
 import { saveSubscription, removeSubscription } from '../services/pushService';
 import { ensurePushSubscriptionsSchema } from '../services/pushSubscriptionsSchema';
 
@@ -20,7 +21,7 @@ type NormalizedPushSubscription = {
 };
 
 export const getVapidPublicKey = (req: Request, res: Response) => {
-  const publicKey = String(process.env.VAPID_PUBLIC_KEY ?? '').trim();
+  const publicKey = getVapidPublicKeyValue();
   if (!publicKey) {
     res.status(503).json({ error: 'VAPID public key is not configured' });
     return;

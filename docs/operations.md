@@ -87,6 +87,11 @@ VAPID_PRIVATE_KEY=...
 VAPID_SUBJECT=mailto:your-support@domain.com
 ```
 
+**Чтобы push не ломался после передеплоя:**
+
+- Если `VAPID_*` не заданы, API один раз создаёт пару ключей и хранит её в БД (`push_server_keys`), так что подписки браузеров переживают пересоздание стека. Явные переменные окружения имеют приоритет. Смена пары ключей отключает все существующие подписки (клиенты пересоздают их сами при следующем открытии).
+- Android/iOS (FCM): `secrets/firebase-sa.json` не в git и монтируется как `./secrets`; при деплое из git (Portainer) каталог может оказаться пустым. Надёжнее задать `FIREBASE_SERVICE_ACCOUNT_JSON` в переменных стека. В логе старта API ищите строку `[push] FCM configured` / `FCM NOT configured`.
+
 ## Аудио/видеозвонки (LiveKit)
 
 Подробно: [`calls-livekit.md`](./calls-livekit.md).

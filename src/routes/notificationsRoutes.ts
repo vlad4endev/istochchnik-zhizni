@@ -12,6 +12,7 @@ import {
 import { removeSubscription, saveSubscription, sendPush } from '../services/pushService';
 import { getFirebaseMessaging } from '../config/firebaseAdmin';
 import { query } from '../config/db';
+import { getVapidPublicKeyValue } from '../services/vapidKeys';
 import { ensurePushSubscriptionsSchema } from '../services/pushSubscriptionsSchema';
 
 let pushSchemaEnsurePromise: Promise<void> | null = null;
@@ -49,7 +50,7 @@ const router = Router();
  * GET /api/notifications/vapid-public-key
  */
 router.get('/vapid-public-key', (_req: Request, res: Response) => {
-  const publicKey = String(process.env.VAPID_PUBLIC_KEY ?? '').trim();
+  const publicKey = getVapidPublicKeyValue();
   if (!publicKey) {
     res.status(503).json({ error: 'VAPID public key is not configured' });
     return;
@@ -238,7 +239,7 @@ router.get('/status', requireAuthSession, async (req: Request, res: Response) =>
     );
     const endpoints = (web.rows as { endpoint: string }[]).map((r) => r.endpoint);
     res.json({
-      vapidConfigured: Boolean(String(process.env.VAPID_PUBLIC_KEY ?? '').trim()),
+      vapidConfigured: Boolean(getVapidPublicKeyValue()),
       fcmConfigured: getFirebaseMessaging() != null,
       webSubscriptions: endpoints.length,
       nativeDevices: Number((native.rows[0] as { n?: number } | undefined)?.n ?? 0),
