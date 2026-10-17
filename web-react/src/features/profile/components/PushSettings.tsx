@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { FiBell, FiBellOff } from 'react-icons/fi';
 import { fetchPushStatus, sendTestPush, unsubscribeFromPushApi, type PushStatus } from '../api';
 import { isAppleMobileWeb, isInstalledPwa } from '../../pwa/utils/pwaEnvironment';
 import { useNotificationManager } from '../../pwa';
 import { useAuthStore } from '../../auth/authStore';
+import { initMessengerPushNotifications } from '../../messenger/push/webPush';
 import { useDeviceNotificationPermission } from '../../../hooks/useDeviceNotificationPermission';
 import { openNativeNotificationSettings } from '../../../lib/nativeApp';
 import { notificationPermissionSettingsHint } from '../../../lib/deviceNotificationPermission';
@@ -207,6 +208,15 @@ export function PushSettings() {
     if (Capacitor.isNativePlatform() || status === 'unsupported') return;
     void refreshServerStatus();
   }, [status, isSubscribed, refreshServerStatus]);
+
+  // Браузер подписан, а сервер своей записи не знает (удалена по 410/ротации) — чиним сами, один раз.
+  const healedRef = useRef(false);
+  useEffect(() => {
+    if (healedRef.current) return;
+    if (!isSubscribed || serverStatus?.currentEndpointRegistered !== false) return;
+    healedRef.current = true;
+    void initMessengerPushNotifications({ force: true }).then(() => refreshServerStatus());
+  }, [isSubscribed, serverStatus, refreshServerStatus]);
 
   async function handleTestPush() {
     setMsg(null);
