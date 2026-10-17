@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parse } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useId, useMemo, useState, type ReactNode, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import {
   LuCalendarClock,
   LuChevronDown,
@@ -10,12 +9,12 @@ import {
   LuLoader,
   LuSearch,
   LuSend,
-  LuX,
   LuCircleAlert,
   LuCircleCheck,
 } from 'react-icons/lu';
 import { SiOpenai } from 'react-icons/si';
 
+import { AppSheet } from '../../../components/ui/AppSheet';
 import { memberRosterName } from '../../../lib/memberRosterName';
 import type { NextWeekMemberDay } from '../../../types';
 import type { CycleCollectionClaimRow, CycleCollectionClaimsSnapshot } from '../collectionTypes';
@@ -519,7 +518,6 @@ function NextWeekMembersPanel(props: {
 }
 
 function ModalFrame(props: {
-  titleId: string;
   title: string;
   subtitle?: string;
   onClose: () => void;
@@ -527,67 +525,17 @@ function ModalFrame(props: {
   /** Шире окно — удобнее список с полем нужды. */
   size?: 'default' | 'wide';
 }) {
-  const { titleId, title, subtitle, onClose, children, size = 'default' } = props;
-  const widthClass = size === 'wide' ? 'max-w-2xl' : 'max-w-md';
-  const maxHClass =
-    size === 'wide' ? 'max-h-[min(92dvh,820px)] sm:max-h-[88dvh]' : 'max-h-[min(88dvh,720px)] sm:max-h-[85dvh]';
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
+  const { title, subtitle, onClose, children, size = 'default' } = props;
   return (
-    <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <AppSheet
+      title={title}
+      subtitle={subtitle}
+      icon={<LuCalendarClock className="h-[18px] w-[18px]" aria-hidden />}
+      onClose={onClose}
+      size={size === 'wide' ? 'wide' : 'md'}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className={`flex w-full flex-col rounded-2xl border border-stone-200/90 bg-[var(--surface)] shadow-2xl ${maxHClass} ${widthClass}`}
-      >
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-2.5 sm:px-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <LuCalendarClock className="h-4 w-4" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <h2 id={titleId} className="truncate text-[15px] font-extrabold text-stone-900">
-                {title}
-              </h2>
-              {subtitle ? (
-                <p className="mt-0.5 line-clamp-2 text-[12px] font-medium leading-snug text-stone-500">{subtitle}</p>
-              ) : null}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100"
-            aria-label="Закрыть"
-          >
-            <LuX className="h-5 w-5" strokeWidth={2} />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">{children}</div>
-      </div>
-    </div>
+      {children}
+    </AppSheet>
   );
 }
 
@@ -612,7 +560,6 @@ export function NextWeekPrayerPlanSection({
 }: Props) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const titleId = useId();
   const [mutErr, setMutErr] = useState<string | null>(null);
   const [weekKind, setWeekKind] = useState<WeekPlanKind>('current');
   const [distributionInfo, setDistributionInfo] = useState<string | null>(null);
@@ -742,16 +689,14 @@ export function NextWeekPrayerPlanSection({
 
       {afterWeekQueueButton}
 
-      {open && typeof document !== 'undefined'
-        ? createPortal(
+      {open ? (
             <ModalFrame
-              titleId={titleId}
               title="Сбор нужд"
               subtitle="По дням недели: кто в очереди и кто отвечает за сбор. Ниже — поиск, фильтр и список."
               onClose={() => setOpen(false)}
               size="wide"
             >
-              <div className="mb-3 flex rounded-xl border border-stone-200/90 bg-stone-100/90 p-1">
+              <div className="mb-3 flex rounded-xl bg-black/[0.06] p-1 dark:bg-white/[0.08]">
                 <button
                   type="button"
                   onClick={() => setWeekKind('current')}
@@ -844,10 +789,8 @@ export function NextWeekPrayerPlanSection({
                 onPrayerSaved={invalidateAfterPrayerSave}
                 isAdmin={isAdmin}
               />
-            </ModalFrame>,
-            document.body,
-          )
-        : null}
+            </ModalFrame>
+      ) : null}
     </div>
   );
 }
