@@ -293,6 +293,7 @@ function SmartTabs({
             className={[
               'tg-smart-tab',
               'tab-filter-button',
+              'tap-compact',
               isActive ? 'tg-smart-tab--active' : '',
               pressedId === t.id ? 'tg-smart-tab--pressed' : '',
             ]

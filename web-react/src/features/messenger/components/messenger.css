@@ -4748,10 +4748,10 @@ html.dark .msg-videonote-circle--placeholder {
     }
 
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-sidebar-actions :is(.tg-calls-btn-sm, .tg-compose-btn-sm) {
-      width: 40px;
-      height: 40px;
-      min-width: 40px;
-      min-height: 40px;
+      width: calc(36px * var(--ui-scale, 1));
+      height: calc(36px * var(--ui-scale, 1));
+      min-width: calc(36px * var(--ui-scale, 1));
+      min-height: calc(36px * var(--ui-scale, 1));
       border-radius: 999px;
       background: transparent !important;
       box-shadow: none !important;
@@ -4775,9 +4775,9 @@ html.dark .msg-videonote-circle--placeholder {
 
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search {
       --r: var(--tg-search-reveal, 1);
-      min-height: 40px;
-      margin: 4px 12px 10px;
-      padding: 6px 14px;
+      min-height: calc(36px * var(--ui-scale, 1));
+      margin: 2px 12px 8px;
+      padding: 4px 12px;
       border-radius: 999px;
       /* Прогресс «потянули» (0→1) из useIosPullSearch: проявление, лёгкий сдвиг и рост. */
       opacity: var(--r);
@@ -4808,7 +4808,10 @@ html.dark .msg-videonote-circle--placeholder {
       color: var(--tg-primary, #7d3640);
     }
 
-    html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search__input {
+    /* :not(#…) поднимает специфичность выше глобального `input { min-height: 44px !important }` из mobile.css. */
+    html[data-apple-mobile='1'][data-messenger-open='1'] input.tg-chatlist-search__input:not(#a):not(#b) {
+      min-height: 0 !important;
+      height: auto;
       background: transparent !important;
       box-shadow: none !important;
     }
@@ -4829,7 +4832,8 @@ html.dark .msg-videonote-circle--placeholder {
     }
 
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-smart-tab {
-      min-height: 34px;
+      min-height: calc(30px * var(--ui-scale, 1));
+      padding: 4px 12px;
       background: transparent !important;
       color: var(--tg-text, #1c1917) !important;
       font-weight: 600;
