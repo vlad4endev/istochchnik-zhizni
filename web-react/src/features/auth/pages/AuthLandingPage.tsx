@@ -5,7 +5,6 @@ import { useAuthSessionReady } from '../../../hooks/useAuthSessionReady';
 import { defaultPostLoginPath } from '../../../lib/appVariant';
 import { useAuthStore } from '../authStore';
 import { AppSplash } from '@/components/AppSplash';
-import { LandingIllustration } from '../components/LandingIllustration';
 
 const DEFAULT_APP_NAME = 'Моя церковь';
 const DEFAULT_DESCRIPTION = 'Чаты, звонки и служения вашей церкви — в одном приложении';
@@ -41,9 +40,19 @@ export function AuthLandingPage() {
   return (
     <div className="flex h-full min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-hidden bg-[#fbf5ef] [min-height:var(--app-content-height,100dvh)] [max-height:var(--app-content-height,100dvh)]">
       <div className="landing-hero relative min-h-[8rem] flex-1 overflow-hidden text-white">
-        <div className="landing-orb landing-orb--rose" aria-hidden />
-        <div className="landing-orb landing-orb--gold" aria-hidden />
-        <LandingIllustration className="landing-rise absolute inset-x-0 bottom-0 h-full w-full" />
+        <img
+          src="/assets/landing-hero.webp"
+          alt=""
+          aria-hidden
+          fetchPriority="high"
+          decoding="async"
+          draggable={false}
+          className="absolute inset-0 h-full w-full select-none object-cover [object-position:50%_62%]"
+        />
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#3a0f20]/70 to-transparent"
+          aria-hidden
+        />
 
         <div
           className="landing-rise relative flex items-center gap-3 px-6 [padding-top:max(1.5rem,calc(env(safe-area-inset-top,0px)+0.75rem))]"
