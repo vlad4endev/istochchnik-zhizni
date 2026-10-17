@@ -420,11 +420,13 @@ html {
 :root {
   --ui-scale-w: 1;
   --ui-scale-h: 1;
-  --ui-scale: calc(var(--ui-scale-w) * var(--ui-scale-h));
+  --ui-scale-k: 1;
+  --ui-scale: calc(var(--ui-scale-w) * var(--ui-scale-h) * var(--ui-scale-k));
 }
 
 @media (max-width: 767px) {
   :root {
+    --ui-scale-k: 0.92; /* общий запас: на iPhone 13–15 (390–430px) всё было крупновато */
     --ui-scale-w: 0.86;
   }
 }
