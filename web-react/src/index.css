@@ -2365,7 +2365,7 @@ button {
 
 /*
  * Android / остальные устройства < lg: нижняя панель — плавающая белая «таблетка» с мягкой тенью,
- * активный пункт — светло-голубая капсула с синими иконкой и подписью (как в Android-приложениях).
+ * активный пункт — капсула с мягкой заливкой цвета бренда (--primary), иконка и подпись того же цвета.
  * iOS остаётся на своём стеклянном варианте выше. Сама nav — прозрачная полноширинная обёртка:
  * Layout/JS меряют её высоту для отступа контента, backdrop-filter на ряд не вешаем (шторка «Ещё» — fixed внутри ряда).
  */
@@ -2373,14 +2373,19 @@ button {
   html:not([data-apple-mobile='1']) {
     --app-nav-panel-bg: var(--surface-elevated, #ffffff);
     --app-nav-ink: #6b7280;
-    --app-nav-active-ink: #1d63f0;
-    --app-nav-active-bg: #e7f0ff;
+    /* Активный пункт — цвет бренда приложения (--primary), как на iOS и во всём интерфейсе. */
+    --app-nav-active-ink: var(--primary, #7d3640);
+    --app-nav-active-bg: rgba(125, 54, 64, 0.14);
+  }
+
+  @supports (color: color-mix(in srgb, red 50%, blue)) {
+    html:not([data-apple-mobile='1']) {
+      --app-nav-active-bg: color-mix(in srgb, var(--primary, #7d3640) 14%, transparent);
+    }
   }
 
   html.dark:not([data-apple-mobile='1']) {
     --app-nav-ink: #a3a8b8;
-    --app-nav-active-ink: #8ab4ff;
-    --app-nav-active-bg: rgba(96, 144, 255, 0.2);
   }
 
   html:not([data-apple-mobile='1']) nav.app-bottom-nav.bottom-nav {
