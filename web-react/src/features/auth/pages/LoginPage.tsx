@@ -7,7 +7,6 @@ import {
   LuCheck,
   LuEye,
   LuEyeOff,
-  LuInfo,
   LuTriangleAlert,
   LuUserPlus,
 } from 'react-icons/lu';
@@ -562,7 +561,7 @@ export function LoginPage() {
   const title = isRegisterMode ? 'Регистрация' : 'Вход в систему';
   const subtitle = isRegisterMode
     ? activeRegisterStep.hint
-    : 'Укажите телефон и пароль. Если администратор сбросил пароль — достаточно номера.';
+    : 'Укажите телефон и пароль';
 
   function switchMode(register: boolean) {
     setIsRegisterMode(register);
@@ -648,7 +647,7 @@ export function LoginPage() {
 
   return (
     <div className="auth-screen relative flex min-h-dvh w-full max-w-[100vw] flex-col overflow-y-auto bg-[#fbf5ef] dark:bg-[var(--surface)]">
-      <div className="landing-hero relative h-[11.5rem] shrink-0 overflow-hidden text-white sm:h-60">
+      <div className="landing-hero relative h-[clamp(7rem,19dvh,11.5rem)] shrink-0 overflow-hidden text-white sm:h-60">
         <img
           src="/assets/landing-hero.webp"
           alt=""
@@ -679,18 +678,20 @@ export function LoginPage() {
       </div>
 
       <div
-        className="landing-rise relative -mt-8 flex-1 rounded-t-[2rem] bg-[#fbf5ef] px-5 pt-7 shadow-[0_-18px_50px_rgba(20,5,10,0.3)] [padding-bottom:max(1.25rem,env(safe-area-inset-bottom,0px))] dark:bg-[var(--surface)] sm:px-7"
+        className="landing-rise relative -mt-8 flex flex-1 flex-col rounded-t-[2rem] bg-[#fbf5ef] px-5 pt-6 shadow-[0_-18px_50px_rgba(20,5,10,0.3)] [padding-bottom:max(1.25rem,env(safe-area-inset-bottom,0px))] dark:bg-[var(--surface)] sm:px-7"
         style={{ '--d': '60ms' } as CSSProperties}
       >
-        <div className="mx-auto w-full max-w-[min(100%,480px)]">
+        <div className="mx-auto flex w-full max-w-[min(100%,480px)] flex-1 flex-col">
             <div className="min-w-0">
               <p className="landing-accent text-xl leading-none">
                 {isRegisterMode ? 'Добро пожаловать' : 'С возвращением'}
               </p>
-              <h1 className="mt-2 text-[1.9rem] font-extrabold leading-[1.1] tracking-tight text-[#2b0d16] dark:text-[var(--text)] sm:text-4xl">
+              <h1 className="mt-1.5 text-[1.75rem] font-extrabold leading-[1.1] tracking-tight text-[#2b0d16] dark:text-[var(--text)] sm:text-4xl">
                 {title}
               </h1>
-              <p className="mt-2 text-[15px] leading-snug text-[#6b5a5e] dark:text-[var(--text-secondary)]">{subtitle}</p>
+              {!isRegisterMode && (
+                <p className="mt-1.5 text-[15px] leading-snug text-[#6b5a5e] dark:text-[var(--text-secondary)]">{subtitle}</p>
+              )}
             </div>
 
             {apiMismatch && (
@@ -706,69 +707,25 @@ export function LoginPage() {
               </div>
             )}
 
-            <div className="mt-6 rounded-2xl bg-[#f1e6dd] p-1 ring-1 ring-[#e6d6cf]/80">
-              <div className="flex gap-0.5">
-                <button
-                  type="button"
-                  className={`touch-manipulation flex-1 rounded-[0.9rem] py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
-                    !isRegisterMode
-                      ? 'bg-white text-stone-900 shadow-sm ring-1 ring-stone-200/80'
-                      : 'bg-transparent text-stone-500'
-                  }`}
-                  onClick={() => switchMode(false)}
-                >
-                  Вход
-                </button>
-                <button
-                  type="button"
-                  className={`touch-manipulation flex-1 rounded-[0.9rem] py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
-                    isRegisterMode
-                      ? 'bg-gradient-to-r from-[#8a2444] to-[#6b1a30] text-white shadow-md shadow-primary/30'
-                      : 'bg-transparent text-stone-500'
-                  }`}
-                  onClick={() => switchMode(true)}
-                >
-                  Регистрация
-                </button>
-              </div>
-            </div>
-
             {isRegisterMode && (
-              <div className="mt-5" aria-label="Шаги регистрации">
-                <div className="flex items-center gap-2">
-                  {REGISTER_STEPS.map((step, index) => {
-                    const done = index < registerStep;
-                    const current = index === registerStep;
-                    return (
-                      <div key={step.id} className="flex min-w-0 flex-1 items-center gap-2">
-                        <div
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
-                            done
-                              ? 'bg-primary text-white'
-                              : current
-                                ? 'bg-primary/15 text-primary ring-2 ring-primary/30'
-                                : 'bg-[#efe3da] text-[#a8928a]'
-                          }`}
-                        >
-                          {done ? <LuCheck className="h-4 w-4" strokeWidth={2.5} aria-hidden /> : index + 1}
-                        </div>
-                        {index < REGISTER_STEPS.length - 1 ? (
-                          <div
-                            className={`h-0.5 flex-1 rounded-full ${done ? 'bg-primary/70' : 'bg-[#e6d6cf]'}`}
-                            aria-hidden
-                          />
-                        ) : null}
-                      </div>
-                    );
-                  })}
+              <div className="mt-4" aria-label="Шаги регистрации">
+                <div className="flex gap-1.5">
+                  {REGISTER_STEPS.map((step, index) => (
+                    <div
+                      key={step.id}
+                      className={`h-1.5 flex-1 rounded-full transition-colors ${
+                        index <= registerStep ? 'bg-gradient-to-r from-[#8a2444] to-[#6b1a30]' : 'bg-[#e6d6cf]'
+                      }`}
+                    />
+                  ))}
                 </div>
-                <p className="mt-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-primary/80">
+                <p className="mt-2 text-xs font-semibold uppercase tracking-[0.08em] text-primary/80">
                   Шаг {registerStep + 1} из {REGISTER_STEPS.length} · {activeRegisterStep.title}
                 </p>
               </div>
             )}
 
-            <form className="mt-4 flex flex-col gap-3.5" onSubmit={handlePrimarySubmit}>
+            <form className="mt-4 flex flex-col gap-3" onSubmit={handlePrimarySubmit}>
               {isRegisterMode && registerStep === 0 && (
                 <div className="auth-step-enter flex flex-col gap-3.5">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -801,13 +758,6 @@ export function LoginPage() {
                     labelClassName={labelClass}
                     required
                   />
-                  <div className="flex gap-2.5 rounded-2xl bg-primary/[0.06] px-3.5 py-3 text-xs leading-relaxed text-stone-600">
-                    <LuInfo className="mt-0.5 h-4 w-4 shrink-0 text-primary" strokeWidth={2} aria-hidden />
-                    <p>
-                      Укажите ФИО как в карточке участника церкви. Если данные не совпадут, заявка уйдёт
-                      администратору на проверку.
-                    </p>
-                  </div>
                 </div>
               )}
 
@@ -1116,7 +1066,7 @@ export function LoginPage() {
               </div>
             )}
 
-            <div className="mt-5 flex gap-2.5">
+            <div className="mt-auto flex gap-2.5 pt-5">
               {isRegisterMode && registerStep > 0 ? (
                 <button
                   type="button"
@@ -1159,6 +1109,17 @@ export function LoginPage() {
                 )}
               </button>
             </div>
+
+            <p className="pt-4 text-center text-sm text-[#6b5a5e] dark:text-[var(--text-secondary)]">
+              {isRegisterMode ? 'Уже есть аккаунт?' : 'Нет аккаунта?'}{' '}
+              <button
+                type="button"
+                className="touch-manipulation font-bold text-primary hover:underline"
+                onClick={() => switchMode(!isRegisterMode)}
+              >
+                {isRegisterMode ? 'Войти' : 'Зарегистрироваться'}
+              </button>
+            </p>
         </div>
       </div>
       <style>{`
