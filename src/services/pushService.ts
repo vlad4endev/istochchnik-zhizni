@@ -1,3 +1,4 @@
+import { pushProxyForEndpoint } from '../lib/pushProxy';
 import webpush from 'web-push';
 import { getFirebaseMessaging } from '../config/firebaseAdmin';
 import { query } from '../config/db';
@@ -309,7 +310,7 @@ export async function sendNotificationToSubscription(
       },
       serializeWebPushPayload(payload),
       // urgency high — иначе Android в Doze и iOS откладывают доставку (вплоть до минут/часов).
-      { TTL: 86400, urgency: 'high', timeout: WEB_PUSH_HTTP_TIMEOUT_MS },
+      { TTL: 86400, urgency: 'high', timeout: WEB_PUSH_HTTP_TIMEOUT_MS, proxy: pushProxyForEndpoint(sub.endpoint) },
     );
     // Mark as used
     query(`UPDATE push_subscriptions SET last_used_at = NOW() WHERE endpoint = $1`, [sub.endpoint]).catch(e => {

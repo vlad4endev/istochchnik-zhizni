@@ -1,5 +1,6 @@
 import fs from 'fs';
 
+import { createPushProxyAgent } from '../lib/pushProxy';
 import type { messaging, ServiceAccount } from 'firebase-admin';
 
 type FirebaseAdminModule = typeof import('firebase-admin');
@@ -47,7 +48,8 @@ function initWithServiceAccount(
   // initAttempted выставляем до попытки: повреждённый ключ бросает из cert() и иначе пробовался бы заново на каждую отправку.
   initAttempted = true;
   try {
-    admin.initializeApp({ credential: admin.credential.cert(creds) });
+    const httpAgent = createPushProxyAgent();
+    admin.initializeApp({ credential: admin.credential.cert(creds, httpAgent), httpAgent });
     return admin.messaging();
   } catch (e) {
     console.warn(
