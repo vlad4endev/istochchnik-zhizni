@@ -5,6 +5,7 @@ import { useAuthStore } from '../features/auth/authStore';
 import { performAuthRefresh } from './authRefresh';
 import { COOKIE_ONLY_SESSION_TOKEN, isCookieOnlySessionToken } from './authSessionConstants';
 import { resolveAxiosBaseURL } from './config';
+import { isLocalDbAvailable, isQueueableWrite, localDbGet, localDbPut, newIdempotencyKey, outboxAdd } from './localDb';
 import { isSessionTeardownActive } from './sessionTeardown';
 import { emitAppToast } from './uiFeedback';
 
@@ -17,6 +18,8 @@ declare module 'axios' {
      * Refresh/cookie-retry всё равно пробуются; при неуспехе ошибка уходит вызывающему коду.
      */
     skipAuthClearOn401?: boolean;
+    /** Повтор из очереди SQLite: при обрыве не ставить в очередь второй раз. */
+    skipLocalOutbox?: boolean;
   }
 }
 
@@ -164,6 +167,27 @@ function isConnectivityFailure(error: AxiosError): boolean {
   );
 }
 
+/** Обрыв связи или отсутствие сети (в отличие от isConnectivityFailure — включая navigator.onLine=false). */
+function isConnectivityOrOffline(error: AxiosError): boolean {
+  if (error.response) return false;
+  if (isCancel(error)) return false;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+  return isTransientNetworkError(error) || String(error.code ?? '') === 'ECONNABORTED';
+}
+
+/** Ключ записи в локальной базе: путь + параметры запроса. */
+function buildLocalDbUrl(config: InternalAxiosRequestConfig): string {
+  const raw = config.url ?? '';
+  const params = config.params as Record<string, unknown> | undefined;
+  if (!params || typeof params !== 'object') return raw;
+  const entries = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .sort(([a], [b]) => a.localeCompare(b));
+  if (entries.length === 0) return raw;
+  const qs = entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&');
+  return `${raw}${raw.includes('?') ? '&' : '?'}${qs}`;
+}
+
 function hasActiveAuthSession(): boolean {
   try {
     return Boolean(useAuthStore.getState().token);
@@ -190,6 +214,12 @@ apiClient.interceptors.request.use((config) => {
     // Prevent stale bearer token after logout/session clear.
     delete (next.headers as Record<string, unknown>).Authorization;
   }
+  // Android: действия из очереди получают ключ идемпотентности уже при первой отправке, поэтому
+  // автоповтор после обрыва или отправка из очереди SQLite не выполнит действие на сервере дважды.
+  if (isLocalDbAvailable() && isQueueableWrite(next.method, next.url) && next.headers) {
+    const existing = (next.headers as AxiosHeaders).get?.('Idempotency-Key');
+    if (!existing) next.headers['Idempotency-Key'] = newIdempotencyKey();
+  }
   // FormData: не удалять boundary — убираем только случайный явный Content-Type (multipart без boundary ломает загрузку).
   if (typeof FormData !== 'undefined' && next.data instanceof FormData && next.headers) {
     delete (next.headers as Record<string, unknown>)['Content-Type'];
@@ -198,7 +228,22 @@ apiClient.interceptors.request.use((config) => {
 });
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Android: успешный GET сохраняем во внутреннюю SQLite, чтобы без сети показать последние данные.
+    if (
+      isLocalDbAvailable() &&
+      response.config?.method?.toLowerCase() === 'get' &&
+      response.config.responseType !== 'blob' &&
+      response.config.responseType !== 'arraybuffer' &&
+      response.status === 200 &&
+      typeof response.data === 'object' &&
+      response.data !== null &&
+      !(response.headers as Record<string, unknown> | undefined)?.['x-local-db']
+    ) {
+      void localDbPut(buildLocalDbUrl(response.config), response.data);
+    }
+    return response;
+  },
   async (error: AxiosError) => {
     if (isCancel(error)) {
       return Promise.reject(error);
@@ -209,6 +254,59 @@ apiClient.interceptors.response.use(
     const status = error.response?.status;
     const bodyMsg = readResponseErrorMessage(error.response?.data);
     const tearingDown = isSessionTeardownActive();
+
+    // Android: действие без сети (подтверждение участия, молитвенная нужда…) кладём в очередь SQLite —
+    // оно уйдёт на сервер при появлении сети (lib/syncLocalDb).
+    if (
+      cfg &&
+      isLocalDbAvailable() &&
+      !tearingDown &&
+      !cfg.skipLocalOutbox &&
+      isQueueableWrite(cfg.method, cfg.url) &&
+      isConnectivityOrOffline(error) &&
+      (cfg._retryNetworkOnce || (typeof navigator !== 'undefined' && navigator.onLine === false))
+    ) {
+      let payload: unknown;
+      try {
+        payload = typeof cfg.data === 'string' && cfg.data ? JSON.parse(cfg.data) : cfg.data;
+      } catch {
+        payload = undefined;
+      }
+      const idemRaw = (cfg.headers as AxiosHeaders | undefined)?.get?.('Idempotency-Key');
+      const idemKey = typeof idemRaw === 'string' && idemRaw ? idemRaw : null;
+      if (await outboxAdd(cfg.method ?? 'post', cfg.url ?? '', payload, idemKey)) {
+        return {
+          data: { queued: true },
+          status: 202,
+          statusText: 'Accepted (queued locally)',
+          headers: { 'x-local-db-queued': '1' },
+          config: cfg,
+        };
+      }
+    }
+
+    // Android: сервера не видно (нет сети) — отдаём последний ответ из внутренней SQLite.
+    if (
+      cfg &&
+      isLocalDbAvailable() &&
+      !tearingDown &&
+      cfg.method?.toLowerCase() === 'get' &&
+      cfg.responseType !== 'blob' &&
+      cfg.responseType !== 'arraybuffer' &&
+      isConnectivityOrOffline(error) &&
+      (cfg._retryNetworkOnce || (typeof navigator !== 'undefined' && navigator.onLine === false))
+    ) {
+      const hit = await localDbGet(buildLocalDbUrl(cfg));
+      if (hit) {
+        return {
+          data: hit.body,
+          status: 200,
+          statusText: 'OK (local)',
+          headers: { 'x-local-db': String(hit.savedAt) },
+          config: cfg,
+        };
+      }
+    }
 
     // Краткий обрыв (рестарт контейнера / proxy): один повтор до toast.
     // Во время logout не ретраим — сессия уже снимается.

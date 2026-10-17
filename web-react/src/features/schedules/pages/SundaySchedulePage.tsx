@@ -56,6 +56,7 @@ import {
   threeMonthWindowStart,
 } from '../utils/sundayScheduleTableModel';
 import { memberHasMinistryRole as matchRole } from '../../mediaSchedule/ministryRoleMatch';
+import { NativeScreenHeader } from '@/components/layout/NativeScreenHeader';
 
 type SundayViewMode = 'calendar' | 'table';
 
@@ -318,11 +319,13 @@ export function SundaySchedulePage() {
   }
 
   return (
+    <>
+    <NativeScreenHeader title="Расписание" />
     <div className="min-h-full bg-[var(--surface)] px-3 pb-28 pt-3 sm:px-4 sm:pb-12 sm:pt-4 shell:px-6 md:px-8">
       <div className="mx-auto w-full max-w-5xl space-y-3 sm:space-y-4">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h1 className="text-xl font-extrabold tracking-tight text-stone-900 sm:text-2xl">Расписание</h1>
+            <h1 className="app-native-hide text-xl font-extrabold tracking-tight text-stone-900 sm:text-2xl">Расписание</h1>
             <p className="mt-0.5 text-[13px] font-semibold leading-snug text-stone-500 sm:text-sm">
               Воскресное служение — ведущие и проповедники
             </p>
@@ -842,5 +845,6 @@ export function SundaySchedulePage() {
         />
       </div>
     </div>
+    </>
   );
 }

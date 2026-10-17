@@ -1,0 +1,46 @@
+# Сборка Android-приложения «Моя церковь» (Capacitor поверх web-react).
+# Артефакт — debug APK для установки и проверки; запускается вручную или при изменении Android-части.
+name: android-apk
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'web-react/android/**'
+      - 'web-react/capacitor.config.ts'
+      - 'web-react/src/styles/androidNative.*'
+      - 'web-react/src/lib/androidNativeTheme.ts'
+      - '.github/workflows/android-apk.yml'
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-react
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web-react/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install
+        run: npm ci
+
+      # Тот же сценарий, что `npm run android:apk`: web-сборка, cap sync и assembleDebug.
+      - name: Build debug APK
+        run: npm run android:apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moya-cerkov-debug-apk
+          path: web-react/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

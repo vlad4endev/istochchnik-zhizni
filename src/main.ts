@@ -19,6 +19,7 @@ import { ensureTelegramSendLogsSchema } from './services/telegramSendLogService'
 import { ensureAppReleasesSchema } from './services/appReleasesService';
 import { requireAuthSession, resolveAuthSession } from './middleware/authSession';
 import { enforceRoleAccess, resolveUserRole } from './middleware/roleAccess';
+import { idempotencyMiddleware } from './middleware/idempotency';
 import routes from './routes';
 import authRoutes from './routes/authRoutes';
 import calendarRoutes from './routes/calendarRoutes';
@@ -55,6 +56,7 @@ import {
 import { initPushCronJobs } from './cron/pushJobs';
 import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
 import { initBackupJob } from './cron/backupJob';
+import { initAppLogCleanupJob } from './cron/appLogCleanupJob';
 import { initCallsCleanupJob } from './cron/callsCleanup';
 import { logLiveKitBootDiagnostics, probeLiveKitRoomService } from './services/livekitService';
 import { warmCallSettingsCache } from './services/callSettingsService';
@@ -282,7 +284,8 @@ app.use(analyticsMiddleware);
 app.use((req, res, next) => {
   const startedAt = Date.now();
   const targetPath = (req.originalUrl || req.url || req.path || '').split('?')[0] || '';
-  const shouldLog = targetPath.startsWith('/api/') || targetPath === '/health';
+  // /health дёргает healthcheck контейнера каждые секунды — в журнал не пишем, иначе он забивается шумом.
+  const shouldLog = targetPath.startsWith('/api/');
   if (!shouldLog) {
     next();
     return;
@@ -353,6 +356,7 @@ app.use('/diagnostics', express.static(diagnosticsClientPath));
 
 app.use(resolveUserRole);
 app.use(enforceRoleAccess);
+app.use(idempotencyMiddleware);
 
 app.get('/', (req, res) => {
   res.json({ message: 'Server is running' });
@@ -602,6 +606,7 @@ async function start(): Promise<void> {
   initPushCronJobs();
   initTelegramDispatchJob();
   initBackupJob();
+  initAppLogCleanupJob();
   initCallsCleanupJob();
   startAnalyticsMaintenance();
   void warmCallSettingsCache()

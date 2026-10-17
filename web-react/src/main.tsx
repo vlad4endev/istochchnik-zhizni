@@ -14,6 +14,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 
 import { scheduleHideNativeSplashAfterPaint } from './lib/hideNativeSplash';
+import { initAndroidNativeTheme } from './lib/androidNativeTheme';
 import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
 import { initTelegramWebApp } from './lib/telegramWebApp';
 import { client } from './lib/appwrite';
@@ -49,6 +50,8 @@ import { useVoipTokenSync } from './hooks/useVoipTokenSync';
 import { useBackgroundDataSync } from './hooks/useBackgroundDataSync';
 import { ImpersonationBanner } from './features/admin/components/ImpersonationBanner';
 import { initAuthCrossTabLocalStorageSync, useAuthStore } from './features/auth/authStore';
+import { isLocalDbAvailable } from './lib/localDb';
+import { installLocalDbSync } from './lib/syncLocalDb';
 import { installSessionCacheCleanup } from './lib/sessionCacheCleanup';
 import { useViewportHeight } from './hooks/useViewportHeight';
 import { useAppUpdate } from './hooks/useAppUpdate';
@@ -231,6 +234,7 @@ if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_WDYR === 'true') {
     });
 }
 
+initAndroidNativeTheme();
 applyNativeShellViewportLock();
 window.addEventListener('load', () => applyNativeShellViewportLock());
 initTelegramWebApp();
@@ -337,7 +341,8 @@ const queryClient = new QueryClient({
       /** PWA iOS: при выходе из фона + «online» иначе лавина refetch бьёт API и тормозит первый кадр. */
       refetchOnReconnect: false,
       /** Офлайн: не крутить запросы вхолостую; при online снова активируются. */
-      networkMode: 'online',
+      // Android: запрос всё равно выполняется без сети — ответ придёт из внутренней SQLite (lib/localDb).
+      networkMode: isLocalDbAvailable() ? 'offlineFirst' : 'online',
       retry: defaultQueryRetry,
       retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10_000),
       staleTime: 60_000,
@@ -352,6 +357,7 @@ const queryClient = new QueryClient({
 if (typeof window !== 'undefined') {
   initAuthCrossTabLocalStorageSync();
   installSessionCacheCleanup(useAuthStore, queryClient);
+  installLocalDbSync();
   const pwaStore = usePwaStore.getState();
 
   window.addEventListener('beforeinstallprompt', (event) => {

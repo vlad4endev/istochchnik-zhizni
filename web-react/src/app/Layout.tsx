@@ -2,6 +2,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+import { Capacitor } from '@capacitor/core';
 import type { IconType } from 'react-icons';
 import {
   LuBookOpen,
@@ -13,6 +14,7 @@ import {
   LuChurch,
   LuDisc3,
   LuEllipsis,
+  LuHouse,
   LuLayoutDashboard,
   LuNewspaper,
   LuMessageCircle,
@@ -92,7 +94,13 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
-  { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard, sectionId: 'dashboard' },
+  {
+    to: '/dashboard',
+    label: 'Главная',
+    /** В Android-приложении — домик, как в макетах. */
+    Icon: Capacitor.getPlatform() === 'android' ? LuHouse : LuLayoutDashboard,
+    sectionId: 'dashboard',
+  },
   /** Как News Feed в Facebook: газета. */
   { to: '/feed', label: 'Лента', Icon: LuNewspaper, sectionId: 'feed' },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },

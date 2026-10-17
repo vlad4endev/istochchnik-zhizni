@@ -1,12 +1,13 @@
 import cron from 'node-cron';
 import { runAppLogCleanup, writeAppLog } from '../services/appLogService';
 import { runTelegramSendLogCleanup } from '../services/telegramSendLogService';
+import { cleanupIdempotencyKeys } from '../middleware/idempotency';
 
 let isRunning = false;
 
 export function initAppLogCleanupJob(): void {
   cron.schedule(
-    process.env.APP_LOG_CLEANUP_CRON ?? '15 3 * * 0',
+    process.env.APP_LOG_CLEANUP_CRON ?? '15 3 * * *',
     async () => {
       if (process.env.DISABLE_APP_LOG_CLEANUP_CRON === 'true') {
         return;
@@ -18,7 +19,8 @@ export function initAppLogCleanupJob(): void {
       try {
         const cleanup = await runAppLogCleanup();
         const tgCleanup = await runTelegramSendLogCleanup();
-        const details = `retention=${cleanup.deletedByRetention}, limit=${cleanup.deletedByLimit}, tg_retention=${tgCleanup.deletedByRetention}, tg_limit=${tgCleanup.deletedByLimit}`;
+        const idemDeleted = await cleanupIdempotencyKeys();
+        const details = `retention=${cleanup.deletedByRetention}, limit=${cleanup.deletedByLimit}, tg_retention=${tgCleanup.deletedByRetention}, tg_limit=${tgCleanup.deletedByLimit}, idempotency_keys=${idemDeleted}`;
         console.log(`[CRON] app log cleanup: ${details}`);
         await writeAppLog({
           level: 'info',

@@ -115,6 +115,7 @@ import { useImpersonation } from '../hooks/useImpersonation';
 import { isAppAdministratorSession } from '../../auth/authStore';
 import { APP_ROLE_IDS, appRoleLabel } from '../../settings/sectionVisibilityApi';
 import { BodyPortal } from '../../../components/BodyPortal';
+import { NativeScreenHeader } from '@/components/layout/NativeScreenHeader';
 
 type UpcomingBirthday = {
   nextDate: Date;
@@ -460,6 +461,8 @@ export function AdminPage() {
   const meta = ADMIN_TABS.find((t) => t.id === tab)!;
 
   return (
+    <>
+    <NativeScreenHeader title="Админ" />
     <div className="mx-auto w-full min-w-0 max-w-6xl px-3 py-3 sm:px-4 sm:py-4 shell:px-6 shell:py-6">
       <div className="min-w-0">
         {/* На узких экранах разделы в основном меню недоступны — компактный переключатель */}
@@ -519,6 +522,7 @@ export function AdminPage() {
         {tab === 'integrations' && <IntegrationsSection />}
       </div>
     </div>
+    </>
   );
 }
 
@@ -549,7 +553,7 @@ function IntegrationsSection() {
   return (
     <div className="space-y-6">
       <section className="rounded-[10px] bg-stone-100 p-1">
-        <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+        <div className="admin-subtabs grid grid-cols-2 gap-1 sm:grid-cols-4">
           <button
             type="button"
             className={

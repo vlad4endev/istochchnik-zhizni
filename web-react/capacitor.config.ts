@@ -21,7 +21,7 @@ if (serverUrl) {
 
 const config: CapacitorConfig = {
   appId: 'com.istochnikzhizni.molitva',
-  appName: 'Источник жизни',
+  appName: 'Моя церковь',
   webDir: 'dist',
   server,
   ios: {

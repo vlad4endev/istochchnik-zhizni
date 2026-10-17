@@ -31,6 +31,7 @@
     "android:apk": "VITE_RELATIVE_BASE=true VITE_API_BASE_URL=https://app.church-tambov.ru npm run build:prod && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor-community/sqlite": "^7.0.3",
     "@capacitor/android": "^7.2.0",
     "@capacitor/core": "^7.2.0",
     "@capacitor/ios": "^7.2.0",
@@ -39,6 +40,8 @@
     "@cyntler/react-doc-viewer": "^1.17.1",
     "@emoji-mart/data": "^1.2.1",
     "@emoji-mart/react": "^1.1.1",
+    "@fontsource/onest": "^5.3.1",
+    "@fontsource/playfair-display": "^5.3.0",
     "@hello-pangea/dnd": "^18.0.1",
     "@livekit/components-react": "^2.9.24",
     "@livekit/components-styles": "^1.2.0",

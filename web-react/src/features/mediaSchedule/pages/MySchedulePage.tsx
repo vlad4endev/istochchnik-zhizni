@@ -69,7 +69,7 @@ export function MySchedulePage() {
   return (
     <div className="min-h-full bg-[var(--surface)] px-3 pb-28 pt-3 sm:px-4 sm:pb-12 sm:pt-4 shell:px-6 md:px-8">
       <div className="mx-auto w-full max-w-2xl space-y-4">
-        <div className="flex items-center gap-3">
+        <div className="app-native-bar flex items-center gap-3">
           <Link
             to="/schedules/media"
             className="tap-highlight-transparent grid h-11 w-11 place-items-center rounded-xl border border-stone-200 bg-white text-stone-800 shadow-sm hover:bg-stone-50 active:bg-stone-100"

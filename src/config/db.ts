@@ -111,6 +111,17 @@ function isTransientConnectionError(err: unknown): boolean {
   );
 }
 
+/**
+ * Повтор после обрыва безопасен только для чтения: если соединение упало уже после выполнения
+ * INSERT/UPDATE/DELETE, повторный запуск продублирует или повторно применит запись.
+ */
+export function isRetryableReadOnlyQuery(text: string): boolean {
+  const sql = text.trim();
+  if (/^(select|show)\b/i.test(sql)) return true;
+  // WITH … SELECT без записывающих CTE
+  return /^with\b/i.test(sql) && !/\b(insert|update|delete|merge)\b/i.test(sql);
+}
+
 export async function query(text: string, params?: unknown[]) {
   if (!pool) {
     throw new Error(
@@ -120,7 +131,7 @@ export async function query(text: string, params?: unknown[]) {
   try {
     return await pool.query(text, params);
   } catch (first) {
-    if (!isTransientConnectionError(first)) {
+    if (!isTransientConnectionError(first) || !isRetryableReadOnlyQuery(text)) {
       throw first;
     }
     console.warn('[db] Retrying query after transient DB error:', (first as Error).message);

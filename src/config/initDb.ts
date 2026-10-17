@@ -2473,6 +2473,11 @@ export async function initDb(): Promise<void> {
     throw new Error('Database pool is not initialized. Set DATABASE_URL in .env');
   }
   await pool.query(INIT_SQL);
-  await pool.query(MEMBER_SEED_SQL);
+  // Сид — разовый импорт для свежей БД. Если гнать его на каждом старте, участник, удалённый админом
+  // (жёсткий DELETE), возвращается в молитвенный цикл после каждого рестарта API.
+  const hasMembers = await pool.query('SELECT 1 FROM members LIMIT 1');
+  if ((hasMembers.rowCount ?? 0) === 0) {
+    await pool.query(MEMBER_SEED_SQL);
+  }
   await mergeDuplicateMembersBootPatchIfNeeded();
 }

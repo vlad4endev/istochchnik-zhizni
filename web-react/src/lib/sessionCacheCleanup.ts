@@ -1,10 +1,13 @@
 import type { QueryClient } from '@tanstack/react-query';
 
+import { clearLocalDb } from './localDb';
+
 /** Имена runtime-кэшей SW с ответами `/api/*` (`api-cache-<tag>` и старый `api-cache`). */
 const API_CACHE_PREFIX = 'api-cache';
 
 /** Удаляет из Cache Storage кэшированные ответы API — они не привязаны к пользователю. */
 export async function purgeApiCaches(): Promise<void> {
+  void clearLocalDb();
   try {
     if (typeof caches === 'undefined') return;
     const keys = await caches.keys();

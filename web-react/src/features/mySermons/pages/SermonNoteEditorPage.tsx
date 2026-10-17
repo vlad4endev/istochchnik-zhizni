@@ -143,7 +143,7 @@ export function SermonNoteEditorPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[var(--surface)]">
-      <header className="sticky top-0 z-20 border-b border-stone-200/80 bg-white/95 backdrop-blur">
+      <header className="sermon-editor-header sticky top-0 z-20 border-b border-stone-200/80 bg-white/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-4xl items-center gap-2 px-3 py-2.5 sm:px-5">
           <Link
             to="/my-sermons"
@@ -193,13 +193,13 @@ export function SermonNoteEditorPage() {
         ) : noteQ.isError ? (
           <p className="py-16 text-center text-sm text-red-600">Документ не найден или нет доступа.</p>
         ) : (
-          <div className="flex flex-1 flex-col rounded-2xl border border-stone-200 bg-white px-3 py-4 shadow-sm sm:px-8 sm:py-6">
+          <div className="sermon-editor-card flex flex-1 flex-col rounded-2xl border border-stone-200 bg-white px-3 py-4 shadow-sm sm:px-8 sm:py-6">
             <input
               type="text"
               value={draft.title}
               onChange={(e) => setDraft((d) => (d ? { ...d, title: e.target.value } : d))}
               placeholder="Название документа"
-              className="w-full border-0 bg-transparent text-3xl font-bold tracking-tight text-stone-900 outline-none placeholder:text-stone-300"
+              className="sermon-editor-title w-full border-0 bg-transparent text-3xl font-bold tracking-tight text-stone-900 outline-none placeholder:text-stone-300"
             />
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <input

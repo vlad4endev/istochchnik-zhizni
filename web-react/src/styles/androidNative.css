@@ -1,0 +1,1529 @@
+/*
+ * Оформление Android-приложения «Моя церковь» (макеты «Моя церковь — Android»).
+ * Подключается только в Capacitor/Android (см. lib/androidNativeTheme.ts) и действует
+ * под классом html.app-android-native. Разметка, экраны и логика те же, что в PWA.
+ *
+ * Палитра: бордовый градиент шапки и таб-бара, кремовая шторка контента, янтарный акцент.
+ */
+
+html.app-android-native:not(.dark, [data-mantine-color-scheme='dark'], [data-color-theme='dark']) {
+  --primary: #8a2742;
+  --primary-dark: #5a1826;
+  --surface: #fbf6ef;
+  --text: #3a1018;
+  --text-secondary: #6a5555;
+  --text-muted: #8f7c79;
+  --radius: 20px;
+  --shadow: 0 8px 22px rgba(90, 24, 38, 0.07);
+  --shadow-card: 0 1px 0 rgba(90, 24, 38, 0.05), 0 8px 22px rgba(90, 24, 38, 0.06);
+  --border: rgba(90, 24, 38, 0.1);
+  --border-hover: rgba(90, 24, 38, 0.18);
+  --glass-border: rgba(90, 24, 38, 0.08);
+  --btn-primary-bg: #8a2742;
+  --btn-primary-hover: #5a1826;
+  --studio-nav-active-text: #8a2742;
+  --studio-editor-accent: #8a2742;
+  /* Полоса под статус-баром продолжает градиент шапки. */
+  --app-status-bar-bg: #7a1f3a;
+
+  --ac-amber: #f2b879;
+  --ac-amber-ink: #4b1620;
+  --ac-night: #230810;
+  --ac-badge: #ff5c7a;
+  --ac-font: 'Onest', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ac-serif: 'Playfair Display', Georgia, serif;
+}
+
+html.app-android-native,
+html.app-android-native body,
+html.app-android-native button,
+html.app-android-native input,
+html.app-android-native select,
+html.app-android-native textarea {
+  font-family: var(--ac-font);
+}
+
+html.app-android-native:not(.dark, [data-mantine-color-scheme='dark'], [data-color-theme='dark']) body {
+  background-color: #fbf6ef;
+  color: #3a1018;
+}
+
+/* ───────── Шапка экрана: бордовый градиент и «шторка» контента ───────── */
+
+html.app-android-native .app-page-header {
+  position: relative;
+  isolation: isolate;
+  height: auto;
+  min-height: 88px;
+  align-items: flex-start;
+  padding-top: 18px;
+  padding-bottom: 38px;
+  padding-inline: 20px;
+  border-radius: 0;
+  background:
+    radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
+    radial-gradient(90% 120% at 100% 10%, rgba(240, 162, 90, 0.34), transparent 62%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+}
+
+html.app-android-native .app-page-header h1 {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+/* Кремовая шторка со скруглением 30px наезжает на шапку снизу. */
+html.app-android-native .app-page-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 30px;
+  z-index: -1;
+  background: var(--surface);
+  border-radius: 30px 30px 0 0;
+}
+
+/* ───────── Нижняя панель: тёмное стекло и янтарная «пилюля» активной вкладки ───────── */
+
+html.app-android-native nav.app-bottom-nav {
+  background: rgba(30, 7, 16, 0.97);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 -12px 40px rgba(20, 4, 8, 0.35);
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab.is-active {
+  color: #fff;
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab .app-bottom-nav__label {
+  font-weight: 500;
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab.is-active .app-bottom-nav__label {
+  font-weight: 700;
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab .app-bottom-nav__icon {
+  width: 3.625rem;
+  height: 1.875rem;
+  border-radius: 999px;
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab .app-bottom-nav__icon.is-active {
+  background: var(--ac-amber);
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab .app-bottom-nav__glyph {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab .app-bottom-nav__icon.is-active .app-bottom-nav__glyph,
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell > .app-bottom-nav__tab .bottom-nav-active-icon {
+  color: var(--ac-amber-ink);
+}
+
+html.app-android-native nav.app-bottom-nav .app-bottom-nav__row > .app-bottom-nav__cell .app-bottom-nav__badge {
+  background: var(--ac-badge);
+  --tw-ring-color: #2a0b15;
+}
+
+/* ───────── Мессенджер: список чатов ───────── */
+
+html.app-android-native:not(.dark, [data-mantine-color-scheme='dark'], [data-color-theme='dark']) {
+  --tg-bg: #fbf6ef;
+  --tg-surface: #ffffff;
+  --tg-surface-elevated: #fbf6ef;
+  --tg-border: rgba(90, 24, 38, 0.08);
+  --tg-border-strong: rgba(90, 24, 38, 0.14);
+  --tg-text: #3a1018;
+  --tg-text-secondary: #6a5555;
+  --tg-text-muted: #8f7c79;
+  --tg-row-divider: rgba(90, 24, 38, 0.08);
+  --messenger-brand: #8a2742;
+  --tg-bubble-out: linear-gradient(145deg, #8a2742 0%, #5a1826 100%);
+  --tg-bubble-out-solid: #8a2742;
+  --tg-bubble-out-shadow: 0 2px 12px rgba(90, 24, 38, 0.2);
+}
+
+html.app-android-native .tg-sidebar-header {
+  position: relative;
+  isolation: isolate;
+  min-height: 88px;
+  align-items: flex-start;
+  padding: 14px 20px 30px;
+  border-bottom: none;
+  background:
+    radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
+    radial-gradient(90% 120% at 100% 10%, rgba(240, 162, 90, 0.34), transparent 62%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+}
+
+html.app-android-native .tg-sidebar-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 30px;
+  z-index: -1;
+  background: var(--surface);
+  border-radius: 30px 30px 0 0;
+}
+
+html.app-android-native .tg-sidebar-title {
+  color: #fff;
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+html.app-android-native .tg-compose-btn-sm {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+html.app-android-native .tg-calls-btn-sm {
+  border-radius: 14px;
+  color: var(--ac-amber-ink);
+  background: linear-gradient(160deg, #f5c48c 0%, #e9a24f 100%);
+  box-shadow: 0 8px 18px rgba(20, 4, 8, 0.35);
+}
+
+html.app-android-native .tg-chatlist-root {
+  background: var(--surface);
+}
+
+html.app-android-native .tg-chatlist-toolbar {
+  padding: 4px 16px 10px;
+  border-bottom: none;
+  background: var(--surface);
+}
+
+html.app-android-native .tg-chatlist-search {
+  min-height: 46px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(90, 24, 38, 0.1);
+}
+
+html.app-android-native .tg-smart-tab {
+  min-height: 40px;
+  background: #fff !important;
+  color: var(--primary-dark) !important;
+  box-shadow: inset 0 0 0 1px rgba(90, 24, 38, 0.1);
+  font-weight: 600;
+}
+
+html.app-android-native .tg-smart-tab--active,
+html.app-android-native .tg-smart-tab--active:hover,
+html.app-android-native .tg-smart-tab--active:focus,
+html.app-android-native .tg-smart-tab--active:focus-visible {
+  background: linear-gradient(135deg, #8a2742, #5a1826) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 18px rgba(90, 24, 38, 0.28);
+}
+
+html.app-android-native .tg-chatlist-scroll {
+  margin: 0 12px;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: var(--shadow-card);
+}
+
+html.app-android-native .tg-chatlist-scroll > ul {
+  background: transparent;
+}
+
+/* ───────── Лента ───────── */
+
+html.app-android-native .app-feed-header {
+  position: relative;
+  isolation: isolate;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  min-height: 88px;
+  padding: 14px 20px 30px;
+  background:
+    radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
+    radial-gradient(90% 120% at 100% 10%, rgba(240, 162, 90, 0.34), transparent 62%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+  color: #fff;
+}
+
+html.app-android-native .app-feed-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 30px;
+  z-index: -1;
+  background: var(--surface);
+  border-radius: 30px 30px 0 0;
+}
+
+html.app-android-native .app-feed-header > *:first-child {
+  order: 2;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+}
+
+html.app-android-native .app-feed-header > *:nth-child(2) {
+  order: 1;
+  justify-self: start;
+}
+
+html.app-android-native .app-feed-header > *:nth-child(n + 3) {
+  display: none;
+}
+
+html.app-android-native .app-feed-header button {
+  color: #fff;
+}
+
+html.app-android-native .app-feed-header__title {
+  font-family: var(--ac-font);
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+/* Собственный заголовок страницы заменяется общей шапкой (NativeScreenHeader). */
+html.app-android-native .app-native-hide {
+  display: none !important;
+}
+
+/* «Моё расписание»: строка «назад + заголовок» — бордовая плашка шапки. */
+html.app-android-native .app-native-bar {
+  padding: 12px 14px;
+  border-radius: 24px;
+  color: #fff;
+  background:
+    radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+  box-shadow: 0 14px 30px rgba(90, 24, 38, 0.18);
+}
+
+html.app-android-native .app-native-bar h1,
+html.app-android-native .app-native-bar p {
+  color: #fff;
+}
+
+html.app-android-native .app-native-bar a {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* ───────── Студия ───────── */
+
+html.app-android-native:not(.dark, [data-mantine-color-scheme='dark'], [data-color-theme='dark']) {
+  --studio-editor-bg: #fbf6ef;
+  --studio-editor-text: #3a1018;
+  --studio-editor-mute: #6a5555;
+  --studio-nav-text: #3a1018;
+  --studio-nav-text-mute: #6a5555;
+  --studio-nav-border: rgba(90, 24, 38, 0.1);
+  --studio-toolbar-border: rgba(90, 24, 38, 0.1);
+  --studio-nav-active-text: #8a2742;
+  --studio-nav-active-bg: rgba(138, 39, 66, 0.08);
+}
+
+html.app-android-native .studio-mobile-toolbar {
+  color: #fff;
+  border-bottom: none;
+  background:
+    radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+}
+
+html.app-android-native .studio-mobile-toolbar h1,
+html.app-android-native .studio-mobile-toolbar button,
+html.app-android-native .studio-mobile-toolbar a {
+  color: #fff;
+}
+
+html.app-android-native .studio-mobile-toolbar a,
+html.app-android-native .studio-mobile-toolbar button:not([class*='bg-']) {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+html.app-android-native .studio-mobile-nav {
+  background: rgba(30, 7, 16, 0.97);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+html.app-android-native .studio-mobile-nav a {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+html.app-android-native .studio-mobile-nav a[aria-current='page'] {
+  color: var(--ac-amber);
+}
+
+/* ───────── Диалог: шапка чата ───────── */
+
+html.app-android-native .chat-header {
+  color: #fff;
+  border-bottom: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background:
+    radial-gradient(120% 160% at 8% -30%, rgba(194, 69, 95, 0.55), transparent 60%),
+    radial-gradient(90% 140% at 100% 10%, rgba(240, 162, 90, 0.3), transparent 62%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+}
+
+html.app-android-native .chat-header .truncate {
+  color: #fff;
+}
+
+html.app-android-native .chat-header .truncate + .truncate,
+html.app-android-native .chat-header .truncate + div .truncate {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+html.app-android-native .chat-header button {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+}
+
+html.app-android-native .chat-header {
+  isolation: isolate;
+  padding-bottom: 16px;
+}
+
+html.app-android-native .chat-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 18px;
+  z-index: -1;
+  background: var(--tg-bg, var(--surface));
+  border-radius: 24px 24px 0 0;
+}
+
+/* ───────── Вход и «нет соединения»: тёмный бордовый фон из макетов ───────── */
+
+html.app-android-native .app-auth-landing,
+html.app-android-native .app-offline-page {
+  color: #fff;
+  background:
+    radial-gradient(120% 70% at 8% 0%, rgba(194, 69, 95, 0.55), transparent 60%),
+    radial-gradient(90% 60% at 100% 35%, rgba(240, 162, 90, 0.34), transparent 62%),
+    linear-gradient(170deg, #7a1f3a 0%, #230810 100%);
+}
+
+html.app-android-native .app-auth-landing a:first-of-type {
+  background: #fff6ea;
+  color: var(--ac-amber-ink);
+}
+
+html.app-android-native .app-offline-page h2,
+html.app-android-native .app-offline-page p {
+  color: #fff !important;
+}
+
+html.app-android-native .app-offline-page a {
+  background: var(--ac-amber);
+  color: var(--ac-amber-ink);
+}
+
+/* ───────── Чтение песни: тёмный режим из макета (янтарные аккорды) ───────── */
+
+html.app-android-native .song-detail-page {
+  --sd-surface: #0b0b0e !important;
+  --sd-surface-elevated: #0b0b0e !important;
+  --sd-text: #ffffff !important;
+  --sd-text-secondary: rgba(255, 255, 255, 0.78) !important;
+  --sd-text-muted: rgba(255, 255, 255, 0.55) !important;
+  --sd-border: rgba(255, 255, 255, 0.1) !important;
+  --sd-bg-elevated: rgba(255, 255, 255, 0.08) !important;
+  --sd-bg-hover: rgba(255, 255, 255, 0.12) !important;
+  background: #0b0b0e;
+}
+
+html.app-android-native .song-detail-page .songbook-reader {
+  border-color: transparent;
+  background: #0b0b0e;
+  color: #fff;
+}
+
+html.app-android-native .song-detail-page .songbook-reader .chord-slot,
+html.app-android-native .song-detail-page .songbook-reader .chord-token {
+  color: var(--ac-amber) !important;
+}
+
+html.app-android-native .song-detail-page .songbook-reader .section-label {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* ───────── Профиль: баннер в палитре макетов ───────── */
+
+html.app-android-native [data-profile-root] {
+  --profile-gradient-from: #7a1f3a;
+  --profile-gradient-to: #230810;
+}
+
+html.app-android-native .song-detail-page .songbook-reader .chord-line,
+html.app-android-native .song-detail-page .songbook-reader .chord-line * {
+  color: var(--ac-amber) !important;
+}
+
+html.app-android-native .song-detail-page .app-page-header::after {
+  background: #0b0b0e;
+}
+
+/* Активные «чипы» в тёмном цвете — в палитре макетов бордовые. */
+html.app-android-native button.bg-stone-900 {
+  background: linear-gradient(135deg, #8a2742, #5a1826);
+  color: #fff;
+}
+
+/* «Заявка на проверке» */
+html.app-android-native .app-pending-page {
+  max-width: none;
+  min-height: var(--app-content-height, 100dvh);
+  padding-inline: 24px;
+  color: rgba(255, 255, 255, 0.8);
+  background:
+    radial-gradient(120% 70% at 8% 0%, rgba(194, 69, 95, 0.55), transparent 60%),
+    radial-gradient(90% 60% at 100% 35%, rgba(240, 162, 90, 0.34), transparent 62%),
+    linear-gradient(170deg, #7a1f3a 0%, #230810 100%);
+}
+
+html.app-android-native .app-pending-page h1 {
+  color: #fff;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+html.app-android-native .app-pending-page button {
+  color: var(--ac-amber);
+}
+
+/* Запрос разрешений: бордовая стеклянная карточка. */
+html.app-android-native .app-permissions-card {
+  border-radius: 28px;
+  background: rgba(34, 8, 16, 0.92);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+html.app-android-native .app-permissions-card button:first-of-type {
+  background: var(--ac-amber);
+  color: var(--ac-amber-ink);
+}
+
+/* ───────── Звонки: входящий и экран разговора (бордовая палитра) ───────── */
+
+html.app-android-native .incoming-call-overlay {
+  --call-accept: #2fbf71;
+  --call-decline: #e5385b;
+  background: #230810;
+}
+
+html.app-android-native .incoming-call-overlay__wave-bg {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 30%, rgba(194, 69, 95, 0.5), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 85% 80%, rgba(240, 162, 90, 0.34), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 10% 20%, rgba(138, 35, 66, 0.55), transparent 50%),
+    linear-gradient(180deg, #5a1826 0%, #230810 100%);
+}
+
+html.app-android-native .incoming-call-overlay__avatar--placeholder {
+  background: linear-gradient(145deg, #e9a24f, #c0792e);
+}
+
+html.app-android-native .incoming-call-overlay__hint {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+html.app-android-native .incoming-call-overlay__secondary-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+html.app-android-native .call-window {
+  --call-bg: #230810;
+  --call-bg-elevated: #3a1018;
+  --call-speak: #f2b879;
+  --call-speak-soft: rgba(242, 184, 121, 0.4);
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(194, 69, 95, 0.35), transparent 55%),
+    radial-gradient(90% 60% at 100% 100%, rgba(240, 162, 90, 0.2), transparent 50%),
+    var(--call-bg);
+}
+
+html.app-android-native .call-controls {
+  background: rgba(30, 7, 16, 0.78);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* ───────── Конспект проповеди: шапка и заголовок как в макете ───────── */
+
+html.app-android-native .sermon-editor-header {
+  position: sticky;
+  isolation: isolate;
+  border-bottom: none;
+  padding-bottom: 14px;
+  color: #fff;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background:
+    radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
+    radial-gradient(90% 120% at 100% 10%, rgba(240, 162, 90, 0.3), transparent 62%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+}
+
+html.app-android-native .sermon-editor-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 18px;
+  z-index: -1;
+  background: var(--surface);
+  border-radius: 24px 24px 0 0;
+}
+
+html.app-android-native .sermon-editor-header p,
+html.app-android-native .sermon-editor-header a,
+html.app-android-native .sermon-editor-header button {
+  color: #fff !important;
+}
+
+html.app-android-native .sermon-editor-header a,
+html.app-android-native .sermon-editor-header button {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: transparent;
+  border-radius: 14px;
+}
+
+html.app-android-native .sermon-editor-card {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding-inline: 4px;
+}
+
+html.app-android-native .sermon-editor-title {
+  font-family: var(--ac-serif);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.85rem;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+/* «Ещё»: шторка в палитре «Моя церковь» (разметка прежняя) */
+html.app-android-native:not(.dark) .app-mobile-nav-more-sheet {
+  background: #fbf6ef;
+  border-color: rgba(138, 39, 66, 0.12);
+  border-top-left-radius: 30px;
+  border-top-right-radius: 30px;
+  color: #3a1018;
+}
+html.app-android-native:not(.dark) .app-mobile-nav-more-sheet a,
+html.app-android-native:not(.dark) .app-mobile-nav-more-sheet button:not([aria-label]) {
+  background: #fff;
+  border-color: rgba(138, 39, 66, 0.12);
+  color: #3a1018;
+  font-weight: 700;
+}
+html.app-android-native:not(.dark) .app-mobile-nav-more-sheet a svg,
+html.app-android-native:not(.dark) .app-mobile-nav-more-sheet button:not([aria-label]) svg {
+  color: #8a2742;
+}
+
+/* Форма входа/регистрации: бордовая шапка и кремовая шторка, как в макете */
+html.app-android-native:not(.dark) .app-auth-screen {
+  background:
+    radial-gradient(120% 40% at 8% 0%, rgba(194, 69, 95, 0.55), transparent 60%),
+    linear-gradient(170deg, #7a1f3a 0%, #230810 38%, #230810 100%);
+}
+html.app-android-native:not(.dark) .app-auth-screen > div:first-child {
+  display: none;
+}
+html.app-android-native:not(.dark) .app-auth-screen > div > a {
+  color: rgba(255, 255, 255, 0.85);
+}
+html.app-android-native:not(.dark) .app-auth-card {
+  background: #fbf6ef;
+  border-radius: 30px;
+  padding-top: 0;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  --stone-label: #3a1018;
+}
+html.app-android-native:not(.dark) .app-auth-head {
+  position: relative;
+  margin: 0 -1.25rem 1.25rem;
+  padding: 1.5rem 1.25rem 2.25rem;
+  background:
+    radial-gradient(120% 90% at 5% 0%, rgba(194, 69, 95, 0.5), transparent 60%),
+    linear-gradient(170deg, #7a1f3a 0%, #3a0f1c 100%);
+  color: #fff;
+}
+html.app-android-native:not(.dark) .app-auth-head::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 22px;
+  background: #fbf6ef;
+  border-radius: 24px 24px 0 0;
+}
+html.app-android-native:not(.dark) .app-auth-head h1 {
+  color: #fff;
+}
+html.app-android-native:not(.dark) .app-auth-head p {
+  color: rgba(255, 255, 255, 0.72);
+}
+html.app-android-native:not(.dark) .app-auth-head > div:first-child {
+  background: rgba(35, 8, 16, 0.75);
+  box-shadow: none;
+  --tw-ring-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Профиль: компактная карточка (аватар слева), как в макете. Разметка прежняя. */
+html.app-android-native:not(.dark) [data-profile-root] .profile-banner {
+  height: 7.5rem;
+}
+html.app-android-native:not(.dark) [data-profile-root] .profile-hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 1rem;
+  align-items: center;
+  text-align: left;
+  margin-top: -1.25rem;
+  margin-inline: 1rem;
+  max-width: none;
+  padding: 1rem;
+  background: #fff;
+  border-radius: 24px;
+  box-shadow: 0 8px 28px rgba(58, 16, 24, 0.1);
+}
+html.app-android-native:not(.dark) [data-profile-root] .profile-hero > div:nth-child(1) {
+  grid-row: 1 / span 2;
+}
+html.app-android-native:not(.dark) [data-profile-root] .profile-hero > div:nth-child(1) > div:first-child {
+  width: 5.5rem;
+  height: 5.5rem;
+  border-width: 3px;
+  box-shadow: none;
+}
+html.app-android-native:not(.dark) [data-profile-root] .profile-hero h1 {
+  margin-top: 0;
+  font-size: 1.35rem;
+  align-self: end;
+}
+html.app-android-native:not(.dark) [data-profile-root] .profile-hero > div:nth-of-type(2) {
+  justify-content: flex-start;
+  align-self: start;
+}
+html.app-android-native:not(.dark) [data-profile-root] .profile-hero > div:last-child {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+html.app-android-native:not(.dark) [data-profile-root] .profile-hero > div:last-child > a {
+  white-space: nowrap;
+  padding: 0.55rem 1rem;
+  font-size: 0.8125rem;
+}
+html.app-android-native:not(.dark) [data-profile-root] .profile-hero > div:nth-child(1) > div:first-child {
+  border-color: rgba(138, 39, 66, 0.25);
+}
+html.app-android-native:not(.dark) [data-profile-root] .profile-hero > p {
+  grid-column: 1 / -1;
+}
+
+/* Окно звонка: плитки участников и подпись-«таблетка» как в макете */
+html.app-android-native .call-participant-tile__media {
+  background:
+    radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.12), transparent 42%),
+    linear-gradient(160deg, color-mix(in srgb, var(--cp-brand, #8a2742) 70%, #3a1018) 0%, #230810 100%);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+html.app-android-native .call-participant-tile__chrome {
+  background: transparent;
+  padding: 0 12px 12px;
+}
+
+/* Tailwind-утилиты `primary` заданы литералом (#7d3640); в Android-режиме ведём их в палитру макетов. */
+html.app-android-native:not(.dark) .bg-primary {
+  background-color: #8a2742;
+}
+html.app-android-native:not(.dark) .bg-primary-dark,
+html.app-android-native:not(.dark) .hover\:bg-primary-dark:hover {
+  background-color: #5a1826;
+}
+html.app-android-native:not(.dark) .text-primary {
+  color: #8a2742;
+}
+html.app-android-native:not(.dark) .text-primary-dark {
+  color: #5a1826;
+}
+html.app-android-native:not(.dark) .border-primary {
+  border-color: #8a2742;
+}
+html.app-android-native:not(.dark) [class*='bg-primary/'] {
+  background-color: rgba(138, 39, 66, 0.1);
+}
+html.app-android-native:not(.dark) [class*='border-primary/'] {
+  border-color: rgba(138, 39, 66, 0.25);
+}
+
+/* Публичный профиль: бордовая верхняя панель и отступы ленты. */
+html.app-android-native:not(.dark) [data-profile-root] > [class*='igTopBar']:not([class*='Skel']) {
+  background: linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+  color: #fff;
+  border-bottom: none;
+}
+html.app-android-native:not(.dark) [data-profile-root] > [class*='igTopBar'] button,
+html.app-android-native:not(.dark) [data-profile-root] > [class*='igTopBar'] a,
+html.app-android-native:not(.dark) [data-profile-root] > [class*='igTopBar'] span {
+  color: #fff;
+}
+html.app-android-native:not(.dark) [data-profile-root] main {
+  padding: 0.75rem 0.75rem 2.5rem !important;
+  box-sizing: border-box;
+}
+
+/* Управление чатом (участники, админы, права, медиа): бордовая шапка и кремовый фон */
+html.app-android-native:not(.dark) .manage-screen {
+  background: var(--surface);
+  min-height: var(--app-content-height, 100dvh);
+}
+html.app-android-native:not(.dark) .manage-screen__bar {
+  position: relative;
+  isolation: isolate;
+  margin: -0.75rem -1rem 1rem;
+  padding: 0.75rem 1rem 1.75rem;
+  color: #fff;
+  background:
+    radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+}
+html.app-android-native:not(.dark) .manage-screen__bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 18px;
+  z-index: -1;
+  background: var(--surface);
+  border-radius: 24px 24px 0 0;
+}
+html.app-android-native:not(.dark) .manage-screen__bar button:not(.bg-primary) {
+  color: #fff;
+}
+html.app-android-native:not(.dark) .manage-screen__bar .bg-primary {
+  background: var(--ac-amber);
+  color: var(--ac-amber-ink);
+}
+html.app-android-native:not(.dark) .manage-screen .bg-gray-900 {
+  background: linear-gradient(135deg, #8a2742, #5a1826);
+}
+
+/* Серые «iOS»-подложки (#f2f2f7) в окнах и листах заменяем кремовой поверхностью. */
+html.app-android-native:not(.dark) [class*='bg-[#f2f2f7]'],
+html.app-android-native:not(.dark) [class*='bg-[#F2F2F7]'] {
+  background-color: var(--surface);
+}
+html.app-android-native:not(.dark) [role='dialog'][aria-labelledby='poll-create-title'] > div {
+  border-radius: 26px;
+}
+html.app-android-native:not(.dark) [role='dialog'][aria-labelledby='poll-create-title'] header h2 {
+  color: #3a1018;
+}
+
+/* Редактор песни: нижняя панель на всю ширину (кнопка «В каталог» не должна схлопываться). */
+html.app-android-native .studio-editor-mobile-dock > div {
+  width: 100%;
+}
+html.app-android-native .studio-editor-mobile-dock > div {
+  gap: 0.375rem;
+  padding-inline: 0.5rem;
+}
+html.app-android-native .studio-editor-mobile-dock button {
+  white-space: nowrap;
+  padding-inline: 0.625rem;
+  font-size: 0.8125rem;
+}
+html.app-android-native .studio-editor-mobile-dock button[aria-label] {
+  padding-inline: 0;
+  flex-shrink: 0;
+}
+html.app-android-native:not(.dark) .studio-btn-success {
+  background: linear-gradient(135deg, #8a2742, #5a1826);
+  color: #fff;
+}
+
+/* Главные кнопки-действия, заданные зелёным литералом (#1A9A55), — бордовые, как все основные кнопки. */
+html.app-android-native:not(.dark) button[class*='bg-[#1A9A55]'] {
+  background: linear-gradient(135deg, #8a2742, #5a1826);
+  color: #fff;
+}
+
+
+/* ───────── Единая сетка: поля 16px, ритм 12/20px, читаемые размеры текста ───────── */
+
+html.app-android-native {
+  --ac-gutter: 16px;
+}
+
+/* Корневые обёртки страниц с узкими полями (px-3 = 12px) приводим к общим 16px. */
+html.app-android-native .dashboard-adaptive > .mx-auto,
+html.app-android-native .prayer-page-bg > div:not(.section-hero-sticky),
+html.app-android-native main[class*='_feed_'] {
+  padding-left: var(--ac-gutter) !important;
+  padding-right: var(--ac-gutter) !important;
+}
+
+/* Мелкий служебный текст: не меньше 12px (рекомендация Material/Android). */
+html.app-android-native .app-main-content [class*='text-[10px]'],
+html.app-android-native .app-main-content [class*='text-[11px]'] {
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+/* Быстрые действия на главной: крупные плитки с читаемой подписью. */
+html.app-android-native .dashboard-quick-actions {
+  gap: 10px;
+  padding-top: 16px;
+  padding-bottom: 8px;
+}
+html.app-android-native .dashboard-quick-actions > button {
+  min-height: 84px;
+  padding: 12px 6px;
+  gap: 8px;
+  border-radius: 20px;
+  box-shadow: var(--shadow-card);
+}
+html.app-android-native .dashboard-quick-actions > button > span:first-child {
+  width: 40px;
+  height: 40px;
+}
+html.app-android-native .dashboard-quick-actions > button > span:first-child svg {
+  width: 20px;
+  height: 20px;
+}
+html.app-android-native .dashboard-quick-actions > button > span:last-child {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+/* Заголовки блоков (ДНИ РОЖДЕНИЯ и т.п.): один стиль и воздух сверху. */
+html.app-android-native .dashboard-adaptive section > div[class*='uppercase'] {
+  margin-top: 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #8a2742;
+}
+
+/* mobile.css схлопывает любые .grid-cols-2/3 в одну колонку на телефоне — из-за этого плитки и метрики
+   вытягивались в длинный столбик. В Android-режиме возвращаем колонки, заданные в разметке. */
+@media (max-width: 639px) {
+  html.app-android-native .grid-cols-2:not(.app-mobile-sections-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+  html.app-android-native .grid-cols-3:not(.app-mobile-sections-grid) {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+}
+
+html.app-android-native .tg-sidebar-header h1,
+html.app-android-native .tg-sidebar-header h2,
+html.app-android-native .app-feed-header__title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* Контент чуть поднимается к скруглению листа. Полоса-«шторка» лежит поверх верхних 30px шапки,
+   поэтому сдвиг небольшой: больше — и она накроет верх контента. */
+html.app-android-native .section-hero-sticky + * {
+  position: relative;
+  z-index: 1;
+  margin-top: -6px;
+}
+
+/* Поля страниц: любые блоки-обёртки с px-3 (12px) приводим к общим 16px. */
+html.app-android-native .app-main-content :is(div, section, header, main, aside).px-3 {
+  padding-left: var(--ac-gutter);
+  padding-right: var(--ac-gutter);
+}
+html.app-android-native .app-main-content [class*='pl-[max(0.75rem'] {
+  padding-left: max(var(--ac-gutter), env(safe-area-inset-left, 0px));
+}
+html.app-android-native .app-main-content [class*='pr-[max(0.75rem'] {
+  padding-right: max(var(--ac-gutter), env(safe-area-inset-right, 0px));
+}
+
+/* «Песенник»: у прокручиваемой колонки был верхний отступ 4px — шапка отрывалась от края экрана. */
+html.app-android-native div.overflow-y-auto:has(> div > .section-hero-sticky) {
+  padding-top: 0;
+}
+
+/* ───────── Доступность: области нажатия не меньше 44px, контраст приглушённого текста ───────── */
+
+html.app-android-native:not(.dark, [data-mantine-color-scheme='dark'], [data-color-theme='dark']) {
+  --text-muted: #7a6764;
+}
+
+html.app-android-native .app-main-content button[aria-label='Закрыть'],
+html.app-android-native .app-main-content button[aria-label*='тему'],
+html.app-android-native .app-main-content button[aria-label*='Нравится'],
+html.app-android-native .app-main-content button[aria-label^='Комментарии'],
+html.app-android-native .app-main-content button[aria-label^='Поделиться'],
+html.app-android-native .app-main-content button[aria-label^='Кто поставил'],
+html.app-android-native .app-main-content button[aria-label^='Написать поздравление'],
+html.app-android-native .app-main-content button[aria-label='Порядок ленты'] {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+html.app-android-native .tg-smart-tab,
+html.app-android-native .app-permissions-card button,
+html.app-android-native .app-main-content button[aria-pressed] {
+  min-height: 44px;
+}
+
+html.app-android-native button[aria-label='Закрыть'] {
+  min-width: 44px;
+  min-height: 44px;
+}
+html.app-android-native button[class*='py-2.5'] {
+  min-height: 44px;
+}
+
+html.app-android-native button.flex-1[class*='py-2']:not([class*='py-2.5']) {
+  min-height: 44px;
+}
+html.app-android-native [data-profile-root] .profile-hero a,
+html.app-android-native [data-profile-root] .profile-hero button {
+  min-height: 44px;
+  min-width: 44px;
+}
+html.app-android-native .app-main-content button[class*='min-h-[38px]'],
+html.app-android-native .app-main-content button[class*='h-[38px]'] {
+  min-height: 44px;
+}
+
+html.app-android-native .app-main-content button.inline-flex.items-center[class*='gap-1.5'] {
+  min-height: 44px;
+}
+
+/* «Чаты»: кнопка видеозвонка — янтарная, рядом с тёмной кнопкой «+», как в макете. */
+html.app-android-native .tg-sidebar-actions {
+  gap: 10px;
+}
+html.app-android-native .tg-calls-btn-sm {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  color: var(--ac-amber-ink);
+  background: linear-gradient(160deg, #f7c68f 0%, #f2b879 55%, #e6a05f 100%);
+  box-shadow: 0 8px 18px rgba(242, 184, 121, 0.35);
+}
+html.app-android-native .tg-sidebar-actions .tg-compose-btn-sm {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+}
+html.app-android-native .tg-sidebar-header {
+  padding-top: 12px;
+  padding-bottom: 32px;
+}
+html.app-android-native .tg-calls-btn-sm,
+html.app-android-native .tg-sidebar-actions .tg-compose-btn-sm {
+  width: 44px;
+  height: 44px;
+}
+html.app-android-native .tg-sidebar-header {
+  align-items: center;
+}
+
+/* ───────── Стартовый экран (Android): макет «Будьте на связи» ───────── */
+
+html.app-android-native .landing-native {
+  display: flex;
+  flex-direction: column;
+  min-height: var(--app-content-height, 100dvh);
+  color: #fff;
+  background:
+    radial-gradient(90% 55% at 50% 38%, rgba(194, 69, 95, 0.55), transparent 62%),
+    radial-gradient(70% 50% at 100% 60%, rgba(240, 162, 90, 0.3), transparent 65%),
+    linear-gradient(170deg, #7a1f3a 0%, #230810 100%);
+}
+html.app-android-native .landing-native__top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 24px 0;
+}
+html.app-android-native .landing-native__brand-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: #fbf6ef;
+}
+html.app-android-native .landing-native__brand-icon img {
+  width: 22px;
+  height: 22px;
+}
+html.app-android-native .landing-native__brand-name {
+  font-size: 17px;
+  font-weight: 700;
+}
+html.app-android-native .landing-native__hero {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: 16px 24px 28px;
+}
+html.app-android-native .landing-native__art {
+  width: min(88vw, 340px);
+  height: auto;
+  max-height: 100%;
+  filter: drop-shadow(0 18px 36px rgba(20, 4, 8, 0.45));
+}
+html.app-android-native .landing-native__sheet {
+  padding: 32px 24px max(24px, env(safe-area-inset-bottom, 0px));
+  border-radius: 36px 36px 0 0;
+  background: #fbf6ef;
+  color: #3a1018;
+}
+html.app-android-native .landing-native__title {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+html.app-android-native .landing-native__title em {
+  display: block;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: #b03a5c;
+}
+html.app-android-native .landing-native__lead {
+  margin: 14px 0 24px;
+  font-size: 16px;
+  line-height: 1.45;
+  color: #6a5555;
+}
+html.app-android-native .landing-native__primary,
+html.app-android-native .landing-native__secondary {
+  display: flex;
+  align-items: center;
+  min-height: 58px;
+  border-radius: 22px;
+  font-size: 17px;
+  font-weight: 700;
+  text-decoration: none;
+}
+html.app-android-native .landing-native__primary {
+  justify-content: space-between;
+  padding: 0 8px 0 24px;
+  color: #fff;
+  background: linear-gradient(135deg, #8a2742, #5a1826);
+  box-shadow: 0 14px 30px rgba(90, 24, 38, 0.3);
+}
+html.app-android-native .landing-native__primary-arrow {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  font-size: 22px;
+  color: var(--ac-amber-ink);
+  background: var(--ac-amber);
+}
+html.app-android-native .landing-native__secondary {
+  justify-content: center;
+  margin-top: 12px;
+  color: #5a1826;
+  border: 1.5px solid #dccbc5;
+  background: transparent;
+}
+html.app-android-native .landing-native__legal {
+  margin: 18px 8px 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* ───────── Календарь мероприятий: месяц целиком на экране, события — цветные точки ───────── */
+
+html.app-android-native [class*='min-w-[560px]'] {
+  min-width: 0;
+}
+html.app-android-native section:has(> .max-sm\:overflow-x-auto) > p {
+  display: none;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] {
+  min-height: 68px;
+  gap: 4px;
+  padding: 6px 2px;
+  align-items: center;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > span:first-child {
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > div {
+  flex: 0 0 auto;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > div > button {
+  width: 8px;
+  height: 8px;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  font-size: 0;
+  box-shadow: none;
+  background-color: currentColor;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > div > button * {
+  display: none;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > div {
+  align-items: flex-start;
+  align-content: flex-start;
+  height: auto;
+  min-height: 0;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > div > button {
+  flex: 0 0 8px;
+  align-self: flex-start;
+  max-height: 8px;
+  background-color: #b03a5c;
+}
+html.app-android-native [role='button'][class*='min-h-[104px]'] > div > button {
+  min-height: 0 !important;
+  min-width: 0 !important;
+  height: 8px !important;
+  width: 8px !important;
+}
+
+/* Подписи историй, время поста и счётчики в чипах — не мельче 12px. */
+html.app-android-native .app-main-content [class*='_label_'],
+html.app-android-native .app-main-content time[class*='_time_'],
+html.app-android-native .tg-smart-tab__badge {
+  font-size: 12px;
+}
+
+
+/* ───────── Окно звонка/встречи: плитки и панель управления как в макете ───────── */
+
+html.app-android-native .call-meeting-topbar__title {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+/* Говорящий: крупная плитка вдвое ниже экрана, а не «на всю высоту». */
+html.app-android-native .call-speaker-layout__spotlight {
+  flex: 0 0 auto;
+}
+html.app-android-native .call-speaker-layout__spotlight .call-participant-tile--video .call-participant-tile__media {
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 1.38;
+  border-radius: 28px;
+}
+
+/* Остальные участники: две равные плитки с разными цветами. */
+html.app-android-native .call-speaker-layout__strip {
+  justify-content: stretch;
+  gap: 12px;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile--strip {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile--strip .call-participant-tile__media {
+  aspect-ratio: 1.02;
+  height: auto;
+  border-radius: 26px;
+}
+
+html.app-android-native .call-participant-tile__media {
+  --tile-a: #6b2038;
+  --tile-b: #2a0c16;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile:nth-child(4n + 1) .call-participant-tile__media {
+  --tile-a: #b5561c;
+  --tile-b: #5e2509;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile:nth-child(4n + 2) .call-participant-tile__media {
+  --tile-a: #2d5287;
+  --tile-b: #11284a;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile:nth-child(4n + 3) .call-participant-tile__media {
+  --tile-a: #2d7a58;
+  --tile-b: #0f3a2a;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile:nth-child(4n) .call-participant-tile__media {
+  --tile-a: #6f3a8a;
+  --tile-b: #2b1440;
+}
+html.app-android-native .call-participant-tile--video .call-participant-tile__media {
+  background: linear-gradient(160deg, var(--tile-a), var(--tile-b));
+}
+html.app-android-native .call-cam-off {
+  background: transparent;
+}
+html.app-android-native .call-cam-off__glow {
+  display: none;
+}
+html.app-android-native .call-cam-off__initials {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: none;
+  border: none;
+}
+html.app-android-native .call-participant-tile__pill {
+  background: rgba(35, 8, 16, 0.72);
+  border: none;
+}
+html.app-android-native .call-participant-tile__label {
+  font-weight: 700;
+}
+
+/* Нижняя панель: квадратные кнопки со скруглением 18px, красная «Выйти». */
+html.app-android-native .call-controls {
+  left: 16px;
+  right: 16px;
+  max-width: none;
+  transform: none;
+  justify-content: space-between;
+  padding: 12px 12px 10px;
+  background: rgba(30, 7, 16, 0.82);
+  border-radius: 30px;
+}
+html.app-android-native .call-ctrl__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+html.app-android-native .call-ctrl--mic-on .call-ctrl__icon {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+html.app-android-native .call-ctrl--off .call-ctrl__icon {
+  background: #fbf6ef;
+  color: #3a1018;
+  opacity: 1;
+}
+html.app-android-native .call-ctrl--active .call-ctrl__icon {
+  background: var(--ac-amber);
+  color: var(--ac-amber-ink);
+}
+html.app-android-native .call-ctrl--hangup .call-ctrl__icon {
+  background: #e5385b;
+  border-color: transparent;
+  box-shadow: 0 8px 22px rgba(229, 56, 91, 0.45);
+}
+
+html.app-android-native .call-speaker-layout {
+  padding-inline: 12px;
+}
+html.app-android-native .call-meeting-topbar {
+  padding-inline: 20px;
+}
+html.app-android-native .call-speaker-layout__strip .call-participant-tile--strip:not(.call-participant-tile--speaking) .call-participant-tile__media {
+  box-shadow: none;
+}
+html.app-android-native .call-meeting-topbar {
+  padding-top: 14px;
+  padding-bottom: 10px;
+}
+
+/* Редактор программы службы: верхняя карточка в стиле шапки экранов. */
+html.app-android-native:not(.dark) .planner-plan-header {
+  border: none;
+  color: #fff;
+  background:
+    radial-gradient(120% 140% at 8% -20%, rgba(194, 69, 95, 0.55), transparent 60%),
+    linear-gradient(160deg, #7a1f3a 0%, #230810 100%);
+  box-shadow: 0 10px 28px rgba(58, 16, 24, 0.22);
+}
+html.app-android-native:not(.dark) .planner-plan-header h1,
+html.app-android-native:not(.dark) .planner-plan-header p,
+html.app-android-native:not(.dark) .planner-plan-header > div > div > span:not([class*='rounded-full']),
+html.app-android-native:not(.dark) .planner-plan-header svg {
+  color: #fff;
+}
+html.app-android-native:not(.dark) .planner-plan-header [class*='rounded-full'] {
+  color: #4b1620;
+}
+html.app-android-native:not(.dark) .planner-plan-header button:not([class*='border-amber']):not([class*='border-rose']):not([class*='border-red']) {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+html.app-android-native:not(.dark) .planner-plan-header button[class*='border-amber'] {
+  color: #ffd9a0;
+  border-color: #f2b879;
+  background: rgba(242, 184, 121, 0.16);
+}
+html.app-android-native:not(.dark) .planner-plan-header button[class*='border-rose'],
+html.app-android-native:not(.dark) .planner-plan-header button[class*='border-red'] {
+  color: #ffb3c2;
+  border-color: #ff7a95;
+  background: rgba(229, 56, 91, 0.18);
+}
+html.app-android-native:not(.dark) .planner-plan-header button[class*='border-amber'] svg,
+html.app-android-native:not(.dark) .planner-plan-header button[class*='border-rose'] svg,
+html.app-android-native:not(.dark) .planner-plan-header button[class*='border-red'] svg {
+  color: inherit;
+}
+html.app-android-native:not(.dark) .planner-plan-header [class*='text-stone']:not(button):not([class*='rounded-full']) {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+/* Админ → «Разделы»: подписи ролей идут отдельной строкой под названием раздела и не рвутся посреди слова. */
+html.app-android-native .app-main-content article > div[class*='flex-1'][class*='flex-wrap'] {
+  flex: 1 1 100%;
+  gap: 8px;
+}
+html.app-android-native .app-main-content article > div[class*='flex-1'][class*='flex-wrap'] > button {
+  white-space: nowrap;
+  min-height: 36px;
+  padding-inline: 12px;
+}
+
+/* ───────── Режим выступления: тёмная сцена с янтарём вместо изумрудного ───────── */
+
+html.app-android-native .perform-stage-surface,
+html.app-android-native [class*='perform'] {
+  --perform-bg: #0b0b0e;
+}
+html.app-android-native [class*='bg-emerald-600'],
+html.app-android-native [class*='bg-emerald-500'] {
+  background: linear-gradient(135deg, #8a2742, #5a1826);
+  border-color: transparent;
+  color: #fff;
+}
+html.app-android-native [class*='bg-emerald-900/'],
+html.app-android-native [class*='bg-emerald-100'],
+html.app-android-native [class*='bg-emerald-50'] {
+  background: rgba(242, 184, 121, 0.16);
+  color: var(--ac-amber);
+  border-color: rgba(242, 184, 121, 0.35);
+}
+html.app-android-native [class*='text-emerald-300'],
+html.app-android-native [class*='text-emerald-200'],
+html.app-android-native [class*='text-emerald-100'],
+html.app-android-native [class*='text-emerald-700'],
+html.app-android-native [class*='text-emerald-900'] {
+  color: var(--ac-amber);
+}
+html.app-android-native [class*='bg-emerald-400'] {
+  background: var(--ac-amber);
+}
+html.app-android-native input[class*='accent-emerald'] {
+  accent-color: #f2b879;
+}
+html.app-android-native .perform-stage-surface .chord-line,
+html.app-android-native .perform-stage-surface .chord-line * {
+  color: var(--ac-amber) !important;
+}
+
+html.app-android-native .perform-stage {
+  --perform-accent: #f2b879;
+  --perform-chord: #f2b879;
+}
+html.app-android-native .perform-stage .perform-song-strip-btn--active {
+  color: #4b1620;
+}
+html.app-android-native .songbook-reader--stage .chorus-block {
+  border-left-color: #f2b879;
+}
+
+/* Ссылки «sky» и синие аккорды на светлых страницах — в бордовый (кроме тёмных сцен). */
+html.app-android-native:not(.dark) a[class*='text-sky-'],
+html.app-android-native:not(.dark) a[class*='text-blue-'] {
+  color: #8a2742;
+  font-weight: 600;
+}
+html.app-android-native:not(.dark) li .chord-line,
+html.app-android-native:not(.dark) li .chord-line *,
+html.app-android-native:not(.dark) li [class*='chord'] {
+  color: #8a2742;
+}
+
+/* Админ → «Релизы»: кнопка под текстом, а не в узкой колонке справа. */
+html.app-android-native .release-card-row {
+  flex-wrap: wrap;
+}
+html.app-android-native .release-card-row > div {
+  flex: 1 1 calc(100% - 3.5rem);
+}
+html.app-android-native .release-card-row > button {
+  flex: 1 1 100%;
+  justify-content: center;
+}
+
+/* Админ → «Интеграции»: вкладки в одну прокручиваемую строку, подписи не рвутся по слогам. */
+html.app-android-native .admin-subtabs {
+  display: flex;
+  overflow-x: auto;
+  gap: 6px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+html.app-android-native .admin-subtabs::-webkit-scrollbar {
+  display: none;
+}
+html.app-android-native .admin-subtabs > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-height: 44px;
+}
