@@ -1,7 +1,8 @@
 /**
  * Векторная иллюстрация для начальной страницы: община вокруг креста.
  * Образы: «Я есмь лоза, а вы ветви» (лоза с листьями и гроздьями), «где двое или трое
- * собраны во имя Моё» (люди вокруг креста), голубь, свет. Всё в SVG, без внешних файлов.
+ * собраны во имя Моё» (люди вокруг креста), голубь, свет, овцы («Я есмь пастырь добрый»)
+ * и колосья пшеницы («жатва многа»). Всё в SVG, без внешних файлов.
  */
 
 type Person = { x: number; base: number; h: number; fill: string; staff?: boolean };
@@ -85,11 +86,86 @@ function Vine({ v, flip }: { v: typeof VINE_L; flip?: boolean }) {
   );
 }
 
+
+/** Овца: пушистое «облако» из кругов, тёмная мордочка и ножки. Смотрит вправо, flip — влево. */
+function Sheep({ x, y, s = 1, flip }: { x: number; y: number; s?: number; flip?: boolean }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${flip ? -s : s} ${s})`}>
+      <ellipse cx="0" cy="1" rx="19" ry="3" fill="#000" fillOpacity="0.28" />
+      {/* ножки */}
+      {[-9, -3, 5, 11].map((lx, i) => (
+        <rect key={i} x={lx - 1.3} y="-6" width="2.6" height="7" rx="1.3" fill="#4a1d2c" />
+      ))}
+      {/* шерсть */}
+      <g fill="#fbf1e4">
+        <ellipse cx="0" cy="-12" rx="15" ry="9" />
+        {[
+          [-11, -14, 7.5],
+          [-5, -19, 8],
+          [3, -19.5, 8],
+          [10, -15, 7.5],
+          [-13, -8, 6.5],
+          [12, -8, 6.5],
+          [0, -7, 7],
+        ].map(([cx, cy, r], i) => (
+          <circle key={i} cx={cx} cy={cy} r={r} />
+        ))}
+      </g>
+      <g fill="#e8d3c0" fillOpacity="0.9">
+        <circle cx="-4" cy="-9" r="5" />
+        <circle cx="6" cy="-10" r="4.5" />
+      </g>
+      {/* голова */}
+      <ellipse cx="18" cy="-11" rx="5.2" ry="6.3" fill="#4a1d2c" />
+      <ellipse cx="14.5" cy="-15.5" rx="4.2" ry="2.2" fill="#4a1d2c" transform="rotate(-25 14.5 -15.5)" />
+      <circle cx="19.6" cy="-12.6" r="0.9" fill="#fbf1e4" />
+    </g>
+  );
+}
+
+/** Колос пшеницы: изогнутый стебель, зёрна парами и усики. */
+function Wheat({ x, base, h, lean, color, delay }: { x: number; base: number; h: number; lean: number; color: string; delay: number }) {
+  const topX = x + lean;
+  const topY = base - h;
+  const grains = Array.from({ length: 7 }, (_, i) => i);
+  return (
+    <g className="landing-sway" style={{ animationDelay: `${delay}s` }}>
+      <path
+        d={`M${x} ${base} Q${x + lean * 0.2} ${base - h * 0.55} ${topX} ${topY}`}
+        stroke={color}
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        fill="none"
+      />
+      {grains.map((i) => {
+        const gy = topY + 4 + i * 6.2;
+        const gx = topX - lean * (i * 6.2) / h * 0.4;
+        const sc = 1 - i * 0.05;
+        return (
+          <g key={i} fill={color}>
+            <ellipse cx={gx - 3.2} cy={gy} rx={2.1 * sc} ry={4.4 * sc} transform={`rotate(-28 ${gx - 3.2} ${gy})`} />
+            <ellipse cx={gx + 3.2} cy={gy} rx={2.1 * sc} ry={4.4 * sc} transform={`rotate(28 ${gx + 3.2} ${gy})`} />
+          </g>
+        );
+      })}
+      <ellipse cx={topX} cy={topY - 1} rx="2" ry="4.6" fill={color} />
+      <path
+        d={`M${topX} ${topY - 5} V${topY - 15} M${topX - 3} ${topY - 3} L${topX - 7} ${topY - 12} M${topX + 3} ${topY - 3} L${topX + 7} ${topY - 12}`}
+        stroke={color}
+        strokeWidth="0.9"
+        strokeLinecap="round"
+        strokeOpacity="0.8"
+        fill="none"
+      />
+    </g>
+  );
+}
+
 export function LandingIllustration({ className }: { className?: string }) {
   const rays = Array.from({ length: 14 }, (_, i) => i * (360 / 14));
   return (
     <svg
-      viewBox="0 0 400 340"
+      viewBox="0 0 400 372"
       preserveAspectRatio="xMidYMax meet"
       className={className}
       aria-hidden
@@ -151,8 +227,8 @@ export function LandingIllustration({ className }: { className?: string }) {
       <Vine v={VINE_R} flip />
 
       {/* холмы */}
-      <path d="M0 262 Q70 214 150 244 T290 236 T400 250 V340 H0Z" fill="url(#li-hill-back)" />
-      <path d="M0 300 Q100 262 200 276 T400 268 V340 H0Z" fill="url(#li-hill-front)" />
+      <path d="M0 262 Q70 214 150 244 T290 236 T400 250 V372 H0Z" fill="url(#li-hill-back)" />
+      <path d="M0 300 Q100 262 200 276 T400 268 V372 H0Z" fill="url(#li-hill-front)" />
 
       {/* голубь */}
       <g transform="translate(200 112)" fill="#fff4de">
@@ -195,7 +271,23 @@ export function LandingIllustration({ className }: { className?: string }) {
       </g>
 
       {/* передний план: травинки */}
-      <path d="M0 318 Q100 296 200 306 T400 300 V340 H0Z" fill="#1d0710" fillOpacity="0.85" />
+      <path d="M0 318 Q100 296 200 306 T400 300 V372 H0Z" fill="#1d0710" fillOpacity="0.9" />
+
+      {/* овцы: «Я есмь пастырь добрый» */}
+      <Sheep x={112} y={320} s={1.05} />
+      <Sheep x={150} y={330} s={0.62} />
+      <Sheep x={290} y={323} s={1} flip />
+      <Sheep x={252} y={332} s={0.58} flip />
+
+      {/* колосья пшеницы */}
+      <g>
+        <Wheat x={14} base={352} h={96} lean={10} color="#f2b479" delay={0} />
+        <Wheat x={30} base={354} h={74} lean={-6} color="#ffd9a0" delay={0.8} />
+        <Wheat x={44} base={352} h={88} lean={8} color="#e9a05f" delay={1.6} />
+        <Wheat x={386} base={352} h={96} lean={-10} color="#f2b479" delay={0.4} />
+        <Wheat x={370} base={354} h={72} lean={6} color="#ffd9a0" delay={1.2} />
+        <Wheat x={356} base={352} h={86} lean={-8} color="#e9a05f" delay={2} />
+      </g>
     </svg>
   );
 }

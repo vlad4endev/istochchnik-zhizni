@@ -2481,6 +2481,15 @@ button {
   transform-origin: 200px 200px;
   animation: landing-rays-spin 90s linear infinite;
 }
+.landing-sway {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: landing-sway 5s ease-in-out infinite alternate;
+}
+@keyframes landing-sway {
+  from { transform: rotate(-2.2deg); }
+  to { transform: rotate(2.2deg); }
+}
 @keyframes landing-rays-spin {
   to { transform: rotate(360deg); }
 }
@@ -2505,6 +2514,6 @@ button {
   100% { transform: translateX(120%); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .landing-orb, .landing-rays, .landing-btn-primary::after { animation: none; }
+  .landing-orb, .landing-rays, .landing-sway, .landing-btn-primary::after { animation: none; }
   .landing-rise { animation: none; opacity: 1; }
 }
