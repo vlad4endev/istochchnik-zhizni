@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { initMessengerPushNotifications } from '../features/messenger/push/webPush';
+import { fetchPushStatus } from '../features/profile/api';
 
 /**
  * Синхронизирует Web Push подписку с бэкендом для всего приложения (не только экран «Чаты»).
@@ -23,6 +24,28 @@ export function useWebPushSync(): void {
     // Один раз после входа / смены токена.
     void initMessengerPushNotifications({ force: true });
 
+    // После передеплоя сервер мог потерять подписку (новые VAPID-ключи → 403/410 → удаление, пересоздание БД),
+    // а браузер продолжает считать себя подписанным. Спрашиваем сервер и при расхождении подписываемся заново.
+    let lastServerCheckMs = 0;
+    const verifyWithServer = async () => {
+      const now = Date.now();
+      if (now - lastServerCheckMs < 5 * 60_000) return;
+      lastServerCheckMs = now;
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+      try {
+        const reg = await navigator.serviceWorker?.getRegistration();
+        const sub = await reg?.pushManager?.getSubscription();
+        if (!sub) return; // отсутствие подписки в браузере обрабатывает проверка ниже
+        const status = await fetchPushStatus(sub.endpoint);
+        if (status.currentEndpointRegistered === false) {
+          await initMessengerPushNotifications({ force: true });
+        }
+      } catch {
+        /* сеть/401 — повторим при следующем возврате в приложение */
+      }
+    };
+    void verifyWithServer();
+
     // Подписка может тихо «протухнуть» (iOS вытесняет, сервер удалил по 410): при возврате в приложение
     // не чаще раза в 6 часов перепроверяем и пересоздаём её.
     let lastResyncMs = Date.now();
@@ -37,6 +60,7 @@ export function useWebPushSync(): void {
       }
       // Дёшево (локально, без сети): разрешение выдали в системных настройках или iOS вытеснил подписку —
       // не ждём 6 часов, а восстанавливаем сразу при возврате в приложение.
+      void verifyWithServer();
       if (now - lastLocalCheckMs < 30_000) return;
       lastLocalCheckMs = now;
       void (async () => {

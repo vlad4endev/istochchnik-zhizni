@@ -137,6 +137,8 @@ export async function fetchPushStatus(endpoint?: string): Promise<PushStatus> {
   const { data } = await apiClient.get<PushStatus>('/api/notifications/status', {
     params: endpoint ? { endpoint } : undefined,
     silentErrorToast: true,
+    // Фоновая сверка не должна выкидывать пользователя из сессии при 401.
+    skipAuthClearOn401: true,
   });
   return data;
 }

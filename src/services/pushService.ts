@@ -12,14 +12,9 @@ import {
 } from './notificationDeliveryService';
 import { isParishionerAllowedPushKindOrType } from '../lib/parishionerPushAllowlist';
 import { fitFcmPayload } from '../lib/fcmPayload';
+import { getVapidConfig, initVapidKeys, type VapidConfig } from './vapidKeys';
 import { sendApnsVoipPush, isApnsVoipConfigured } from './apnsVoipPush';
 import { deleteVoipToken, getVoipTokensForMember } from './voipTokenService';
-
-const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
-
-const vapidConfigured = Boolean(
-  VAPID_PUBLIC_KEY?.trim() && VAPID_PRIVATE_KEY?.trim() && VAPID_SUBJECT?.trim(),
-);
 
 /** Таймаут HTTP к FCM/Web Push (мс). На VPS с жёстким firewall иногда нужен больший срок. */
 const WEB_PUSH_HTTP_TIMEOUT_MS = Math.min(
@@ -44,18 +39,30 @@ function isPushNetworkTimeoutErr(err: unknown): boolean {
 }
 
 let vapidReady = false;
-if (vapidConfigured) {
+
+function applyVapid(cfg: VapidConfig | null): void {
+  if (!cfg) return;
   try {
-    // web-push требует subject вида mailto:… или https://…; голый e-mail нормализуем.
-    const rawSubject = VAPID_SUBJECT!.trim();
-    const subject = /^(mailto:|https?:\/\/)/i.test(rawSubject) ? rawSubject : `mailto:${rawSubject}`;
-    webpush.setVapidDetails(subject, VAPID_PUBLIC_KEY!.trim(), VAPID_PRIVATE_KEY!.trim());
+    // web-push требует subject вида mailto:… или https://…
+    webpush.setVapidDetails(cfg.subject, cfg.publicKey, cfg.privateKey);
     vapidReady = true;
   } catch (e) {
+    vapidReady = false;
     console.error('[push] Invalid VAPID configuration — Web Push disabled:', e);
   }
-} else {
-  console.warn('VAPID keys are not configured. Web Push will not work.');
+}
+
+// Синхронно подхватываем ключи из окружения; initPushVapid() при старте добавляет запасной путь через БД.
+applyVapid(getVapidConfig());
+if (!vapidReady) {
+  console.warn('VAPID keys are not configured yet. Web Push will start after initPushVapid().');
+}
+
+/** Вызывается при старте API: гарантирует, что VAPID-ключи есть и переживут передеплой. */
+export async function initPushVapid(): Promise<VapidConfig | null> {
+  const cfg = await initVapidKeys();
+  applyVapid(cfg);
+  return cfg;
 }
 
 export interface PushSubscriptionKeys {

@@ -62,6 +62,8 @@ import callsRoutes, { callInvitationsRouter } from './routes/callsRoutes';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel, ensureMediykaMessengerChannel, ensureServicePlanPlanningMessengerChannel } from './services/messengerService';
 import { ensurePushSubscriptionsSchema } from './services/pushSubscriptionsSchema';
+import { initPushVapid } from './services/pushService';
+import { getFirebaseMessaging } from './config/firebaseAdmin';
 import { ensureFeedSchema } from './services/feedSchema';
 import { ensureSermonNotesSchema } from './services/sermonNotesService';
 import { writeAppLog } from './services/appLogService';
@@ -572,16 +574,22 @@ async function start(): Promise<void> {
     }
   }
 
-  const vapidOk = Boolean(
-    process.env.VAPID_PUBLIC_KEY?.trim() &&
-      process.env.VAPID_PRIVATE_KEY?.trim() &&
-      process.env.VAPID_SUBJECT?.trim(),
-  );
-  if (!vapidOk) {
-    console.warn(
-      '[push] VAPID keys are not configured (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT) — Web Push / PWA notifications will not work.',
-    );
+  try {
+    const vapid = await initPushVapid();
+    if (!vapid) {
+      console.warn('[push] VAPID keys are not available — Web Push / PWA notifications will not work.');
+    } else {
+      console.log(`[push] VAPID ready (source: ${vapid.source}, key ${vapid.publicKey.slice(0, 10)}…)`);
+    }
+  } catch (e) {
+    console.warn('[push] initPushVapid failed:', e);
   }
+  const fcmOk = getFirebaseMessaging() != null;
+  console.log(
+    fcmOk
+      ? '[push] FCM (Android/iOS native) configured'
+      : '[push] FCM NOT configured — Android/iOS push will not work. Проверьте secrets/firebase-sa.json (монтируется как ./secrets) или FIREBASE_SERVICE_ACCOUNT_JSON.',
+  );
 
   if (!process.env.SUPABASE_URL?.trim() || !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
     console.warn(
