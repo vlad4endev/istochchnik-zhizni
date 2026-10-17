@@ -74,18 +74,23 @@ export function useConversationSharedMedia(chatId: string | undefined) {
       const p = (m.payload ?? {}) as Record<string, unknown>;
       const album = Array.isArray(p.images) ? p.images : [];
       if (album.length) {
-        for (const img of album) {
+        for (const [idx, img] of album.entries()) {
           const row = typeof img === 'object' && img !== null ? (img as Record<string, unknown>) : {};
           const raw = getAlbumImageUrl(row);
           if (isMessengerVideoAttachment(row, raw)) continue;
-          const src = resolvePublicUrl(raw) ?? raw;
-          if (src) out.push({ id: String(m.id), src });
+          const id = String(m.id);
+          // Вложения мессенджера отдаются через прокси с авторизацией: прямая ссылка из payload часто не открывается.
+          const src = /^\d+$/.test(id)
+            ? api.buildMessengerAttachmentFileUrl(id, { slot: idx })
+            : (resolvePublicUrl(raw) ?? raw);
+          if (src) out.push({ id, src });
         }
       } else {
         const raw = getPrimaryAttachmentUrl(p);
         if (isMessengerVideoAttachment(p as Record<string, unknown>, raw)) continue;
-        const src = resolvePublicUrl(raw) ?? raw;
-        if (src) out.push({ id: String(m.id), src });
+        const id = String(m.id);
+        const src = /^\d+$/.test(id) ? api.buildMessengerAttachmentFileUrl(id) : (resolvePublicUrl(raw) ?? raw);
+        if (src) out.push({ id, src });
       }
     }
     return out;

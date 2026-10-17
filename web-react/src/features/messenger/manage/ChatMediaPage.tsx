@@ -1,3 +1,4 @@
+import { AuthImg } from './AuthImg';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { LuFile, LuImage, LuLink2 } from 'react-icons/lu';
@@ -36,7 +37,7 @@ export function ChatMediaPage() {
             <div className="grid grid-cols-3 gap-2">
               {mediaItems.map((item) => (
                 <a key={`${item.id}-${item.src}`} href={item.src} target="_blank" rel="noreferrer" className="overflow-hidden rounded-lg bg-stone-100">
-                  <img src={item.src} alt="" className="h-24 w-full object-cover" loading="lazy" />
+                  <AuthImg src={item.src} className="block h-24 w-full object-cover" />
                 </a>
               ))}
             </div>

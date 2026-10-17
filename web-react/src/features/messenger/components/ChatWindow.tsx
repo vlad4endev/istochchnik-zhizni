@@ -52,6 +52,12 @@ interface ChatWindowProps {
   sendTypingStop: (id: string) => void;
 }
 
+function readComposerOverlayPx(win: HTMLElement | null): number {
+  if (!win) return 0;
+  const v = Number.parseFloat(win.style.getPropertyValue('--tg-chat-composer-h'));
+  return Number.isFinite(v) && v > 0 ? v : 0;
+}
+
 export function ChatWindow({
   conversationId,
   onBack,
@@ -517,6 +523,9 @@ export function ChatWindow({
     },
     overscan: 12,
     gap: 10,
+    // iOS: композер лежит поверх ленты. scrollToIndex(align:'end') иначе ставит последнее сообщение вплотную к низу
+    // видимой области, то есть ПОД композер; отступ = высота композера (см. useIosChatInsets).
+    scrollPaddingEnd: readComposerOverlayPx(chatWindowRef.current),
     getItemKey: (index) => {
       const row = groupedMessages[index];
       if (!row) return index;

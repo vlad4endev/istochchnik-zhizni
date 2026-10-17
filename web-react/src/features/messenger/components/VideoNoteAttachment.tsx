@@ -3,6 +3,15 @@ import { LuPause, LuPlay } from 'react-icons/lu';
 
 import { useAuthenticatedApiBlobSrc } from '../../../lib/useAuthenticatedApiBlobSrc';
 
+function formatClock(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return '0:00';
+  const s = Math.floor(sec);
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+}
+
+const RING_R = 48;
+const RING_LEN = 2 * Math.PI * RING_R;
+
 /**
  * Видеокружок как в Telegram: без рамки «карточки», тап — плей/пауза, мета (время, галочки) в оверлее.
  */
@@ -25,6 +34,7 @@ export function VideoNoteAttachment({
   const usedFallbackRef = useRef(false);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(() => (typeof durationHintSec === 'number' && durationHintSec > 0 ? durationHintSec : 0));
   const [activeSrc, setActiveSrc] = useState<string | null>(videoSrc);
   const [usedFallback, setUsedFallback] = useState(false);
 
@@ -82,6 +92,7 @@ export function VideoNoteAttachment({
     const onTime = () => {
       if (el.duration && Number.isFinite(el.duration) && el.duration > 0) {
         setProgress(el.currentTime / el.duration);
+        setDuration((d) => (Math.abs(d - el.duration) > 0.4 ? el.duration : d));
       }
     };
     const onPlay = () => setPlaying(true);
@@ -169,6 +180,7 @@ export function VideoNoteAttachment({
           muted={false}
           onLoadedMetadata={(e) => {
             const el = e.currentTarget;
+            if (Number.isFinite(el.duration) && el.duration > 0) setDuration(el.duration);
             if (
               !usedFallbackRef.current &&
               videoFallbackSrc &&
@@ -202,9 +214,21 @@ export function VideoNoteAttachment({
             </span>
           </span>
         )}
-        <span className="msg-videonote-progress-track" aria-hidden>
-          <span className="msg-videonote-progress-fill" style={{ width: `${Math.max(1, Math.round(progress * 100))}%` }} />
-        </span>
+        <svg className="msg-videonote-ring" viewBox="0 0 100 100" aria-hidden>
+          <circle
+            className="msg-videonote-ring__arc"
+            cx="50"
+            cy="50"
+            r={RING_R}
+            strokeDasharray={RING_LEN}
+            strokeDashoffset={RING_LEN * (1 - (playing || progress > 0 ? progress : 0))}
+          />
+        </svg>
+        {duration > 0 ? (
+          <span className="msg-videonote-duration">
+            {formatClock(playing || progress > 0 ? Math.max(0, duration - progress * duration) : duration)}
+          </span>
+        ) : null}
         {metaOverlay ? <span className="msg-videonote-meta-overlay">{metaOverlay}</span> : null}
       </button>
     </div>

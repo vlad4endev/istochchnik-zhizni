@@ -11,8 +11,11 @@ import {
   LuVideo,
   LuFileText,
   LuChartColumn,
-  LuMic,
   LuMusic,
+  LuTrash2,
+  LuLock,
+  LuChevronLeft,
+  LuChevronUp,
   LuTriangleAlert,
 } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
@@ -347,8 +350,11 @@ export function ChatInput({
   const VOICE_MIN_MS = 450;
   /** После появления текста кнопка — «Отправить»; удержание ~420ms запускает запись с подписью. */
   const VOICE_ARM_MS = 420;
-  /** Порог свайпа (px): чуть ниже, чем было 44 — удобнее большим пальцем, без ложных срабатываний. */
-  const SWIPE_SWITCH_PX = 38;
+  /** Свайп влево на столько px — отмена записи (как в Telegram). */
+  const CANCEL_SWIPE_PX = 110;
+  /** Свайп вверх на столько px — запись «закрепляется», палец можно отпустить. */
+  const LOCK_SWIPE_PX = 72;
+  const CAPTURE_KIND_KEY = 'messenger-capture-kind';
 
   type CaptureKind = 'audio' | 'video_note';
   type MediaCaptureState = {
@@ -358,6 +364,19 @@ export function ChatInput({
     segmentStartedAt: number;
   };
   const [mediaCapture, setMediaCapture] = useState<MediaCaptureState | null>(null);
+  /** Что записывает долгое нажатие на пустом композере: микрофон или кружок (переключается тапом). */
+  const [preferredKind, setPreferredKind] = useState<CaptureKind>(() => {
+    try {
+      return localStorage.getItem('messenger-capture-kind') === 'video_note' ? 'video_note' : 'audio';
+    } catch {
+      return 'audio';
+    }
+  });
+  const [captureLocked, setCaptureLocked] = useState(false);
+  const captureLockedRef = useRef(false);
+  /** 0…1 — насколько палец ушёл влево к отмене (прозрачность подсказки). */
+  const [cancelProgress, setCancelProgress] = useState(0);
+  const recordSwipeOriginYRef = useRef(0);
   const [videoPreviewNonce, setVideoPreviewNonce] = useState(0);
   const captureKindRef = useRef<CaptureKind>('audio');
   const activeSegmentKindRef = useRef<CaptureKind>('audio');
@@ -366,7 +385,6 @@ export function ChatInput({
   const wallClockStartRef = useRef(0);
   const wallInitRef = useRef(false);
   const segmentClockStartRef = useRef(0);
-  const swapInFlightRef = useRef(false);
   const swipeMoveHandlerRef: MutableRefObject<((ev: PointerEvent) => void) | null> = useRef(null);
   const capturePreviewVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -1335,6 +1353,11 @@ export function ChatInput({
     }
     const cap = kind === 'video_note' ? VIDEO_NOTE_MAX_MS : VOICE_MAX_MS;
     voiceMaxTimerRef.current = setTimeout(() => {
+      if (captureLockedRef.current) {
+        // Закреплённая запись дошла до лимита — отправляем, как Telegram.
+        finishRecording(true);
+        return;
+      }
       try {
         voiceRecorderRef.current?.stop();
       } catch {
@@ -1357,26 +1380,6 @@ export function ChatInput({
         aspectRatio: { ideal: 1 },
       },
     };
-  };
-
-  const stopCurrentRecorderSegment = async () => {
-    const rec = voiceRecorderRef.current;
-    await new Promise<void>((resolve) => {
-      if (!rec || rec.state === 'inactive') {
-        resolve();
-        return;
-      }
-      rec.onstop = () => resolve();
-      try {
-        rec.stop();
-      } catch {
-        resolve();
-      }
-    });
-    voiceStreamRef.current?.getTracks().forEach((t) => t.stop());
-    voiceStreamRef.current = null;
-    voiceRecorderRef.current = null;
-    voiceChunksRef.current = [];
   };
 
   const acquireStreamMatchingKind = async (myGen: number): Promise<MediaStream> => {
@@ -1483,54 +1486,26 @@ export function ChatInput({
     startRecorderFromStream(stream, captureKindRef.current, myGen);
   };
 
-  const swapCaptureKindIfRecording = async (next: CaptureKind) => {
-    if (swapInFlightRef.current) return;
-    if (!voiceRecorderRef.current || voiceRecorderRef.current.state !== 'recording') return;
-    if (activeSegmentKindRef.current === next) return;
-    swapInFlightRef.current = true;
-    const myGen = voiceSessionGenRef.current;
-    try {
-      await stopCurrentRecorderSegment();
-      if (myGen !== voiceSessionGenRef.current) return;
-      const stream = await acquireStreamMatchingKind(myGen);
-      if (myGen !== voiceSessionGenRef.current) {
-        stream.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      if (!voiceSwipeActiveRef.current && !voicePointerDownRef.current) {
-        stream.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      startRecorderFromStream(stream, next, myGen);
-    } catch {
-      if (myGen === voiceSessionGenRef.current) {
-        emitAppToast('Не удалось переключить режим записи', 'error');
-      }
-      try {
-        await stopCurrentRecorderSegment();
-      } catch {
-        /* ignore */
-      }
-      setMediaCapture(null);
-    } finally {
-      swapInFlightRef.current = false;
-    }
-  };
-
-  const bindSwipeListeners = (originX: number) => {
+  const bindSwipeListeners = (originX: number, originY: number) => {
     unbindSwipeListeners();
     recordSwipeOriginXRef.current = originX;
+    recordSwipeOriginYRef.current = originY;
     const onMove = (moveEv: PointerEvent) => {
-      if (!voiceSwipeActiveRef.current) return;
-      const dx = moveEv.clientX - recordSwipeOriginXRef.current;
-      let next = captureKindRef.current;
-      if (dx <= -SWIPE_SWITCH_PX) next = 'video_note';
-      else if (dx >= SWIPE_SWITCH_PX) next = 'audio';
-      else return;
-      if (next === captureKindRef.current) return;
-      captureKindRef.current = next;
-      setMediaCapture((s) => (s ? { ...s, kind: next } : s));
-      void swapCaptureKindIfRecording(next);
+      if (!voiceSwipeActiveRef.current || captureLockedRef.current) return;
+      const left = recordSwipeOriginXRef.current - moveEv.clientX;
+      const up = recordSwipeOriginYRef.current - moveEv.clientY;
+      const q = Math.round(Math.min(1, Math.max(0, left / CANCEL_SWIPE_PX)) * 10) / 10;
+      setCancelProgress((prev) => (prev === q ? prev : q));
+      if (left >= CANCEL_SWIPE_PX && left > up) {
+        haptic(18);
+        finishRecording(false);
+      } else if (up >= LOCK_SWIPE_PX && up > left) {
+        haptic(14);
+        captureLockedRef.current = true;
+        setCaptureLocked(true);
+        setCancelProgress(0);
+        unbindSwipeListeners();
+      }
     };
     swipeMoveHandlerRef.current = onMove;
     window.addEventListener('pointermove', onMove, { passive: true });
@@ -1614,6 +1589,12 @@ export function ChatInput({
 
   const onSendOrMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (e.button !== 0) return;
+    if (captureLockedRef.current) {
+      // Запись закреплена: кнопка работает как «Отправить».
+      e.preventDefault();
+      finishRecording(true);
+      return;
+    }
     if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       emitAppToast('Запись голоса не поддерживается в этом браузере', 'error');
       return;
@@ -1638,14 +1619,17 @@ export function ChatInput({
     }
 
     e.preventDefault();
+    captureLockedRef.current = false;
+    setCaptureLocked(false);
+    setCancelProgress(0);
     const onlyText = Boolean(content.trim());
     const emptyComposer = !content.trim();
 
     if (onlyText) {
       wallInitRef.current = false;
       voiceSwipeActiveRef.current = true;
-      bindSwipeListeners(e.clientX);
-      captureKindRef.current = 'audio';
+      bindSwipeListeners(e.clientX, e.clientY);
+      captureKindRef.current = preferredKind;
       voiceHoldPointerIdRef.current = e.pointerId;
       stopVoiceArmTimerOnly();
       voiceArmTimerRef.current = window.setTimeout(() => {
@@ -1677,12 +1661,12 @@ export function ChatInput({
       const myGen = (voiceSessionGenRef.current += 1);
       void e.currentTarget.setPointerCapture(e.pointerId);
       voiceSwipeActiveRef.current = true;
-      bindSwipeListeners(e.clientX);
-      captureKindRef.current = 'audio';
+      bindSwipeListeners(e.clientX, e.clientY);
+      captureKindRef.current = preferredKind;
       voicePointerDownRef.current = true;
       const t0 = Date.now();
       setMediaCapture({
-        kind: 'audio',
+        kind: preferredKind,
         connecting: true,
         wallStartedAt: t0,
         segmentStartedAt: t0,
@@ -1696,6 +1680,30 @@ export function ChatInput({
     if (pending || pendingImages.length > 0) return;
 
     endVoiceGestureTracking();
+
+    if (captureLockedRef.current) {
+      // Закреплённая запись продолжается после того, как палец отпущен.
+      suppressVoiceSendClickRef.current = true;
+      window.setTimeout(() => {
+        suppressVoiceSendClickRef.current = false;
+      }, 420);
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+
+    finishRecording(shouldSend, e.pointerId);
+  };
+
+  /** Останавливает запись: отправляет (`shouldSend`) или отбрасывает. Вызывается при отпускании, отмене и из закреплённого режима. */
+  const finishRecording = (shouldSend: boolean, pointerId?: number) => {
+    endVoiceGestureTracking();
+    captureLockedRef.current = false;
+    setCaptureLocked(false);
+    setCancelProgress(0);
 
     if (
       !voiceRecorderRef.current &&
@@ -1711,7 +1719,8 @@ export function ChatInput({
     }, 420);
 
     try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
+      const id = pointerId ?? voiceHoldPointerIdRef.current;
+      if (id >= 0) sendOrMicBtnRef.current?.releasePointerCapture(id);
     } catch {
       /* ignore */
     }
@@ -1801,9 +1810,11 @@ export function ChatInput({
   /** В textOnly (ИИ помощник) всегда кнопка «отправить», без микрофона. */
   const iconMode: IconMode = textOnly
     ? 'send'
-    : isRecording
-      ? (captureKind === 'video_note' ? 'video' : 'mic')
-      : (hasSendAction ? 'send' : 'mic');
+    : captureLocked
+      ? 'send'
+      : isRecording
+        ? (captureKind === 'video_note' ? 'video' : 'mic')
+        : (hasSendAction ? 'send' : (preferredKind === 'video_note' ? 'video' : 'mic'));
   const attachmentsUiEnabled = canSendAttachments && !textOnly;
   const replyBanner = replyingTo ?? replyTo;
   const composerBannerTitle = editing
@@ -1922,6 +1933,7 @@ export function ChatInput({
               variant="file"
               title={pending.displayTitle || audioDisplayTitle(pending.file.name)}
               durationHintSec={pending.durationSec}
+              sizeBytes={pending.file.size}
               waveSeed={`draft-${pending.file.name}-${pending.file.size}`}
               ownerId={`draft:${conversationId}:${pending.file.name}:${pending.file.size}`}
               registerInQueue={false}
@@ -2136,9 +2148,12 @@ export function ChatInput({
       ) : null}
 
       {mediaCapture ? (
-        <div className="tg-videonote-capture mb-2" aria-live="polite">
-          <div className="tg-videonote-capture__stage">
-            {mediaCapture.kind === 'video_note' && !mediaCapture.connecting ? (
+        <div
+          className={['tg-rec', mediaCapture.kind === 'video_note' ? 'tg-rec--video' : 'tg-rec--audio', captureLocked ? 'tg-rec--locked' : ''].join(' ')}
+          aria-live="polite"
+        >
+          {mediaCapture.kind === 'video_note' && !mediaCapture.connecting ? (
+            <div className="tg-rec__circle">
               <div className="tg-capture-hud-videonote-ring">
                 <video
                   ref={capturePreviewVideoRef}
@@ -2149,65 +2164,30 @@ export function ChatInput({
                   aria-hidden
                 />
               </div>
-            ) : (
-              <div className="tg-videonote-capture__audio-visual">
-                <LuMic className="h-12 w-12" strokeWidth={1.75} aria-hidden />
-                <div className="tg-videonote-capture__waves" aria-hidden>
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="tg-videonote-capture__rail">
-            <span
-              className={[
-                'tg-videonote-capture__mode',
-                mediaCapture.kind === 'audio' ? 'tg-videonote-capture__mode--on' : '',
-              ].join(' ')}
-              aria-hidden
-            >
-              <LuMic className="h-5 w-5" strokeWidth={2.25} />
-            </span>
-            <div className="tg-videonote-capture__timer">
-              {mediaCapture.connecting
-                ? '…'
-                : formatVoiceElapsed(mediaCapture.segmentStartedAt, voiceTick)}
-            </div>
-            <span
-              className={[
-                'tg-videonote-capture__mode',
-                mediaCapture.kind === 'video_note' ? 'tg-videonote-capture__mode--on' : '',
-              ].join(' ')}
-              aria-hidden
-            >
-              <LuVideo className="h-5 w-5" strokeWidth={2.25} />
-            </span>
-          </div>
-          {isRecording ? (
-            <div className="swipeHint" aria-hidden>
-              <span className={captureKind === 'video_note' ? 'hintActive' : ''}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <rect x="2" y="6" width="13" height="12" rx="2.5" fill="currentColor" />
-                  <path d="M15 10l5-3v10l-5-3V10z" fill="currentColor" />
-                </svg>
-              </span>
-              <span>← свайп →</span>
-              <span className={captureKind === 'audio' ? 'hintActive' : ''}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor" />
-                  <path d="M5 10a7 7 0 0014 0M12 19v3M9 22h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </span>
             </div>
           ) : null}
-          <p className="tg-videonote-capture__hint">
-            {mediaCapture.connecting
-              ? 'Разрешите доступ к микрофону или камере'
-              : 'Свайп влево — видеокружок (до 1 мин), вправо — голос. Отпустите — отправить.'}
-          </p>
+          <div className="tg-rec__bar">
+            <span className="tg-rec__dot" aria-hidden />
+            <span className="tg-rec__timer">
+              {mediaCapture.connecting ? '…' : formatVoiceElapsed(mediaCapture.segmentStartedAt, voiceTick)}
+            </span>
+            {mediaCapture.kind === 'audio' ? (
+              <span className="tg-rec__levels" aria-hidden>
+                <span /><span /><span /><span /><span /><span /><span />
+              </span>
+            ) : null}
+            {captureLocked ? (
+              <button type="button" className="tg-rec__cancel" onClick={() => { haptic(12); finishRecording(false); }}>
+                <LuTrash2 size={18} aria-hidden />
+                <span>Удалить</span>
+              </button>
+            ) : (
+              <span className="tg-rec__slide" style={{ opacity: Math.max(0.15, 1 - cancelProgress * 1.1) }} aria-hidden>
+                <LuChevronLeft size={16} strokeWidth={2.4} />
+                <span>{mediaCapture.connecting ? 'Разрешите доступ' : 'Влево — отмена'}</span>
+              </span>
+            )}
+          </div>
         </div>
       ) : null}
 
@@ -2409,14 +2389,20 @@ export function ChatInput({
             </div>
           </div>
 
-          <div className="shrink-0">
+          <div className="relative shrink-0">
+            {isRecording && !captureLocked ? (
+              <span className="tg-rec__lock" aria-hidden>
+                <LuLock size={16} strokeWidth={2.3} />
+                <LuChevronUp size={16} strokeWidth={2.6} className="tg-rec__lock-arrow" />
+              </span>
+            ) : null}
             <button
               ref={sendOrMicBtnRef}
               type="button"
               className={[
                 'tg-send-btn sendBtn relative !flex !h-11 !w-11 !min-h-[44px] !min-w-[44px] shrink-0 touch-none select-none items-center justify-center !rounded-full',
-                isRecording ? 'recording' : '',
-                isRecording && captureKind === 'video_note' ? 'videoMode' : '',
+                isRecording && !captureLocked ? 'recording' : '',
+                isRecording && !captureLocked && captureKind === 'video_note' ? 'videoMode' : '',
                 iconMode === 'mic' || iconMode === 'video' ? 'sendBtn--voice' : '',
                 textOnly && !hasSendAction ? 'opacity-45' : '',
               ].join(' ')}
@@ -2431,14 +2417,28 @@ export function ChatInput({
                 if (hasSendAction) {
                   void handleSend();
                 } else {
-                  focusMessengerField(textareaRef.current);
-                  // Короткое нажатие на микрофон — подсказка, как записать (раньше просто фокус в поле без объяснений).
+                  // Как в Telegram: короткий тап переключает «микрофон ↔ кружок», удержание — запись.
                   if (!textOnly && canSendAttachments && uploadsHealthy) {
+                    haptic(8);
+                    const next: CaptureKind = preferredKind === 'audio' ? 'video_note' : 'audio';
+                    setPreferredKind(next);
+                    try {
+                      localStorage.setItem(CAPTURE_KIND_KEY, next);
+                    } catch {
+                      /* ignore */
+                    }
                     const now = Date.now();
                     if (now - voiceHintShownAtRef.current > 6000) {
                       voiceHintShownAtRef.current = now;
-                      emitAppToast('Удерживайте микрофон, чтобы записать голосовое сообщение', 'info');
+                      emitAppToast(
+                        next === 'video_note'
+                          ? 'Теперь запись кружка: удерживайте кнопку. Тап — вернуть микрофон'
+                          : 'Теперь голосовое: удерживайте кнопку. Тап — переключить на кружок',
+                        'info',
+                      );
                     }
+                  } else {
+                    focusMessengerField(textareaRef.current);
                   }
                 }
               }}
@@ -2464,7 +2464,7 @@ export function ChatInput({
                     ? 'Отправить. Удерживайте — голос или кружок; текст пойдёт подписью'
                     : 'Отправить';
                 }
-                return 'Удерживайте: запись. Влево — видеокружок до 1 мин, вправо — голос';
+                return preferredKind === 'video_note' ? 'Удерживайте: видеокружок. Тап — переключить на голос' : 'Удерживайте: голосовое. Тап — переключить на кружок';
               })()}
               title={(() => {
                 if (textOnly) return hasSendAction ? 'Отправить' : 'Введите вопрос';
@@ -2482,7 +2482,7 @@ export function ChatInput({
                     ? 'Отправить · удерживайте — голос или кружок с подписью'
                     : 'Отправить';
                 }
-                return 'Удерживайте: влево — кружок, вправо — голос';
+                return preferredKind === 'video_note' ? 'Удерживайте — кружок; тап — голос' : 'Удерживайте — голос; тап — кружок';
               })()}
             >
               <span

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { LuChevronRight, LuFile, LuFileArchive, LuFileSpreadsheet, LuFileText, LuImage, LuLink2 } from 'react-icons/lu';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
+import { AuthImg } from './AuthImg';
 import { useConversationSharedMedia } from './useConversationSharedMedia';
 import './privateChatProfile.css';
 
@@ -60,7 +61,7 @@ export function SharedMediaCard({ chatId }: { chatId: string }) {
         <div className="pcp-grid" role="tabpanel">
           {mediaItems.slice(0, MEDIA_PREVIEW).map((item, i) => (
             <a key={`${item.id}-${i}`} href={item.src} target="_blank" rel="noreferrer" className="pcp-grid__cell">
-              <img src={item.src} alt="" loading="lazy" decoding="async" />
+              <AuthImg src={item.src} />
             </a>
           ))}
         </div>

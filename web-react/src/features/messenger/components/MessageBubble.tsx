@@ -1465,6 +1465,10 @@ function MessageBubbleInner({
             durationHintSec={Number.isFinite(durationHint) && durationHint > 0 ? durationHint : undefined}
             variant={isAudioFile ? 'file' : 'voice'}
             title={displayTitle || undefined}
+            sizeBytes={(() => {
+              const n = Number((payload as Record<string, unknown>).size ?? (payload as Record<string, unknown>).fileSize);
+              return Number.isFinite(n) && n > 0 ? n : undefined;
+            })()}
             waveSeed={String(message.id)}
             ownerId={`msg:${message.id}`}
             conversationId={String(message.conversation_id)}
