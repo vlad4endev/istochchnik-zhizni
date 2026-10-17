@@ -4950,17 +4950,9 @@ html.dark .msg-videonote-circle--placeholder {
 
     html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > .tg-chat-window__body [role='log'] {
       padding-top: calc(var(--tg-chat-head-h) + 8px);
-      /* Safari не включает padding-bottom flex-контейнера в прокручиваемую область — последнее сообщение
-         оставалось под композером. Отступ делаем реальным flex-элементом ::after. */
+      /* Нижний отступ под композер — реальный блок в конце списка (ChatWindow), padding Safari не учитывает. */
       padding-bottom: 12px;
       scroll-padding-bottom: calc(var(--tg-chat-composer-h, 64px) + 8px);
-    }
-
-    html[data-apple-mobile='1'][data-chat-open='1'] .tg-chat-window > .tg-chat-window__body [role='log']::after {
-      content: '';
-      display: block;
-      flex: 0 0 auto;
-      height: calc(var(--tg-chat-composer-h, 64px) - 4px);
     }
 
     /* Закреплённые сообщения (если есть) начинаются под шапкой, а у списка тогда нет двойного отступа. */

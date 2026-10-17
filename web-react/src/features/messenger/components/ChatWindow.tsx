@@ -52,12 +52,6 @@ interface ChatWindowProps {
   sendTypingStop: (id: string) => void;
 }
 
-function readComposerOverlayPx(win: HTMLElement | null): number {
-  if (!win) return 0;
-  const v = Number.parseFloat(win.style.getPropertyValue('--tg-chat-composer-h'));
-  return Number.isFinite(v) && v > 0 ? v : 0;
-}
-
 export function ChatWindow({
   conversationId,
   onBack,
@@ -93,7 +87,7 @@ export function ChatWindow({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const chatWindowRef = useRef<HTMLDivElement>(null);
-  useIosChatInsets(chatWindowRef);
+  const composerOverlayPx = useIosChatInsets(chatWindowRef);
   const restoredChatScrollRef = useRef(false);
   const nearBottomRef = useRef(true);
   const restoreScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
@@ -525,7 +519,7 @@ export function ChatWindow({
     gap: 10,
     // iOS: композер лежит поверх ленты. scrollToIndex(align:'end') иначе ставит последнее сообщение вплотную к низу
     // видимой области, то есть ПОД композер; отступ = высота композера (см. useIosChatInsets).
-    scrollPaddingEnd: readComposerOverlayPx(chatWindowRef.current),
+    scrollPaddingEnd: composerOverlayPx,
     getItemKey: (index) => {
       const row = groupedMessages[index];
       if (!row) return index;
@@ -898,6 +892,13 @@ export function ChatWindow({
     ro.observe(el);
     return () => ro.disconnect();
   }, [conversationId]);
+
+  // Композер вырос/появилась плашка над ним: если читаем у низа — остаёмся у низа.
+  useLayoutEffect(() => {
+    if (composerOverlayPx <= 0 || !nearBottomRef.current) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [composerOverlayPx]);
 
   useEffect(() => {
     if (!assistantThinking || !nearBottomRef.current) return;
@@ -1376,7 +1377,9 @@ export function ChatWindow({
         ) : (
           <div
             key={conversationId}
-            className="relative w-full"
+            // shrink-0: в колонке flex контейнер без in-flow детей иначе сжимается до высоты окна, и блок после него
+            // (отступ под композер) оказывается в начале ленты, а не после последней строки.
+            className="relative w-full shrink-0"
             style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -1455,6 +1458,10 @@ export function ChatWindow({
               <span className="tg-typing-dots__dot" />
             </span>
           </div>
+        ) : null}
+        {composerOverlayPx > 0 ? (
+          // iOS: композер лежит поверх ленты — реальный отступ в конце списка, чтобы последнее сообщение можно было прокрутить выше него.
+          <div aria-hidden className="shrink-0" style={{ height: `${composerOverlayPx}px` }} />
         ) : null}
         </div>
       </div>
