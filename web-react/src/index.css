@@ -404,18 +404,228 @@ html {
   -webkit-tap-highlight-color: transparent;
   /* На полноэкранных экранах входа без полос по краям */
   background-color: var(--surface);
-  font-size: calc(16px * var(--a11y-font-scale, 1));
+  font-size: calc(16px * var(--ui-scale, 1) * var(--a11y-font-scale, 1));
   transition: background-color 0.3s ease, color 0.2s ease;
 }
 
 /*
- * Гибкий масштаб интерфейса на телефонах: базовый размер (а значит всё, что в rem) плавно меняется от 14.4px на самых
- * узких экранах (320px, iPhone SE) через 16px на 390px (iPhone 13/14/15) до ~17px на 430px (Pro Max) и больших Android.
- * Планшеты и ПК (от 768px) остаются на 16px; масштаб из панели доступности применяется поверх.
+ * Гибкий масштаб интерфейса на телефонах. `--ui-scale` = масштаб по ширине × масштаб по высоте экрана.
+ * По ширине (CSS-пиксели iPhone): 320px (режим «Увеличение», SE 1) ≈ 0.86, 375px (mini, X–11 Pro, SE 2–3) ≈ 0.94,
+ * 390–393px (12–16) ≈ 0.96–0.97, 402px (16/17 Pro) ≈ 0.98, 414px (Plus, XR) ≈ 0.99, 420–440px и шире = 1.
+ * По высоте (только портрет): низкие экраны SE/6/7/8 (568–667px) и «Увеличение» (693px) сжимаются ещё немного,
+ * чтобы на них помещалось больше. Планшеты и ПК — 1.
+ * На `--ui-scale` домножаются и базовый размер (всё, что в rem), и шрифты в px (см. postcss.px-font-scale.cjs).
+ * Масштаб из панели доступности применяется поверх.
+ */
+:root {
+  --ui-scale-w: 1;
+  --ui-scale-h: 1;
+  --ui-scale: calc(var(--ui-scale-w) * var(--ui-scale-h));
+}
+
+@media (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.86;
+  }
+}
+
+@media (min-width: 325px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.868;
+  }
+}
+
+@media (min-width: 330px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.876;
+  }
+}
+
+@media (min-width: 335px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.884;
+  }
+}
+
+@media (min-width: 340px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.892;
+  }
+}
+
+@media (min-width: 345px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.9;
+  }
+}
+
+@media (min-width: 350px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.907;
+  }
+}
+
+@media (min-width: 355px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.915;
+  }
+}
+
+@media (min-width: 360px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.922;
+  }
+}
+
+@media (min-width: 365px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.929;
+  }
+}
+
+@media (min-width: 370px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.936;
+  }
+}
+
+@media (min-width: 375px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.943;
+  }
+}
+
+@media (min-width: 380px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.95;
+  }
+}
+
+@media (min-width: 385px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.956;
+  }
+}
+
+@media (min-width: 390px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.962;
+  }
+}
+
+@media (min-width: 395px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.968;
+  }
+}
+
+@media (min-width: 400px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.974;
+  }
+}
+
+@media (min-width: 405px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.98;
+  }
+}
+
+@media (min-width: 410px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.985;
+  }
+}
+
+@media (min-width: 415px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.989;
+  }
+}
+
+@media (min-width: 420px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.994;
+  }
+}
+
+@media (min-width: 425px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 0.997;
+  }
+}
+
+@media (min-width: 430px) and (max-width: 767px) {
+  :root {
+    --ui-scale-w: 1;
+  }
+}
+
+@media (max-width: 767px) and (orientation: portrait) and (max-height: 740px) {
+  :root {
+    --ui-scale-h: 0.985;
+  }
+}
+
+@media (max-width: 767px) and (orientation: portrait) and (max-height: 680px) {
+  :root {
+    --ui-scale-h: 0.97;
+  }
+}
+
+@media (max-width: 767px) and (orientation: portrait) and (max-height: 600px) {
+  :root {
+    --ui-scale-h: 0.94;
+  }
+}
+
+/*
+ * Иконки на телефонах мельче текста: размер в px-атрибуте (`size={22}` у react-icons) и px-классы не масштабируются
+ * корневым размером, а иконки в rem (`h-5 w-5`) масштабируются так же, как текст. Поэтому:
+ *  — иконки с размером в px/атрибуте ужимаются на ui-scale × (1 + ui-scale) / 2 (≈0.91 на 375px, ≈0.80 на 320px);
+ *  — иконки в rem уже ужаты вместе с текстом, им добавляем только вторую половину множителя (1 + ui-scale) / 2.
+ * На 430px и шире, на планшетах и ПК множитель равен 1.
  */
 @media (max-width: 767px) {
-  html {
-    font-size: calc(clamp(14.4px, calc(14.4px + (100vw - 320px) * 0.0229), 17px) * var(--a11y-font-scale, 1));
+  svg[height='10']:not([class*='h-']):not([class*='w-']),
+  svg[height='11']:not([class*='h-']):not([class*='w-']),
+  svg[height='12']:not([class*='h-']):not([class*='w-']),
+  svg[height='13']:not([class*='h-']):not([class*='w-']),
+  svg[height='14']:not([class*='h-']):not([class*='w-']),
+  svg[height='15']:not([class*='h-']):not([class*='w-']),
+  svg[height='16']:not([class*='h-']):not([class*='w-']),
+  svg[height='17']:not([class*='h-']):not([class*='w-']),
+  svg[height='18']:not([class*='h-']):not([class*='w-']),
+  svg[height='19']:not([class*='h-']):not([class*='w-']),
+  svg[height='20']:not([class*='h-']):not([class*='w-']),
+  svg[height='21']:not([class*='h-']):not([class*='w-']),
+  svg[height='22']:not([class*='h-']):not([class*='w-']),
+  svg[height='23']:not([class*='h-']):not([class*='w-']),
+  svg[height='24']:not([class*='h-']):not([class*='w-']),
+  svg[height='25']:not([class*='h-']):not([class*='w-']),
+  svg[height='26']:not([class*='h-']):not([class*='w-']),
+  svg[height='27']:not([class*='h-']):not([class*='w-']),
+  svg[height='28']:not([class*='h-']):not([class*='w-']),
+  svg[height='29']:not([class*='h-']):not([class*='w-']),
+  svg[height='30']:not([class*='h-']):not([class*='w-']),
+  svg[height='31']:not([class*='h-']):not([class*='w-']),
+  svg[height='32']:not([class*='h-']):not([class*='w-']),
+  svg[height='33']:not([class*='h-']):not([class*='w-']),
+  svg[height='34']:not([class*='h-']):not([class*='w-']),
+  svg[class*='h-['][class*='px]'] {
+    zoom: calc(var(--ui-scale, 1) * (1 + var(--ui-scale, 1)) / 2);
+  }
+
+  svg[class*='h-['][class*='rem]']:not([class*='px]']),
+  svg[class~='h-3'],
+  svg[class~='h-3.5'],
+  svg[class~='h-4'],
+  svg[class~='h-4.5'],
+  svg[class~='h-5'],
+  svg[class~='h-6'],
+  svg[class~='h-7'],
+  svg[class~='h-8'] {
+    zoom: calc((1 + var(--ui-scale, 1)) / 2);
   }
 }
 

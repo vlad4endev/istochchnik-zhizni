@@ -190,7 +190,7 @@ function ServiceCard({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex flex-1 flex-col px-4 py-3.5 sm:px-5 sm:py-4">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <div className="flex min-w-0 items-center gap-2">
               <span
                 className="grid h-7 w-7 shrink-0 place-items-center rounded-full"
@@ -198,7 +198,7 @@ function ServiceCard({
               >
                 <Icon className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
               </span>
-              <span className="text-sm font-medium text-stone-500">{meta.label}</span>
+              <span className="whitespace-nowrap text-sm font-medium text-stone-500">{meta.label}</span>
             </div>
             <StatusBadge status={cardStatus} />
           </div>
