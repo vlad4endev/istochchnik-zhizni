@@ -109,7 +109,7 @@ export function ForwardMessageSheet({
       onClick={(e) => e.target === e.currentTarget && handleClose()}
     >
       <div
-        className="flex max-h-[min(88dvh,560px)] w-full max-w-md flex-col overflow-hidden rounded-t-[18px] bg-white shadow-2xl sm:rounded-[14px]"
+        className="flex max-h-[min(88dvh,560px)] w-full max-w-md flex-col overflow-hidden rounded-t-[18px] bg-white pb-[env(safe-area-inset-bottom,0px)] shadow-2xl sm:rounded-[14px]"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex shrink-0 items-center gap-2 border-b border-black/[0.06] px-3 py-2.5">
