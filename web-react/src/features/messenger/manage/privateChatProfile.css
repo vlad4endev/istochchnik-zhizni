@@ -9,6 +9,8 @@
   --pcp-accent: var(--primary, #7d3640);
   --pcp-line: rgba(28, 25, 23, 0.09);
   min-height: 100%;
+  /* В колонке-обёртке страницы не сжимаем экран до высоты окна: иначе запас под нижнюю панель (iOS) лежит поверх контента. */
+  flex-shrink: 0;
   width: 100%;
   background: var(--surface, #f4f1ed);
   color: var(--pcp-text);
@@ -217,7 +219,7 @@ html[data-color-theme='blue'] .pcp {
 }
 
 .pcp-action__label {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   line-height: 1.1;
   white-space: nowrap;
