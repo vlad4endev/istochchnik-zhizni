@@ -30,6 +30,8 @@ export interface AuthProfile {
   registrationStatus: RegistrationStatus;
   username: string;
   memberId: number | null;
+  /** Стабильный публичный UUID (`members.user_id`) для поиска пользователя и привязки данных. */
+  userId: string | null;
 }
 
 interface AuthState extends AuthProfile {
@@ -80,6 +82,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   registrationStatus: 'active',
   username: '',
   memberId: null,
+  userId: null,
   hydrated: false,
 
   hydrate: () => {
@@ -94,12 +97,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 
-  setSession: ({ token, firstName, lastName, role, roles, registrationStatus, username, memberId }) => {
+  setSession: ({
+    token,
+    firstName,
+    lastName,
+    role,
+    roles,
+    registrationStatus,
+    username,
+    memberId,
+    userId,
+  }) => {
     const normalizedRole = normalizeRole(role);
     const normalizedRoles =
       Array.isArray(roles) && roles.length > 0
         ? Array.from(new Set(roles.map((r) => normalizeRole(String(r)))))
         : [normalizedRole];
+    const normalizedUserId =
+      typeof userId === 'string' && userId.trim() ? userId.trim() : null;
     setAuthToken(token);
     persistAuthProfile({
       firstName: firstName.trim(),
@@ -108,6 +123,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       registrationStatus: normalizeRegistrationStatus(registrationStatus),
       username: (username ?? '').trim(),
       memberId: memberId ?? null,
+      userId: normalizedUserId,
     });
     set({
       token,
@@ -118,11 +134,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       registrationStatus: normalizeRegistrationStatus(registrationStatus),
       username: (username ?? '').trim(),
       memberId: memberId ?? null,
+      userId: normalizedUserId,
     });
   },
 
   applyServerProfile: (profile) => {
     if (!get().token) return;
+    const normalizedUserId =
+      typeof profile.userId === 'string' && profile.userId.trim()
+        ? profile.userId.trim()
+        : null;
     persistAuthProfile({
       firstName: profile.firstName,
       lastName: profile.lastName,
@@ -130,6 +151,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       registrationStatus: profile.registrationStatus,
       username: profile.username,
       memberId: profile.memberId,
+      userId: normalizedUserId,
     });
     set({
       firstName: profile.firstName.trim(),
@@ -139,6 +161,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       registrationStatus: normalizeRegistrationStatus(profile.registrationStatus),
       username: profile.username.trim(),
       memberId: profile.memberId,
+      userId: normalizedUserId,
     });
   },
 
@@ -153,6 +176,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       registrationStatus: 'active',
       username: '',
       memberId: null,
+      userId: null,
     });
   },
 
@@ -162,6 +186,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         token?: string;
         user?: {
           id?: number;
+          user_id?: string;
           first_name?: string;
           last_name?: string;
           app_role?: string;
@@ -208,6 +233,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         registrationStatus: normalizeRegistrationStatus(user.registration_status),
         username: (user.username ?? '').trim(),
         memberId: typeof user.id === 'number' ? user.id : null,
+        userId: typeof user.user_id === 'string' && user.user_id.trim() ? user.user_id.trim() : null,
       });
 
       return { ok: true };
@@ -247,6 +273,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         registration_status?: string;
         username?: string;
         id?: number;
+        user_id?: string;
       }>(`${resolveApiOrigin()}${AUTH_API_PREFIX}/me`, {
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
         timeout: 15_000,
@@ -261,6 +288,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         registrationStatus: normalizeRegistrationStatus(data.registration_status),
         username: (data.username ?? '').trim(),
         memberId: typeof data.id === 'number' ? data.id : null,
+        userId: typeof data.user_id === 'string' && data.user_id.trim() ? data.user_id.trim() : null,
       });
     } catch {
       /* ignore */

@@ -56,6 +56,7 @@ router.put('/prayer-cycle/roster-order', savePrayerCycleRosterOrderHandler);
 router.delete('/prayer-cycle/roster-order', clearPrayerCycleRosterOrderHandler);
 router.post('/prayer-cycle/anchor-member', anchorPrayerCycleMemberHandler);
 router.post('/prayer-cycle/start', startPrayerCycleHandler);
+/** `:id` — числовой members.id или публичный UUID members.user_id */
 router.get('/:id', getUser);
 router.get('/:id/prayer-requests/history', getPrayerRequestHistoryHandler);
 router.post('/:id/prayer-requests/history', addPrayerRequestHistoryHandler);

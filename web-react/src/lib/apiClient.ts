@@ -106,6 +106,7 @@ function switchSessionToCookieOnly(): void {
       registrationStatus: auth.registrationStatus,
       username: auth.username,
       memberId: auth.memberId,
+      userId: auth.userId,
     });
   } catch {
     /* store недоступен */
@@ -248,6 +249,7 @@ apiClient.interceptors.response.use(
               registrationStatus: auth.registrationStatus,
               username: auth.username,
               memberId: auth.memberId,
+              userId: auth.userId,
             });
             stripStaleAuthorization(retryCfg);
             return apiClient.request(retryCfg);

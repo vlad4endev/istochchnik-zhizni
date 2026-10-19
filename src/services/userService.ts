@@ -2,6 +2,7 @@ import { query } from '../config/db';
 import type { AppRole } from '../types/appRole';
 import { mergeAppRoles, normalizeAppRole, normalizeAppRoles, pickPrimaryAppRole } from '../types/appRole';
 import { computePrayerCycleAnchorStartDate, getPrayerCyclePosition } from '../utils/isoDates';
+import { isPublicUserId, parseMemberRef } from '../utils/memberIdentity';
 import { getPrayerDataByDate } from './calendarService';
 import { reconcileCollectionClaimsAfterMemberLeftPrayerCycle } from './cycleCollectionClaimsService';
 import {
@@ -321,11 +322,7 @@ export async function listUsers(): Promise<AppUser[]> {
   return result.rows.map(mapUser);
 }
 
-export async function getUserById(id: number): Promise<AppUser | null> {
-  const ci = await getCurrentCycleIndexForUpsert();
-  const mpcPick = buildCyclePrayerMpcPickSql('$2');
-  const result = await query(
-    `SELECT
+const MEMBER_SELECT_COLUMNS = (mpcPickSql: string) => `
       m.id,
       m.user_id,
       m.first_name,
@@ -339,7 +336,7 @@ export async function getUserById(id: number): Promise<AppUser | null> {
       m.telegram_delivery_blocked_at,
       m.ministry_role,
       m.ministry_direction,
-      ${mpcPick.prayerRequest} AS prayer_request,
+      ${mpcPickSql} AS prayer_request,
       m.birth_date,
       m.email,
       m.account_provider,
@@ -353,12 +350,57 @@ export async function getUserById(id: number): Promise<AppUser | null> {
       m.password_reset_required,
       m.created_at,
       m.updated_at
+`;
+
+export async function getUserById(id: number): Promise<AppUser | null> {
+  const ci = await getCurrentCycleIndexForUpsert();
+  const mpcPick = buildCyclePrayerMpcPickSql('$2');
+  const result = await query(
+    `SELECT
+      ${MEMBER_SELECT_COLUMNS(mpcPick.prayerRequest)}
     FROM members m
     WHERE m.id = $1`,
     [id, ci]
   );
 
   return result.rows[0] ? mapUser(result.rows[0] as AppUser) : null;
+}
+
+/**
+ * Находит участника по стабильному публичному UUID (`members.user_id`).
+ * Для клиентов и будущих приложений — основной способ найти пользователя без знания внутреннего PK.
+ */
+export async function getUserByPublicId(publicUserId: string): Promise<AppUser | null> {
+  const normalized = publicUserId.trim();
+  if (!isPublicUserId(normalized)) {
+    return null;
+  }
+  const ci = await getCurrentCycleIndexForUpsert();
+  const mpcPick = buildCyclePrayerMpcPickSql('$2');
+  const result = await query(
+    `SELECT
+      ${MEMBER_SELECT_COLUMNS(mpcPick.prayerRequest)}
+    FROM members m
+    WHERE m.user_id = $1::uuid`,
+    [normalized, ci]
+  );
+
+  return result.rows[0] ? mapUser(result.rows[0] as AppUser) : null;
+}
+
+/**
+ * Резолвит участника по числовому `id` или публичному `user_id` (UUID).
+ * Данные приложения по-прежнему привязаны к `members.id`; UUID — стабильный внешний ключ поиска.
+ */
+export async function resolveUserRef(idOrPublicId: string): Promise<AppUser | null> {
+  const ref = parseMemberRef(idOrPublicId);
+  if (!ref) {
+    return null;
+  }
+  if (ref.kind === 'numeric_id') {
+    return getUserById(ref.id);
+  }
+  return getUserByPublicId(ref.userId);
 }
 
 /**

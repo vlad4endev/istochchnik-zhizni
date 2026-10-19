@@ -346,6 +346,8 @@ ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('m
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_collection_coordinator BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Публичный UUID пользователя (генерируется при INSERT, в т.ч. при регистрации).
+-- Публичный стабильный UUID участника (внешний id для клиентов/приложений).
+-- Внутренние FK данных ссылаются на members.id; поиск пользователя — по user_id или id.
 ALTER TABLE members ADD COLUMN IF NOT EXISTS user_id UUID;
 UPDATE members SET user_id = gen_random_uuid() WHERE user_id IS NULL;
 ALTER TABLE members ALTER COLUMN user_id SET DEFAULT gen_random_uuid();
