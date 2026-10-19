@@ -4748,10 +4748,10 @@ html.dark .msg-videonote-circle--placeholder {
     }
 
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-sidebar-actions :is(.tg-calls-btn-sm, .tg-compose-btn-sm) {
-      width: calc(36px * var(--ui-scale, 1));
-      height: calc(36px * var(--ui-scale, 1));
-      min-width: calc(36px * var(--ui-scale, 1));
-      min-height: calc(36px * var(--ui-scale, 1));
+      width: calc(42px * var(--ui-scale, 1));
+      height: calc(42px * var(--ui-scale, 1));
+      min-width: calc(42px * var(--ui-scale, 1));
+      min-height: calc(42px * var(--ui-scale, 1));
       border-radius: 999px;
       background: transparent !important;
       box-shadow: none !important;
@@ -4775,7 +4775,7 @@ html.dark .msg-videonote-circle--placeholder {
 
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-chatlist-search {
       --r: var(--tg-search-reveal, 1);
-      min-height: calc(36px * var(--ui-scale, 1));
+      min-height: calc(42px * var(--ui-scale, 1));
       margin: 2px 12px 8px;
       padding: 4px 12px;
       border-radius: 999px;
@@ -4832,8 +4832,8 @@ html.dark .msg-videonote-circle--placeholder {
     }
 
     html[data-apple-mobile='1'][data-messenger-open='1'] .tg-smart-tab {
-      min-height: calc(30px * var(--ui-scale, 1));
-      padding: 4px 12px;
+      min-height: calc(36px * var(--ui-scale, 1));
+      padding: 5px 14px;
       background: transparent !important;
       color: var(--tg-text, #1c1917) !important;
       font-weight: 600;
