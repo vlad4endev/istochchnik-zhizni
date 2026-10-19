@@ -426,7 +426,6 @@ html {
 
 @media (max-width: 767px) {
   :root {
-    --ui-scale-k: 0.92; /* общий запас: на iPhone 13–15 (390–430px) всё было крупновато */
     --ui-scale-w: 0.86;
   }
 }
@@ -2594,9 +2593,9 @@ button {
     box-sizing: border-box;
     width: calc(100% - 1.5rem);
     max-width: 26rem;
-    min-height: calc(58px * var(--ui-scale, 1));
+    min-height: calc(62px * var(--ui-scale, 1));
     margin: 0 auto;
-    padding: 3px;
+    padding: 4px;
     gap: 2px;
   }
 
@@ -2619,7 +2618,7 @@ button {
   }
 
   html[data-apple-mobile='1'] nav.app-bottom-nav .app-bottom-nav__tab {
-    min-height: calc(50px * var(--ui-scale, 1));
+    min-height: calc(54px * var(--ui-scale, 1));
     border-radius: 999px;
     gap: 0.0625rem;
   }
