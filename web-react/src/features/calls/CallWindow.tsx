@@ -19,6 +19,7 @@ import {
   ConnectionState,
   DisconnectReason,
   ParticipantEvent,
+  RoomEvent,
   Track,
   VideoPresets,
   type Participant,
@@ -194,21 +195,87 @@ function resumeCallMedia(room?: Room | null): void {
   void room.startAudio().catch(() => undefined);
 }
 
-/** После фона/блокировки экрана браузер часто suspend'ит audio — вернуть на foreground. */
+/**
+ * Звук собеседника на iOS PWA / macOS Safari: autoplay policy блокирует <audio> без жеста,
+ * а после фона/блокировки экрана браузер suspend'ит аудио. Повторяем startAudio():
+ * при подключении, новых аудио-треках, смене статуса воспроизведения, возврате на foreground,
+ * на любом первом жесте пользователя и коротким retry-циклом, пока звук не заработает.
+ */
 function KeepAliveCallMedia() {
   const room = useRoomContext();
   useEffect(() => {
+    let disposed = false;
+    let retryTimer: number | null = null;
+    let retries = 0;
+
+    const clearRetry = () => {
+      if (retryTimer != null) {
+        window.clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+    };
+
     const kick = () => {
+      if (disposed) return;
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       resumeCallMedia(room);
     };
+
+    const scheduleRetry = () => {
+      clearRetry();
+      if (disposed || room.canPlaybackAudio || retries >= 20) return;
+      retries += 1;
+      retryTimer = window.setTimeout(() => {
+        kick();
+        scheduleRetry();
+      }, 1500);
+    };
+
+    const onPlaybackChanged = () => {
+      if (room.canPlaybackAudio) {
+        retries = 0;
+        clearRetry();
+      } else {
+        kick();
+        scheduleRetry();
+      }
+    };
+
+    const onTrack = () => {
+      kick();
+      scheduleRetry();
+    };
+
+    const onGesture = () => {
+      kick();
+    };
+
     document.addEventListener('visibilitychange', kick);
     window.addEventListener('focus', kick);
     window.addEventListener('pageshow', kick);
+    // Любой жест разблокирует autoplay: capture, чтобы не зависеть от stopPropagation в UI.
+    document.addEventListener('pointerdown', onGesture, true);
+    document.addEventListener('touchend', onGesture, true);
+    document.addEventListener('click', onGesture, true);
+    room.on(RoomEvent.AudioPlaybackStatusChanged, onPlaybackChanged);
+    room.on(RoomEvent.TrackSubscribed, onTrack);
+    room.on(RoomEvent.Connected, onTrack);
+    room.on(RoomEvent.Reconnected, onTrack);
+    kick();
+    scheduleRetry();
     return () => {
+      disposed = true;
+      clearRetry();
       document.removeEventListener('visibilitychange', kick);
       window.removeEventListener('focus', kick);
       window.removeEventListener('pageshow', kick);
+      document.removeEventListener('pointerdown', onGesture, true);
+      document.removeEventListener('touchend', onGesture, true);
+      document.removeEventListener('click', onGesture, true);
+      room.off(RoomEvent.AudioPlaybackStatusChanged, onPlaybackChanged);
+      room.off(RoomEvent.TrackSubscribed, onTrack);
+      room.off(RoomEvent.Connected, onTrack);
+      room.off(RoomEvent.Reconnected, onTrack);
     };
   }, [room]);
   return null;
