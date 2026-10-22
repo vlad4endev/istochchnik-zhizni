@@ -2,6 +2,8 @@ import { apiClient } from '../../../lib/apiClient';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { fetchVapidPublicKey } from '../../profile/api';
 import { ensureServiceWorkerRegistered } from '../../pwa/ensureServiceWorker';
+import { adviceForPushPermissionDenied, adviceForPushServiceUnreachable, adviceForPushUnsupported, currentPushPlatform } from '../../pwa/utils/pushBrowserAdvice';
+import { isInstalledPwa } from '../../pwa/utils/pwaEnvironment';
 
 /** Последний известный публичный VAPID с сервера — чтобы при смене ключей пересоздать подписку. */
 const LS_VAPID_PUBLIC_KEY = 'web_push_vapid_public_key';
@@ -95,10 +97,10 @@ export function describePushEnableError(err: unknown): string {
     return 'Service worker ещё не запущен. Обновите страницу (Ctrl+Shift+R) и попробуйте снова; в режиме разработки push не работает.';
   }
   if (name === 'AbortError') {
-    return 'Браузер не смог связаться со своим push-сервисом (Google FCM / Apple). Проверьте доступ в интернет, отключите блокировщики и VPN; в Brave включите «Использовать сервисы Google для push-сообщений».';
+    return adviceForPushServiceUnreachable(currentPushPlatform(isInstalledPwa()));
   }
   if (name === 'NotAllowedError') {
-    return 'Браузер не разрешил уведомления для этого сайта. Проверьте настройки сайта (значок замка в адресной строке).';
+    return adviceForPushPermissionDenied(currentPushPlatform(isInstalledPwa()));
   }
   if (name === 'InvalidCharacterError' || name === 'InvalidAccessError') {
     return 'Ключ push-сервера (VAPID) на сервере повреждён. Обратитесь к администратору.';
@@ -130,10 +132,10 @@ export async function initMessengerPushNotifications(opts?: { force?: boolean })
  */
 export async function enableWebPush(): Promise<WebPushResult> {
   if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-    return { ok: false, error: 'Браузер не поддерживает push-уведомления.' };
+    return { ok: false, error: adviceForPushUnsupported(currentPushPlatform(isInstalledPwa())) };
   }
   if (Notification.permission === 'denied') {
-    return { ok: false, error: 'Уведомления заблокированы в настройках браузера.' };
+    return { ok: false, error: adviceForPushPermissionDenied(currentPushPlatform(isInstalledPwa())) };
   }
   if (Notification.permission !== 'granted') {
     const permission = await Notification.requestPermission();

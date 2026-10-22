@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { FiBell, FiBellOff } from 'react-icons/fi';
 import { fetchPushStatus, sendTestPush, unsubscribeFromPushApi, type PushStatus } from '../api';
-import { isAppleMobileWeb, isInstalledPwa } from '../../pwa/utils/pwaEnvironment';
+import { isInstalledPwa } from '../../pwa/utils/pwaEnvironment';
+import {
+  adviceForPushPermissionDenied,
+  adviceForPushUnsupported,
+  currentPushPlatform,
+} from '../../pwa/utils/pushBrowserAdvice';
 import { useNotificationManager } from '../../pwa';
 import { useAuthStore } from '../../auth/authStore';
 import { initMessengerPushNotifications } from '../../messenger/push/webPush';
@@ -312,9 +317,7 @@ export function PushSettings() {
       <div className={profileShell.profileRoot} data-profile-root>
         <div className="mt-4 rounded-xl border border-[color:var(--profile-card-ring)] bg-[color:color-mix(in_srgb,var(--profile-surface-elevated)_70%,var(--profile-surface))] p-4">
           <p className="text-sm text-[color:var(--profile-text-muted)]">
-            {isAppleMobileWeb() && !isInstalledPwa()
-              ? 'На iPhone и iPad push работают только в установленном приложении: нажмите «Поделиться» → «На экран „Домой“», затем откройте ярлык и включите уведомления здесь (нужен iOS 16.4 или новее).'
-              : 'Браузер не поддерживает Push-уведомления. На iPhone добавьте сайт на экран «Домой» и откройте ярлык.'}
+            {adviceForPushUnsupported(currentPushPlatform(isInstalledPwa()))}
           </p>
         </div>
       </div>
@@ -399,8 +402,7 @@ export function PushSettings() {
 
       {status === 'denied' ? (
         <p className="mt-3 text-xs text-red-500">
-          Уведомления заблокированы в настройках браузера. Разрешите их для этого сайта вручную, затем
-          обновите страницу.
+          {adviceForPushPermissionDenied(currentPushPlatform(isInstalledPwa()))}
         </p>
       ) : null}
     </div>
