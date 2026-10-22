@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  LuMic,
-  LuMicOff,
-  LuPhone,
-  LuPhoneOff,
-  LuVideo,
-} from 'react-icons/lu';
+  IcMic,
+  IcMicOff,
+  IcPhone,
+  IcHangup,
+  IcVideo,
+} from './callIcons';
 import { useLocalParticipant, useRoomContext } from '@livekit/components-react';
 
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
@@ -85,9 +85,9 @@ function ActiveCallBarChrome({
           ) : (
             <span className="active-call-bar__avatar-mark">
               {activeCall.callType === 'video' ? (
-                <LuVideo size={18} strokeWidth={2.2} />
+                <IcVideo size={18} strokeWidth={2.2} />
               ) : (
-                <LuPhone size={18} strokeWidth={2.2} />
+                <IcPhone size={18} strokeWidth={2.2} />
               )}
             </span>
           )}
@@ -132,9 +132,9 @@ function ActiveCallBarChrome({
             aria-label={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
           >
             {isMuted ? (
-              <LuMicOff size={18} strokeWidth={2.3} />
+              <IcMicOff size={18} strokeWidth={2.3} />
             ) : (
-              <LuMic size={18} strokeWidth={2.3} />
+              <IcMic size={18} strokeWidth={2.3} />
             )}
           </button>
         ) : null}
@@ -147,7 +147,7 @@ function ActiveCallBarChrome({
           }}
           aria-label={hangupLabel}
         >
-          <LuPhoneOff size={18} strokeWidth={2.3} />
+          <IcHangup size={18} strokeWidth={2.3} />
         </button>
       </div>
     </div>

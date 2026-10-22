@@ -1,4 +1,4 @@
-import { LuMic, LuVideo } from 'react-icons/lu';
+import { IcMic, IcVideo } from './callIcons';
 
 type MeetingAvatarProps = {
   mediaType?: 'audio' | 'video';
@@ -13,7 +13,7 @@ type MeetingAvatarProps = {
  */
 export function MeetingAvatar({ mediaType = 'video', size = 'lg', className }: MeetingAvatarProps) {
   const isVideo = mediaType !== 'audio';
-  const Icon = isVideo ? LuVideo : LuMic;
+  const Icon = isVideo ? IcVideo : IcMic;
   const iconSize = size === 'lg' ? 40 : 30;
 
   return (

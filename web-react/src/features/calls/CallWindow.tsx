@@ -40,23 +40,23 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  LuChevronsDown,
-  LuCopy,
-  LuGalleryHorizontalEnd,
-  LuLayoutGrid,
-  LuMic,
-  LuMicOff,
-  LuMonitorUp,
-  LuVolume2,
-  LuVolumeX,
-  LuPanelRight,
-  LuPhoneOff,
-  LuShare2,
-  LuUsers,
-  LuVideo,
-  LuVideoOff,
-  LuX,
-} from 'react-icons/lu';
+  IcChevronsDown,
+  IcCopy,
+  IcLayoutSpeaker,
+  IcLayoutGrid,
+  IcMic,
+  IcMicOff,
+  IcScreenShare,
+  IcVolume,
+  IcVolumeOff,
+  IcLayoutSidebar,
+  IcHangup,
+  IcShare,
+  IcUsers,
+  IcVideo,
+  IcVideoOff,
+  IcClose,
+} from './callIcons';
 import { useNavigate } from 'react-router-dom';
 
 import { BodyPortal } from '../../components/BodyPortal';
@@ -107,7 +107,7 @@ function MinimizeCallButton({ className }: { className?: string }) {
       aria-label="Свернуть звонок и продолжить пользоваться приложением"
       title="Свернуть"
     >
-      <LuChevronsDown size={20} strokeWidth={2.3} aria-hidden />
+      <IcChevronsDown size={20} strokeWidth={2.3} aria-hidden />
     </button>
   );
 }
@@ -537,7 +537,7 @@ function CallControls({
           aria-label={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
         >
           <span className="call-ctrl__icon">
-            {isMuted ? <LuMicOff size={22} /> : <LuMic size={22} />}
+            {isMuted ? <IcMicOff size={22} /> : <IcMic size={22} />}
           </span>
           <span className="call-ctrl__label">Микрофон</span>
         </button>
@@ -551,7 +551,7 @@ function CallControls({
           aria-label="Нет звука? Включить звук"
         >
           <span className="call-ctrl__icon">
-            {canPlayAudio ? <LuVolume2 size={22} /> : <LuVolumeX size={22} />}
+            {canPlayAudio ? <IcVolume size={22} /> : <IcVolumeOff size={22} />}
           </span>
           <span className="call-ctrl__label">Звук</span>
         </button>
@@ -564,7 +564,7 @@ function CallControls({
             aria-label={isVideoOff ? 'Включить камеру' : 'Выключить камеру'}
           >
             <span className="call-ctrl__icon">
-              {isVideoOff ? <LuVideoOff size={22} /> : <LuVideo size={22} />}
+              {isVideoOff ? <IcVideoOff size={22} /> : <IcVideo size={22} />}
             </span>
             <span className="call-ctrl__label">Камера</span>
           </button>
@@ -578,7 +578,7 @@ function CallControls({
             aria-label="Демонстрация экрана"
           >
             <span className="call-ctrl__icon">
-              <LuMonitorUp size={22} />
+              <IcScreenShare size={22} />
             </span>
             <span className="call-ctrl__label">Экран</span>
           </button>
@@ -592,7 +592,7 @@ function CallControls({
             aria-pressed={participantsOpen}
           >
             <span className="call-ctrl__icon">
-              <LuUsers size={22} />
+              <IcUsers size={22} />
             </span>
             <span className="call-ctrl__label">Участники</span>
           </button>
@@ -606,7 +606,7 @@ function CallControls({
             aria-pressed={shareOpen}
           >
             <span className="call-ctrl__icon">
-              <LuShare2 size={22} />
+              <IcShare size={22} />
             </span>
             <span className="call-ctrl__label">Ссылка</span>
           </button>
@@ -656,7 +656,7 @@ function CallControls({
           aria-expanded={onEndForAll ? leaveMenuOpen : undefined}
         >
           <span className="call-ctrl__icon">
-            <LuPhoneOff size={22} />
+            <IcHangup size={22} />
           </span>
           <span className="call-ctrl__label">Выйти</span>
         </button>
@@ -800,7 +800,7 @@ function MeetingOverflowTile({ count }: { count: number }) {
   return (
     <div className="call-participant-tile call-participant-tile--overflow" aria-label={label}>
       <div className="call-participant-tile__media call-participant-tile__media--overflow">
-        <LuUsers size={28} strokeWidth={2} aria-hidden />
+        <IcUsers size={28} strokeWidth={2} aria-hidden />
         <span className="call-participant-tile__overflow-count">+{count}</span>
       </div>
       <p className="call-participant-tile__name">{label}</p>
@@ -929,7 +929,7 @@ function MeetingParticipantTile({
                   .join(' ')}
                 aria-label={micOn ? (speaking ? 'Говорит' : 'Микрофон включён') : 'Микрофон выключен'}
               >
-                {micOn ? <LuMic size={13} strokeWidth={2.4} /> : <LuMicOff size={13} strokeWidth={2.4} />}
+                {micOn ? <IcMic size={13} strokeWidth={2.4} /> : <IcMicOff size={13} strokeWidth={2.4} />}
               </span>
               <span className="call-participant-tile__label">{displayName}</span>
               {qualityWarn || participant.isLocal ? (
@@ -957,7 +957,7 @@ function MeetingParticipantTile({
                 .join(' ')}
               aria-hidden
             >
-              {micOn ? <LuMic size={12} strokeWidth={2.4} /> : <LuMicOff size={12} strokeWidth={2.4} />}
+              {micOn ? <IcMic size={12} strokeWidth={2.4} /> : <IcMicOff size={12} strokeWidth={2.4} />}
             </span>
           </div>
         </>
@@ -1248,7 +1248,7 @@ function RoomStage({
               </span>
             ) : null}
             <span className="call-meeting-topbar__count" title="Участники">
-              <LuUsers size={14} strokeWidth={2.4} aria-hidden />
+              <IcUsers size={14} strokeWidth={2.4} aria-hidden />
               {Math.max(1, sortedParticipants.length)}
             </span>
             {meetingUi ? (
@@ -1266,7 +1266,7 @@ function RoomStage({
                   aria-pressed={layoutMode === 'grid'}
                   title="Сетка"
                 >
-                  <LuLayoutGrid size={16} strokeWidth={2.2} />
+                  <IcLayoutGrid size={16} strokeWidth={2.2} />
                 </button>
                 <button
                   type="button"
@@ -1281,7 +1281,7 @@ function RoomStage({
                   aria-pressed={layoutMode === 'speaker'}
                   title="Говорящий крупно"
                 >
-                  <LuGalleryHorizontalEnd size={16} strokeWidth={2.2} />
+                  <IcLayoutSpeaker size={16} strokeWidth={2.2} />
                 </button>
                 <button
                   type="button"
@@ -1297,7 +1297,7 @@ function RoomStage({
                   aria-pressed={layoutMode === 'sidebar'}
                   title="Боковая лента"
                 >
-                  <LuPanelRight size={16} strokeWidth={2.2} />
+                  <IcLayoutSidebar size={16} strokeWidth={2.2} />
                 </button>
               </div>
             ) : (
@@ -1552,7 +1552,7 @@ function MeetingInviteBar({ callId, onCollapse }: { callId: string; onCollapse: 
         onClick={onCollapse}
         aria-label="Свернуть"
       >
-        <LuX size={18} strokeWidth={2.2} />
+        <IcClose size={18} strokeWidth={2.2} />
       </button>
       <p className="call-invite-bar__title">{meetingTitle}</p>
       <p className="call-invite-bar__hint">
@@ -1572,7 +1572,7 @@ function MeetingInviteBar({ callId, onCollapse }: { callId: string; onCollapse: 
           disabled={!displayUrl}
           onClick={copy}
         >
-          <LuCopy size={18} strokeWidth={2.2} aria-hidden />
+          <IcCopy size={18} strokeWidth={2.2} aria-hidden />
           Скопировать
         </button>
         <button
@@ -1581,7 +1581,7 @@ function MeetingInviteBar({ callId, onCollapse }: { callId: string; onCollapse: 
           disabled={!displayUrl}
           onClick={() => void share()}
         >
-          <LuShare2 size={18} strokeWidth={2.2} aria-hidden />
+          <IcShare size={18} strokeWidth={2.2} aria-hidden />
           Поделиться
         </button>
       </div>
@@ -1630,7 +1630,7 @@ function MeetingSidePanelRow({ participant }: { participant: Participant }) {
             .join(' ')}
           title={micOn ? 'Микрофон' : 'Микрофон выкл.'}
         >
-          {micOn ? <LuMic size={14} /> : <LuMicOff size={14} />}
+          {micOn ? <IcMic size={14} /> : <IcMicOff size={14} />}
         </span>
         <span
           className={['call-sidepanel__flag', !camOn ? 'call-sidepanel__flag--off' : '']
@@ -1638,7 +1638,7 @@ function MeetingSidePanelRow({ participant }: { participant: Participant }) {
             .join(' ')}
           title={camOn ? 'Камера' : 'Камера выкл.'}
         >
-          {camOn ? <LuVideo size={14} /> : <LuVideoOff size={14} />}
+          {camOn ? <IcVideo size={14} /> : <IcVideoOff size={14} />}
         </span>
       </div>
     </li>
@@ -1699,7 +1699,7 @@ function MeetingSidePanel({
       <header className="call-sidepanel__head">
         <h2 className="call-sidepanel__title">Участники ({sorted.length})</h2>
         <button type="button" className="call-sidepanel__close" onClick={onClose} aria-label="Закрыть">
-          <LuX size={18} strokeWidth={2.2} />
+          <IcClose size={18} strokeWidth={2.2} />
         </button>
       </header>
       <ul className="call-sidepanel__list">
@@ -1719,7 +1719,7 @@ function MeetingSidePanel({
             disabled={!displayUrl}
             onClick={copy}
           >
-            <LuCopy size={16} strokeWidth={2.2} aria-hidden />
+            <IcCopy size={16} strokeWidth={2.2} aria-hidden />
             Пригласить участников
           </button>
         </div>
@@ -1910,7 +1910,7 @@ function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; o
                   });
                 }}
               >
-                <LuCopy size={18} strokeWidth={2.2} aria-hidden />
+                <IcCopy size={18} strokeWidth={2.2} aria-hidden />
                 Скопировать ссылку
               </button>
             ) : null}
@@ -1928,7 +1928,7 @@ function OutgoingRing({ activeCall, onCancel }: { activeCall: ActiveCallState; o
           aria-label="Отменить"
         >
           <span className="call-ctrl__icon">
-            <LuPhoneOff size={22} />
+            <IcHangup size={22} />
           </span>
           <span className="call-ctrl__label">Отмена</span>
         </button>
@@ -1959,7 +1959,7 @@ function CallShell({
       <div className="call-controls" role="toolbar" aria-label="Управление звонком">
         <button type="button" className="call-ctrl call-ctrl--hangup" onClick={onHangup} aria-label="Завершить">
           <span className="call-ctrl__icon">
-            <LuPhoneOff size={22} />
+            <IcHangup size={22} />
           </span>
           <span className="call-ctrl__label">Выйти</span>
         </button>

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  LuMessageCircle,
-  LuPhoneIncoming,
-  LuPhoneOff,
-  LuVideo,
-} from 'react-icons/lu';
+  IcMessage,
+  IcPhoneIncoming,
+  IcHangup,
+  IcVideo,
+} from './callIcons';
 
 import { emitAppToast } from '../../lib/uiFeedback';
 import { useAuthStore } from '../auth/authStore';
@@ -150,13 +150,13 @@ export function CallPage() {
       <GlassCallShell className="glass-call--ended" closeTo={messengerHref}>
         <div className="glass-call__status-card" aria-hidden>
           <span className="glass-call__status-icon">
-            <LuPhoneOff size={32} strokeWidth={1.7} />
+            <IcHangup size={32} strokeWidth={1.7} />
           </span>
         </div>
         <GlassCallTitle title={error} />
         {title ? <p className="glass-call__lead glass-call__lead--meeting">{title}</p> : null}
         <div className="glass-call__spacer" />
-        <GlassCallCta to={messengerHref} icon={<LuMessageCircle size={20} strokeWidth={1.8} />}>
+        <GlassCallCta to={messengerHref} icon={<IcMessage size={20} strokeWidth={1.8} />}>
           В мессенджер
         </GlassCallCta>
         <GlassCallCta to="/dashboard" variant="ghost">
@@ -184,9 +184,9 @@ export function CallPage() {
         <div className="glass-call__status-card glass-call__status-card--live" aria-hidden>
           <span className="glass-call__status-icon">
             {mediaType === 'video' ? (
-              <LuVideo size={32} strokeWidth={1.7} />
+              <IcVideo size={32} strokeWidth={1.7} />
             ) : (
-              <LuPhoneIncoming size={32} strokeWidth={1.7} />
+              <IcPhoneIncoming size={32} strokeWidth={1.7} />
             )}
           </span>
         </div>
@@ -208,7 +208,7 @@ export function CallPage() {
               );
             }}
           >
-            <LuPhoneOff size={18} strokeWidth={2.2} aria-hidden />
+            <IcHangup size={18} strokeWidth={2.2} aria-hidden />
             Отклонить
           </button>
           <button
@@ -222,7 +222,7 @@ export function CallPage() {
                 .catch((e) => emitAppToast(e instanceof Error ? e.message : 'Ошибка', 'error'));
             }}
           >
-            <LuPhoneIncoming size={18} strokeWidth={2.2} aria-hidden />
+            <IcPhoneIncoming size={18} strokeWidth={2.2} aria-hidden />
             Принять
           </button>
         </div>
@@ -236,13 +236,13 @@ export function CallPage() {
       <GlassCallShell className="glass-call--ended" closeTo={messengerHref}>
         <div className="glass-call__status-card" aria-hidden>
           <span className="glass-call__status-icon">
-            <LuPhoneOff size={32} strokeWidth={1.7} />
+            <IcHangup size={32} strokeWidth={1.7} />
           </span>
         </div>
         <GlassCallTitle title="Звонок завершён" />
         {title ? <p className="glass-call__lead glass-call__lead--meeting">{title}</p> : null}
         <div className="glass-call__spacer" />
-        <GlassCallCta to={messengerHref} icon={<LuMessageCircle size={20} strokeWidth={1.8} />}>
+        <GlassCallCta to={messengerHref} icon={<IcMessage size={20} strokeWidth={1.8} />}>
           В мессенджер
         </GlassCallCta>
         <GlassCallCta to="/dashboard" variant="ghost">
@@ -257,7 +257,7 @@ export function CallPage() {
     <GlassCallShell className="glass-call--active" closeTo={messengerHref}>
       <div className="glass-call__status-card glass-call__status-card--live" aria-hidden>
         <span className="glass-call__status-icon">
-          <LuVideo size={32} strokeWidth={1.7} />
+          <IcVideo size={32} strokeWidth={1.7} />
         </span>
         <span className="glass-call__live-badge">В эфире</span>
       </div>
@@ -277,7 +277,7 @@ export function CallPage() {
           to={messengerHref}
           variant="ghost"
           onClick={() => minimizeCall()}
-          icon={<LuMessageCircle size={20} strokeWidth={1.8} />}
+          icon={<IcMessage size={20} strokeWidth={1.8} />}
         >
           Свернуть в чат
         </GlassCallCta>
