@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { LuArrowRight, LuX } from 'react-icons/lu';
+import { IcArrowRight, IcClose } from './callIcons';
 
 /** Split meeting title like the Glass mock: first word + italic accent line. */
 export function splitGlassTitle(title: string): { head: string; accent: string } {
@@ -62,11 +62,11 @@ export function GlassCallShell({
               aria-label="Закрыть"
               onClick={onClose}
             >
-              <LuX size={20} strokeWidth={1.8} aria-hidden />
+              <IcClose size={20} strokeWidth={1.8} aria-hidden />
             </button>
           ) : (
             <Link to={closeTo} className="glass-call__close" aria-label="Закрыть">
-              <LuX size={20} strokeWidth={1.8} aria-hidden />
+              <IcClose size={20} strokeWidth={1.8} aria-hidden />
             </Link>
           )}
         </header>
@@ -106,7 +106,7 @@ export function GlassCallCta({
       </span>
       {variant === 'primary' ? (
         <span className="glass-call__cta-arrow" aria-hidden>
-          <LuArrowRight size={20} strokeWidth={2} />
+          <IcArrowRight size={20} strokeWidth={2} />
         </span>
       ) : null}
     </>

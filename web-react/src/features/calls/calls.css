@@ -677,7 +677,7 @@
   left: 50%;
   bottom: var(--call-controls-reserve, calc(128px + var(--call-inset-bottom, 0px)));
   transform: translateX(-50%);
-  z-index: 5;
+  z-index: 60;
   border: 0;
   border-radius: 999px;
   padding: 10px 18px;
@@ -896,18 +896,47 @@
 }
 
 .call-ctrl__icon {
+  position: relative;
   width: 48px;
   height: 48px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.12);
-  transition: background 0.15s ease, transform 0.12s ease, opacity 0.15s ease;
+  font-size: 22px;
+  color: #fff;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 4px 14px rgba(0, 0, 0, 0.28);
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+
+.call-ctrl__icon svg {
+  width: 1em;
+  height: 1em;
+  flex: none;
+}
+
+@media (hover: hover) {
+  .call-ctrl:hover .call-ctrl__icon {
+    transform: translateY(-1px);
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.12));
+  }
 }
 
 .call-ctrl:active .call-ctrl__icon {
-  transform: scale(0.96);
+  transform: scale(0.94);
+}
+
+.call-ctrl:focus-visible .call-ctrl__icon {
+  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline-offset: 2px;
+}
+
+.call-ctrl:disabled {
+  opacity: 0.6;
 }
 
 .call-ctrl__label {
@@ -918,18 +947,36 @@
   line-height: 1.1;
 }
 
+/* Выключено / заблокировано — мягкий красный, чтобы состояние читалось сразу. */
 .call-ctrl--off .call-ctrl__icon {
-  background: rgba(255, 255, 255, 0.07);
-  opacity: 0.72;
+  color: #ff7a70;
+  background: linear-gradient(160deg, rgba(255, 69, 58, 0.34), rgba(255, 69, 58, 0.16));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 160, 150, 0.28),
+    inset 0 0 0 1px rgba(255, 90, 80, 0.35),
+    0 4px 14px rgba(255, 59, 48, 0.18);
 }
 
+.call-ctrl--off .call-ctrl__label {
+  color: #ff9d95;
+}
+
+/* Микрофон включён — свежий зелёный акцент. */
 .call-ctrl--mic-on .call-ctrl__icon {
-  background: #22c55e;
   color: #fff;
+  background: linear-gradient(160deg, #34d77b, #16a34a);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 6px 18px rgba(34, 197, 94, 0.38);
 }
 
+/* Включённая функция (экран, участники, ссылка) — синий акцент. */
 .call-ctrl--active .call-ctrl__icon {
-  background: rgba(59, 130, 246, 0.55);
+  color: #fff;
+  background: linear-gradient(160deg, #5aa2ff, #2f6df6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 6px 18px rgba(59, 130, 246, 0.42);
 }
 
 .call-leave-wrap {
@@ -982,8 +1029,11 @@
 .call-ctrl--hangup .call-ctrl__icon {
   width: 52px;
   height: 52px;
-  background: #ff3b30;
-  box-shadow: 0 6px 20px rgba(255, 59, 48, 0.45);
+  color: #fff;
+  background: linear-gradient(160deg, #ff5a4f, #e5251b);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 6px 20px rgba(255, 59, 48, 0.5);
 }
 
 .call-ctrl--hangup .call-ctrl__label {

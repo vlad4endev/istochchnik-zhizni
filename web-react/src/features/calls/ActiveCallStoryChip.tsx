@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LuPhone, LuVideo } from 'react-icons/lu';
+import { IcPhone, IcVideo } from './callIcons';
 
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 
@@ -76,9 +76,9 @@ export function ActiveCallStoryChip() {
             ) : (
               <span className={styles.avatarMark} aria-hidden>
                 {activeCall.callType === 'video' ? (
-                  <LuVideo size={22} strokeWidth={2.2} />
+                  <IcVideo size={22} strokeWidth={2.2} />
                 ) : (
-                  <LuPhone size={22} strokeWidth={2.2} />
+                  <IcPhone size={22} strokeWidth={2.2} />
                 )}
               </span>
             )}

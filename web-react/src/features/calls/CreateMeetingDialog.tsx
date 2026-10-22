@@ -1,14 +1,14 @@
 import { useCallback, useId, useState, type ReactNode } from 'react';
 import {
-  LuLink2,
-  LuMic,
-  LuMicOff,
-  LuMoon,
-  LuSun,
-  LuVideo,
-  LuVideoOff,
-  LuX,
-} from 'react-icons/lu';
+  IcLink,
+  IcMic,
+  IcMicOff,
+  IcMoon,
+  IcSun,
+  IcVideo,
+  IcVideoOff,
+  IcClose,
+} from './callIcons';
 
 import { BodyPortal } from '../../components/BodyPortal';
 import { useMe } from '../../hooks/useMe';
@@ -115,7 +115,7 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
         </div>
 
         <button type="button" className="telemost-create__close" onClick={onClose} aria-label="Закрыть" disabled={busy}>
-          <LuX size={22} strokeWidth={2.25} />
+          <IcClose size={22} strokeWidth={2.25} />
         </button>
 
         <div className="telemost-create__panel">
@@ -124,7 +124,7 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
             <span className="telemost-create__ring" />
             <span className="telemost-create__ring telemost-create__ring--late" />
             <span className="telemost-create__badge">
-              {isVideo ? <LuVideo size={34} strokeWidth={1.75} /> : <LuMic size={34} strokeWidth={1.75} />}
+              {isVideo ? <IcVideo size={34} strokeWidth={1.75} /> : <IcMic size={34} strokeWidth={1.75} />}
             </span>
           </div>
 
@@ -153,7 +153,7 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
                     onClick={() => void createWithTitle(tpl.title, tpl.id)}
                   >
                     <span className="telemost-create__template-icon" aria-hidden>
-                      {isMorning ? <LuSun size={22} strokeWidth={2} /> : <LuMoon size={22} strokeWidth={2} />}
+                      {isMorning ? <IcSun size={22} strokeWidth={2} /> : <IcMoon size={22} strokeWidth={2} />}
                     </span>
                     <span className="telemost-create__template-copy">
                       <span className="telemost-create__template-short">{tpl.short}</span>
@@ -206,8 +206,8 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
               onClick={() => setMicOn((v) => !v)}
               labelOn="Микрофон"
               labelOff="Микрофон выкл."
-              iconOn={<LuMic size={20} strokeWidth={2.1} />}
-              iconOff={<LuMicOff size={20} strokeWidth={2.1} />}
+              iconOn={<IcMic size={20} strokeWidth={2.1} />}
+              iconOff={<IcMicOff size={20} strokeWidth={2.1} />}
             />
             {isVideo ? (
               <DeviceToggle
@@ -215,8 +215,8 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
                 onClick={() => setCamOn((v) => !v)}
                 labelOn="Камера"
                 labelOff="Камера выкл."
-                iconOn={<LuVideo size={20} strokeWidth={2.1} />}
-                iconOff={<LuVideoOff size={20} strokeWidth={2.1} />}
+                iconOn={<IcVideo size={20} strokeWidth={2.1} />}
+                iconOff={<IcVideoOff size={20} strokeWidth={2.1} />}
               />
             ) : null}
           </div>
@@ -231,7 +231,7 @@ export function CreateMeetingDialog({ mediaType, onClose, onCreated }: CreateMee
           </button>
 
           <p className="telemost-create__foot">
-            <LuLink2 size={16} aria-hidden />
+            <IcLink size={16} aria-hidden />
             {showPrayerTemplates
               ? 'После старта: «Скопировать» — название и ссылка одной вставкой'
               : 'В ссылке для шаринга будет название и адрес'}

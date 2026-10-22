@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  LuCircleAlert,
-  LuMic,
-  LuMicOff,
-  LuUsers,
-  LuUser,
-  LuVideo,
-  LuVideoOff,
-} from 'react-icons/lu';
+  IcAlert,
+  IcMic,
+  IcMicOff,
+  IcUsers,
+  IcUser,
+  IcVideo,
+  IcVideoOff,
+} from './callIcons';
 
 import { LOGIN_PATH } from '../../app/routeGuards';
 import { emitAppToast } from '../../lib/uiFeedback';
@@ -30,7 +30,7 @@ function IosSafariPwaHint() {
   if (!show) return null;
   return (
     <div className="glass-call__hint" role="note">
-      <LuCircleAlert size={18} strokeWidth={1.8} aria-hidden />
+      <IcAlert size={18} strokeWidth={1.8} aria-hidden />
       <p>
         Открыто в Safari. Для стабильного звонка откройте ссылку из приложения «Моя церковь» на
         домашнем экране.
@@ -185,13 +185,13 @@ export function CallJoinPage() {
       <div className={['glass-call__stage', camOn && isVideo ? 'is-live' : ''].filter(Boolean).join(' ')}>
         {preview.participantCount != null ? (
           <div className="glass-call__meta">
-            <LuUsers size={17} strokeWidth={1.8} aria-hidden />
+            <IcUsers size={17} strokeWidth={1.8} aria-hidden />
             Участников: {preview.participantCount}
           </div>
         ) : null}
 
         <div className={['glass-call__avatar', camOn && isVideo ? 'is-on' : 'is-off'].join(' ')} aria-hidden>
-          {isVideo ? <LuVideo size={44} strokeWidth={1.6} /> : <LuUser size={44} strokeWidth={1.6} />}
+          {isVideo ? <IcVideo size={44} strokeWidth={1.6} /> : <IcUser size={44} strokeWidth={1.6} />}
         </div>
 
         <div className="glass-call__devices" role="group" aria-label="Устройства перед входом">
@@ -200,8 +200,8 @@ export function CallJoinPage() {
             onClick={() => setMicOn((v) => !v)}
             labelOn="Микрофон"
             labelOff="Микрофон"
-            iconOn={<LuMic size={24} strokeWidth={1.8} />}
-            iconOff={<LuMicOff size={24} strokeWidth={1.8} />}
+            iconOn={<IcMic size={24} strokeWidth={1.8} />}
+            iconOff={<IcMicOff size={24} strokeWidth={1.8} />}
           />
           {isVideo ? (
             <GlassDeviceToggle
@@ -209,8 +209,8 @@ export function CallJoinPage() {
               onClick={() => setCamOn((v) => !v)}
               labelOn="Камера"
               labelOff="Камера"
-              iconOn={<LuVideo size={24} strokeWidth={1.8} />}
-              iconOff={<LuVideoOff size={24} strokeWidth={1.8} />}
+              iconOn={<IcVideo size={24} strokeWidth={1.8} />}
+              iconOff={<IcVideoOff size={24} strokeWidth={1.8} />}
             />
           ) : null}
         </div>
@@ -227,9 +227,9 @@ export function CallJoinPage() {
         onClick={() => void onJoin()}
         icon={
           isVideo ? (
-            <LuVideo size={22} strokeWidth={1.8} aria-hidden />
+            <IcVideo size={22} strokeWidth={1.8} aria-hidden />
           ) : (
-            <LuMic size={22} strokeWidth={1.8} aria-hidden />
+            <IcMic size={22} strokeWidth={1.8} aria-hidden />
           )
         }
       >
