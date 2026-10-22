@@ -153,4 +153,10 @@ describe('mobile layout invariants', () => {
     walk(path.join(root, 'src'));
     expect(offenders).toEqual([]);
   });
+  it('окно звонка не выше видимой области: height = min(--viewport-height, 100dvh) (в Safari/in-app --viewport-height = 100lvh)', () => {
+    const css = strip(read('src/features/calls/calls.css'));
+    const win = css.match(/\.call-window\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(win).toMatch(/height:\s*min\(var\(--viewport-height,\s*100dvh\),\s*100dvh\)/);
+    expect(css).not.toMatch(/(^|[^-\w])height:\s*var\(--viewport-height,\s*100dvh\);/m);
+  });
 });
