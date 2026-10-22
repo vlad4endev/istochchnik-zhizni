@@ -13,7 +13,6 @@ import {
   useRemoteParticipants,
   useSpeakingParticipants,
   useIsSpeaking,
-  useAudioPlayback,
 } from '@livekit/components-react';
 import {
   ConnectionQuality,
@@ -47,8 +46,6 @@ import {
   IcMic,
   IcMicOff,
   IcScreenShare,
-  IcVolume,
-  IcVolumeOff,
   IcLayoutSidebar,
   IcHangup,
   IcShare,
@@ -198,16 +195,6 @@ function resumeCallMedia(room?: Room | null): void {
   void room.startAudio().catch(() => undefined);
 }
 
-/** Ручное включение звука: снять блокировку autoplay и запустить все <audio> звонка. */
-function forceEnableCallAudio(room: Room): void {
-  resumeCallMedia(room);
-  if (typeof document === 'undefined') return;
-  document.querySelectorAll('audio').forEach((el) => {
-    el.muted = false;
-    if (el.paused) void el.play().catch(() => undefined);
-  });
-}
-
 /**
  * Звук собеседника на iOS PWA / macOS Safari: autoplay policy блокирует <audio> без жеста,
  * а после фона/блокировки экрана браузер suspend'ит аудио. Повторяем startAudio():
@@ -263,6 +250,24 @@ function KeepAliveCallMedia() {
       kick();
     };
 
+    // Сторож: iOS/Safari может молча поставить удалённый звук на паузу (маршрутизация
+    // аудио после включения микрофона, прерывание системой, смена устройства вывода).
+    const watchdog = window.setInterval(() => {
+      if (disposed) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (!room.canPlaybackAudio) {
+        resumeCallMedia(room);
+        return;
+      }
+      document.querySelectorAll('audio').forEach((el) => {
+        // Только потоки звонка (LiveKit ставит srcObject); голосовые мессенджера не трогаем.
+        if (!(el.srcObject instanceof MediaStream)) return;
+        if (el.muted) el.muted = false;
+        if (el.paused) void el.play().catch(() => undefined);
+      });
+      unlockCallAudio();
+    }, 2500);
+
     document.addEventListener('visibilitychange', kick);
     window.addEventListener('focus', kick);
     window.addEventListener('pageshow', kick);
@@ -278,6 +283,7 @@ function KeepAliveCallMedia() {
     scheduleRetry();
     return () => {
       disposed = true;
+      window.clearInterval(watchdog);
       clearRetry();
       document.removeEventListener('visibilitychange', kick);
       window.removeEventListener('focus', kick);
@@ -424,7 +430,6 @@ function CallControls({
   const isMeeting = variant === 'meeting';
   const [mediaBusy, setMediaBusy] = useState(false);
   const [leaveMenuOpen, setLeaveMenuOpen] = useState(false);
-  const { canPlayAudio } = useAudioPlayback();
   const leaveWrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -540,20 +545,6 @@ function CallControls({
             {isMuted ? <IcMicOff size={22} /> : <IcMic size={22} />}
           </span>
           <span className="call-ctrl__label">Микрофон</span>
-        </button>
-        <button
-          type="button"
-          className={['call-ctrl', canPlayAudio ? '' : 'call-ctrl--off'].filter(Boolean).join(' ')}
-          onClick={() => {
-            forceEnableCallAudio(room);
-            emitAppToast('Звук включён. Если не слышно — проверьте громкость устройства', 'info');
-          }}
-          aria-label="Нет звука? Включить звук"
-        >
-          <span className="call-ctrl__icon">
-            {canPlayAudio ? <IcVolume size={22} /> : <IcVolumeOff size={22} />}
-          </span>
-          <span className="call-ctrl__label">Звук</span>
         </button>
         {videoEnabled ? (
           <button

@@ -7,8 +7,6 @@ export {
   PiMicrophoneSlashFill as IcMicOff,
   PiVideoCameraFill as IcVideo,
   PiVideoCameraSlashFill as IcVideoOff,
-  PiSpeakerHighFill as IcVolume,
-  PiSpeakerSlashFill as IcVolumeOff,
   PiMonitorArrowUpFill as IcScreenShare,
   PiUsersThreeFill as IcUsers,
   PiShareNetworkFill as IcShare,
