@@ -13,6 +13,7 @@ import {
   useRemoteParticipants,
   useSpeakingParticipants,
   useIsSpeaking,
+  useAudioPlayback,
 } from '@livekit/components-react';
 import {
   ConnectionQuality,
@@ -46,6 +47,8 @@ import {
   LuMic,
   LuMicOff,
   LuMonitorUp,
+  LuVolume2,
+  LuVolumeX,
   LuPanelRight,
   LuPhoneOff,
   LuShare2,
@@ -193,6 +196,16 @@ function resumeCallMedia(room?: Room | null): void {
   unlockCallAudio();
   if (!room) return;
   void room.startAudio().catch(() => undefined);
+}
+
+/** Ручное включение звука: снять блокировку autoplay и запустить все <audio> звонка. */
+function forceEnableCallAudio(room: Room): void {
+  resumeCallMedia(room);
+  if (typeof document === 'undefined') return;
+  document.querySelectorAll('audio').forEach((el) => {
+    el.muted = false;
+    if (el.paused) void el.play().catch(() => undefined);
+  });
 }
 
 /**
@@ -411,6 +424,7 @@ function CallControls({
   const isMeeting = variant === 'meeting';
   const [mediaBusy, setMediaBusy] = useState(false);
   const [leaveMenuOpen, setLeaveMenuOpen] = useState(false);
+  const { canPlayAudio } = useAudioPlayback();
   const leaveWrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -526,6 +540,20 @@ function CallControls({
             {isMuted ? <LuMicOff size={22} /> : <LuMic size={22} />}
           </span>
           <span className="call-ctrl__label">Микрофон</span>
+        </button>
+        <button
+          type="button"
+          className={['call-ctrl', canPlayAudio ? '' : 'call-ctrl--off'].filter(Boolean).join(' ')}
+          onClick={() => {
+            forceEnableCallAudio(room);
+            emitAppToast('Звук включён. Если не слышно — проверьте громкость устройства', 'info');
+          }}
+          aria-label="Нет звука? Включить звук"
+        >
+          <span className="call-ctrl__icon">
+            {canPlayAudio ? <LuVolume2 size={22} /> : <LuVolumeX size={22} />}
+          </span>
+          <span className="call-ctrl__label">Звук</span>
         </button>
         {videoEnabled ? (
           <button
