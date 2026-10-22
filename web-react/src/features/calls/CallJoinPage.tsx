@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  LuBan,
   LuCircleAlert,
+  LuClock,
+  LuLink2Off,
+  LuLock,
+  LuLogIn,
   LuMic,
   LuMicOff,
   LuUsers,
@@ -19,6 +24,7 @@ import { joinInvitation, previewInvitation } from './callsApi';
 import {
   GlassCallCta,
   GlassCallShell,
+  GlassCallStatus,
   GlassCallTitle,
 } from './glassCallUi';
 import { meetingTitleFromPreview } from './meetingTitle';
@@ -37,6 +43,57 @@ function IosSafariPwaHint() {
       </p>
     </div>
   );
+}
+
+interface InviteProblem {
+  icon: ReactNode;
+  title: string;
+  lead: string;
+}
+
+/** Понятное объяснение, почему ссылка не открылась, и что делать дальше. */
+function describeInviteProblem(reason: string | undefined, fallback?: string | null): InviteProblem {
+  const size = 40;
+  switch (reason) {
+    case 'call_ended':
+      return {
+        icon: <LuVideoOff size={size} strokeWidth={1.5} />,
+        title: 'Встреча завершена',
+        lead: 'Организатор уже закончил эту встречу. Попросите у него новую ссылку или загляните в мессенджер — возможно, встреча уже идёт в другой комнате.',
+      };
+    case 'expired':
+      return {
+        icon: <LuClock size={size} strokeWidth={1.5} />,
+        title: 'Ссылка устарела',
+        lead: 'Срок действия приглашения истёк. Попросите организатора прислать свежую ссылку.',
+      };
+    case 'revoked':
+      return {
+        icon: <LuBan size={size} strokeWidth={1.5} />,
+        title: 'Приглашение отозвано',
+        lead: 'Организатор закрыл эту ссылку. Если вам нужно подключиться, попросите новую.',
+      };
+    case 'no_group_access':
+      return {
+        icon: <LuLock size={size} strokeWidth={1.5} />,
+        title: 'Нет доступа',
+        lead: 'Эта встреча открыта только для участников определённой группы. Если вы должны на неё попасть, обратитесь к организатору или лидеру группы.',
+      };
+    case 'exhausted':
+      return {
+        icon: <LuLink2Off size={size} strokeWidth={1.5} />,
+        title: 'Лимит исчерпан',
+        lead: 'Ссылкой уже воспользовалось максимальное число участников. Попросите организатора создать новое приглашение.',
+      };
+    default:
+      return {
+        icon: <LuLink2Off size={size} strokeWidth={1.5} />,
+        title: 'Ссылка не работает',
+        lead: fallback && fallback !== 'Приглашение недействительно'
+          ? fallback
+          : 'Приглашение недействительно или было удалено. Проверьте, что ссылка скопирована полностью, или запросите новую.',
+      };
+  }
 }
 
 export function CallJoinPage() {
@@ -120,10 +177,12 @@ export function CallJoinPage() {
 
   if (!preview && !error) {
     return (
-      <GlassCallShell className="glass-call--simple" closeTo={isAuthenticated ? '/messenger' : '/dashboard'}>
-        <p className="glass-call__lead glass-call__lead--solo">Проверка приглашения…</p>
-        <div className="glass-call__spinner" aria-hidden />
-      </GlassCallShell>
+      <GlassCallStatus
+        tone="loading"
+        title="Проверяем приглашение"
+        lead="Секунду — подготавливаем вход во встречу."
+        closeTo={isAuthenticated ? '/messenger' : '/dashboard'}
+      />
     );
   }
 
@@ -131,48 +190,46 @@ export function CallJoinPage() {
     const from = `/call/join/${encodeURIComponent(inviteToken)}`;
     const inviteTitle =
       preview && preview.valid ? meetingTitleFromPreview(preview) : 'Вход во встречу';
+    const hasTitle = preview?.valid === true;
     return (
-      <GlassCallShell className="glass-call--simple" closeTo="/dashboard">
-        <GlassCallTitle title={inviteTitle} />
-        <p className="glass-call__lead">Войдите в аккаунт, чтобы подключиться по ссылке.</p>
-        <div className="glass-call__spacer" />
-        <GlassCallCta to={`${LOGIN_PATH}?from=${encodeURIComponent(from)}`}>Войти</GlassCallCta>
-      </GlassCallShell>
+      <GlassCallStatus
+        icon={<LuLogIn size={40} strokeWidth={1.5} />}
+        chip={hasTitle ? inviteTitle : undefined}
+        title="Войдите, чтобы присоединиться"
+        lead="Вас пригласили на встречу. Войдите в свой аккаунт — после этого вы сразу вернётесь к этой встрече."
+        closeTo="/dashboard"
+        primary={{ label: 'Войти', to: `${LOGIN_PATH}?from=${encodeURIComponent(from)}` }}
+      />
     );
   }
 
   if (error || (preview && !preview.valid)) {
-    const reason = preview?.reason;
-    const msg =
-      reason === 'expired'
-        ? 'Срок приглашения истёк'
-        : reason === 'revoked'
-          ? 'Приглашение отозвано'
-          : reason === 'call_ended'
-            ? 'Встреча уже завершена'
-            : reason === 'no_group_access'
-              ? 'Нет доступа к этой встрече'
-              : reason === 'exhausted'
-                ? 'Лимит использований приглашения исчерпан'
-                : error || 'Приглашение недействительно';
+    const problem = describeInviteProblem(preview?.reason, error);
     return (
-      <GlassCallShell className="glass-call--simple" closeTo="/messenger">
-        <GlassCallTitle title="Не удалось войти" />
-        <p className="glass-call__lead">{msg}</p>
-        <div className="glass-call__spacer" />
-        <GlassCallCta to="/messenger">В мессенджер</GlassCallCta>
-      </GlassCallShell>
+      <GlassCallStatus
+        tone="error"
+        icon={problem.icon}
+        title={problem.title}
+        lead={problem.lead}
+        closeTo="/messenger"
+        primary={{ label: 'В мессенджер', to: '/messenger' }}
+        secondary={{ label: 'На главную', to: '/dashboard' }}
+      />
     );
   }
 
   if (!preview || !preview.valid) {
+    const problem = describeInviteProblem(undefined, error);
     return (
-      <GlassCallShell className="glass-call--simple" closeTo="/messenger">
-        <GlassCallTitle title="Не удалось войти" />
-        <p className="glass-call__lead">{error || 'Приглашение недействительно'}</p>
-        <div className="glass-call__spacer" />
-        <GlassCallCta to="/messenger">В мессенджер</GlassCallCta>
-      </GlassCallShell>
+      <GlassCallStatus
+        tone="error"
+        icon={problem.icon}
+        title={problem.title}
+        lead={problem.lead}
+        closeTo="/messenger"
+        primary={{ label: 'В мессенджер', to: '/messenger' }}
+        secondary={{ label: 'На главную', to: '/dashboard' }}
+      />
     );
   }
 

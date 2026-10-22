@@ -126,3 +126,57 @@ export function GlassCallCta({
     </button>
   );
 }
+
+export type GlassCallStatusTone = 'error' | 'info' | 'loading';
+
+/**
+ * Экран-статус встречи (ссылка недействительна, нужно войти, проверка приглашения).
+ * Крупная иконка, заголовок и пояснение по центру, действия внизу — одинаково хорошо на телефоне,
+ * планшете и компьютере.
+ */
+export function GlassCallStatus({
+  tone = 'info',
+  icon,
+  title,
+  lead,
+  chip,
+  closeTo,
+  primary,
+  secondary,
+}: {
+  tone?: GlassCallStatusTone;
+  icon?: ReactNode;
+  title: string;
+  lead?: string;
+  /** Небольшая подпись над заголовком (например, название встречи). */
+  chip?: string;
+  closeTo: string;
+  primary?: { label: string; to: string };
+  secondary?: { label: string; to: string };
+}) {
+  return (
+    <GlassCallShell className={`glass-call--status glass-call--status-${tone}`} closeTo={closeTo}>
+      <div className="glass-call__status-body" aria-live="polite">
+        <div className="glass-call__status-icon-wrap" aria-hidden>
+          <span className="glass-call__status-ring" />
+          <span className="glass-call__status-badge">
+            {tone === 'loading' ? <span className="glass-call__spinner glass-call__spinner--lg" /> : icon}
+          </span>
+        </div>
+        {chip ? <p className="glass-call__status-chip">{chip}</p> : null}
+        <GlassCallTitle title={title} />
+        {lead ? <p className="glass-call__status-lead">{lead}</p> : null}
+      </div>
+      {primary || secondary ? (
+        <div className="glass-call__status-actions">
+          {primary ? <GlassCallCta to={primary.to}>{primary.label}</GlassCallCta> : null}
+          {secondary ? (
+            <GlassCallCta to={secondary.to} variant="ghost">
+              {secondary.label}
+            </GlassCallCta>
+          ) : null}
+        </div>
+      ) : null}
+    </GlassCallShell>
+  );
+}
