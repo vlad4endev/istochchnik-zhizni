@@ -4963,3 +4963,243 @@ html[data-call-minimized='1'] .app-bottom-nav {
   pointer-events: auto !important;
   visibility: visible;
 }
+
+/* ——— Glass status screens (invalid link / sign-in / checking) ——— */
+.glass-call--status .glass-call__inner {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.glass-call--status .glass-call__inner::-webkit-scrollbar {
+  display: none;
+}
+
+.glass-call__status-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0;
+  padding: clamp(12px, 3vh, 32px) 4px;
+}
+
+.glass-call__status-icon-wrap {
+  position: relative;
+  width: clamp(112px, 30vw, 148px);
+  height: clamp(112px, 30vw, 148px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: clamp(18px, 3.4vh, 30px);
+  flex-shrink: 0;
+}
+
+.glass-call__status-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: radial-gradient(closest-side, rgba(242, 169, 187, 0.22), transparent 72%);
+  animation: glass-call-status-pulse 3.2s ease-in-out infinite;
+}
+
+.glass-call__status-badge {
+  position: relative;
+  width: 74%;
+  height: 74%;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #f8d9e1;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.05) 100%);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.glass-call__status-badge svg {
+  width: 44%;
+  height: 44%;
+}
+
+.glass-call--status-error .glass-call__status-badge {
+  color: #ffc9d4;
+  border-color: rgba(242, 130, 158, 0.38);
+}
+
+.glass-call--status-error .glass-call__status-ring {
+  background: radial-gradient(closest-side, rgba(232, 112, 140, 0.28), transparent 72%);
+}
+
+.glass-call__status-chip {
+  margin: 0 0 10px;
+  max-width: 100%;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: clamp(12px, 3.2vw, 14px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #efdfe3;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glass-call--status .glass-call__title {
+  margin: 0;
+  font-size: clamp(2rem, 9vw, 2.9rem);
+  line-height: 1.06;
+  text-shadow: 0 10px 36px rgba(0, 0, 0, 0.45);
+}
+
+.glass-call--status .glass-call__title-accent {
+  color: #f6b8c6;
+}
+
+.glass-call__status-lead {
+  margin: clamp(12px, 2vh, 18px) 0 0;
+  max-width: 32ch;
+  font-size: clamp(15px, 4.1vw, 18px);
+  line-height: 1.5;
+  color: var(--gc-muted);
+  text-wrap: balance;
+}
+
+.glass-call__status-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.glass-call--status .glass-call__cta {
+  height: 60px;
+  font-size: 17px;
+}
+
+.glass-call--status .glass-call__cta-arrow {
+  width: 48px;
+  height: 48px;
+}
+
+.glass-call--status .glass-call__cta + .glass-call__cta {
+  margin-top: 0;
+}
+
+.glass-call--status .glass-call__cta--ghost {
+  height: 54px;
+}
+
+.glass-call__spinner--lg {
+  width: 38%;
+  height: 38%;
+  margin: 0;
+  border-width: 3px;
+}
+
+@keyframes glass-call-status-pulse {
+  0%,
+  100% {
+    transform: scale(0.94);
+    opacity: 0.75;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+/* Планшеты и компьютеры: карточка по центру, крупнее и воздушнее. */
+@media (min-width: 720px) and (min-height: 621px) {
+  .glass-call--status .glass-call__inner {
+    max-width: 560px;
+    padding-left: 32px;
+    padding-right: 32px;
+    justify-content: center;
+  }
+
+  .glass-call--status .glass-call__topbar {
+    position: absolute;
+    top: max(20px, env(safe-area-inset-top, 0px));
+    left: 32px;
+    right: 32px;
+  }
+
+  .glass-call__status-body {
+    flex: 0 1 auto;
+    padding: 44px 40px 36px;
+    margin-bottom: 18px;
+    border-radius: 36px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.035) 100%);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    box-shadow:
+      0 30px 70px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .glass-call--status .glass-call__title {
+    font-size: clamp(2.3rem, 4vw, 3rem);
+  }
+
+  .glass-call__status-lead {
+    font-size: 18px;
+  }
+}
+
+@media (min-width: 1100px) and (min-height: 621px) {
+  .glass-call--status .glass-call__inner {
+    max-width: 620px;
+  }
+}
+
+/* Низкие экраны (альбомная ориентация телефона): компактнее, без обрезки. */
+@media (max-height: 620px) {
+  .glass-call__status-body {
+    flex: 0 0 auto;
+    padding-top: 4px;
+    padding-bottom: 8px;
+  }
+
+  .glass-call__status-icon-wrap {
+    width: 84px;
+    height: 84px;
+    margin-bottom: 12px;
+  }
+
+  .glass-call--status .glass-call__title {
+    font-size: 1.7rem;
+  }
+
+  .glass-call__status-lead {
+    font-size: 14px;
+    margin-top: 8px;
+  }
+
+  .glass-call--status .glass-call__cta {
+    height: 50px;
+  }
+
+  .glass-call--status .glass-call__cta--ghost {
+    height: 46px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-call__status-ring {
+    animation: none;
+  }
+}
