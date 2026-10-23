@@ -23,6 +23,13 @@ import {
   type BackupTelegramTarget,
 } from '../services/backupSettingsService';
 import {
+  beginDriveOAuth,
+  disconnectDriveOAuth,
+  finishDriveOAuth,
+  resolveDriveOAuthRedirectUri,
+  saveDriveOAuthClientFromAdmin,
+} from '../lib/googleDriveAuth';
+import {
   deleteDriveBackup,
   getDriveStatus,
   listDriveBackups,
@@ -101,7 +108,7 @@ function mapBackupError(error: unknown): { status: number; error: string } {
     return {
       status: 400,
       error:
-        'Google Drive не настроен: вставьте JSON ключа service account в разделе «Резервная копия» и сохраните.',
+        'Google Drive не настроен: нажмите «Войти через Google» в разделе «Резервная копия» или вставьте JSON ключа.',
     };
   }
   if (msg === 'drive_folder_missing') {
@@ -116,6 +123,25 @@ function mapBackupError(error: unknown): { status: number; error: string } {
   if (msg === 'drive_sa_missing_fields') {
     return { status: 400, error: 'В JSON нужны поля client_email и private_key' };
   }
+  if (msg === 'drive_oauth_invalid_json') {
+    return { status: 400, error: 'Некорректный JSON OAuth-клиента: нужны client_id и client_secret' };
+  }
+  if (msg === 'drive_oauth_client_missing') {
+    return {
+      status: 400,
+      error: 'Сначала вставьте OAuth Client ID и Secret, сохраните, затем нажмите «Войти через Google».',
+    };
+  }
+  if (msg === 'drive_oauth_state_invalid') {
+    return { status: 400, error: 'Сессия входа в Google истекла. Нажмите «Войти через Google» ещё раз.' };
+  }
+  if (msg === 'drive_oauth_no_refresh_token') {
+    return {
+      status: 400,
+      error:
+        'Google не вернул refresh token. Удалите доступ приложения в аккаунте Google и войдите снова с consent.',
+    };
+  }
   if (msg.startsWith('Google Drive:')) {
     return { status: 400, error: msg.slice(0, 800) };
   }
@@ -127,6 +153,7 @@ export async function getBackupSettingsHandler(req: Request, res: Response): Pro
   if (!ensureAdmin(req, res)) return;
   try {
     const settings = await getBackupSettingsAdminView();
+    settings.drive_oauth_redirect_uri = resolveDriveOAuthRedirectUri(req);
     res.json({
       settings,
       running: isBackupBusy(),
@@ -229,6 +256,20 @@ export async function patchBackupSettingsHandler(req: Request, res: Response): P
     patch.drive_retention_days = body.drive_retention_days;
   }
 
+  if (body.drive_oauth_client_json !== undefined) {
+    if (body.drive_oauth_client_json !== null && typeof body.drive_oauth_client_json !== 'string') {
+      res.status(400).json({ error: 'drive_oauth_client_json: строка JSON или null' });
+      return;
+    }
+    try {
+      await saveDriveOAuthClientFromAdmin(body.drive_oauth_client_json as string | null);
+    } catch (error) {
+      const mapped = mapBackupError(error);
+      res.status(mapped.status).json({ error: mapped.error });
+      return;
+    }
+  }
+
   // Опционально: сохранить / очистить service account JSON
   if (body.drive_service_account_json !== undefined) {
     if (body.drive_service_account_json !== null && typeof body.drive_service_account_json !== 'string') {
@@ -255,6 +296,65 @@ export async function patchBackupSettingsHandler(req: Request, res: Response): P
       await runDriveRetentionCleanup().catch(() => undefined);
     }
     const settings = await getBackupSettingsAdminView();
+    settings.drive_oauth_redirect_uri = resolveDriveOAuthRedirectUri(req);
+    res.json({ settings });
+  } catch (error) {
+    const mapped = mapBackupError(error);
+    res.status(mapped.status).json({ error: mapped.error });
+  }
+}
+
+export async function startDriveOAuthHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    const redirectUri = resolveDriveOAuthRedirectUri(req);
+    const result = await beginDriveOAuth(redirectUri);
+    res.json(result);
+  } catch (error) {
+    const mapped = mapBackupError(error);
+    res.status(mapped.status).json({ error: mapped.error });
+  }
+}
+
+function adminBackupRedirect(req: Request, extra: Record<string, string>): string {
+  const origin = resolveDriveOAuthRedirectUri(req).replace(/\/api\/backup\/drive\/oauth\/callback$/, '');
+  const params = new URLSearchParams({ tab: 'backup', ...extra });
+  return `${origin}/admin?${params.toString()}`;
+}
+
+export async function driveOAuthCallbackHandler(req: Request, res: Response): Promise<void> {
+  const errQ = typeof req.query.error === 'string' ? req.query.error : '';
+  if (errQ) {
+    res.redirect(adminBackupRedirect(req, { drive: 'oauth_error', drive_msg: errQ.slice(0, 200) }));
+    return;
+  }
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  if (!code || !state) {
+    res.redirect(adminBackupRedirect(req, { drive: 'oauth_error', drive_msg: 'no_code' }));
+    return;
+  }
+  try {
+    await finishDriveOAuth({
+      code,
+      state,
+      redirectUri: resolveDriveOAuthRedirectUri(req),
+    });
+    res.redirect(adminBackupRedirect(req, { drive: 'oauth_ok' }));
+  } catch (error) {
+    const mapped = mapBackupError(error);
+    res.redirect(
+      adminBackupRedirect(req, { drive: 'oauth_error', drive_msg: mapped.error.slice(0, 200) }),
+    );
+  }
+}
+
+export async function disconnectDriveOAuthHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    await disconnectDriveOAuth();
+    const settings = await getBackupSettingsAdminView();
+    settings.drive_oauth_redirect_uri = resolveDriveOAuthRedirectUri(req);
     res.json({ settings });
   } catch (error) {
     const mapped = mapBackupError(error);

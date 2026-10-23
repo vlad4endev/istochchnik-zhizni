@@ -43,17 +43,23 @@ export function formatDriveApiError(error: unknown): string {
   if (reason === 'storageQuotaExceeded' || /storageQuotaExceeded|quota has been exceeded/i.test(text)) {
     return (
       'Google Drive: у service account нет своей квоты, файл не попал в расшаренную папку. ' +
-      'Проверьте ID папки и право «Редактор» на email из ключа. ' +
-      'В Google Workspace надёжнее общий диск (Shared Drive), куда SA добавлен как участник.'
+      'Для личного Gmail нажмите «Войти через Google». ' +
+      'В Google Workspace — общий диск, SA как «Управляющий содержимым».'
     );
   }
   if (
+    /specified parent/i.test(text) ||
     reason === 'insufficientFilePermissions' ||
     /insufficientFilePermissions|insufficient permissions|The user does not have sufficient permissions/i.test(
       text,
     )
   ) {
-    return 'Google Drive: нет права записи в папку. Расшарьте папку на email service account как «Редактор», не «Читатель».';
+    return (
+      'Google Drive: нет права создать файл в этой папке (Insufficient permissions for the specified parent). ' +
+      'Шаринг обычной папки личного Gmail на service account больше не даёт запись. ' +
+      'Подключите свой Google-аккаунт кнопкой «Войти через Google» — файлы пойдут в вашу папку. ' +
+      'Либо в Workspace создайте общий диск и добавьте SA как «Управляющий содержимым».'
+    );
   }
   if (status === 404 || /not found/i.test(text)) {
     return 'Google Drive: папка или файл не найдены. Проверьте ID/ссылку папки.';

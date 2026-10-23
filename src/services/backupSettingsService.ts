@@ -51,6 +51,11 @@ export type BackupSettingsAdminView = BackupSettingsDocument & {
   drive_client_email_masked: string | null;
   drive_source: string | null;
   drive_folder_name: string | null;
+  has_drive_oauth: boolean;
+  has_drive_oauth_client: boolean;
+  drive_oauth_email_masked: string | null;
+  drive_oauth_redirect_uri: string | null;
+  drive_folder_kind: 'my_drive' | 'shared_drive' | null;
 };
 
 export interface BackupSettingsPatch {

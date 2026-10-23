@@ -35,7 +35,19 @@ function run(): void {
       },
     },
   };
-  assert.match(formatDriveApiError(perms), /нет права записи/);
+  assert.match(formatDriveApiError(perms), /Войти через Google/);
+
+  const parent = {
+    message: 'Insufficient permissions for the specified parent.',
+    response: {
+      status: 403,
+      data: {
+        error: { message: 'Insufficient permissions for the specified parent.' },
+      },
+    },
+  };
+  assert.match(formatDriveApiError(parent), /specified parent/);
+  assert.match(formatDriveApiError(parent), /Войти через Google/);
 
   const missing = {
     message: 'Request failed with status code 404',

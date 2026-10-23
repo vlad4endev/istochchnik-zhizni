@@ -1341,6 +1341,11 @@ export interface BackupSettings {
   drive_client_email_masked: string | null;
   drive_source: string | null;
   drive_folder_name: string | null;
+  has_drive_oauth: boolean;
+  has_drive_oauth_client: boolean;
+  drive_oauth_email_masked: string | null;
+  drive_oauth_redirect_uri: string | null;
+  drive_folder_kind: 'my_drive' | 'shared_drive' | null;
 }
 
 export interface BackupComponentsSummary {
@@ -1442,6 +1447,8 @@ export async function patchBackupSettings(body: {
   drive_retention_days?: number;
   /** Новый JSON ключа; `null` — удалить сохранённый ключ. */
   drive_service_account_json?: string | null;
+  /** JSON OAuth web-клиента `{web:{client_id,client_secret}}`; `null` — удалить. */
+  drive_oauth_client_json?: string | null;
 }): Promise<{ settings: BackupSettings }> {
   const { data } = await apiClient.patch<{ settings: BackupSettings }>('/api/backup/settings', body);
   return data;
@@ -1515,6 +1522,20 @@ export async function sendBackupDrive(id: string): Promise<{
     drive_file_id: string | null;
     deleted_local: boolean;
   }>(`/api/backup/${encodeURIComponent(id)}/send-drive`, {}, { timeout: 50 * 60_000 });
+  return data;
+}
+
+export async function startDriveOAuth(): Promise<{ auth_url: string; redirect_uri: string }> {
+  const { data } = await apiClient.post<{ auth_url: string; redirect_uri: string }>(
+    '/api/backup/drive/oauth/start',
+  );
+  return data;
+}
+
+export async function disconnectDriveOAuth(): Promise<{ settings: BackupSettings }> {
+  const { data } = await apiClient.post<{ settings: BackupSettings }>(
+    '/api/backup/drive/oauth/disconnect',
+  );
   return data;
 }
 

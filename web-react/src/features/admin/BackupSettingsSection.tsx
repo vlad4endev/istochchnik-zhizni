@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   LuCloud,
   LuDatabase,
@@ -21,6 +22,7 @@ import {
   apiErrorMessage,
   createBackup,
   deleteBackup,
+  disconnectDriveOAuth,
   downloadBackupArchive,
   fetchBackupDetail,
   fetchBackupList,
@@ -29,6 +31,7 @@ import {
   restoreBackup,
   sendBackupDrive,
   sendBackupTelegram,
+  startDriveOAuth,
   type BackupComponentsSummary,
   type BackupDetailView,
   type BackupLocation,
@@ -187,6 +190,7 @@ function LocationBadge({ location }: { location: BackupLocation }) {
 
 export function BackupSettingsSection() {
   const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const settingsQ = useQuery({
     queryKey: Q_SETTINGS,
     queryFn: fetchBackupSettings,
@@ -218,6 +222,8 @@ export function BackupSettingsSection() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [driveSaJson, setDriveSaJson] = useState('');
   const [clearDriveSa, setClearDriveSa] = useState(false);
+  const [driveOauthJson, setDriveOauthJson] = useState('');
+  const [clearDriveOauth, setClearDriveOauth] = useState(false);
 
   const confirmPhrase = settingsQ.data?.restore_confirm_phrase || DEFAULT_CONFIRM;
 
@@ -243,11 +249,36 @@ export function BackupSettingsSection() {
         last_drive_status: s.last_drive_status ?? null,
         last_drive_message: s.last_drive_message ?? null,
         last_drive_file_id: s.last_drive_file_id ?? null,
+        has_drive_oauth: Boolean(s.has_drive_oauth),
+        has_drive_oauth_client: Boolean(s.has_drive_oauth_client),
+        drive_oauth_email_masked: s.drive_oauth_email_masked ?? null,
+        drive_oauth_redirect_uri: s.drive_oauth_redirect_uri ?? null,
+        drive_folder_kind: s.drive_folder_kind ?? null,
       });
       setSendTelegramOnCreate(Boolean(s.telegram_send));
       setClearDriveSa(false);
+      setClearDriveOauth(false);
     }
   }, [settingsQ.data]);
+
+  useEffect(() => {
+    const driveFlag = searchParams.get('drive');
+    if (!driveFlag) return;
+    if (driveFlag === 'oauth_ok') {
+      setNote({ type: 'ok', text: 'Google-аккаунт подключён. Можно выгружать снимки в папку Drive.' });
+      void qc.invalidateQueries({ queryKey: Q_SETTINGS });
+      void qc.invalidateQueries({ queryKey: Q_LIST });
+    } else if (driveFlag === 'oauth_error') {
+      setNote({
+        type: 'err',
+        text: searchParams.get('drive_msg') || 'Не удалось войти в Google Drive.',
+      });
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('drive');
+    next.delete('drive_msg');
+    setSearchParams(next, { replace: true });
+  }, [qc, searchParams, setSearchParams]);
 
   const saveMut = useMutation({
     mutationFn: () => {
@@ -270,12 +301,19 @@ export function BackupSettingsSection() {
           : driveSaJson.trim()
             ? driveSaJson.trim()
             : undefined,
+        drive_oauth_client_json: clearDriveOauth
+          ? null
+          : driveOauthJson.trim()
+            ? driveOauthJson.trim()
+            : undefined,
       });
     },
     onSuccess: () => {
       setNote({ type: 'ok', text: 'Настройки бекапа сохранены.' });
       setDriveSaJson('');
       setClearDriveSa(false);
+      setDriveOauthJson('');
+      setClearDriveOauth(false);
       void qc.invalidateQueries({ queryKey: Q_SETTINGS });
       void qc.invalidateQueries({ queryKey: Q_LIST });
     },
@@ -649,8 +687,9 @@ export function BackupSettingsSection() {
           Google Drive — основное хранилище
         </h2>
         <p className="mt-1 text-sm text-stone-600">
-          Все настройки Drive задаются здесь. Как только папка подключена, каждый новый снимок
-          уходит туда; локально на сервере можно не хранить копии.
+          Для обычного Gmail Google больше не даёт service account писать в вашу папку
+          (ошибка «Insufficient permissions for the specified parent»). Подключите свой
+          Google-аккаунт — снимки пойдут в указанную папку от вашего имени.
         </p>
 
         <div
@@ -668,15 +707,28 @@ export function BackupSettingsSection() {
               ? `Подключено${draft.drive_folder_name ? `: «${draft.drive_folder_name}»` : ''}${
                   draft.drive_client_email_masked ? ` · ${draft.drive_client_email_masked}` : ''
                 }. Новые снимки выгружаются автоматически.`
-              : draft.has_drive_service_account
-                ? 'Ключ сохранён, но папка недоступна — проверьте ID папки и шаринг на email service account (право «Редактор»).'
-                : 'Не настроено: вставьте JSON ключа и ID папки, затем сохраните.'}
+              : draft.has_drive_oauth
+                ? 'Google-аккаунт подключён, но папка недоступна — проверьте ID папки.'
+                : draft.has_drive_oauth_client
+                  ? 'OAuth-клиент сохранён. Нажмите «Войти через Google».'
+                  : draft.has_drive_service_account
+                    ? 'Service account видит папку, но Google не даёт ему в неё писать. Подключите Google-аккаунт ниже.'
+                    : 'Не настроено: OAuth-клиент + «Войти через Google», либо общий диск Workspace.'}
         </div>
 
         <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs text-stone-500">
-          <li>Google Cloud → IAM → Service Account → создать → скачать JSON-ключ</li>
-          <li>Создайте папку на Google Drive и расшарьте её на email из ключа (право «Редактор»)</li>
-          <li>Вставьте JSON и ID/ссылку папки ниже → Сохранить → Проверить</li>
+          <li>
+            Google Cloud → APIs &amp; Services → Credentials → Create OAuth client ID → Web
+            application
+          </li>
+          <li>
+            В Authorized redirect URIs добавьте:{' '}
+            <code className="break-all text-stone-700">
+              {draft.drive_oauth_redirect_uri || 'https://ваш-домен/api/backup/drive/oauth/callback'}
+            </code>
+          </li>
+          <li>Скачайте JSON клиента, вставьте ниже, сохраните, нажмите «Войти через Google»</li>
+          <li>Укажите ID папки Drive (это должна быть папка того же Google-аккаунта)</li>
         </ol>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -748,8 +800,54 @@ export function BackupSettingsSection() {
 
           <label className="block text-sm sm:col-span-2">
             <span className="mb-1 block font-medium text-stone-700">
-              Ключ service account (JSON)
-              {draft.has_drive_service_account && draft.drive_client_email_masked
+              OAuth-клиент Google (JSON web)
+              {draft.has_drive_oauth && draft.drive_oauth_email_masked
+                ? ` — вход: ${draft.drive_oauth_email_masked}`
+                : draft.has_drive_oauth_client
+                  ? ' — клиент сохранён, нужен вход'
+                  : ''}
+            </span>
+            <textarea
+              className={`${fieldClass()} min-h-[80px] font-mono text-xs`}
+              value={driveOauthJson}
+              onChange={(e) => {
+                setDriveOauthJson(e.target.value);
+                if (e.target.value.trim()) {
+                  setClearDriveOauth(false);
+                  setDraft((d) => (d ? { ...d, drive_enabled: true } : d));
+                }
+              }}
+              placeholder={
+                draft.has_drive_oauth_client
+                  ? 'Клиент уже сохранён. Вставьте новый JSON только чтобы заменить его.'
+                  : '{"web":{"client_id":"….apps.googleusercontent.com","client_secret":"GOCSPX-…"}}'
+              }
+              spellCheck={false}
+              disabled={clearDriveOauth}
+            />
+          </label>
+
+          {draft.has_drive_oauth_client && (
+            <label className="flex items-center gap-2 text-sm font-medium text-red-800 sm:col-span-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-stone-300 text-red-600"
+                checked={clearDriveOauth}
+                onChange={(e) => {
+                  setClearDriveOauth(e.target.checked);
+                  if (e.target.checked) setDriveOauthJson('');
+                }}
+              />
+              Удалить OAuth-клиент и отключить Google-аккаунт при сохранении
+            </label>
+          )}
+
+          <label className="block text-sm sm:col-span-2">
+            <span className="mb-1 block font-medium text-stone-700">
+              Ключ service account (JSON) — только общий диск Workspace
+              {draft.has_drive_service_account &&
+              draft.drive_source === 'database' &&
+              draft.drive_client_email_masked
                 ? ` — сохранён: ${draft.drive_client_email_masked}`
                 : draft.has_drive_service_account
                   ? ' — ключ сохранён'
@@ -800,6 +898,54 @@ export function BackupSettingsSection() {
           >
             Сохранить настройки Drive
           </button>
+          <button
+            type="button"
+            className={btnPrimary()}
+            disabled={saveMut.isPending}
+            onClick={() => {
+              void (async () => {
+                try {
+                  if (driveOauthJson.trim() && !draft.has_drive_oauth_client) {
+                    await patchBackupSettings({
+                      drive_oauth_client_json: driveOauthJson.trim(),
+                      drive_enabled: true,
+                      drive_folder_id: draft.drive_folder_id,
+                    });
+                  }
+                  const { auth_url } = await startDriveOAuth();
+                  window.location.href = auth_url;
+                } catch (e) {
+                  setNote({
+                    type: 'err',
+                    text: apiErrorMessage(e, 'Не удалось начать вход в Google.'),
+                  });
+                }
+              })();
+            }}
+          >
+            Войти через Google
+          </button>
+          {draft.has_drive_oauth && (
+            <button
+              type="button"
+              className={btnSecondary('text-red-700')}
+              onClick={() => {
+                void disconnectDriveOAuth()
+                  .then(() => {
+                    setNote({ type: 'ok', text: 'Google-аккаунт отключён.' });
+                    void qc.invalidateQueries({ queryKey: Q_SETTINGS });
+                  })
+                  .catch((e) =>
+                    setNote({
+                      type: 'err',
+                      text: apiErrorMessage(e, 'Не удалось отключить Google.'),
+                    }),
+                  );
+              }}
+            >
+              Отключить Google
+            </button>
+          )}
           <button
             type="button"
             className={btnSecondary()}

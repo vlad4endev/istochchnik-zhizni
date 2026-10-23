@@ -15,21 +15,30 @@
 - автобекап по расписанию (ежедневно / по дням недели);
 - отправка архива администратору через Telegram-бота.
 
-API (только admin): `/api/backup/settings`, `/list`, `/create`, `/drive/status`, `/drive/list`, `/:id/detail`, `/:id/download`, `/:id/send-telegram`, `/:id/send-drive`, `POST /:id/restore`, `DELETE /:id`.
+API (только admin): `/api/backup/settings`, `/list`, `/create`, `/drive/status`, `/drive/list`, `/drive/oauth/start`, `/drive/oauth/callback`, `/drive/oauth/disconnect`, `/:id/detail`, `/:id/download`, `/:id/send-telegram`, `/:id/send-drive`, `POST /:id/restore`, `DELETE /:id`.
 
 ### Google Drive (рекомендуемая схема)
 
-Все настройки Drive — **только в админке** (ключ не задаётся через `.env`):
+Все настройки Drive — **только в админке**.
 
-1. Google Cloud → **Service Account** → скачайте JSON-ключ.
-2. Создайте папку на Google Drive и **расшарьте** её на `client_email` из ключа («Редактор»).
-3. Админка → Резервная копия → вставьте JSON, укажите ID/ссылку папки → **Сохранить** → **Проверить подключение**.
-4. Включите «Автоматически выгружать» (ставится само при вводе ключа и папки) и при желании «Удалять локальную копию после выгрузки».
-5. В Google Cloud → APIs включите **Google Drive API** для проекта service account.
+**Личный Gmail (обычный диск):** Google больше не даёт service account писать в расшаренную папку
+(`Insufficient permissions for the specified parent`). Нужен вход вашим Google-аккаунтом:
 
-После создания снимка архив уходит на Drive (и если галочка автовыгрузки не стояла — тоже, пока папка «Подключена»). Локально сервер может не копить гигабайты. Скачивание и восстановление при необходимости подтягивают файл с Drive.
+1. Google Cloud → APIs & Services → включите **Google Drive API**.
+2. Credentials → Create OAuth client ID → **Web application**.
+3. В Authorized redirect URIs добавьте `https://<ваш-домен>/api/backup/drive/oauth/callback`
+   (точный URL показан в админке).
+4. Скачайте JSON клиента, вставьте в «Резервная копия», сохраните, нажмите **Войти через Google**.
+5. Укажите ID папки того же аккаунта.
 
-Если выгрузка не проходит: в блоке Drive будет красный текст ошибки. Частые причины — папка расшарена как «Читатель», неверный ID, Drive API выключен, либо личный диск без Shared Drive (у service account своя квота = 0, файл должен создаваться *внутри* вашей папки).
+При первом входе Google покажет «приложение не проверено» — это нормально для своего клиента:
+«Дополнительные сведения» → перейти к приложению.
+
+**Google Workspace:** можно по-прежнему service account + **общий диск** (Shared Drive), SA —
+участник с правом «Управляющий содержимым». Шаринг обычной папки My Drive на SA для записи
+не работает.
+
+После создания снимка архив уходит на Drive. Локально сервер может не копить гигабайты.
 
 ### Восстановление из админки
 

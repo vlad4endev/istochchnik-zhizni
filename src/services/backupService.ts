@@ -5,6 +5,12 @@ import path from 'node:path';
 
 import { query } from '../config/db';
 import { getUploadsRoot } from '../config/uploadsRoot';
+import {
+  loadDriveOAuthDocument,
+  loadDriveServiceAccountFromDb,
+  maskServiceAccountEmail,
+  resolveDriveOAuthRedirectUri,
+} from '../lib/googleDriveAuth';
 import { formatDriveApiError } from '../lib/googleDriveErrors';
 import {
   BACKUP_RETENTION_DAYS_MAX,
@@ -990,6 +996,8 @@ export async function getBackupSettingsAdminView(): Promise<BackupSettingsAdminV
   } catch {
     driveStatus = null;
   }
+  const oauth = await loadDriveOAuthDocument().catch(() => null);
+  const sa = await loadDriveServiceAccountFromDb().catch(() => null);
   return {
     ...doc,
     backups_dir: backupsRoot(),
@@ -997,10 +1005,15 @@ export async function getBackupSettingsAdminView(): Promise<BackupSettingsAdminV
     telegram_bot_ready: Boolean(tg.enabled && tg.has_bot_token),
     drive_ready: Boolean(driveStatus?.ready),
     drive_configured: Boolean(driveStatus?.configured),
-    has_drive_service_account: Boolean(driveStatus?.configured),
+    has_drive_service_account: Boolean(sa),
     drive_client_email_masked: driveStatus?.client_email_masked ?? null,
     drive_source: driveStatus?.source ?? null,
     drive_folder_name: driveStatus?.folder_name ?? null,
+    has_drive_oauth: Boolean(oauth?.refresh_token),
+    has_drive_oauth_client: Boolean(oauth?.client_id && oauth?.client_secret),
+    drive_oauth_email_masked: oauth?.email ? maskServiceAccountEmail(oauth.email) : null,
+    drive_oauth_redirect_uri: resolveDriveOAuthRedirectUri(),
+    drive_folder_kind: driveStatus?.folder_kind ?? null,
   };
 }
 
