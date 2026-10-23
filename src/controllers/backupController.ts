@@ -116,6 +116,9 @@ function mapBackupError(error: unknown): { status: number; error: string } {
   if (msg === 'drive_sa_missing_fields') {
     return { status: 400, error: 'В JSON нужны поля client_email и private_key' };
   }
+  if (msg.startsWith('Google Drive:')) {
+    return { status: 400, error: msg.slice(0, 800) };
+  }
   console.error('[backup]', error);
   return { status: 500, error: 'Операция с бекапом не удалась' };
 }

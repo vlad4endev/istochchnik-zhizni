@@ -94,15 +94,28 @@ function clampRetention(raw: unknown, fallback: number): number {
   return retention;
 }
 
-function normalizeFolderId(raw: unknown): string | null {
+export function normalizeDriveFolderId(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const t = raw.trim();
   if (!t) return null;
-  // Allow pasting full Drive folder URL
-  const fromUrl = /\/folders\/([a-zA-Z0-9_-]+)/.exec(t);
-  if (fromUrl) return fromUrl[1]!;
+  const fromFolders = /\/folders\/([a-zA-Z0-9_-]+)/.exec(t);
+  if (fromFolders) return fromFolders[1]!;
+  const fromIdParam = /[?&#]id=([a-zA-Z0-9_-]{10,})/.exec(t);
+  if (fromIdParam) return fromIdParam[1]!;
   if (/^[a-zA-Z0-9_-]{10,}$/.test(t)) return t;
   return t.slice(0, 200);
+}
+
+/**
+ * Выгружать снимок, если включена галочка или Drive уже успешно подключён
+ * (админ заполнил ключ и папку, но мог не поставить «Автоматически выгружать»).
+ */
+export function shouldAttemptDriveUpload(
+  settings: Pick<BackupSettingsDocument, 'drive_enabled' | 'drive_folder_id'>,
+  driveReady: boolean,
+): boolean {
+  if (!settings.drive_folder_id) return false;
+  return Boolean(settings.drive_enabled) || driveReady;
 }
 
 export function normalizeBackupSettingsDocument(raw: unknown): BackupSettingsDocument {
@@ -153,7 +166,7 @@ export function normalizeBackupSettingsDocument(raw: unknown): BackupSettingsDoc
     telegram_target,
     retention_days: retention,
     drive_enabled,
-    drive_folder_id: normalizeFolderId(o.drive_folder_id),
+    drive_folder_id: normalizeDriveFolderId(o.drive_folder_id),
     drive_delete_local_after_upload: deleteLocal,
     drive_retention_days: driveRetention,
     last_run_at: typeof o.last_run_at === 'string' ? o.last_run_at : null,
@@ -233,7 +246,7 @@ export async function patchBackupSettings(patch: BackupSettingsPatch): Promise<B
   }
   if (typeof patch.drive_enabled === 'boolean') next.drive_enabled = patch.drive_enabled;
   if (patch.drive_folder_id !== undefined) {
-    next.drive_folder_id = normalizeFolderId(patch.drive_folder_id);
+    next.drive_folder_id = normalizeDriveFolderId(patch.drive_folder_id);
   }
   if (typeof patch.drive_delete_local_after_upload === 'boolean') {
     next.drive_delete_local_after_upload = patch.drive_delete_local_after_upload;

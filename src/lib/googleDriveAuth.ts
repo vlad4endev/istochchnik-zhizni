@@ -8,10 +8,12 @@ import type { drive_v3 } from 'googleapis';
 
 import { query } from '../config/db';
 
-const DRIVE_SCOPES = [
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/drive',
-];
+/** Полный Drive scope: `drive.file` не умеет писать в чужую расшаренную папку. */
+const DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive'];
+
+export function normalizeDrivePrivateKey(key: string): string {
+  return key.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
+}
 
 export interface DriveServiceAccount {
   type?: string;
@@ -101,7 +103,7 @@ export async function createDriveClient(): Promise<{
 
   const auth = new google.auth.JWT({
     email: sa.client_email,
-    key: String(sa.private_key).replace(/\\n/g, '\n'),
+    key: normalizeDrivePrivateKey(String(sa.private_key)),
     scopes: DRIVE_SCOPES,
   });
   await auth.authorize();

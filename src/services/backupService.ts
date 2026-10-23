@@ -5,9 +5,11 @@ import path from 'node:path';
 
 import { query } from '../config/db';
 import { getUploadsRoot } from '../config/uploadsRoot';
+import { formatDriveApiError } from '../lib/googleDriveErrors';
 import {
   BACKUP_RETENTION_DAYS_MAX,
   loadBackupSettingsDocument,
+  shouldAttemptDriveUpload,
   updateBackupRunStatus,
   type BackupSettingsAdminView,
   type BackupSettingsDocument,
@@ -347,7 +349,7 @@ export async function listBackups(): Promise<BackupListItem[]> {
       }
     }
   } catch (e) {
-    console.warn('[backup] drive list merge skipped:', e instanceof Error ? e.message : e);
+    console.warn('[backup] drive list merge skipped:', formatDriveApiError(e));
   }
 
   items.sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
@@ -635,7 +637,14 @@ export async function createFullBackup(options?: {
       await applyRetention(settings.retention_days);
 
       let drive: DriveUploadResult | undefined;
-      if (settings.drive_enabled) {
+      let driveReady = false;
+      try {
+        driveReady = Boolean((await getDriveStatus(settings.drive_folder_id)).ready);
+      } catch {
+        driveReady = false;
+      }
+      const attemptDrive = shouldAttemptDriveUpload(settings, driveReady);
+      if (attemptDrive) {
         await updateBackupRunStatus({
           last_run_at: new Date().toISOString(),
           last_run_status: 'running',
@@ -666,7 +675,7 @@ export async function createFullBackup(options?: {
             console.warn('[backup] drive retention:', e),
           );
         } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
+          const msg = formatDriveApiError(e);
           await updateBackupRunStatus({
             last_drive_at: new Date().toISOString(),
             last_drive_status: 'error',
@@ -680,10 +689,18 @@ export async function createFullBackup(options?: {
             drive_file_id: null,
             web_view_link: null,
             size_bytes,
-            message: `Drive: ${msg.slice(0, 400)}`,
+            message: msg.slice(0, 400),
             deleted_local: false,
           };
         }
+      } else if (settings.drive_folder_id || driveReady) {
+        await updateBackupRunStatus({
+          last_drive_at: new Date().toISOString(),
+          last_drive_status: 'skipped',
+          last_drive_message:
+            'Автовыгрузка пропущена: включите «Автоматически выгружать» или нажмите «На Drive» у снимка.',
+          last_drive_file_id: null,
+        });
       }
 
       let telegram: BackupTelegramSendResult | undefined;

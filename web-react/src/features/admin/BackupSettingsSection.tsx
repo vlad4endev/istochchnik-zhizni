@@ -289,7 +289,11 @@ export function BackupSettingsSection() {
       const drive = data.backup.drive;
       const parts = [
         tg ? `Telegram: ${tg.message}` : null,
-        drive ? `Drive: ${drive.message}` : null,
+        drive
+          ? `Drive: ${drive.message}`
+          : draft?.drive_folder_id
+            ? 'Drive: не выгружено — проверьте подключение и статус ниже'
+            : null,
       ].filter(Boolean);
       setNote({
         type: drive && !drive.ok ? 'err' : 'ok',
@@ -645,24 +649,28 @@ export function BackupSettingsSection() {
           Google Drive — основное хранилище
         </h2>
         <p className="mt-1 text-sm text-stone-600">
-          Все настройки Drive задаются здесь. Снимки уходят в папку на Google Drive; локально на
-          сервере можно не хранить копии.
+          Все настройки Drive задаются здесь. Как только папка подключена, каждый новый снимок
+          уходит туда; локально на сервере можно не хранить копии.
         </p>
 
         <div
           className={`mt-3 rounded-xl px-3 py-2 text-xs ${
-            draft.drive_ready
-              ? 'bg-emerald-50 text-emerald-900'
-              : 'bg-amber-50 text-amber-900'
+            draft.last_drive_status === 'error'
+              ? 'bg-red-50 text-red-900'
+              : draft.drive_ready
+                ? 'bg-emerald-50 text-emerald-900'
+                : 'bg-amber-50 text-amber-900'
           }`}
         >
-          {draft.drive_ready
-            ? `Подключено${draft.drive_folder_name ? `: «${draft.drive_folder_name}»` : ''}${
-                draft.drive_client_email_masked ? ` · ${draft.drive_client_email_masked}` : ''
-              }`
-            : draft.has_drive_service_account
-              ? 'Ключ сохранён, но папка недоступна — проверьте ID папки и шаринг на email service account.'
-              : 'Не настроено: вставьте JSON ключа и ID папки, затем сохраните.'}
+          {draft.last_drive_status === 'error' && draft.last_drive_message
+            ? draft.last_drive_message
+            : draft.drive_ready
+              ? `Подключено${draft.drive_folder_name ? `: «${draft.drive_folder_name}»` : ''}${
+                  draft.drive_client_email_masked ? ` · ${draft.drive_client_email_masked}` : ''
+                }. Новые снимки выгружаются автоматически.`
+              : draft.has_drive_service_account
+                ? 'Ключ сохранён, но папка недоступна — проверьте ID папки и шаринг на email service account (право «Редактор»).'
+                : 'Не настроено: вставьте JSON ключа и ID папки, затем сохраните.'}
         </div>
 
         <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs text-stone-500">
@@ -680,6 +688,10 @@ export function BackupSettingsSection() {
               onChange={(e) => setDraft({ ...draft, drive_enabled: e.target.checked })}
             />
             Автоматически выгружать каждый снимок на Google Drive
+            <span className="font-normal text-stone-500">
+              {' '}
+              (включается само, когда указаны ключ и папка)
+            </span>
           </label>
           <label className="flex items-center gap-2 text-sm font-medium text-stone-800 sm:col-span-2">
             <input
@@ -700,9 +712,14 @@ export function BackupSettingsSection() {
             <input
               className={fieldClass()}
               value={draft.drive_folder_id ?? ''}
-              onChange={(e) =>
-                setDraft({ ...draft, drive_folder_id: e.target.value.trim() || null })
-              }
+              onChange={(e) => {
+                const value = e.target.value.trim() || null;
+                setDraft({
+                  ...draft,
+                  drive_folder_id: value,
+                  drive_enabled: value ? true : draft.drive_enabled,
+                });
+              }}
               placeholder="1AbC…xyz или https://drive.google.com/drive/folders/…"
             />
           </label>
@@ -743,7 +760,10 @@ export function BackupSettingsSection() {
               value={driveSaJson}
               onChange={(e) => {
                 setDriveSaJson(e.target.value);
-                if (e.target.value.trim()) setClearDriveSa(false);
+                if (e.target.value.trim()) {
+                  setClearDriveSa(false);
+                  setDraft((d) => (d ? { ...d, drive_enabled: true } : d));
+                }
               }}
               placeholder={
                 draft.has_drive_service_account
@@ -796,7 +816,15 @@ export function BackupSettingsSection() {
         </div>
 
         {draft.last_drive_message && (
-          <p className="mt-3 text-xs text-stone-500">
+          <p
+            className={`mt-3 text-xs ${
+              draft.last_drive_status === 'error'
+                ? 'text-red-700'
+                : draft.last_drive_status === 'skipped'
+                  ? 'text-amber-700'
+                  : 'text-stone-500'
+            }`}
+          >
             Drive: {formatRuDate(draft.last_drive_at)} — {draft.last_drive_message}
           </p>
         )}

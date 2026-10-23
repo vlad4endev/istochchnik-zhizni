@@ -609,6 +609,11 @@ async function start(): Promise<void> {
   }
 
   const server = http.createServer(app);
+  // Node 20 по умолчанию рвёт запрос через 5 минут — полный бекап + Drive не укладываются.
+  const longReqMs = 2 * 60 * 60 * 1000;
+  server.requestTimeout = longReqMs;
+  server.headersTimeout = longReqMs + 30_000;
+  server.timeout = longReqMs;
   await initMessengerFanoutPublisherOnly();
   await initRealtimeRedis();
   attachRealtimeWebSocket(server);
