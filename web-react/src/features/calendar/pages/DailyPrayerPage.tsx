@@ -45,13 +45,22 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { PrayerSkeleton } from '@/components/skeletons/PrayerSkeleton';
 import { sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { memberRosterName } from '../../../lib/memberRosterName';
-import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
+import type {
+  Backslider,
+  DayPrayerData,
+  GlobalTheme,
+  Member,
+  Ministry,
+  PrayerWatchTopic,
+} from '../../../types';
 import { useMe } from '@/hooks/useMe';
 import { keys } from '@/lib/queryKeys';
 import { useCoordinatorNoteEditorRequestStore } from '../../dashboard/coordinatorNoteEditorRequestStore';
 import { NextWeekPrayerPlanSection } from '../components/NextWeekPrayerPlanSection';
 import { PrayerSectionViewersModal } from '../components/PrayerSectionViewersModal';
+import { WatchTopicsSection } from '../../admin/WatchTopicsSection';
 import {
+  userCanEditWatchTopics,
   userCanManageCoordinatorDashboardNotes,
   userCanTelegramPrayerDispatch,
   userCanViewNextWeekPrayerPlan,
@@ -90,7 +99,8 @@ function isDayPrayerEmpty(data: DayPrayerData): boolean {
     data.members.length === 0 &&
     data.global_themes.length === 0 &&
     data.ministries.length === 0 &&
-    data.backsliders.length === 0
+    data.backsliders.length === 0 &&
+    !data.watch_topic?.topic
   );
 }
 
@@ -228,6 +238,52 @@ function GlobalThemeCard({ theme, cardIndex = 0 }: { theme: GlobalTheme; cardInd
         </div>
       ) : null}
       {hasPoints ? <p className="text-base leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap">{theme.prayer_points}</p> : null}
+      {hasNothing ? <p className="italic text-[var(--text-muted)]">Нет дополнительной информации</p> : null}
+    </PrayerCard>
+  );
+}
+
+function WatchTopicCard({
+  topic,
+  isOverride,
+  cardIndex = 0,
+}: {
+  topic: PrayerWatchTopic;
+  isOverride?: boolean;
+  cardIndex?: number;
+}) {
+  const hasVerse = topic.bible_verse != null && topic.bible_verse.trim().length > 0;
+  const hasPoints = topic.prayer_points != null && topic.prayer_points.trim().length > 0;
+  const hasNotes = topic.notes != null && topic.notes.trim().length > 0;
+  const hasNothing = !hasVerse && !hasPoints && !hasNotes;
+  return (
+    <PrayerCard
+      Icon={LuFlame}
+      title={topic.title}
+      accentVar="var(--primary)"
+      cardIndex={cardIndex}
+    >
+      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+        Тема молитвенной стражи{isOverride ? ' · вручную' : ''}
+      </p>
+      {hasVerse ? (
+        <div className="mb-3 rounded-xl border border-[color-mix(in_srgb,var(--primary)_18%,transparent)] bg-[color-mix(in_srgb,var(--primary)_8%,transparent)] px-3.5 py-3.5">
+          <div className="flex gap-2.5">
+            <LuBookMarked className="mt-0.5 h-[18px] w-[18px] shrink-0 text-primary" aria-hidden />
+            <p className="text-base italic leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap">
+              {topic.bible_verse}
+            </p>
+          </div>
+        </div>
+      ) : null}
+      {hasPoints ? (
+        <p className="text-base leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap">
+          {topic.prayer_points}
+        </p>
+      ) : null}
+      {hasNotes ? (
+        <p className="mt-2 text-sm text-[var(--text-muted)] whitespace-pre-wrap">{topic.notes}</p>
+      ) : null}
       {hasNothing ? <p className="italic text-[var(--text-muted)]">Нет дополнительной информации</p> : null}
     </PrayerCard>
   );
@@ -749,6 +805,7 @@ export function DailyPrayerPage() {
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
   const [telegramDispatchModalOpen, setTelegramDispatchModalOpen] = useState(false);
   const [prayerViewersModalOpen, setPrayerViewersModalOpen] = useState(false);
+  const [watchTopicsEditorOpen, setWatchTopicsEditorOpen] = useState(false);
 
   const { data: me, isSuccess: meQuerySuccess } = useMe();
 
@@ -828,6 +885,9 @@ export function DailyPrayerPage() {
       : 'Сегодня молимся за члена церкви';
   const hasThemesOrMinistries =
     data != null && (data.global_themes.length > 0 || data.ministries.length > 0);
+  const canEditWatchTopics =
+    meQuerySuccess && userCanEditWatchTopics(me, rolePermissionsQ.data);
+  const watchTopic = data?.watch_topic?.topic ?? null;
 
   const urgentPrayerText = coordinatorNotesQ.data?.urgent_prayer?.text?.trim() ?? '';
   const urgentPrayerBlock: ReactNode =
@@ -1022,12 +1082,53 @@ export function DailyPrayerPage() {
         ) : urgentPrayerStack ? (
           <div className="mb-4">{urgentPrayerStack}</div>
         ) : null}
+
+        {canEditWatchTopics ? (
+          <div className="mb-4 overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-sm">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+              onClick={() => setWatchTopicsEditorOpen((v) => !v)}
+              aria-expanded={watchTopicsEditorOpen}
+            >
+              <span>
+                <span className="block text-sm font-extrabold text-stone-900">
+                  Темы молитвенных страж
+                </span>
+                <span className="mt-0.5 block text-xs text-stone-500">
+                  Каталог, цикл и расписание — доступ по роли
+                </span>
+              </span>
+              {watchTopicsEditorOpen ? (
+                <LuChevronUp className="h-5 w-5 shrink-0 text-stone-400" aria-hidden />
+              ) : (
+                <LuChevronDown className="h-5 w-5 shrink-0 text-stone-400" aria-hidden />
+              )}
+            </button>
+            {watchTopicsEditorOpen ? (
+              <div className="border-t border-stone-100 px-3 py-4 sm:px-4">
+                <WatchTopicsSection compact />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {isPending ? (
           <PrayerSkeleton />
         ) : isError ? (
           <ErrorBlock err={queryError} onRetry={() => void refetch()} />
         ) : hasPrayerContent(data) ? (
           <div className="pb-6">
+            {watchTopic ? (
+              <section className="mb-3" aria-label="Тема молитвенной стражи">
+                <WatchTopicCard
+                  topic={watchTopic}
+                  isOverride={Boolean(data.watch_topic?.is_override)}
+                  cardIndex={0}
+                />
+              </section>
+            ) : null}
+
             {data.members.length > 0 ? (
               <section aria-labelledby={sectionMemberId}>
                 <SectionHeader
@@ -1043,7 +1144,7 @@ export function DailyPrayerPage() {
 
             {hasThemesOrMinistries ? (
               <section
-                className={data.members.length > 0 ? 'mt-3' : undefined}
+                className={data.members.length > 0 || watchTopic ? 'mt-3' : undefined}
                 aria-labelledby={themesMinistriesRegionId}
               >
                 <h2 id={themesMinistriesRegionId} className="sr-only">
@@ -1065,7 +1166,9 @@ export function DailyPrayerPage() {
             {data.backsliders.length > 0 ? (
               <section
                 className={
-                  data.members.length > 0 || hasThemesOrMinistries ? 'mt-3' : undefined
+                  data.members.length > 0 || hasThemesOrMinistries || watchTopic
+                    ? 'mt-3'
+                    : undefined
                 }
                 aria-labelledby={sectionBacksliderId}
               >

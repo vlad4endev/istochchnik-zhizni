@@ -89,6 +89,12 @@ export const APP_PERMISSION_DEFS = [
     label: 'Улучшение текста нужды',
     description: 'AI-улучшение формулировок молитвенных нужд.',
   },
+  {
+    id: 'calendar.watch_topics_edit',
+    category: 'calendar',
+    label: 'Темы молитвенных страж',
+    description: 'Добавление, редактирование и расписание молитвенных тем для страж (циклы и очередь).',
+  },
   { id: 'broadcast.manage', category: 'broadcast', label: 'Трансляции', description: 'Запуск и настройка трансляций.' },
   { id: 'content.posts_create', category: 'content', label: 'Публикации', description: 'Создание постов на личной странице.' },
 ] as const;
@@ -160,6 +166,7 @@ export function defaultRolePermissionsSettings(): RolePermissionsSettingsDocumen
   }
 
   grant(roles.minister, ['planner.manage', 'broadcast.manage', 'calendar.dashboard_notes']);
+  grant(roles.pastor, ['calendar.watch_topics_edit']);
   grant(roles.musician, [...MUSICIAN_STUDIO_PERMISSIONS]);
   grant(roles.editor, [
     'section.songbook',
