@@ -109,14 +109,8 @@ public class OngoingCallService extends Service {
     final Notification notification = buildNotification(callId, peerName, callType, callKind, hasVideo);
 
     try {
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-        int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-          | ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK;
-        if (hasVideo) {
-          type |= ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
-        }
-        startForeground(NOTIFY_ID, notification, type);
-      } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      // Typed FGS: microphone/camera constants require API 30+.
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
           | ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK;
         if (hasVideo) {
