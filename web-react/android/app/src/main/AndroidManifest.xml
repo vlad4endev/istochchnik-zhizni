@@ -38,6 +38,7 @@
             <intent-filter>
                 <action android:name="com.istochnikzhizni.molitva.CALL_ACCEPT" />
                 <action android:name="com.istochnikzhizni.molitva.CALL_DECLINE" />
+                <action android:name="com.istochnikzhizni.molitva.ONGOING_CALL_HANGUP" />
             </intent-filter>
         </receiver>
 
@@ -67,6 +68,12 @@
             </intent-filter>
         </service>
 
+        <!-- Держит LiveKit/WebRTC живым при блокировке экрана / уходе в фон -->
+        <service
+            android:name=".OngoingCallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|camera|mediaPlayback" />
+
         <!-- Дубль из @capacitor/push-notifications — иначе пуши теряются -->
         <service
             android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
@@ -80,6 +87,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

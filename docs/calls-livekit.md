@@ -186,6 +186,24 @@ Push **не** содержит LiveKit token. Успешная отправка 
 
 В **foreground** Capacitor-приложении рингтон у адресата идёт через нативный `NativeCall.playRingtone` (Android `RingtoneManager` / iOS `AVAudioEngine`), потому что Web Audio часто молчит без жеста пользователя. FCM `incoming_call` в foreground открывает overlay (не toast).
 
+### Активный звонок при блокировке экрана / в фоне
+
+Входящий wake (CallStyle / CallKit) ≠ удержание **уже идущего** LiveKit-сеанса.
+
+| Клиент | Что держит медиа под lock |
+|--------|---------------------------|
+| **Capacitor Android** | `OngoingCallService` — FGS `microphone\|camera\|mediaPlayback` + ongoing CallStyle; старт через `NativeCall.startOngoing` при `status=active` |
+| **Capacitor iOS** | CallKit ongoing (`CXStartCallAction` / connected) + `AVAudioSession` `.playAndRecord` / `.voiceChat`; `UIBackgroundModes`: `audio` + `voip` |
+| **PWA / Safari / Chrome** | **Невозможно** надёжно: ОС замораживает WebRTC. Нужно нативное приложение |
+
+Критичный баг, который ломал личные звонки: `pagehide` + `sendBeacon(/end)` при уходе в фон (в т.ч. блокировка). Теперь beacon только для web 1:1 **исходящего ring**, никогда на Capacitor и никогда для `active`.
+
+Проверка вручную (нативное приложение, не PWA):
+
+1. Личный аудиозвонок → принять → заблокировать телефон на 30–60 с → разблокировать: звук и таймер продолжаются, в шторке «В звонке».
+2. То же для групповой встречи (хост и участник).
+3. С шторки / CallKit нажать «Завершить» → комната закрывается у обеих сторон.
+
 ## Проверка вручную
 
 1. Два пользователя в личном чате, `CALLS_ENABLED` и `VITE_CALLS_ENABLED`.

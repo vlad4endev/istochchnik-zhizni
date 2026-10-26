@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 
 import { useCallStore } from './callStore';
+import { useNativeOngoingCall } from './useNativeOngoingCall';
 
 /**
  * LiveKit + CallWindow тяжёлые (~сотни KB). Раньше тянулись в entry через Layout
@@ -24,6 +25,9 @@ export function CallWindowHost() {
     const st = s.activeCall?.status;
     return st === 'calling' || st === 'ringing_in' || st === 'active';
   });
+
+  // Android FGS / iOS CallKit — иначе LiveKit умирает при блокировке экрана.
+  useNativeOngoingCall();
 
   if (!needsCallWindow) return null;
 
