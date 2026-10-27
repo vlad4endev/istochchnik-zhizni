@@ -340,9 +340,9 @@ export function ChatInput({
   const [mentionHighlight, setMentionHighlight] = useState(0);
   const lastOpenedEditIdRef = useRef<string | null>(null);
   const uploadsHealthTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  /** IME (иероглифы и т.п.): не отправлять по Enter в середине композиции — как в Telegram. */
+  /** IME (иероглифы и т.п.): не выбирать mention по Enter в середине композиции. */
   const composingRef = useRef(false);
-  /** Защита от двойного Enter / двойного тапа «Отправить». */
+  /** Защита от двойного тапа «Отправить». */
   const sendInFlightRef = useRef(false);
 
   const VOICE_MAX_MS = 10 * 60 * 1000;
@@ -1279,6 +1279,10 @@ export function ChatInput({
         return;
       }
       if (e.key === 'Enter' && !e.shiftKey) {
+        const ne = e.nativeEvent as KeyboardEvent;
+        if (composingRef.current || ne.isComposing || ne.keyCode === 229) {
+          return;
+        }
         e.preventDefault();
         const sel = mentionFiltered[mentionHighlight];
         if (sel) pickMention(sel.id);
@@ -1290,14 +1294,7 @@ export function ChatInput({
         return;
       }
     }
-    if (e.key === 'Enter' && !e.shiftKey) {
-      const ne = e.nativeEvent as KeyboardEvent;
-      if (composingRef.current || ne.isComposing || ne.keyCode === 229) {
-        return;
-      }
-      e.preventDefault();
-      void handleSend();
-    }
+    // Enter — только новая строка; отправка сообщений — кнопкой «Отправить».
     if (e.key === 'Escape') {
       e.preventDefault();
       if (emojiOpen) {
@@ -2313,7 +2310,7 @@ export function ChatInput({
                     ? 'Добавить подпись…'
                     : placeholder
               }
-              enterKeyHint="send"
+              enterKeyHint="enter"
               inputMode="text"
               autoComplete="off"
               autoCorrect="off"
@@ -2321,8 +2318,8 @@ export function ChatInput({
               spellCheck="true"
               title={
                 mentionParticipants.length > 0
-                  ? 'Enter — отправить · Shift+Enter — новая строка · @ — упоминание'
-                  : 'Enter — отправить · Shift+Enter — новая строка'
+                  ? 'Enter — новая строка · отправка — кнопкой · @ — упоминание'
+                  : 'Enter — новая строка · отправка — кнопкой'
               }
               aria-label="Текст сообщения"
               aria-describedby={
