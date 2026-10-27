@@ -1446,7 +1446,11 @@ export async function addParticipant(
     `INSERT INTO conversation_participants (conversation_id, member_id, role)
      VALUES ($1, $2, $3)
      ON CONFLICT (conversation_id, member_id) DO UPDATE
-     SET left_at = NULL, role = $3, joined_at = NOW()`,
+     SET role = CASE WHEN conversation_participants.left_at IS NULL
+                     THEN conversation_participants.role ELSE $3 END,
+         joined_at = CASE WHEN conversation_participants.left_at IS NULL
+                          THEN conversation_participants.joined_at ELSE NOW() END,
+         left_at = NULL`,
     [conversationId, memberId, role],
   );
 }
@@ -3947,42 +3951,9 @@ export async function postRegistrationAccessRequestMessengerNotification(input: 
   }
 }
 
-async function syncPlanningParticipantsToServicePlanChannel(conversationId: string): Promise<void> {
-  const members = await dbQuery(
-    `SELECT id FROM members
-     WHERE COALESCE(is_active, TRUE)
-       AND (
-         app_role IN ('admin', 'editor', 'minister')
-         OR coalesce(app_roles, array[]::text[]) && array['admin','editor','minister']::text[]
-       )`,
-  );
-  for (const row of members.rows) {
-    const mId = Number((row as { id: unknown }).id);
-    if (!Number.isFinite(mId)) continue;
-    await addParticipant(conversationId, mId, 'member');
-  }
-}
-
-async function syncMediaParticipantsToMediykaChannel(conversationId: string): Promise<void> {
-  const members = await dbQuery(
-    `SELECT id FROM members
-     WHERE COALESCE(is_active, TRUE)
-       AND (
-         app_role IN ('admin', 'editor')
-         OR coalesce(app_roles, array[]::text[]) && array['admin','editor']::text[]
-         OR lower(coalesce(ministry_direction, '')) LIKE '%медиа%'
-         OR lower(coalesce(ministry_role, '')) LIKE '%медиа%'
-       )`,
-  );
-  for (const row of members.rows) {
-    const mId = Number((row as { id: unknown }).id);
-    if (!Number.isFinite(mId)) continue;
-    await addParticipant(conversationId, mId, 'member');
-  }
-}
-
 /**
  * Канал «Медийка»: ищем по metadata.kind, иначе по названию, иначе создаём.
+ * Участников автоматически не добавляем: состав задаёт админ чата или тот, у кого есть право.
  */
 export async function ensureMediykaMessengerChannel(): Promise<string | null> {
   try {
@@ -3994,7 +3965,6 @@ export async function ensureMediykaMessengerChannel(): Promise<string | null> {
     );
     if (byKind.rows[0]?.id != null) {
       const convId = bigint((byKind.rows[0] as { id: unknown }).id);
-      await syncMediaParticipantsToMediykaChannel(convId);
       return convId;
     }
 
@@ -4019,7 +3989,6 @@ export async function ensureMediykaMessengerChannel(): Promise<string | null> {
           JSON.stringify(meta),
         ]);
       }
-      await syncMediaParticipantsToMediykaChannel(convId);
       return convId;
     }
 
@@ -4029,9 +3998,7 @@ export async function ensureMediykaMessengerChannel(): Promise<string | null> {
        RETURNING id`,
       [MEDIA_TEAM_CHANNEL_TITLE, JSON.stringify({ kind: MEDIA_TEAM_CHANNEL_KIND })],
     );
-    const convId = bigint((ins.rows[0] as { id: unknown }).id);
-    await syncMediaParticipantsToMediykaChannel(convId);
-    return convId;
+    return bigint((ins.rows[0] as { id: unknown }).id);
   } catch (e) {
     console.error('[messenger] ensureMediykaMessengerChannel:', e);
     return null;
@@ -4220,9 +4187,7 @@ export async function ensureServicePlanPlanningMessengerChannel(): Promise<strin
       [SERVICE_PLAN_PLANNING_CHANNEL_KIND],
     );
     if (byKind.rows[0]?.id != null) {
-      const convId = bigint((byKind.rows[0] as { id: unknown }).id);
-      await syncPlanningParticipantsToServicePlanChannel(convId);
-      return convId;
+      return bigint((byKind.rows[0] as { id: unknown }).id);
     }
 
     const byTitle = await dbQuery(
@@ -4246,7 +4211,6 @@ export async function ensureServicePlanPlanningMessengerChannel(): Promise<strin
           JSON.stringify(meta),
         ]);
       }
-      await syncPlanningParticipantsToServicePlanChannel(convId);
       return convId;
     }
 
@@ -4259,9 +4223,7 @@ export async function ensureServicePlanPlanningMessengerChannel(): Promise<strin
         JSON.stringify({ kind: SERVICE_PLAN_PLANNING_CHANNEL_KIND }),
       ],
     );
-    const convId = bigint((ins.rows[0] as { id: unknown }).id);
-    await syncPlanningParticipantsToServicePlanChannel(convId);
-    return convId;
+    return bigint((ins.rows[0] as { id: unknown }).id);
   } catch (e) {
     console.error('[messenger] ensureServicePlanPlanningMessengerChannel:', e);
     return null;
