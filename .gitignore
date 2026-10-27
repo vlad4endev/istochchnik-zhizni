@@ -21,3 +21,6 @@ secrets/*.json
 # Артефакты для Dockerfile.web.prebuilt (генерируются локально)
 release/web/*
 !release/web/.gitkeep
+
+# Локальные настройки Claude Code (содержат пути конкретной машины)
+.claude/
