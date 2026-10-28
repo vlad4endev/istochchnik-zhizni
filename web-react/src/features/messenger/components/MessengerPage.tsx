@@ -63,6 +63,9 @@ export function MessengerPage() {
   const activeId = useChatStore((s) => s.activeConversationId);
   const setActive = useChatStore((s) => s.setActiveConversation);
   const ensurePrivateDraftFromConversationId = useChatStore((s) => s.ensurePrivateDraftFromConversationId);
+  const openPrivateDraftByAccountId = useChatStore((s) => s.openPrivateDraftByAccountId);
+  const ensureSessionIdentity = useChatStore((s) => s.ensureSessionIdentity);
+  const currentMemberId = useChatStore((s) => s.currentMemberId);
   const loadConversations = useChatStore((s) => s.loadConversations);
   const [showNewChat, setShowNewChat] = useState(false);
   const [callsMenuOpen, setCallsMenuOpen] = useState(false);
@@ -162,13 +165,46 @@ export function MessengerPage() {
   }, [loadConversations]);
 
   useEffect(() => {
+    if (currentMemberId == null) return;
+    void ensureSessionIdentity();
+  }, [currentMemberId, ensureSessionIdentity]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('messenger:desktop-density', density);
   }, [density]);
 
+  // Deep-link Session QR / share: /messenger?sessionId=05…
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const sessionId = params.get('sessionId')?.trim() ?? '';
+    if (!sessionId) return;
+    let cancelled = false;
+    void (async () => {
+      const ok = await openPrivateDraftByAccountId(sessionId);
+      if (cancelled) return;
+      if (ok) {
+        const draftOrActive = useChatStore.getState().activeConversationId;
+        setMobileView('chat');
+        if (draftOrActive) {
+          saveActiveMessengerConversation(draftOrActive);
+          navigate(messengerPathWithConversation(draftOrActive), { replace: true });
+        } else {
+          navigate('/messenger', { replace: true });
+        }
+      } else {
+        navigate('/messenger', { replace: true });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.search, navigate, openPrivateDraftByAccountId]);
+
   // Deep-link from push / dashboard / cold start: /messenger?conversationId=123|draft:42
   useEffect(() => {
     const params = new URLSearchParams(location.search);
+    if (params.get('sessionId')?.trim()) return;
     const convId = params.get('conversationId')?.trim() ?? '';
     if (!convId) return;
     if (isConversationRemoved(convId)) {
@@ -201,6 +237,7 @@ export function MessengerPage() {
     restoredActiveRef.current = true;
     const params = new URLSearchParams(location.search);
     if (params.get('conversationId')?.trim()) return;
+    if (params.get('sessionId')?.trim()) return;
     if (activeId) {
       setMobileView('chat');
       navigate(messengerPathWithConversation(activeId), { replace: true });

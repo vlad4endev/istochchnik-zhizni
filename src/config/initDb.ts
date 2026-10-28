@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS members (
   app_role VARCHAR(16) NOT NULL DEFAULT 'member' CHECK (app_role IN ('member', 'parishioner', 'minister', 'pastor', 'musician', 'editor', 'admin')),
   app_roles TEXT[] NOT NULL DEFAULT ARRAY['member'],
   public_key TEXT,
+  messenger_account_id VARCHAR(66),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -1564,6 +1565,10 @@ CREATE TABLE IF NOT EXISTS message_interactions (
 -- Upgrades for DBs created before avatar_url
 ALTER TABLE members ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS public_key TEXT;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS messenger_account_id VARCHAR(66);
+CREATE UNIQUE INDEX IF NOT EXISTS members_messenger_account_id_uidx
+  ON members (messenger_account_id)
+  WHERE messenger_account_id IS NOT NULL;
 
 -- Upgrades for older messenger DBs (columns added after initial rollout)
 -- These are safe no-ops on fresh DBs, and prevent 42703 errors (missing columns) on old ones.

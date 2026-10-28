@@ -234,7 +234,17 @@ export interface SearchMember {
   is_online?: boolean;
   registration_status?: 'active' | 'pending_review' | 'rejected';
   has_registered?: boolean;
+  messenger_account_id?: string | null;
+  public_key?: string | null;
 }
+
+export type MessengerIdentity = {
+  member_id: number;
+  account_id: string;
+  public_key: string | null;
+  qr_payload: { v: 1; type: 'messenger_session'; id: string };
+  qr_path: string;
+};
 
 // ─── API calls ────────────────────────────────────────────────
 
@@ -243,12 +253,45 @@ export async function fetchConversations(): Promise<ConversationListItem[]> {
   return (data ?? []).map(normalizeConversationListItem);
 }
 
-export async function createPersonalChat(otherMemberId: number) {
+export async function createPersonalChat(
+  otherMemberId: number,
+  opts?: { otherAccountId?: string },
+) {
+  const body: { otherMemberId?: number; otherAccountId?: string } = { otherMemberId };
+  if (opts?.otherAccountId) body.otherAccountId = opts.otherAccountId;
   const { data } = await apiClient.post<{
     conversationId: string;
     conversation: ConversationListItem | null;
-  }>(`${BASE}/conversations/personal`, { otherMemberId });
+  }>(`${BASE}/conversations/personal`, body);
   return data;
+}
+
+export async function fetchMessengerIdentity(): Promise<MessengerIdentity> {
+  const { data } = await apiClient.get<MessengerIdentity>(`${BASE}/identity`);
+  return data;
+}
+
+export async function ensureMessengerIdentity(publicKey?: string): Promise<MessengerIdentity> {
+  const { data } = await apiClient.post<MessengerIdentity>(`${BASE}/identity/ensure`, {
+    publicKey: publicKey || undefined,
+  });
+  return data;
+}
+
+export async function resolveMessengerAccountId(
+  accountId: string,
+): Promise<SearchMember | null> {
+  const id = String(accountId || '').trim();
+  if (!id) return null;
+  try {
+    const { data } = await apiClient.get<SearchMember>(
+      `${BASE}/members/by-account/${encodeURIComponent(id)}`,
+      { silentErrorToast: true },
+    );
+    return data ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function messengerApiErrorMessage(error: unknown, fallback: string): string {

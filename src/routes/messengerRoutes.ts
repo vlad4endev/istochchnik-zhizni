@@ -37,6 +37,8 @@ import {
 } from '../lib/supabaseStorage';
 import type { AppRole } from '../types/appRole';
 import { canAccessMessengerAssistant } from '../types/appRole';
+import { normalizeMessengerAccountId } from '../lib/messengerAccountId';
+import * as identitySvc from '../services/messengerIdentityService';
 
 type AuthReq = Request & {
   authUserId?: number;
@@ -798,25 +800,38 @@ router.get('/conversations', async (req: Request, res: Response) => {
   }
 });
 
-/** POST /api/messenger/conversations/personal { otherMemberId } */
+/** POST /api/messenger/conversations/personal { otherMemberId } | { otherAccountId } */
 router.post('/conversations/personal', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
-  const { otherMemberId } = req.body;
-  if (!otherMemberId || typeof otherMemberId !== 'number') {
-    res.status(400).json({ error: 'otherMemberId is required' });
-    return;
-  }
+  const { otherMemberId, otherAccountId } = req.body ?? {};
+  let targetId: number | null = null;
   try {
-    const convId = await svc.findOrCreatePersonalConversation(userId, otherMemberId);
+    const accountId = normalizeMessengerAccountId(otherAccountId);
+    if (accountId) {
+      const contact = await identitySvc.resolveMemberByMessengerAccountId(accountId, userId);
+      if (!contact) {
+        res.status(404).json({ error: 'Пользователь с таким ID не найден' });
+        return;
+      }
+      targetId = contact.id;
+    } else if (typeof otherMemberId === 'number' && Number.isFinite(otherMemberId) && otherMemberId > 0) {
+      targetId = otherMemberId;
+    } else if (typeof otherMemberId === 'string' && /^\d+$/.test(otherMemberId.trim())) {
+      targetId = Number(otherMemberId.trim());
+    } else {
+      res.status(400).json({ error: 'otherMemberId or otherAccountId is required' });
+      return;
+    }
+    const convId = await svc.findOrCreatePersonalConversation(userId, targetId);
     // Ensure both members join the WS room
     ensureMemberInRoom(userId, convId);
-    ensureMemberInRoom(otherMemberId, convId);
+    ensureMemberInRoom(targetId, convId);
     const convKey = String(convId);
     const convForMe = await getConversationListItemForMember(userId, convKey);
     // Notify the other member about new conversation (shape must be from THEIR perspective)
-    const convForOther = await getConversationListItemForMember(otherMemberId, convKey);
+    const convForOther = await getConversationListItemForMember(targetId, convKey);
     if (convForOther) {
-      sendToMember(otherMemberId, { type: 'conv:created', conversation: convForOther });
+      sendToMember(targetId, { type: 'conv:created', conversation: convForOther });
     }
     res.json({ conversationId: convKey, conversation: convForMe ?? null });
   } catch (e: unknown) {
@@ -2116,6 +2131,64 @@ router.delete('/messages/:id/reactions/:emoji', async (req: Request, res: Respon
     }
     console.error('[messenger] removeReaction error:', e);
     res.status(500).json({ error: 'Failed to remove reaction' });
+  }
+});
+
+// ─── Session-like identity (account id + QR) ──────────────────
+
+/** GET /api/messenger/identity — мой сложный ID и payload для QR. */
+router.get('/identity', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  try {
+    const identity = await identitySvc.getMessengerIdentity(userId);
+    res.json(identity);
+  } catch (e) {
+    console.error('[messenger] getIdentity error:', e);
+    res.status(500).json({ error: 'Failed to load messenger identity' });
+  }
+});
+
+/** POST /api/messenger/identity/ensure { publicKey? } — создать ID и сохранить E2EE public key. */
+router.post('/identity/ensure', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const publicKey =
+    typeof req.body?.publicKey === 'string'
+      ? req.body.publicKey
+      : typeof req.body?.public_key === 'string'
+        ? req.body.public_key
+        : undefined;
+  try {
+    const identity = await identitySvc.ensureMessengerIdentity(userId, { publicKey });
+    res.json(identity);
+  } catch (e) {
+    console.error('[messenger] ensureIdentity error:', e);
+    const msg = e instanceof Error ? e.message : 'Failed to ensure identity';
+    if (msg === 'Member not found') {
+      res.status(404).json({ error: msg });
+      return;
+    }
+    res.status(500).json({ error: 'Failed to ensure messenger identity' });
+  }
+});
+
+/** GET /api/messenger/members/by-account/:accountId — найти участника по Session-like ID / QR. */
+router.get('/members/by-account/:accountId', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const accountId = normalizeMessengerAccountId(req.params.accountId);
+  if (!accountId) {
+    res.status(400).json({ error: 'Invalid account id' });
+    return;
+  }
+  try {
+    const member = await identitySvc.resolveMemberByMessengerAccountId(accountId, userId);
+    if (!member) {
+      res.status(404).json({ error: 'Member not found' });
+      return;
+    }
+    res.json(member);
+  } catch (e) {
+    console.error('[messenger] resolveByAccountId error:', e);
+    res.status(500).json({ error: 'Failed to resolve account id' });
   }
 });
 

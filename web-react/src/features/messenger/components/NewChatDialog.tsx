@@ -10,7 +10,9 @@ import {
   type ChangeEvent,
   type CSSProperties,
 } from 'react';
-import { LuSearch, LuX, LuUsers, LuMegaphone, LuChevronLeft, LuCamera } from 'react-icons/lu';
+import { LuSearch, LuX, LuUsers, LuMegaphone, LuChevronLeft, LuCamera, LuQrCode, LuScanLine } from 'react-icons/lu';
+import { SessionQrShareSheet } from './SessionQrShareSheet';
+import { SessionQrScanSheet } from './SessionQrScanSheet';
 import { useChatStore, DRAFT_PRIVATE_PREFIX } from '../chatStore';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { getAvatarColor } from '../avatarUtils';
@@ -220,6 +222,8 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   const [avatarDraft, setAvatarDraft] = useState<{ file: File; url: string } | null>(null);
   /** Участники группы/канала при создании (id → карточка поиска). */
   const [groupPick, setGroupPick] = useState<Record<number, SearchMember>>({});
+  const [showMyQr, setShowMyQr] = useState(false);
+  const [showScanQr, setShowScanQr] = useState(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchGenRef = useRef(0);
   const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -559,6 +563,22 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
             <div className="tg-dialog-results">
               {!searchQuery && (
                 <div className="tg-dialog-sections">
+                  <button type="button" className="tg-section-btn" onClick={() => setShowScanQr(true)}>
+                    <div className="tg-section-icon"><LuScanLine size={20} aria-hidden /></div>
+                    <span className="tg-section-copy">
+                      <span className="tg-section-title">Сканировать QR</span>
+                      <span className="tg-section-sub">Добавить по ID как в Session</span>
+                    </span>
+                  </button>
+                  {currentMemberId != null ? (
+                    <button type="button" className="tg-section-btn" onClick={() => setShowMyQr(true)}>
+                      <div className="tg-section-icon"><LuQrCode size={20} aria-hidden /></div>
+                      <span className="tg-section-copy">
+                        <span className="tg-section-title">Мой QR и ID</span>
+                        <span className="tg-section-sub">Показать сложный ID для добавления</span>
+                      </span>
+                    </button>
+                  ) : null}
                   <button type="button" className="tg-section-btn" onClick={() => setMode('group')}>
                     <div className="tg-section-icon"><LuUsers size={20} aria-hidden /></div>
                     <span className="tg-section-copy">
@@ -862,6 +882,17 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
         )}
       </div>
       <style>{DIALOG_STYLES}</style>
+      {showMyQr && currentMemberId != null ? (
+        <SessionQrShareSheet memberId={currentMemberId} onClose={() => setShowMyQr(false)} />
+      ) : null}
+      {showScanQr ? (
+        <SessionQrScanSheet
+          onClose={() => setShowScanQr(false)}
+          onResolved={(member) => {
+            handleOpenChat(member);
+          }}
+        />
+      ) : null}
     </div></BodyPortal>
   );
 }
