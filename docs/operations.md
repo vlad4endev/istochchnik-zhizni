@@ -116,6 +116,14 @@ CONFIRM_RESTORE=YES bash scripts/restore.sh backups/latest
 
 На проде: `BACKUP_BEFORE_UPDATE=1`, по возможности `BACKUP_ENCRYPT_PASSPHRASE`. В админке: **Система → Резервная копия**. Подробности: [backup.md](./backup.md).
 
+### Нулевой деплой и участники
+
+`initDb` поднимает только схему. Список участников **не** заливается из кода при старте API
+(раньше `MEMBER_SEED_SQL` снова создавал удалённых людей после пересборки).
+
+- Пустой сервер → пустая `members` → либо restore из бэкапа, либо ручное добавление.
+- Явный сид из репозитория (если нужен): `npm run db:seed-members` или `SEED_MEMBERS_ON_INIT=true`.
+
 ## Обновление на сервере
 
 ```bash
