@@ -78,6 +78,32 @@ export function canModerateCatalog(role: AppRole): boolean {
 }
 
 /**
+ * Чистый прихожанин (гость): только роль parishioner, без member и выше.
+ * Пустой список ролей не считаем прихожанином (нормализация сессии даёт member).
+ */
+export function isParishionerOnly(roles: readonly AppRole[] | AppRole | null | undefined): boolean {
+  const list = Array.isArray(roles)
+    ? roles.map((role) => normalizeAppRole(role))
+    : roles
+      ? [normalizeAppRole(roles)]
+      : [];
+  if (list.length === 0) return false;
+  return list.every((role) => role === 'parishioner');
+}
+
+/**
+ * В каталоге мессенджера (новый чат / поиск / добавление) прихожанин
+ * видит только других прихожан — не членов церкви и роли выше.
+ */
+export function isMessengerDirectoryVisibleToViewer(
+  viewerRoles: readonly AppRole[] | AppRole | null | undefined,
+  targetRoles: readonly AppRole[] | AppRole | null | undefined,
+): boolean {
+  if (!isParishionerOnly(viewerRoles)) return true;
+  return isParishionerOnly(targetRoles);
+}
+
+/**
  * Чат «ИИ помощник»: доступен членам церкви и выше (member, minister, pastor, musician, editor, admin).
  * Роль «прихожанин» (guest) — без доступа, если нет другой роли.
  */
