@@ -2,6 +2,7 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {Text, View} from 'react-native';
 
 import {SongbookListScreen} from '../screens/songbook/SongbookListScreen';
+import {BibleScreen} from '../screens/bible/BibleScreen';
 import {useAuthStore} from '../shared/auth/authStore';
 import {Button} from '../components/ui/Button';
 import {Screen} from '../components/ui/Screen';
@@ -35,6 +36,7 @@ export function MainTabs() {
         tabBarActiveTintColor: '#7d3640',
       }}>
       <Tab.Screen name="Songbook" component={SongbookListScreen} options={{title: 'Песенник'}} />
+      <Tab.Screen name="Bible" component={BibleScreen} options={{title: 'Библия'}} />
       <Tab.Screen name="Settings" component={SettingsScreen} options={{title: 'Настройки'}} />
     </Tab.Navigator>
   );

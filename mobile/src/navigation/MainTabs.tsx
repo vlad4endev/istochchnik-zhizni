@@ -25,6 +25,7 @@ import { StudioSetlistDetailScreen } from '../screens/StudioSetlistDetailScreen'
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SongDetailScreen } from '../screens/SongDetailScreen';
 import { SongbookScreen } from '../screens/SongbookScreen';
+import { BibleHomeScreen, BibleReaderScreen } from '../screens/BibleScreen';
 import { useTheme } from '../theme';
 import type { MainTabParamList, RootStackParamList } from './types';
 
@@ -244,6 +245,18 @@ export function MainStack() {
         name="PrayerCyclePlan"
         component={PrayerCyclePlanScreen}
         options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="Bible"
+        component={BibleHomeScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="BibleReader"
+        component={BibleReaderScreen}
+        options={({ route }) => ({
+          title: route.params.title ?? 'Чтение',
+        })}
       />
     </Stack.Navigator>
   );

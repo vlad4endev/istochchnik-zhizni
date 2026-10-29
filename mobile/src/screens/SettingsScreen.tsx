@@ -137,6 +137,14 @@ export function SettingsScreen() {
             onPress={() => navigation.navigate('Sermons')}
             colors={colors}
           />
+          <Divider />
+          <MenuRow
+            icon="book-outline"
+            label="Библия"
+            subtitle="Синодальный перевод"
+            onPress={() => navigation.navigate('Bible')}
+            colors={colors}
+          />
           {canViewMediaSchedule ? (
             <>
               <Divider />

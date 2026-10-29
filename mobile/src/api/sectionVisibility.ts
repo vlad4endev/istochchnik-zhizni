@@ -3,6 +3,7 @@ import { apiClient } from './client';
 export type AppSectionId =
   | 'dashboard'
   | 'prayer'
+  | 'bible'
   | 'songbook'
   | 'service_planner'
   | 'studio'
