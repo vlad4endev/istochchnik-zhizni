@@ -1,4 +1,10 @@
 import { BIBLE_BOOK_DEFS } from '../bible/bibleBookCatalog';
+import {
+  BIBLE_TRANSLATION_DEFS,
+  findTranslationDef,
+  type BibleTranslationAvailability,
+  type BibleTranslationScope,
+} from '../bible/bibleTranslationCatalog';
 import { query } from '../config/db';
 import { ensureBibleSchema } from './bibleSchema';
 
@@ -6,8 +12,15 @@ export interface BibleTranslationRow {
   id: number;
   code: string;
   title: string;
+  short_title: string;
+  description: string;
+  year: string | null;
   language: string;
+  scope: BibleTranslationScope;
+  availability: BibleTranslationAvailability;
   license_note: string;
+  sort_order: number;
+  verse_count?: number;
 }
 
 export interface BibleBookRow {
@@ -26,34 +39,38 @@ export interface BibleVerseRow {
   text: string;
 }
 
-const SYNODAL = {
-  code: 'synodal',
-  title: 'Синодальный перевод',
-  language: 'ru',
-  license_note: 'Public domain (Синодальный перевод, 1876). Источник: Free.Bible / eBible.',
-};
+const TRANSLATION_SELECT = `
+  id, code, title, short_title, description, year, language, scope, availability, license_note, sort_order
+`;
 
-export async function ensureSynodalTranslation(): Promise<BibleTranslationRow> {
-  await ensureBibleSchema();
-  const existing = await query(
-    `SELECT id, code, title, language, license_note FROM bible_translations WHERE code = $1 LIMIT 1`,
-    [SYNODAL.code],
-  );
-  if (existing.rows[0]) return existing.rows[0] as BibleTranslationRow;
-
-  const inserted = await query(
-    `INSERT INTO bible_translations (code, title, language, license_note)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, code, title, language, license_note`,
-    [SYNODAL.code, SYNODAL.title, SYNODAL.language, SYNODAL.license_note],
-  );
-  return inserted.rows[0] as BibleTranslationRow;
+function mapTranslationRow(row: Record<string, unknown>): BibleTranslationRow {
+  return {
+    id: Number(row.id),
+    code: String(row.code),
+    title: String(row.title),
+    short_title: String(row.short_title ?? ''),
+    description: String(row.description ?? ''),
+    year: row.year != null && String(row.year).trim() ? String(row.year) : null,
+    language: String(row.language ?? 'ru'),
+    scope: (row.scope === 'nt' || row.scope === 'partial' ? row.scope : 'full') as BibleTranslationScope,
+    availability: (row.availability === 'license_required' ? 'license_required' : 'available') as BibleTranslationAvailability,
+    license_note: String(row.license_note ?? ''),
+    sort_order: Number(row.sort_order ?? 100),
+    ...(row.verse_count != null ? { verse_count: Number(row.verse_count) } : {}),
+  };
 }
 
-export async function ensureSynodalBooks(translationId: number): Promise<Map<string, BibleBookRow>> {
+export async function ensureTranslationBooks(
+  translationId: number,
+  scope: BibleTranslationScope,
+): Promise<Map<string, BibleBookRow>> {
   await ensureBibleSchema();
   const map = new Map<string, BibleBookRow>();
-  for (const def of BIBLE_BOOK_DEFS) {
+  const defs =
+    scope === 'nt' || scope === 'partial'
+      ? BIBLE_BOOK_DEFS.filter((d) => d.testament === 'nt')
+      : BIBLE_BOOK_DEFS;
+  for (const def of defs) {
     const upserted = await query(
       `INSERT INTO bible_books (translation_id, ord, testament, slug, name, short_name, chapters_count)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -66,26 +83,85 @@ export async function ensureSynodalBooks(translationId: number): Promise<Map<str
        RETURNING id, translation_id, ord, testament, slug, name, short_name, chapters_count`,
       [translationId, def.ord, def.testament, def.slug, def.nameRu, def.shortNameRu, def.chapters],
     );
-    map.set(def.slug, upserted.rows[0]!);
+    map.set(def.slug, upserted.rows[0]! as BibleBookRow);
   }
   return map;
 }
 
-export async function listTranslations(): Promise<BibleTranslationRow[]> {
+/** Upsert all catalog translations + book skeletons (NT-only where needed). */
+export async function ensureCatalogTranslations(): Promise<BibleTranslationRow[]> {
   await ensureBibleSchema();
+  const out: BibleTranslationRow[] = [];
+  for (const def of BIBLE_TRANSLATION_DEFS) {
+    const upserted = await query(
+      `INSERT INTO bible_translations
+         (code, title, short_title, description, year, language, scope, availability, license_note, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       ON CONFLICT (code) DO UPDATE SET
+         title = EXCLUDED.title,
+         short_title = EXCLUDED.short_title,
+         description = EXCLUDED.description,
+         year = EXCLUDED.year,
+         language = EXCLUDED.language,
+         scope = EXCLUDED.scope,
+         availability = EXCLUDED.availability,
+         license_note = EXCLUDED.license_note,
+         sort_order = EXCLUDED.sort_order
+       RETURNING ${TRANSLATION_SELECT}`,
+      [
+        def.code,
+        def.title,
+        def.shortTitle,
+        def.description,
+        def.year,
+        def.language,
+        def.scope,
+        def.availability,
+        def.licenseNote,
+        def.sortOrder,
+      ],
+    );
+    const row = mapTranslationRow(upserted.rows[0] as Record<string, unknown>);
+    await ensureTranslationBooks(row.id, def.scope);
+    out.push(row);
+  }
+  return out;
+}
+
+export async function ensureSynodalTranslation(): Promise<BibleTranslationRow> {
+  const all = await ensureCatalogTranslations();
+  const synodal = all.find((t) => t.code === 'synodal');
+  if (!synodal) throw new Error('synodal_missing');
+  return synodal;
+}
+
+export async function ensureSynodalBooks(translationId: number): Promise<Map<string, BibleBookRow>> {
+  return ensureTranslationBooks(translationId, 'full');
+}
+
+export async function listTranslations(): Promise<BibleTranslationRow[]> {
+  await ensureCatalogTranslations();
   const r = await query(
-    `SELECT id, code, title, language, license_note FROM bible_translations ORDER BY id`,
+    `SELECT ${TRANSLATION_SELECT},
+            (SELECT COUNT(*)::int FROM bible_verses v WHERE v.translation_id = t.id) AS verse_count
+     FROM bible_translations t
+     ORDER BY sort_order, id`,
   );
-  return r.rows;
+  return r.rows.map((row) => mapTranslationRow(row as Record<string, unknown>));
 }
 
 export async function getTranslationByCode(code: string): Promise<BibleTranslationRow | null> {
-  await ensureBibleSchema();
+  await ensureCatalogTranslations();
   const r = await query(
-    `SELECT id, code, title, language, license_note FROM bible_translations WHERE code = $1 LIMIT 1`,
+    `SELECT ${TRANSLATION_SELECT},
+            (SELECT COUNT(*)::int FROM bible_verses v WHERE v.translation_id = t.id) AS verse_count
+     FROM bible_translations t
+     WHERE code = $1
+     LIMIT 1`,
     [code],
   );
-  return r.rows[0] ?? null;
+  const row = r.rows[0];
+  return row ? mapTranslationRow(row as Record<string, unknown>) : null;
 }
 
 export async function listBooks(translationCode: string): Promise<BibleBookRow[]> {
@@ -141,7 +217,12 @@ export async function getChapterVerses(
     [translation.id, book.id, chapter],
   );
 
-  return { translation, book, chapter, verses: verses.rows };
+  return {
+    translation,
+    book,
+    chapter,
+    verses: verses.rows as BibleVerseRow[],
+  };
 }
 
 export async function searchVerses(

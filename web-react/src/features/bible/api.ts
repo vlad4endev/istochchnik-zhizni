@@ -4,8 +4,15 @@ export interface BibleTranslation {
   id: number;
   code: string;
   title: string;
+  short_title: string;
+  description: string;
+  year: string | null;
   language: string;
+  scope: 'full' | 'nt' | 'partial';
+  availability: 'available' | 'license_required';
   license_note: string;
+  sort_order: number;
+  verse_count?: number;
 }
 
 export interface BibleBook {

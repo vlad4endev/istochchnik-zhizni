@@ -15,9 +15,31 @@ export async function ensureBibleSchema(): Promise<void> {
           title VARCHAR(200) NOT NULL,
           language VARCHAR(16) NOT NULL DEFAULT 'ru',
           license_note TEXT NOT NULL DEFAULT '',
+          short_title VARCHAR(64) NOT NULL DEFAULT '',
+          description TEXT NOT NULL DEFAULT '',
+          year VARCHAR(32),
+          scope VARCHAR(16) NOT NULL DEFAULT 'full',
+          availability VARCHAR(32) NOT NULL DEFAULT 'available',
+          sort_order SMALLINT NOT NULL DEFAULT 100,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `);
+      await query(
+        `ALTER TABLE public.bible_translations ADD COLUMN IF NOT EXISTS short_title VARCHAR(64) NOT NULL DEFAULT ''`,
+      );
+      await query(
+        `ALTER TABLE public.bible_translations ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT ''`,
+      );
+      await query(`ALTER TABLE public.bible_translations ADD COLUMN IF NOT EXISTS year VARCHAR(32)`);
+      await query(
+        `ALTER TABLE public.bible_translations ADD COLUMN IF NOT EXISTS scope VARCHAR(16) NOT NULL DEFAULT 'full'`,
+      );
+      await query(
+        `ALTER TABLE public.bible_translations ADD COLUMN IF NOT EXISTS availability VARCHAR(32) NOT NULL DEFAULT 'available'`,
+      );
+      await query(
+        `ALTER TABLE public.bible_translations ADD COLUMN IF NOT EXISTS sort_order SMALLINT NOT NULL DEFAULT 100`,
+      );
 
       await query(`
         CREATE TABLE IF NOT EXISTS public.bible_books (

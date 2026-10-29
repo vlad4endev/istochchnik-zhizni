@@ -9,6 +9,7 @@ loadEnvFromDotenv();
 import { BIBLE_BOOK_DEFS } from '../bible/bibleBookCatalog';
 import { pool } from '../config/db';
 import {
+  ensureCatalogTranslations,
   ensureSynodalBooks,
   ensureSynodalTranslation,
   upsertChapterVerses,
@@ -53,6 +54,7 @@ async function main(): Promise<void> {
       )
     : null;
 
+  await ensureCatalogTranslations();
   const translation = await ensureSynodalTranslation();
   const books = await ensureSynodalBooks(translation.id);
 

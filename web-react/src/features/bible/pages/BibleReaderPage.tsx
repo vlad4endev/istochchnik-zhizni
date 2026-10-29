@@ -16,9 +16,11 @@ import {
   fetchBibleChapter,
   fetchBibleCommentaries,
   fetchBibleNotes,
+  fetchBibleTranslations,
   saveBibleProgress,
 } from '../api';
 import { SyncedAudioPlayer } from '../components/SyncedAudioPlayer';
+import { TranslationPicker } from '../components/TranslationPicker';
 
 export function BibleReaderPage() {
   const { translation = 'synodal', book = 'john', chapter: chapterParam } = useParams();
@@ -40,6 +42,10 @@ export function BibleReaderPage() {
   const [churchBody, setChurchBody] = useState('');
   const verseRefs = useRef<Map<number, HTMLElement>>(new Map());
 
+  const translationsQ = useQuery({
+    queryKey: ['bible', 'translations'],
+    queryFn: fetchBibleTranslations,
+  });
   const chapterQ = useQuery({
     queryKey: ['bible', 'chapter', translation, book, chapter],
     queryFn: () => fetchBibleChapter(translation, book, chapter),
@@ -48,6 +54,10 @@ export function BibleReaderPage() {
     queryKey: ['bible', 'books', translation],
     queryFn: () => fetchBibleBooks(translation),
   });
+  const translationMeta = (translationsQ.data ?? []).find((t) => t.code === translation);
+  const licenseLocked =
+    translationMeta?.availability === 'license_required' &&
+    !(translationMeta.verse_count && translationMeta.verse_count > 0);
   const notesQ = useQuery({
     queryKey: ['bible', 'notes', translation, book, chapter],
     queryFn: () => fetchBibleNotes({ translation, book, chapter }),
@@ -136,6 +146,19 @@ export function BibleReaderPage() {
       </div>
 
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 px-4 py-4 sm:px-5">
+        <TranslationPicker
+          translations={translationsQ.data ?? []}
+          value={translation}
+          onChange={(code) => {
+            try {
+              localStorage.setItem('bible.translation', code);
+            } catch {
+              /* ignore */
+            }
+            void navigate(`/bible/${code}/${book}/${chapter}${focusVerse != null ? `?v=${focusVerse}` : ''}`);
+          }}
+        />
+
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"
@@ -156,7 +179,7 @@ export function BibleReaderPage() {
           </button>
         </div>
 
-        {audioQ.data ? (
+        {audioQ.data && !licenseLocked ? (
           <SyncedAudioPlayer
             audio={audioQ.data}
             onActiveVerse={setActiveAudioVerse}
@@ -164,11 +187,18 @@ export function BibleReaderPage() {
           />
         ) : null}
 
-        {chapterQ.isLoading ? (
+        {licenseLocked ? (
+          <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <span className="font-semibold">{translationMeta?.title}</span>
+            <br />
+            {translationMeta?.license_note ||
+              'Текст этого перевода появится после лицензионного соглашения с правообладателем.'}
+          </p>
+        ) : chapterQ.isLoading ? (
           <p className="text-sm text-stone-500">Загрузка…</p>
         ) : chapterQ.data?.verses.length === 0 ? (
           <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Текст главы отсутствует. Запустите seed: <code>npm run bible:seed</code>
+            Текст главы отсутствует. Для Синодального: <code>npm run bible:seed</code>
           </p>
         ) : (
           <div className="space-y-1 pb-28 font-serif text-[17px] leading-8 text-stone-900 sm:text-[18px]">

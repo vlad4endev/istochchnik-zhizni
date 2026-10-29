@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { LuBookMarked, LuNotebookPen, LuSearch, LuSparkles } from 'react-icons/lu';
@@ -6,10 +6,17 @@ import { LuBookMarked, LuNotebookPen, LuSearch, LuSparkles } from 'react-icons/l
 import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
 
-import { fetchBibleBooks, fetchBibleProgress, fetchBiblePlans, searchBible } from '../api';
+import {
+  fetchBibleBooks,
+  fetchBibleProgress,
+  fetchBiblePlans,
+  fetchBibleTranslations,
+  searchBible,
+} from '../api';
 import { parseBibleRef } from '../bibleRef';
+import { TranslationPicker } from '../components/TranslationPicker';
 
-const TRANSLATION = 'synodal';
+const LS_KEY = 'bible.translation';
 
 export function BibleHomePage() {
   const navigate = useNavigate();
@@ -17,23 +24,48 @@ export function BibleHomePage() {
   const initialQ = params.get('q') ?? '';
   const [q, setQ] = useState(initialQ);
   const [submitted, setSubmitted] = useState(initialQ);
+  const [translation, setTranslation] = useState(() => {
+    try {
+      return localStorage.getItem(LS_KEY) || 'synodal';
+    } catch {
+      return 'synodal';
+    }
+  });
+
+  const translationsQ = useQuery({
+    queryKey: ['bible', 'translations'],
+    queryFn: fetchBibleTranslations,
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_KEY, translation);
+    } catch {
+      /* ignore */
+    }
+  }, [translation]);
+
+  const currentMeta = (translationsQ.data ?? []).find((t) => t.code === translation);
+  const hasText = Boolean(currentMeta?.verse_count && currentMeta.verse_count > 0);
+  const licenseLocked =
+    currentMeta?.availability === 'license_required' && !hasText;
 
   const booksQ = useQuery({
-    queryKey: ['bible', 'books', TRANSLATION],
-    queryFn: () => fetchBibleBooks(TRANSLATION),
+    queryKey: ['bible', 'books', translation],
+    queryFn: () => fetchBibleBooks(translation),
   });
   const progressQ = useQuery({
-    queryKey: ['bible', 'progress', TRANSLATION],
-    queryFn: () => fetchBibleProgress(TRANSLATION),
+    queryKey: ['bible', 'progress', translation],
+    queryFn: () => fetchBibleProgress(translation),
   });
   const plansQ = useQuery({
     queryKey: ['bible', 'plans'],
     queryFn: fetchBiblePlans,
   });
   const searchQ = useQuery({
-    queryKey: ['bible', 'search', TRANSLATION, submitted],
-    queryFn: () => searchBible(submitted, TRANSLATION),
-    enabled: submitted.trim().length >= 2,
+    queryKey: ['bible', 'search', translation, submitted],
+    queryFn: () => searchBible(submitted, translation),
+    enabled: submitted.trim().length >= 2 && hasText,
   });
 
   const ot = useMemo(() => (booksQ.data ?? []).filter((b) => b.testament === 'ot'), [booksQ.data]);
@@ -45,7 +77,7 @@ export function BibleHomePage() {
     const trimmed = q.trim();
     const parsed = parseBibleRef(trimmed);
     if (parsed) {
-      const path = `/bible/${TRANSLATION}/${parsed.bookSlug}/${parsed.chapter}${
+      const path = `/bible/${translation}/${parsed.bookSlug}/${parsed.chapter}${
         parsed.verseStart != null ? `?v=${parsed.verseStart}` : ''
       }`;
       void navigate(path);
@@ -61,9 +93,25 @@ export function BibleHomePage() {
       </div>
 
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-5 sm:px-5">
-        {progress ? (
+        <TranslationPicker
+          translations={translationsQ.data ?? []}
+          value={translation}
+          onChange={setTranslation}
+        />
+
+        {licenseLocked ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <p className="font-semibold">Текст перевода пока недоступен в приложении</p>
+            <p className="mt-1 leading-relaxed">
+              {currentMeta?.license_note ||
+                'Нужно лицензионное соглашение с правообладателем. Каталог книг уже готов — текст появится после разрешения.'}
+            </p>
+          </div>
+        ) : null}
+
+        {progress && hasText ? (
           <Link
-            to={`/bible/${TRANSLATION}/${progress.book_slug}/${progress.chapter}?v=${progress.verse}`}
+            to={`/bible/${translation}/${progress.book_slug}/${progress.chapter}?v=${progress.verse}`}
             className="block rounded-3xl bg-gradient-to-br from-stone-800 to-stone-700 px-5 py-4 text-white shadow-[var(--shadow)]"
           >
             <p className="text-xs font-semibold uppercase tracking-wide text-white/70">Продолжить чтение</p>
@@ -84,7 +132,7 @@ export function BibleHomePage() {
           />
         </form>
 
-        {submitted.trim().length >= 2 ? (
+        {submitted.trim().length >= 2 && hasText ? (
           <div className="space-y-2">
             <p className="text-sm font-semibold text-stone-500">Результаты</p>
             {(searchQ.data ?? []).length === 0 && !searchQ.isLoading ? (
@@ -93,7 +141,7 @@ export function BibleHomePage() {
             {(searchQ.data ?? []).map((hit) => (
               <Link
                 key={`${hit.book_slug}-${hit.chapter}-${hit.verse}`}
-                to={`/bible/${TRANSLATION}/${hit.book_slug}/${hit.chapter}?v=${hit.verse}`}
+                to={`/bible/${translation}/${hit.book_slug}/${hit.chapter}?v=${hit.verse}`}
                 className="block rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] px-4 py-3"
               >
                 <p className="text-sm font-bold text-stone-900">
@@ -131,19 +179,24 @@ export function BibleHomePage() {
           </Link>
         ))}
 
-        <BookSection title="Новый Завет" books={nt} />
-        <BookSection title="Ветхий Завет" books={ot} />
+        <BookSection title="Новый Завет" books={nt} translation={translation} />
+        {currentMeta?.scope !== 'nt' ? (
+          <BookSection title="Ветхий Завет" books={ot} translation={translation} />
+        ) : null}
 
-        {(booksQ.data ?? []).length === 0 && !booksQ.isLoading ? (
+        {translation === 'synodal' && (booksQ.data ?? []).length === 0 && !booksQ.isLoading ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <p className="font-semibold">Текст Библии ещё не загружен</p>
-            <p className="mt-1">На сервере выполните: <code>npm run bible:seed</code> (или <code>bible:seed:sample</code>).</p>
+            <p className="font-semibold">Текст Синодального ещё не загружен</p>
+            <p className="mt-1">
+              На сервере выполните: <code>npm run bible:seed</code> (или <code>bible:seed:sample</code>).
+            </p>
           </div>
         ) : null}
 
         <p className="pb-8 text-center text-xs text-stone-400">
           <LuBookMarked className="mr-1 inline" size={12} />
-          Синодальный перевод · общественное достояние
+          {currentMeta?.short_title || 'Библия'}
+          {currentMeta?.availability === 'available' ? ' · текст в приложении' : ' · ожидает лицензии'}
         </p>
       </div>
     </div>
@@ -153,9 +206,11 @@ export function BibleHomePage() {
 function BookSection({
   title,
   books,
+  translation,
 }: {
   title: string;
   books: Array<{ slug: string; name: string; short_name: string; chapters_count: number }>;
+  translation: string;
 }) {
   if (books.length === 0) return null;
   return (
@@ -165,7 +220,7 @@ function BookSection({
         {books.map((b) => (
           <Link
             key={b.slug}
-            to={`/bible/${TRANSLATION}/${b.slug}/1`}
+            to={`/bible/${translation}/${b.slug}/1`}
             className="rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] px-3 py-3 transition hover:border-primary/40"
           >
             <p className="text-sm font-bold text-stone-900">{b.short_name}</p>
