@@ -179,7 +179,7 @@ export function BibleReaderPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className={sectionHeroStickyClass}>
-        <PageHeader title={bookMeta ? `${bookMeta.short_name} ${chapter}` : 'Чтение'} />
+        <PageHeader title="Библия" />
       </div>
 
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 px-4 py-4 sm:px-5">
