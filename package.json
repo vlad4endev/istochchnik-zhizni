@@ -85,6 +85,7 @@
     "bible:lopukhin": "npx ts-node --transpile-only src/cli/importLopukhinCommentaries.ts",
     "bible:seed:vps": "node scripts/withDockerDbUrl.mjs npm run bible:seed",
     "bible:seed:sample:vps": "node scripts/withDockerDbUrl.mjs npm run bible:seed:sample",
+    "bible:seed:john:vps": "node scripts/withDockerDbUrl.mjs npx ts-node --transpile-only src/cli/seedBibleSynodal.ts --translation=synodal --books=john",
     "bible:audio:vps": "node scripts/withDockerDbUrl.mjs npm run bible:audio --",
     "bible:lopukhin:vps": "node scripts/withDockerDbUrl.mjs npm run bible:lopukhin",
     "bible:seed:docker": "docker compose -f docker-compose.prod.yml exec -T api node dist/cli/seedBibleSynodal.js --translation=all",

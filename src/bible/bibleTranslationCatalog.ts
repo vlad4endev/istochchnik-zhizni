@@ -29,7 +29,7 @@ export const BIBLE_TRANSLATION_DEFS: readonly BibleTranslationDef[] = [
     scope: 'full',
     availability: 'available',
     description: 'Классический, традиционный, но с архаизмами.',
-    licenseNote: 'Источник seed: Free.Bible / eBible (public domain).',
+    licenseNote: 'Источник seed: justbible.ru (translation=rst), fallback Free.Bible.',
     sortOrder: 10,
   },
   {
