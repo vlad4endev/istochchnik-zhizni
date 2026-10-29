@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LuChevronLeft, LuChevronRight, LuMessageSquareText, LuNotebookPen, LuX } from 'react-icons/lu';
+import {
+  LuChevronDown,
+  LuChevronLeft,
+  LuChevronRight,
+  LuMessageSquareText,
+  LuNotebookPen,
+  LuX,
+} from 'react-icons/lu';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
@@ -19,6 +26,12 @@ import {
   fetchBibleTranslations,
   saveBibleProgress,
 } from '../api';
+import {
+  pushRecentBible,
+  readRecentBible,
+  writeStoredTranslation,
+} from '../bibleUiMeta';
+import { BooksSheet } from '../components/BooksSheet';
 import { SyncedAudioPlayer } from '../components/SyncedAudioPlayer';
 import { TranslationPicker } from '../components/TranslationPicker';
 
@@ -38,6 +51,8 @@ export function BibleReaderPage() {
   const [selectedVerse, setSelectedVerse] = useState<number | null>(focusVerse);
   const [activeAudioVerse, setActiveAudioVerse] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [booksOpen, setBooksOpen] = useState(false);
+  const [recent, setRecent] = useState(() => readRecentBible());
   const [noteBody, setNoteBody] = useState('');
   const [churchBody, setChurchBody] = useState('');
   const verseRefs = useRef<Map<number, HTMLElement>>(new Map());
@@ -74,6 +89,10 @@ export function BibleReaderPage() {
   );
 
   useEffect(() => {
+    writeStoredTranslation(translation);
+  }, [translation]);
+
+  useEffect(() => {
     if (!chapterQ.data?.verses.length) return;
     const verse = focusVerse && focusVerse > 0 ? focusVerse : 1;
     void saveBibleProgress({
@@ -83,6 +102,27 @@ export function BibleReaderPage() {
       verse,
     }).catch(() => undefined);
   }, [translation, book, chapter, focusVerse, chapterQ.data?.verses.length]);
+
+  useEffect(() => {
+    if (!bookMeta || !translationMeta) return;
+    setRecent(
+      pushRecentBible({
+        translation,
+        translation_title: translationMeta.title,
+        book_slug: bookMeta.slug,
+        book_name: bookMeta.name,
+        short_name: bookMeta.short_name,
+        chapter,
+      }),
+    );
+  }, [
+    translation,
+    chapter,
+    bookMeta?.slug,
+    bookMeta?.name,
+    bookMeta?.short_name,
+    translationMeta?.title,
+  ]);
 
   useEffect(() => {
     if (focusVerse == null) return;
@@ -143,18 +183,29 @@ export function BibleReaderPage() {
       </div>
 
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 px-4 py-4 sm:px-5">
-        <TranslationPicker
-          translations={translationsQ.data ?? []}
-          value={translation}
-          onChange={(code) => {
-            try {
-              localStorage.setItem('bible.translation', code);
-            } catch {
-              /* ignore */
-            }
-            void navigate(`/bible/${code}/${book}/${chapter}${focusVerse != null ? `?v=${focusVerse}` : ''}`);
-          }}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <TranslationPicker
+            compact
+            translations={translationsQ.data ?? []}
+            value={translation}
+            onChange={(code) => {
+              writeStoredTranslation(code);
+              void navigate(
+                `/bible/${code}/${book}/${chapter}${focusVerse != null ? `?v=${focusVerse}` : ''}`,
+              );
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => setBooksOpen(true)}
+            className="inline-flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-left"
+          >
+            <span className="truncate text-sm font-bold text-stone-900">
+              {bookMeta ? `${bookMeta.name} ${chapter}` : 'Книга'}
+            </span>
+            <LuChevronDown size={16} className="shrink-0 text-stone-400" />
+          </button>
+        </div>
 
         <div className="flex items-center justify-between gap-2">
           <button
@@ -165,7 +216,7 @@ export function BibleReaderPage() {
           >
             <LuChevronLeft /> Назад
           </button>
-          <p className="text-sm font-medium text-stone-500">{bookMeta?.name}</p>
+          <p className="text-sm font-medium text-stone-500">{bookMeta?.short_name} {chapter}</p>
           <button
             type="button"
             disabled={nextChapter == null}
@@ -241,6 +292,18 @@ export function BibleReaderPage() {
           </section>
         ) : null}
       </div>
+
+      <BooksSheet
+        open={booksOpen}
+        books={booksQ.data ?? []}
+        translation={translationMeta ?? null}
+        currentBookSlug={book}
+        recent={recent}
+        onClose={() => setBooksOpen(false)}
+        onPick={(bookSlug, nextChapterNum) => {
+          void navigate(`/bible/${translation}/${bookSlug}/${nextChapterNum}`);
+        }}
+      />
 
       {sheetOpen && selectedVerse != null ? (
         <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-2xl rounded-t-3xl border border-stone-200 bg-[var(--surface-elevated)] p-4 shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
