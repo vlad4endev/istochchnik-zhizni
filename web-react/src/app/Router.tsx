@@ -200,36 +200,6 @@ const PublicSetlistPage = lazy(async () => {
   return { default: m.PublicSetlistPage };
 });
 
-const PublicSiteLayout = lazy(async () => {
-  const m = await import('../features/publicSite/PublicSiteLayout');
-  return { default: m.PublicSiteLayout };
-});
-
-const PublicSiteHomePage = lazy(async () => {
-  const m = await import('../features/publicSite/pages/PublicSiteHomePage');
-  return { default: m.PublicSiteHomePage };
-});
-
-const PublicSiteEventsPage = lazy(async () => {
-  const m = await import('../features/publicSite/pages/PublicSiteEventsPage');
-  return { default: m.PublicSiteEventsPage };
-});
-
-const PublicSiteLivePage = lazy(async () => {
-  const m = await import('../features/publicSite/pages/PublicSiteLivePage');
-  return { default: m.PublicSiteLivePage };
-});
-
-const PublicSiteGalleryPage = lazy(async () => {
-  const m = await import('../features/publicSite/pages/PublicSiteGalleryPage');
-  return { default: m.PublicSiteGalleryPage };
-});
-
-const PublicSiteAlbumPage = lazy(async () => {
-  const m = await import('../features/publicSite/pages/PublicSiteAlbumPage');
-  return { default: m.PublicSiteAlbumPage };
-});
-
 const PublicSermonNotePage = lazy(async () => {
   const m = await import('../features/mySermons/pages/PublicSermonNotePage');
   return { default: m.PublicSermonNotePage };
@@ -297,57 +267,6 @@ export function AppRouter() {
       <Route path="/offline" element={<OfflinePage />} />
       <Route path={LOGIN_PATH} element={<AuthLandingPage />} />
       <Route path={`${LOGIN_PATH}/form`} element={<LoginPage />} />
-      <Route
-        path="/site"
-        element={
-          <Suspense fallback={<RouteFallback />}>
-            <ModuleErrorBoundary moduleName="публичный сайт церкви">
-              <PublicSiteLayout />
-            </ModuleErrorBoundary>
-          </Suspense>
-        }
-      >
-        <Route
-          index
-          element={
-            <Suspense fallback={<RouteFallback />}>
-              <PublicSiteHomePage />
-            </Suspense>
-          }
-        />
-        <Route
-          path="events"
-          element={
-            <Suspense fallback={<RouteFallback />}>
-              <PublicSiteEventsPage />
-            </Suspense>
-          }
-        />
-        <Route
-          path="live"
-          element={
-            <Suspense fallback={<RouteFallback />}>
-              <PublicSiteLivePage />
-            </Suspense>
-          }
-        />
-        <Route
-          path="gallery"
-          element={
-            <Suspense fallback={<RouteFallback />}>
-              <PublicSiteGalleryPage />
-            </Suspense>
-          }
-        />
-        <Route
-          path="gallery/:albumId"
-          element={
-            <Suspense fallback={<RouteFallback />}>
-              <PublicSiteAlbumPage />
-            </Suspense>
-          }
-        />
-      </Route>
       <Route
         path="/call/join/:inviteToken"
         element={

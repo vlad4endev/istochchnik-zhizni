@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { LuExternalLink, LuImagePlus, LuPlus, LuTrash2 } from 'react-icons/lu';
+import { LuImagePlus, LuPlus, LuTrash2 } from 'react-icons/lu';
 
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 import { apiErrorMessage } from './api';
@@ -17,7 +16,7 @@ import {
   patchAdminSiteSettings,
   uploadAdminGalleryImage,
 } from './siteApi';
-import type { SiteSettings } from '../publicSite/types';
+import type { SiteSettings } from './siteTypes';
 
 const Q_SETTINGS = ['admin', 'site', 'settings'] as const;
 const Q_ALBUMS = ['admin', 'site', 'albums'] as const;
@@ -138,18 +137,12 @@ export function SiteContentSection() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-extrabold text-stone-900">Публичный сайт</h2>
-          <p className="mt-1 max-w-2xl text-sm text-stone-600">
-            Мини-раздел управления: тексты главной, видимость блоков, фотогалерея. События берутся из
-            раздела «Мероприятия», трансляция — из «Трансляции» (нужен флаг «Публичная»).
-          </p>
-        </div>
-        <Link to="/site" target="_blank" rel="noreferrer" className={btnSecondary()}>
-          <LuExternalLink className="h-4 w-4" />
-          Открыть сайт
-        </Link>
+      <div>
+        <h2 className="text-xl font-extrabold text-stone-900">Контент для сайта церкви</h2>
+        <p className="mt-1 max-w-2xl text-sm text-stone-600">
+          Данные отдаются наружу через API <code className="rounded bg-stone-100 px-1">/api/site/public/*</code>.
+          События — из «Мероприятия», трансляция — из «Трансляции» (флаг «Публичная»), фото — ниже.
+        </p>
       </div>
 
       {note && (

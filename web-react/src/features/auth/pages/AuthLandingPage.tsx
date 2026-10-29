@@ -100,12 +100,6 @@ export function AuthLandingPage() {
             >
               Зарегистрироваться
             </Link>
-            <Link
-              to="/site"
-              className="touch-manipulation flex h-12 w-full items-center justify-center text-center text-sm font-semibold text-[#7a6a6e] underline-offset-2 transition hover:text-[#5a1830] hover:underline"
-            >
-              Открыть сайт церкви
-            </Link>
           </div>
 
           <p className="mt-5 text-center text-xs leading-snug text-[#7a6a6e]">

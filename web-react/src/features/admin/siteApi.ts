@@ -1,9 +1,5 @@
 import { apiClient } from '../../lib/apiClient';
-import type {
-  SiteGalleryAlbum,
-  SiteGalleryPhoto,
-  SiteSettings,
-} from '../publicSite/types';
+import type { SiteGalleryAlbum, SiteGalleryPhoto, SiteSettings } from './siteTypes';
 
 const BASE = '/api/site';
 
