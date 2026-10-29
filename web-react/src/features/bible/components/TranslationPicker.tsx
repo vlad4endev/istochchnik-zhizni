@@ -18,7 +18,7 @@ export function TranslationPicker({ translations, value, onChange }: Props) {
       <div className="flex flex-wrap gap-2">
         {translations.map((t) => {
           const active = t.code === value;
-          const locked = t.availability === 'license_required' && !(t.verse_count && t.verse_count > 0);
+          const empty = !(t.verse_count && t.verse_count > 0);
           return (
             <button
               key={t.code}
@@ -32,8 +32,8 @@ export function TranslationPicker({ translations, value, onChange }: Props) {
               ].join(' ')}
             >
               <span className="font-bold">{t.short_title || t.title}</span>
-              {locked ? (
-                <span className="ml-1 text-[10px] font-semibold uppercase text-amber-700">скоро</span>
+              {empty ? (
+                <span className="ml-1 text-[10px] font-semibold uppercase text-stone-400">нет текста</span>
               ) : null}
             </button>
           );

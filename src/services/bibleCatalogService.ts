@@ -1,7 +1,6 @@
 import { BIBLE_BOOK_DEFS } from '../bible/bibleBookCatalog';
 import {
   BIBLE_TRANSLATION_DEFS,
-  findTranslationDef,
   type BibleTranslationAvailability,
   type BibleTranslationScope,
 } from '../bible/bibleTranslationCatalog';
@@ -66,10 +65,8 @@ export async function ensureTranslationBooks(
 ): Promise<Map<string, BibleBookRow>> {
   await ensureBibleSchema();
   const map = new Map<string, BibleBookRow>();
-  const defs =
-    scope === 'nt' || scope === 'partial'
-      ? BIBLE_BOOK_DEFS.filter((d) => d.testament === 'nt')
-      : BIBLE_BOOK_DEFS;
+  // nt — только НЗ; partial/full — полный скелет 66 книг (partial может быть неполным по стихам)
+  const defs = scope === 'nt' ? BIBLE_BOOK_DEFS.filter((d) => d.testament === 'nt') : BIBLE_BOOK_DEFS;
   for (const def of defs) {
     const upserted = await query(
       `INSERT INTO bible_books (translation_id, ord, testament, slug, name, short_name, chapters_count)

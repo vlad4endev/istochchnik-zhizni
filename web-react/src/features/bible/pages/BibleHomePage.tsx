@@ -47,8 +47,6 @@ export function BibleHomePage() {
 
   const currentMeta = (translationsQ.data ?? []).find((t) => t.code === translation);
   const hasText = Boolean(currentMeta?.verse_count && currentMeta.verse_count > 0);
-  const licenseLocked =
-    currentMeta?.availability === 'license_required' && !hasText;
 
   const booksQ = useQuery({
     queryKey: ['bible', 'books', translation],
@@ -98,16 +96,6 @@ export function BibleHomePage() {
           value={translation}
           onChange={setTranslation}
         />
-
-        {licenseLocked ? (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            <p className="font-semibold">Текст перевода пока недоступен в приложении</p>
-            <p className="mt-1 leading-relaxed">
-              {currentMeta?.license_note ||
-                'Нужно лицензионное соглашение с правообладателем. Каталог книг уже готов — текст появится после разрешения.'}
-            </p>
-          </div>
-        ) : null}
 
         {progress && hasText ? (
           <Link
@@ -180,15 +168,16 @@ export function BibleHomePage() {
         ))}
 
         <BookSection title="Новый Завет" books={nt} translation={translation} />
-        {currentMeta?.scope !== 'nt' ? (
+        {currentMeta?.scope === 'nt' ? null : (
           <BookSection title="Ветхий Завет" books={ot} translation={translation} />
-        ) : null}
+        )}
 
-        {translation === 'synodal' && (booksQ.data ?? []).length === 0 && !booksQ.isLoading ? (
+        {!hasText && !booksQ.isLoading ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <p className="font-semibold">Текст Синодального ещё не загружен</p>
+            <p className="font-semibold">Текст перевода ещё не загружен</p>
             <p className="mt-1">
-              На сервере выполните: <code>npm run bible:seed</code> (или <code>bible:seed:sample</code>).
+              На сервере: <code>npm run bible:seed -- --translation={translation}</code>
+              {' '}(или <code>bible:seed:sample</code> для нескольких переводов).
             </p>
           </div>
         ) : null}
@@ -196,7 +185,7 @@ export function BibleHomePage() {
         <p className="pb-8 text-center text-xs text-stone-400">
           <LuBookMarked className="mr-1 inline" size={12} />
           {currentMeta?.short_title || 'Библия'}
-          {currentMeta?.availability === 'available' ? ' · текст в приложении' : ' · ожидает лицензии'}
+          {hasText ? ' · текст в приложении' : ' · текст не загружен'}
         </p>
       </div>
     </div>

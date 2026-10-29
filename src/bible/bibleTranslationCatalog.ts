@@ -1,7 +1,6 @@
 /**
  * Каталог переводов Библии для раздела /bible.
- * Текст стихов: только у переводов с availability=available и залитым seed.
- * Остальные — метаданные + ожидание лицензии правообладателя (РБО и др.).
+ * Текст стихов заливается CLI seed (`npm run bible:seed`).
  */
 
 export type BibleTranslationScope = 'full' | 'nt' | 'partial';
@@ -30,7 +29,7 @@ export const BIBLE_TRANSLATION_DEFS: readonly BibleTranslationDef[] = [
     scope: 'full',
     availability: 'available',
     description: 'Классический, традиционный, но с архаизмами.',
-    licenseNote: 'Public domain (1876). Источник seed: Free.Bible / eBible.',
+    licenseNote: 'Источник seed: Free.Bible / eBible (public domain).',
     sortOrder: 10,
   },
   {
@@ -40,10 +39,9 @@ export const BIBLE_TRANSLATION_DEFS: readonly BibleTranslationDef[] = [
     year: '2011+',
     language: 'ru',
     scope: 'full',
-    availability: 'license_required',
+    availability: 'available',
     description: 'Понятный язык, учтена современная текстология.',
-    licenseNote:
-      '© Российское Библейское общество. Текст появится после лицензионного соглашения с РБО.',
+    licenseNote: 'Источник seed: justbible.ru (translation=rbo).',
     sortOrder: 20,
   },
   {
@@ -53,10 +51,9 @@ export const BIBLE_TRANSLATION_DEFS: readonly BibleTranslationDef[] = [
     year: '2001',
     language: 'ru',
     scope: 'nt',
-    availability: 'license_required',
+    availability: 'available',
     description: 'Живой, современный стиль (Новый Завет, В. Н. Кузнецова). Только Новый Завет.',
-    licenseNote:
-      '© Российское Библейское общество / перевод В. Н. Кузнецовой. Нужна лицензия на публикацию.',
+    licenseNote: 'Текст появится после seed (источник пока не подключён).',
     sortOrder: 30,
   },
   {
@@ -66,10 +63,9 @@ export const BIBLE_TRANSLATION_DEFS: readonly BibleTranslationDef[] = [
     year: '1970',
     language: 'ru',
     scope: 'nt',
-    availability: 'license_required',
+    availability: 'available',
     description: 'Академичный, с учётом текстологических данных. Новый Завет.',
-    licenseNote:
-      '© Правообладатель / РБО. Авторские права действуют (ориентир до ~2035). Нужна лицензия.',
+    licenseNote: 'Источник seed: azbyka.ru (lang=b).',
     sortOrder: 40,
   },
   {
@@ -78,10 +74,10 @@ export const BIBLE_TRANSLATION_DEFS: readonly BibleTranslationDef[] = [
     shortTitle: 'Десницкий',
     year: null,
     language: 'ru',
-    scope: 'nt',
-    availability: 'license_required',
+    scope: 'partial',
+    availability: 'available',
     description: 'Ясный современный язык; Новый Завет готов, Ветхий — в работе.',
-    licenseNote: '© Андрей Десницкий / издатель. Текст появится после разрешения правообладателя.',
+    licenseNote: 'Источник seed: bolls.life (DESN).',
     sortOrder: 50,
   },
 ] as const;
