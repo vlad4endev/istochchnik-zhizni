@@ -83,6 +83,13 @@
     "bible:seed:synodal": "npx ts-node --transpile-only src/cli/seedBibleSynodal.ts --translation=synodal",
     "bible:audio": "npx ts-node --transpile-only src/cli/generateBibleAudio.ts",
     "bible:lopukhin": "npx ts-node --transpile-only src/cli/importLopukhinCommentaries.ts",
+    "bible:seed:vps": "node scripts/withDockerDbUrl.mjs npm run bible:seed",
+    "bible:seed:sample:vps": "node scripts/withDockerDbUrl.mjs npm run bible:seed:sample",
+    "bible:audio:vps": "node scripts/withDockerDbUrl.mjs npm run bible:audio --",
+    "bible:lopukhin:vps": "node scripts/withDockerDbUrl.mjs npm run bible:lopukhin",
+    "bible:seed:docker": "docker compose -f docker-compose.prod.yml exec -T api node dist/cli/seedBibleSynodal.js --translation=all",
+    "bible:audio:docker": "docker compose -f docker-compose.prod.yml exec -T api node dist/cli/generateBibleAudio.js",
+    "bible:lopukhin:docker": "docker compose -f docker-compose.prod.yml exec -T api node dist/cli/importLopukhinCommentaries.js",
     "backup:enrich": "npx ts-node --transpile-only src/cli/enrichBackupSnapshot.ts",
     "restore": "bash scripts/restore.sh"
   },

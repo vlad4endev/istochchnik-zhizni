@@ -238,7 +238,7 @@ async function seedOne(
   if (!translation) throw new Error(`translation_missing:${code}`);
 
   const books = await ensureTranslationBooks(translation.id, def.scope);
-  let defs = BIBLE_BOOK_DEFS.filter((d) => {
+  const defs = BIBLE_BOOK_DEFS.filter((d) => {
     if (wanted && !wanted.has(d.slug)) return false;
     if (def.scope === 'nt' && d.testament !== 'nt') return false;
     if (bookFilter && !bookFilter(d)) return false;
