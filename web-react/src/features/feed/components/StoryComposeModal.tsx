@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { LuImagePlus } from 'react-icons/lu';
 
+import { inferMediaFileKind } from '../../../lib/mediaFileKind';
 import { createStory } from '../feedApi';
 
 import styles from './StoryComposeModal.module.css';
@@ -52,7 +53,7 @@ export function StoryComposeModal({ open, onClose, onPublished }: StoryComposeMo
 
   if (!open) return null;
 
-  const isVideo = file?.type.startsWith('video/') ?? false;
+  const isVideo = file ? inferMediaFileKind(file) === 'video' : false;
 
   const onPublish = async () => {
     if (!file || busy) return;
@@ -105,9 +106,19 @@ export function StoryComposeModal({ open, onClose, onPublished }: StoryComposeMo
         <input
           ref={inputRef}
           type="file"
-          accept="image/*,video/*"
+          accept="image/*,video/*,.mp4,.m4v,.mov,.webm,.3gp"
           className={styles.hidden}
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            const next = e.target.files?.[0] ?? null;
+            if (next && !inferMediaFileKind(next)) {
+              setFile(null);
+              setError('Можно выбрать только фото (JPEG, PNG, GIF, WebP) или видео (MP4, MOV, WebM)');
+              e.currentTarget.value = '';
+              return;
+            }
+            setError(null);
+            setFile(next);
+          }}
         />
         <button type="button" className={styles.fileBtn} onClick={() => inputRef.current?.click()}>
           <LuImagePlus className="h-4 w-4" aria-hidden />
