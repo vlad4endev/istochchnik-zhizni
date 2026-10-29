@@ -1,15 +1,44 @@
+import { existsSync } from 'node:fs';
 import { Pool, type PoolConfig } from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const rawConnectionString = process.env.DATABASE_URL;
 const forceSsl = process.env.DB_SSL === 'true';
-const hasSslModeInConnectionString = rawConnectionString?.includes('sslmode=');
-const useSsl = forceSsl || Boolean(hasSslModeInConnectionString);
 /** По умолчанию false — Supabase/managed Postgres часто дают SELF_SIGNED_CERT_IN_CHAIN при verify-full. Строгая проверка CA: DB_SSL_REJECT_UNAUTHORIZED=true */
 const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true';
 const dbDebugLog = process.env.DB_DEBUG_LOG === 'true';
+
+/**
+ * В docker-compose Postgres называется `db` — это имя резолвится только внутри сети Compose.
+ * CLI с хоста (`npm run bible:seed` и т.п.) иначе падает с getaddrinfo EAI_AGAIN db.
+ * Отключить: SEED_NO_DB_HOST_REWRITE=true
+ */
+function rewriteDockerDbHostForHostProcess(raw: string): string {
+  if (process.env.SEED_NO_DB_HOST_REWRITE === 'true') {
+    return raw;
+  }
+  if (existsSync('/.dockerenv')) {
+    return raw;
+  }
+  try {
+    const u = new URL(raw);
+    if (u.hostname !== 'db') {
+      return raw;
+    }
+    const hostPort = process.env.POSTGRES_HOST_PORT || u.port || '5432';
+    u.hostname = '127.0.0.1';
+    u.port = hostPort;
+    const next = u.toString();
+    process.env.DATABASE_URL = next;
+    console.warn(
+      `[db] Хост «db» недоступен с машины хоста — подключение: 127.0.0.1:${hostPort} (POSTGRES_HOST_PORT). Внутри контейнера оставьте @db.`
+    );
+    return next;
+  } catch {
+    return raw;
+  }
+}
 
 /**
  * Supabase / PgBouncer **transaction** pooler (порт 6543): node-pg должен отключить
@@ -17,8 +46,9 @@ const dbDebugLog = process.env.DB_DEBUG_LOG === 'true';
  * Предпочтительнее для Node — **session** pooler на 5432 (см. .env.example).
  */
 function resolveConnectionString(raw: string): string {
+  const withHost = rewriteDockerDbHostForHostProcess(raw);
   try {
-    const u = new URL(raw);
+    const u = new URL(withHost);
     const port = u.port || '5432';
     if (port === '6543' && !u.searchParams.has('pgbouncer')) {
       u.searchParams.set('pgbouncer', 'true');
@@ -32,9 +62,12 @@ function resolveConnectionString(raw: string): string {
   } catch {
     // fall through
   }
-  return raw;
+  return withHost;
 }
 
+const rawConnectionString = process.env.DATABASE_URL;
+const hasSslModeInConnectionString = rawConnectionString?.includes('sslmode=');
+const useSsl = forceSsl || Boolean(hasSslModeInConnectionString);
 const connectionString = rawConnectionString ? resolveConnectionString(rawConnectionString) : undefined;
 
 function logDatabaseConfig(): void {
