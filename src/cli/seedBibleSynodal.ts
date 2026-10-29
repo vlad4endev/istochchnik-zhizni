@@ -2,7 +2,7 @@
  * Seed Bible translations into Postgres.
  *
  * Sources:
- *   synodal     — Free.Bible JSON chapters
+ *   synodal     — justbible.ru (translation=rst), fallback Free.Bible
  *   rbo         — justbible.ru API
  *   desnitsky   — bolls.life DESN
  *   cassian     — azbyka.ru HTML (lang=b, NT)
@@ -179,12 +179,28 @@ function mapNumberedObject(obj: Record<string, unknown>): Verse[] {
     .sort((a, b) => a.v - b.v);
 }
 
-async function fetchSynodalChapter(bookSlug: string, chapter: number): Promise<Verse[]> {
+async function fetchSynodalFromFreeBible(bookSlug: string, chapter: number): Promise<Verse[]> {
   const url = `https://free.bible/bible/synodal/${bookSlug}/${chapter}.json`;
   const json = (await fetchJson(url)) as { verses?: Array<{ v: number; t: string }> };
   return (json.verses ?? [])
     .filter((v) => typeof v.v === 'number' && typeof v.t === 'string' && v.t.trim())
     .map((v) => ({ v: v.v, t: v.t.trim() }));
+}
+
+/**
+ * Синодальный: primary = justbible.ru `rst` (доступен с RU VPS),
+ * fallback = free.bible (часто ETIMEDOUT из РФ/СНГ).
+ */
+async function fetchSynodalChapter(book: BibleBookDef, chapter: number): Promise<Verse[]> {
+  try {
+    const verses = await fetchJustbibleChapter('rst', book.ord, chapter);
+    if (verses.length > 0) return verses;
+  } catch (e) {
+    console.warn(
+      `[bible-seed] justbible rst failed ${book.slug}:${chapter} — fallback free.bible (${e instanceof Error ? e.message : e})`,
+    );
+  }
+  return fetchSynodalFromFreeBible(book.slug, chapter);
 }
 
 async function fetchJustbibleChapter(translation: string, bookOrd: number, chapter: number): Promise<Verse[]> {
@@ -263,7 +279,7 @@ async function buildFetcher(code: string): Promise<{
   if (!def) throw new Error(`unknown_translation:${code}`);
 
   if (code === 'synodal') {
-    return { def, fetcher: (book, ch) => fetchSynodalChapter(book.slug, ch) };
+    return { def, fetcher: (book, ch) => fetchSynodalChapter(book, ch) };
   }
   if (code === 'rbo') {
     return { def, fetcher: (book, ch) => fetchJustbibleChapter('rbo', book.ord, ch) };
