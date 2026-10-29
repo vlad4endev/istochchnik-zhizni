@@ -69,6 +69,91 @@ const AZBYKA_NT_CODES: Record<string, string> = {
   revelation: 'Apok',
 };
 
+/**
+ * justbible.ru: ВЗ 1–39 как у протестантов; НЗ — восточный порядок
+ * (соборные послания до Павловых). Наш `book.ord` — протестантский.
+ * Без этого маппинга Рим. уходит в Иакова и т.д.
+ */
+const JUSTBIBLE_BOOK_ID_BY_SLUG: Record<string, number> = {
+  genesis: 1,
+  exodus: 2,
+  leviticus: 3,
+  numbers: 4,
+  deuteronomy: 5,
+  joshua: 6,
+  judges: 7,
+  ruth: 8,
+  '1-samuel': 9,
+  '2-samuel': 10,
+  '1-kings': 11,
+  '2-kings': 12,
+  '1-chronicles': 13,
+  '2-chronicles': 14,
+  ezra: 15,
+  nehemiah: 16,
+  esther: 17,
+  job: 18,
+  psalms: 19,
+  proverbs: 20,
+  ecclesiastes: 21,
+  'song-of-solomon': 22,
+  isaiah: 23,
+  jeremiah: 24,
+  lamentations: 25,
+  ezekiel: 26,
+  daniel: 27,
+  hosea: 28,
+  joel: 29,
+  amos: 30,
+  obadiah: 31,
+  jonah: 32,
+  micah: 33,
+  nahum: 34,
+  habakkuk: 35,
+  zephaniah: 36,
+  haggai: 37,
+  zechariah: 38,
+  malachi: 39,
+  matthew: 40,
+  mark: 41,
+  luke: 42,
+  john: 43,
+  acts: 44,
+  james: 45,
+  '1-peter': 46,
+  '2-peter': 47,
+  '1-john': 48,
+  '2-john': 49,
+  '3-john': 50,
+  jude: 51,
+  romans: 52,
+  '1-corinthians': 53,
+  '2-corinthians': 54,
+  galatians: 55,
+  ephesians: 56,
+  philippians: 57,
+  colossians: 58,
+  '1-thessalonians': 59,
+  '2-thessalonians': 60,
+  '1-timothy': 61,
+  '2-timothy': 62,
+  titus: 63,
+  philemon: 64,
+  hebrews: 65,
+  revelation: 66,
+};
+
+function justbibleBookId(book: BibleBookDef): number {
+  const id = JUSTBIBLE_BOOK_ID_BY_SLUG[book.slug];
+  if (!id) throw new Error(`no justbible book id for ${book.slug}`);
+  return id;
+}
+
+/** Книги, где justbible id ≠ protestant ord — при resume нельзя skip (могли залить чужой текст). */
+function justbibleIdDiffersFromOrd(book: BibleBookDef): boolean {
+  return JUSTBIBLE_BOOK_ID_BY_SLUG[book.slug] !== book.ord;
+}
+
 function parseArg(name: string): string | null {
   const prefix = `--${name}=`;
   const hit = process.argv.find((a) => a.startsWith(prefix));
@@ -193,7 +278,7 @@ async function fetchSynodalFromFreeBible(bookSlug: string, chapter: number): Pro
  */
 async function fetchSynodalChapter(book: BibleBookDef, chapter: number): Promise<Verse[]> {
   try {
-    const verses = await fetchJustbibleChapter('rst', book.ord, chapter);
+    const verses = await fetchJustbibleChapter('rst', book, chapter);
     if (verses.length > 0) return verses;
   } catch (e) {
     console.warn(
@@ -203,17 +288,27 @@ async function fetchSynodalChapter(book: BibleBookDef, chapter: number): Promise
   return fetchSynodalFromFreeBible(book.slug, chapter);
 }
 
-async function fetchJustbibleChapter(translation: string, bookOrd: number, chapter: number): Promise<Verse[]> {
-  const url = `https://justbible.ru/api/bible?translation=${encodeURIComponent(translation)}&book=${bookOrd}&chapter=${chapter}`;
+async function fetchJustbibleChapter(
+  translation: string,
+  book: BibleBookDef,
+  chapter: number,
+): Promise<Verse[]> {
+  const bookId = justbibleBookId(book);
+  const url = `https://justbible.ru/api/bible?translation=${encodeURIComponent(translation)}&book=${bookId}&chapter=${chapter}`;
   const json = await fetchJson(url);
   if (!json || typeof json !== 'object' || Array.isArray(json)) {
-    throw new Error(`unexpected justbible payload for ${translation} ${bookOrd}:${chapter}`);
+    throw new Error(`unexpected justbible payload for ${translation} ${book.slug}:${chapter}`);
   }
   const obj = json as Record<string, unknown>;
-  if (obj.status === 'error' || obj.error) {
+  if (obj.status === 'error' || obj.status === 'false' || obj.status === false || obj.error) {
     throw new Error(String(obj.error ?? 'justbible_error'));
   }
-  return mapNumberedObject(obj);
+  // PHP warning / HTML вместо JSON уже отловит fetchJson; пустой объект — ошибка
+  const verses = mapNumberedObject(obj);
+  if (verses.length === 0) {
+    throw new Error(`empty justbible chapter ${translation} ${book.slug}:${chapter}`);
+  }
+  return verses;
 }
 
 async function fetchBollsChapter(translation: string, bookOrd: number, chapter: number): Promise<Verse[]> {
@@ -282,7 +377,7 @@ async function buildFetcher(code: string): Promise<{
     return { def, fetcher: (book, ch) => fetchSynodalChapter(book, ch) };
   }
   if (code === 'rbo') {
-    return { def, fetcher: (book, ch) => fetchJustbibleChapter('rbo', book.ord, ch) };
+    return { def, fetcher: (book, ch) => fetchJustbibleChapter('rbo', book, ch) };
   }
   if (code === 'desnitsky') {
     const available = await listBollsBookIds('DESN');
@@ -351,7 +446,11 @@ async function seedOne(
     const chapterLimit = maxChapters != null ? Math.min(bookDef.chapters, maxChapters) : bookDef.chapters;
     for (let ch = 1; ch <= chapterLimit; ch += 1) {
       try {
-        if (!force) {
+        // Не skip, если justbible-нумерация ≠ ord: раньше могли залить чужую книгу (Рим.←Иак.).
+        const mustRefetch =
+          force ||
+          ((code === 'synodal' || code === 'rbo') && justbibleIdDiffersFromOrd(bookDef));
+        if (!mustRefetch) {
           const existing = await chapterVerseCount(translation.id, book.id, ch);
           if (existing > 0) {
             chaptersSkip += 1;
