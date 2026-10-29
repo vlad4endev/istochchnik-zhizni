@@ -281,32 +281,41 @@ export function FeedPage() {
     return () => io.disconnect();
   }, [cursor, loadMore]);
 
-  const patchPost = (postId: string, patch: Partial<FeedPost>) => {
-    setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, ...patch } : p)));
+  /** Корневой id контента: у репоста счётчики общие с оригиналом. */
+  const contentRootId = (p: Pick<FeedPost, 'id' | 'shared_post'>) => p.shared_post?.id ?? p.id;
+
+  const patchEngagementByRoot = (
+    rootId: string,
+    patch: Partial<Pick<FeedPost, 'liked_by_me' | 'like_count' | 'comment_count' | 'repost_count' | 'reposted_by_me'>>,
+  ) => {
+    setPosts((prev) =>
+      prev.map((p) => (contentRootId(p) === rootId ? { ...p, ...patch } : p)),
+    );
   };
 
   const onToggleLike = async (post: FeedCardPost) => {
     if (!me) return;
-    const key = `like-${post.id}`;
+    const rootId = contentRootId(post);
+    const key = `like-${rootId}`;
     if (busy[key]) return;
     setBusy((b) => ({ ...b, [key]: '1' }));
     const liked = post.liked_by_me ?? false;
     const prevCount = post.like_count ?? 0;
     // Optimistic UI — мгновенный отклик как в нативных лентах.
-    patchPost(post.id, {
+    patchEngagementByRoot(rootId, {
       liked_by_me: !liked,
       like_count: Math.max(0, prevCount + (liked ? -1 : 1)),
     });
     try {
       if (liked) {
         const r = await unlikeProfilePost(post.id);
-        patchPost(post.id, { liked_by_me: false, like_count: r.like_count });
+        patchEngagementByRoot(rootId, { liked_by_me: false, like_count: r.like_count });
       } else {
         const r = await likeProfilePost(post.id);
-        patchPost(post.id, { liked_by_me: true, like_count: r.like_count });
+        patchEngagementByRoot(rootId, { liked_by_me: true, like_count: r.like_count });
       }
     } catch {
-      patchPost(post.id, { liked_by_me: liked, like_count: prevCount });
+      patchEngagementByRoot(rootId, { liked_by_me: liked, like_count: prevCount });
     } finally {
       setBusy((b) => {
         const n = { ...b };
@@ -318,11 +327,12 @@ export function FeedPage() {
 
   const onRepost = async (post: FeedCardPost) => {
     if (!me || post.reposted_by_me) return;
-    const key = `repost-${post.id}`;
+    const rootId = contentRootId(post);
+    const key = `repost-${rootId}`;
     setBusy((b) => ({ ...b, [key]: '1' }));
     try {
       await repostProfilePost(post.id);
-      patchPost(post.id, {
+      patchEngagementByRoot(rootId, {
         reposted_by_me: true,
         repost_count: (post.repost_count ?? 0) + 1,
       });
@@ -597,13 +607,24 @@ export function FeedPage() {
         profileLinkState={profileLinkState}
         onClose={() => setCommentTarget(null)}
         onCountChange={(postId, delta) => {
-          setPosts((prev) =>
-            prev.map((p) =>
-              p.id === postId
+          setPosts((prev) => {
+            const target = prev.find((p) => p.id === postId);
+            const rootId = target ? contentRootId(target) : postId;
+            return prev.map((p) =>
+              contentRootId(p) === rootId
                 ? { ...p, comment_count: Math.max(0, (p.comment_count ?? 0) + delta) }
                 : p,
-            ),
-          );
+            );
+          });
+        }}
+        onCountSync={(postId, count) => {
+          setPosts((prev) => {
+            const target = prev.find((p) => p.id === postId);
+            const rootId = target ? contentRootId(target) : postId;
+            return prev.map((p) =>
+              contentRootId(p) === rootId ? { ...p, comment_count: Math.max(0, count) } : p,
+            );
+          });
         }}
       />
 
