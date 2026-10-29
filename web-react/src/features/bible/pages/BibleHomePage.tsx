@@ -209,16 +209,41 @@ export function BibleHomePage() {
           </Link>
         </div>
 
-        {(plansQ.data ?? []).slice(0, 2).map((plan) => (
-          <Link
-            key={plan.id}
-            to={`/bible/plans/${plan.id}`}
-            className="mt-3 rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] px-4 py-3"
-          >
-            <p className="font-bold text-stone-900">{plan.title}</p>
-            {plan.goal ? <p className="mt-1 line-clamp-2 text-sm text-stone-600">{plan.goal}</p> : null}
-          </Link>
-        ))}
+        {(plansQ.data ?? []).slice(0, 2).map((plan) => {
+          const total = plan.days_total ?? 0;
+          const done = plan.days_completed ?? 0;
+          const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+          return (
+            <Link
+              key={plan.id}
+              to={`/bible/plans/${plan.id}`}
+              className="mt-3 block rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] px-4 py-3 transition hover:border-primary/30"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-bold text-stone-900">{plan.title}</p>
+                  {plan.goal ? (
+                    <p className="mt-1 line-clamp-2 text-sm text-stone-600">{plan.goal}</p>
+                  ) : null}
+                  {total > 0 ? (
+                    <p className="mt-1.5 text-xs tabular-nums text-stone-400">
+                      {done} из {total} дней · {pct}%
+                    </p>
+                  ) : null}
+                </div>
+                <LuChevronRight className="mt-1 shrink-0 text-stone-300" size={18} />
+              </div>
+              {total > 0 ? (
+                <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-stone-200/80">
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              ) : null}
+            </Link>
+          );
+        })}
 
         <div className="mt-6 flex items-center justify-between">
           <h2 className="text-lg font-bold text-stone-900">Книги</h2>

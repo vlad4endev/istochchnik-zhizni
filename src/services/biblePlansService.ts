@@ -30,6 +30,8 @@ export interface BiblePlanRow {
   ai_prompt: string | null;
   created_at: string;
   updated_at: string;
+  days_total?: number;
+  days_completed?: number;
   days?: BiblePlanDayRow[];
 }
 
@@ -82,11 +84,19 @@ export function validateAiPlanPayload(raw: unknown): {
 export async function listPlans(memberId: number): Promise<BiblePlanRow[]> {
   await ensureBibleSchema();
   const r = await query(
-    `SELECT id, member_id, title, goal, start_date::text, end_date::text, status,
-            ai_prompt, created_at::text, updated_at::text
-     FROM bible_reading_plans
-     WHERE member_id = $1
-     ORDER BY updated_at DESC
+    `SELECT p.id, p.member_id, p.title, p.goal, p.start_date::text, p.end_date::text, p.status,
+            p.ai_prompt, p.created_at::text, p.updated_at::text,
+            COALESCE(stats.days_total, 0)::int AS days_total,
+            COALESCE(stats.days_completed, 0)::int AS days_completed
+     FROM bible_reading_plans p
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS days_total,
+              COUNT(*) FILTER (WHERE d.completed_at IS NOT NULL)::int AS days_completed
+       FROM bible_reading_plan_days d
+       WHERE d.plan_id = p.id
+     ) stats ON TRUE
+     WHERE p.member_id = $1
+     ORDER BY p.updated_at DESC
      LIMIT 100`,
     [memberId],
   );

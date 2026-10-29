@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildInternalBibleUrl, parseBibleRef, verseFromTimings } from './bibleRef';
+import {
+  biblePlanRefUrl,
+  buildInternalBibleUrl,
+  formatBiblePlanRef,
+  parseBibleRef,
+  verseFromTimings,
+} from './bibleRef';
 
 describe('parseBibleRef', () => {
   it('parses Ин 3:16', () => {
@@ -25,5 +31,13 @@ describe('verseFromTimings', () => {
     ];
     expect(verseFromTimings(timings, 1)).toBe(1);
     expect(verseFromTimings(timings, 6)).toBe(2);
+  });
+});
+
+describe('formatBiblePlanRef', () => {
+  it('formats russian short ref and url', () => {
+    const ref = { book_slug: 'john', chapter: 3, verse_start: 16, verse_end: 18 };
+    expect(formatBiblePlanRef(ref)).toBe('Ин\u00a03:16–18');
+    expect(biblePlanRefUrl(ref, 'rbo')).toBe('/bible/rbo/john/3?v=16');
   });
 });

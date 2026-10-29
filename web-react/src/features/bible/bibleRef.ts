@@ -123,6 +123,100 @@ export function buildInternalBibleUrl(scripture: string, translation = 'synodal'
   return parsed.verseStart != null ? `${base}?v=${parsed.verseStart}` : base;
 }
 
+/** Краткие русские имена для подписей в планах чтения. */
+const SHORT_NAME_BY_SLUG: Record<string, string> = {
+  genesis: 'Быт',
+  exodus: 'Исх',
+  leviticus: 'Лев',
+  numbers: 'Чис',
+  deuteronomy: 'Втор',
+  joshua: 'Нав',
+  judges: 'Суд',
+  ruth: 'Руф',
+  '1-samuel': '1Цар',
+  '2-samuel': '2Цар',
+  '1-kings': '3Цар',
+  '2-kings': '4Цар',
+  '1-chronicles': '1Пар',
+  '2-chronicles': '2Пар',
+  ezra: 'Езд',
+  nehemiah: 'Неем',
+  esther: 'Есф',
+  job: 'Иов',
+  psalms: 'Пс',
+  proverbs: 'Прит',
+  ecclesiastes: 'Еккл',
+  'song-of-solomon': 'Песн',
+  isaiah: 'Ис',
+  jeremiah: 'Иер',
+  lamentations: 'Плач',
+  ezekiel: 'Иез',
+  daniel: 'Дан',
+  hosea: 'Ос',
+  joel: 'Иоил',
+  amos: 'Ам',
+  obadiah: 'Авд',
+  jonah: 'Ион',
+  micah: 'Мих',
+  nahum: 'Наум',
+  habakkuk: 'Авв',
+  zephaniah: 'Соф',
+  haggai: 'Агг',
+  zechariah: 'Зах',
+  malachi: 'Мал',
+  matthew: 'Мф',
+  mark: 'Мк',
+  luke: 'Лк',
+  john: 'Ин',
+  acts: 'Деян',
+  romans: 'Рим',
+  '1-corinthians': '1Кор',
+  '2-corinthians': '2Кор',
+  galatians: 'Гал',
+  ephesians: 'Еф',
+  philippians: 'Флп',
+  colossians: 'Кол',
+  '1-thessalonians': '1Фес',
+  '2-thessalonians': '2Фес',
+  '1-timothy': '1Тим',
+  '2-timothy': '2Тим',
+  titus: 'Тит',
+  philemon: 'Флм',
+  hebrews: 'Евр',
+  james: 'Иак',
+  '1-peter': '1Пет',
+  '2-peter': '2Пет',
+  '1-john': '1Ин',
+  '2-john': '2Ин',
+  '3-john': '3Ин',
+  jude: 'Иуд',
+  revelation: 'Откр',
+};
+
+export type BiblePlanRefLike = {
+  book_slug: string;
+  chapter: number;
+  verse_start?: number;
+  verse_end?: number;
+};
+
+export function formatBiblePlanRef(ref: BiblePlanRefLike): string {
+  const short = SHORT_NAME_BY_SLUG[ref.book_slug] || ref.book_slug;
+  let label = `${short}\u00a0${ref.chapter}`;
+  if (ref.verse_start != null && ref.verse_start > 0) {
+    label += `:${ref.verse_start}`;
+    if (ref.verse_end != null && ref.verse_end > 0 && ref.verse_end !== ref.verse_start) {
+      label += `–${ref.verse_end}`;
+    }
+  }
+  return label;
+}
+
+export function biblePlanRefUrl(ref: BiblePlanRefLike, translation = 'synodal'): string {
+  const base = `/bible/${translation}/${ref.book_slug}/${ref.chapter}`;
+  return ref.verse_start != null && ref.verse_start > 0 ? `${base}?v=${ref.verse_start}` : base;
+}
+
 export function verseFromTimings(
   timings: Array<{ v: number; start: number; end?: number }>,
   currentTime: number,
