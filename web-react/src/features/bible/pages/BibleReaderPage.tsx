@@ -207,26 +207,6 @@ export function BibleReaderPage() {
           </button>
         </div>
 
-        <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            disabled={prevChapter == null}
-            className="inline-flex items-center gap-1 rounded-xl px-2 py-1.5 text-sm font-semibold text-stone-600 disabled:opacity-30"
-            onClick={() => prevChapter != null && navigate(`/bible/${translation}/${book}/${prevChapter}`)}
-          >
-            <LuChevronLeft /> Назад
-          </button>
-          <p className="text-sm font-medium text-stone-500">{bookMeta?.short_name} {chapter}</p>
-          <button
-            type="button"
-            disabled={nextChapter == null}
-            className="inline-flex items-center gap-1 rounded-xl px-2 py-1.5 text-sm font-semibold text-stone-600 disabled:opacity-30"
-            onClick={() => nextChapter != null && navigate(`/bible/${translation}/${book}/${nextChapter}`)}
-          >
-            Далее <LuChevronRight />
-          </button>
-        </div>
-
         {audioQ.data ? (
           <SyncedAudioPlayer
             audio={audioQ.data}
@@ -243,7 +223,7 @@ export function BibleReaderPage() {
             <code>npm run bible:seed -- --translation={translationMeta?.code || translation}</code>
           </p>
         ) : (
-          <div className="space-y-1 pb-28 font-serif text-[17px] leading-8 text-stone-900 sm:text-[18px]">
+          <div className="space-y-1 pb-36 font-serif text-[17px] leading-8 text-stone-900 sm:text-[18px] lg:pb-24">
             {(chapterQ.data?.verses ?? []).map((v) => {
               const active = highlightVerse === v.verse;
               return (
@@ -272,7 +252,7 @@ export function BibleReaderPage() {
         )}
 
         {(commentsQ.data ?? []).length > 0 ? (
-          <section className="space-y-2 border-t border-stone-200 pt-4">
+          <section className="space-y-2 border-t border-stone-200 pb-28 pt-4 lg:pb-16">
             <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-stone-500">
               <LuMessageSquareText size={14} /> Комментарии
             </h2>
@@ -304,6 +284,34 @@ export function BibleReaderPage() {
           void navigate(`/bible/${translation}/${bookSlug}/${nextChapterNum}`);
         }}
       />
+
+      {/* Главы: круглые кнопки по краям снизу, над таб-баром (как в «Библия») */}
+      {!sheetOpen && !booksOpen ? (
+        <div className="pointer-events-none fixed inset-x-0 z-[90] flex items-end justify-between px-3 sm:px-4 lg:px-8 bottom-[calc(var(--app-bottom-nav-total-height)+0.55rem)] lg:bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))]">
+          <button
+            type="button"
+            aria-label="Предыдущая глава"
+            disabled={prevChapter == null}
+            onClick={() =>
+              prevChapter != null && navigate(`/bible/${translation}/${book}/${prevChapter}`)
+            }
+            className="pointer-events-auto inline-flex h-12 w-12 items-center justify-center rounded-full border border-stone-200/90 bg-white/95 text-stone-800 shadow-[0_6px_20px_rgba(28,25,23,0.14)] backdrop-blur transition active:scale-95 disabled:pointer-events-none disabled:opacity-0 lg:h-11 lg:w-11"
+          >
+            <LuChevronLeft size={22} strokeWidth={2.25} />
+          </button>
+          <button
+            type="button"
+            aria-label="Следующая глава"
+            disabled={nextChapter == null}
+            onClick={() =>
+              nextChapter != null && navigate(`/bible/${translation}/${book}/${nextChapter}`)
+            }
+            className="pointer-events-auto inline-flex h-12 w-12 items-center justify-center rounded-full border border-stone-200/90 bg-white/95 text-stone-800 shadow-[0_6px_20px_rgba(28,25,23,0.14)] backdrop-blur transition active:scale-95 disabled:pointer-events-none disabled:opacity-0 lg:h-11 lg:w-11"
+          >
+            <LuChevronRight size={22} strokeWidth={2.25} />
+          </button>
+        </div>
+      ) : null}
 
       {sheetOpen && selectedVerse != null ? (
         <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-2xl rounded-t-3xl border border-stone-200 bg-[var(--surface-elevated)] p-4 shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
