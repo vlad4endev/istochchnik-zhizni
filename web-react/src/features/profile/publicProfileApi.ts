@@ -58,6 +58,8 @@ export interface ProfileFeedPost {
 
 export interface ProfileFeedResponse {
   profile: ProfileFeedProfile;
+  /** Полное число публикаций; `posts` — не больше 50 последних. */
+  posts_total?: number;
   posts: ProfileFeedPost[];
 }
 

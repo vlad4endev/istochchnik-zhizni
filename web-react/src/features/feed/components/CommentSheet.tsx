@@ -54,6 +54,8 @@ export type CommentSheetProps = {
   profileLinkState?: { backTo?: string; backLabel?: string };
   onClose: () => void;
   onCountChange?: (postId: string, delta: number) => void;
+  /** Абсолютный счётчик после загрузки/изменения списка (чтобы не «плыл» от optimistic delta). */
+  onCountSync?: (postId: string, count: number) => void;
 };
 
 export function CommentSheet({
@@ -66,6 +68,7 @@ export function CommentSheet({
   profileLinkState,
   onClose,
   onCountChange,
+  onCountSync,
 }: CommentSheetProps) {
   const titleId = useId();
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -81,6 +84,9 @@ export function CommentSheet({
   const [sendError, setSendError] = useState<string | null>(null);
   const [keyboardInset, setKeyboardInset] = useState(0);
 
+  const onCountSyncRef = useRef(onCountSync);
+  onCountSyncRef.current = onCountSync;
+
   const load = useCallback(async () => {
     if (!postId) return;
     setLoading(true);
@@ -88,6 +94,7 @@ export function CommentSheet({
     try {
       const list = await fetchPostComments(postId);
       setComments(list);
+      onCountSyncRef.current?.(postId, list.length);
     } catch (e) {
       const msg =
         e && typeof e === 'object' && 'response' in e
@@ -211,19 +218,23 @@ export function CommentSheet({
     setSendError(null);
     try {
       const created = await createPostComment(postId, trimmed);
-      setComments((prev) => [
-        ...prev,
-        {
-          id: created.id,
-          post_id: postId,
-          member_id: myMemberId,
-          text: trimmed,
-          created_at: created.created_at,
-          author: myAuthor ?? null,
-          like_count: 0,
-          liked_by_me: false,
-        },
-      ]);
+      setComments((prev) => {
+        const next = [
+          ...prev,
+          {
+            id: created.id,
+            post_id: postId,
+            member_id: myMemberId,
+            text: trimmed,
+            created_at: created.created_at,
+            author: myAuthor ?? null,
+            like_count: 0,
+            liked_by_me: false,
+          },
+        ];
+        onCountSync?.(postId, next.length);
+        return next;
+      });
       setText('');
       onCountChange?.(postId, 1);
       requestAnimationFrame(() => autosizeTextarea(inputRef.current));
@@ -280,7 +291,11 @@ export function CommentSheet({
     setDeletingId(comment.id);
     try {
       await deletePostComment(postId, comment.id);
-      setComments((prev) => prev.filter((c) => c.id !== comment.id));
+      setComments((prev) => {
+        const next = prev.filter((c) => c.id !== comment.id);
+        onCountSync?.(postId, next.length);
+        return next;
+      });
       onCountChange?.(postId, -1);
     } catch {
       /* ignore */
