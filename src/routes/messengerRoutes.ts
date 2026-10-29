@@ -807,6 +807,18 @@ router.post('/conversations/personal', async (req: Request, res: Response) => {
     return;
   }
   try {
+    // Уже существующий ЛС можно открыть; новый — только если собеседник виден в каталоге.
+    const existingId = await svc.findExistingPersonalConversation(userId, otherMemberId);
+    if (!existingId) {
+      const canSee = await svc.canViewerSeeMemberInMessengerDirectory(
+        sessionRoles(req),
+        otherMemberId,
+      );
+      if (!canSee) {
+        res.status(403).json({ error: 'Нельзя начать чат с этим пользователем' });
+        return;
+      }
+    }
     const convId = await svc.findOrCreatePersonalConversation(userId, otherMemberId);
     // Ensure both members join the WS room
     ensureMemberInRoom(userId, convId);
@@ -838,7 +850,18 @@ router.post('/conversations/group', async (req: Request, res: Response) => {
   // Accept number | numeric string — strict typeof==='number' previously dropped all string ids.
   const ids = svc.parsePositiveMemberIds(memberIds).filter((id) => id !== userId);
   try {
-    const created = await svc.createGroupConversation(userId, title, convType, ids);
+    const roles = sessionRoles(req);
+    const visibleIds: number[] = [];
+    for (const id of ids) {
+      if (await svc.canViewerSeeMemberInMessengerDirectory(roles, id)) {
+        visibleIds.push(id);
+      }
+    }
+    if (ids.length > 0 && visibleIds.length === 0) {
+      res.status(403).json({ error: 'Нельзя добавить выбранных пользователей' });
+      return;
+    }
+    const created = await svc.createGroupConversation(userId, title, convType, visibleIds);
     const convKey = String(created.conversationId);
     const notifiedIds = created.addedMemberIds;
 
@@ -1147,6 +1170,12 @@ router.post(
       const alreadyActive = await svc.isMemberInConversation(String(convId), parsed);
       if (alreadyActive) {
         res.json({ ok: true, alreadyMember: true });
+        return;
+      }
+
+      const canSee = await svc.canViewerSeeMemberInMessengerDirectory(sessionRoles(req), parsed);
+      if (!canSee) {
+        res.status(403).json({ error: 'Нельзя добавить этого пользователя' });
         return;
       }
 
@@ -2126,14 +2155,15 @@ router.get('/members/search', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const q = (req.query.q as string || '').trim();
   const offset = parsePageOffset(req.query.offset);
+  const viewerRoles = sessionRoles(req);
   try {
     if (q.length < 1) {
       const limit = parsePageLimit(req.query.limit, MEMBER_LIST_DEFAULT_LIMIT, MEMBER_LIST_MAX_LIMIT);
-      const members = await svc.listRegisteredMembers(userId, limit, offset);
+      const members = await svc.listRegisteredMembers(userId, limit, offset, { viewerRoles });
       res.json(members.map((m) => ({ ...m, is_online: isMemberOnline(m.id) })));
     } else {
       const limit = parsePageLimit(req.query.limit, MEMBER_SEARCH_DEFAULT_LIMIT, MEMBER_SEARCH_MAX_LIMIT);
-      const members = await svc.searchMembers(q, userId, limit, offset);
+      const members = await svc.searchMembers(q, userId, limit, offset, { viewerRoles });
       res.json(members.map((m) => ({ ...m, is_online: isMemberOnline(m.id) })));
     }
   } catch (e) {
@@ -2151,7 +2181,9 @@ router.get('/members/:memberId', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const member = await svc.getMemberByIdForMessenger(memberId, userId);
+    const member = await svc.getMemberByIdForMessenger(memberId, userId, {
+      viewerRoles: sessionRoles(req),
+    });
     if (!member) {
       res.status(404).json({ error: 'Member not found' });
       return;
