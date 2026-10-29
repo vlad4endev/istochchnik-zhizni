@@ -178,6 +178,8 @@ function isTransientFetchError(err: unknown): boolean {
   );
 }
 
+type FetchHttpError = Error & { httpStatus?: number; retryAfterMs?: number };
+
 async function fetchOnce(
   url: string,
   headers: Record<string, string>,
@@ -188,33 +190,62 @@ async function fetchOnce(
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) {
-    const err = new Error(`HTTP ${res.status} for ${url}`);
-    (err as Error & { httpStatus?: number }).httpStatus = res.status;
+    const err: FetchHttpError = new Error(`HTTP ${res.status} for ${url}`);
+    err.httpStatus = res.status;
+    const ra = res.headers.get('retry-after');
+    if (ra) {
+      const asInt = Number(ra);
+      if (Number.isFinite(asInt) && asInt >= 0) {
+        err.retryAfterMs = asInt * 1000;
+      } else {
+        const when = Date.parse(ra);
+        if (Number.isFinite(when)) err.retryAfterMs = Math.max(0, when - Date.now());
+      }
+    }
     throw err;
   }
   return res;
 }
 
-/** Ретраи при ETIMEDOUT / обрывах TLS — типично для free.bible / azbyka с VPS. */
+/** Глобальный cool-down после 429 — не долбить azbyka/bolls между главами. */
+let rateLimitCooldownUntil = 0;
+
+async function honorRateLimitCooldown(): Promise<void> {
+  const wait = rateLimitCooldownUntil - Date.now();
+  if (wait > 0) await sleep(wait);
+}
+
+/** Ретраи при ETIMEDOUT / 429 — azbyka и bolls.life часто режут частоту. */
 async function fetchWithRetry(
   url: string,
   headers: Record<string, string>,
   as: 'json' | 'text',
 ): Promise<unknown> {
-  const attempts = Math.max(1, Number(process.env.BIBLE_SEED_FETCH_RETRIES ?? 6));
+  const attempts = Math.max(1, Number(process.env.BIBLE_SEED_FETCH_RETRIES ?? 8));
   const timeoutMs = Math.max(5_000, Number(process.env.BIBLE_SEED_FETCH_TIMEOUT_MS ?? 45_000));
   let last: unknown;
   for (let i = 1; i <= attempts; i += 1) {
     try {
+      await honorRateLimitCooldown();
       const res = await fetchOnce(url, headers, timeoutMs);
       return as === 'json' ? res.json() : res.text();
     } catch (e) {
       last = e;
-      const httpStatus = (e as Error & { httpStatus?: number }).httpStatus;
+      const httpStatus = (e as FetchHttpError).httpStatus;
       const retryable =
         isTransientFetchError(e) || httpStatus === 429 || httpStatus === 502 || httpStatus === 503;
       if (!retryable || i === attempts) break;
-      const backoff = Math.min(30_000, 800 * 2 ** (i - 1) + Math.floor(Math.random() * 400));
+      let backoff: number;
+      if (httpStatus === 429) {
+        const suggested = (e as FetchHttpError).retryAfterMs;
+        backoff = Math.min(
+          120_000,
+          Math.max(15_000, suggested ?? 12_000 * 2 ** (i - 1)) + Math.floor(Math.random() * 1500),
+        );
+        rateLimitCooldownUntil = Date.now() + backoff;
+      } else {
+        backoff = Math.min(30_000, 800 * 2 ** (i - 1) + Math.floor(Math.random() * 400));
+      }
       console.warn(
         `[bible-seed] retry ${i}/${attempts} after ${backoff}ms: ${url} (${e instanceof Error ? e.message : e})`,
       );
@@ -477,8 +508,12 @@ async function seedOne(
           `[bible-seed] failed ${code} ${bookDef.slug}:${ch}`,
           e instanceof Error ? e.message : e,
         );
-        // после таймаута — чуть подождать, не долбить источник
-        if (isTransientFetchError(e)) await sleep(Math.max(delayMs, 1500));
+        const httpStatus = (e as FetchHttpError).httpStatus;
+        if (httpStatus === 429) {
+          await sleep(Math.max(delayMs, 20_000));
+        } else if (isTransientFetchError(e)) {
+          await sleep(Math.max(delayMs, 1500));
+        }
       }
       if (delayMs > 0) await sleep(delayMs);
     }
@@ -490,12 +525,18 @@ async function seedOne(
   );
 }
 
+function defaultDelayMsForTranslation(code: string): number {
+  // azbyka / bolls.life отдают 429 при частых запросах
+  if (code === 'cassian') return 900;
+  if (code === 'desnitsky') return 1200;
+  return 200;
+}
+
 async function main(): Promise<void> {
   const booksFilter = parseArg('books');
   const maxChaptersRaw = parseArg('max-chapters');
   const maxChapters = maxChaptersRaw ? Math.max(1, Number(maxChaptersRaw) || 0) : null;
-  // free.bible / azbyka с некоторых VPS тормозят — пауза по умолчанию выше
-  const delayMs = Number(parseArg('delay-ms') ?? process.env.BIBLE_SEED_DELAY_MS ?? '200');
+  const delayOverride = parseArg('delay-ms') ?? process.env.BIBLE_SEED_DELAY_MS;
   const codes = resolveTranslationCodes(parseArg('translation'));
 
   const wanted = booksFilter
@@ -511,6 +552,8 @@ async function main(): Promise<void> {
 
   for (const code of codes) {
     try {
+      const delayMs = Number(delayOverride ?? defaultDelayMsForTranslation(code));
+      console.log(`[bible-seed] ${code} delay-ms=${delayMs}`);
       await seedOne(code, wanted, maxChapters, delayMs);
     } catch (e) {
       console.warn(`[bible-seed] skip ${code}:`, e);
