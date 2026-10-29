@@ -56,6 +56,11 @@ const DailyPrayerPage = lazy(async () => {
   return { default: m.DailyPrayerPage };
 });
 
+const BibleRoutes = lazy(async () => {
+  const m = await import('../features/bible/routes/BibleRoutes');
+  return { default: m.BibleRoutes };
+});
+
 const EventsCalendarPage = lazy(async () => {
   const m = await import('../features/calendar/pages/EventsCalendarPage');
   return { default: m.EventsCalendarPage };
@@ -438,6 +443,20 @@ export function AppRouter() {
                 <RequireSectionAccess sectionId="prayer">
                   <Suspense fallback={<RouteFallback />}>
                     <DailyPrayerPage />
+                  </Suspense>
+                </RequireSectionAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
+          }
+        />
+        <Route
+          path="bible/*"
+          element={
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireSectionAccess sectionId="bible">
+                  <Suspense fallback={<RouteFallback />}>
+                    <BibleRoutes />
                   </Suspense>
                 </RequireSectionAccess>
               </RequireFullMember>

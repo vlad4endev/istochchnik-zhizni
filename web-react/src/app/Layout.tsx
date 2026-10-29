@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSPrope
 import { createPortal } from 'react-dom';
 import type { IconType } from 'react-icons';
 import {
+  LuBookMarked,
   LuBookOpen,
   LuCalendarClock,
   LuChevronDown,
@@ -97,6 +98,7 @@ const NAV_ITEMS: NavItem[] = [
   /** Как News Feed в Facebook: газета. */
   { to: '/feed', label: 'Лента', Icon: LuNewspaper, sectionId: 'feed' },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
+  { to: '/bible', label: 'Библия', Icon: LuBookMarked, sectionId: 'bible' },
   { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
   { to: '/service-planner', label: 'Служение', Icon: LuCalendarDays, sectionId: 'service_planner' },
   { to: '/schedules', label: 'Расписание', Icon: LuCalendarClock, scheduleAccessOnly: true },
