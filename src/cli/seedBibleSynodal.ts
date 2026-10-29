@@ -12,6 +12,9 @@
  *   npx ts-node --transpile-only src/cli/seedBibleSynodal.ts
  *   npx ts-node --transpile-only src/cli/seedBibleSynodal.ts --translation=rbo
  *   npx ts-node --transpile-only src/cli/seedBibleSynodal.ts --translation=all --books=john,matthew --max-chapters=3
+ *   --force          перезалить главы, даже если стихи уже есть
+ *   --delay-ms=200   пауза между главами (или BIBLE_SEED_DELAY_MS)
+ * Повтор при ETIMEDOUT: BIBLE_SEED_FETCH_RETRIES=6, BIBLE_SEED_FETCH_TIMEOUT_MS=45000
  */
 import { loadEnvFromDotenv } from './loadEnv';
 
@@ -23,7 +26,7 @@ import {
   findTranslationDef,
   type BibleTranslationDef,
 } from '../bible/bibleTranslationCatalog';
-import { pool } from '../config/db';
+import { pool, query } from '../config/db';
 import {
   ensureCatalogTranslations,
   ensureTranslationBooks,
@@ -76,24 +79,97 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchJson(url: string): Promise<unknown> {
+function isTransientFetchError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  const cause = (err as Error & { cause?: { code?: string; message?: string } }).cause;
+  const code = cause?.code ?? '';
+  return (
+    /etimedout|econnreset|econnrefused|enotfound|eai_again|socket|network|fetch failed|terminated|aborted|timeout/i.test(
+      msg,
+    ) ||
+    /etimedout|econnreset|econnrefused|enotfound|eai_again|und_err|aborted/i.test(code) ||
+    /etimedout|econnreset|fetch failed|terminated/i.test(String(cause?.message ?? ''))
+  );
+}
+
+async function fetchOnce(
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number,
+): Promise<Response> {
   const res = await fetch(url, {
-    headers: { Accept: 'application/json', 'User-Agent': 'istochik-bible-seed/1.0' },
+    headers,
+    signal: AbortSignal.timeout(timeoutMs),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  return res.json();
+  if (!res.ok) {
+    const err = new Error(`HTTP ${res.status} for ${url}`);
+    (err as Error & { httpStatus?: number }).httpStatus = res.status;
+    throw err;
+  }
+  return res;
+}
+
+/** Ретраи при ETIMEDOUT / обрывах TLS — типично для free.bible / azbyka с VPS. */
+async function fetchWithRetry(
+  url: string,
+  headers: Record<string, string>,
+  as: 'json' | 'text',
+): Promise<unknown> {
+  const attempts = Math.max(1, Number(process.env.BIBLE_SEED_FETCH_RETRIES ?? 6));
+  const timeoutMs = Math.max(5_000, Number(process.env.BIBLE_SEED_FETCH_TIMEOUT_MS ?? 45_000));
+  let last: unknown;
+  for (let i = 1; i <= attempts; i += 1) {
+    try {
+      const res = await fetchOnce(url, headers, timeoutMs);
+      return as === 'json' ? res.json() : res.text();
+    } catch (e) {
+      last = e;
+      const httpStatus = (e as Error & { httpStatus?: number }).httpStatus;
+      const retryable =
+        isTransientFetchError(e) || httpStatus === 429 || httpStatus === 502 || httpStatus === 503;
+      if (!retryable || i === attempts) break;
+      const backoff = Math.min(30_000, 800 * 2 ** (i - 1) + Math.floor(Math.random() * 400));
+      console.warn(
+        `[bible-seed] retry ${i}/${attempts} after ${backoff}ms: ${url} (${e instanceof Error ? e.message : e})`,
+      );
+      await sleep(backoff);
+    }
+  }
+  throw last instanceof Error ? last : new Error(String(last));
+}
+
+async function fetchJson(url: string): Promise<unknown> {
+  return fetchWithRetry(
+    url,
+    { Accept: 'application/json', 'User-Agent': 'istochik-bible-seed/1.0' },
+    'json',
+  );
 }
 
 async function fetchText(url: string): Promise<string> {
-  const res = await fetch(url, {
-    headers: {
+  return (await fetchWithRetry(
+    url,
+    {
       Accept: 'text/html',
       'Accept-Encoding': 'identity',
       'User-Agent': 'Mozilla/5.0 (compatible; istochik-bible-seed/1.0)',
     },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  return res.text();
+    'text',
+  )) as string;
+}
+
+async function chapterVerseCount(
+  translationId: number,
+  bookId: number,
+  chapter: number,
+): Promise<number> {
+  const r = await query(
+    `SELECT COUNT(*)::text AS c FROM bible_verses
+     WHERE translation_id = $1 AND book_id = $2 AND chapter = $3`,
+    [translationId, bookId, chapter],
+  );
+  return Number(r.rows[0]?.c ?? 0);
 }
 
 function mapNumberedObject(obj: Record<string, unknown>): Verse[] {
@@ -248,8 +324,10 @@ async function seedOne(
   console.log(`[bible-seed] translation=${code} books=${defs.length} scope=${def.scope}`);
 
   let chaptersOk = 0;
+  let chaptersSkip = 0;
   let versesOk = 0;
   let chaptersFail = 0;
+  const force = process.argv.includes('--force');
 
   for (const bookDef of defs) {
     const book = books.get(bookDef.slug) as BibleBookRow | undefined;
@@ -257,16 +335,35 @@ async function seedOne(
     const chapterLimit = maxChapters != null ? Math.min(bookDef.chapters, maxChapters) : bookDef.chapters;
     for (let ch = 1; ch <= chapterLimit; ch += 1) {
       try {
+        if (!force) {
+          const existing = await chapterVerseCount(translation.id, book.id, ch);
+          if (existing > 0) {
+            chaptersSkip += 1;
+            continue;
+          }
+        }
         const verses = await fetcher(bookDef, ch);
+        if (!verses.length) {
+          chaptersFail += 1;
+          console.warn(`[bible-seed] empty ${code} ${bookDef.slug}:${ch}`);
+          continue;
+        }
         await upsertChapterVerses(translation.id, book.id, ch, verses);
         chaptersOk += 1;
         versesOk += verses.length;
         if (chaptersOk % 25 === 0) {
-          console.log(`[bible-seed] progress ${code} chapters=${chaptersOk} last=${bookDef.slug}:${ch}`);
+          console.log(
+            `[bible-seed] progress ${code} ok=${chaptersOk} skip=${chaptersSkip} fail=${chaptersFail} last=${bookDef.slug}:${ch}`,
+          );
         }
       } catch (e) {
         chaptersFail += 1;
-        console.warn(`[bible-seed] failed ${code} ${bookDef.slug}:${ch}`, e);
+        console.warn(
+          `[bible-seed] failed ${code} ${bookDef.slug}:${ch}`,
+          e instanceof Error ? e.message : e,
+        );
+        // после таймаута — чуть подождать, не долбить источник
+        if (isTransientFetchError(e)) await sleep(Math.max(delayMs, 1500));
       }
       if (delayMs > 0) await sleep(delayMs);
     }
@@ -274,7 +371,7 @@ async function seedOne(
 
   const total = await countVerses(translation.id);
   console.log(
-    `[bible-seed] done ${code} chapters=${chaptersOk} failed=${chaptersFail} verses_upserted=${versesOk} total_in_db=${total}`,
+    `[bible-seed] done ${code} ok=${chaptersOk} skip=${chaptersSkip} failed=${chaptersFail} verses_upserted=${versesOk} total_in_db=${total}`,
   );
 }
 
@@ -282,7 +379,8 @@ async function main(): Promise<void> {
   const booksFilter = parseArg('books');
   const maxChaptersRaw = parseArg('max-chapters');
   const maxChapters = maxChaptersRaw ? Math.max(1, Number(maxChaptersRaw) || 0) : null;
-  const delayMs = Number(parseArg('delay-ms') ?? '60');
+  // free.bible / azbyka с некоторых VPS тормозят — пауза по умолчанию выше
+  const delayMs = Number(parseArg('delay-ms') ?? process.env.BIBLE_SEED_DELAY_MS ?? '200');
   const codes = resolveTranslationCodes(parseArg('translation'));
 
   const wanted = booksFilter
