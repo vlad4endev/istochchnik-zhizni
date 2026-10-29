@@ -93,6 +93,8 @@ export interface BiblePlan {
   start_date: string | null;
   end_date: string | null;
   status: string;
+  days_total?: number;
+  days_completed?: number;
   days?: BiblePlanDay[];
 }
 
