@@ -44,7 +44,7 @@ export function BiblePlansListPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className={sectionHeroStickyClass}>
-        <PageHeader title="Планы чтения" />
+        <PageHeader title="Библия" />
       </div>
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-4 py-5">
         <Link to="/bible" className="text-sm font-semibold text-primary">
@@ -129,7 +129,7 @@ export function BiblePlanDetailPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className={sectionHeroStickyClass}>
-        <PageHeader title={plan?.title || 'План'} />
+        <PageHeader title="Библия" />
       </div>
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-3 px-4 py-5">
         <div className="flex items-center justify-between gap-2">
