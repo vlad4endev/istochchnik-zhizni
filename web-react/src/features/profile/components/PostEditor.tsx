@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { LuGripHorizontal, LuImagePlus, LuPlay, LuTrash2 } from 'react-icons/lu';
 
+import { inferMediaFileKind, type MediaFileKind } from '../../../lib/mediaFileKind';
 import { useProfileDraftStore } from '../profileDraftStore';
 import profileShell from '../profileShell.module.css';
 import igStyles from './PostEditor.module.css';
 
-type MediaKind = 'image' | 'video';
+type MediaKind = MediaFileKind;
 
 type MediaDraftItem = {
   id: string;
@@ -14,15 +15,6 @@ type MediaDraftItem = {
   kind: MediaKind;
   previewUrl: string;
 };
-
-function isSupportedFile(file: File): boolean {
-  const mt = (file.type || '').toLowerCase();
-  return mt.startsWith('image/') || mt.startsWith('video/');
-}
-
-function inferKind(file: File): MediaKind {
-  return (file.type || '').toLowerCase().startsWith('video/') ? 'video' : 'image';
-}
 
 function reorder<T>(list: T[], startIndex: number, endIndex: number): T[] {
   const result = [...list];
@@ -56,6 +48,7 @@ export function PostEditor(props: {
   const [items, setItems] = useState<MediaDraftItem[]>([]);
   const [activeIdx, setActiveIdx] = useState(0);
   const [caption, setCaption] = useState('');
+  const [pickHint, setPickHint] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
@@ -89,18 +82,39 @@ export function PostEditor(props: {
   const onPickFiles = (filesLike: FileList | File[] | null | undefined) => {
     if (!filesLike) return;
     const list = Array.from(filesLike);
-    const filtered = list.filter(isSupportedFile);
-    if (filtered.length === 0) return;
+    const supported: Array<{ file: File; kind: MediaKind }> = [];
+    let skippedUnsupported = 0;
+    for (const file of list) {
+      const kind = inferMediaFileKind(file);
+      if (!kind) {
+        skippedUnsupported += 1;
+        continue;
+      }
+      supported.push({ file, kind });
+    }
+    if (supported.length === 0) {
+      setPickHint(
+        skippedUnsupported > 0
+          ? 'Можно добавить только фото (JPEG, PNG, GIF, WebP) или видео (MP4, MOV, WebM)'
+          : null,
+      );
+      return;
+    }
+    setPickHint(
+      skippedUnsupported > 0
+        ? `Пропущено файлов: ${skippedUnsupported} (неподдерживаемый формат)`
+        : null,
+    );
 
     setItems((prev) => {
       const left = Math.max(0, maxFiles - prev.length);
-      const take = filtered.slice(0, left);
+      const take = supported.slice(0, left);
       const next: MediaDraftItem[] = [
         ...prev,
-        ...take.map((file) => ({
+        ...take.map(({ file, kind }) => ({
           id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
           file,
-          kind: inferKind(file),
+          kind,
           previewUrl: URL.createObjectURL(file),
         })),
       ];
@@ -210,7 +224,7 @@ export function PostEditor(props: {
             <input
               ref={inputRef}
               type="file"
-              accept="image/*,video/*"
+              accept="image/*,video/*,.mp4,.m4v,.mov,.webm,.3gp"
               multiple
               className="hidden"
               onChange={(e) => {
@@ -218,6 +232,11 @@ export function PostEditor(props: {
                 e.currentTarget.value = '';
               }}
             />
+            {pickHint ? (
+              <p className="mt-2 text-center text-xs font-semibold text-amber-700" role="status">
+                {pickHint}
+              </p>
+            ) : null}
 
             {items.length > 0 ? (
               <DragDropContext onDragEnd={onReorder}>
@@ -374,7 +393,7 @@ export function PostEditor(props: {
           <input
             ref={inputRef}
             type="file"
-            accept="image/*,video/*"
+            accept="image/*,video/*,.mp4,.m4v,.mov,.webm,.3gp"
             multiple
             className="hidden"
             onChange={(e) => {
@@ -399,11 +418,16 @@ export function PostEditor(props: {
             <div className="text-center">
               <p className="text-sm font-extrabold text-[color:var(--profile-text-body)]">Перетащи фото/видео сюда</p>
               <p className="mt-1 text-sm font-semibold text-[color:var(--profile-text-muted)]">
-                или нажми, чтобы выбрать файлы (до {maxFiles})
+                или нажми, чтобы выбрать файлы (до {maxFiles}, видео до 100 МБ)
               </p>
               {!canAddMore && (
                 <p className="mt-2 text-xs font-semibold text-amber-700">Достигнут лимит файлов</p>
               )}
+              {pickHint ? (
+                <p className="mt-2 text-xs font-semibold text-amber-700" role="status">
+                  {pickHint}
+                </p>
+              ) : null}
             </div>
           </div>
 

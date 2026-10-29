@@ -11,6 +11,7 @@ import {
   LuUser,
 } from 'react-icons/lu';
 
+import { looksLikeVideoUrl } from '../../../lib/mediaFileKind';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { memberNameFirstLast } from '../../profile/memberDisplayName';
 import type {
@@ -89,15 +90,19 @@ function ProfilePostMediaBlock({
       {items.map((m, idx) => {
         const url = resolvePublicUrl(m.url) ?? '';
         if (!url) return null;
-        if (m.type === 'video') {
+        const asVideo = m.type === 'video' || looksLikeVideoUrl(url);
+        if (asVideo) {
           return (
             <video
               key={`${m.url}-${idx}`}
-              className={styles.mediaItem}
+              className={`${styles.mediaItem} ${styles.mediaVideo}`}
               src={url}
               controls
               playsInline
               preload="metadata"
+              controlsList="nodownload"
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
             />
           );
         }
