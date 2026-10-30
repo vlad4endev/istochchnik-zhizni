@@ -202,16 +202,27 @@ export async function disconnectDriveOAuth(): Promise<void> {
   });
 }
 
+/** Origin без пробелов/переносов — Google OAuth отклоняет redirect URI с whitespace. */
+export function sanitizePublicOrigin(raw: string): string {
+  return raw.replace(/\s+/g, '').replace(/\/+$/, '');
+}
+
 export function resolveDriveOAuthRedirectUri(req?: {
   protocol?: string;
   headers?: { host?: string; 'x-forwarded-host'?: string | string[]; 'x-forwarded-proto'?: string | string[] };
 }): string {
-  const env = process.env.PUBLIC_WEB_ORIGIN?.trim().replace(/\/+$/, '');
+  const env = process.env.PUBLIC_WEB_ORIGIN
+    ? sanitizePublicOrigin(process.env.PUBLIC_WEB_ORIGIN)
+    : '';
   if (env) return `${env}/api/backup/drive/oauth/callback`;
   const xfHost = req?.headers?.['x-forwarded-host'];
-  const host = (Array.isArray(xfHost) ? xfHost[0] : xfHost) || req?.headers?.host || '';
+  const hostRaw = (Array.isArray(xfHost) ? xfHost[0] : xfHost) || req?.headers?.host || '';
+  const host = hostRaw.replace(/\s+/g, '');
   const xfProto = req?.headers?.['x-forwarded-proto'];
-  const proto = (Array.isArray(xfProto) ? xfProto[0] : xfProto) || req?.protocol || 'https';
+  const proto = ((Array.isArray(xfProto) ? xfProto[0] : xfProto) || req?.protocol || 'https').replace(
+    /\s+/g,
+    '',
+  );
   if (!host) return '/api/backup/drive/oauth/callback';
   return `${proto}://${host}/api/backup/drive/oauth/callback`;
 }
@@ -221,20 +232,21 @@ export async function beginDriveOAuth(redirectUri: string): Promise<{ auth_url: 
   if (!doc.client_id || !doc.client_secret) {
     throw new Error('drive_oauth_client_missing');
   }
+  const uri = redirectUri.replace(/\s+/g, '');
   const state = randomBytes(24).toString('hex');
   await saveDriveOAuthDocument({
     ...doc,
     state,
     state_exp: Date.now() + 15 * 60_000,
   });
-  const oauth2 = new google.auth.OAuth2(doc.client_id, doc.client_secret, redirectUri);
+  const oauth2 = new google.auth.OAuth2(doc.client_id, doc.client_secret, uri);
   const auth_url = oauth2.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
     scope: DRIVE_OAUTH_SCOPES,
     state,
   });
-  return { auth_url, redirect_uri: redirectUri };
+  return { auth_url, redirect_uri: uri };
 }
 
 export async function finishDriveOAuth(opts: {
@@ -249,7 +261,8 @@ export async function finishDriveOAuth(opts: {
   if (!doc.state || doc.state !== opts.state || !doc.state_exp || doc.state_exp < Date.now()) {
     throw new Error('drive_oauth_state_invalid');
   }
-  const oauth2 = new google.auth.OAuth2(doc.client_id, doc.client_secret, opts.redirectUri);
+  const redirectUri = opts.redirectUri.replace(/\s+/g, '');
+  const oauth2 = new google.auth.OAuth2(doc.client_id, doc.client_secret, redirectUri);
   const { tokens } = await oauth2.getToken(opts.code);
   if (!tokens.refresh_token) {
     throw new Error('drive_oauth_no_refresh_token');
