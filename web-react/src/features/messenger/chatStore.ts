@@ -28,6 +28,11 @@ import {
   type WsBatchRuntime,
   type WsInboundMessage,
 } from './chatStoreWsBatch';
+import {
+  decryptTextFromPeer,
+  encryptTextForPeer,
+  ensureLocalSessionKeypair,
+} from './sessionCrypto';
 
 /** Скрыть «ИИ помощник» для прихожан (клиентская защита поверх фильтра API). */
 function filterConversationsForAssistantAccess(
@@ -55,6 +60,36 @@ export function messengerDraftConversationPath(memberId: number): string {
   const id = Number(memberId);
   if (!Number.isFinite(id) || id <= 0) return '/messenger';
   return `/messenger?conversationId=${encodeURIComponent(`${DRAFT_PRIVATE_PREFIX}${id}`)}`;
+}
+
+async function decryptE2eeMessageContent(
+  msg: MessageWithSender,
+  peerPublicKey: string | null | undefined,
+  myMemberId: number | null,
+): Promise<MessageWithSender> {
+  if (!msg.is_e2ee || !msg.encrypted_payload || !peerPublicKey || myMemberId == null) return msg;
+  const plain = await decryptTextFromPeer(myMemberId, peerPublicKey, msg.encrypted_payload);
+  if (plain == null) return msg;
+  return { ...msg, content: plain };
+}
+
+async function decryptE2eeMessagesInConv(
+  conversationId: string,
+  messages: MessageWithSender[],
+  getState: () => {
+    conversations: ConversationListItem[];
+    currentMemberId: number | null;
+  },
+): Promise<MessageWithSender[]> {
+  const conv = getState().conversations.find((c) => String(c.id) === String(conversationId));
+  const peerKey = conv?.type === 'private' ? conv.other_member?.public_key : null;
+  const myId = getState().currentMemberId;
+  if (!peerKey || myId == null) return messages;
+  const out: MessageWithSender[] = [];
+  for (const m of messages) {
+    out.push(await decryptE2eeMessageContent(m, peerKey, myId));
+  }
+  return out;
 }
 
 /** Дебаунс markReadUpTo при потоке входящих WS-сообщений — иначе сотни параллельных POST → ERR_INSUFFICIENT_RESOURCES. */
@@ -223,6 +258,10 @@ export interface ChatState {
   loadConversations: (opts?: { force?: boolean }) => Promise<void>;
   setActiveConversation: (id: string | null) => void;
   openPrivateDraft: (peer: SearchMember) => void;
+  /** Открыть ЛС по Session-like Account ID (из QR / deep link). */
+  openPrivateDraftByAccountId: (accountId: string) => Promise<boolean>;
+  /** Создать/обновить локальный ключ и опубликовать public key + account id на сервер. */
+  ensureSessionIdentity: () => Promise<void>;
   /** Deep link `draft:{memberId}` без peer в store — подтянуть карточку и открыть черновик ЛС. */
   ensurePrivateDraftFromConversationId: (conversationId: string) => Promise<boolean>;
   loadMessages: (conversationId: string, older?: boolean, opts?: { force?: boolean }) => Promise<void>;
@@ -1252,6 +1291,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
+  ensureSessionIdentity: async () => {
+    const memberId = get().currentMemberId;
+    if (memberId == null || memberId <= 0) return;
+    try {
+      const kp = await ensureLocalSessionKeypair(memberId);
+      await api.ensureMessengerIdentity(kp.publicKeySpkiB64);
+    } catch (e) {
+      console.warn('[chatStore] ensureSessionIdentity failed:', e);
+    }
+  },
+
+  openPrivateDraftByAccountId: async (accountId) => {
+    const id = String(accountId || '').trim();
+    if (!id) return false;
+    try {
+      const peer = await api.resolveMessengerAccountId(id);
+      if (!peer) {
+        emitAppToast('Пользователь с таким ID не найден', 'error');
+        return false;
+      }
+      const existingConv = (get().conversations || EMPTY_ARRAY).find(
+        (c) => c.type === 'private' && c.other_member != null && Number(c.other_member.id) === peer.id,
+      );
+      if (existingConv) {
+        get().setActiveConversation(existingConv.id);
+        return true;
+      }
+      get().openPrivateDraft(peer);
+      return true;
+    } catch (e) {
+      console.error('[chatStore] openPrivateDraftByAccountId error:', e);
+      emitAppToast('Не удалось открыть чат по ID', 'error');
+      return false;
+    }
+  },
+
   ensurePrivateDraftFromConversationId: async (conversationId) => {
     const memberId = parseDraftPrivateMemberId(conversationId);
     if (memberId == null) return false;
@@ -1321,7 +1396,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const existing = state.messagesByConv[conversationId] || [];
       const beforeId = older && existing.length > 0 ? existing[0].id : undefined;
       const limit = 50;
-      const messages = await api.fetchMessages(conversationId, beforeId, limit);
+      const fetched = await api.fetchMessages(conversationId, beforeId, limit);
+      const messages = await decryptE2eeMessagesInConv(conversationId, fetched, get);
 
       set((s) => {
         const prev = s.messagesByConv[conversationId] || [];
@@ -1442,7 +1518,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return null;
     }
     try {
-      const created = await api.createPersonalChat(otherId);
+      const accountId =
+        typeof peer.messenger_account_id === 'string' && peer.messenger_account_id.trim()
+          ? peer.messenger_account_id.trim()
+          : undefined;
+      const created = await api.createPersonalChat(otherId, { otherAccountId: accountId });
       const realId = created.conversationId;
       const draftKey = conversationId;
       set((s) => {
@@ -1569,7 +1649,48 @@ export const useChatStore = create<ChatState>((set, get) => ({
     scheduleServerAckTimer(get, convId, tempId, clientMsgId);
 
     try {
-      const real = await api.sendMessage(convId, textForSend, serverReplyId, clientMsgId, pt, payload);
+      let contentToSend = textForSend;
+      let payloadToSend: api.MessagePayload = payload;
+      if (pt === 'text') {
+        const conv = get().conversations.find((c) => String(c.id) === String(convId));
+        const peerKey =
+          conv?.type === 'private' ? conv.other_member?.public_key : null;
+        const myId = get().currentMemberId;
+        const draftPeerKey =
+          get().privateDraftPeer && String(conversationId).startsWith(DRAFT_PRIVATE_PREFIX)
+            ? get().privateDraftPeer?.public_key
+            : null;
+        const effectivePeerKey = peerKey || draftPeerKey || null;
+        if (myId != null && effectivePeerKey && textForSend) {
+          const envelope = await encryptTextForPeer(myId, effectivePeerKey, textForSend);
+          if (envelope) {
+            contentToSend = '🔒';
+            const { text: _omitText, ...restPayload } = payload as { text?: unknown } & api.MessagePayload;
+            void _omitText;
+            payloadToSend = {
+              ...restPayload,
+              is_e2ee: true,
+              encrypted_payload: envelope,
+            };
+          }
+        }
+      }
+      const realRaw = await api.sendMessage(
+        convId,
+        contentToSend,
+        serverReplyId,
+        clientMsgId,
+        pt,
+        payloadToSend,
+      );
+      const peerKeyForDecrypt =
+        get().conversations.find((c) => String(c.id) === String(convId))?.other_member
+          ?.public_key ?? null;
+      const real = await decryptE2eeMessageContent(
+        { ...realRaw, content: textForSend },
+        peerKeyForDecrypt,
+        get().currentMemberId,
+      );
       clearServerAckTimer(convId, clientMsgId);
       // Replace temp with real and dedupe against WS echo by id/client_msg_id.
       set((s) => ({
@@ -2574,6 +2695,38 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   handleWsMessageBatch: (events) => {
     processMessengerWsBatch(events, set, createWsBatchRuntime(get, set));
+    // Async decrypt for Session-style E2EE private messages arriving over WS.
+    void (async () => {
+      const myId = get().currentMemberId;
+      if (myId == null) return;
+      for (const ev of events) {
+        if (ev.type !== 'message' && ev.type !== 'new_message') continue;
+        const payload = (ev.message ?? ev.payload ?? ev) as MessageWithSender;
+        if (!payload?.is_e2ee || !payload.encrypted_payload || !payload.id) continue;
+        const convId = String(payload.conversation_id ?? ev.conversationId ?? '');
+        if (!convId) continue;
+        const peerKey = get().conversations.find((c) => String(c.id) === convId)?.other_member
+          ?.public_key;
+        if (!peerKey) continue;
+        const plain = await decryptTextFromPeer(myId, peerKey, payload.encrypted_payload);
+        if (plain == null) continue;
+        set((s) => {
+          const list = s.messagesByConv[convId];
+          if (!list?.length) return s;
+          let changed = false;
+          const next = list.map((m) => {
+            if (String(m.id) !== String(payload.id) && String(m.client_msg_id || '') !== String(payload.client_msg_id || '')) {
+              return m;
+            }
+            if (!m.is_e2ee) return m;
+            changed = true;
+            return { ...m, content: plain };
+          });
+          if (!changed) return s;
+          return { messagesByConv: { ...s.messagesByConv, [convId]: next } };
+        });
+      }
+    })();
   },
 }));
 
