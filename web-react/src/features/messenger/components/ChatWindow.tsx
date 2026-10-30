@@ -20,6 +20,7 @@ import {
   isAccessRequestsMessengerChannel,
   isAssistantBotMessage,
   isAssistantMessengerChannel,
+  messengerComposerCanSend,
 } from '../messengerChannelKinds';
 import { useCallStore } from '../../calls/callStore';
 import { ActiveCallStoryChip } from '../../calls/ActiveCallStoryChip';
@@ -345,8 +346,11 @@ export function ChatWindow({
     setPresenceAnnouncement(next ? `${name} в сети` : `${name} оффлайн`);
   }, [isPrivatePeerOnline, conv]);
 
-  const canPostMessages =
-    !isAccessRequestsChannel && (isDraft || chatMeta?.my_effective_permissions?.can_send_messages !== false);
+  const canPostMessages = messengerComposerCanSend({
+    metadata: chatMeta?.metadata ?? conv?.metadata,
+    isDraft,
+    canSendMessages: chatMeta?.my_effective_permissions?.can_send_messages,
+  });
   /** В группах/каналах медиа может быть отключено отдельно от текста. У ИИ помощника — только текст. */
   const canSendAttachments =
     canPostMessages &&

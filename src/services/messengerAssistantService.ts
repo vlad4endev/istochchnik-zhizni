@@ -905,7 +905,19 @@ export async function ensureAssistantConversation(
       AND cp.left_at IS NULL
      WHERE c.type = 'channel'
        AND c.metadata->>'kind' = $2
-       AND (c.metadata->>'owner_member_id') = $3
+       AND (
+         (c.metadata->>'owner_member_id') = $3
+         OR (
+           COALESCE(c.metadata->>'owner_member_id', '') = ''
+           AND (
+             SELECT COUNT(*)::int
+             FROM conversation_participants cp2
+             WHERE cp2.conversation_id = c.id
+               AND cp2.left_at IS NULL
+           ) = 1
+         )
+       )
+     ORDER BY CASE WHEN (c.metadata->>'owner_member_id') = $3 THEN 0 ELSE 1 END, c.id
      LIMIT 1`,
     [memberId, MESSENGER_ASSISTANT_CHANNEL_KIND, String(memberId)],
   );
@@ -917,6 +929,11 @@ export async function ensureAssistantConversation(
       `UPDATE conversations SET title = $2 WHERE id = $1::bigint AND title IS DISTINCT FROM $2`,
       [conversationId, MESSENGER_ASSISTANT_CHANNEL_TITLE],
     );
+    try {
+      await repairAssistantComposeAccess(conversationId, memberId);
+    } catch (e) {
+      console.warn('[assistant] compose access repair failed:', e);
+    }
     try {
       await refreshAssistantWelcomeIfStale(conversationId);
     } catch (e) {
@@ -965,6 +982,53 @@ export async function ensureAssistantConversation(
   }
 
   return { conversationId: convId, created: true };
+}
+
+/**
+ * У части уже созданных чатов роль осталась member, а can_send_messages=false
+ * прячет поле ввода. Пишем только если значение реально сломано.
+ */
+async function repairAssistantComposeAccess(conversationId: string, memberId: number): Promise<void> {
+  await dbQuery(
+    `UPDATE conversation_participants
+     SET role = 'owner'
+     WHERE conversation_id = $1::bigint
+       AND member_id = $2
+       AND left_at IS NULL
+       AND role IS DISTINCT FROM 'owner'`,
+    [conversationId, memberId],
+  );
+  await dbQuery(
+    `UPDATE conversation_participants
+     SET permissions = COALESCE(permissions, '{}'::jsonb) || '{"can_send_messages": true}'::jsonb
+     WHERE conversation_id = $1::bigint
+       AND member_id = $2
+       AND left_at IS NULL
+       AND COALESCE(permissions->>'can_send_messages', 'true') = 'false'`,
+    [conversationId, memberId],
+  );
+  await dbQuery(
+    `UPDATE conversations
+     SET default_permissions =
+           COALESCE(default_permissions, '{}'::jsonb) || '{"can_send_messages": true}'::jsonb,
+         metadata = CASE
+           WHEN COALESCE(metadata->>'owner_member_id', '') = ''
+             THEN jsonb_set(
+               COALESCE(metadata, '{}'::jsonb),
+               '{owner_member_id}',
+               to_jsonb($2::text),
+               true
+             )
+           ELSE metadata
+         END
+     WHERE id = $1::bigint
+       AND metadata->>'kind' = $3
+       AND (
+         COALESCE(default_permissions->>'can_send_messages', 'true') = 'false'
+         OR COALESCE(metadata->>'owner_member_id', '') = ''
+       )`,
+    [conversationId, String(memberId), MESSENGER_ASSISTANT_CHANNEL_KIND],
+  );
 }
 
 function isAssistantOwnedBy(metadata: unknown, memberId: number): boolean {
