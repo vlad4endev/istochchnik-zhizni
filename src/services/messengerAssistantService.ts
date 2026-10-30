@@ -231,7 +231,7 @@ const ASSISTANT_WELCOME =
 
 const DEFAULT_ASSISTANT_SYSTEM_PROMPT = `Ты — христианский баптистский ассистент церкви «Источник жизни».
 
-Нужные выдержки уже вставлены в сообщение: «Текст Писания», «План чтения собеседника», «Данные из базы». Не вызывай функции и не пиши, что ищешь в базе — сразу отвечай.
+Нужные выдержки уже вставлены в сообщение: «Текст документа», «Текст Писания», «План чтения собеседника», «Данные из базы». Не вызывай функции и не пиши, что ищешь в базе — сразу отвечай. Если есть «Текст документа», отвечай по нему и не дописывай факты, которых в файле нет.
 
 Твоя цель — помогать пользователю с вопросами и задачами, опираясь на авторитет Библии, Иисуса Христа и Бога. Подстраивайся под запрос, давая чёткие, живые и душевные ответы со ссылками на Библию (книга, глава, стих). Если в контексте есть дословный синодальный текст — цитируй его, не подменяй своей формулировкой. Если написано, что стиха в базе нет — не выдумывай дословную цитату. Если данные взяты из книги в векторной базе, в конце укажи книгу и автора.
 
@@ -1291,14 +1291,33 @@ async function refreshAssistantWelcomeIfStale(conversationId: string): Promise<v
  * Обработать сообщение пользователя в чате «ИИ помощник» и ответить.
  * Вызывать fire-and-forget после успешной записи пользовательского сообщения.
  */
+function documentExcerptFromPayload(payload: unknown): string {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return '';
+  return String((payload as Record<string, unknown>).assistant_document_text ?? '').trim();
+}
+
+async function rememberAssistantDocumentExcerpt(messageId: string, excerpt: string): Promise<void> {
+  const text = excerpt.trim().slice(0, 12_000);
+  if (!text || !/^\d+$/.test(messageId)) return;
+  await dbQuery(
+    `UPDATE messages
+     SET payload = COALESCE(payload, '{}'::jsonb) || jsonb_build_object('assistant_document_text', $2::text)
+     WHERE id = $1::bigint`,
+    [messageId, text],
+  );
+}
+
 export async function replyAsAssistantBot(input: {
   conversationId: string;
   memberId: number;
   userMessageId: string;
   userText: string;
+  /** Уже извлечённый блок «Текст документа» для текущего вложения. */
+  documentContext?: string;
 }): Promise<void> {
-  const { conversationId, memberId, userMessageId, userText } = input;
-  const text = String(userText ?? '').trim();
+  const { conversationId, memberId, userMessageId } = input;
+  const documentContext = String(input.documentContext ?? '').trim();
+  const text = String(input.userText ?? '').trim() || (documentContext ? 'Разбери приложенный документ.' : '');
   if (!text) return;
 
   if (!(await memberCanAccessAssistant(memberId))) {
@@ -1320,6 +1339,14 @@ export async function replyAsAssistantBot(input: {
     return;
   }
 
+  if (documentContext) {
+    try {
+      await rememberAssistantDocumentExcerpt(userMessageId, documentContext);
+    } catch (e) {
+      console.warn('[assistant] remember document excerpt failed:', e);
+    }
+  }
+
   let history: MessageWithSender[] = [];
   try {
     history = await loadMessages(conversationId, memberId, 16, null);
@@ -1330,7 +1357,10 @@ export async function replyAsAssistantBot(input: {
   const chatHistory: ChatMessage[] = [];
   for (const m of history) {
     const body = String(m.content ?? '').trim();
-    if (!body || m.is_deleted) continue;
+    if (m.is_deleted) continue;
+    const earlierDocument =
+      String(m.id) === userMessageId ? '' : documentExcerptFromPayload(m.payload);
+    if (!body && !earlierDocument) continue;
     const isBot =
       m.sender_id == null ||
       (m.payload &&
@@ -1340,7 +1370,7 @@ export async function replyAsAssistantBot(input: {
             MESSENGER_ASSISTANT_CHANNEL_KIND));
     chatHistory.push({
       role: isBot ? 'assistant' : 'user',
-      content: body,
+      content: earlierDocument ? `${body}\n\n${earlierDocument}`.trim() : body,
     });
   }
 
@@ -1361,9 +1391,10 @@ export async function replyAsAssistantBot(input: {
 
   const focus = planAssistantContext(text);
   const parts: string[] = [];
-  if (focus.greeting) {
+  if (documentContext) parts.push(documentContext);
+  if (focus.greeting && !documentContext) {
     parts.push('Собеседник поздоровался. Ответь тепло и коротко, без справок из базы.');
-  } else {
+  } else if (!focus.greeting) {
     try {
       const scripture = await loadScriptureContext(focus);
       if (scripture) parts.push(scripture);
@@ -1421,7 +1452,8 @@ export async function replyAsAssistantBot(input: {
       `${text}\n\n` +
       `---\n` +
       speakerBlock +
-      `Ниже уже готовый контекст. Блок «Текст Писания» — синодальный текст: цитируй его дословно. ` +
+      `Ниже уже готовый контекст. Блок «Текст документа» — файл собеседника: отвечай по нему и не дописывай то, чего в файле нет. ` +
+      `«Текст Писания» — синодальный текст: цитируй его дословно. ` +
       `«План чтения собеседника» — только его планы. Дальше — данные церкви (события, расписание, участники). ` +
       `Не выдумывай стихи, даты и имена, которых в этих блоках нет.\n` +
       `${digest.slice(0, 12000)}`;
@@ -1463,6 +1495,7 @@ export async function replyAsAssistantBot(input: {
         content:
           speakerBlock +
           'Ниже уже готовый контекст, не пиши, что ищешь его.\n' +
+          '«Текст документа» — присланный файл: отвечай по нему и не дописывай факты, которых в тексте нет.\n' +
           '«Текст Писания» — синодальный текст: цитируй дословно и оформляй цитатой «> ». Если стиха нет — не выдумывай формулировку.\n' +
           '«План чтения собеседника» — только его планы и место остановки.\n' +
           '«Данные из базы» / строка «Сегодня» — события, служения, песни, расписание, молитвенный календарь, участники и роли. Не раскрывай личные переписки, телефоны и email.\n\n' +
