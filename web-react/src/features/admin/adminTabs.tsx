@@ -4,6 +4,7 @@ import {
   LuCalendarDays,
   LuCalendarRange,
   LuChartColumnBig,
+  LuGlobe,
   LuHardDrive,
   LuHistory,
   LuInbox,
@@ -25,6 +26,7 @@ export interface AdminTabConfig {
     | 'requests'
     | 'calendar'
     | 'events'
+    | 'site'
     | 'templates'
     | 'project'
     | 'sections'
@@ -78,6 +80,15 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     Icon: LuCalendarRange,
     short: 'Анонсы',
     description: 'Управление событиями, которые отображаются в дашборде.',
+  },
+  {
+    id: 'site',
+    label: 'Сайт церкви',
+    navLabel: 'Сайт',
+    Icon: LuGlobe,
+    short: 'Сайт',
+    description:
+      'Контент для внешнего сайта церкви (API): тексты, видимость блоков, фотогалерея. События и трансляция — из приложения.',
   },
   {
     id: 'templates',
@@ -213,6 +224,7 @@ export const ADMIN_SIDEBAR_GROUPS: readonly AdminSidebarGroup[] = [
     items: [
       { id: 'calendar' },
       { id: 'events' },
+      { id: 'site' },
       { id: 'templates' },
       { id: 'project' },
     ],
