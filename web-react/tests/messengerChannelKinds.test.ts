@@ -5,6 +5,7 @@ import {
   isAssistantMessengerChannel,
   isServicePlanMondayMailingPayload,
   messengerComposerCanSend,
+  shouldListAssistantConversation,
 } from '../src/features/messenger/messengerChannelKinds';
 
 describe('hasMessengerSenderId', () => {
@@ -60,6 +61,48 @@ describe('messengerComposerCanSend', () => {
       messengerComposerCanSend({
         metadata: { kind: 'access_requests' },
         canSendMessages: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('hides the assistant chat from parishioners, including by title', () => {
+    expect(
+      shouldListAssistantConversation({
+        metadata: assistant,
+        title: 'ИИ помощник',
+        canAccessAssistant: false,
+        memberId: 7,
+      }),
+    ).toBe(false);
+    expect(
+      shouldListAssistantConversation({
+        title: 'ИИ помощник',
+        canAccessAssistant: false,
+        memberId: 7,
+      }),
+    ).toBe(false);
+    expect(
+      shouldListAssistantConversation({
+        metadata: assistant,
+        canAccessAssistant: true,
+        memberId: 7,
+      }),
+    ).toBe(true);
+    expect(
+      shouldListAssistantConversation({
+        metadata: assistant,
+        canAccessAssistant: true,
+        memberId: 3,
+      }),
+    ).toBe(false);
+  });
+
+  it('hides the assistant composer when the role cannot open the chat', () => {
+    expect(
+      messengerComposerCanSend({
+        metadata: assistant,
+        canSendMessages: true,
+        assistantAllowed: false,
       }),
     ).toBe(false);
   });

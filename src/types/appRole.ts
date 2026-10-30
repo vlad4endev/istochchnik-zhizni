@@ -78,8 +78,9 @@ export function canModerateCatalog(role: AppRole): boolean {
 }
 
 /**
- * Чат «ИИ помощник»: доступен членам церкви и выше (member, minister, pastor, musician, editor, admin).
- * Роль «прихожанин» (guest) — без доступа, если нет другой роли.
+ * Чат «ИИ помощник» доступен всем ролям, кроме «прихожанин».
+ * Если среди ролей есть любая другая — чат есть. Пустой список сюда не приходит:
+ * `normalizeAppRoles` подставляет member. Явный пустой массив — не прихожанин.
  */
 export function canAccessMessengerAssistant(roles: readonly AppRole[] | AppRole | null | undefined): boolean {
   const list = Array.isArray(roles)
@@ -87,7 +88,7 @@ export function canAccessMessengerAssistant(roles: readonly AppRole[] | AppRole 
     : roles
       ? [roles]
       : [];
-  if (list.length === 0) return false;
+  if (list.length === 0) return true;
   return list.some((role) => role !== 'parishioner');
 }
 

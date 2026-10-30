@@ -539,18 +539,24 @@ export function isAppAdministratorSession(): boolean {
 }
 
 /**
- * Чат «ИИ помощник»: только члены церкви и выше.
- * Роль «прихожанин» без другой роли — без доступа (как на бэке `canAccessMessengerAssistant`).
+ * Чат «ИИ помощник» есть у всех ролей, кроме «прихожанин».
+ * Пустой набор ролей — не прихожанин (как `canAccessMessengerAssistant` на бэке).
  */
+export function canAccessMessengerAssistantRoles(
+  role: string | null | undefined,
+  roles: readonly string[] | null | undefined,
+): boolean {
+  const list = Array.isArray(roles) && roles.length > 0 ? roles : role ? [role] : [];
+  if (list.length === 0) return true;
+  return list.some((r) => normalizeRole(String(r)) !== 'parishioner');
+}
+
 export function canAccessMessengerAssistantSession(): boolean {
   try {
     const { role, roles } = useAuthStore.getState();
-    const list =
-      Array.isArray(roles) && roles.length > 0 ? roles : role ? [role] : [];
-    if (list.length === 0) return false;
-    return list.some((r) => r !== 'parishioner');
+    return canAccessMessengerAssistantRoles(role, roles);
   } catch {
-    return false;
+    return true;
   }
 }
 

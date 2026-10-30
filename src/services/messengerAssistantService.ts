@@ -893,7 +893,7 @@ export async function ensureAssistantConversation(
     throw new Error('Invalid memberId');
   }
   if (!(await memberCanAccessAssistant(memberId))) {
-    throw new Error('ИИ помощник доступен только членам церкви. Для прихожан чат недоступен.');
+    throw new Error('ИИ помощник недоступен для роли «прихожанин».');
   }
 
   const found = await dbQuery(

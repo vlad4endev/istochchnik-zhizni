@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 
-import { assistantMemberCanCompose, isAssistantChannelMetadata } from './assistantChatCompose';
+import { canAccessMessengerAssistant } from '../types/appRole';
+import {
+  assistantMemberCanCompose,
+  isAssistantChannelMetadata,
+  shouldExposeAssistantConversation,
+} from './assistantChatCompose';
 
 function main(): void {
   const own = { kind: 'assistant', owner_member_id: '42' };
@@ -44,7 +49,8 @@ function main(): void {
       memberId: 42,
       role: 'member',
     }),
-    false,
+    true,
+    'личный канал без owner_member_id всё равно можно писать',
   );
   assert.equal(
     assistantMemberCanCompose({
@@ -53,6 +59,68 @@ function main(): void {
       role: 'owner',
     }),
     false,
+  );
+
+  assert.equal(canAccessMessengerAssistant('member'), true);
+  assert.equal(canAccessMessengerAssistant('minister'), true);
+  assert.equal(canAccessMessengerAssistant('pastor'), true);
+  assert.equal(canAccessMessengerAssistant('musician'), true);
+  assert.equal(canAccessMessengerAssistant('editor'), true);
+  assert.equal(canAccessMessengerAssistant('admin'), true);
+  assert.equal(canAccessMessengerAssistant(['parishioner', 'member']), true);
+  assert.equal(canAccessMessengerAssistant('parishioner'), false);
+  assert.equal(canAccessMessengerAssistant(['parishioner']), false);
+  assert.equal(canAccessMessengerAssistant([]), true);
+
+  assert.equal(
+    shouldExposeAssistantConversation({
+      metadata: own,
+      title: 'ИИ помощник',
+      assistantAllowed: false,
+      memberId: 42,
+      role: 'owner',
+    }),
+    false,
+    'прихожанину чат не показываем',
+  );
+  assert.equal(
+    shouldExposeAssistantConversation({
+      metadata: undefined,
+      title: 'ИИ помощник',
+      assistantAllowed: false,
+      memberId: 42,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldExposeAssistantConversation({
+      metadata: own,
+      title: 'ИИ помощник',
+      assistantAllowed: true,
+      memberId: 42,
+      role: 'member',
+    }),
+    true,
+  );
+  assert.equal(
+    shouldExposeAssistantConversation({
+      metadata: own,
+      title: 'ИИ помощник',
+      assistantAllowed: true,
+      memberId: 7,
+      role: 'member',
+    }),
+    false,
+    'чужой ИИ-чат не показываем',
+  );
+  assert.equal(
+    shouldExposeAssistantConversation({
+      metadata: { kind: 'group' },
+      title: 'Молодёжь',
+      assistantAllowed: false,
+      memberId: 1,
+    }),
+    true,
   );
 
   console.log('assistantChatCompose (unit) ok');

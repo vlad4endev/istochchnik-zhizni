@@ -16,7 +16,13 @@ import { extractMentionMemberIdsFromText, normalizeMentionsToCanonical } from '.
 import { normalizeChatDisplayText } from './normalizeChatDisplayText';
 import { messengerAudioListPreview } from './chatAudio';
 import { inferMessengerPayloadType } from './payloadMedia';
-import { hasMessengerSenderId, isAssistantBotMessage, isAssistantMessengerChannel } from './messengerChannelKinds';
+import {
+  hasMessengerSenderId,
+  isAssistantBotMessage,
+  isAssistantMessengerChannel,
+  MESSENGER_ASSISTANT_CHANNEL_TITLE,
+  shouldListAssistantConversation,
+} from './messengerChannelKinds';
 import {
   applyNewMessage,
   dropConversationState,
@@ -29,12 +35,20 @@ import {
   type WsInboundMessage,
 } from './chatStoreWsBatch';
 
-/** Скрыть «ИИ помощник» для прихожан (клиентская защита поверх фильтра API). */
+/** Прихожанину «ИИ помощник» не показываем. Остальным — только свой чат. */
 function filterConversationsForAssistantAccess(
   conversations: ConversationListItem[],
 ): ConversationListItem[] {
-  if (canAccessMessengerAssistantSession()) return conversations;
-  return conversations.filter((c) => !isAssistantMessengerChannel(c.metadata));
+  const canAccessAssistant = canAccessMessengerAssistantSession();
+  const memberId = useAuthStore.getState().memberId;
+  return conversations.filter((c) =>
+    shouldListAssistantConversation({
+      metadata: c.metadata,
+      title: c.title,
+      canAccessAssistant,
+      memberId,
+    }),
+  );
 }
 
 /** Личный чат до первого сообщения: нет строки в БД, пока пользователь не отправит сообщение. */
@@ -1071,13 +1085,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   getConversationsForActiveTab: () => {
     const tab = get().activeTab;
-    const list = get().conversations || EMPTY_ARRAY;
+    const list = filterConversationsForAssistantAccess(get().conversations || EMPTY_ARRAY);
     if (tab === 'all') return list;
     return list.filter((c) => classifyConversation(c) === tab);
   },
 
   getUnreadForTab: (tab) => {
-    const list = get().conversations || EMPTY_ARRAY;
+    const list = filterConversationsForAssistantAccess(get().conversations || EMPTY_ARRAY);
     if (tab === 'all') return list.reduce((sum: number, c: any) => sum + (c.unread_count ?? 0), 0);
     return list.reduce((sum: number, c: any) => sum + (classifyConversation(c) === tab ? (c.unread_count ?? 0) : 0), 0);
   },
@@ -1205,9 +1219,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ─── Active conversation ──────────────────────────────────
 
   setActiveConversation: (id) => {
-    if (id && !isDraftPrivateConversationId(id) && !canAccessMessengerAssistantSession()) {
+    if (id && !isDraftPrivateConversationId(id)) {
       const existing = get().conversations.find((c) => String(c.id) === String(id));
-      if (existing && isAssistantMessengerChannel(existing.metadata)) {
+      if (
+        existing &&
+        !shouldListAssistantConversation({
+          metadata: existing.metadata,
+          title: existing.title,
+          canAccessAssistant: canAccessMessengerAssistantSession(),
+          memberId: useAuthStore.getState().memberId,
+        })
+      ) {
         return;
       }
     }
@@ -2502,7 +2524,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ globalSearchLoading: true });
     try {
       const results = await api.searchAllMessages(query, 30);
-      set({ globalSearchResults: results });
+      const visible = canAccessMessengerAssistantSession()
+        ? results
+        : results.filter(
+            (row) => String(row.conversationTitle ?? '').trim() !== MESSENGER_ASSISTANT_CHANNEL_TITLE,
+          );
+      set({ globalSearchResults: visible });
     } catch (e) {
       console.error('[chatStore] searchAllConversations error:', e);
       set({ globalSearchResults: [] });

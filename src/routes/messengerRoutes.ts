@@ -36,22 +36,14 @@ import {
   uploadStreamToPublicBucket,
 } from '../lib/supabaseStorage';
 import type { AppRole } from '../types/appRole';
-import { canAccessMessengerAssistant } from '../types/appRole';
+import { sessionCanAccessMessengerAssistant } from '../types/appRole';
+import { shouldExposeAssistantConversation } from '../utils/assistantChatCompose';
 
 type AuthReq = Request & {
   authUserId?: number;
   authUserRole?: AppRole;
   authUserRoles?: AppRole[];
 };
-
-function sessionRoles(req: Request): AppRole[] {
-  const r = req as AuthReq;
-  if (Array.isArray(r.authUserRoles) && r.authUserRoles.length > 0) {
-    return r.authUserRoles;
-  }
-  if (r.authUserRole) return [r.authUserRole];
-  return [];
-}
 
 const MESSENGER_ATTACHMENT_PROXY_MAX_BYTES = 25 * 1024 * 1024;
 
@@ -593,9 +585,9 @@ router.post('/studio/song-chat', async (req: Request, res: Response) => {
 /** POST /api/messenger/assistant — личный чат с «ИИ помощник». */
 router.post('/assistant', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
-  if (!canAccessMessengerAssistant(sessionRoles(req))) {
+  if (!sessionCanAccessMessengerAssistant(req)) {
     res.status(403).json({
-      error: 'ИИ помощник доступен только членам церкви. Для прихожан чат недоступен.',
+      error: 'ИИ помощник недоступен для роли «прихожанин».',
     });
     return;
   }
@@ -775,9 +767,9 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
 router.get('/conversations', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const startedAt = Date.now();
-  const assistantAllowed = canAccessMessengerAssistant(sessionRoles(req));
+  const assistantAllowed = sessionCanAccessMessengerAssistant(req);
   try {
-    // Гарантируем личный чат «ИИ помощник» только для членов церкви (не прихожан).
+    // Личный чат «ИИ помощник» — всем, кроме роли «прихожанин».
     if (assistantAllowed) {
       try {
         const ensured = await ensureAssistantConversation(userId);
@@ -787,9 +779,15 @@ router.get('/conversations', async (req: Request, res: Response) => {
       }
     }
     let list = await svc.listConversations(userId);
-    if (!assistantAllowed) {
-      list = list.filter((c) => !svc.isMessengerAssistantChannelMetadata(c.metadata));
-    }
+    list = list.filter((c) =>
+      shouldExposeAssistantConversation({
+        metadata: c.metadata,
+        title: c.title,
+        assistantAllowed,
+        memberId: userId,
+        role: c.my_role,
+      }),
+    );
     res.setHeader('Server-Timing', `listConversations;dur=${Date.now() - startedAt}`);
     res.json(list);
   } catch (e) {
@@ -1433,7 +1431,7 @@ router.post(
       }
 
       // ИИ помощник: ответ после успешной записи пользовательского текста.
-      if (pt === 'text' && canAccessMessengerAssistant(sessionRoles(req))) {
+      if (pt === 'text' && sessionCanAccessMessengerAssistant(req)) {
         void (async () => {
           try {
             const cmeta = await svc.getConversationMeta(convKey);
@@ -2002,7 +2000,7 @@ router.post('/conversations/:id/read', async (req: Request, res: Response) => {
 router.get('/unread-count', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   try {
-    const excludeAssistant = !canAccessMessengerAssistant(sessionRoles(req));
+    const excludeAssistant = !sessionCanAccessMessengerAssistant(req);
     const count = await svc.getTotalUnreadCount(userId, { excludeAssistant });
     res.json({ count });
   } catch (e) {
@@ -2203,7 +2201,9 @@ router.get('/search', async (req: Request, res: Response) => {
   }
 
   try {
-    const results = await svc.searchAllMessages(searchQuery, userId, limit);
+    const results = await svc.searchAllMessages(searchQuery, userId, limit, {
+      excludeAssistant: !sessionCanAccessMessengerAssistant(req),
+    });
     res.json(results);
   } catch (e) {
     console.error('[messenger] searchAllMessages error:', e);

@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as svc from '../services/messengerService';
-import { canAccessMessengerAssistant } from '../types/appRole';
+import { sessionCanAccessMessengerAssistant } from '../types/appRole';
 import type { ParticipantRole, PermissionsJson, PermissionKey } from '../types/messenger';
 import { assistantMemberCanCompose } from '../utils/assistantChatCompose';
 
@@ -179,16 +179,11 @@ export function checkChatPermission(action: Action) {
         svc.isMessengerAssistantChannelMetadata(meta.metadata) &&
         (action === 'view' || action === 'send_message' || action === 'send_media')
       ) {
-        const roles = Array.isArray(req.authUserRoles)
-          ? req.authUserRoles
-          : req.authUserRole
-            ? [req.authUserRole]
-            : [];
-        if (!canAccessMessengerAssistant(roles)) {
+        if (!sessionCanAccessMessengerAssistant(req)) {
           return deny(
             res,
             403,
-            'ИИ помощник доступен только членам церкви. Для прихожан чат недоступен.',
+            'ИИ помощник недоступен для роли «прихожанин».',
           );
         }
       }

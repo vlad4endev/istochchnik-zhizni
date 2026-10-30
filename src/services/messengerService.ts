@@ -29,6 +29,7 @@ import {
   shouldDeleteOwnedConversation,
 } from '../utils/groupChatCreate';
 import { isSystemChatKind, systemChatKindSqlList } from '../utils/adminMessengerChats';
+import { isAssistantChannelMetadata } from '../utils/assistantChatCompose';
 import { parsePositiveMemberIds } from '../utils/parsePositiveMemberIds';
 
 export { parsePositiveMemberIds };
@@ -3742,14 +3743,9 @@ export function isMessengerAccessRequestsChannelMetadata(metadata: unknown): boo
   );
 }
 
-/** Личный канал ИИ-ассистента «ИИ помощник». */
+/** Личный канал ИИ-ассистента «ИИ помощник». Понимает и jsonb-объект, и JSON-строку. */
 export function isMessengerAssistantChannelMetadata(metadata: unknown): boolean {
-  return (
-    metadata != null &&
-    typeof metadata === 'object' &&
-    !Array.isArray(metadata) &&
-    String((metadata as Record<string, unknown>).kind ?? '') === MESSENGER_ASSISTANT_CHANNEL_KIND
-  );
+  return isAssistantChannelMetadata(metadata);
 }
 
 /** Канал «Богослужение (планирование)». */
@@ -4631,10 +4627,17 @@ export async function searchMessages(
  * Global search across ALL conversations the user is a member of.
  * Returns messages with a `conversationTitle` field.
  */
+/** Прихожанам не показываем «ИИ помощник» ни по kind, ни по старому названию без metadata. */
+function assistantHiddenFromSearchSql(): string {
+  return `AND COALESCE(c.metadata->>'kind', '') <> '${MESSENGER_ASSISTANT_CHANNEL_KIND}'
+          AND COALESCE(c.title, '') IS DISTINCT FROM '${MESSENGER_ASSISTANT_CHANNEL_TITLE}'`;
+}
+
 export async function searchAllMessages(
   searchQuery: string,
   memberId: number,
   limit: number = 30,
+  opts?: { excludeAssistant?: boolean },
 ): Promise<Array<ReturnType<typeof mapMessageWithSender> & { conversationTitle: string }>> {
   const normalizedQuery = searchQuery.trim().toLowerCase();
   if (isMessageEncryptionEnabled()) {
@@ -4676,6 +4679,7 @@ export async function searchAllMessages(
       LEFT JOIN messages rm ON rm.id = msg.reply_to_message_id
       LEFT JOIN members rm_s ON rm_s.id = rm.sender_id
       WHERE msg.is_deleted = FALSE
+        ${opts?.excludeAssistant ? assistantHiddenFromSearchSql() : ''}
       ORDER BY msg.created_at DESC
       LIMIT $1
       `,
@@ -4734,6 +4738,7 @@ export async function searchAllMessages(
     LEFT JOIN members rm_s ON rm_s.id = rm.sender_id
     WHERE msg.is_deleted = FALSE
       AND msg.content ILIKE $1
+      ${opts?.excludeAssistant ? assistantHiddenFromSearchSql() : ''}
     ORDER BY msg.created_at DESC
     LIMIT $3
     `,

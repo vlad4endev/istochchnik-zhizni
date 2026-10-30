@@ -8,6 +8,8 @@
  */
 
 const ASSISTANT_CHANNEL_KIND = 'assistant';
+/** Совпадает с `MESSENGER_ASSISTANT_CHANNEL_TITLE` в messengerService. */
+const ASSISTANT_CHANNEL_TITLE = 'ИИ помощник';
 
 function channelMetadataRecord(metadata: unknown): Record<string, unknown> | null {
   if (metadata == null) return null;
@@ -45,6 +47,27 @@ export function assistantMemberCanCompose(input: {
   const role = String(input.role ?? '');
   if (role === 'owner' || role === 'admin') return true;
   const owner = String(rec.owner_member_id ?? '').trim();
-  if (!owner) return false;
+  // Владелец не записан — участник уже в своём личном канале (починка допишет id).
+  if (!owner) return true;
   return owner === String(input.memberId);
+}
+
+/** Показывать ли чат в списке. Прихожанину — никогда, даже если metadata пустая, а название осталось. */
+export function shouldExposeAssistantConversation(input: {
+  metadata: unknown;
+  title?: string | null;
+  assistantAllowed: boolean;
+  memberId: number;
+  role?: string | null;
+}): boolean {
+  const assistant = isAssistantChannelMetadata(input.metadata);
+  const titled = String(input.title ?? '').trim() === ASSISTANT_CHANNEL_TITLE;
+  if (!assistant && !titled) return true;
+  if (!input.assistantAllowed) return false;
+  if (!assistant) return true;
+  return assistantMemberCanCompose({
+    metadata: input.metadata,
+    memberId: input.memberId,
+    role: input.role ?? 'member',
+  });
 }
