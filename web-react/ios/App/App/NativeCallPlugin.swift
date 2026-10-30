@@ -11,6 +11,8 @@ public class NativeCallPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "isSupported", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openNotificationSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "endCall", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "startOngoing", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "stopOngoing", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "registerVoip", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "playRingtone", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopRingtone", returnType: CAPPluginReturnPromise),
@@ -46,6 +48,10 @@ public class NativeCallPlugin: CAPPlugin, CAPBridgedPlugin {
             self?.stopRingtoneInternal()
             self?.notifyListeners("ended", data: ["callId": callId])
         }
+        manager.onHangupRequested = { [weak self] callId in
+            self?.stopRingtoneInternal()
+            self?.notifyListeners("hangupRequested", data: ["callId": callId])
+        }
         manager.start()
     }
 
@@ -73,6 +79,33 @@ public class NativeCallPlugin: CAPPlugin, CAPBridgedPlugin {
             CallKitManager.shared.endCall(callId: callId)
         }
         call.resolve()
+    }
+
+    /// Hold AVAudioSession + CallKit while LiveKit is connected (screen lock / background).
+    @objc func startOngoing(_ call: CAPPluginCall) {
+        let callId = call.getString("callId") ?? ""
+        guard !callId.isEmpty else {
+            call.reject("callId required")
+            return
+        }
+        let peerName = call.getString("peerName") ?? "Собеседник"
+        let callType = call.getString("callType") ?? "audio"
+        let hasVideo = call.getBool("hasVideo") ?? (callType == "video")
+        stopRingtoneInternal()
+        DispatchQueue.main.async {
+            CallKitManager.shared.startOngoing(callId: callId, peerName: peerName, hasVideo: hasVideo)
+            call.resolve()
+        }
+    }
+
+    @objc func stopOngoing(_ call: CAPPluginCall) {
+        let callId = call.getString("callId") ?? ""
+        DispatchQueue.main.async {
+            if !callId.isEmpty {
+                CallKitManager.shared.endCall(callId: callId)
+            }
+            call.resolve()
+        }
     }
 
     @objc func registerVoip(_ call: CAPPluginCall) {

@@ -57,10 +57,12 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 import { BodyPortal } from '../../components/BodyPortal';
+import { isCapacitorNative } from '../../lib/nativeApp';
 import { emitAppToast } from '../../lib/uiFeedback';
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 import { subscribeRealtimeMessages } from '../../lib/realtimeWsClient';
 import { setTelegramCallPresentation } from '../../lib/telegramWebApp';
+import { NativeCall } from '../../plugins/nativeCall';
 import { absoluteAppUrlForShare } from '../pwa/pwaInAppPath';
 
 import {
@@ -82,6 +84,7 @@ import {
   connectionQualityStatusLabel,
   connectionQualityTone,
 } from './callConnectionQuality';
+import { shouldBeaconEndOnPageHide } from './callBackgroundPolicy';
 import { startCallRing, stopCallRing, unlockCallAudio } from './callRingtone';
 import { copyInviteShare, formatInviteShareText, shareInviteLink } from './inviteShare';
 import { MeetingAvatar } from './MeetingAvatar';
@@ -1996,14 +1999,27 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const hangup = useCallback(
     async (opts?: { endForAll?: boolean }) => {
       stopCallRing();
+      const callId = activeCall.callId;
       try {
         if (activeCall.status === 'calling' && activeCall.isInitiator && !opts?.endForAll) {
-          await cancelCall(activeCall.callId);
+          await cancelCall(callId);
         } else {
-          await endCall(activeCall.callId, opts?.endForAll ? { endForAll: true } : undefined);
+          await endCall(callId, opts?.endForAll ? { endForAll: true } : undefined);
         }
       } catch {
         /* ignore */
+      }
+      if (isCapacitorNative()) {
+        try {
+          await NativeCall.stopOngoing?.({ callId });
+        } catch {
+          /* ignore */
+        }
+        try {
+          await NativeCall.endCall({ callId });
+        } catch {
+          /* ignore */
+        }
       }
       closeCall();
     },
@@ -2016,12 +2032,21 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     }
   }, [activeCall.status]);
 
-  // Best-effort leave when the tab closes — only for 1:1 / cancel ring.
-  // Group meetings: no beacon /end — mobile background would kick host and kill the room.
+  // Best-effort leave when the *tab* really closes — only for web 1:1 outgoing ring.
+  // Capacitor + active LiveKit must NOT beacon: lock / app-switch fires pagehide.
   useEffect(() => {
     if (!needsLiveKit) return;
-    if (activeCall.callKind === 'group' && activeCall.status !== 'calling') return;
-    const onPageHide = () => {
+    const onPageHide = (ev: PageTransitionEvent) => {
+      if (
+        !shouldBeaconEndOnPageHide({
+          isNativeApp: isCapacitorNative(),
+          callKind: activeCall.callKind,
+          status: activeCall.status,
+          persisted: ev.persisted,
+        })
+      ) {
+        return;
+      }
       const body = JSON.stringify({});
       const url =
         activeCall.status === 'calling' && activeCall.isInitiator
