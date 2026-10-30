@@ -38,6 +38,11 @@ import {
 import type { AppRole } from '../types/appRole';
 import { sessionCanAccessMessengerAssistant } from '../types/appRole';
 import { shouldExposeAssistantConversation } from '../utils/assistantChatCompose';
+import {
+  classifyAssistantDocument,
+  extractAssistantDocumentText,
+  formatAssistantDocumentBlock,
+} from '../utils/assistantDocumentText';
 
 type AuthReq = Request & {
   authUserId?: number;
@@ -1334,6 +1339,18 @@ router.get('/conversations/:id/messages', async (req: Request, res: Response) =>
   }
 });
 
+/** Документ в чат «ИИ помощник» можно отправить даже если в чате выключены медиа. */
+async function assistantConversationAcceptsDocument(
+  conversationId: string,
+  payload: Record<string, unknown>,
+): Promise<boolean> {
+  const meta = await svc.getConversationMeta(conversationId);
+  if (!meta || !svc.isMessengerAssistantChannelMetadata(meta.metadata)) return false;
+  const name = String(payload.name ?? payload.filename ?? '');
+  const mime = String(payload.mimeType ?? payload.mimetype ?? '');
+  return classifyAssistantDocument(name, mime) != null;
+}
+
 /** POST /api/messenger/conversations/:id/messages { content, replyToMessageId? } */
 router.post(
   '/conversations/:id/messages',
@@ -1366,8 +1383,14 @@ router.post(
         req.chatAuth &&
         !req.chatAuth.effective.can_send_media
       ) {
-        res.status(403).json({ error: 'Отправка медиа и файлов отключена в этом чате' });
-        return;
+        const assistantDocument =
+          pt === 'file' &&
+          sessionCanAccessMessengerAssistant(req) &&
+          (await assistantConversationAcceptsDocument(convId, pl));
+        if (!assistantDocument) {
+          res.status(403).json({ error: 'Отправка медиа и файлов отключена в этом чате' });
+          return;
+        }
       }
       const safeClientMsgId =
         typeof clientMsgId === 'string' && clientMsgId.trim()
@@ -1430,17 +1453,38 @@ router.post(
         return;
       }
 
-      // ИИ помощник: ответ после успешной записи пользовательского текста.
-      if (pt === 'text' && sessionCanAccessMessengerAssistant(req)) {
+      // ИИ помощник: текст или документ (PDF, Word, таблица, презентация).
+      if (sessionCanAccessMessengerAssistant(req) && (pt === 'text' || pt === 'file')) {
         void (async () => {
           try {
             const cmeta = await svc.getConversationMeta(convKey);
             if (!svc.isMessengerAssistantChannelMetadata(cmeta?.metadata)) return;
+            let documentContext = '';
+            if (pt === 'file') {
+              const item = await svc.getMessageAttachmentForMember(String(message.id), userId);
+              if (!item || classifyAssistantDocument(item.fileName, item.mimeType) == null) return;
+              try {
+                const loaded = await loadMessengerAttachmentBytesForProxy(item);
+                documentContext = await extractAssistantDocumentText({
+                  buffer: loaded.buffer,
+                  fileName: item.fileName,
+                  mimeType: item.mimeType || loaded.contentType,
+                });
+              } catch (readErr) {
+                console.warn('[assistant] document read failed:', readErr);
+                documentContext = formatAssistantDocumentBlock({
+                  fileName: item.fileName,
+                  text: '',
+                  warning: 'Файл не удалось прочитать. Не выдумывай содержание.',
+                });
+              }
+            }
             await replyAsAssistantBot({
               conversationId: convKey,
               memberId: userId,
               userMessageId: String(message.id),
               userText: String(message.content ?? content ?? ''),
+              documentContext,
             });
           } catch (assistantErr) {
             console.warn('[messenger] assistant reply failed:', assistantErr);
