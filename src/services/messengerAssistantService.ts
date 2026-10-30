@@ -35,8 +35,18 @@ import {
   MESSENGER_ASSISTANT_CHANNEL_TITLE,
 } from './messengerService';
 import { sendPushNotification } from './pushService';
+import { bibleRefToPath, type ParsedBibleRef } from '../bible/bibleRefParser';
+import { findBookDefBySlug } from '../bible/bibleBookCatalog';
+import { getChapterVerses, getReadingProgress, searchVerses } from './bibleCatalogService';
+import { getPlan as getBibleReadingPlan, listPlans as listBibleReadingPlans } from './biblePlansService';
 import { listPlans } from './servicePlannerService';
 import { listPublishedSongs } from './songService';
+import {
+  clipAssistantTurn,
+  planAssistantContext,
+  type AssistantChurchTopic,
+  type AssistantContextPlan,
+} from '../utils/assistantQuestionFocus';
 import { listSundayScheduleSlots } from './sundayScheduleSlots';
 import { canAccessMessengerAssistant, normalizeAppRoles, type AppRole } from '../types/appRole';
 import { parseMinistryRoles } from '../utils/ministryRoleMatch';
@@ -215,16 +225,15 @@ async function loadAssistantSpeakerProfile(memberId: number): Promise<string | n
 
 const ASSISTANT_WELCOME =
   'Мир вам! Я — христианский помощник.\n\n' +
-  'Могу поговорить о вере и Библии, помочь с планом чтения Писания, ответить на богословские и жизненные вопросы, ' +
-  'а также подсказать по событиям, проповедям, песням, расписанию, молитвенному календарю, нуждам, участникам и кто чем занимается в церкви.\n\n' +
-  'Напишите свой вопрос. ' +
-  'Я опираюсь на Священное Писание и не вижу личные переписки.';
+  'Могу разобрать вопрос о вере и процитировать стих из Синодального перевода, подсказать ваш план чтения ' +
+  'и где вы остановились, а также ответить по событиям, проповедям, песням, расписанию, молитвенному календарю и служениям.\n\n' +
+  'Напишите вопрос или ссылку, например «Ин 3:16». Я не вижу личные переписки и не меняю данные в приложении.';
 
-const DEFAULT_ASSISTANT_SYSTEM_PROMPT = `Ты — христианский баптистский ассистент церкви «Источник жизни», знающий Библию (все книги, главы, стихи), баптистскую доктрину и проверенную христианскую литературу из векторной базы данных.
+const DEFAULT_ASSISTANT_SYSTEM_PROMPT = `Ты — христианский баптистский ассистент церкви «Источник жизни».
 
-В первую очередь при каждом обращении вызывай функцию searchDatabase.
+Нужные выдержки уже вставлены в сообщение: «Текст Писания», «План чтения собеседника», «Данные из базы». Не вызывай функции и не пиши, что ищешь в базе — сразу отвечай.
 
-Твоя цель — помогать пользователю с вопросами и задачами, опираясь на авторитет Библии, Иисуса Христа и Бога. Подстраивайся под запрос, давая чёткие, живые и душевные ответы со ссылками на Библию (книга, глава, стих). Если данные взяты из книги, загруженной в векторную базу, в конце укажи книгу и автора.
+Твоя цель — помогать пользователю с вопросами и задачами, опираясь на авторитет Библии, Иисуса Христа и Бога. Подстраивайся под запрос, давая чёткие, живые и душевные ответы со ссылками на Библию (книга, глава, стих). Если в контексте есть дословный синодальный текст — цитируй его, не подменяй своей формулировкой. Если написано, что стиха в базе нет — не выдумывай дословную цитату. Если данные взяты из книги в векторной базе, в конце укажи книгу и автора.
 
 Если в сообщении есть блок «Контекст программы церкви» / «Данные из базы» — для вопросов о событиях, служениях, проповедях, песнях, расписании, молитвенном календаре, нуждах, участниках и их ролях (кто чем занимается: служение, направление, роли в приложении) опирайся только на эти факты; не выдумывай даты, имена, должности и детали, которых там нет.
 
@@ -252,7 +261,7 @@ const DEFAULT_ASSISTANT_SYSTEM_PROMPT = `Ты — христианский ба�
 - К советам добавляй: «Поговори с Андреем Жигуновым или с лидером малой группы, которую ты посещаешь».
 - Если вопрос сложный: «Я могу ответить только на основании Библии и данных. Давайте уточним?»
 - Только библейские истины, без домыслов.
-- По вопросам веры, доктрины и литературы ты ограничен данными из searchDatabase (и Священным Писанием); не выдумывай источники.
+- По вопросам веры не выдумывай дословные стихи и названия книг, которых нет в блоке «Текст Писания» или в RAG. Смысл можно объяснить своими словами и честно сказать, если точной строки нет.
 - Не раскрывай пароли, телефоны, email, логины и личные переписки. Имена и молитвенные нужды из контекста программы церкви — можно.
 - Не изменяй данные в приложении: только консультируй.
 - Очередь молитвы в церкви называй только «молитвенный календарь». Не используй формулировку «молитвенный цикл».
@@ -418,14 +427,197 @@ async function loadPlanSermonAndSongLines(planIds: number[]): Promise<Map<number
   return out;
 }
 
-async function buildChurchContextDigest(userQuestion: string): Promise<string> {
+const ASSISTANT_BIBLE_TRANSLATION = 'synodal';
+
+function formatBibleRefLabel(ref: AssistantContextPlan['refs'][number]): string {
+  const verse =
+    ref.verseStart == null
+      ? ''
+      : ref.verseEnd != null && ref.verseEnd !== ref.verseStart
+        ? `:${ref.verseStart}-${ref.verseEnd}`
+        : `:${ref.verseStart}`;
+  return `${ref.book.nameRu} ${ref.chapter}${verse}`;
+}
+
+async function loadScriptureContext(plan: AssistantContextPlan): Promise<string> {
+  if (!plan.scripture || (plan.refs.length === 0 && !plan.verseQuery)) return '';
+  const blocks: string[] = [];
+  for (const ref of plan.refs) {
+    try {
+      const chapter = await getChapterVerses(
+        ASSISTANT_BIBLE_TRANSLATION,
+        ref.book.slug,
+        ref.chapter,
+      );
+      if (!chapter || chapter.verses.length === 0) {
+        blocks.push(
+          `${formatBibleRefLabel(ref)}: текста в базе нет. Не выдумывай дословную цитату.`,
+        );
+        continue;
+      }
+      const start = ref.verseStart ?? 1;
+      const end = ref.verseEnd ?? ref.verseStart ?? Math.min(chapter.verses.length, 8);
+      const shown = chapter.verses
+        .filter((v) => {
+          const n = Number(v.verse);
+          return n >= start && n <= end;
+        })
+        .slice(0, 24);
+      const lines = shown.map((v) => `${v.verse} ${String(v.text ?? '').trim()}`);
+      const longer =
+        ref.verseStart == null && chapter.verses.length > shown.length
+          ? `\n(в главе ${chapter.verses.length} стихов, здесь ${shown[0]?.verse ?? start}–${shown[shown.length - 1]?.verse ?? end})`
+          : '';
+      blocks.push(
+        `${formatBibleRefLabel(ref)}\n${lines.join('\n')}${longer}\nСсылка: ${bibleRefToPath(ref, ASSISTANT_BIBLE_TRANSLATION)}`,
+      );
+    } catch (e) {
+      console.warn('[assistant] scripture lookup failed:', e);
+      blocks.push(`${formatBibleRefLabel(ref)}: не удалось прочитать текст. Не выдумывай дословную цитату.`);
+    }
+  }
+  if (plan.refs.length === 0 && plan.verseQuery) {
+    try {
+      let hits = await searchVerses(ASSISTANT_BIBLE_TRANSLATION, plan.verseQuery, 8);
+      if (hits.length === 0) {
+        const words = plan.verseQuery
+          .split(/\s+/)
+          .map((w) => w.replace(/[^\p{L}\p{N}-]/gu, ''))
+          .filter((w) => w.length >= 5)
+          .slice(0, 2);
+        const seen = new Set<string>();
+        const merged: typeof hits = [];
+        for (const word of words) {
+          const part = await searchVerses(ASSISTANT_BIBLE_TRANSLATION, word, 4);
+          for (const hit of part) {
+            const key = `${hit.book_slug}:${hit.chapter}:${hit.verse}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            merged.push(hit);
+            if (merged.length >= 8) break;
+          }
+          if (merged.length >= 8) break;
+        }
+        hits = merged;
+      }
+      if (hits.length === 0) {
+        blocks.push(
+          `Поиск «${plan.verseQuery}» в синодальном тексте ничего не дал. Не выдумывай дословную цитату.`,
+        );
+      } else {
+        blocks.push(
+          hits
+            .map((hit) => {
+              const label = `${hit.book_name} ${hit.chapter}:${hit.verse}`;
+              const link = `/bible/${ASSISTANT_BIBLE_TRANSLATION}/${hit.book_slug}/${hit.chapter}?v=${hit.verse}`;
+              return `${label}\n${hit.verse} ${String(hit.text ?? '').trim().slice(0, 400)}\nСсылка: ${link}`;
+            })
+            .join('\n\n'),
+        );
+      }
+    } catch (e) {
+      console.warn('[assistant] verse search failed:', e);
+      blocks.push('Поиск по тексту Писания не удался. Не выдумывай дословную цитату.');
+    }
+  }
+  if (blocks.length === 0) return '';
+  return (
+    'Текст Писания (Синодальный перевод). Цитируй эти строки дословно, каждую как цитату Markdown «> ». Не подменяй формулировку.\n\n' +
+    blocks.join('\n\n')
+  );
+}
+
+async function loadReadingContext(memberId: number): Promise<string> {
+  const lines: string[] = [];
+  try {
+    const progress = await getReadingProgress(memberId, ASSISTANT_BIBLE_TRANSLATION);
+    lines.push(
+      progress
+        ? `Место остановки в читалке: ${progress.book_name} ${progress.chapter}:${progress.verse}.`
+        : 'Место остановки в читалке не сохранено.',
+    );
+  } catch (e) {
+    console.warn('[assistant] reading progress failed:', e);
+  }
+  try {
+    const plans = await listBibleReadingPlans(memberId);
+    const open = plans.filter((p) => p.status !== 'archived' && p.status !== 'completed');
+    const picked = (open.length > 0 ? open : plans).slice(0, 2);
+    if (picked.length === 0) {
+      lines.push('Планов чтения нет.');
+    }
+    let nextPassageRefs: ParsedBibleRef[] | null = null;
+    for (const brief of picked) {
+      const full = await getBibleReadingPlan(memberId, brief.id);
+      if (!full) continue;
+      const days = full.days ?? [];
+      const next = days.find((d) => !d.completed_at);
+      const refs = (next?.refs_json ?? [])
+        .map((r) => {
+          const book = findBookDefBySlug(r.book_slug);
+          const name = book?.shortNameRu ?? r.book_slug;
+          const verses =
+            r.verse_start != null
+              ? `:${r.verse_start}${r.verse_end != null && r.verse_end !== r.verse_start ? `-${r.verse_end}` : ''}`
+              : '';
+          return `${name} ${r.chapter}${verses}`;
+        })
+        .join(', ');
+      const done = full.days_completed ?? days.filter((d) => d.completed_at).length;
+      const total = full.days_total ?? days.length;
+      lines.push(
+        `План «${full.title}» (${done}/${total}, статус ${full.status}). ` +
+          (next
+            ? `Следующий день ${next.day_index}${next.label ? ` «${next.label}»` : ''}: ${refs || 'отрывки не указаны'}.`
+            : 'Все дни отмечены.'),
+      );
+      if (!nextPassageRefs && next) {
+        const parsed: ParsedBibleRef[] = [];
+        for (const ref of (next.refs_json ?? []).slice(0, 2)) {
+          const book = findBookDefBySlug(ref.book_slug);
+          if (!book) continue;
+          parsed.push({
+            book,
+            chapter: ref.chapter,
+            verseStart: ref.verse_start ?? null,
+            verseEnd: ref.verse_end ?? null,
+          });
+        }
+        if (parsed.length > 0) nextPassageRefs = parsed;
+      }
+    }
+    if (nextPassageRefs) {
+      const passage = await loadScriptureContext({
+        greeting: false,
+        scripture: true,
+        reading: true,
+        church: [],
+        refs: nextPassageRefs,
+        verseQuery: null,
+      });
+      if (passage) lines.push(passage);
+    }
+  } catch (e) {
+    console.warn('[assistant] reading plans failed:', e);
+    lines.push('План чтения загрузить не удалось.');
+  }
+  if (lines.length === 0) return '';
+  return `План чтения собеседника (только его данные, не выдумывай другие отрывки):\n${lines.join('\n')}`;
+}
+
+async function buildChurchContextDigest(
+  userQuestion: string,
+  topics: ReadonlySet<AssistantChurchTopic>,
+): Promise<string> {
   const today = ymdLocal(new Date());
   const horizon = addDaysYmd(today, 28);
   const searchHint = extractSearchHints(userQuestion);
+  const want = (topic: AssistantChurchTopic) => topics.has(topic);
 
   const sections: string[] = [`Сегодня: ${today}`];
+  if (topics.size === 0) return sections[0]!;
 
-  try {
+  if (want('events')) try {
     const events = await listActiveEvents();
     const upcoming = events
       .filter((e) => e.event_date >= today && e.event_date <= horizon)
@@ -452,7 +644,7 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
     sections.push('События: не удалось загрузить.');
   }
 
-  try {
+  if (want('services')) try {
     const plans = await listPlans({ from: today, to: horizon });
     const recent = [...plans]
       .sort((a, b) => String(a.service_date).localeCompare(String(b.service_date)))
@@ -493,7 +685,7 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
     sections.push('Программы служения: не удалось загрузить.');
   }
 
-  try {
+  if (want('services')) try {
     const slots = await listSundayScheduleSlots({ from: today, to: horizon });
     const ids = slots.flatMap((s) =>
       [s.leader_member_id, s.preacher_member_id].filter((x): x is number => x != null),
@@ -518,7 +710,7 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
     console.warn('[assistant] sunday schedule context failed:', e);
   }
 
-  try {
+  if (want('schedule')) try {
     const from = new Date(`${today}T00:00:00`);
     const to = new Date(`${horizon}T00:00:00`);
     const [musicEvents, mediaEvents] = await Promise.all([
@@ -550,7 +742,7 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
   /** Участники, встречающиеся в календаре — для подгрузки истории нужд. */
   const prayerMemberIds = new Set<number>();
 
-  try {
+  if (want('prayer')) try {
     const prayerDays: string[] = [];
     for (let i = 0; i <= 13; i += 1) {
       const day = addDaysYmd(today, i);
@@ -595,7 +787,7 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
     sections.push('Молитвенный календарь: не удалось загрузить.');
   }
 
-  try {
+  if (want('prayer')) try {
     const [currentWeek, nextWeek] = await Promise.all([
       getMemberAssignmentsForWeek('current'),
       getMemberAssignmentsForWeek('next'),
@@ -621,7 +813,7 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
     sections.push('План молитвы (недели): не удалось загрузить.');
   }
 
-  try {
+  if (want('prayer')) try {
     const historyLines: string[] = [];
     const ids = [...prayerMemberIds].slice(0, 18);
     const nameMap = await resolveMemberNames(ids);
@@ -655,7 +847,7 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
     sections.push('История молитвенных нужд: не удалось загрузить.');
   }
 
-  try {
+  if (want('prayer')) try {
     const roster = await getPrayerCycleRosterSnapshot(today);
     const rosterLines = roster.roster.slice(0, 80).map((entry, idx) => {
       const name = memberLabel(entry) || `id ${entry.id}`;
@@ -671,7 +863,7 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
     sections.push('Молитвенный календарь (очередь участников): не удалось загрузить.');
   }
 
-  try {
+  if (want('people')) try {
     const usersRes = await dbQuery(
       `SELECT id, first_name, last_name, name, app_role, app_roles, ministry_role, ministry_direction,
               in_prayer_cycle, is_collection_coordinator, is_active
@@ -698,7 +890,7 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
     sections.push('Участники церкви: не удалось загрузить.');
   }
 
-  try {
+  if (want('songs')) try {
     const filters = searchHint ? { q: searchHint } : undefined;
     const songs = await listPublishedSongs(null, filters);
     const slice = songs.slice(0, searchHint ? 15 : 12);
@@ -712,14 +904,21 @@ async function buildChurchContextDigest(userQuestion: string): Promise<string> {
       sections.push(
         `Песенник${searchHint ? ` (поиск «${searchHint}»)` : ' (фрагмент каталога)'}:\n` +
           slice
-            .map((s) => {
+            .map((s, index) => {
               const num = s.song_number != null ? `#${s.song_number} ` : '';
               const key = s.default_key ? ` [${s.default_key}]` : '';
               const tags =
                 Array.isArray(s.tags) && s.tags.length
                   ? ` теги: ${s.tags.slice(0, 4).join(', ')}`
                   : '';
-              return `- ${num}${s.title}${key}${tags}`;
+              const lyric =
+                searchHint && index < 3
+                  ? String(s.content ?? '')
+                      .replace(/\s+/g, ' ')
+                      .trim()
+                      .slice(0, 420)
+                  : '';
+              return `- ${num}${s.title}${key}${tags}${lyric ? `\n  текст: ${lyric}` : ''}`;
             })
             .join('\n'),
       );
@@ -1070,7 +1269,8 @@ async function refreshAssistantWelcomeIfStale(conversationId: string): Promise<v
     current.includes('Ассистенот') ||
     current.includes('Примеры вопросов') ||
     current.includes('Я — ИИ помощник.') ||
-    current.includes('Подскажу по событиям, проповедям');
+    current.includes('Подскажу по событиям, проповедям') ||
+    current.includes('Могу поговорить о вере и Библии, помочь с планом чтения');
   if (!looksStale) return;
 
   const contentForDb = encryptMessageText(ASSISTANT_WELCOME);
@@ -1140,25 +1340,52 @@ export async function replyAsAssistantBot(input: {
             MESSENGER_ASSISTANT_CHANNEL_KIND));
     chatHistory.push({
       role: isBot ? 'assistant' : 'user',
-      content: body.slice(0, 2000),
+      content: body,
     });
   }
 
   if (
     chatHistory.length === 0 ||
     chatHistory[chatHistory.length - 1]?.role !== 'user' ||
-    chatHistory[chatHistory.length - 1]?.content !== text.slice(0, 2000)
+    chatHistory[chatHistory.length - 1]?.content !== text
   ) {
-    chatHistory.push({ role: 'user', content: text.slice(0, 2000) });
+    chatHistory.push({ role: 'user', content: text });
   }
+  const clippedHistory = chatHistory.map((turn, index) => ({
+    ...turn,
+    content: clipAssistantTurn(
+      typeof turn.content === 'string' ? turn.content : '',
+      chatHistory.length - 1 - index,
+    ),
+  }));
 
-  let digest = '';
-  try {
-    digest = await buildChurchContextDigest(text);
-  } catch (e) {
-    console.warn('[assistant] context digest failed:', e);
-    digest = 'Контекст базы временно недоступен.';
+  const focus = planAssistantContext(text);
+  const parts: string[] = [];
+  if (focus.greeting) {
+    parts.push('Собеседник поздоровался. Ответь тепло и коротко, без справок из базы.');
+  } else {
+    try {
+      const scripture = await loadScriptureContext(focus);
+      if (scripture) parts.push(scripture);
+    } catch (e) {
+      console.warn('[assistant] scripture context failed:', e);
+    }
+    if (focus.reading) {
+      try {
+        const reading = await loadReadingContext(memberId);
+        if (reading) parts.push(reading);
+      } catch (e) {
+        console.warn('[assistant] reading context failed:', e);
+      }
+    }
+    try {
+      parts.push(await buildChurchContextDigest(text, new Set(focus.church)));
+    } catch (e) {
+      console.warn('[assistant] context digest failed:', e);
+      parts.push('Контекст базы временно недоступен.');
+    }
   }
+  const digest = parts.filter(Boolean).join('\n\n');
 
   let speakerProfile: string | null = null;
   try {
@@ -1194,7 +1421,9 @@ export async function replyAsAssistantBot(input: {
       `${text}\n\n` +
       `---\n` +
       speakerBlock +
-      `Контекст программы церкви (события, расписание, участники и их роли/служения — кто чем занимается; для веры/Библии опирайся на Писание и RAG):\n` +
+      `Ниже уже готовый контекст. Блок «Текст Писания» — синодальный текст: цитируй его дословно. ` +
+      `«План чтения собеседника» — только его планы. Дальше — данные церкви (события, расписание, участники). ` +
+      `Не выдумывай стихи, даты и имена, которых в этих блоках нет.\n` +
       `${digest.slice(0, 12000)}`;
     try {
       const gpt = await gptunnelAssistantChat({
@@ -1233,11 +1462,13 @@ export async function replyAsAssistantBot(input: {
         role: 'system',
         content:
           speakerBlock +
-          'Данные из базы (только чтение): события, служения, песни, расписание, участники и их роли (кто чем занимается). Не раскрывай личные переписки, телефоны и email.\n' +
-          'Для вопросов веры, Библии и доктрины опирайся на Священное Писание и протестантское учение — этот блок не ограничивает библейские ответы.\n\n' +
+          'Ниже уже готовый контекст, не пиши, что ищешь его.\n' +
+          '«Текст Писания» — синодальный текст: цитируй дословно и оформляй цитатой «> ». Если стиха нет — не выдумывай формулировку.\n' +
+          '«План чтения собеседника» — только его планы и место остановки.\n' +
+          '«Данные из базы» / строка «Сегодня» — события, служения, песни, расписание, молитвенный календарь, участники и роли. Не раскрывай личные переписки, телефоны и email.\n\n' +
           digest,
       },
-      ...chatHistory,
+      ...clippedHistory,
     ];
 
     try {
