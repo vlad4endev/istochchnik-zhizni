@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   LuCloud,
+  LuCopy,
   LuDatabase,
   LuDownload,
   LuFileText,
@@ -39,6 +40,7 @@ import {
   type BackupSettings,
   type BackupTelegramTarget,
 } from './api';
+import { driveJsOrigin, driveOAuthRedirectUri } from './driveOAuthUri';
 import { BodyPortal } from '../../components/BodyPortal';
 
 const Q_SETTINGS = ['admin', 'backup', 'settings'] as const;
@@ -167,6 +169,44 @@ function ComponentChips({ components }: { components: BackupComponentsSummary | 
           {c.label}
         </span>
       ))}
+    </div>
+  );
+}
+
+function CopyableUri({ value, onCopied }: { value: string; onCopied?: () => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const clean = value.replace(/\s+/g, '');
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(clean);
+      onCopied?.();
+    } catch {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.select();
+    }
+  }
+
+  return (
+    <div className="mt-1 flex min-w-0 items-stretch gap-1">
+      <input
+        ref={inputRef}
+        readOnly
+        value={clean}
+        className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 font-mono text-[11px] text-stone-800 outline-none"
+        onFocus={(e) => e.currentTarget.select()}
+        aria-label={clean}
+      />
+      <button
+        type="button"
+        className={btnSecondary('shrink-0 px-2 py-1 text-xs')}
+        onClick={() => void copy()}
+      >
+        <LuCopy className="h-3.5 w-3.5" />
+        Копировать
+      </button>
     </div>
   );
 }
@@ -716,16 +756,24 @@ export function BackupSettingsSection() {
                     : 'Не настроено: OAuth-клиент + «Войти через Google», либо общий диск Workspace.'}
         </div>
 
-        <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs text-stone-500">
+        <ol className="mt-3 list-decimal space-y-2 pl-5 text-xs text-stone-500">
           <li>
             Google Cloud → APIs &amp; Services → Credentials → Create OAuth client ID → Web
             application
           </li>
           <li>
-            В Authorized redirect URIs добавьте:{' '}
-            <code className="break-all text-stone-700">
-              {draft.drive_oauth_redirect_uri || 'https://ваш-домен/api/backup/drive/oauth/callback'}
-            </code>
+            Authorized JavaScript origins:{' '}
+            <CopyableUri
+              value={driveJsOrigin(draft.drive_oauth_redirect_uri)}
+              onCopied={() => setNote({ type: 'ok', text: 'JavaScript origin скопирован.' })}
+            />
+          </li>
+          <li>
+            Authorized redirect URIs — вставьте одной строкой, без пробелов и переносов:
+            <CopyableUri
+              value={driveOAuthRedirectUri(draft.drive_oauth_redirect_uri)}
+              onCopied={() => setNote({ type: 'ok', text: 'Redirect URI скопирован без пробелов.' })}
+            />
           </li>
           <li>Скачайте JSON клиента, вставьте ниже, сохраните, нажмите «Войти через Google»</li>
           <li>Укажите ID папки Drive (это должна быть папка того же Google-аккаунта)</li>
