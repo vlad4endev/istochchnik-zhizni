@@ -78,6 +78,48 @@ export function canModerateCatalog(role: AppRole): boolean {
 }
 
 /**
+ * Чистый прихожанин (гость): только роль parishioner, без member и выше.
+ * Пустой список ролей не считаем прихожанином (нормализация сессии даёт member).
+ */
+export function isParishionerOnly(roles: readonly AppRole[] | AppRole | null | undefined): boolean {
+  const list = Array.isArray(roles)
+    ? roles.map((role) => normalizeAppRole(role))
+    : roles
+      ? [normalizeAppRole(roles)]
+      : [];
+  if (list.length === 0) return false;
+  return list.every((role) => role === 'parishioner');
+}
+
+/**
+ * Зритель каталога мессенджера — прихожанин.
+ * Основная роль `app_role` важнее массива: у старых записей `app_roles` часто
+ * остаётся `{member}`, хотя `app_role` уже `parishioner`.
+ */
+export function isParishionerDirectoryViewer(
+  primaryRole: unknown,
+  roles: readonly AppRole[] | AppRole | null | undefined,
+): boolean {
+  if (typeof primaryRole === 'string' && primaryRole.trim() && normalizeAppRole(primaryRole) === 'parishioner') {
+    return true;
+  }
+  return isParishionerOnly(roles);
+}
+
+/**
+ * В каталоге мессенджера (новый чат / поиск / добавление) прихожанин
+ * видит только других прихожан — не членов церкви и роли выше.
+ */
+export function isMessengerDirectoryVisibleToViewer(
+  viewerRoles: readonly AppRole[] | AppRole | null | undefined,
+  targetRoles: readonly AppRole[] | AppRole | null | undefined,
+  viewerPrimaryRole?: unknown,
+): boolean {
+  if (!isParishionerDirectoryViewer(viewerPrimaryRole, viewerRoles)) return true;
+  return isParishionerOnly(targetRoles);
+}
+
+/**
  * Чат «ИИ помощник» доступен всем ролям, кроме «прихожанин».
  * Если среди ролей есть любая другая — чат есть. Пустой список сюда не приходит:
  * `normalizeAppRoles` подставляет member. Явный пустой массив — не прихожанин.

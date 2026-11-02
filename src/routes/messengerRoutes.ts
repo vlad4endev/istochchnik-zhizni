@@ -36,7 +36,11 @@ import {
   uploadStreamToPublicBucket,
 } from '../lib/supabaseStorage';
 import type { AppRole } from '../types/appRole';
-import { sessionCanAccessMessengerAssistant } from '../types/appRole';
+import {
+  isParishionerDirectoryViewer,
+  rolesOfSession,
+  sessionCanAccessMessengerAssistant,
+} from '../types/appRole';
 import { shouldExposeAssistantConversation } from '../utils/assistantChatCompose';
 
 type AuthReq = Request & {
@@ -44,6 +48,32 @@ type AuthReq = Request & {
   authUserRole?: AppRole;
   authUserRoles?: AppRole[];
 };
+
+function directoryViewerOptions(req: Request): {
+  viewerRoles: AppRole[];
+  viewerPrimaryRole: AppRole | undefined;
+} {
+  const r = req as AuthReq;
+  return { viewerRoles: rolesOfSession(r), viewerPrimaryRole: r.authUserRole };
+}
+
+function viewerIsParishioner(req: Request): boolean {
+  const opts = directoryViewerOptions(req);
+  return isParishionerDirectoryViewer(opts.viewerPrimaryRole, opts.viewerRoles);
+}
+
+/** Прихожанин не видит в списках чата членов церкви и роли выше. Себя оставляем. */
+async function filterRowsForParishionerViewer<T>(
+  req: Request,
+  rows: T[],
+  memberIdOf: (row: T) => number,
+): Promise<T[]> {
+  if (!viewerIsParishioner(req)) return rows;
+  const viewerId = (req as AuthReq).authUserId ?? 0;
+  const visible = await svc.parishionerVisibleMemberIdSet(rows.map(memberIdOf));
+  if (viewerId > 0) visible.add(viewerId);
+  return rows.filter((row) => visible.has(memberIdOf(row)));
+}
 
 const MESSENGER_ATTACHMENT_PROXY_MAX_BYTES = 25 * 1024 * 1024;
 
@@ -805,6 +835,20 @@ router.post('/conversations/personal', async (req: Request, res: Response) => {
     return;
   }
   try {
+    // Уже существующий ЛС можно открыть; новый — только если собеседник виден в каталоге.
+    const existingId = await svc.findExistingPersonalConversation(userId, otherMemberId);
+    if (!existingId) {
+      const viewer = directoryViewerOptions(req);
+      const canSee = await svc.canViewerSeeMemberInMessengerDirectory(
+        viewer.viewerRoles,
+        otherMemberId,
+        viewer.viewerPrimaryRole,
+      );
+      if (!canSee) {
+        res.status(403).json({ error: 'Нельзя начать чат с этим пользователем' });
+        return;
+      }
+    }
     const convId = await svc.findOrCreatePersonalConversation(userId, otherMemberId);
     // Ensure both members join the WS room
     ensureMemberInRoom(userId, convId);
@@ -836,7 +880,24 @@ router.post('/conversations/group', async (req: Request, res: Response) => {
   // Accept number | numeric string — strict typeof==='number' previously dropped all string ids.
   const ids = svc.parsePositiveMemberIds(memberIds).filter((id) => id !== userId);
   try {
-    const created = await svc.createGroupConversation(userId, title, convType, ids);
+    const viewer = directoryViewerOptions(req);
+    const visibleIds: number[] = [];
+    for (const id of ids) {
+      if (
+        await svc.canViewerSeeMemberInMessengerDirectory(
+          viewer.viewerRoles,
+          id,
+          viewer.viewerPrimaryRole,
+        )
+      ) {
+        visibleIds.push(id);
+      }
+    }
+    if (ids.length > 0 && visibleIds.length === 0) {
+      res.status(403).json({ error: 'Нельзя добавить выбранных пользователей' });
+      return;
+    }
+    const created = await svc.createGroupConversation(userId, title, convType, visibleIds);
     const convKey = String(created.conversationId);
     const notifiedIds = created.addedMemberIds;
 
@@ -916,7 +977,12 @@ router.get('/conversations/:id/participants', async (req: Request, res: Response
       return;
     }
     const participants = await svc.getConversationParticipants(convId);
-    res.json(participants);
+    const visible = await filterRowsForParishionerViewer(
+      req,
+      participants as Array<{ member_id?: unknown }>,
+      (row) => Number(row.member_id),
+    );
+    res.json(visible);
   } catch (e) {
     console.error('[messenger] getParticipants error:', e);
     res.status(500).json({ error: 'Failed to load participants' });
@@ -973,8 +1039,9 @@ router.get('/conversations/:id/members', checkChatPermission('view'), async (req
   const convId = String(req.params.id);
   try {
     const members = await svc.listConversationMembers(convId);
+    const visible = await filterRowsForParishionerViewer(req, members, (m) => m.member_id);
     res.json(
-      members.map((m) => ({
+      visible.map((m) => ({
         ...m,
         is_online: isMemberOnline(m.member_id),
       })),
@@ -1145,6 +1212,17 @@ router.post(
       const alreadyActive = await svc.isMemberInConversation(String(convId), parsed);
       if (alreadyActive) {
         res.json({ ok: true, alreadyMember: true });
+        return;
+      }
+
+      const viewer = directoryViewerOptions(req);
+      const canSee = await svc.canViewerSeeMemberInMessengerDirectory(
+        viewer.viewerRoles,
+        parsed,
+        viewer.viewerPrimaryRole,
+      );
+      if (!canSee) {
+        res.status(403).json({ error: 'Нельзя добавить этого пользователя' });
         return;
       }
 
@@ -2124,14 +2202,15 @@ router.get('/members/search', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const q = (req.query.q as string || '').trim();
   const offset = parsePageOffset(req.query.offset);
+  const viewer = directoryViewerOptions(req);
   try {
     if (q.length < 1) {
       const limit = parsePageLimit(req.query.limit, MEMBER_LIST_DEFAULT_LIMIT, MEMBER_LIST_MAX_LIMIT);
-      const members = await svc.listRegisteredMembers(userId, limit, offset);
+      const members = await svc.listRegisteredMembers(userId, limit, offset, viewer);
       res.json(members.map((m) => ({ ...m, is_online: isMemberOnline(m.id) })));
     } else {
       const limit = parsePageLimit(req.query.limit, MEMBER_SEARCH_DEFAULT_LIMIT, MEMBER_SEARCH_MAX_LIMIT);
-      const members = await svc.searchMembers(q, userId, limit, offset);
+      const members = await svc.searchMembers(q, userId, limit, offset, viewer);
       res.json(members.map((m) => ({ ...m, is_online: isMemberOnline(m.id) })));
     }
   } catch (e) {
@@ -2149,7 +2228,7 @@ router.get('/members/:memberId', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const member = await svc.getMemberByIdForMessenger(memberId, userId);
+    const member = await svc.getMemberByIdForMessenger(memberId, userId, directoryViewerOptions(req));
     if (!member) {
       res.status(404).json({ error: 'Member not found' });
       return;
