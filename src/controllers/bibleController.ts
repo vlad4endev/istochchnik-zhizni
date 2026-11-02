@@ -5,6 +5,7 @@ import { buildInternalBibleUrl, parseBibleRef } from '../bible/bibleRefParser';
 import {
   getChapterVerses,
   getReadingProgress,
+  getVerseOfDay,
   listBooks,
   listTranslations,
   saveReadingProgress,
@@ -90,6 +91,21 @@ export async function bibleChapterGet(req: Request, res: Response): Promise<void
   } catch (e) {
     console.error('[bible] chapter:', e);
     res.status(500).json({ error: 'Не удалось загрузить главу' });
+  }
+}
+
+export async function bibleVerseOfDayGet(req: Request, res: Response): Promise<void> {
+  try {
+    const translation = String(req.query.translation ?? 'synodal');
+    const verse = await getVerseOfDay(translation);
+    if (!verse) {
+      res.status(404).json({ error: 'Стих дня недоступен' });
+      return;
+    }
+    res.json(verse);
+  } catch (e) {
+    console.error('[bible] verse of day:', e);
+    res.status(500).json({ error: 'Не удалось загрузить стих дня' });
   }
 }
 

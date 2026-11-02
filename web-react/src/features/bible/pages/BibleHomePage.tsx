@@ -11,6 +11,7 @@ import {
   fetchBibleProgress,
   fetchBiblePlans,
   fetchBibleTranslations,
+  fetchBibleVerseOfDay,
   searchBible,
 } from '../api';
 import { parseBibleRef } from '../bibleRef';
@@ -24,6 +25,7 @@ import {
 } from '../bibleUiMeta';
 import { BooksSheet } from '../components/BooksSheet';
 import { TranslationPicker } from '../components/TranslationPicker';
+import { VerseOfDayCard } from '../components/VerseOfDayCard';
 
 export function BibleHomePage() {
   const navigate = useNavigate();
@@ -59,6 +61,11 @@ export function BibleHomePage() {
   const plansQ = useQuery({
     queryKey: ['bible', 'plans'],
     queryFn: fetchBiblePlans,
+  });
+  const verseOfDayQ = useQuery({
+    queryKey: ['bible', 'verse-of-day', translation],
+    queryFn: () => fetchBibleVerseOfDay(translation),
+    enabled: hasText,
   });
   const searchQ = useQuery({
     queryKey: ['bible', 'search', translation, submitted],
@@ -144,6 +151,14 @@ export function BibleHomePage() {
             </p>
             <p className="mt-0.5 text-sm text-white/80">{progress.book_name}</p>
           </button>
+        ) : null}
+
+        {verseOfDayQ.data ? (
+          <VerseOfDayCard
+            verse={verseOfDayQ.data}
+            translation={translation}
+            translationTitle={currentMeta?.title || translation}
+          />
         ) : null}
 
         <form onSubmit={onSearchSubmit} className="relative mt-4">

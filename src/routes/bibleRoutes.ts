@@ -24,6 +24,7 @@ import {
   bibleProgressPut,
   bibleSearch,
   bibleTranslationsList,
+  bibleVerseOfDayGet,
 } from '../controllers/bibleController';
 import { requireAuthSession } from '../middleware/authSession';
 
@@ -34,6 +35,7 @@ router.use(requireAuthSession);
 router.get('/translations', bibleTranslationsList);
 router.get('/books', bibleBooksList);
 router.get('/search', bibleSearch);
+router.get('/verse-of-day', bibleVerseOfDayGet);
 router.get('/parse-ref', bibleParseRef);
 router.get('/chapter/:translation/:book/:chapter', bibleChapterGet);
 router.get('/audio/:translation/:book/:chapter', bibleAudioGet);

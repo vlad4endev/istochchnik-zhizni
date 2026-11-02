@@ -110,6 +110,29 @@ export interface BibleCommentary {
   body: string;
 }
 
+export interface BibleVerseOfDay {
+  book_slug: string;
+  book_name: string;
+  short_name: string;
+  chapter: number;
+  verse_start: number;
+  verse_end: number;
+  text: string;
+  date: string;
+}
+
+export async function fetchBibleVerseOfDay(translation = 'synodal'): Promise<BibleVerseOfDay | null> {
+  try {
+    const { data } = await apiClient.get<BibleVerseOfDay>('/api/bible/verse-of-day', {
+      params: { translation },
+      silentErrorToast: true,
+    });
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 export type BibleHighlightColor = 'yellow' | 'green' | 'blue' | 'pink';
 
 export interface BibleHighlight {
