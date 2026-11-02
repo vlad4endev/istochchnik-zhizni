@@ -7,6 +7,8 @@ import {
   LuChevronRight,
   LuMessageSquareText,
   LuNotebookPen,
+  LuShare2,
+  LuType,
   LuX,
 } from 'react-icons/lu';
 
@@ -14,6 +16,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
 import { emitAppToast } from '@/lib/uiFeedback';
 import { useAuthStore } from '@/features/auth/authStore';
+import { shareBibleVerse } from '../shareVerse';
 
 import {
   createBibleNote,
@@ -27,11 +30,16 @@ import {
   saveBibleProgress,
 } from '../api';
 import {
+  BIBLE_READER_SPACING_LINE_HEIGHT,
   pushRecentBible,
+  readReaderSettings,
   readRecentBible,
+  writeReaderSettings,
   writeStoredTranslation,
+  type BibleReaderSettings,
 } from '../bibleUiMeta';
 import { BooksSheet } from '../components/BooksSheet';
+import { ReaderSettingsSheet } from '../components/ReaderSettingsSheet';
 import { SyncedAudioPlayer } from '../components/SyncedAudioPlayer';
 import { TranslationPicker } from '../components/TranslationPicker';
 
@@ -52,10 +60,19 @@ export function BibleReaderPage() {
   const [activeAudioVerse, setActiveAudioVerse] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [booksOpen, setBooksOpen] = useState(false);
+  const [readerSettingsOpen, setReaderSettingsOpen] = useState(false);
+  const [readerSettings, setReaderSettings] = useState<BibleReaderSettings>(() =>
+    readReaderSettings(),
+  );
   const [recent, setRecent] = useState(() => readRecentBible());
   const [noteBody, setNoteBody] = useState('');
   const [churchBody, setChurchBody] = useState('');
   const verseRefs = useRef<Map<number, HTMLElement>>(new Map());
+
+  function updateReaderSettings(next: BibleReaderSettings) {
+    setReaderSettings(next);
+    writeReaderSettings(next);
+  }
 
   const translationsQ = useQuery({
     queryKey: ['bible', 'translations'],
@@ -205,6 +222,14 @@ export function BibleReaderPage() {
             </span>
             <LuChevronDown size={16} className="shrink-0 text-stone-400" />
           </button>
+          <button
+            type="button"
+            aria-label="Настройки чтения"
+            onClick={() => setReaderSettingsOpen(true)}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-700"
+          >
+            <LuType size={16} />
+          </button>
         </div>
 
         {audioQ.data ? (
@@ -223,7 +248,16 @@ export function BibleReaderPage() {
             <code>npm run bible:seed -- --translation={translationMeta?.code || translation}</code>
           </p>
         ) : (
-          <div className="space-y-1 pb-36 font-serif text-[17px] leading-8 text-stone-900 sm:text-[18px] lg:pb-24">
+          <div
+            className={[
+              'space-y-1 pb-36 text-stone-900 lg:pb-24',
+              readerSettings.font === 'sans' ? 'font-sans' : 'font-serif',
+            ].join(' ')}
+            style={{
+              fontSize: `${1.0625 * readerSettings.fontScale}rem`,
+              lineHeight: `calc(${BIBLE_READER_SPACING_LINE_HEIGHT[readerSettings.spacing]} * var(--a11y-line-height, 1.55))`,
+            }}
+          >
             {(chapterQ.data?.verses ?? []).map((v) => {
               const active = highlightVerse === v.verse;
               return (
@@ -232,16 +266,26 @@ export function BibleReaderPage() {
                   ref={(el) => {
                     if (el) verseRefs.current.set(v.verse, el);
                   }}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={active}
+                  aria-label={`Стих ${v.verse}: ${v.text}`}
                   className={[
-                    'cursor-pointer rounded-xl px-2 py-1 transition',
+                    'cursor-pointer rounded-xl px-2 py-1 outline-none transition focus-visible:ring-2 focus-visible:ring-primary/40',
                     active ? 'bg-amber-100/90' : 'hover:bg-stone-100/80',
                   ].join(' ')}
                   onClick={() => {
                     setSelectedVerse(v.verse);
                     setSheetOpen(true);
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    setSelectedVerse(v.verse);
+                    setSheetOpen(true);
+                  }}
                 >
-                  <sup className="mr-1 select-none text-[11px] font-sans font-bold text-primary">
+                  <sup className="mr-1 select-none text-[0.6em] font-sans font-bold text-primary">
                     {v.verse}
                   </sup>
                   {v.text}
@@ -285,6 +329,13 @@ export function BibleReaderPage() {
         }}
       />
 
+      <ReaderSettingsSheet
+        open={readerSettingsOpen}
+        value={readerSettings}
+        onChange={updateReaderSettings}
+        onClose={() => setReaderSettingsOpen(false)}
+      />
+
       {/* Главы: круглые кнопки по краям снизу, над таб-баром (как в «Библия») */}
       {!sheetOpen && !booksOpen ? (
         <div className="pointer-events-none fixed inset-x-0 z-[90] flex items-end justify-between px-3 sm:px-4 lg:px-8 bottom-[calc(var(--app-bottom-nav-total-height)+0.55rem)] lg:bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))]">
@@ -319,9 +370,28 @@ export function BibleReaderPage() {
             <p className="font-bold text-stone-900">
               {bookMeta?.short_name} {chapter}:{selectedVerse}
             </p>
-            <button type="button" aria-label="Закрыть" onClick={() => setSheetOpen(false)}>
-              <LuX size={20} className="text-stone-500" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-label="Поделиться стихом"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-stone-500 hover:bg-stone-100"
+                onClick={() => {
+                  const verseText =
+                    (chapterQ.data?.verses ?? []).find((v) => v.verse === selectedVerse)?.text ?? '';
+                  void shareBibleVerse({
+                    reference: `${bookMeta?.short_name ?? ''} ${chapter}:${selectedVerse}`,
+                    text: verseText,
+                    translationTitle: translationMeta?.title ?? translation,
+                    url: `${window.location.origin}/bible/${translation}/${book}/${chapter}?v=${selectedVerse}`,
+                  });
+                }}
+              >
+                <LuShare2 size={17} />
+              </button>
+              <button type="button" aria-label="Закрыть" onClick={() => setSheetOpen(false)}>
+                <LuX size={20} className="text-stone-500" />
+              </button>
+            </div>
           </div>
           <textarea
             value={noteBody}

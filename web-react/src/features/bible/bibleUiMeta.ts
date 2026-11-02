@@ -12,6 +12,59 @@ export type BibleRecentItem = {
 
 const RECENT_KEY = 'bible.recent';
 const TRANSLATION_KEY = 'bible.translation';
+const READER_SETTINGS_KEY = 'bible.readerSettings';
+
+export type BibleReaderFont = 'serif' | 'sans';
+export type BibleReaderSpacing = 'compact' | 'normal' | 'relaxed';
+
+export type BibleReaderSettings = {
+  /** Доп. масштаб текста ридера сверх общего --a11y-font-scale приложения. */
+  fontScale: number;
+  font: BibleReaderFont;
+  spacing: BibleReaderSpacing;
+};
+
+export const BIBLE_READER_FONT_SCALES = [0.875, 1, 1.125, 1.25, 1.375] as const;
+
+const DEFAULT_READER_SETTINGS: BibleReaderSettings = {
+  fontScale: 1,
+  font: 'serif',
+  spacing: 'normal',
+};
+
+export const BIBLE_READER_SPACING_LINE_HEIGHT: Record<BibleReaderSpacing, number> = {
+  compact: 1.35,
+  normal: 1.7,
+  relaxed: 2,
+};
+
+export function readReaderSettings(): BibleReaderSettings {
+  try {
+    const raw = localStorage.getItem(READER_SETTINGS_KEY);
+    if (!raw) return DEFAULT_READER_SETTINGS;
+    const parsed = JSON.parse(raw) as Partial<BibleReaderSettings>;
+    return {
+      fontScale: BIBLE_READER_FONT_SCALES.includes(parsed.fontScale as never)
+        ? (parsed.fontScale as number)
+        : DEFAULT_READER_SETTINGS.fontScale,
+      font: parsed.font === 'sans' ? 'sans' : 'serif',
+      spacing:
+        parsed.spacing === 'compact' || parsed.spacing === 'relaxed'
+          ? parsed.spacing
+          : 'normal',
+    };
+  } catch {
+    return DEFAULT_READER_SETTINGS;
+  }
+}
+
+export function writeReaderSettings(next: BibleReaderSettings): void {
+  try {
+    localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
 
 const PUBLISHER_BY_CODE: Record<string, string> = {
   synodal: 'Public domain',
