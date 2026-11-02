@@ -2171,8 +2171,13 @@ CREATE TABLE IF NOT EXISTS analytics_sessions (
   device_type VARCHAR(20),
   os VARCHAR(50),
   browser VARCHAR(50),
+  platform VARCHAR(20),
+  current_page_key VARCHAR(100),
   ip_hash CHAR(64)
 );
+
+ALTER TABLE analytics_sessions ADD COLUMN IF NOT EXISTS platform VARCHAR(20);
+ALTER TABLE analytics_sessions ADD COLUMN IF NOT EXISTS current_page_key VARCHAR(100);
 
 CREATE INDEX IF NOT EXISTS idx_analytics_sessions_user
   ON analytics_sessions (user_id);
@@ -2190,10 +2195,13 @@ CREATE TABLE IF NOT EXISTS page_views (
   device_type VARCHAR(20),
   os VARCHAR(50),
   browser VARCHAR(50),
+  platform VARCHAR(20),
   referrer TEXT,
   duration_seconds INTEGER,
   viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE page_views ADD COLUMN IF NOT EXISTS platform VARCHAR(20);
 
 CREATE INDEX IF NOT EXISTS idx_page_views_page_key
   ON page_views (page_key);

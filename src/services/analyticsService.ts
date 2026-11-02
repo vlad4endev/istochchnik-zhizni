@@ -115,17 +115,36 @@ function buildPeriodRange(period: Period): QueryRange {
   };
 }
 
-function pageNameByKey(pageKey: string): string {
+export function calcTrend(current: number, previous: number): number {
+  if (previous <= 0) return current > 0 ? 100 : 0;
+  return Number((((current - previous) / previous) * 100).toFixed(2));
+}
+
+/** Нормализует platform из клиента: только [a-z0-9_-] до 20 символов, иначе null. */
+export function normalizeAnalyticsPlatform(raw: unknown): string | null {
+  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return /^[a-z0-9_-]{1,20}$/.test(value) ? value : null;
+}
+
+export function pageNameByKey(pageKey: string): string {
   const map: Record<string, string> = {
     dashboard: 'Главная',
+    feed: 'Лента',
     prayer: 'Молитва',
+    bible: 'Библия',
     messenger: 'Чаты',
     songbook: 'Песенник',
     studio: 'Студия',
     service_planner: 'Планировщик служений',
+    schedules: 'Расписание',
+    events: 'События',
+    broadcast: 'Трансляция',
+    call: 'Звонки',
     profile: 'Профиль',
+    settings: 'Настройки',
     admin: 'Админ',
     sermons: 'Проповеди',
+    my_sermons: 'Мои проповеди',
     resources: 'Ресурсы',
   };
   return map[pageKey] ?? pageKey;
@@ -188,15 +207,34 @@ export async function getOverview(periodRaw: unknown): Promise<unknown> {
     ORDER BY total_views DESC
     LIMIT 10
   `;
+  const prevSummarySql = `
+    SELECT
+      COUNT(*)::bigint AS total_views,
+      COUNT(DISTINCT user_id)::bigint AS unique_users,
+      COUNT(DISTINCT COALESCE(session_id, user_id::text))::bigint AS unique_sessions,
+      COALESCE(AVG(duration_seconds)::numeric(12,2), 0::numeric) AS avg_session_duration
+    FROM page_views
+    WHERE viewed_at >= $1 AND viewed_at < $2
+  `;
   const byDaySql = `
     SELECT
-      day::date AS day,
-      SUM(total_views)::bigint AS views,
-      SUM(unique_users)::bigint AS unique_users
-    FROM analytics_page_daily_mv
-    ${range.whereSql ? 'WHERE day >= $1::timestamptz' : ''}
-    GROUP BY day::date
-    ORDER BY day::date ASC
+      date_trunc('day', viewed_at)::date AS day,
+      COUNT(*)::bigint AS views,
+      COUNT(DISTINCT user_id)::bigint AS unique_users
+    FROM page_views
+    ${range.whereSql}
+    GROUP BY 1
+    ORDER BY 1 ASC
+  `;
+  const byPlatformSql = `
+    SELECT
+      COALESCE(platform, 'web') AS platform,
+      COUNT(*)::bigint AS views,
+      COUNT(DISTINCT user_id)::bigint AS unique_users
+    FROM page_views
+    ${range.whereSql}
+    GROUP BY 1
+    ORDER BY views DESC
   `;
   const newVsReturningSql = `
     WITH first_seen AS (
@@ -253,11 +291,15 @@ export async function getOverview(periodRaw: unknown): Promise<unknown> {
     ORDER BY m.day_n ASC
   `;
 
-  const [summary, topPages, byDay, newVsReturning] = await Promise.all([
+  const [summary, topPages, byDay, newVsReturning, prevSummary, byPlatform] = await Promise.all([
     pool.query(summarySql, range.params),
     pool.query(topPagesSql, range.params),
     pool.query(byDaySql, range.params),
     pool.query(newVsReturningSql, [...range.params, (range.nowRange.from ?? new Date(0)).toISOString()]),
+    range.nowRange.from
+      ? pool.query(prevSummarySql, [range.prevRange.from!.toISOString(), range.prevRange.to.toISOString()])
+      : Promise.resolve({ rows: [] as Array<Record<string, unknown>> }),
+    pool.query(byPlatformSql, range.params),
   ]);
 
   let retentionRows: Array<{ day_n: unknown; cohort_size: unknown; returned_users: unknown }> = [];
@@ -275,11 +317,25 @@ export async function getOverview(periodRaw: unknown): Promise<unknown> {
     retentionRows = [];
   }
 
+  const totalViews = Number(summary.rows[0]?.total_views ?? 0);
+  const uniqueUsers = Number(summary.rows[0]?.unique_users ?? 0);
+  const uniqueSessions = Number(summary.rows[0]?.unique_sessions ?? 0);
+  const avgDuration = Number(summary.rows[0]?.avg_session_duration ?? 0);
+  const prevRow = prevSummary.rows[0] ?? {};
+  const prevViews = Number(prevRow.total_views ?? 0);
+  const prevUsers = Number(prevRow.unique_users ?? 0);
+  const prevSessions = Number(prevRow.unique_sessions ?? 0);
+  const prevDuration = Number(prevRow.avg_session_duration ?? 0);
+
   const result = {
-    total_views: Number(summary.rows[0]?.total_views ?? 0),
-    unique_users: Number(summary.rows[0]?.unique_users ?? 0),
-    unique_sessions: Number(summary.rows[0]?.unique_sessions ?? 0),
-    avg_session_duration: Number(summary.rows[0]?.avg_session_duration ?? 0),
+    total_views: totalViews,
+    unique_users: uniqueUsers,
+    unique_sessions: uniqueSessions,
+    avg_session_duration: avgDuration,
+    views_trend: calcTrend(totalViews, prevViews),
+    users_trend: calcTrend(uniqueUsers, prevUsers),
+    sessions_trend: calcTrend(uniqueSessions, prevSessions),
+    duration_trend: calcTrend(avgDuration, prevDuration),
     top_pages: topPages.rows.map((r) => ({
       page_key: r.page_key,
       page_name: pageNameByKey(String(r.page_key)),
@@ -288,6 +344,11 @@ export async function getOverview(periodRaw: unknown): Promise<unknown> {
     })),
     views_by_day: byDay.rows.map((r) => ({
       day: r.day,
+      views: Number(r.views ?? 0),
+      unique_users: Number(r.unique_users ?? 0),
+    })),
+    users_by_platform: byPlatform.rows.map((r) => ({
+      platform: String(r.platform ?? 'web'),
       views: Number(r.views ?? 0),
       unique_users: Number(r.unique_users ?? 0),
     })),
@@ -496,7 +557,7 @@ export async function getUserStats(userId: number, periodRaw: unknown): Promise<
     : 'WHERE user_id = $1';
   const params = range.whereSql ? [...range.params, userId] : [userId];
 
-  const [userRow, summary, favoritePages, byDay, devices] = await Promise.all([
+  const [userRow, summary, favoritePages, byDay, devices, sections] = await Promise.all([
     pool.query(
       `
         SELECT id, name, first_name, last_name, avatar_url, app_role, created_at
@@ -548,6 +609,20 @@ export async function getUserStats(userId: number, periodRaw: unknown): Promise<
       `,
       params,
     ),
+    pool.query(
+      `
+        SELECT
+          page_key,
+          COUNT(*)::bigint AS views,
+          COALESCE(SUM(duration_seconds), 0)::bigint AS total_time_seconds,
+          MAX(viewed_at) AS last_viewed_at
+        FROM page_views
+        ${whereSql}
+        GROUP BY page_key
+        ORDER BY total_time_seconds DESC
+      `,
+      params,
+    ),
   ]);
 
   return {
@@ -561,6 +636,13 @@ export async function getUserStats(userId: number, periodRaw: unknown): Promise<
     })),
     activity_by_day: byDay.rows.map((r) => ({ day: r.day, views: Number(r.views ?? 0) })),
     devices: devices.rows.map((r) => ({ device_type: r.device_type, views: Number(r.views ?? 0) })),
+    sections: sections.rows.map((r) => ({
+      page_key: r.page_key,
+      page_name: pageNameByKey(String(r.page_key)),
+      views: Number(r.views ?? 0),
+      total_time_seconds: Number(r.total_time_seconds ?? 0),
+      last_viewed_at: r.last_viewed_at,
+    })),
     first_visit: summary.rows[0]?.first_visit ?? null,
     last_visit: summary.rows[0]?.last_visit ?? null,
   };
@@ -600,6 +682,7 @@ export async function getTopUsers(input: {
       m.app_role AS role,
       COUNT(*)::bigint AS total_views,
       COUNT(DISTINCT COALESCE(pv.session_id, pv.user_id::text))::bigint AS total_sessions,
+      COALESCE(SUM(pv.duration_seconds), 0)::bigint AS total_time_seconds,
       MAX(pv.viewed_at) AS last_active,
       (
         SELECT pv2.page_key
@@ -624,35 +707,184 @@ export async function getTopUsers(input: {
     role: r.role,
     total_views: Number(r.total_views ?? 0),
     sessions: Number(r.total_sessions ?? 0),
+    total_time_seconds: Number(r.total_time_seconds ?? 0),
     last_active: r.last_active,
     favorite_page: r.favorite_page,
     favorite_page_name: r.favorite_page ? pageNameByKey(String(r.favorite_page)) : null,
   }));
 }
 
+export async function getPrayerStats(periodRaw: unknown): Promise<unknown> {
+  if (!pool) return {};
+  const period = normalizePeriod(periodRaw);
+  const cacheKey = `prayer:${period}`;
+  const cached = await cacheGet<unknown>(cacheKey);
+  if (cached) return cached;
+
+  const range = buildPeriodRange(period);
+  const whereSql = range.whereSql
+    ? `${range.whereSql} AND page_key = $${range.params.length + 1}`
+    : 'WHERE page_key = $1';
+  const params = range.whereSql ? [...range.params, 'prayer'] : ['prayer'];
+
+  const [summary, byDay, visitors, today] = await Promise.all([
+    pool.query(
+      `
+        SELECT
+          COUNT(*)::bigint AS total_views,
+          COUNT(DISTINCT user_id)::bigint AS unique_visitors,
+          COALESCE(SUM(duration_seconds), 0)::bigint AS total_time_seconds,
+          COALESCE(AVG(duration_seconds)::numeric(12,2), 0::numeric) AS avg_duration_seconds
+        FROM page_views
+        ${whereSql}
+      `,
+      params,
+    ),
+    pool.query(
+      `
+        SELECT
+          date_trunc('day', viewed_at)::date AS day,
+          COUNT(DISTINCT user_id)::bigint AS visitors,
+          COUNT(*)::bigint AS views,
+          COALESCE(SUM(duration_seconds), 0)::bigint AS total_time_seconds
+        FROM page_views
+        ${whereSql}
+        GROUP BY 1
+        ORDER BY 1 ASC
+      `,
+      params,
+    ),
+    pool.query(
+      `
+        SELECT
+          pv.user_id,
+          COALESCE(NULLIF(TRIM(m.name), ''), CONCAT_WS(' ', m.first_name, m.last_name), CONCAT('#', pv.user_id::text)) AS name,
+          m.avatar_url AS avatar,
+          m.app_role AS role,
+          COUNT(*)::bigint AS visits,
+          COALESCE(SUM(pv.duration_seconds), 0)::bigint AS total_time_seconds,
+          COALESCE(AVG(pv.duration_seconds)::numeric(12,2), 0::numeric) AS avg_duration_seconds,
+          MAX(pv.viewed_at) AS last_viewed_at
+        FROM page_views pv
+        LEFT JOIN members m ON m.id = pv.user_id
+        ${whereSql}
+          AND pv.user_id IS NOT NULL
+        GROUP BY pv.user_id, m.name, m.first_name, m.last_name, m.avatar_url, m.app_role
+        ORDER BY total_time_seconds DESC
+        LIMIT 200
+      `,
+      params,
+    ),
+    pool.query(
+      `
+        SELECT COUNT(DISTINCT user_id)::bigint AS today_visitors
+        FROM page_views
+        WHERE page_key = 'prayer'
+          AND viewed_at >= date_trunc('day', NOW())
+      `,
+    ),
+  ]);
+
+  const result = {
+    total_views: Number(summary.rows[0]?.total_views ?? 0),
+    unique_visitors: Number(summary.rows[0]?.unique_visitors ?? 0),
+    total_time_seconds: Number(summary.rows[0]?.total_time_seconds ?? 0),
+    avg_duration_seconds: Number(summary.rows[0]?.avg_duration_seconds ?? 0),
+    today_visitors: Number(today.rows[0]?.today_visitors ?? 0),
+    by_day: byDay.rows.map((r) => ({
+      day: r.day,
+      visitors: Number(r.visitors ?? 0),
+      views: Number(r.views ?? 0),
+      total_time_seconds: Number(r.total_time_seconds ?? 0),
+    })),
+    visitors: visitors.rows.map((r) => ({
+      user_id: Number(r.user_id),
+      name: r.name,
+      avatar: r.avatar,
+      role: r.role,
+      visits: Number(r.visits ?? 0),
+      total_time_seconds: Number(r.total_time_seconds ?? 0),
+      avg_duration_seconds: Number(r.avg_duration_seconds ?? 0),
+      last_viewed_at: r.last_viewed_at,
+    })),
+  };
+
+  await cacheSet(cacheKey, result);
+  return result;
+}
+
+export async function trackSessionHeartbeat(input: {
+  userId: number | null;
+  sessionId: string | null;
+  pageKey: string | null;
+  platform: string | null;
+  deviceType: string | null;
+  os: string | null;
+  browser: string | null;
+  ipHash: string | null;
+}): Promise<void> {
+  if (!pool) return;
+  const id = input.userId ? `u-${input.userId}` : input.sessionId;
+  if (!id) return;
+  await pool.query(
+    `
+      INSERT INTO analytics_sessions (id, user_id, device_type, os, browser, platform, current_page_key, ip_hash, last_active_at, pages_visited)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), 0)
+      ON CONFLICT (id) DO UPDATE
+      SET
+        user_id = COALESCE(EXCLUDED.user_id, analytics_sessions.user_id),
+        device_type = COALESCE(EXCLUDED.device_type, analytics_sessions.device_type),
+        os = COALESCE(EXCLUDED.os, analytics_sessions.os),
+        browser = COALESCE(EXCLUDED.browser, analytics_sessions.browser),
+        platform = COALESCE(EXCLUDED.platform, analytics_sessions.platform),
+        current_page_key = COALESCE(EXCLUDED.current_page_key, analytics_sessions.current_page_key),
+        ip_hash = COALESCE(EXCLUDED.ip_hash, analytics_sessions.ip_hash),
+        last_active_at = NOW()
+    `,
+    [id, input.userId, input.deviceType, input.os, input.browser, input.platform, input.pageKey, input.ipHash],
+  );
+}
+
 export async function getRealtimeOnline(): Promise<unknown> {
   if (!pool) return { online_count: 0, users: [] };
   const result = await pool.query(
     `
-      WITH latest AS (
-        SELECT DISTINCT ON (COALESCE(user_id::text, session_id))
+      WITH activity AS (
+        SELECT
+          COALESCE(user_id::text, session_id) AS identity,
           user_id,
-          session_id,
-          page_key AS current_page,
-          viewed_at
+          page_key,
+          viewed_at AS active_at
         FROM page_views
         WHERE viewed_at >= NOW() - INTERVAL '5 minutes'
-        ORDER BY COALESCE(user_id::text, session_id), viewed_at DESC
+        UNION ALL
+        SELECT
+          COALESCE(user_id::text, id) AS identity,
+          user_id,
+          current_page_key AS page_key,
+          last_active_at AS active_at
+        FROM analytics_sessions
+        WHERE last_active_at >= NOW() - INTERVAL '5 minutes'
+      ),
+      latest AS (
+        SELECT DISTINCT ON (identity)
+          identity,
+          user_id,
+          page_key,
+          active_at
+        FROM activity
+        ORDER BY identity, active_at DESC
       )
       SELECT
         l.user_id,
         COALESCE(NULLIF(TRIM(m.name), ''), CONCAT_WS(' ', m.first_name, m.last_name), 'Гость') AS name,
         m.avatar_url AS avatar,
-        l.current_page,
-        l.viewed_at AS online_since
+        l.page_key AS current_page,
+        l.active_at AS online_since,
+        GREATEST(0, ROUND(EXTRACT(EPOCH FROM (NOW() - l.active_at)) / 60))::int AS last_seen_minutes
       FROM latest l
       LEFT JOIN members m ON m.id = l.user_id
-      ORDER BY l.viewed_at DESC
+      ORDER BY l.active_at DESC
       LIMIT 100
     `,
   );
@@ -663,7 +895,9 @@ export async function getRealtimeOnline(): Promise<unknown> {
       name: r.name,
       avatar: r.avatar,
       current_page: r.current_page,
+      current_page_name: r.current_page ? pageNameByKey(String(r.current_page)) : null,
       online_since: r.online_since,
+      last_seen_minutes: Number(r.last_seen_minutes ?? 0),
     })),
   };
 }
