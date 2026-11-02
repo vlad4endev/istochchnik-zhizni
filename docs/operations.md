@@ -102,7 +102,7 @@ VAPID_SUBJECT=mailto:your-support@domain.com
 docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d
 ```
 
-Нужны DNS `call.church-tambov.ru` (WSS), UDP **50000–50100** и TCP **7881**.
+Нужны DNS `call.church-tambov.ru` (WSS), UDP **7882**, UDP **3478**, UDP **50100–50999** (TURN relay) и TCP **7881**.
 
 ## Бекап (БД + uploads)
 

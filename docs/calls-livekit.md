@@ -88,7 +88,7 @@ Host network + `advertise_internal_ip` / `skip_external_ip_validation`: ICE от
    | 7881 | TCP | ICE/TCP |
    | 7882 | UDP | ICE/UDP mux |
    | 3478 | UDP | TURN |
-   | 50100–50119 | UDP | TURN relay (**1 порт = 1 relay-алокация**; диапазон из одного порта = 1 relayed-участник на весь сервер) |
+   | 50100–50999 | UDP | TURN relay (**1 порт = 1 relay-алокация** ≈ 1 relayed-участник; 900 портов ≈ до ~900 relayed-участников одновременно на весь сервер) |
    | 7880 | — | **не открывать** |
    Домен в `turn.domain` должен резолвиться напрямую в IP хоста LiveKit (не через CDN-прокси — UDP 3478 через прокси не пройдёт). Для сетей, где UDP закрыт полностью (корпоративный Wi-Fi), нужен TURN/TLS: `turn.tls_port` + `cert_file`/`key_file` в `docker/livekit.yaml` (порт 5349 или 443 через L4-прокси).
 3. `"userland-proxy": false` + `deploy/sysctl-livekit.conf`.
@@ -121,8 +121,8 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs li
   Быстрый ремонт на сервере: `sudo bash scripts/repair-livekit.sh`
   Диагностика: `curl -s https://app.church-tambov.ru/health/livekit` и `curl -s https://app.church-tambov.ru/lk/`
 - `text/html` ~29KB → старый образ web без location `/lk/`.
-- WSS ок, но «Переподключение…» / нет медиа → UDP **7882** + TCP **7881** + UDP **3478** + UDP **50100–50119** на роутере + `userland-proxy: false`.
-- «Не слышно» у части участников (особенно на мобильном интернете) → симметричный NAT: проверить, что TURN relay-порты 50100–50119 проброшены; в логах LiveKit — `turn.relay_range` и успешные Allocate.
+- WSS ок, но «Переподключение…» / нет медиа → UDP **7882** + TCP **7881** + UDP **3478** + UDP **50100–50999** на роутере + `userland-proxy: false`.
+- «Не слышно» у части участников (особенно на мобильном интернете) → симметричный NAT: проверить, что TURN relay-порты 50100–50999 проброшены (диапазон в `docker/livekit.yaml` должен совпадать с пробросом); в логах LiveKit — `turn.relay_range` и успешные Allocate. Если Allocate есть, а медиа нет у новых участников — диапазон исчерпан: счётчик алокаций в метриках LiveKit, расширить диапазон.
 - Звонок умирает после долгого обрыва сети (>10 мин) → клиент сам перезаходит со свежим JWT (до 3 попыток); если не помогло — завершить и перезвонить.
 
 ## API (кратко)

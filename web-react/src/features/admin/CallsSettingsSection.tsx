@@ -620,7 +620,7 @@ function CallsConfigPanel() {
             </p>
             <ul className="list-disc pl-4 space-y-0.5">
               <li>RTC node IP / advertised addresses</li>
-              <li>TURN (3478 / 50100) и firewall UDP/TCP 7881–7882</li>
+              <li>TURN (3478 / relay-диапазон 50100–50999) и firewall UDP/TCP 7881–7882</li>
               <li>TLS и DNS для публичного WSS</li>
               <li>nginx upstream / docker compose на стороне медиа-ноды</li>
             </ul>
