@@ -336,17 +336,33 @@ export async function searchVerses(
   if (needle.length < 2) return [];
   const capped = Math.min(100, Math.max(1, Math.floor(limit)));
 
-  const r = await query(
+  // Полнотекстовый поиск (русская морфология, ts_rank) — находит словоформы
+  // («возлюбил» по запросу «любовь»), а не только точную подстроку.
+  const fts = await query(
+    `SELECT b.slug AS book_slug, b.name AS book_name, b.short_name, v.chapter, v.verse, v.text
+     FROM bible_verses v
+     JOIN bible_books b ON b.id = v.book_id
+     JOIN bible_translations t ON t.id = v.translation_id
+     WHERE t.code = $1 AND v.text_tsv @@ websearch_to_tsquery('russian', $2)
+     ORDER BY ts_rank(v.text_tsv, websearch_to_tsquery('russian', $2)) DESC, b.ord, v.chapter, v.verse
+     LIMIT $3`,
+    [translationCode, needle, capped],
+  );
+  if (fts.rows.length > 0) return fts.rows;
+
+  // Фолбэк на триграммы: короткие/частичные слова, опечатки, фрагменты имён —
+  // то, что морфологический поиск по целым леммам не находит.
+  const trgm = await query(
     `SELECT b.slug AS book_slug, b.name AS book_name, b.short_name, v.chapter, v.verse, v.text
      FROM bible_verses v
      JOIN bible_books b ON b.id = v.book_id
      JOIN bible_translations t ON t.id = v.translation_id
      WHERE t.code = $1 AND v.text ILIKE '%' || $2 || '%'
-     ORDER BY b.ord, v.chapter, v.verse
+     ORDER BY similarity(v.text, $2) DESC, b.ord, v.chapter, v.verse
      LIMIT $3`,
     [translationCode, needle, capped],
   );
-  return r.rows;
+  return trgm.rows;
 }
 
 export async function countVerses(translationId: number): Promise<number> {

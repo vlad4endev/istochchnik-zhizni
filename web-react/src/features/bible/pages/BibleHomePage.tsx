@@ -14,6 +14,7 @@ import {
   searchBible,
 } from '../api';
 import { parseBibleRef } from '../bibleRef';
+import { highlightMatch } from '../highlightMatch';
 import {
   pushRecentBible,
   readRecentBible,
@@ -188,7 +189,9 @@ export function BibleHomePage() {
                 <p className="text-sm font-bold text-stone-900">
                   {hit.short_name} {hit.chapter}:{hit.verse}
                 </p>
-                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-stone-600">{hit.text}</p>
+                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-stone-600">
+                  {highlightMatch(hit.text, submitted)}
+                </p>
               </button>
             ))}
           </div>

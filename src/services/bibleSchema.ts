@@ -78,6 +78,19 @@ export async function ensureBibleSchema(): Promise<void> {
           ON public.bible_verses USING gin (text gin_trgm_ops)
       `);
 
+      // Полнотекстовый поиск с русской морфологией (ts_rank), вместо чистого ILIKE substring.
+      // STORED generated column сам поддерживает себя в актуальном виде при INSERT/UPDATE.
+      await query(`
+        ALTER TABLE public.bible_verses
+          ADD COLUMN IF NOT EXISTS text_tsv tsvector
+          GENERATED ALWAYS AS (to_tsvector('russian', text)) STORED
+      `);
+
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_bible_verses_text_tsv
+          ON public.bible_verses USING gin (text_tsv)
+      `);
+
       await query(`
         CREATE TABLE IF NOT EXISTS public.bible_notes (
           id BIGSERIAL PRIMARY KEY,
