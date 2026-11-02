@@ -12,6 +12,7 @@ import {
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
+import { pluralizeRu } from '@/lib/pluralizeRu';
 import { emitAppToast } from '@/lib/uiFeedback';
 
 import {
@@ -26,6 +27,49 @@ import {
 } from '../api';
 import { biblePlanRefUrl, formatBiblePlanRef } from '../bibleRef';
 import { readStoredTranslation } from '../bibleUiMeta';
+
+const RU_MONTH_SHORT = [
+  'янв',
+  'фев',
+  'мар',
+  'апр',
+  'мая',
+  'июн',
+  'июл',
+  'авг',
+  'сен',
+  'окт',
+  'ноя',
+  'дек',
+] as const;
+
+/** 'YYYY-MM-DD' (из Postgres DATE) → '5 нояб'. Парсим вручную, без сдвига по таймзоне. */
+function formatPlanDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return null;
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `${day} ${RU_MONTH_SHORT[month - 1]}`;
+}
+
+function todayIsoLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Сколько различных глав охватывает день (стиховые отрывки одной главы считаем один раз). */
+function dayChapterCount(day: BiblePlanDay): number {
+  return new Set((day.refs_json ?? []).map((r) => `${r.book_slug}:${r.chapter}`)).size;
+}
+
+function chaptersLabel(count: number): string {
+  return `${count} ${pluralizeRu(count, ['глава', 'главы', 'глав'])}`;
+}
 
 function planProgress(plan: BiblePlan): { done: number; total: number; pct: number } {
   const days = plan.days;
@@ -69,6 +113,7 @@ export function BiblePlansListPage() {
   const qc = useQueryClient();
   const [goal, setGoal] = useState('Евангелия за 30 дней');
   const [days, setDays] = useState(30);
+  const [startDate, setStartDate] = useState(todayIsoLocal);
   const [createOpen, setCreateOpen] = useState(false);
 
   const plansQ = useQuery({
@@ -77,7 +122,7 @@ export function BiblePlansListPage() {
   });
 
   const genMut = useMutation({
-    mutationFn: () => generateBiblePlan({ goal, days }),
+    mutationFn: () => generateBiblePlan({ goal, days, start_date: startDate || undefined }),
     onSuccess: (plan) => {
       void qc.invalidateQueries({ queryKey: ['bible', 'plans'] });
       void navigate(`/bible/plans/${plan.id}`);
@@ -148,7 +193,16 @@ export function BiblePlansListPage() {
                   max={90}
                   value={days}
                   onChange={(e) => setDays(Number(e.target.value) || 7)}
-                  className="w-20 rounded-xl border border-stone-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-20 rounded-xl border border-stone-200 bg-white px-2.5 py-1.5 text-sm text-stone-900 outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-stone-600">
+                Старт
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="rounded-xl border border-stone-200 bg-white px-2.5 py-1.5 text-sm text-stone-900 outline-none focus:ring-2 focus:ring-primary/30"
                 />
               </label>
               <button
@@ -317,6 +371,11 @@ export function BiblePlanDetailPage() {
               {plan.goal ? (
                 <p className="mt-1.5 text-sm leading-relaxed text-stone-500">{plan.goal}</p>
               ) : null}
+              {formatPlanDate(plan.start_date) && formatPlanDate(plan.end_date) ? (
+                <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-stone-400">
+                  {formatPlanDate(plan.start_date)} — {formatPlanDate(plan.end_date)}
+                </p>
+              ) : null}
               <div className="mt-4">
                 <div className="mb-1.5 flex items-baseline justify-between text-xs text-stone-500">
                   <span>
@@ -402,6 +461,16 @@ export function BiblePlanDetailPage() {
                             <span className="text-xs font-bold tabular-nums text-stone-400">
                               День {day.day_index}
                             </span>
+                            {formatPlanDate(day.day_date) ? (
+                              <span className="text-xs font-medium tabular-nums text-stone-400">
+                                {formatPlanDate(day.day_date)}
+                              </span>
+                            ) : null}
+                            {refs.length > 0 ? (
+                              <span className="text-xs font-medium tabular-nums text-stone-400">
+                                {chaptersLabel(dayChapterCount(day))}
+                              </span>
+                            ) : null}
                             {day.label ? (
                               <span
                                 className={[
