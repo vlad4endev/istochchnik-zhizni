@@ -701,8 +701,8 @@ export function LoginPage() {
               >
                 <LuTriangleAlert className="h-5 w-5 shrink-0 text-amber-600" strokeWidth={2} aria-hidden />
                 <p>
-                  Сайт собран без адреса API (в билде остался localhost). В Vercel: Environment
-                  Variables → VITE_API_BASE_URL = ваш публичный HTTPS API → пересборка.
+                  Сайт собран без адреса API (в билде остался localhost). Задайте при сборке
+                  VITE_API_BASE_URL = ваш публичный HTTPS API и пересоберите фронтенд.
                 </p>
               </div>
             )}

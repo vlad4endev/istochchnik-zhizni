@@ -27,8 +27,8 @@ function inlineAppSplashCss(): Plugin {
 }
 
 /**
- * Карты исходников (`sourcemap: 'hidden'`) не должны попадать в deploy: Dockerfile.web*, rsync в
- * release/web и Vercel копируют весь `dist/`. После сборки (в том числе после генерации sw.js
+ * Карты исходников (`sourcemap: 'hidden'`) не должны попадать в deploy: Dockerfile.web* и rsync в
+ * release/web копируют весь `dist/`. После сборки (в том числе после генерации sw.js
  * плагином PWA) переносим все `*.map` в соседний каталог `dist-sourcemaps/` — для отладки и
  * загрузки в трекер ошибок они остаются, но в раздачу не попадают.
  */
@@ -78,11 +78,9 @@ export default defineConfig(({ mode }) => {
   /**
    * Суффикс имён runtime Cache Storage: новый деплой → новые `*-cache-<tag>` → пустые кэши,
    * браузер не подмешивает ассеты/картинки от прошлой версии после активации SW.
-   * На Vercel доступен VERCEL_GIT_COMMIT_SHA; локально — уникальный тег на сборку.
+   * В CI доступен GITHUB_SHA; локально — уникальный тег на сборку.
    */
   const deployCacheTag = (
-    process.env.VERCEL_GIT_COMMIT_SHA ||
-    process.env.VERCEL_DEPLOYMENT_ID ||
     process.env.CF_PAGES_COMMIT_SHA ||
     process.env.GITHUB_SHA ||
     process.env.CI_COMMIT_SHA ||

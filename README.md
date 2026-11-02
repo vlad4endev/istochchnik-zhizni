@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://istochchnik-zhizni.vercel.app"><img src="https://img.shields.io/badge/Demo-Открыть_сайт-8C2C3F?style=for-the-badge" alt="Demo" /></a>
+  <a href="https://app.church-tambov.ru"><img src="https://img.shields.io/badge/Demo-Открыть_сайт-8C2C3F?style=for-the-badge" alt="Demo" /></a>
   &nbsp;
   <a href="#быстрый-старт"><img src="https://img.shields.io/badge/Старт-5_минут-C1684B?style=for-the-badge" alt="Quick start" /></a>
   &nbsp;
@@ -191,5 +191,5 @@ istochchnik-zhizni/
 ---
 
 <p align="center">
-  <sub>Сделано с заботой об общине · <a href="https://istochchnik-zhizni.vercel.app">istochchnik-zhizni.vercel.app</a></sub>
+  <sub>Сделано с заботой об общине · <a href="https://app.church-tambov.ru">app.church-tambov.ru</a></sub>
 </p>

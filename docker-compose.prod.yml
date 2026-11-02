@@ -1,5 +1,5 @@
 # =============================================================================
-# Production VPS: PostgreSQL + Node API (React/Vite на Vercel/Netlify или свой nginx).
+# Production VPS: PostgreSQL + Node API (React/Vite раздаёт свой nginx).
 #
 # 1. cp .env.production .env  — задайте POSTGRES_PASSWORD, DATABASE_URL, CORS_ALLOWED_ORIGINS
 # 2. DATABASE_URL внутри Docker-сети: postgresql://USER:PASSWORD@db:5432/DBNAME
