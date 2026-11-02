@@ -14,6 +14,7 @@ import {
   getCallHandler,
   invitationJoinHandler,
   invitationPreviewHandler,
+  postCallJournalHandler,
   reportCallQualityHandler,
   revokeInvitationHandler,
 } from '../controllers/callsController';
@@ -61,6 +62,17 @@ const createCallLimiter = createMemberIdRateLimiter({
   },
 });
 
+const callJournalLimiter = createMemberIdRateLimiter({
+  windowMs: 60_000,
+  maxRequests: 40,
+  keyPrefix: 'calls-journal',
+  message: 'Слишком частая отправка журнала звонка.',
+  resolveMemberId: (req) => {
+    const id = (req as Request & { authUserId?: number }).authUserId;
+    return typeof id === 'number' && Number.isFinite(id) ? id : null;
+  },
+});
+
 // Legacy ICE helper (optional Metered TURN) — not required for LiveKit media path.
 router.get('/ice-servers', requireAuthSession, async (_req: Request, res: Response) => {
   try {
@@ -90,6 +102,7 @@ router.post('/:callId/cancel', requireAuthSession, cancelCallHandler);
 router.post('/:callId/end', requireAuthSession, endCallHandler);
 router.post('/:callId/token', requireAuthSession, callTokenHandler);
 router.post('/:callId/quality', requireAuthSession, reportCallQualityHandler);
+router.post('/:callId/journal', requireAuthSession, callJournalLimiter, postCallJournalHandler);
 router.post('/:callId/invitations', requireAuthSession, createInvitationHandler);
 router.delete('/:callId/invitations/:invitationId', requireAuthSession, revokeInvitationHandler);
 

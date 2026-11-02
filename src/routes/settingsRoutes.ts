@@ -27,6 +27,8 @@ import {
   resetRolePermissionsSettingsHandler,
 } from '../controllers/rolePermissionsSettingsController';
 import {
+  getCallJournalHandler,
+  getCallLogDetailHandler,
   getCallSettingsAdminHandler,
   getCallUsageStatsHandler,
   patchCallSettingsHandler,
@@ -62,5 +64,7 @@ router.get('/calls/admin', getCallSettingsAdminHandler);
 router.patch('/calls', patchCallSettingsHandler);
 router.post('/calls/livekit/test', postLiveKitTestHandler);
 router.get('/calls/stats', getCallUsageStatsHandler);
+router.get('/calls/journal', getCallJournalHandler);
+router.get('/calls/:callId/log', getCallLogDetailHandler);
 
 export default router;
