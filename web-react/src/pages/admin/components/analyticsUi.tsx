@@ -130,6 +130,63 @@ export function formatNumber(value: number): string {
   return Number(value ?? 0).toLocaleString('ru-RU').replace(/\u00a0/g, ' ');
 }
 
+export const CHART_COLORS = ['#7a1f2e', '#b45e6e', '#dba8b3', '#8f2e40', '#6a1423'];
+
+export function formatDuration(secs: number): string {
+  const sTotal = Math.max(0, Math.round(Number(secs) || 0));
+  const m = Math.floor(sTotal / 60);
+  const s = sTotal % 60;
+  return m > 0 ? `${m} мин ${s} сек` : `${s} сек`;
+}
+
+export function formatLongDuration(secs: number): string {
+  const sTotal = Math.max(0, Math.round(Number(secs) || 0));
+  const h = Math.floor(sTotal / 3600);
+  const m = Math.round((sTotal % 3600) / 60);
+  if (h > 0) return `${h} ч ${m} мин`;
+  return formatDuration(sTotal);
+}
+
+export function formatDateTime(value?: string | null): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+export function formatDayTick(value: string | number): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'Админ',
+  pastor: 'Пастор',
+  minister: 'Служитель',
+  musician: 'Музыкант',
+  editor: 'Редактор',
+  member: 'Участник',
+  parishioner: 'Прихожанин',
+};
+
+export function formatRole(role?: string | null): string {
+  if (!role) return '';
+  return ROLE_LABELS[role] ?? role;
+}
+
+const PLATFORM_LABELS: Record<string, string> = {
+  web: 'Веб',
+  ios: 'iOS',
+  android: 'Android',
+  unknown: 'Другое',
+};
+
+export function formatPlatform(platform?: string | null): string {
+  if (!platform) return PLATFORM_LABELS.unknown;
+  return PLATFORM_LABELS[platform] ?? platform;
+}
+
 export function formatMinutesAgo(value?: number | null): string {
   const minutes = Math.max(0, Number(value ?? 0));
   if (minutes < 1) return 'только что';

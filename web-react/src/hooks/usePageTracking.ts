@@ -1,23 +1,31 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 
-import { trackPageView } from '../api/analyticsApi';
+import { trackHeartbeat, trackPageView } from '../api/analyticsApi';
 
 function resolvePageKey(pathname: string): string {
   if (pathname === '/' || pathname.startsWith('/dashboard')) return 'dashboard';
+  if (pathname.startsWith('/feed')) return 'feed';
   if (pathname.startsWith('/prayer')) return 'prayer';
   if (pathname.startsWith('/messenger')) return 'messenger';
   if (pathname.startsWith('/songbook')) return 'songbook';
   if (pathname.startsWith('/studio')) return 'studio';
-  if (pathname.startsWith('/service-planner') || pathname.startsWith('/service-plan')) return 'service_planner';
+  if (pathname.startsWith('/service-planner') || pathname.startsWith('/service-plan') || pathname.startsWith('/service-flow')) return 'service_planner';
+  if (pathname.startsWith('/events') || pathname.startsWith('/calendar')) return 'events';
+  if (pathname.startsWith('/schedules')) return 'schedules';
+  if (pathname.startsWith('/broadcast')) return 'broadcast';
+  if (pathname.startsWith('/call')) return 'call';
   if (pathname.startsWith('/profile')) return 'profile';
-  if (pathname.startsWith('/admin')) return 'admin';
+  if (pathname.startsWith('/settings')) return 'settings';
+  if (pathname.startsWith('/admin') || pathname.startsWith('/analytics')) return 'admin';
   if (pathname.startsWith('/sermons')) return 'sermons';
   if (pathname.startsWith('/bible')) return 'bible';
   if (pathname.startsWith('/my-sermons')) return 'my_sermons';
   if (pathname.startsWith('/resources')) return 'resources';
   return 'other';
 }
+
+const HEARTBEAT_INTERVAL_MS = 60_000;
 
 type PageSnapshot = { pathname: string; fullUrl: string };
 
@@ -61,6 +69,8 @@ export function usePageTracking(): void {
         page_url: pageUrlFull,
         referrer: document.referrer || null,
         duration_ms: durationMs,
+        platform: 'web',
+        session_id: localStorage.getItem('analytics_session_id') ?? undefined,
       });
       const blob = new Blob([payload], { type: 'application/json' });
       if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
@@ -99,10 +109,18 @@ export function usePageTracking(): void {
     window.addEventListener('pagehide', flushOnLeave);
     window.addEventListener('beforeunload', flushOnLeave);
 
+    const heartbeatKey = resolvePageKey(pathname);
+    const heartbeatTimer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void trackHeartbeat(heartbeatKey);
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', flushOnLeave);
       window.removeEventListener('beforeunload', flushOnLeave);
+      window.clearInterval(heartbeatTimer);
     };
   }, [location.pathname]);
 }
