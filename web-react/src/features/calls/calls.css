@@ -3421,6 +3421,110 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
   color: rgba(255, 255, 255, 0.5);
 }
 
+/* Всё помещается на экран без прокрутки: чем ниже окно, тем компактнее диалог. */
+.telemost-create__panel {
+  margin: auto;
+  max-height: 100%;
+  justify-content: center;
+}
+
+@media (max-height: 920px) {
+  .telemost-create__eyebrow,
+  .telemost-create__hero {
+    display: none;
+  }
+  .telemost-create__panel {
+    padding: 22px 20px 18px;
+  }
+  .telemost-create__title {
+    font-size: clamp(1.45rem, 5vw, 1.9rem);
+  }
+  .telemost-create__lead {
+    margin-top: 8px;
+    font-size: 0.92rem;
+    line-height: 1.4;
+  }
+  .telemost-create__templates {
+    margin-top: 16px;
+    gap: 8px;
+  }
+  .telemost-create__template {
+    padding: 10px 14px;
+    gap: 12px;
+  }
+  .telemost-create__template-icon {
+    width: 40px;
+    height: 40px;
+  }
+  .telemost-create__or {
+    margin-top: 14px;
+  }
+  .telemost-create__name,
+  .telemost-create__devices {
+    margin-top: 14px;
+  }
+  .telemost-create__cta {
+    margin-top: 18px;
+    min-height: 50px;
+    padding: 12px 24px;
+  }
+  .telemost-create__foot {
+    margin-top: 12px;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-height: 760px) {
+  .telemost-create {
+    padding-top: max(12px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
+  .telemost-create__panel {
+    padding: 16px 18px 14px;
+  }
+  .telemost-create__lead,
+  .telemost-create__template-hint,
+  .telemost-create__foot {
+    display: none;
+  }
+  .telemost-create__template {
+    padding: 8px 12px;
+  }
+  .telemost-create__template-icon {
+    width: 36px;
+    height: 36px;
+  }
+  .telemost-create__or {
+    margin-top: 10px;
+  }
+  .telemost-create__name,
+  .telemost-create__devices {
+    margin-top: 10px;
+  }
+  .telemost-create__cta {
+    margin-top: 14px;
+    min-height: 46px;
+    padding: 10px 24px;
+  }
+  .telemost-create__device {
+    min-height: 44px;
+    padding-block: 4px;
+  }
+}
+
+@media (max-height: 600px) {
+  .telemost-create__template-short,
+  .telemost-create__or {
+    display: none;
+  }
+  .telemost-create__title {
+    font-size: 1.3rem;
+  }
+  .telemost-create__name-input {
+    padding: 8px 12px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .telemost-create__glow,
   .telemost-create__ring,
