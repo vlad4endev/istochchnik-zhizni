@@ -11,6 +11,19 @@ public class CallActionReceiver extends BroadcastReceiver {
   public void onReceive(Context context, Intent intent) {
     if (context == null || intent == null || intent.getAction() == null) return;
 
+    // Hang up from ongoing-call foreground notification (screen locked / shade).
+    if (OngoingCallService.ACTION_HANGUP.equals(intent.getAction())) {
+      String callId = trim(intent.getStringExtra(OngoingCallService.EXTRA_CALL_ID));
+      if (callId.isEmpty()) {
+        callId = trim(intent.getStringExtra(CallNotificationHelper.EXTRA_CALL_ID));
+      }
+      OngoingCallService.stop(context);
+      if (!callId.isEmpty()) {
+        NativeCallPlugin.notifyHangupRequested(callId);
+      }
+      return;
+    }
+
     final String callId = trim(intent.getStringExtra(CallNotificationHelper.EXTRA_CALL_ID));
     if (callId.isEmpty()) return;
 
