@@ -1038,14 +1038,16 @@ html.dark aside {
 }
 
 html.dark input,
-html.dark textarea {
+html.dark textarea,
+html.dark select {
   background: var(--bg-interactive);
   border-color: var(--border);
   color: var(--text);
 }
 
 html.dark input:focus,
-html.dark textarea:focus {
+html.dark textarea:focus,
+html.dark select:focus {
   border-color: var(--primary);
 }
 
