@@ -106,3 +106,45 @@ export function isServicePlanPublishedPayload(payload: unknown): boolean {
   if (!p) return false;
   return String(p.kind ?? '') === 'service_plan_published';
 }
+
+const ASSISTANT_DOCUMENT_EXTS = new Set([
+  'pdf',
+  'doc',
+  'docx',
+  'odt',
+  'txt',
+  'csv',
+  'md',
+  'markdown',
+  'rtf',
+  'xls',
+  'xlsx',
+  'pptx',
+]);
+
+/** Расширения, которые «ИИ помощник» умеет разобрать. */
+export const ASSISTANT_DOCUMENT_ACCEPT =
+  '.pdf,.doc,.docx,.odt,.txt,.csv,.md,.rtf,.xls,.xlsx,.pptx,application/pdf,text/plain';
+
+/** PDF, Word, таблицы, презентации и простой текст. Картинки и аудио — нет. */
+export function isAssistantDocumentFile(file: { name?: string; type?: string }): boolean {
+  const name = String(file.name ?? '').trim().toLowerCase();
+  const dot = name.lastIndexOf('.');
+  const ext = dot > 0 ? name.slice(dot + 1) : '';
+  if (ASSISTANT_DOCUMENT_EXTS.has(ext)) return true;
+  const mime = String(file.type ?? '').split(';')[0].trim().toLowerCase();
+  return (
+    mime === 'application/pdf' ||
+    mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    mime === 'application/vnd.oasis.opendocument.text' ||
+    mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    mime === 'application/vnd.ms-excel' ||
+    mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+    mime === 'text/plain' ||
+    mime === 'text/csv' ||
+    mime === 'text/markdown' ||
+    mime === 'text/rtf' ||
+    mime === 'application/rtf' ||
+    mime === 'application/msword'
+  );
+}

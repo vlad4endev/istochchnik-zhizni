@@ -47,6 +47,7 @@ import {
   videoNoteRecorderOptions,
 } from '../voiceRecording';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
+import { ASSISTANT_DOCUMENT_ACCEPT, isAssistantDocumentFile } from '../messengerChannelKinds';
 
 function toastMessengerUploadError(e: unknown): void {
   const err = e as Error & { code?: string };
@@ -188,10 +189,12 @@ interface ChatInputProps {
   /** Медиа/файлы (отдельное право в группах/каналах). По умолчанию совпадает с возможностью писать текст. */
   canSendAttachments?: boolean;
   /**
-   * Только текст: скрыть скрепку, микрофон и предупреждение про отключённые вложения.
-   * Для чата «ИИ помощник».
+   * Без микрофона и кружков. Для чата «ИИ помощник».
+   * Скрепка документов включается отдельно через documentAttachments.
    */
   textOnly?: boolean;
+  /** Скрепка только для PDF, Word, таблиц, презентаций и текста. Вместе с textOnly. */
+  documentAttachments?: boolean;
   /** Участники для @-упоминаний (группы/каналы). */
   mentionParticipants?: { id: number; label: string }[];
   /** Имена по id — чтобы при редактировании показывать @Имя, а не @[цифры]. */
@@ -274,6 +277,7 @@ export function ChatInput({
   canSend,
   canSendAttachments = true,
   textOnly = false,
+  documentAttachments = false,
   mentionParticipants = [],
   participantLabelById = {},
   placeholder = 'Сообщение',
@@ -950,15 +954,17 @@ export function ChatInput({
     // и не даёт открыть проводник. `*/*` открывает системные «Файлы» (там есть папки записей); тип проверяем после выбора.
     const nativeAndroid = Capacitor.getPlatform() === 'android';
     input.accept =
-      kind === 'image'
-        ? 'image/*,video/*'
-        : kind === 'audio'
-          ? nativeAndroid
-            ? '*/*'
-            : CHAT_AUDIO_ACCEPT
-          : nativeAndroid
-            ? '*/*'
-            : 'application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt';
+      documentAttachments
+        ? ASSISTANT_DOCUMENT_ACCEPT
+        : kind === 'image'
+          ? 'image/*,video/*'
+          : kind === 'audio'
+            ? nativeAndroid
+              ? '*/*'
+              : CHAT_AUDIO_ACCEPT
+            : nativeAndroid
+              ? '*/*'
+              : 'application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt';
     try {
       input.disabled = false;
       input.click();
@@ -1069,6 +1075,11 @@ export function ChatInput({
     }
 
     const file = selected[0];
+    if (documentAttachments && !isAssistantDocumentFile(file)) {
+      setUploadErr('Помощник разбирает PDF, Word, Excel, PowerPoint и текстовые файлы.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
     // Validate before preview/upload
     const asAudio = isChatAudioFile(file);
     const maxBytes = asAudio ? MAX_CHAT_AUDIO_BYTES : MAX_CHAT_IMAGE_BYTES;
@@ -1139,6 +1150,13 @@ export function ChatInput({
   /** Вставка из буфера / drag-and-drop — та же ветка, что и выбор файла из меню. */
   const ingestExternalFiles = (files: File[]) => {
     if (!canSendAttachments || files.length === 0) return;
+    if (documentAttachments) {
+      filePickerModeRef.current = 'file';
+      const dt = new DataTransfer();
+      for (const f of files) dt.items.add(f);
+      void handleFileSelected(dt.files);
+      return;
+    }
     const allMedia = files.every((f) => isChatPhotoOrVideoFile(f));
     const allAudio = files.every((f) => isChatAudioFile(f));
     filePickerModeRef.current = allMedia ? 'image' : allAudio ? 'audio' : 'file';
@@ -1812,7 +1830,7 @@ export function ChatInput({
       : isRecording
         ? (captureKind === 'video_note' ? 'video' : 'mic')
         : (hasSendAction ? 'send' : (preferredKind === 'video_note' ? 'video' : 'mic'));
-  const attachmentsUiEnabled = canSendAttachments && !textOnly;
+  const attachmentsUiEnabled = canSendAttachments && (!textOnly || documentAttachments);
   const replyBanner = replyingTo ?? replyTo;
   const composerBannerTitle = editing
     ? 'Редактирование'
@@ -2126,7 +2144,7 @@ export function ChatInput({
           <span className="min-w-0">{uploadErr}</span>
         </p>
       ) : null}
-      {!uploadsHealthy && !textOnly ? (
+      {!uploadsHealthy && (!textOnly || documentAttachments) ? (
         <p className="mb-2 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[13px] font-medium leading-snug text-amber-800 dark:bg-amber-400/10 dark:text-amber-200">
           <LuTriangleAlert className="mt-px h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden />
           <span className="min-w-0">
@@ -2248,12 +2266,16 @@ export function ChatInput({
                 disabled={!canSendAttachments}
                 onClick={() => {
                   haptic(8);
+                  if (documentAttachments) {
+                    pickFile('file');
+                    return;
+                  }
                   setAttachMenuOpen((v) => !v);
                 }}
-                aria-label="Вложения"
-                aria-expanded={attachMenuOpen}
-                aria-haspopup="menu"
-                title="Вложения"
+                aria-label={documentAttachments ? 'Прикрепить документ' : 'Вложения'}
+                aria-expanded={documentAttachments ? undefined : attachMenuOpen}
+                aria-haspopup={documentAttachments ? undefined : 'menu'}
+                title={documentAttachments ? 'PDF, Word, Excel, текст' : 'Вложения'}
                 className={[
                   'flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors',
                   'text-stone-600 hover:bg-black/[0.06] active:scale-[0.98]',

@@ -383,11 +383,11 @@ export function ChatWindow({
     canSendMessages: chatMeta?.my_effective_permissions?.can_send_messages,
     assistantAllowed,
   });
-  /** В группах/каналах медиа может быть отключено отдельно от текста. У ИИ помощника — только текст. */
+  /** В группах/каналах медиа может быть отключено отдельно от текста. У ИИ помощника — документы. */
   const canSendAttachments =
     canPostMessages &&
-    !isAssistantChannel &&
-    (isDraft ||
+    (isAssistantChannel ||
+      isDraft ||
       chatMeta == null ||
       chatMeta.my_effective_permissions?.can_send_media !== false);
   const canPinMessages =
@@ -1519,11 +1519,12 @@ export function ChatWindow({
             canSend={canPostMessages}
             canSendAttachments={canSendAttachments}
             textOnly={isAssistantChannel}
+            documentAttachments={isAssistantChannel}
             mentionParticipants={
               conv && conv.type !== 'private' && !isAssistantChannel ? mentionList : []
             }
             participantLabelById={participantLabelById}
-            placeholder={isAssistantChannel ? 'Ваш вопрос…' : 'Сообщение'}
+            placeholder={isAssistantChannel ? 'Вопрос или документ…' : 'Сообщение'}
           />
         )}
       </div>

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   hasMessengerSenderId,
   isAssistantBotMessage,
+  isAssistantDocumentFile,
   isAssistantMessengerChannel,
   isServicePlanMondayMailingPayload,
   messengerComposerCanSend,
@@ -115,5 +116,20 @@ describe('messengerComposerCanSend', () => {
       false,
     );
     expect(messengerComposerCanSend({ metadata: null, canSendMessages: undefined })).toBe(true);
+  });
+});
+
+describe('isAssistantDocumentFile', () => {
+  it('accepts documents the assistant can read', () => {
+    expect(isAssistantDocumentFile({ name: 'проповедь.pdf' })).toBe(true);
+    expect(isAssistantDocumentFile({ name: 'урок.docx' })).toBe(true);
+    expect(isAssistantDocumentFile({ name: 'file', type: 'application/pdf' })).toBe(true);
+    expect(isAssistantDocumentFile({ name: 'таблица.xlsx' })).toBe(true);
+  });
+
+  it('rejects photos, video and audio', () => {
+    expect(isAssistantDocumentFile({ name: 'photo.jpg', type: 'image/jpeg' })).toBe(false);
+    expect(isAssistantDocumentFile({ name: 'clip.mp4', type: 'video/mp4' })).toBe(false);
+    expect(isAssistantDocumentFile({ name: 'voice.ogg', type: 'audio/ogg' })).toBe(false);
   });
 });
