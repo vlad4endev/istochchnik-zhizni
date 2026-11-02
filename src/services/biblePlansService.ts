@@ -2,6 +2,12 @@ import { query } from '../config/db';
 import { ensureBibleSchema } from './bibleSchema';
 import { findBookDefBySlug } from '../bible/bibleBookCatalog';
 
+export interface BiblePlanDayInput {
+  day: number;
+  label?: string;
+  refs: BiblePlanRef[];
+}
+
 export interface BiblePlanRef {
   book_slug: string;
   chapter: number;
@@ -59,13 +65,13 @@ function normalizeRefs(raw: unknown): BiblePlanRef[] {
 
 export function validateAiPlanPayload(raw: unknown): {
   title: string;
-  days: Array<{ day: number; label?: string; refs: BiblePlanRef[] }>;
+  days: BiblePlanDayInput[];
 } | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
   const title = typeof o.title === 'string' && o.title.trim() ? o.title.trim() : 'План чтения';
   if (!Array.isArray(o.days) || o.days.length === 0) return null;
-  const days: Array<{ day: number; label?: string; refs: BiblePlanRef[] }> = [];
+  const days: BiblePlanDayInput[] = [];
   for (const d of o.days) {
     if (!d || typeof d !== 'object') continue;
     const dayObj = d as Record<string, unknown>;
@@ -79,6 +85,113 @@ export function validateAiPlanPayload(raw: unknown): {
   if (days.length === 0) return null;
   days.sort((a, b) => a.day - b.day);
   return { title, days };
+}
+
+/**
+ * Размеры дней для равномерного распределения `total` отрывков по `n` дням:
+ * размеры отличаются не более чем на 1, остаток уходит в ПЕРВЫЕ дни
+ * (привычный формат читательских планов), а не сваливается в последний день.
+ */
+export function evenChunkSizes(total: number, n: number): number[] {
+  const count = Math.max(1, Math.floor(n) || 1);
+  const base = Math.floor(total / count);
+  const extra = total % count;
+  return Array.from({ length: count }, (_, i) => base + (i < extra ? 1 : 0));
+}
+
+function refSortKey(ref: BiblePlanRef): [number, number, number] {
+  const def = findBookDefBySlug(ref.book_slug);
+  return [def?.ord ?? 999, ref.chapter, ref.verse_start ?? 0];
+}
+
+/** Ссылки идут в каноническом порядке (неубывающе): книга → глава → стих. */
+function isCanonicalSequence(refs: BiblePlanRef[]): boolean {
+  for (let i = 1; i < refs.length; i += 1) {
+    const [po, pc, pv] = refSortKey(refs[i - 1]!);
+    const [o, c, v] = refSortKey(refs[i]!);
+    if (o < po) return false;
+    if (o === po && c < pc) return false;
+    if (o === po && c === pc && v < pv) return false;
+  }
+  return true;
+}
+
+function shortBookName(slug: string): string {
+  return findBookDefBySlug(slug)?.shortNameRu ?? slug;
+}
+
+/** Подпись дня по диапазону ссылок: «Мф 1–4», «Мк 16 — Лк 2», «Ин 3». */
+export function buildPlanDayLabel(refs: BiblePlanRef[]): string {
+  if (refs.length === 0) return '';
+  const first = refs[0]!;
+  const last = refs[refs.length - 1]!;
+  const firstLabel = `${shortBookName(first.book_slug)} ${first.chapter}${
+    first.verse_start != null ? `:${first.verse_start}` : ''
+  }`;
+  if (first.book_slug === last.book_slug) {
+    if (first.chapter === last.chapter) return firstLabel;
+    return `${shortBookName(first.book_slug)} ${first.chapter}–${last.chapter}`;
+  }
+  return `${firstLabel} — ${shortBookName(last.book_slug)} ${last.chapter}`;
+}
+
+function sameRefs(a: BiblePlanRef[], b: BiblePlanRef[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every(
+    (r, i) =>
+      r.book_slug === b[i]!.book_slug &&
+      r.chapter === b[i]!.chapter &&
+      r.verse_start === b[i]!.verse_start &&
+      r.verse_end === b[i]!.verse_end,
+  );
+}
+
+/**
+ * Детерминированная перебалансировка дней плана после ответа ИИ.
+ *
+ * Модель часто делит «по N глав» и сваливает весь остаток в последний день
+ * (89 глав / 25 дней → 24 дня по 3 и последний день из 14 глав).
+ * Здесь, если ссылки образуют непрерывное каноническое чтение, мы перераспределяем
+ * их ровно по запрошенному числу дней (±1 глава, остаток — в первые дни),
+ * перенумеровываем дни подряд и пересобираем подписи по фактическому диапазону.
+ *
+ * Тематические планы (не канонический порядок) не трогаем — только перенумеровываем
+ * дни подряд с 1, иначе дубликаты/пропуски номеров ломают UNIQUE (plan_id, day_index).
+ */
+export function rebalancePlanDays(
+  days: BiblePlanDayInput[],
+  requestedDays: number,
+): BiblePlanDayInput[] {
+  if (days.length === 0) return days;
+  const refs = days.flatMap((d) => d.refs);
+  if (refs.length === 0) return days;
+
+  if (!isCanonicalSequence(refs)) {
+    return days.map((d, i) => ({ day: i + 1, label: d.label, refs: d.refs }));
+  }
+
+  const n = Math.max(
+    1,
+    Math.min(Math.floor(requestedDays) || days.length, refs.length),
+  );
+  const sizes = evenChunkSizes(refs.length, n);
+  const keepAsIs =
+    n === days.length && days.every((d, i) => d.refs.length === sizes[i]);
+
+  const out: BiblePlanDayInput[] = [];
+  let offset = 0;
+  for (let i = 0; i < n; i += 1) {
+    const chunk = refs.slice(offset, offset + sizes[i]!);
+    offset += sizes[i]!;
+    const prev = days[i];
+    const unchanged = keepAsIs && prev != null && sameRefs(prev.refs, chunk);
+    out.push({
+      day: i + 1,
+      label: unchanged ? prev.label : buildPlanDayLabel(chunk),
+      refs: chunk,
+    });
+  }
+  return out;
 }
 
 export async function listPlans(memberId: number): Promise<BiblePlanRow[]> {
@@ -142,20 +255,22 @@ export async function createPlanWithDays(
     title: string;
     goal?: string;
     startDate?: string | null;
+    endDate?: string | null;
     aiPrompt?: string | null;
     days: Array<{ day: number; label?: string; refs: BiblePlanRef[]; dayDate?: string | null }>;
   },
 ): Promise<BiblePlanRow> {
   await ensureBibleSchema();
   const inserted = await query(
-    `INSERT INTO bible_reading_plans (member_id, title, goal, start_date, ai_prompt)
-     VALUES ($1, $2, $3, $4::date, $5)
+    `INSERT INTO bible_reading_plans (member_id, title, goal, start_date, end_date, ai_prompt)
+     VALUES ($1, $2, $3, $4::date, $5::date, $6)
      RETURNING id`,
     [
       memberId,
       input.title.slice(0, 500),
       (input.goal ?? '').slice(0, 4000),
       input.startDate ?? null,
+      input.endDate ?? null,
       input.aiPrompt ?? null,
     ],
   );
