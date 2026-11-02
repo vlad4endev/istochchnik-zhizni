@@ -32,7 +32,7 @@ import { isSystemChatKind, systemChatKindSqlList } from '../utils/adminMessenger
 import { parsePositiveMemberIds } from '../utils/parsePositiveMemberIds';
 import {
   isMessengerDirectoryVisibleToViewer,
-  isParishionerOnly,
+  isParishionerDirectoryViewer,
   normalizeAppRoles,
   type AppRole,
 } from '../types/appRole';
@@ -3662,12 +3662,16 @@ function mapMemberSearchRow(r: Record<string, unknown>) {
 }
 
 export type MessengerMemberSearchOptions = {
-  /** Роли зрителя: прихожанин без других ролей — только другие прихожане. */
+  /** Роли зрителя (app_roles). */
   viewerRoles?: readonly AppRole[] | null;
+  /** Основная роль сессии (members.app_role). Имеет приоритет над устаревшим app_roles. */
+  viewerPrimaryRole?: unknown;
 };
 
-function parishionerDirectoryFilterSql(viewerRoles: readonly AppRole[] | null | undefined): string {
-  return isParishionerOnly(viewerRoles) ? MEMBER_SEARCH_PARISHIONER_ONLY_SQL : '';
+function parishionerDirectoryFilterSql(options?: MessengerMemberSearchOptions): string {
+  return isParishionerDirectoryViewer(options?.viewerPrimaryRole, options?.viewerRoles)
+    ? MEMBER_SEARCH_PARISHIONER_ONLY_SQL
+    : '';
 }
 
 export async function getMemberAppRoles(memberId: number): Promise<AppRole[]> {
@@ -3685,10 +3689,25 @@ export async function getMemberAppRoles(memberId: number): Promise<AppRole[]> {
 export async function canViewerSeeMemberInMessengerDirectory(
   viewerRoles: readonly AppRole[] | null | undefined,
   targetMemberId: number,
+  viewerPrimaryRole?: unknown,
 ): Promise<boolean> {
-  if (!isParishionerOnly(viewerRoles)) return true;
+  if (!isParishionerDirectoryViewer(viewerPrimaryRole, viewerRoles)) return true;
   const targetRoles = await getMemberAppRoles(targetMemberId);
-  return isMessengerDirectoryVisibleToViewer(viewerRoles, targetRoles);
+  return isMessengerDirectoryVisibleToViewer(viewerRoles, targetRoles, viewerPrimaryRole);
+}
+
+/** Id из списка, которых прихожанин может видеть (только другие прихожане). */
+export async function parishionerVisibleMemberIdSet(memberIds: number[]): Promise<Set<number>> {
+  const ids = [...new Set(memberIds.filter((id) => Number.isFinite(id) && id > 0))];
+  if (ids.length === 0) return new Set();
+  const result = await dbQuery(
+    `SELECT m.id
+     FROM members m
+     WHERE m.id = ANY($1::int[])
+       ${MEMBER_SEARCH_PARISHIONER_ONLY_SQL}`,
+    [ids],
+  );
+  return new Set(result.rows.map((row) => Number((row as { id?: unknown }).id)));
 }
 
 export async function searchMembers(
@@ -3701,7 +3720,7 @@ export async function searchMembers(
   const tokens = nameSearchTokens(searchTerm);
   const safeLimit = Math.min(Math.max(Math.trunc(limit) || 50, 1), 200);
   const safeOffset = Math.min(Math.max(Math.trunc(offset) || 0, 0), 10_000);
-  const roleFilter = parishionerDirectoryFilterSql(options?.viewerRoles);
+  const roleFilter = parishionerDirectoryFilterSql(options);
   const nameFilter =
     tokens.length > 0
       ? `AND NOT EXISTS (
@@ -3745,7 +3764,7 @@ export async function listRegisteredMembers(
 ) {
   const safeLimit = Math.min(Math.max(Math.trunc(limit) || 80, 1), 200);
   const safeOffset = Math.min(Math.max(Math.trunc(offset) || 0, 0), 10_000);
-  const roleFilter = parishionerDirectoryFilterSql(options?.viewerRoles);
+  const roleFilter = parishionerDirectoryFilterSql(options);
   const result = await dbQuery(
     `SELECT ${MEMBER_SEARCH_SELECT}
      FROM members m
@@ -3767,7 +3786,7 @@ export async function getMemberByIdForMessenger(
 ) {
   if (!Number.isFinite(memberId) || memberId <= 0) return null;
   if (memberId === viewerMemberId) return null;
-  const roleFilter = parishionerDirectoryFilterSql(options?.viewerRoles);
+  const roleFilter = parishionerDirectoryFilterSql(options);
   const result = await dbQuery(
     `SELECT ${MEMBER_SEARCH_SELECT}
      FROM members m

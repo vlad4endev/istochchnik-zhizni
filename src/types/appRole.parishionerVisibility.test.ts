@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   isMessengerDirectoryVisibleToViewer,
+  isParishionerDirectoryViewer,
   isParishionerOnly,
 } from './appRole';
 
@@ -48,6 +49,20 @@ function run(): void {
   );
   assert.equal(
     isMessengerDirectoryVisibleToViewer(['minister'], ['member']),
+    true,
+  );
+
+  // app_role=parishioner, но app_roles ещё {member} — ограничение всё равно включено.
+  assert.equal(isParishionerDirectoryViewer('parishioner', ['member']), true);
+  assert.equal(isParishionerDirectoryViewer('member', ['member']), false);
+  assert.equal(isParishionerDirectoryViewer('member', ['parishioner']), true);
+  assert.equal(isParishionerDirectoryViewer(undefined, ['parishioner']), true);
+  assert.equal(
+    isMessengerDirectoryVisibleToViewer(['member'], ['member'], 'parishioner'),
+    false,
+  );
+  assert.equal(
+    isMessengerDirectoryVisibleToViewer(['member'], ['parishioner'], 'parishioner'),
     true,
   );
 

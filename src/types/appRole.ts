@@ -92,14 +92,30 @@ export function isParishionerOnly(roles: readonly AppRole[] | AppRole | null | u
 }
 
 /**
+ * Зритель каталога мессенджера — прихожанин.
+ * Основная роль `app_role` важнее массива: у старых записей `app_roles` часто
+ * остаётся `{member}`, хотя `app_role` уже `parishioner`.
+ */
+export function isParishionerDirectoryViewer(
+  primaryRole: unknown,
+  roles: readonly AppRole[] | AppRole | null | undefined,
+): boolean {
+  if (typeof primaryRole === 'string' && primaryRole.trim() && normalizeAppRole(primaryRole) === 'parishioner') {
+    return true;
+  }
+  return isParishionerOnly(roles);
+}
+
+/**
  * В каталоге мессенджера (новый чат / поиск / добавление) прихожанин
  * видит только других прихожан — не членов церкви и роли выше.
  */
 export function isMessengerDirectoryVisibleToViewer(
   viewerRoles: readonly AppRole[] | AppRole | null | undefined,
   targetRoles: readonly AppRole[] | AppRole | null | undefined,
+  viewerPrimaryRole?: unknown,
 ): boolean {
-  if (!isParishionerOnly(viewerRoles)) return true;
+  if (!isParishionerDirectoryViewer(viewerPrimaryRole, viewerRoles)) return true;
   return isParishionerOnly(targetRoles);
 }
 
