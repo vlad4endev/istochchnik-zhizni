@@ -359,6 +359,25 @@ export default defineConfig(({ mode }) => {
               handler: 'NetworkOnly',
             },
             {
+              /**
+               * Текст Писания/переводы/книги/комментарии/аудио-тайминги практически неизменны —
+               * в отличие от остального /api (прогресс, заметки, планы, поиск), которому нужен
+               * свежий ответ. StaleWhileRevalidate отдаёт из кэша мгновенно (офлайн-чтение уже
+               * открытых глав без ожидания таймаута сети), но тихо обновляет кэш в фоне — новый
+               * сид/правка текста долетит к следующему заходу, в отличие от CacheFirst.
+               */
+              urlPattern: /\/api\/bible\/(?:translations|books|chapter\/|commentaries|audio\/)/,
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: `bible-text-cache-${runtimeCacheSuffix}`,
+                expiration: {
+                  maxEntries: 1000,
+                  maxAgeSeconds: 30 * 24 * 60 * 60,
+                },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+            {
               urlPattern: /\/api\//,
               handler: 'NetworkFirst',
               options: {
