@@ -120,7 +120,7 @@ export function BibleHomePage() {
         <PageHeader title="Библия" />
       </div>
 
-      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col px-4 pb-8 pt-4 sm:px-5">
+      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col px-4 pb-8 pt-4 sm:px-5 max-lg:pb-[calc(var(--app-bottom-nav-total-height,0px)+var(--app-bottom-nav-content-gap,1rem))]">
         <TranslationPicker
           translations={translationsQ.data ?? []}
           value={translation}
