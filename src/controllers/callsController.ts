@@ -20,6 +20,7 @@ import {
   type CallAccessMode,
   type CallMediaType,
 } from '../services/callsService';
+import { recordClientCallEvents } from '../services/callEventsService';
 
 type AuthReq = Request & { authUserId?: number };
 
@@ -236,6 +237,28 @@ export async function callHistoryHandler(req: Request, res: Response): Promise<v
     res.json(result);
   } catch (err) {
     sendCallsError(res, err);
+  }
+}
+
+/** Приём пакета клиентских событий звонка (телеметрия для админ-журнала). */
+export async function postCallJournalHandler(req: Request, res: Response): Promise<void> {
+  const uid = memberId(req);
+  if (!uid) {
+    res.status(401).json({ error: 'Требуется авторизация' });
+    return;
+  }
+  try {
+    const body =
+      req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>) : {};
+    const result = await recordClientCallEvents(String(req.params.callId ?? ''), uid, body.events);
+    res.json(result);
+  } catch (err) {
+    if ((err as { code?: string }).code === 'forbidden') {
+      res.status(403).json({ error: 'Нет доступа к этому звонку' });
+      return;
+    }
+    console.error('[calls] journal post error:', err);
+    res.status(500).json({ error: 'Внутренняя ошибка сервера' });
   }
 }
 

@@ -2,6 +2,7 @@ import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { useScreenTracking } from '../hooks/useScreenTracking';
 import { isActiveMember, useAuthStore } from '../stores/authStore';
 import { useTheme } from '../theme';
 import { AuthNavigator } from './AuthNavigator';
@@ -14,6 +15,7 @@ export function RootNavigator() {
   const registrationStatus = useAuthStore((s) => s.registrationStatus);
   const hydrate = useAuthStore((s) => s.hydrate);
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
+  const { navigationRef, handleReady, handleStateChange } = useScreenTracking();
 
   useEffect(() => {
     hydrate();
@@ -61,7 +63,7 @@ export function RootNavigator() {
   const authInitial = token ? 'PendingReview' : 'Login';
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer ref={navigationRef} theme={navTheme} onReady={handleReady} onStateChange={handleStateChange}>
       {showMain ? <MainStack /> : <AuthNavigator initialRouteName={authInitial} />}
     </NavigationContainer>
   );

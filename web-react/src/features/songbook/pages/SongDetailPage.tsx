@@ -174,8 +174,10 @@ export function SongDetailPage() {
             aria-label="Закрыть настройки"
             onClick={() => setSettingsOpen(false)}
           />
+          {/* --sd-* живут на странице. Портал в body их не наследует: без style фон прозрачный и текст песни просвечивает. */}
           <div
-            className="fixed left-1/2 top-1/2 z-[121] flex w-[min(calc(100vw-1.5rem),28rem)] max-w-md max-h-[min(85dvh,640px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-[var(--sd-border)] bg-[var(--sd-surface)] shadow-2xl"
+            style={semanticVars as CSSProperties}
+            className="fixed left-1/2 top-1/2 z-[121] flex w-[min(calc(100vw-1.5rem),28rem)] max-w-md max-h-[min(85dvh,640px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-[var(--sd-border)] bg-[var(--sd-surface)] text-[var(--sd-text)] shadow-2xl"
             role="dialog"
             aria-label="Настройки текста песни"
           >

@@ -31,6 +31,12 @@ import {
 import { isSystemChatKind, systemChatKindSqlList } from '../utils/adminMessengerChats';
 import { isAssistantChannelMetadata } from '../utils/assistantChatCompose';
 import { parsePositiveMemberIds } from '../utils/parsePositiveMemberIds';
+import {
+  isMessengerDirectoryVisibleToViewer,
+  isParishionerDirectoryViewer,
+  normalizeAppRoles,
+  type AppRole,
+} from '../types/appRole';
 
 export { parsePositiveMemberIds };
 
@@ -1070,16 +1076,12 @@ export async function clearConversationHistory(
   await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [conversationId]);
 }
 
-/**
- * Find or create a private (P2P) conversation between two members.
- */
-export async function findOrCreatePersonalConversation(
+/** Existing private (1:1) conversation between two members, if any. */
+export async function findExistingPersonalConversation(
   memberA: number,
   memberB: number,
-): Promise<string> {
-  if (memberA === memberB) throw new Error('Cannot create chat with yourself');
-
-  // Check if private conversation already exists
+): Promise<string | null> {
+  if (memberA === memberB) return null;
   const existing = await dbQuery(
     `
     SELECT cp1.conversation_id
@@ -1095,10 +1097,21 @@ export async function findOrCreatePersonalConversation(
     `,
     [memberA, memberB],
   );
+  if (!existing.rows[0]) return null;
+  return bigint(existing.rows[0].conversation_id);
+}
 
-  if (existing.rows[0]) {
-    return bigint(existing.rows[0].conversation_id);
-  }
+/**
+ * Find or create a private (P2P) conversation between two members.
+ */
+export async function findOrCreatePersonalConversation(
+  memberA: number,
+  memberB: number,
+): Promise<string> {
+  if (memberA === memberB) throw new Error('Cannot create chat with yourself');
+
+  const existingId = await findExistingPersonalConversation(memberA, memberB);
+  if (existingId) return existingId;
 
   // Create new
   const conv = await dbQuery(
@@ -3620,6 +3633,21 @@ const MEMBER_SEARCH_ORDER = `
   (m.password_hash IS NOT NULL) DESC,
   m.name ASC`;
 
+/**
+ * Прихожанин видит в каталоге только других прихожан (без member и выше).
+ * Эффективные роли: непустой app_roles, иначе ARRAY[app_role].
+ */
+const MEMBER_SEARCH_PARISHIONER_ONLY_SQL = `
+  AND (
+    SELECT bool_and(lower(COALESCE(r.role, '')) = 'parishioner')
+    FROM unnest(
+      CASE
+        WHEN m.app_roles IS NOT NULL AND cardinality(m.app_roles) > 0 THEN m.app_roles
+        ELSE ARRAY[COALESCE(NULLIF(TRIM(m.app_role), ''), 'member')]::text[]
+      END
+    ) AS r(role)
+  )`;
+
 function mapMemberSearchRow(r: Record<string, unknown>) {
   return {
     id: Number(r.id),
@@ -3634,15 +3662,66 @@ function mapMemberSearchRow(r: Record<string, unknown>) {
   };
 }
 
+export type MessengerMemberSearchOptions = {
+  /** Роли зрителя (app_roles). */
+  viewerRoles?: readonly AppRole[] | null;
+  /** Основная роль сессии (members.app_role). Имеет приоритет над устаревшим app_roles. */
+  viewerPrimaryRole?: unknown;
+};
+
+function parishionerDirectoryFilterSql(options?: MessengerMemberSearchOptions): string {
+  return isParishionerDirectoryViewer(options?.viewerPrimaryRole, options?.viewerRoles)
+    ? MEMBER_SEARCH_PARISHIONER_ONLY_SQL
+    : '';
+}
+
+export async function getMemberAppRoles(memberId: number): Promise<AppRole[]> {
+  if (!Number.isFinite(memberId) || memberId <= 0) return [];
+  const result = await dbQuery(
+    `SELECT app_role, app_roles FROM members WHERE id = $1 LIMIT 1`,
+    [memberId],
+  );
+  const row = result.rows[0] as { app_role?: unknown; app_roles?: unknown } | undefined;
+  if (!row) return [];
+  return normalizeAppRoles(row.app_roles, row.app_role);
+}
+
+/** Можно ли зрителю открыть/пригласить участника из каталога мессенджера. */
+export async function canViewerSeeMemberInMessengerDirectory(
+  viewerRoles: readonly AppRole[] | null | undefined,
+  targetMemberId: number,
+  viewerPrimaryRole?: unknown,
+): Promise<boolean> {
+  if (!isParishionerDirectoryViewer(viewerPrimaryRole, viewerRoles)) return true;
+  const targetRoles = await getMemberAppRoles(targetMemberId);
+  return isMessengerDirectoryVisibleToViewer(viewerRoles, targetRoles, viewerPrimaryRole);
+}
+
+/** Id из списка, которых прихожанин может видеть (только другие прихожане). */
+export async function parishionerVisibleMemberIdSet(memberIds: number[]): Promise<Set<number>> {
+  const ids = [...new Set(memberIds.filter((id) => Number.isFinite(id) && id > 0))];
+  if (ids.length === 0) return new Set();
+  const result = await dbQuery(
+    `SELECT m.id
+     FROM members m
+     WHERE m.id = ANY($1::int[])
+       ${MEMBER_SEARCH_PARISHIONER_ONLY_SQL}`,
+    [ids],
+  );
+  return new Set(result.rows.map((row) => Number((row as { id?: unknown }).id)));
+}
+
 export async function searchMembers(
   searchTerm: string,
   excludeMemberId: number,
   limit: number = 50,
   offset: number = 0,
+  options?: MessengerMemberSearchOptions,
 ) {
   const tokens = nameSearchTokens(searchTerm);
   const safeLimit = Math.min(Math.max(Math.trunc(limit) || 50, 1), 200);
   const safeOffset = Math.min(Math.max(Math.trunc(offset) || 0, 0), 10_000);
+  const roleFilter = parishionerDirectoryFilterSql(options);
   const nameFilter =
     tokens.length > 0
       ? `AND NOT EXISTS (
@@ -3666,6 +3745,7 @@ export async function searchMembers(
      FROM members m
      WHERE m.is_active = TRUE
        AND m.id != $1
+       ${roleFilter}
        ${nameFilter}
      ORDER BY ${MEMBER_SEARCH_ORDER}
      LIMIT ${limitParam} OFFSET ${offsetParam}`,
@@ -3681,14 +3761,17 @@ export async function listRegisteredMembers(
   excludeMemberId: number,
   limit: number = 80,
   offset: number = 0,
+  options?: MessengerMemberSearchOptions,
 ) {
   const safeLimit = Math.min(Math.max(Math.trunc(limit) || 80, 1), 200);
   const safeOffset = Math.min(Math.max(Math.trunc(offset) || 0, 0), 10_000);
+  const roleFilter = parishionerDirectoryFilterSql(options);
   const result = await dbQuery(
     `SELECT ${MEMBER_SEARCH_SELECT}
      FROM members m
      WHERE m.is_active = TRUE
        AND m.id != $1
+       ${roleFilter}
      ORDER BY ${MEMBER_SEARCH_ORDER}
      LIMIT $2 OFFSET $3`,
     [excludeMemberId, safeLimit, safeOffset],
@@ -3700,15 +3783,18 @@ export async function listRegisteredMembers(
 export async function getMemberByIdForMessenger(
   memberId: number,
   viewerMemberId: number,
+  options?: MessengerMemberSearchOptions,
 ) {
   if (!Number.isFinite(memberId) || memberId <= 0) return null;
   if (memberId === viewerMemberId) return null;
+  const roleFilter = parishionerDirectoryFilterSql(options);
   const result = await dbQuery(
     `SELECT ${MEMBER_SEARCH_SELECT}
      FROM members m
      WHERE m.id = $1
        AND m.is_active = TRUE
        AND COALESCE(NULLIF(TRIM(m.registration_status), ''), 'active') = 'active'
+       ${roleFilter}
      LIMIT 1`,
     [memberId],
   );

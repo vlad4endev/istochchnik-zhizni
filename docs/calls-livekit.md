@@ -88,8 +88,9 @@ Host network + `advertise_internal_ip` / `skip_external_ip_validation`: ICE от
    | 7881 | TCP | ICE/TCP |
    | 7882 | UDP | ICE/UDP mux |
    | 3478 | UDP | TURN |
-   | 50100 | UDP | TURN relay |
+   | 50100–50999 | UDP | TURN relay (**1 порт = 1 relay-алокация** ≈ 1 relayed-участник; 900 портов ≈ до ~900 relayed-участников одновременно на весь сервер) |
    | 7880 | — | **не открывать** |
+   Домен в `turn.domain` должен резолвиться напрямую в IP хоста LiveKit (не через CDN-прокси — UDP 3478 через прокси не пройдёт). Для сетей, где UDP закрыт полностью (корпоративный Wi-Fi), нужен TURN/TLS: `turn.tls_port` + `cert_file`/`key_file` в `docker/livekit.yaml` (порт 5349 или 443 через L4-прокси).
 3. `"userland-proxy": false` + `deploy/sysctl-livekit.conf`.
 4. `LIVEKIT_RTC_NODE_IP` = белый IP.
 5. Permissions-Policy: `camera=(self), microphone=(self)`.
@@ -120,7 +121,9 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs li
   Быстрый ремонт на сервере: `sudo bash scripts/repair-livekit.sh`
   Диагностика: `curl -s https://app.church-tambov.ru/health/livekit` и `curl -s https://app.church-tambov.ru/lk/`
 - `text/html` ~29KB → старый образ web без location `/lk/`.
-- WSS ок, но «Переподключение…» / нет медиа → UDP **7882** + TCP **7881** + UDP **3478** + UDP **50100** на роутере + `userland-proxy: false`.
+- WSS ок, но «Переподключение…» / нет медиа → UDP **7882** + TCP **7881** + UDP **3478** + UDP **50100–50999** на роутере + `userland-proxy: false`.
+- «Не слышно» у части участников (особенно на мобильном интернете) → симметричный NAT: проверить, что TURN relay-порты 50100–50999 проброшены (диапазон в `docker/livekit.yaml` должен совпадать с пробросом); в логах LiveKit — `turn.relay_range` и успешные Allocate. Если Allocate есть, а медиа нет у новых участников — диапазон исчерпан: счётчик алокаций в метриках LiveKit, расширить диапазон.
+- Звонок умирает после долгого обрыва сети (>10 мин) → клиент сам перезаходит со свежим JWT (до 3 попыток); если не помогло — завершить и перезвонить.
 
 ## API (кратко)
 
@@ -131,8 +134,25 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs li
 - `GET /api/call-invitations/:token` — preview без секретов LiveKit
 - `POST /api/call-invitations/:token/join`
 - `GET /api/calls/history`
+- `POST /api/calls/:id/journal` — пакет клиентских событий звонка (телеметрия, только участник)
+- `GET /api/settings/calls/journal` — админский журнал звонков (фильтры, флаги проблем, курсор)
+- `GET /api/settings/calls/:id/log` — подробный лог звонка для админа (события + участники + проблемы)
 
 Токены выдаются только участникам с правом доступа. Identity: `member:{id}`.
+
+## Журнал звонков (админ-аналитика)
+
+Таблица `call_events` (создаётся в `initDb`): серверные переходы (`call_created`, `accepted`,
+`call_finished`, `token_issued`, `ghost_cleared`, …) + клиентская телеметрия из
+`web-react/src/features/calls/callJournal.ts` (`connected`/`reconnecting`/`device_error`/
+`stats_sample` с RTT/джиттером/потерями и т.д.). Клиент шлёт пакетами каждые 10 c и
+keepalive-fetch при закрытии вкладки; allowlist видов событий и лимиты — в
+`src/services/callEventsService.ts`. Retention: 90 дней (чистит `cleanupStaleCalls`).
+
+Админка → Звонки → Статистика → «Журнал звонков»: фильтры (период, статус, участник,
+«только проблемные»), у каждого звонка — автофлаги проблем (`deriveCallIssues`:
+`media_never_connected`, `reconnect_storm`, `device_error`, `low_quality`, `ghost_cleanup`, …)
+с подсказками по исправлению, участники, отчёты качества и хронология событий.
 
 ## Приглашения
 
@@ -200,7 +220,10 @@ Push **не** содержит LiveKit token. Успешная отправка 
 - **Один активный звонок на пользователя** — `pg_advisory_xact_lock` при create / accept / join / token; повторный join в другую комнату блокируется (`already_in_call`).
 - **Ghost «занят»** — cron сверяет `joined` с LiveKit presence (`CALL_GHOST_GRACE_SEC` + `CALL_GHOST_MISS_TICKS`); ICE-blip не закрывает UI (клиент игнорирует `ghost_cleanup`, пока комната жива).
 - **Выход ≠ завершение** — в группе «Выйти» только leave (в т.ч. хост); «Завершить для всех» — явный `endForAll` модератора. Pagehide-beacon `/end` только для 1:1 (мобильный фон не рвёт встречу).
-- **Лимит группы** — `CALL_MAX_GROUP_PARTICIPANTS` (по умолчанию 50) + LiveKit `maxParticipants`; join закрытой группы — в транзакции с `FOR UPDATE`.
-- **Длинные конференции** — JWT TTL по умолчанию 4 ч (compose/docs `14400`); в UI для групп включены adaptiveStream / dynacast / simulcast.
+- **Лимит группы** — `CALL_MAX_GROUP_PARTICIPANTS` (по умолчанию 50) + LiveKit `maxParticipants`; join закрытой группы — в транзакции с `FOR UPDATE`. Внимание: `maxParticipants` применяется только при явном `createRoom`; если Room Service недоступен из api, комната авто-создаётся при join без лимита.
+- **Перезаход после обрыва** — внутренний reconnect LiveKit исчерпан → клиент берёт свежий JWT (`POST /api/calls/:id/token`) и монтирует комнату заново (до 3 попыток, backoff 2/4/8 c). Дальше — «Завершить» и перезвонить.
+- **JWT TTL** — по умолчанию 4 ч. Истечение токена **не разрывает** активную сессию: сервер проактивно выдаёт подключённым клиентам refresh-токены (окно reconnect ≥ 10 мин). TTL влияет на первичное подключение и на повторный вход «с нуля». Для self-hosted **нет отзыва токенов** (revocation — только Cloud): удалённый из комнаты участник может переподключиться по старому JWT до его `exp`. Снижение TTL (напр. 3600) сокращает это окно, но сужает и окно reconnect после долгого обрыва — взвешивать. Дополнительная защита после стабилизации `api→7880`: `room.auto_create: false` в `docker/livekit.yaml` (вход только в явно созданные комнаты).
+- **Кодеки** — vp8 обязателен; h264 добавлен для аппаратного кодирования на iOS/Android (меньше CPU/нагрева/фризов на слабых устройствах) и старых Safari; vp9 — SVC для групп. Клиент по умолчанию публикует vp8 (`publishDefaults.videoCodec` в `CallWindow.tsx`).
+- **Фон на мобильных** — iOS: `UIBackgroundModes=audio` + CallKit есть. Android: для устойчивой работы микрофона/камеры в фоне нужен foreground service (`FOREGROUND_SERVICE_MICROPHONE`/`CAMERA` + `foregroundServiceType`) или self-managed `ConnectionService` (разрешение `MANAGE_OWN_CALLS` уже есть); без этого OEM-оптимизации батареи (Xiaomi/Huawei) рвут звонок при блокировке экрана.
 - **1:1** — только из личного чата (оба участника должны быть в private conversation).
 - **Многопользовательские встречи** — кнопка камеры в мессенджере → standalone link-встреча (как Телемост) или конференция по ссылке из группы.

@@ -6,6 +6,7 @@ export type PageViewPayload = {
   referrer?: string | null;
   duration_seconds?: number;
   session_id?: string;
+  platform?: string;
 };
 
 function getSessionId(): string {
@@ -23,11 +24,24 @@ function getSessionId(): string {
 export async function trackPageView(data: PageViewPayload): Promise<void> {
   try {
     await apiClient.post('/api/analytics/track/page-view', {
+      platform: 'web',
       ...data,
       session_id: data.session_id ?? getSessionId(),
     });
   } catch {
     // Не блокируем UI: лимиты (429), офлайн, отключённая аналитика.
+  }
+}
+
+export async function trackHeartbeat(pageKey: string): Promise<void> {
+  try {
+    await apiClient.post('/api/analytics/track/heartbeat', {
+      page_key: pageKey,
+      session_id: getSessionId(),
+      platform: 'web',
+    });
+  } catch {
+    // Heartbeat — фоновый сигнал, ошибки игнорируем.
   }
 }
 
@@ -77,4 +91,25 @@ export async function fetchAnalyticsUserDetail(userId: number, period: string): 
 export async function fetchAnalyticsRealtime(): Promise<any> {
   const { data } = await apiClient.get('/api/analytics/realtime');
   return data;
+}
+
+export async function fetchAnalyticsPrayer(period: string): Promise<any> {
+  const { data } = await apiClient.get('/api/analytics/prayer', { params: { period } });
+  return data;
+}
+
+export async function downloadAnalyticsCsv(period: string): Promise<void> {
+  const { data } = await apiClient.get('/api/analytics/export', {
+    params: { format: 'csv', period },
+    responseType: 'blob',
+  });
+  const blob = data instanceof Blob ? data : new Blob([String(data)], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `analytics-${period}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

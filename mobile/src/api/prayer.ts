@@ -11,6 +11,10 @@ export async function fetchPrayerByDate(date: string): Promise<DayPrayerData> {
   return data;
 }
 
+export async function postPrayerSectionVisit(): Promise<void> {
+  await apiClient.post('/api/calendar/prayer-section/visit');
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }

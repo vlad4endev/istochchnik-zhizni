@@ -1891,61 +1891,91 @@ export type CallUsageStatsResponse = {
     by_type: { direct: number; group: number };
     by_access: { closed: number; link: number };
   };
-  by_day: Array<{
-    day: string;
-    count: number;
-    avg_duration_sec: number | null;
-    avg_quality: number | null;
-  }>;
   by_status: Array<{ status: string; label: string; count: number }>;
   by_end_reason: Array<{ reason: string; label: string; count: number }>;
-  top_users: Array<{
-    member_id: number;
-    name: string;
-    avatar_url: string | null;
-    calls_initiated: number;
-    calls_joined: number;
-    total_duration_sec: number;
-    avg_quality: number | null;
-  }>;
-  recent: Array<{
-    id: string;
-    type: string;
-    media_type: string;
-    status: string;
-    status_label: string;
-    access_mode: string;
-    title: string | null;
-    initiated_by: number;
-    initiator_name: string;
-    initiator_avatar: string | null;
-    conversation_id: string | null;
-    created_at: string;
-    started_at: string | null;
-    ended_at: string | null;
-    duration_seconds: number | null;
-    end_reason: string | null;
-    end_reason_label: string | null;
-    quality_score: number | null;
-    quality_reports: Array<{
-      userId: number;
-      score: number;
-      connectionQuality?: string | null;
-      rttMs?: number | null;
-      packetLoss?: number | null;
-      jitterMs?: number | null;
-      at: string;
-    }>;
-    participants: Array<{
-      user_id: number;
-      name: string;
-      avatar_url: string | null;
-      role: string;
-      status: string;
-      joined_at: string | null;
-      left_at: string | null;
-    }>;
-  }>;
+};
+
+export type CallIssueSeverity = 'info' | 'warn' | 'error';
+
+export type CallIssue = {
+  code: string;
+  severity: CallIssueSeverity;
+  title: string;
+  hint: string;
+};
+
+export type CallJournalItem = {
+  id: string;
+  type: string;
+  mediaType: string;
+  status: string;
+  statusLabel: string;
+  accessMode: string;
+  title: string | null;
+  initiatedBy: number;
+  initiatorName: string;
+  initiatorAvatar: string | null;
+  conversationId: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  durationSeconds: number | null;
+  endReason: string | null;
+  endReasonLabel: string | null;
+  qualityScore: number | null;
+  participantsCount: number;
+  eventsCount: number;
+  warnCount: number;
+  errorCount: number;
+  reconnects: number;
+  lastEventAt: string | null;
+  issues: CallIssue[];
+};
+
+export type CallJournalResponse = {
+  items: CallJournalItem[];
+  nextCursor: string | null;
+};
+
+export type CallQualityReportEntry = {
+  userId: number;
+  score: number;
+  connectionQuality?: string | null;
+  rttMs?: number | null;
+  packetLoss?: number | null;
+  jitterMs?: number | null;
+  at: string;
+};
+
+export type CallLogParticipant = {
+  userId: number;
+  name: string;
+  avatarUrl: string | null;
+  role: string;
+  status: string;
+  invitedAt: string;
+  joinedAt: string | null;
+  leftAt: string | null;
+};
+
+export type CallLogEvent = {
+  id: number;
+  callId: string;
+  memberId: number | null;
+  memberName: string | null;
+  source: 'server' | 'client';
+  kind: string;
+  severity: CallIssueSeverity;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type CallLogDetail = {
+  call: CallJournalItem & { livekitRoomName: string };
+  participants: CallLogParticipant[];
+  qualityReports: CallQualityReportEntry[];
+  events: CallLogEvent[];
+  issues: CallIssue[];
 };
 
 export async function fetchCallSettingsAdmin(): Promise<CallSettingsAdminResponse> {
@@ -2002,10 +2032,39 @@ export async function fetchCallUsageStats(params?: {
   to?: string;
   status?: string;
   memberId?: number;
-  limit?: number;
 }): Promise<CallUsageStatsResponse> {
   const { data } = await apiClient.get<CallUsageStatsResponse>('/api/settings/calls/stats', {
     params,
   });
+  return data;
+}
+
+export async function fetchCallJournal(params?: {
+  from?: string;
+  to?: string;
+  status?: string;
+  member?: string;
+  onlyIssues?: boolean;
+  cursor?: string;
+  limit?: number;
+}): Promise<CallJournalResponse> {
+  const { data } = await apiClient.get<CallJournalResponse>('/api/settings/calls/journal', {
+    params: {
+      from: params?.from,
+      to: params?.to,
+      status: params?.status,
+      member: params?.member,
+      onlyIssues: params?.onlyIssues ? '1' : undefined,
+      cursor: params?.cursor,
+      limit: params?.limit,
+    },
+  });
+  return data;
+}
+
+export async function fetchCallLogDetail(callId: string): Promise<CallLogDetail> {
+  const { data } = await apiClient.get<CallLogDetail>(
+    `/api/settings/calls/${encodeURIComponent(callId)}/log`,
+  );
   return data;
 }

@@ -12,11 +12,11 @@
 #   VITE_CALLS_ENABLED=true
 #   LIVEKIT_RTC_NODE_IP=77.93.125.36
 #
-# Роутер → LAN IP хоста (отдельные правила, без диапазонов):
+# Роутер → LAN IP хоста:
 #   TCP 7881 → 7881
 #   UDP 7882 → 7882
 #   UDP 3478 → 3478
-#   UDP 50100 → 50100
+#   UDP 50100–50999 → 50100–50999 (диапазон; 1 порт = 1 TURN-алокация, см. docker/livekit.yaml)
 #   7880 наружу НЕ открывать
 #
 # Рекомендуется: /etc/docker/daemon.json → { "userland-proxy": false }
@@ -30,6 +30,12 @@ services:
     restart: always
     network_mode: host
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    # Каждый TURN-relay и каждый ICE/UDP-сокет = файловый дескриптор.
+    # При relay-диапазоне 50100–50999 дефолтного nofile 1024 не хватит.
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     environment:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY in .env}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET in .env}

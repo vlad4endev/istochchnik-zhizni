@@ -102,7 +102,7 @@ VAPID_SUBJECT=mailto:your-support@domain.com
 docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d
 ```
 
-Нужны DNS `call.church-tambov.ru` (WSS), UDP **50000–50100** и TCP **7881**.
+Нужны DNS `call.church-tambov.ru` (WSS), UDP **7882**, UDP **3478**, UDP **50100–50999** (TURN relay) и TCP **7881**.
 
 ## Бекап (БД + uploads)
 
@@ -118,11 +118,12 @@ CONFIRM_RESTORE=YES bash scripts/restore.sh backups/latest
 
 ### Нулевой деплой и участники
 
-`initDb` поднимает только схему. Список участников **не** заливается из кода при старте API
-(раньше `MEMBER_SEED_SQL` снова создавал удалённых людей после пересборки).
+`initDb` поднимает только схему. Список участников **никогда** не заливается из кода
+(раньше сид снова создавал удалённых людей после пересборки).
 
-- Пустой сервер → пустая `members` → либо restore из бэкапа, либо ручное добавление.
-- Явный сид из репозитория (если нужен): `npm run db:seed-members` или `SEED_MEMBERS_ON_INIT=true`.
+- Пустой сервер → пустая `members` → restore из бэкапа или ручное добавление в админке.
+- Старый список ФИО лежит только в архиве `scripts/archive/church-roster-seed-2026-03.sql` (не подключён к старту).
+- После `git pull` обязательно пересоберите образ API (`docker compose build --no-cache api` или `npm run server:update`), иначе может крутиться старый образ с автосидом.
 
 ## Обновление на сервере
 

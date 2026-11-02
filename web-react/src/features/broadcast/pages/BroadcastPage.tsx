@@ -246,13 +246,13 @@ export function BroadcastPage() {
             <div style={skeletonStyle}>
               <div style={{ background: '#1a0808', width: '100%', aspectRatio: '16/9', borderRadius: '20px 20px 0 0' }} />
               <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ height: 16, background: '#eee', borderRadius: 8, width: '55%' }} />
-                <div style={{ height: 36, background: '#F4F0EE', borderRadius: 10, width: '100%' }} />
+                <div style={{ height: 16, background: 'var(--bg-elevated)', borderRadius: 8, width: '55%' }} />
+                <div style={{ height: 36, background: 'var(--bg-hover)', borderRadius: 10, width: '100%' }} />
               </div>
             </div>
           ) : error ? (
             <div style={{ ...skeletonStyle, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 13, color: '#999' }}>Не удалось загрузить данные трансляции</span>
+              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Не удалось загрузить данные трансляции</span>
             </div>
           ) : (
             <StreamPlayer
@@ -322,9 +322,9 @@ export function BroadcastPage() {
 }
 
 const skeletonStyle: React.CSSProperties = {
-  background: '#fff',
+  background: 'var(--bg-card)',
   borderRadius: 20,
-  border: '1px solid rgba(0,0,0,0.07)',
+  border: '1px solid var(--border)',
   overflow: 'hidden',
   width: '100%',
 };

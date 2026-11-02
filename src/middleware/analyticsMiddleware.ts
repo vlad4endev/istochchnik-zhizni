@@ -20,6 +20,7 @@ type QueuedPageView = {
   deviceType: string | null;
   os: string | null;
   browser: string | null;
+  platform: string | null;
   referrer: string | null;
   durationSeconds: number | null;
   viewedAt: Date;
@@ -172,7 +173,7 @@ async function flushQueue(): Promise<void> {
     const values: unknown[] = [];
     const rowsSql = batch
       .map((item, i) => {
-        const p = i * 12;
+        const p = i * 13;
         values.push(
           item.pageKey,
           item.pageUrl,
@@ -183,17 +184,18 @@ async function flushQueue(): Promise<void> {
           item.deviceType,
           item.os,
           item.browser,
+          item.platform,
           item.referrer,
           item.durationSeconds,
           item.viewedAt.toISOString(),
         );
-        return `($${p + 1}, $${p + 2}, $${p + 3}, $${p + 4}, $${p + 5}, $${p + 6}, $${p + 7}, $${p + 8}, $${p + 9}, $${p + 10}, $${p + 11}, $${p + 12})`;
+        return `($${p + 1}, $${p + 2}, $${p + 3}, $${p + 4}, $${p + 5}, $${p + 6}, $${p + 7}, $${p + 8}, $${p + 9}, $${p + 10}, $${p + 11}, $${p + 12}, $${p + 13})`;
       })
       .join(', ');
     await pool.query(
       `
         INSERT INTO page_views (
-          page_key, page_url, user_id, session_id, ip_hash, user_agent, device_type, os, browser, referrer, duration_seconds, viewed_at
+          page_key, page_url, user_id, session_id, ip_hash, user_agent, device_type, os, browser, platform, referrer, duration_seconds, viewed_at
         )
         VALUES ${rowsSql}
       `,
@@ -249,6 +251,7 @@ function normalizeQueuedPageView(item: Partial<QueuedPageView>): QueuedPageView 
     deviceType: item.deviceType ?? null,
     os: item.os ?? null,
     browser: item.browser ?? null,
+    platform: item.platform ?? null,
     referrer: item.referrer ?? null,
     durationSeconds: item.durationSeconds ?? null,
     viewedAt: toDateSafe(item.viewedAt),
@@ -295,6 +298,7 @@ export function analyticsMiddleware(req: Request, res: Response, next: NextFunct
       deviceType,
       os,
       browser,
+      platform: 'web',
       referrer,
       durationSeconds,
       viewedAt: new Date(),

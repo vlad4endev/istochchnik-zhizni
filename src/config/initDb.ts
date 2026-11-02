@@ -1,5 +1,4 @@
 import { pool } from './db';
-import { MEMBER_SEED_SQL, shouldSeedMembersOnInit } from './memberSeedSql';
 import { mergeDuplicateMembersBootPatchIfNeeded } from '../services/memberMergeService';
 
 const INIT_SQL = `
@@ -2172,8 +2171,13 @@ CREATE TABLE IF NOT EXISTS analytics_sessions (
   device_type VARCHAR(20),
   os VARCHAR(50),
   browser VARCHAR(50),
+  platform VARCHAR(20),
+  current_page_key VARCHAR(100),
   ip_hash CHAR(64)
 );
+
+ALTER TABLE analytics_sessions ADD COLUMN IF NOT EXISTS platform VARCHAR(20);
+ALTER TABLE analytics_sessions ADD COLUMN IF NOT EXISTS current_page_key VARCHAR(100);
 
 CREATE INDEX IF NOT EXISTS idx_analytics_sessions_user
   ON analytics_sessions (user_id);
@@ -2191,10 +2195,13 @@ CREATE TABLE IF NOT EXISTS page_views (
   device_type VARCHAR(20),
   os VARCHAR(50),
   browser VARCHAR(50),
+  platform VARCHAR(20),
   referrer TEXT,
   duration_seconds INTEGER,
   viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE page_views ADD COLUMN IF NOT EXISTS platform VARCHAR(20);
 
 CREATE INDEX IF NOT EXISTS idx_page_views_page_key
   ON page_views (page_key);
@@ -2457,6 +2464,22 @@ CREATE INDEX IF NOT EXISTS idx_call_invitations_call
   ON call_invitations (call_id)
   WHERE revoked_at IS NULL;
 
+-- Журнал событий звонка: серверные переходы + клиентская телеметрия (для админ-аналитики)
+CREATE TABLE IF NOT EXISTS call_events (
+  id BIGSERIAL PRIMARY KEY,
+  call_id UUID NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
+  member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  source VARCHAR(8) NOT NULL DEFAULT 'server' CHECK (source IN ('server', 'client')),
+  kind VARCHAR(64) NOT NULL,
+  severity VARCHAR(8) NOT NULL DEFAULT 'info' CHECK (severity IN ('info', 'warn', 'error')),
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_call_events_call_created
+  ON call_events (call_id, created_at ASC, id ASC);
+CREATE INDEX IF NOT EXISTS idx_call_events_created
+  ON call_events (created_at);
+
 -- Offline sync MVP columns
 ALTER TABLE songs ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE songs ADD COLUMN IF NOT EXISTS client_id UUID;
@@ -2473,12 +2496,15 @@ export async function initDb(): Promise<void> {
     throw new Error('Database pool is not initialized. Set DATABASE_URL in .env');
   }
   await pool.query(INIT_SQL);
-  // Do not insert church roster on every boot: deleted members were coming back after
-  // rebuild, and empty servers already had people before any backup restore.
-  // Explicit seed: SEED_MEMBERS_ON_INIT=true or `npm run db:seed-members`.
-  if (shouldSeedMembersOnInit()) {
-    await pool.query(MEMBER_SEED_SQL);
-    console.log('[db] MEMBER_SEED_SQL applied (SEED_MEMBERS_ON_INIT=true)');
-  }
+  // Never seed members from the repo here — deleted people were resurrected on rebuild.
+  // Roster comes from backup restore or admin UI only.
   await mergeDuplicateMembersBootPatchIfNeeded();
+  try {
+    const count = await pool.query<{ c: string }>(
+      'SELECT COUNT(*)::text AS c FROM members',
+    );
+    console.log('[db] members rows after initDb:', count.rows[0]?.c ?? '?');
+  } catch (e) {
+    console.warn('[db] could not count members after initDb:', e);
+  }
 }

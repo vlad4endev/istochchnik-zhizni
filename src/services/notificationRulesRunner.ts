@@ -329,7 +329,7 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
     }
     case 'system_update': {
       const stamp =
-        String(process.env.BUILD_STAMP ?? process.env.GIT_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? '').trim() ||
+        String(process.env.BUILD_STAMP ?? process.env.GIT_SHA ?? '').trim() ||
         null;
       if (!stamp) return;
       if (!rs.lastApiBuildStamp) {
