@@ -209,6 +209,46 @@ export async function recordClientCallEvents(
 }
 
 // ---------------------------------------------------------------------------
+// Ретенция журнала: ежесуточная батч-очистка (вызывается из cron, не из hot path)
+// ---------------------------------------------------------------------------
+
+const RETENTION_BATCH_SIZE = 5000;
+/** Потолок батчей за прогон (5000 × 200 = 1 млн строк) — защита от бесконечного цикла под нагрузкой. */
+const RETENTION_MAX_BATCHES = 200;
+
+/** Срок хранения событий журнала в днях: CALL_JOURNAL_RETENTION_DAYS, по умолчанию 90. */
+export function getCallJournalRetentionDays(): number {
+  const raw = Number(process.env.CALL_JOURNAL_RETENTION_DAYS);
+  if (!Number.isFinite(raw) || raw <= 0) return 90;
+  return Math.min(3650, Math.floor(raw));
+}
+
+/**
+ * Удаляет события старше retentionDays батчами по RETENTION_BATCH_SIZE строк:
+ * короткие транзакции — без длинных блокировок и всплесков WAL, которые дал бы
+ * один большой DELETE. Возвращает общее число удалённых строк.
+ */
+export async function deleteExpiredCallEvents(
+  retentionDays = getCallJournalRetentionDays(),
+): Promise<number> {
+  const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString();
+  let total = 0;
+  for (let batch = 0; batch < RETENTION_MAX_BATCHES; batch += 1) {
+    const res = await query(
+      `DELETE FROM call_events
+       WHERE ctid IN (
+         SELECT ctid FROM call_events WHERE created_at < $1::timestamptz LIMIT $2
+       )`,
+      [cutoff, RETENTION_BATCH_SIZE],
+    );
+    const deleted = Number(res.rowCount ?? 0);
+    total += deleted;
+    if (deleted < RETENTION_BATCH_SIZE) break;
+  }
+  return total;
+}
+
+// ---------------------------------------------------------------------------
 // Аналитика проблем (pure — покрыто тестами)
 // ---------------------------------------------------------------------------
 

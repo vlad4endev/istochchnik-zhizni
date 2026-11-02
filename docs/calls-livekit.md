@@ -147,7 +147,9 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs li
 `web-react/src/features/calls/callJournal.ts` (`connected`/`reconnecting`/`device_error`/
 `stats_sample` с RTT/джиттером/потерями и т.д.). Клиент шлёт пакетами каждые 10 c и
 keepalive-fetch при закрытии вкладки; allowlist видов событий и лимиты — в
-`src/services/callEventsService.ts`. Retention: 90 дней (чистит `cleanupStaleCalls`).
+`src/services/callEventsService.ts`. Retention: `CALL_JOURNAL_RETENTION_DAYS` (по умолчанию
+90 дней), ежесуточная батч-очистка `src/cron/callJournalRetention.ts` (04:30,
+override `CALL_JOURNAL_RETENTION_CRON`) + отложенный прогон через 2 мин после старта API.
 
 Админка → Звонки → Статистика → «Журнал звонков»: фильтры (период, статус, участник,
 «только проблемные»), у каждого звонка — автофлаги проблем (`deriveCallIssues`:

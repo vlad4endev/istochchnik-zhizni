@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   CLIENT_CALL_EVENT_KINDS,
   deriveCallIssues,
+  getCallJournalRetentionDays,
   sanitizeClientEvent,
   sanitizeClientPayload,
   type CallIssueInput,
@@ -165,6 +166,26 @@ async function main(): Promise<void> {
   assert.equal(CLIENT_CALL_EVENT_KINDS.connected, 'info');
   assert.equal(CLIENT_CALL_EVENT_KINDS.room_error, 'error');
   assert.ok(!('sql_injection_attempt' in CLIENT_CALL_EVENT_KINDS));
+
+  // --- getCallJournalRetentionDays: env parsing ---
+  const prevRetentionEnv = process.env.CALL_JOURNAL_RETENTION_DAYS;
+  try {
+    delete process.env.CALL_JOURNAL_RETENTION_DAYS;
+    assert.equal(getCallJournalRetentionDays(), 90);
+    process.env.CALL_JOURNAL_RETENTION_DAYS = '30';
+    assert.equal(getCallJournalRetentionDays(), 30);
+    process.env.CALL_JOURNAL_RETENTION_DAYS = '0';
+    assert.equal(getCallJournalRetentionDays(), 90);
+    process.env.CALL_JOURNAL_RETENTION_DAYS = '-5';
+    assert.equal(getCallJournalRetentionDays(), 90);
+    process.env.CALL_JOURNAL_RETENTION_DAYS = 'abc';
+    assert.equal(getCallJournalRetentionDays(), 90);
+    process.env.CALL_JOURNAL_RETENTION_DAYS = '999999';
+    assert.equal(getCallJournalRetentionDays(), 3650);
+  } finally {
+    if (prevRetentionEnv === undefined) delete process.env.CALL_JOURNAL_RETENTION_DAYS;
+    else process.env.CALL_JOURNAL_RETENTION_DAYS = prevRetentionEnv;
+  }
 
   console.log('callEventsService ok');
 }

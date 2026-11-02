@@ -2204,10 +2204,9 @@ export async function cleanupStaleCalls(): Promise<{
      WHERE revoked_at IS NULL AND expires_at < NOW() - INTERVAL '7 days'`,
   ).catch(() => undefined);
 
-  // Retention журнала событий звонков
-  await query(`DELETE FROM call_events WHERE created_at < NOW() - INTERVAL '90 days'`).catch(
-    () => undefined,
-  );
+  // Ретенция журнала (call_events) вынесена в ежесуточную батч-задачу:
+  // src/cron/callJournalRetention.ts. Здесь, в тике каждые 15 с, удалять нельзя —
+  // небатчированный DELETE на большой таблице даёт блокировки и всплески WAL.
 
   return { missed, endedEmpty, ghostsCleared: ghosts.cleared };
 }
