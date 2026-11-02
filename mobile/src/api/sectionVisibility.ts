@@ -48,6 +48,12 @@ export async function fetchSectionVisibilitySettings(): Promise<SectionVisibilit
   return data;
 }
 
+/**
+ * Доступ к разделу строго по списку ролей из настроек — без автоматического
+ * наследования «прихожанином» прав роли «член церкви». Если раздел должен
+ * быть доступен прихожанам, роль `parishioner` должна быть явно включена
+ * администратором в список ролей раздела.
+ */
 export function canRoleAccessSection(
   settings: SectionVisibilitySettingsPublic | undefined,
   sectionId: AppSectionId,
@@ -64,9 +70,5 @@ export function canRoleAccessSection(
   );
   const rule = settings.sections[sectionId];
   if (!rule || !rule.enabled) return false;
-  return roles.some(
-    (role) =>
-      rule.roles.includes(role) ||
-      (role === 'parishioner' && rule.roles.includes('member')),
-  );
+  return roles.some((role) => rule.roles.includes(role));
 }

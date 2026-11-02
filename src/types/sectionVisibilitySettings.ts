@@ -119,6 +119,11 @@ export function normalizeSectionVisibilitySettings(raw: unknown): SectionVisibil
   return { sections: out };
 }
 
+/**
+ * Доступ к разделу строго по списку ролей из настроек — без автоматического
+ * наследования «прихожанином» прав роли «член церкви». Если нужно открыть
+ * раздел прихожанам, роль `parishioner` должна быть явно добавлена в `roles`.
+ */
 export function isSectionVisibleForRole(
   doc: SectionVisibilitySettingsDocument,
   sectionId: AppSectionId,
@@ -127,8 +132,5 @@ export function isSectionVisibleForRole(
   const role = normalizeRole(roleRaw) ?? 'member';
   const rule = doc.sections[sectionId];
   if (!rule.enabled) return false;
-  return (
-    rule.roles.includes(role) ||
-    (role === 'parishioner' && rule.roles.includes('member'))
-  );
+  return rule.roles.includes(role);
 }

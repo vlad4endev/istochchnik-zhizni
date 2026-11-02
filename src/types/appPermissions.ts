@@ -229,13 +229,11 @@ export function roleHasPermission(
   return false;
 }
 
+/** Строго по явным ролям — «прихожанин» не наследует права «члена церкви». */
 function normalizeAppRolesForCheck(roles: AppRole[]): AppRole[] {
   const out: AppRole[] = [];
   for (const r of roles) {
     if (!out.includes(r)) out.push(r);
-    if (r === 'parishioner' && !out.includes('member')) {
-      /* parishioner inherits section.member rules via section visibility, not here */
-    }
   }
   return out.length > 0 ? out : ['member'];
 }
