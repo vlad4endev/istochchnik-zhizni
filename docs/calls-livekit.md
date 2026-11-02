@@ -88,8 +88,9 @@ Host network + `advertise_internal_ip` / `skip_external_ip_validation`: ICE от
    | 7881 | TCP | ICE/TCP |
    | 7882 | UDP | ICE/UDP mux |
    | 3478 | UDP | TURN |
-   | 50100 | UDP | TURN relay |
+   | 50100–50119 | UDP | TURN relay (**1 порт = 1 relay-алокация**; диапазон из одного порта = 1 relayed-участник на весь сервер) |
    | 7880 | — | **не открывать** |
+   Домен в `turn.domain` должен резолвиться напрямую в IP хоста LiveKit (не через CDN-прокси — UDP 3478 через прокси не пройдёт). Для сетей, где UDP закрыт полностью (корпоративный Wi-Fi), нужен TURN/TLS: `turn.tls_port` + `cert_file`/`key_file` в `docker/livekit.yaml` (порт 5349 или 443 через L4-прокси).
 3. `"userland-proxy": false` + `deploy/sysctl-livekit.conf`.
 4. `LIVEKIT_RTC_NODE_IP` = белый IP.
 5. Permissions-Policy: `camera=(self), microphone=(self)`.
@@ -120,7 +121,9 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs li
   Быстрый ремонт на сервере: `sudo bash scripts/repair-livekit.sh`
   Диагностика: `curl -s https://app.church-tambov.ru/health/livekit` и `curl -s https://app.church-tambov.ru/lk/`
 - `text/html` ~29KB → старый образ web без location `/lk/`.
-- WSS ок, но «Переподключение…» / нет медиа → UDP **7882** + TCP **7881** + UDP **3478** + UDP **50100** на роутере + `userland-proxy: false`.
+- WSS ок, но «Переподключение…» / нет медиа → UDP **7882** + TCP **7881** + UDP **3478** + UDP **50100–50119** на роутере + `userland-proxy: false`.
+- «Не слышно» у части участников (особенно на мобильном интернете) → симметричный NAT: проверить, что TURN relay-порты 50100–50119 проброшены; в логах LiveKit — `turn.relay_range` и успешные Allocate.
+- Звонок умирает после долгого обрыва сети (>10 мин) → клиент сам перезаходит со свежим JWT (до 3 попыток); если не помогло — завершить и перезвонить.
 
 ## API (кратко)
 
@@ -200,7 +203,10 @@ Push **не** содержит LiveKit token. Успешная отправка 
 - **Один активный звонок на пользователя** — `pg_advisory_xact_lock` при create / accept / join / token; повторный join в другую комнату блокируется (`already_in_call`).
 - **Ghost «занят»** — cron сверяет `joined` с LiveKit presence (`CALL_GHOST_GRACE_SEC` + `CALL_GHOST_MISS_TICKS`); ICE-blip не закрывает UI (клиент игнорирует `ghost_cleanup`, пока комната жива).
 - **Выход ≠ завершение** — в группе «Выйти» только leave (в т.ч. хост); «Завершить для всех» — явный `endForAll` модератора. Pagehide-beacon `/end` только для 1:1 (мобильный фон не рвёт встречу).
-- **Лимит группы** — `CALL_MAX_GROUP_PARTICIPANTS` (по умолчанию 50) + LiveKit `maxParticipants`; join закрытой группы — в транзакции с `FOR UPDATE`.
-- **Длинные конференции** — JWT TTL по умолчанию 4 ч (compose/docs `14400`); в UI для групп включены adaptiveStream / dynacast / simulcast.
+- **Лимит группы** — `CALL_MAX_GROUP_PARTICIPANTS` (по умолчанию 50) + LiveKit `maxParticipants`; join закрытой группы — в транзакции с `FOR UPDATE`. Внимание: `maxParticipants` применяется только при явном `createRoom`; если Room Service недоступен из api, комната авто-создаётся при join без лимита.
+- **Перезаход после обрыва** — внутренний reconnect LiveKit исчерпан → клиент берёт свежий JWT (`POST /api/calls/:id/token`) и монтирует комнату заново (до 3 попыток, backoff 2/4/8 c). Дальше — «Завершить» и перезвонить.
+- **JWT TTL** — по умолчанию 4 ч. Истечение токена **не разрывает** активную сессию: сервер проактивно выдаёт подключённым клиентам refresh-токены (окно reconnect ≥ 10 мин). TTL влияет на первичное подключение и на повторный вход «с нуля». Для self-hosted **нет отзыва токенов** (revocation — только Cloud): удалённый из комнаты участник может переподключиться по старому JWT до его `exp`. Снижение TTL (напр. 3600) сокращает это окно, но сужает и окно reconnect после долгого обрыва — взвешивать. Дополнительная защита после стабилизации `api→7880`: `room.auto_create: false` в `docker/livekit.yaml` (вход только в явно созданные комнаты).
+- **Кодеки** — vp8 обязателен; h264 добавлен для аппаратного кодирования на iOS/Android (меньше CPU/нагрева/фризов на слабых устройствах) и старых Safari; vp9 — SVC для групп. Клиент по умолчанию публикует vp8 (`publishDefaults.videoCodec` в `CallWindow.tsx`).
+- **Фон на мобильных** — iOS: `UIBackgroundModes=audio` + CallKit есть. Android: для устойчивой работы микрофона/камеры в фоне нужен foreground service (`FOREGROUND_SERVICE_MICROPHONE`/`CAMERA` + `foregroundServiceType`) или self-managed `ConnectionService` (разрешение `MANAGE_OWN_CALLS` уже есть); без этого OEM-оптимизации батареи (Xiaomi/Huawei) рвут звонок при блокировке экрана.
 - **1:1** — только из личного чата (оба участника должны быть в private conversation).
 - **Многопользовательские встречи** — кнопка камеры в мессенджере → standalone link-встреча (как Телемост) или конференция по ссылке из группы.
