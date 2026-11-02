@@ -5,6 +5,7 @@ import {
   LuChevronDown,
   LuChevronLeft,
   LuChevronRight,
+  LuColumns2,
   LuHighlighter,
   LuMessageSquareText,
   LuNotebookPen,
@@ -49,6 +50,7 @@ import { BooksSheet } from '../components/BooksSheet';
 import { ReaderSettingsSheet } from '../components/ReaderSettingsSheet';
 import { SyncedAudioPlayer } from '../components/SyncedAudioPlayer';
 import { TranslationPicker } from '../components/TranslationPicker';
+import { TranslationsSheet } from '../components/TranslationsSheet';
 
 const HIGHLIGHT_BG: Record<BibleHighlightColor, string> = {
   yellow: 'bg-amber-200/70',
@@ -76,8 +78,9 @@ const HIGHLIGHT_COLORS: BibleHighlightColor[] = ['yellow', 'green', 'blue', 'pin
 export function BibleReaderPage() {
   const { translation = 'synodal', book = 'john', chapter: chapterParam } = useParams();
   const chapter = Math.max(1, Number(chapterParam) || 1);
-  const [search] = useSearchParams();
+  const [search, setSearchParams] = useSearchParams();
   const focusVerse = search.get('v') != null ? Number(search.get('v')) : null;
+  const compareCode = search.get('cmp');
   const navigate = useNavigate();
   const qc = useQueryClient();
   const roles = useAuthStore((s) => s.roles ?? []);
@@ -93,6 +96,7 @@ export function BibleReaderPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [booksOpen, setBooksOpen] = useState(false);
   const [readerSettingsOpen, setReaderSettingsOpen] = useState(false);
+  const [compareSheetOpen, setCompareSheetOpen] = useState(false);
   const [readerSettings, setReaderSettings] = useState<BibleReaderSettings>(() =>
     readReaderSettings(),
   );
@@ -138,6 +142,13 @@ export function BibleReaderPage() {
       .join(' ');
   }
 
+  function setCompareCode(code: string | null) {
+    const next = new URLSearchParams(search);
+    if (code) next.set('cmp', code);
+    else next.delete('cmp');
+    setSearchParams(next, { replace: true });
+  }
+
   const translationsQ = useQuery({
     queryKey: ['bible', 'translations'],
     queryFn: fetchBibleTranslations,
@@ -167,6 +178,12 @@ export function BibleReaderPage() {
     queryKey: ['bible', 'highlights', translation, book, chapter],
     queryFn: () => fetchBibleHighlights({ translation, book, chapter }),
   });
+  const compareChapterQ = useQuery({
+    queryKey: ['bible', 'chapter', compareCode, book, chapter],
+    queryFn: () => fetchBibleChapter(compareCode!, book, chapter),
+    enabled: Boolean(compareCode) && compareCode !== translation,
+  });
+  const compareTranslationMeta = (translationsQ.data ?? []).find((t) => t.code === compareCode);
 
   const bookMeta = useMemo(
     () => (booksQ.data ?? []).find((b) => b.slug === book) ?? chapterQ.data?.book,
@@ -176,6 +193,13 @@ export function BibleReaderPage() {
   useEffect(() => {
     writeStoredTranslation(translation);
   }, [translation]);
+
+  useEffect(() => {
+    if (compareCode && compareCode === translation) {
+      setCompareCode(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [translation, compareCode]);
 
   useEffect(() => {
     if (!chapterQ.data?.verses.length) return;
@@ -324,6 +348,42 @@ export function BibleReaderPage() {
           >
             <LuType size={16} />
           </button>
+          {compareCode && compareTranslationMeta ? (
+            <button
+              type="button"
+              onClick={() => setCompareSheetOpen(true)}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary"
+            >
+              <LuColumns2 size={14} />
+              {compareTranslationMeta.short_title || compareTranslationMeta.title}
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label="Убрать сравнение"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCompareCode(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.stopPropagation();
+                  setCompareCode(null);
+                }}
+                className="ml-0.5 rounded-full p-0.5 hover:bg-primary/20"
+              >
+                <LuX size={12} />
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label="Сравнить переводы"
+              onClick={() => setCompareSheetOpen(true)}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-700"
+            >
+              <LuColumns2 size={16} />
+            </button>
+          )}
         </div>
 
         {audioQ.data ? (
@@ -405,6 +465,39 @@ export function BibleReaderPage() {
           </div>
         )}
 
+        {compareCode && compareTranslationMeta ? (
+          <section className="border-t border-stone-200 pt-4">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-400">
+              {compareTranslationMeta.title}
+            </p>
+            {compareChapterQ.isLoading ? (
+              <p className="text-sm text-stone-500">Загрузка…</p>
+            ) : (compareChapterQ.data?.verses.length ?? 0) === 0 ? (
+              <p className="text-sm text-stone-500">Текст этого перевода пока не загружен.</p>
+            ) : (
+              <div
+                className={[
+                  'space-y-1 text-stone-700',
+                  readerSettings.font === 'sans' ? 'font-sans' : 'font-serif',
+                ].join(' ')}
+                style={{
+                  fontSize: `${0.95 * readerSettings.fontScale}rem`,
+                  lineHeight: `calc(${BIBLE_READER_SPACING_LINE_HEIGHT[readerSettings.spacing]} * var(--a11y-line-height, 1.55))`,
+                }}
+              >
+                {(compareChapterQ.data?.verses ?? []).map((v) => (
+                  <p key={v.verse}>
+                    <sup className="mr-1 select-none text-[0.6em] font-sans font-bold text-stone-400">
+                      {v.verse}
+                    </sup>
+                    {v.text}
+                  </p>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : null}
+
         {(commentsQ.data ?? []).length > 0 ? (
           <section className="space-y-2 border-t border-stone-200 pb-28 pt-4 lg:pb-16">
             <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-stone-500">
@@ -444,6 +537,14 @@ export function BibleReaderPage() {
         value={readerSettings}
         onChange={updateReaderSettings}
         onClose={() => setReaderSettingsOpen(false)}
+      />
+
+      <TranslationsSheet
+        open={compareSheetOpen}
+        translations={(translationsQ.data ?? []).filter((t) => t.code !== translation)}
+        value={compareCode ?? ''}
+        onClose={() => setCompareSheetOpen(false)}
+        onChange={(code) => setCompareCode(code)}
       />
 
       {/* Главы: круглые кнопки по краям снизу, над таб-баром (как в «Библия») */}
