@@ -56,6 +56,8 @@ const MAX_CLIENT_EVENTS_PER_CALL = 3000;
 const MAX_PAYLOAD_CHARS = 1500;
 const CLIENT_TS_SKEW_PAST_MS = 2 * 60 * 60 * 1000;
 const CLIENT_TS_SKEW_FUTURE_MS = 5 * 60 * 1000;
+const CLIENT_BUDGET_TTL_MS = 12 * 60 * 60 * 1000;
+const CLIENT_BUDGET_SWEEP_AT = 5000;
 
 export type ClientCallEventInput = {
   kind: string;
@@ -156,6 +158,48 @@ export function recordCallEvent(input: {
   ).catch((e) => console.warn('[call-events] record failed:', e instanceof Error ? e.message : e));
 }
 
+// ---------------------------------------------------------------------------
+// Бюджет клиентских событий (≤ MAX_CLIENT_EVENTS_PER_CALL на звонок).
+// COUNT(*) в БД выполняется один раз на звонок; дальше остаток декрементируется
+// в памяти. Это порог-защита, а не точный учёт: параллельные flush'и могут
+// превысить лимит на величину ≤ batch × конкуренция — приемлемо.
+// ---------------------------------------------------------------------------
+
+const clientEventBudget = new Map<string, { remaining: number; expiresAt: number }>();
+
+/** Тестовый сброс in-memory бюджета клиентских событий. */
+export function resetClientEventBudgetForTests(): void {
+  clientEventBudget.clear();
+}
+
+function sweepClientEventBudget(nowMs: number): void {
+  if (clientEventBudget.size <= CLIENT_BUDGET_SWEEP_AT) return;
+  for (const [key, entry] of clientEventBudget) {
+    if (entry.expiresAt <= nowMs) clientEventBudget.delete(key);
+  }
+}
+
+async function getClientEventBudget(callId: string): Promise<number> {
+  const nowMs = Date.now();
+  sweepClientEventBudget(nowMs);
+  const cached = clientEventBudget.get(callId);
+  if (cached && cached.expiresAt > nowMs) return cached.remaining;
+  const countRes = await query(
+    `SELECT COUNT(*)::int AS c FROM call_events WHERE call_id = $1::uuid AND source = 'client'`,
+    [callId],
+  );
+  const existing = Number(countRes.rows[0]?.c ?? 0);
+  const remaining = Math.max(0, MAX_CLIENT_EVENTS_PER_CALL - existing);
+  clientEventBudget.set(callId, { remaining, expiresAt: nowMs + CLIENT_BUDGET_TTL_MS });
+  return remaining;
+}
+
+function consumeClientEventBudget(callId: string, used: number): void {
+  const cached = clientEventBudget.get(callId);
+  if (!cached) return;
+  cached.remaining = Math.max(0, cached.remaining - used);
+}
+
 /** Пакетная запись клиентских событий. Возвращает число принятых событий. */
 export async function recordClientCallEvents(
   callId: string,
@@ -174,12 +218,8 @@ export async function recordClientCallEvents(
 
   if (!Array.isArray(rawEvents) || rawEvents.length === 0) return { accepted: 0 };
 
-  const countRes = await query(
-    `SELECT COUNT(*)::int AS c FROM call_events WHERE call_id = $1::uuid AND source = 'client'`,
-    [callId],
-  );
-  const existing = Number(countRes.rows[0]?.c ?? 0);
-  let budget = Math.max(0, MAX_CLIENT_EVENTS_PER_CALL - existing);
+  // Бюджет из памяти: исчерпанный лимит не тратит ни одного запроса к БД.
+  let budget = await getClientEventBudget(callId);
   if (budget === 0) return { accepted: 0 };
 
   const nowMs = Date.now();
@@ -205,6 +245,7 @@ export async function recordClientCallEvents(
      VALUES ${values.join(', ')}`,
     params,
   );
+  consumeClientEventBudget(callId, events.length);
   return { accepted: events.length };
 }
 
