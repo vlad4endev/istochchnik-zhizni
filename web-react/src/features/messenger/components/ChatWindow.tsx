@@ -19,13 +19,16 @@ import {
   hasMessengerSenderId,
   isAccessRequestsMessengerChannel,
   isAssistantBotMessage,
+  isAssistantConversationRow,
   isAssistantMessengerChannel,
+  messengerComposerCanSend,
+  shouldListAssistantConversation,
 } from '../messengerChannelKinds';
 import { useCallStore } from '../../calls/callStore';
 import { ActiveCallStoryChip } from '../../calls/ActiveCallStoryChip';
 import { requestCallNotificationsFromUserGesture } from '../../calls/incomingCallBackground';
 import { emitAppToast } from '../../../lib/uiFeedback';
-import { useAuthStore } from '../../auth/authStore';
+import { canAccessMessengerAssistantRoles, useAuthStore } from '../../auth/authStore';
 import {
   clearChatScrollAnchor,
   readChatScrollAnchor,
@@ -161,6 +164,26 @@ export function ChatWindow({
     () => isAssistantMessengerChannel(chatMeta?.metadata ?? conv?.metadata),
     [chatMeta?.metadata, conv?.metadata],
   );
+  const assistantAllowed = useAuthStore((s) => canAccessMessengerAssistantRoles(s.role, s.roles));
+  const sessionMemberId = useAuthStore((s) => s.memberId);
+  const assistantRowHidden = useMemo(() => {
+    const row = {
+      metadata: chatMeta?.metadata ?? conv?.metadata,
+      title: chatMeta?.title ?? conv?.title,
+    };
+    if (!isAssistantConversationRow(row)) return false;
+    return !shouldListAssistantConversation({
+      ...row,
+      canAccessAssistant: assistantAllowed,
+      memberId: sessionMemberId,
+    });
+  }, [assistantAllowed, chatMeta?.metadata, chatMeta?.title, conv?.metadata, conv?.title, sessionMemberId]);
+
+  useEffect(() => {
+    if (!assistantRowHidden) return;
+    useChatStore.getState().setActiveConversation(null);
+    onBack();
+  }, [assistantRowHidden, onBack]);
 
   const canShowDirectCall = useMemo(() => {
     if (!CALLS_FEATURE_ENABLED) return false;
@@ -239,8 +262,17 @@ export function ChatWindow({
       setChatHeadReady(true);
     };
 
-    void loadChatHeadData().catch(() => {
+    void loadChatHeadData().catch((err: unknown) => {
       if (!alive) return;
+      const apiError =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { error?: unknown } } }).response?.data?.error
+          : undefined;
+      if (typeof apiError === 'string' && apiError.includes('прихожан')) {
+        useChatStore.getState().setActiveConversation(null);
+        onBack();
+        return;
+      }
       setChatMeta(null);
       setPinnedMessages([]);
       setMentionList([]);
@@ -251,7 +283,7 @@ export function ChatWindow({
     return () => {
       alive = false;
     };
-  }, [conversationId, isDraft, conv?.type, pinnedBump]);
+  }, [conversationId, isDraft, conv?.type, onBack, pinnedBump]);
 
   const participantLabelById = useMemo(() => {
     const m: Record<number, string> = {};
@@ -345,8 +377,12 @@ export function ChatWindow({
     setPresenceAnnouncement(next ? `${name} в сети` : `${name} оффлайн`);
   }, [isPrivatePeerOnline, conv]);
 
-  const canPostMessages =
-    !isAccessRequestsChannel && (isDraft || chatMeta?.my_effective_permissions?.can_send_messages !== false);
+  const canPostMessages = messengerComposerCanSend({
+    metadata: chatMeta?.metadata ?? conv?.metadata,
+    isDraft,
+    canSendMessages: chatMeta?.my_effective_permissions?.can_send_messages,
+    assistantAllowed,
+  });
   /** В группах/каналах медиа может быть отключено отдельно от текста. У ИИ помощника — только текст. */
   const canSendAttachments =
     canPostMessages &&

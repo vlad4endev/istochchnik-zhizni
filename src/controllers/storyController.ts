@@ -26,9 +26,24 @@ import { resolveMessengerConversationDeepLink } from '../config/messengerPublic'
 
 type AuthReq = Request & { authUserId?: number };
 
-function inferMediaTypeFromMimetype(mt: string): MediaType {
-  const m = (mt || '').toLowerCase();
-  return m.startsWith('video/') ? 'video' : 'image';
+function inferMediaTypeFromUpload(file: Pick<Express.Multer.File, 'mimetype' | 'originalname'>): MediaType {
+  const m = (file.mimetype || '').toLowerCase();
+  if (m.startsWith('video/')) return 'video';
+  if (m.startsWith('image/')) return 'image';
+  const name = (file.originalname || '').toLowerCase();
+  if (/\.(mp4|m4v|webm|mov|3gp|3g2)$/i.test(name)) return 'video';
+  return 'image';
+}
+
+function contentTypeForUpload(file: Express.Multer.File, type: MediaType): string {
+  const m = String(file.mimetype || '').toLowerCase();
+  if (m.startsWith('video/') || m.startsWith('image/')) return m;
+  if (type === 'video') {
+    const name = (file.originalname || '').toLowerCase();
+    if (name.endsWith('.webm')) return 'video/webm';
+    return 'video/mp4';
+  }
+  return 'image/jpeg';
 }
 
 export async function getStories(req: Request, res: Response): Promise<void> {
@@ -79,7 +94,8 @@ export async function postCreateStory(req: Request, res: Response): Promise<void
       }
       const ext = path.extname(file.originalname || '') || '';
       const safeExt = ext && ext.length <= 12 ? ext.toLowerCase() : '';
-      const mime = String(file.mimetype || 'application/octet-stream').toLowerCase();
+      const mediaType = inferMediaTypeFromUpload(file);
+      const mime = contentTypeForUpload(file, mediaType);
       const objectPath = buildUserMediaProfilePath(authUserId, safeExt).replace(
         'profile-media/',
         'story-media/',
@@ -98,7 +114,7 @@ export async function postCreateStory(req: Request, res: Response): Promise<void
       const created = await createStory({
         memberId: authUserId,
         mediaUrl: publicUrl,
-        mediaType: inferMediaTypeFromMimetype(file.mimetype),
+        mediaType,
         caption,
       });
       res.status(201).json(created);

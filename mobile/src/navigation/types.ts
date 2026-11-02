@@ -25,4 +25,12 @@ export type RootStackParamList = {
   StudioSetlistDetail: { setlistId: number; title: string };
   StudioPerform: { setlistId: number; title?: string };
   PrayerCyclePlan: undefined;
+  Bible: undefined;
+  BibleReader: {
+    translation: string;
+    book: string;
+    chapter: number;
+    title?: string;
+    verse?: number;
+  };
 };

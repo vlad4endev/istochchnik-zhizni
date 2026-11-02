@@ -101,7 +101,11 @@ export function PublicProfilePage() {
   const isOwner = me != null && data != null && me.id === data.profile.member_id;
   const postsVisible = data && (!data.profile.is_private || isOwner);
   const posts = postsVisible ? data.posts : [];
-  const postsLabel = pluralizeRu(posts.length, ['публикация', 'публикации', 'публикаций']);
+  const postsTotal =
+    postsVisible && data
+      ? Math.max(Number(data.posts_total ?? posts.length) || 0, posts.length)
+      : 0;
+  const postsLabel = pluralizeRu(postsTotal, ['публикация', 'публикации', 'публикаций']);
   const isAdmin = (me?.app_role ?? '').toLowerCase() === 'admin';
 
   const displayName = useMemo(() => {
@@ -171,6 +175,11 @@ export function PublicProfilePage() {
     };
   }, [me, isOwner, data]);
 
+  const contentRootId = useCallback(
+    (p: Pick<ProfileFeedPost, 'id' | 'shared_post'>) => p.shared_post?.id ?? p.id,
+    [],
+  );
+
   const patchPost = useCallback((postId: string, patch: Partial<ProfileFeedPost>) => {
     setData((prev) => {
       if (!prev) return prev;
@@ -181,10 +190,32 @@ export function PublicProfilePage() {
     });
   }, []);
 
+  const patchEngagementByRoot = useCallback(
+    (
+      rootId: string,
+      patch: Partial<
+        Pick<ProfileFeedPost, 'liked_by_me' | 'like_count' | 'comment_count' | 'repost_count' | 'reposted_by_me'>
+      >,
+    ) => {
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          posts: prev.posts.map((p) => (contentRootId(p) === rootId ? { ...p, ...patch } : p)),
+        };
+      });
+    },
+    [contentRootId],
+  );
+
   const removePost = useCallback((postId: string) => {
     setData((prev) => {
       if (!prev) return prev;
-      return { ...prev, posts: prev.posts.filter((p) => p.id !== postId) };
+      return {
+        ...prev,
+        posts: prev.posts.filter((p) => p.id !== postId),
+        posts_total: Math.max(0, (prev.posts_total ?? prev.posts.length) - 1),
+      };
     });
   }, []);
 
@@ -212,16 +243,17 @@ export function PublicProfilePage() {
   const onToggleLike = useCallback(
     async (post: FeedCardPost) => {
       if (!me) return;
-      const busyKey = `like-${post.id}`;
+      const rootId = contentRootId(post);
+      const busyKey = `like-${rootId}`;
       setPostBusy((b) => ({ ...b, [busyKey]: '1' }));
       const liked = post.liked_by_me ?? false;
       try {
         if (liked) {
           const r = await unlikeProfilePost(post.id);
-          patchPost(post.id, { liked_by_me: false, like_count: r.like_count });
+          patchEngagementByRoot(rootId, { liked_by_me: false, like_count: r.like_count });
         } else {
           const r = await likeProfilePost(post.id);
-          patchPost(post.id, { liked_by_me: true, like_count: r.like_count });
+          patchEngagementByRoot(rootId, { liked_by_me: true, like_count: r.like_count });
         }
       } catch {
         /* ignore */
@@ -233,7 +265,7 @@ export function PublicProfilePage() {
         });
       }
     },
-    [me, patchPost],
+    [me, contentRootId, patchEngagementByRoot],
   );
 
   const onRepost = useCallback(
@@ -391,7 +423,7 @@ export function PublicProfilePage() {
 
               <div className={styles.igStatColumns} role="group" aria-label="Статистика профиля">
                 <div className={styles.igStatCell}>
-                  <span className={styles.igStatCellNum}>{posts.length}</span>
+                  <span className={styles.igStatCellNum}>{postsTotal}</span>
                   <span className={styles.igStatCellLabel}>{postsLabel}</span>
                 </div>
                 <div className={styles.igStatCellMuted}>
@@ -535,12 +567,27 @@ export function PublicProfilePage() {
         onCountChange={(postId, delta) => {
           setData((prev) => {
             if (!prev) return prev;
+            const target = prev.posts.find((p) => p.id === postId);
+            const rootId = target ? contentRootId(target) : postId;
             return {
               ...prev,
               posts: prev.posts.map((p) =>
-                p.id === postId
+                contentRootId(p) === rootId
                   ? { ...p, comment_count: Math.max(0, (p.comment_count ?? 0) + delta) }
                   : p,
+              ),
+            };
+          });
+        }}
+        onCountSync={(postId, count) => {
+          setData((prev) => {
+            if (!prev) return prev;
+            const target = prev.posts.find((p) => p.id === postId);
+            const rootId = target ? contentRootId(target) : postId;
+            return {
+              ...prev,
+              posts: prev.posts.map((p) =>
+                contentRootId(p) === rootId ? { ...p, comment_count: Math.max(0, count) } : p,
               ),
             };
           });

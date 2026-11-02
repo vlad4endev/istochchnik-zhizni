@@ -1,7 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as svc from '../services/messengerService';
-import { canAccessMessengerAssistant } from '../types/appRole';
+import { sessionCanAccessMessengerAssistant } from '../types/appRole';
 import type { ParticipantRole, PermissionsJson, PermissionKey } from '../types/messenger';
+import { assistantMemberCanCompose } from '../utils/assistantChatCompose';
 
 type AuthReq = Request & { authUserId?: number };
 type ReqWithUser = Request & { user?: { id?: number | string } };
@@ -178,16 +179,11 @@ export function checkChatPermission(action: Action) {
         svc.isMessengerAssistantChannelMetadata(meta.metadata) &&
         (action === 'view' || action === 'send_message' || action === 'send_media')
       ) {
-        const roles = Array.isArray(req.authUserRoles)
-          ? req.authUserRoles
-          : req.authUserRole
-            ? [req.authUserRole]
-            : [];
-        if (!canAccessMessengerAssistant(roles)) {
+        if (!sessionCanAccessMessengerAssistant(req)) {
           return deny(
             res,
             403,
-            'ИИ помощник доступен только членам церкви. Для прихожан чат недоступен.',
+            'ИИ помощник недоступен для роли «прихожанин».',
           );
         }
       }
@@ -205,9 +201,20 @@ export function checkChatPermission(action: Action) {
       const roleBase = superpowers(String(role));
       const base = roleBase ?? (meta.default_permissions ?? {});
       const effective = mergePermissions(base, memberPermissions);
+      // Личный ИИ-чат: override can_send_messages=false и role=member не должны
+      // прятать поле ввода у владельца. Mute глушит только пуши, не набор текста.
+      const assistantCompose = assistantMemberCanCompose({
+        metadata: meta.metadata,
+        memberId: userId,
+        role: String(role),
+      });
+      if (assistantCompose) {
+        effective.can_send_messages = true;
+      }
 
       // Common mute restriction
       if (
+        !assistantCompose &&
         mutedUntil &&
         (action === 'send_message' || action === 'send_media') &&
         new Date(mutedUntil).getTime() > Date.now()
@@ -235,7 +242,12 @@ export function checkChatPermission(action: Action) {
       if (action === 'view') {
         // membership-only; no additional checks
       } else if (action === 'send_message') {
-        if (meta.type === 'channel' && role !== 'owner' && role !== 'admin') {
+        if (
+          !assistantCompose &&
+          meta.type === 'channel' &&
+          role !== 'owner' &&
+          role !== 'admin'
+        ) {
           return deny(res, 403, 'В канале сообщения могут отправлять только администраторы');
         }
         if (!require('can_send_messages')) return;

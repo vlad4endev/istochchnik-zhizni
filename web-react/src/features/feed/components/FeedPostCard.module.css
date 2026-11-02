@@ -294,6 +294,15 @@
   min-height: 11rem;
 }
 
+.mediaVideo {
+  object-fit: contain;
+  background: #0c0a09;
+  /* Чтобы double-tap like не перехватывал клики по controls */
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+}
+
 @media (min-width: 640px) {
   .mediaItem {
     max-height: min(70dvh, 32rem);

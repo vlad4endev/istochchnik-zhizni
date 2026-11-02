@@ -4,23 +4,8 @@ export const MESSENGER_ACCESS_REQUESTS_CHANNEL_KIND = 'access_requests';
 /** Совпадает с `metadata.kind` личного ИИ-чата (см. `ensureAssistantConversation`). */
 export const MESSENGER_ASSISTANT_CHANNEL_KIND = 'assistant';
 
-export function isAccessRequestsMessengerChannel(metadata: unknown): boolean {
-  return (
-    metadata != null &&
-    typeof metadata === 'object' &&
-    !Array.isArray(metadata) &&
-    String((metadata as Record<string, unknown>).kind ?? '') === MESSENGER_ACCESS_REQUESTS_CHANNEL_KIND
-  );
-}
-
-export function isAssistantMessengerChannel(metadata: unknown): boolean {
-  return (
-    metadata != null &&
-    typeof metadata === 'object' &&
-    !Array.isArray(metadata) &&
-    String((metadata as Record<string, unknown>).kind ?? '') === MESSENGER_ASSISTANT_CHANNEL_KIND
-  );
-}
+/** Совпадает с названием канала в БД. */
+export const MESSENGER_ASSISTANT_CHANNEL_TITLE = 'ИИ помощник';
 
 function asPayloadRecord(payload: unknown): Record<string, unknown> | null {
   if (payload == null) return null;
@@ -39,6 +24,59 @@ function asPayloadRecord(payload: unknown): Record<string, unknown> | null {
     return payload as Record<string, unknown>;
   }
   return null;
+}
+
+export function isAccessRequestsMessengerChannel(metadata: unknown): boolean {
+  const rec = asPayloadRecord(metadata);
+  return rec != null && String(rec.kind ?? '') === MESSENGER_ACCESS_REQUESTS_CHANNEL_KIND;
+}
+
+export function isAssistantMessengerChannel(metadata: unknown): boolean {
+  const rec = asPayloadRecord(metadata);
+  return rec != null && String(rec.kind ?? '') === MESSENGER_ASSISTANT_CHANNEL_KIND;
+}
+
+/** Личный ИИ-чат: по kind или по оставшемуся названию, если metadata не доехала. */
+export function isAssistantConversationRow(input: {
+  metadata?: unknown;
+  title?: string | null;
+}): boolean {
+  if (isAssistantMessengerChannel(input.metadata)) return true;
+  return String(input.title ?? '').trim() === MESSENGER_ASSISTANT_CHANNEL_TITLE;
+}
+
+/**
+ * Прихожанину чат не показываем. Остальным — свой (owner_member_id совпал или ещё не записан).
+ */
+export function shouldListAssistantConversation(input: {
+  metadata?: unknown;
+  title?: string | null;
+  canAccessAssistant: boolean;
+  memberId?: number | null;
+}): boolean {
+  if (!isAssistantConversationRow(input)) return true;
+  if (!input.canAccessAssistant) return false;
+  if (!isAssistantMessengerChannel(input.metadata)) return true;
+  const rec = asPayloadRecord(input.metadata);
+  const owner = String(rec?.owner_member_id ?? '').trim();
+  if (!owner || input.memberId == null) return true;
+  return owner === String(input.memberId);
+}
+
+/**
+ * Показывать ли поле ввода. В своём «ИИ помощник» строка есть у всех, кому чат доступен.
+ * Канал заявок — только чтение.
+ */
+export function messengerComposerCanSend(input: {
+  metadata: unknown;
+  isDraft?: boolean;
+  canSendMessages?: boolean;
+  assistantAllowed?: boolean;
+}): boolean {
+  if (isAccessRequestsMessengerChannel(input.metadata)) return false;
+  if (isAssistantMessengerChannel(input.metadata)) return input.assistantAllowed !== false;
+  if (input.isDraft) return true;
+  return input.canSendMessages !== false;
 }
 
 /** Реальный отправитель (member id > 0). `null`/`0` — системные сообщения (рассылка и т.п.). */

@@ -1,8 +1,22 @@
 /**
- * Идемпотентная вставка базового списка участников.
+ * Идемпотентная вставка базового списка участников (опциональный сид, не схема).
+ *
+ * По умолчанию при старте API / initDb НЕ применяется — иначе «нулевой» деплой
+ * и удаление участников при пересборке снова наполняют таблицу из кода.
+ * Включение: SEED_MEMBERS_ON_INIT=true или `npm run db:seed-members`
+ * (SQL-зеркало: scripts/seed-members-base.sql).
+ *
  * Учитывает ту же семантику, что findMemberIdConflictingName: «Фамилия Имя» в сиде
  * не дублирует карточку с first_name/last_name и name «Имя Фамилия».
  */
+
+/** Opt-in: `SEED_MEMBERS_ON_INIT=true`. Default off so zero/fresh deploys stay empty. */
+export function shouldSeedMembersOnInit(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.SEED_MEMBERS_ON_INIT === 'true';
+}
+
 export const MEMBER_SEED_SQL = `
 WITH source_members(full_name) AS (
   VALUES

@@ -4,7 +4,7 @@
 
 | Источник | Кто применяет | Замечание |
 |---|---|---|
-| `src/config/initDb.ts` (+ `MEMBER_SEED_SQL`) | API на старте, если `SKIP_DB_INIT_ON_START=false` | основная часть таблиц (мессенджер, аналитика, ...) |
+| `src/config/initDb.ts` | API на старте, если `SKIP_DB_INIT_ON_START=false` | основная часть таблиц (мессенджер, аналитика, …). Список участников **не** заливается автоматически; опционально `SEED_MEMBERS_ON_INIT=true` или `npm run db:seed-members` |
 | `ensure*Schema` в сервисах (push, feed, media/music-schedule, sermon-notes, telegram-send-logs, app-releases, ...) | API на старте всегда | DDL размазан по ~30 файлам `src/` |
 | `supabase/migrations/*.sql` | `supabase db push` (`scripts/supabase-db-push.sh`, `RUN_SUPABASE_PUSH=1`) | 114 файлов; на пустой БД не применяются целиком |
 | `prisma/migrations` | не используется приложением | Prisma-схема без моделей |

@@ -58,7 +58,8 @@ async function notifyOwner(params: {
 
 /** Пуш автору поста: новый лайк (только если лайк реально добавлен). */
 export async function notifyPostLiked(postId: string, actorMemberId: number): Promise<void> {
-  const ownerId = await resolvePostOwnerId(postId);
+  const rootId = await resolveRepostRoot(postId);
+  const ownerId = await resolvePostOwnerId(rootId);
   if (ownerId == null) return;
   const actor = await resolveActorLabel(actorMemberId);
   await notifyOwner({
@@ -67,8 +68,8 @@ export async function notifyPostLiked(postId: string, actorMemberId: number): Pr
     title: actor,
     body: 'нравится ваша публикация',
     kind: 'feed_like',
-    postId,
-    tag: `feed-like-${postId}-${actorMemberId}`,
+    postId: rootId,
+    tag: `feed-like-${rootId}-${actorMemberId}`,
   });
 }
 
@@ -78,7 +79,8 @@ export async function notifyPostCommented(
   actorMemberId: number,
   commentText: string,
 ): Promise<void> {
-  const ownerId = await resolvePostOwnerId(postId);
+  const rootId = await resolveRepostRoot(postId);
+  const ownerId = await resolvePostOwnerId(rootId);
   if (ownerId == null) return;
   const actor = await resolveActorLabel(actorMemberId);
   const snippet = truncateText(commentText);
@@ -88,8 +90,8 @@ export async function notifyPostCommented(
     title: actor,
     body: snippet ? `прокомментировал(а): ${snippet}` : 'прокомментировал(а) вашу публикацию',
     kind: 'feed_comment',
-    postId,
-    tag: `feed-comment-${postId}-${actorMemberId}-${Date.now()}`,
+    postId: rootId,
+    tag: `feed-comment-${rootId}-${actorMemberId}-${Date.now()}`,
   });
 }
 

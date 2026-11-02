@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSPrope
 import { createPortal } from 'react-dom';
 import type { IconType } from 'react-icons';
 import {
+  LuBookMarked,
   LuBookOpen,
   LuCalendarClock,
   LuChevronDown,
@@ -97,6 +98,7 @@ const NAV_ITEMS: NavItem[] = [
   /** Как News Feed в Facebook: газета. */
   { to: '/feed', label: 'Лента', Icon: LuNewspaper, sectionId: 'feed' },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
+  { to: '/bible', label: 'Библия', Icon: LuBookMarked, sectionId: 'bible' },
   { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
   { to: '/service-planner', label: 'Служение', Icon: LuCalendarDays, sectionId: 'service_planner' },
   { to: '/schedules', label: 'Расписание', Icon: LuCalendarClock, scheduleAccessOnly: true },
@@ -542,15 +544,17 @@ export function Layout() {
   const messengerNavBadge = Math.min(99, Math.max(0, unreadMessages));
   /** Иконка PWA: чаты + журнал push/напоминаний. */
   const activityBadgeTotal = Math.min(99, Math.max(0, unreadMessages + pendingDeliveries));
+  const onFeedRoute = location.pathname === '/feed' || location.pathname.startsWith('/feed/');
   const feedUnreadQ = useQuery({
     queryKey: keys.feedUnread,
     queryFn: fetchFeedUnreadCount,
-    enabled: Boolean(token),
+    enabled: Boolean(token) && !onFeedRoute,
     staleTime: 15_000,
-    refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
+    refetchInterval: onFeedRoute ? false : 60_000,
+    refetchOnWindowFocus: !onFeedRoute,
   });
-  const feedUnreadCount = feedUnreadQ.data ?? 0;
+  // Пока пользователь в ленте — бейдж не показываем (watermark уже сброшен при открытии).
+  const feedUnreadCount = onFeedRoute ? 0 : (feedUnreadQ.data ?? 0);
   const role = useAuthStore((s) => s.role);
   const roles = useAuthStore((s) => s.roles ?? [s.role]);
   const sectionVisibilityQ = useQuery({

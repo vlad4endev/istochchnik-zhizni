@@ -39,6 +39,7 @@ import messengerRoutes from './routes/messengerRoutes';
 import adminMessengerRoutes from './routes/adminMessengerRoutes';
 import servicePlannerRoutes from './routes/servicePlannerRoutes';
 import sermonNotesRoutes from './routes/sermonNotesRoutes';
+import bibleRoutes from './routes/bibleRoutes';
 import mediaScheduleRoutes from './routes/mediaScheduleRoutes';
 import musicScheduleRoutes from './routes/musicScheduleRoutes';
 import sundayScheduleRoutes from './routes/sundayScheduleRoutes';
@@ -66,6 +67,7 @@ import { initPushVapid } from './services/pushService';
 import { getFirebaseMessaging } from './config/firebaseAdmin';
 import { ensureFeedSchema } from './services/feedSchema';
 import { ensureSermonNotesSchema } from './services/sermonNotesService';
+import { ensureBibleSchema } from './services/bibleSchema';
 import { writeAppLog } from './services/appLogService';
 import { getAuthAccessTtlMinutes, getRefreshTtlDays } from './config/authCookie';
 import { cleanupExpiredSessions } from './services/authService';
@@ -270,8 +272,9 @@ app.use((req, res, next) => {
   res.setHeader(
     'Content-Security-Policy',
     "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; " +
-      "img-src 'self' data: blob: https:; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-      "connect-src 'self' https: wss: ws:; frame-src 'self' https://rutube.ru https://www.youtube.com https://vk.com; form-action 'self'",
+      "img-src 'self' data: blob: https:; media-src 'self' blob: https:; script-src 'self'; " +
+      "style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: ws:; " +
+      "frame-src 'self' https://rutube.ru https://www.youtube.com https://vk.com; form-action 'self'",
   );
   next();
 });
@@ -408,6 +411,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api', servicePlannerRoutes);
 app.use('/api/sermon-notes', sermonNotesRoutes);
+app.use('/api/bible', bibleRoutes);
 app.use('/api', routes);
 app.use('/api/push', pushRoutes);
 app.use('/api/notifications', notificationsRoutes);
@@ -558,6 +562,12 @@ async function start(): Promise<void> {
         console.log('[sermon-notes] schema ensured');
       } catch (e) {
         console.warn('[sermon-notes] ensureSermonNotesSchema failed:', e);
+      }
+      try {
+        await ensureBibleSchema();
+        console.log('[bible] schema ensured');
+      } catch (e) {
+        console.warn('[bible] ensureBibleSchema failed:', e);
       }
       try {
         await ensureTelegramSendLogsSchema();

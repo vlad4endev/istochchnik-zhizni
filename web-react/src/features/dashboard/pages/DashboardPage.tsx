@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { buildInternalBibleUrl } from '../../bible/bibleRef';
 import { format, isBefore, parse, startOfDay, startOfWeek } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import {
@@ -262,8 +263,7 @@ function preacherInitials(name: string): string {
 }
 
 function buildBibleVerseUrl(scripture: string): string {
-  const q = scripture.trim();
-  return `https://www.bible.com/ru/search/bible?q=${encodeURIComponent(q)}`;
+  return buildInternalBibleUrl(scripture);
 }
 
 function profileDisplayName(
@@ -494,13 +494,13 @@ function UpcomingPreacherCard({
       <div className="dashboard-service-card__sermon">
         <p className="dashboard-service-card__title">{topicTitle}</p>
         <div className="dashboard-service-card__tags">
-          <a className="dashboard-service-card__tag dashboard-service-card__tag--ref" href={scriptureUrl} target="_blank" rel="noreferrer">
+          <Link className="dashboard-service-card__tag dashboard-service-card__tag--ref" to={scriptureUrl}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
               <path d="M6 4h9a3 3 0 0 1 3 3v13H8a2 2 0 0 1-2-2V4Z" />
               <path d="M6 17h12" />
             </svg>
             <span>{scripture}</span>
-          </a>
+          </Link>
           <p className="dashboard-service-card__summary" title={summary}>
             {summary}
           </p>

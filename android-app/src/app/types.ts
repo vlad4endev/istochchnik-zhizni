@@ -8,5 +8,6 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Songbook: undefined;
+  Bible: undefined;
   Settings: undefined;
 };

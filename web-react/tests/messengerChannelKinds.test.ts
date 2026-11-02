@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   hasMessengerSenderId,
   isAssistantBotMessage,
+  isAssistantMessengerChannel,
   isServicePlanMondayMailingPayload,
+  messengerComposerCanSend,
+  shouldListAssistantConversation,
 } from '../src/features/messenger/messengerChannelKinds';
 
 describe('hasMessengerSenderId', () => {
@@ -31,5 +34,86 @@ describe('isAssistantBotMessage', () => {
     expect(isAssistantBotMessage({ assistant: true }, 0)).toBe(true);
     expect(isAssistantBotMessage({ assistant: true }, null)).toBe(true);
     expect(isAssistantBotMessage({ assistant: true }, 12)).toBe(false);
+  });
+});
+
+describe('messengerComposerCanSend', () => {
+  const assistant = { kind: 'assistant', owner_member_id: '7' };
+
+  it('keeps the composer in an assistant chat even when send is flagged off', () => {
+    expect(isAssistantMessengerChannel(JSON.stringify(assistant))).toBe(true);
+    expect(
+      messengerComposerCanSend({
+        metadata: assistant,
+        canSendMessages: false,
+      }),
+    ).toBe(true);
+    expect(
+      messengerComposerCanSend({
+        metadata: JSON.stringify(assistant),
+        canSendMessages: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('hides the composer in the access-requests channel', () => {
+    expect(
+      messengerComposerCanSend({
+        metadata: { kind: 'access_requests' },
+        canSendMessages: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('hides the assistant chat from parishioners, including by title', () => {
+    expect(
+      shouldListAssistantConversation({
+        metadata: assistant,
+        title: 'ИИ помощник',
+        canAccessAssistant: false,
+        memberId: 7,
+      }),
+    ).toBe(false);
+    expect(
+      shouldListAssistantConversation({
+        title: 'ИИ помощник',
+        canAccessAssistant: false,
+        memberId: 7,
+      }),
+    ).toBe(false);
+    expect(
+      shouldListAssistantConversation({
+        metadata: assistant,
+        canAccessAssistant: true,
+        memberId: 7,
+      }),
+    ).toBe(true);
+    expect(
+      shouldListAssistantConversation({
+        metadata: assistant,
+        canAccessAssistant: true,
+        memberId: 3,
+      }),
+    ).toBe(false);
+  });
+
+  it('hides the assistant composer when the role cannot open the chat', () => {
+    expect(
+      messengerComposerCanSend({
+        metadata: assistant,
+        canSendMessages: true,
+        assistantAllowed: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('follows can_send_messages for ordinary chats', () => {
+    expect(messengerComposerCanSend({ metadata: null, isDraft: true, canSendMessages: false })).toBe(
+      true,
+    );
+    expect(messengerComposerCanSend({ metadata: { kind: 'group' }, canSendMessages: false })).toBe(
+      false,
+    );
+    expect(messengerComposerCanSend({ metadata: null, canSendMessages: undefined })).toBe(true);
   });
 });

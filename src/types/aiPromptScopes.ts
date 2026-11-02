@@ -14,6 +14,7 @@ export const AI_PROMPT_SCOPE_LIST = [
   { id: 'service_flow', label: 'Ход собрания' },
   { id: 'dashboard', label: 'Дашборд' },
   { id: 'admin', label: 'Админ-панель и отчёты' },
+  { id: 'bible', label: 'Библия (планы чтения)' },
 ] as const;
 
 export type AiPromptScopeId = (typeof AI_PROMPT_SCOPE_LIST)[number]['id'];

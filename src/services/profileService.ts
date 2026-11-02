@@ -54,6 +54,8 @@ export type ProfileView = {
     created_at: string;
     updated_at: string;
   };
+  /** Полное число публикаций (лента отдаёт не больше 50 последних). */
+  posts_total: number;
   posts: Array<{
     id: string;
     member_id: number;
@@ -297,38 +299,42 @@ export async function getProfileWithFeed(memberId: number, viewerMemberId?: numb
   const profile = prof.rows[0] as ProfileView['profile'] | undefined;
   if (!profile) return null;
 
-  const postsRes = await query(
-    `SELECT
-      p.id::text AS id,
-      p.member_id,
-      p.caption,
-      p.created_at::text AS created_at,
-      p.shared_post_id::text AS shared_post_id,
-      COALESCE(l.like_count, 0)::int AS like_count,
-      COALESCE(c.comment_count, 0)::int AS comment_count,
-      COALESCE(rc.cnt, 0)::int AS repost_count
-     FROM profile_posts p
-     LEFT JOIN (
-       SELECT post_id, COUNT(*)::int AS like_count
-       FROM profile_post_likes
-       GROUP BY post_id
-     ) l ON l.post_id = p.id
-     LEFT JOIN (
-       SELECT post_id, COUNT(*)::int AS comment_count
-       FROM profile_post_comments
-       GROUP BY post_id
-     ) c ON c.post_id = p.id
-     LEFT JOIN (
-       SELECT shared_post_id, COUNT(*)::int AS cnt
-       FROM profile_posts
-       WHERE shared_post_id IS NOT NULL
-       GROUP BY shared_post_id
-     ) rc ON rc.shared_post_id = p.id
-     WHERE p.member_id = $1
-     ORDER BY p.created_at DESC, p.id DESC
-     LIMIT 50`,
-    [memberId],
-  );
+  const [postsRes, postsCountRes] = await Promise.all([
+    query(
+      `SELECT
+        p.id::text AS id,
+        p.member_id,
+        p.caption,
+        p.created_at::text AS created_at,
+        p.shared_post_id::text AS shared_post_id,
+        COALESCE(l.like_count, 0)::int AS like_count,
+        COALESCE(c.comment_count, 0)::int AS comment_count,
+        COALESCE(rc.cnt, 0)::int AS repost_count
+       FROM profile_posts p
+       LEFT JOIN (
+         SELECT post_id, COUNT(*)::int AS like_count
+         FROM profile_post_likes
+         GROUP BY post_id
+       ) l ON l.post_id = COALESCE(p.shared_post_id, p.id)
+       LEFT JOIN (
+         SELECT post_id, COUNT(*)::int AS comment_count
+         FROM profile_post_comments
+         GROUP BY post_id
+       ) c ON c.post_id = COALESCE(p.shared_post_id, p.id)
+       LEFT JOIN (
+         SELECT shared_post_id, COUNT(*)::int AS cnt
+         FROM profile_posts
+         WHERE shared_post_id IS NOT NULL
+         GROUP BY shared_post_id
+       ) rc ON rc.shared_post_id = COALESCE(p.shared_post_id, p.id)
+       WHERE p.member_id = $1
+       ORDER BY p.created_at DESC, p.id DESC
+       LIMIT 50`,
+      [memberId],
+    ),
+    query(`SELECT COUNT(*)::int AS c FROM profile_posts WHERE member_id = $1`, [memberId]),
+  ]);
+  const postsTotal = Math.max(0, Number((postsCountRes.rows[0] as { c?: unknown } | undefined)?.c ?? 0));
 
   const postRows = postsRes.rows as Array<{
     id: string;
@@ -345,33 +351,29 @@ export async function getProfileWithFeed(memberId: number, viewerMemberId?: numb
   const sharedIds = postRows.map((r) => r.shared_post_id).filter((x): x is string => !!x);
   const mediaByPost = await loadMediaMap(postIds);
 
+  const contentRootIds = [
+    ...new Set(
+      postRows.map((r) => (r.shared_post_id && r.shared_post_id.length > 0 ? r.shared_post_id : r.id)),
+    ),
+  ];
+
   let likedSet = new Set<string>();
   let repostedRootSet = new Set<string>();
-  if (viewerMemberId !== undefined && viewerMemberId > 0 && postIds.length > 0) {
+  if (viewerMemberId !== undefined && viewerMemberId > 0 && contentRootIds.length > 0) {
     const lk = await query(
       `SELECT post_id::text AS post_id FROM profile_post_likes
        WHERE member_id = $1 AND post_id = ANY($2::bigint[])`,
-      [viewerMemberId, postIds.map((id) => BigInt(id))],
+      [viewerMemberId, contentRootIds.map((id) => BigInt(id))],
     );
     likedSet = new Set((lk.rows as Array<{ post_id: string }>).map((x) => x.post_id));
 
-    const rootIds = [
-      ...new Set(
-        postRows.map((r) => {
-          const root = r.shared_post_id && r.shared_post_id.length > 0 ? r.shared_post_id : r.id;
-          return root;
-        }),
-      ),
-    ];
-    if (rootIds.length > 0) {
-      const rp = await query(
-        `SELECT shared_post_id::text AS sid
-         FROM profile_posts
-         WHERE member_id = $1 AND shared_post_id = ANY($2::bigint[])`,
-        [viewerMemberId, rootIds.map((id) => BigInt(id))],
-      );
-      repostedRootSet = new Set((rp.rows as Array<{ sid: string }>).map((x) => x.sid));
-    }
+    const rp = await query(
+      `SELECT shared_post_id::text AS sid
+       FROM profile_posts
+       WHERE member_id = $1 AND shared_post_id = ANY($2::bigint[])`,
+      [viewerMemberId, contentRootIds.map((id) => BigInt(id))],
+    );
+    repostedRootSet = new Set((rp.rows as Array<{ sid: string }>).map((x) => x.sid));
   }
 
   const embeddedById = sharedIds.length > 0 ? await buildEmbeddedPosts([...new Set(sharedIds)]) : new Map<string, ProfilePostEmbedded>();
@@ -388,13 +390,13 @@ export async function getProfileWithFeed(memberId: number, viewerMemberId?: numb
       like_count: row.like_count,
       comment_count: row.comment_count,
       repost_count: row.repost_count,
-      liked_by_me: likedSet.has(row.id),
+      liked_by_me: likedSet.has(contentRootId),
       reposted_by_me: repostedRootSet.has(contentRootId),
       shared_post: sharedPost,
     };
   });
 
-  return { profile, posts };
+  return { profile, posts, posts_total: postsTotal };
 }
 
 const USERNAME_MAX_LEN = 64;
@@ -602,19 +604,25 @@ export async function patchMyProfileSettings(
 }
 
 export async function likePost(postId: string, memberId: number): Promise<{ like_count: number; inserted: boolean }> {
+  // Лайки/счётчики всегда на корневом контенте — иначе репост показывает 0.
+  const rootId = await resolveRepostRoot(postId);
   const ins = await query(
     `INSERT INTO profile_post_likes (post_id, member_id)
      VALUES ($1::bigint, $2)
      ON CONFLICT (post_id, member_id) DO NOTHING`,
-    [postId, memberId],
+    [rootId, memberId],
   );
-  const cnt = await query(`SELECT COUNT(*)::int AS c FROM profile_post_likes WHERE post_id = $1::bigint`, [postId]);
+  const cnt = await query(`SELECT COUNT(*)::int AS c FROM profile_post_likes WHERE post_id = $1::bigint`, [rootId]);
   return { like_count: Number((cnt.rows[0] as { c?: unknown } | undefined)?.c ?? 0), inserted: (ins.rowCount ?? 0) > 0 };
 }
 
 export async function unlikePost(postId: string, memberId: number): Promise<{ like_count: number; removed: boolean }> {
-  const del = await query(`DELETE FROM profile_post_likes WHERE post_id = $1::bigint AND member_id = $2`, [postId, memberId]);
-  const cnt = await query(`SELECT COUNT(*)::int AS c FROM profile_post_likes WHERE post_id = $1::bigint`, [postId]);
+  const rootId = await resolveRepostRoot(postId);
+  const del = await query(`DELETE FROM profile_post_likes WHERE post_id = $1::bigint AND member_id = $2`, [
+    rootId,
+    memberId,
+  ]);
+  const cnt = await query(`SELECT COUNT(*)::int AS c FROM profile_post_likes WHERE post_id = $1::bigint`, [rootId]);
   return { like_count: Number((cnt.rows[0] as { c?: unknown } | undefined)?.c ?? 0), removed: (del.rowCount ?? 0) > 0 };
 }
 
@@ -648,10 +656,11 @@ export async function listPostLikers(params: {
   limit?: number;
   cursor?: string | null;
 }): Promise<PostLikersPage> {
-  const postId = String(params.postId ?? '').trim();
-  if (!/^\d+$/.test(postId)) {
+  const rawPostId = String(params.postId ?? '').trim();
+  if (!/^\d+$/.test(rawPostId)) {
     throw new Error('Публикация не найдена');
   }
+  const postId = await resolveRepostRoot(rawPostId);
   const exists = await query(`SELECT 1 FROM profile_posts WHERE id = $1::bigint LIMIT 1`, [postId]);
   if ((exists.rowCount ?? 0) === 0) {
     throw new Error('Публикация не найдена');
@@ -779,18 +788,18 @@ const FEED_JOINS = `
     SELECT post_id, COUNT(*)::int AS like_count
     FROM profile_post_likes
     GROUP BY post_id
-  ) l ON l.post_id = p.id
+  ) l ON l.post_id = COALESCE(p.shared_post_id, p.id)
   LEFT JOIN (
     SELECT post_id, COUNT(*)::int AS comment_count
     FROM profile_post_comments
     GROUP BY post_id
-  ) c ON c.post_id = p.id
+  ) c ON c.post_id = COALESCE(p.shared_post_id, p.id)
   LEFT JOIN (
     SELECT shared_post_id, COUNT(*)::int AS cnt
     FROM profile_posts
     WHERE shared_post_id IS NOT NULL
     GROUP BY shared_post_id
-  ) rc ON rc.shared_post_id = p.id
+  ) rc ON rc.shared_post_id = COALESCE(p.shared_post_id, p.id)
   LEFT JOIN (
     SELECT
       post_id,
@@ -818,13 +827,13 @@ const FEED_JOINS = `
     FROM profile_post_likes
     WHERE created_at > NOW() - INTERVAL '6 hours'
     GROUP BY post_id
-  ) lv ON lv.post_id = p.id
+  ) lv ON lv.post_id = COALESCE(p.shared_post_id, p.id)
   LEFT JOIN (
     SELECT post_id, COUNT(*)::int AS cnt
     FROM profile_post_comments
     WHERE created_at > NOW() - INTERVAL '6 hours'
     GROUP BY post_id
-  ) cv ON cv.post_id = p.id
+  ) cv ON cv.post_id = COALESCE(p.shared_post_id, p.id)
   LEFT JOIN (
     SELECT member_id, COUNT(*)::int AS cnt
     FROM profile_posts
@@ -849,30 +858,29 @@ async function hydrateFeedPosts(
       : Promise.resolve(new Map<string, ProfilePostEmbedded>()),
   ]);
 
+  const contentRootIds = [
+    ...new Set(
+      pageRows.map((r) => (r.shared_post_id && r.shared_post_id.length > 0 ? r.shared_post_id : r.id)),
+    ),
+  ];
+
   let likedSet = new Set<string>();
   let repostedRootSet = new Set<string>();
-  if (viewerId > 0 && postIds.length > 0) {
+  if (viewerId > 0 && contentRootIds.length > 0) {
     const lk = await query(
       `SELECT post_id::text AS post_id FROM profile_post_likes
        WHERE member_id = $1 AND post_id = ANY($2::bigint[])`,
-      [viewerId, postIds.map((id) => BigInt(id))],
+      [viewerId, contentRootIds.map((id) => BigInt(id))],
     );
     likedSet = new Set((lk.rows as Array<{ post_id: string }>).map((x) => x.post_id));
 
-    const rootIds = [
-      ...new Set(
-        pageRows.map((r) => (r.shared_post_id && r.shared_post_id.length > 0 ? r.shared_post_id : r.id)),
-      ),
-    ];
-    if (rootIds.length > 0) {
-      const rp = await query(
-        `SELECT shared_post_id::text AS sid
-         FROM profile_posts
-         WHERE member_id = $1 AND shared_post_id = ANY($2::bigint[])`,
-        [viewerId, rootIds.map((id) => BigInt(id))],
-      );
-      repostedRootSet = new Set((rp.rows as Array<{ sid: string }>).map((x) => x.sid));
-    }
+    const rp = await query(
+      `SELECT shared_post_id::text AS sid
+       FROM profile_posts
+       WHERE member_id = $1 AND shared_post_id = ANY($2::bigint[])`,
+      [viewerId, contentRootIds.map((id) => BigInt(id))],
+    );
+    repostedRootSet = new Set((rp.rows as Array<{ sid: string }>).map((x) => x.sid));
   }
 
   const posts: FeedPost[] = [];
@@ -891,7 +899,7 @@ async function hydrateFeedPosts(
       like_count: row.like_count,
       comment_count: row.comment_count,
       repost_count: row.repost_count,
-      liked_by_me: likedSet.has(row.id),
+      liked_by_me: likedSet.has(contentRootId),
       reposted_by_me: repostedRootSet.has(contentRootId),
       shared_post: row.shared_post_id ? embeddedById.get(row.shared_post_id) ?? null : null,
     });
@@ -1294,7 +1302,8 @@ export function canAccessPostComments(
 
 export async function listComments(postId: string, viewerMemberId: number): Promise<ProfilePostComment[]> {
   await ensureCommentLikesSchema();
-  const gate = await getPostCommentGate(postId);
+  const rootId = await resolveRepostRoot(postId);
+  const gate = await getPostCommentGate(rootId);
   if (!gate) throw new Error('Публикация не найдена');
   if (!canAccessPostComments(gate, viewerMemberId)) {
     throw new Error('Комментарии недоступны');
@@ -1321,7 +1330,7 @@ export async function listComments(postId: string, viewerMemberId: number): Prom
      WHERE c.post_id = $1::bigint
      ORDER BY c.created_at ASC, c.id ASC
      LIMIT 200`,
-    [postId, viewerMemberId],
+    [rootId, viewerMemberId],
   );
   const rows = r.rows as Array<{
     id: string;
@@ -1353,14 +1362,15 @@ export async function likeComment(
   memberId: number,
 ): Promise<{ like_count: number }> {
   await ensureCommentLikesSchema();
-  const gate = await getPostCommentGate(postId);
+  const rootId = await resolveRepostRoot(postId);
+  const gate = await getPostCommentGate(rootId);
   if (!gate) throw new Error('Публикация не найдена');
   if (!canAccessPostComments(gate, memberId)) {
     throw new Error('Комментарии недоступны');
   }
   const owns = await query(
     `SELECT 1 FROM profile_post_comments WHERE id = $1::bigint AND post_id = $2::bigint`,
-    [commentId, postId],
+    [commentId, rootId],
   );
   if (owns.rows.length === 0) throw new Error('Комментарий не найден');
   await query(
@@ -1382,7 +1392,8 @@ export async function unlikeComment(
   memberId: number,
 ): Promise<{ like_count: number }> {
   await ensureCommentLikesSchema();
-  const gate = await getPostCommentGate(postId);
+  const rootId = await resolveRepostRoot(postId);
+  const gate = await getPostCommentGate(rootId);
   if (!gate) throw new Error('Публикация не найдена');
   if (!canAccessPostComments(gate, memberId)) {
     throw new Error('Комментарии недоступны');
@@ -1404,7 +1415,8 @@ export async function addComment(
   memberId: number,
   text: string,
 ): Promise<{ id: string; created_at: string }> {
-  const gate = await getPostCommentGate(postId);
+  const rootId = await resolveRepostRoot(postId);
+  const gate = await getPostCommentGate(rootId);
   if (!gate) throw new Error('Публикация не найдена');
   if (!canAccessPostComments(gate, memberId)) {
     throw new Error('Комментарии недоступны');
@@ -1413,7 +1425,7 @@ export async function addComment(
     `INSERT INTO profile_post_comments (post_id, member_id, text)
      VALUES ($1::bigint, $2, $3)
      RETURNING id::text AS id, created_at::text AS created_at`,
-    [postId, memberId, text],
+    [rootId, memberId, text],
   );
   const row = r.rows[0] as { id?: string; created_at?: string } | undefined;
   if (!row?.id) throw new Error('Failed to add comment');
@@ -1426,18 +1438,19 @@ export async function deleteCommentAsOwnerOrAdmin(
   memberId: number,
   isAdmin: boolean,
 ): Promise<boolean> {
+  const rootId = await resolveRepostRoot(postId);
   if (isAdmin) {
     const r = await query(
       `DELETE FROM profile_post_comments
        WHERE id = $1::bigint AND post_id = $2::bigint`,
-      [commentId, postId],
+      [commentId, rootId],
     );
     return (r.rowCount ?? 0) > 0;
   }
   const r = await query(
     `DELETE FROM profile_post_comments
      WHERE id = $1::bigint AND post_id = $2::bigint AND member_id = $3`,
-    [commentId, postId, memberId],
+    [commentId, rootId, memberId],
   );
   return (r.rowCount ?? 0) > 0;
 }

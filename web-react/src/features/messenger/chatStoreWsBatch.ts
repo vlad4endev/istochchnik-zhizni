@@ -7,7 +7,7 @@ import {
   type ConversationListRow,
   type MessageWithSender,
 } from './api/messengerApi';
-import { canAccessMessengerAssistantSession } from '../auth/authStore';
+import { canAccessMessengerAssistantSession, useAuthStore } from '../auth/authStore';
 import { emitAppToast } from '../../lib/uiFeedback';
 import { playAudio } from '../../utils/audio';
 import { sendRealtimeJson } from '../../lib/realtimeWsClient';
@@ -15,7 +15,12 @@ import { isMessengerChatReadSurfaceOpen } from './messengerReadSurface';
 import { getAvatarInitial } from './avatarUtils';
 import { messengerAudioListPreview } from './chatAudio';
 import { inferMessengerPayloadType } from './payloadMedia';
-import { hasMessengerSenderId, isAssistantBotMessage, isAssistantMessengerChannel } from './messengerChannelKinds';
+import {
+  hasMessengerSenderId,
+  isAssistantBotMessage,
+  isAssistantMessengerChannel,
+  shouldListAssistantConversation,
+} from './messengerChannelKinds';
 import type { ChatState } from './chatStore';
 
 export type WsInboundMessage = Record<string, unknown> & { type?: string };
@@ -793,8 +798,12 @@ export function applyWsEvent(s: ChatState, msg: WsInboundMessage, effects: WsBat
         id: String((conv as ConversationListRow).id),
       });
       if (
-        isAssistantMessengerChannel(normalized.metadata) &&
-        !canAccessMessengerAssistantSession()
+        !shouldListAssistantConversation({
+          metadata: normalized.metadata,
+          title: normalized.title,
+          canAccessAssistant: canAccessMessengerAssistantSession(),
+          memberId: useAuthStore.getState().memberId,
+        })
       ) {
         return s;
       }

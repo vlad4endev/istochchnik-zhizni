@@ -2,6 +2,8 @@ import { useEffect, useCallback, useState, useRef, lazy, Suspense, useLayoutEffe
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LuPhone, LuPlus, LuMessageSquare, LuSlidersHorizontal, LuVideo } from 'react-icons/lu';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
+import { canAccessMessengerAssistantRoles, useAuthStore } from '../../auth/authStore';
+import { shouldListAssistantConversation } from '../messengerChannelKinds';
 import { isConversationRemoved } from '../chatStoreWsBatch';
 import { useMessengerWsContext } from '../MessengerWsContext';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
@@ -187,6 +189,40 @@ export function MessengerPage() {
   }, [location.search, navigate, setActive, ensurePrivateDraftFromConversationId]);
 
   const conversations = useChatStore((s) => s.conversations);
+  const conversationsLoaded = useChatStore((s) => s.conversationsLoaded);
+  const assistantAllowed = useAuthStore((s) => canAccessMessengerAssistantRoles(s.role, s.roles));
+  const sessionMemberId = useAuthStore((s) => s.memberId);
+  useEffect(() => {
+    if (!conversationsLoaded) return;
+    const params = new URLSearchParams(location.search);
+    const convId = (activeId ?? params.get('conversationId') ?? '').trim();
+    if (!convId || isDraftPrivateConversationId(convId)) return;
+    const conv = conversations.find((c) => String(c.id) === convId);
+    if (!conv) return;
+    if (
+      shouldListAssistantConversation({
+        metadata: conv.metadata,
+        title: conv.title,
+        canAccessAssistant: assistantAllowed,
+        memberId: sessionMemberId,
+      })
+    ) {
+      return;
+    }
+    setActive(null);
+    saveActiveMessengerConversation(null);
+    setMobileView('list');
+    navigate('/messenger', { replace: true });
+  }, [
+    activeId,
+    assistantAllowed,
+    conversations,
+    conversationsLoaded,
+    location.search,
+    navigate,
+    sessionMemberId,
+    setActive,
+  ]);
   useEffect(() => {
     if (!activeId || !isConversationRemoved(activeId)) return;
     setActive(null);

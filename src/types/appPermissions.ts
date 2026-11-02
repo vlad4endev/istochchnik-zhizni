@@ -50,6 +50,7 @@ export const APP_PERMISSION_DEFS = [
   { id: 'section.dashboard', category: 'sections', label: 'Главная', description: 'Дашборд и общая лента событий.' },
   { id: 'section.feed', category: 'sections', label: 'Лента', description: 'Публикации и сторис участников.' },
   { id: 'section.prayer', category: 'sections', label: 'Молитва', description: 'Молитвенный календарь и цикл.' },
+  { id: 'section.bible', category: 'sections', label: 'Библия', description: 'Чтение Писания, заметки и планы.' },
   { id: 'section.songbook', category: 'sections', label: 'Песенник', description: 'Каталог песен для просмотра.' },
   { id: 'section.service_planner', category: 'sections', label: 'Планировщик', description: 'Раздел планировщика служений.' },
   { id: 'section.studio', category: 'sections', label: 'Студия', description: 'Студия аранжировок и репетиций.' },

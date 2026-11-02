@@ -5499,4 +5499,13 @@ textarea.tg-input-textarea.tg-composer-textarea {
   word-break: break-word;
   white-space: pre-wrap;
   overflow-x: hidden;
+  /*
+   * mobile.css на ширине ≤1023px ставит textarea { width:100%; min-height:100px } !important.
+   * В композере без скрепки (ИИ-чат) поле из-за этого раздувается или схлопывается во flex.
+   * Специфичность (0,2,1) выше голого textarea, поэтому !important здесь побеждает.
+   */
+  width: auto !important;
+  max-width: 100% !important;
+  min-height: 44px !important;
+  flex: 1 1 auto !important;
 }

@@ -5,7 +5,6 @@ import {
   LuBookOpen,
   LuChurch,
   LuClock,
-  LuExternalLink,
   LuMic,
   LuMusic2,
   LuUser,
@@ -17,6 +16,8 @@ import { useAuthStore } from '@/features/auth/authStore';
 import { useMe } from '@/hooks/useMe';
 import { resolvePublicUrl } from '@/lib/resolvePublicUrl';
 
+import { buildInternalBibleUrl } from '@/features/bible/bibleRef';
+
 import type { CalendarSundayService } from '../sundayServiceTypes';
 import { BodyPortal } from '../../../components/BodyPortal';
 
@@ -26,7 +27,7 @@ function parseYmdLocal(ymd: string): Date {
 }
 
 function buildBibleVerseUrl(scripture: string): string {
-  return `https://www.bible.com/ru/search/bible?q=${encodeURIComponent(scripture.trim())}`;
+  return buildInternalBibleUrl(scripture);
 }
 
 function initials(name: string): string {
@@ -148,15 +149,12 @@ export function SundayServiceDetailSheet({
               <p className="mt-1.5 text-base font-extrabold leading-snug text-stone-900">{service.sermon_topic}</p>
             ) : null}
             {service.sermon_scripture ? (
-              <a
-                href={buildBibleVerseUrl(service.sermon_scripture)}
-                target="_blank"
-                rel="noreferrer"
+              <Link
+                to={buildBibleVerseUrl(service.sermon_scripture)}
                 className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border border-[#E3D7DB] bg-white px-3 py-1 text-[12px] font-semibold text-[#6B2D3E] hover:bg-[#F8F2F4]"
               >
                 <span className="min-w-0 truncate">{service.sermon_scripture}</span>
-                <LuExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              </a>
+              </Link>
             ) : null}
           </div>
         ) : null}

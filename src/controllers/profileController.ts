@@ -56,9 +56,24 @@ function normalizeCaption(raw: unknown): string | null {
   return t.length > 0 ? t : null;
 }
 
-function inferMediaTypeFromMimetype(mt: string): MediaType {
-  const m = (mt || '').toLowerCase();
-  return m.startsWith('video/') ? 'video' : 'image';
+function inferMediaTypeFromUpload(file: Pick<Express.Multer.File, 'mimetype' | 'originalname'>): MediaType {
+  const m = (file.mimetype || '').toLowerCase();
+  if (m.startsWith('video/')) return 'video';
+  if (m.startsWith('image/')) return 'image';
+  const name = (file.originalname || '').toLowerCase();
+  if (/\.(mp4|m4v|webm|mov|3gp|3g2)$/i.test(name)) return 'video';
+  return 'image';
+}
+
+function contentTypeForUpload(file: Express.Multer.File, type: MediaType): string {
+  const m = String(file.mimetype || '').toLowerCase();
+  if (m.startsWith('video/') || m.startsWith('image/')) return m;
+  if (type === 'video') {
+    const name = (file.originalname || '').toLowerCase();
+    if (name.endsWith('.webm')) return 'video/webm';
+    return 'video/mp4';
+  }
+  return 'image/jpeg';
 }
 
 export async function getProfile(req: Request, res: Response): Promise<void> {
@@ -142,7 +157,8 @@ export async function postCreatePost(req: Request, res: Response): Promise<void>
         }
         const ext = path.extname(f.originalname || '') || '';
         const safeExt = ext && ext.length <= 12 ? ext.toLowerCase() : '';
-        const mime = String(f.mimetype || 'application/octet-stream').toLowerCase();
+        const type = inferMediaTypeFromUpload(f);
+        const mime = contentTypeForUpload(f, type);
         let url: string;
         try {
           const objectPath = buildUserMediaProfilePath(authUserId, safeExt);
@@ -169,7 +185,7 @@ export async function postCreatePost(req: Request, res: Response): Promise<void>
         }
         uploads.push({
           url,
-          type: inferMediaTypeFromMimetype(f.mimetype),
+          type,
           order: idx,
         });
       }
