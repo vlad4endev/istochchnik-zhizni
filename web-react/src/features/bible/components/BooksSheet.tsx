@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { LuSearch } from 'react-icons/lu';
 
 import type { BibleBook, BibleTranslation } from '../api';
 import type { BibleRecentItem } from '../bibleUiMeta';
@@ -28,10 +29,12 @@ export function BooksSheet({
   onPick,
 }: Props) {
   const [chapterBook, setChapterBook] = useState<BibleBook | null>(null);
+  const [q, setQ] = useState('');
 
   useEffect(() => {
     if (!open) {
       setChapterBook(null);
+      setQ('');
       return;
     }
     if (!initialBookSlug) return;
@@ -39,8 +42,16 @@ export function BooksSheet({
     setChapterBook(hit);
   }, [open, initialBookSlug, books]);
 
-  const ot = useMemo(() => books.filter((b) => b.testament === 'ot'), [books]);
-  const nt = useMemo(() => books.filter((b) => b.testament === 'nt'), [books]);
+  const needle = q.trim().toLowerCase();
+  const filteredBooks = useMemo(() => {
+    if (needle.length === 0) return books;
+    return books.filter(
+      (b) => b.name.toLowerCase().includes(needle) || b.short_name.toLowerCase().includes(needle),
+    );
+  }, [books, needle]);
+
+  const ot = useMemo(() => filteredBooks.filter((b) => b.testament === 'ot'), [filteredBooks]);
+  const nt = useMemo(() => filteredBooks.filter((b) => b.testament === 'nt'), [filteredBooks]);
   const translationTitle = translation?.title || 'Перевод';
 
   function closeAll() {
@@ -104,6 +115,20 @@ export function BooksSheet({
         </div>
       ) : (
         <div>
+          <div className="sticky top-0 z-10 bg-white/95 px-4 py-2 backdrop-blur">
+            <div className="relative">
+              <LuSearch
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
+                size={15}
+              />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Поиск книги"
+                className="w-full rounded-full border border-stone-200 bg-stone-50 py-2 pl-8 pr-3 text-sm outline-none ring-primary/30 focus:ring-2"
+              />
+            </div>
+          </div>
           {nt.length > 0 ? (
             <BookList
               title="Новый Завет"
@@ -119,6 +144,9 @@ export function BooksSheet({
               currentBookSlug={currentBookSlug}
               onSelect={setChapterBook}
             />
+          ) : null}
+          {needle.length > 0 && nt.length === 0 && ot.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-stone-500">Книга не найдена</p>
           ) : null}
         </div>
       )}
