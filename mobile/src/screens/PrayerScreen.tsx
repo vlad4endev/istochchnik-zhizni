@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { fetchPrayerByDate } from '../api/prayer';
+import { fetchPrayerByDate, postPrayerSectionVisit } from '../api/prayer';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
 import {
@@ -32,6 +32,7 @@ import {
   isTodayIso,
   todayIsoUtc,
 } from '../lib/date';
+import { storage } from '../lib/storage';
 import { resolveApiOrigin } from '../lib/config';
 import type { MainTabParamList, RootStackParamList } from '../navigation/types';
 import type { DayPrayerData } from '../types';
@@ -41,6 +42,8 @@ type PrayerNav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Prayer'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
+
+const PRAYER_VISIT_DATE_KEY = 'prayer_section_visit_date';
 
 function isPrayerEmpty(data: DayPrayerData): boolean {
   return (
@@ -62,6 +65,18 @@ export function PrayerScreen() {
     queryKey: ['prayer', date],
     queryFn: () => fetchPrayerByDate(date),
   });
+
+  // Отметка о посещении раздела «Молитва» — не чаще раза в день (паритет с вебом).
+  useFocusEffect(
+    useCallback(() => {
+      const today = todayIsoUtc();
+      if (storage.getString(PRAYER_VISIT_DATE_KEY) === today) return;
+      storage.set(PRAYER_VISIT_DATE_KEY, today);
+      void postPrayerSectionVisit().catch(() => {
+        storage.remove(PRAYER_VISIT_DATE_KEY);
+      });
+    }, []),
+  );
 
   const data = prayerQuery.data;
   const isToday = isTodayIso(date);
