@@ -207,6 +207,8 @@ export function parseWeekPlanMembers(data: unknown): NextWeekMemberDay[] {
 export async function getWeekPlanMembers(week: WeekPlanKind = 'next'): Promise<NextWeekMemberDay[]> {
   const { data } = await apiClient.get<unknown>('/api/calendar/next-week/members', {
     params: { week },
+    // План недели + снимок цикла; не обрывать раньше SW/прокси на слабом VPS.
+    timeout: 60_000,
   });
   return parseWeekPlanMembers(data);
 }

@@ -17,7 +17,10 @@ export function loadErrorDescription(err: unknown): string | null {
       return 'Пришёл ответ HTML вместо JSON. Часто URL API совпадает с фронтендом — укажите отдельный адрес бэкенда.';
     }
     if (err.code === 'ERR_NETWORK' || err.message.toLowerCase().includes('network')) {
-      return 'Не удаётся подключиться к серверу. Проверьте CORS, HTTPS и доступность API.';
+      return 'Нет ответа от сервера. Обновите страницу (Ctrl+Shift+R) — часто помогает сброс кэша service worker — и повторите.';
+    }
+    if (err.code === 'ECONNABORTED' || /timeout/i.test(err.message)) {
+      return 'Сервер слишком долго отвечает. Повторите через несколько секунд.';
     }
     const msg = err.message;
     if (msg) return msg;
