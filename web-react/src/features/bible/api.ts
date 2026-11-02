@@ -110,6 +110,19 @@ export interface BibleCommentary {
   body: string;
 }
 
+export type BibleHighlightColor = 'yellow' | 'green' | 'blue' | 'pink';
+
+export interface BibleHighlight {
+  id: number;
+  translation_code: string;
+  book_slug: string;
+  chapter: number;
+  verse_start: number;
+  verse_end: number;
+  color: BibleHighlightColor;
+  created_at: string;
+}
+
 export interface BibleAudio {
   id: number;
   audio_url: string;
@@ -251,6 +264,33 @@ export async function createChurchCommentary(body: {
 }): Promise<BibleCommentary> {
   const { data } = await apiClient.post<BibleCommentary>('/api/bible/commentaries', body);
   return data;
+}
+
+export async function fetchBibleHighlights(params: {
+  translation: string;
+  book: string;
+  chapter: number;
+}): Promise<BibleHighlight[]> {
+  const { data } = await apiClient.get<{ highlights: BibleHighlight[] }>('/api/bible/highlights', {
+    params,
+  });
+  return data.highlights ?? [];
+}
+
+export async function createBibleHighlight(body: {
+  translation?: string;
+  book_slug: string;
+  chapter: number;
+  verse_start: number;
+  verse_end?: number;
+  color: BibleHighlightColor;
+}): Promise<BibleHighlight> {
+  const { data } = await apiClient.post<BibleHighlight>('/api/bible/highlights', body);
+  return data;
+}
+
+export async function deleteBibleHighlight(id: number): Promise<void> {
+  await apiClient.delete(`/api/bible/highlights/${id}`);
 }
 
 export async function fetchBibleAudio(

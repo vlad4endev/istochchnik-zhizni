@@ -7,6 +7,9 @@ import {
   bibleCommentariesCreate,
   bibleCommentariesDelete,
   bibleCommentariesList,
+  bibleHighlightsCreate,
+  bibleHighlightsDelete,
+  bibleHighlightsList,
   bibleNotesCreate,
   bibleNotesDelete,
   bibleNotesList,
@@ -52,5 +55,9 @@ router.delete('/plans/:id', biblePlansDelete);
 router.get('/commentaries', bibleCommentariesList);
 router.post('/commentaries', bibleCommentariesCreate);
 router.delete('/commentaries/:id', bibleCommentariesDelete);
+
+router.get('/highlights', bibleHighlightsList);
+router.post('/highlights', bibleHighlightsCreate);
+router.delete('/highlights/:id', bibleHighlightsDelete);
 
 export default router;

@@ -30,6 +30,11 @@ import {
   listCommentariesForChapter,
 } from '../services/bibleCommentariesService';
 import { getChapterAudio } from '../services/bibleAudioService';
+import {
+  createBibleHighlight,
+  deleteBibleHighlight,
+  listBibleHighlightsForChapter,
+} from '../services/bibleHighlightsService';
 
 type AuthReq = Request & {
   authUserId?: number;
@@ -243,6 +248,69 @@ export async function bibleNotesDelete(req: Request, res: Response): Promise<voi
   } catch (e) {
     console.error('[bible] notes delete:', e);
     res.status(500).json({ error: 'Не удалось удалить заметку' });
+  }
+}
+
+export async function bibleHighlightsList(req: Request, res: Response): Promise<void> {
+  try {
+    const id = memberId(req);
+    if (!id) {
+      res.status(401).json({ error: 'Требуется вход' });
+      return;
+    }
+    const translation = String(req.query.translation ?? 'synodal');
+    const book = String(req.query.book ?? '');
+    const chapter = Number(req.query.chapter);
+    if (!book || !Number.isInteger(chapter)) {
+      res.status(400).json({ error: 'Укажите книгу и главу' });
+      return;
+    }
+    res.json({ highlights: await listBibleHighlightsForChapter(id, translation, book, chapter) });
+  } catch (e) {
+    console.error('[bible] highlights list:', e);
+    res.status(500).json({ error: 'Не удалось загрузить выделения' });
+  }
+}
+
+export async function bibleHighlightsCreate(req: Request, res: Response): Promise<void> {
+  try {
+    const id = memberId(req);
+    if (!id) {
+      res.status(401).json({ error: 'Требуется вход' });
+      return;
+    }
+    const body = req.body as Record<string, unknown>;
+    const highlight = await createBibleHighlight(id, {
+      translationCode: String(body.translation ?? 'synodal'),
+      bookSlug: String(body.book_slug ?? ''),
+      chapter: Number(body.chapter),
+      verseStart: Number(body.verse_start ?? body.verse ?? 1),
+      verseEnd: body.verse_end != null ? Number(body.verse_end) : undefined,
+      color: typeof body.color === 'string' ? body.color : undefined,
+    });
+    res.status(201).json(highlight);
+  } catch (e) {
+    console.error('[bible] highlights create:', e);
+    res.status(500).json({ error: 'Не удалось сохранить выделение' });
+  }
+}
+
+export async function bibleHighlightsDelete(req: Request, res: Response): Promise<void> {
+  try {
+    const id = memberId(req);
+    if (!id) {
+      res.status(401).json({ error: 'Требуется вход' });
+      return;
+    }
+    const ok = await deleteBibleHighlight(id, Number(req.params.id));
+    if (!ok) {
+      res.status(404).json({ error: 'Выделение не найдено' });
+      return;
+    }
+    res.status(204).send();
+  } catch (e) {
+    console.error('[bible] highlights delete:', e);
+    res.status(500).json({ error: 'Не удалось удалить выделение' });
   }
 }
 
