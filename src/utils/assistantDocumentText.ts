@@ -60,9 +60,7 @@ export function formatAssistantDocumentBlock(input: {
 }): string {
   const name = String(input.fileName ?? '').trim() || 'документ';
   const warning = String(input.warning ?? '').trim();
-  const body = String(input.text ?? '')
-    .replaceAll(String.fromCharCode(0), '')
-    .trim();
+  const body = String(input.text ?? '').split('\0').join('').trim();
   if (!body) {
     return (
       `Текст документа «${name}».\n` +
