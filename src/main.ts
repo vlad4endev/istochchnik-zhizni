@@ -1,6 +1,6 @@
 /**
- * Точка входа HTTP-сервера. Не называть файл src/index.ts — Vercel тогда
- * подхватывает Express как serverless и ломает деплой статического фронта (web-react).
+ * Точка входа HTTP-сервера. Файл намеренно называется src/main.ts, а не
+ * src/index.ts: имя зашито в tsconfig/Dockerfile и скриптах запуска сервера.
  */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -426,7 +426,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 app.get('/api/version', ...(isProduction ? [requireAuthSession] : []), (_req, res) => {
   res.json({
     api_build_stamp: process.env.BUILD_STAMP ?? null,
-    api_commit: process.env.GIT_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+    api_commit: process.env.GIT_SHA ?? null,
     ...(isProduction ? {} : { node_env: process.env.NODE_ENV ?? null, server_time: new Date().toISOString() }),
   });
 });
