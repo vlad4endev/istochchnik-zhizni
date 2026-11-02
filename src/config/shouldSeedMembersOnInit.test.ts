@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
-import { shouldSeedMembersOnInit } from './memberSeedSql';
+import { MEMBER_SEED_SQL, shouldSeedMembersOnInit } from './memberSeedSql';
 
 assert.equal(shouldSeedMembersOnInit({}), false);
-assert.equal(shouldSeedMembersOnInit({ SEED_MEMBERS_ON_INIT: 'false' }), false);
-assert.equal(shouldSeedMembersOnInit({ SEED_MEMBERS_ON_INIT: '1' }), false);
-assert.equal(shouldSeedMembersOnInit({ SEED_MEMBERS_ON_INIT: 'true' }), true);
+assert.equal(shouldSeedMembersOnInit({ SEED_MEMBERS_ON_INIT: 'true' }), false);
+assert.match(MEMBER_SEED_SQL, /WHERE FALSE/i);
 
 console.log('shouldSeedMembersOnInit.test OK');
 process.exit(0);

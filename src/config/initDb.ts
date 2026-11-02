@@ -1,5 +1,4 @@
 import { pool } from './db';
-import { MEMBER_SEED_SQL, shouldSeedMembersOnInit } from './memberSeedSql';
 import { mergeDuplicateMembersBootPatchIfNeeded } from '../services/memberMergeService';
 
 const INIT_SQL = `
@@ -2473,12 +2472,15 @@ export async function initDb(): Promise<void> {
     throw new Error('Database pool is not initialized. Set DATABASE_URL in .env');
   }
   await pool.query(INIT_SQL);
-  // Do not insert church roster on every boot: deleted members were coming back after
-  // rebuild, and empty servers already had people before any backup restore.
-  // Explicit seed: SEED_MEMBERS_ON_INIT=true or `npm run db:seed-members`.
-  if (shouldSeedMembersOnInit()) {
-    await pool.query(MEMBER_SEED_SQL);
-    console.log('[db] MEMBER_SEED_SQL applied (SEED_MEMBERS_ON_INIT=true)');
-  }
+  // Never seed members from the repo here — deleted people were resurrected on rebuild.
+  // Roster comes from backup restore or admin UI only.
   await mergeDuplicateMembersBootPatchIfNeeded();
+  try {
+    const count = await pool.query<{ c: string }>(
+      'SELECT COUNT(*)::text AS c FROM members',
+    );
+    console.log('[db] members rows after initDb:', count.rows[0]?.c ?? '?');
+  } catch (e) {
+    console.warn('[db] could not count members after initDb:', e);
+  }
 }
