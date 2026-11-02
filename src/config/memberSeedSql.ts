@@ -7,9 +7,7 @@
  */
 
 /** Always false: boot must never insert a roster from the repo. */
-export function shouldSeedMembersOnInit(
-  _env: NodeJS.ProcessEnv = process.env,
-): boolean {
+export function shouldSeedMembersOnInit(): boolean {
   return false;
 }
 
