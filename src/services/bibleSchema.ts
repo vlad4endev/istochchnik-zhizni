@@ -10,7 +10,7 @@ export async function ensureBibleSchema(): Promise<void> {
 
       await query(`
         CREATE TABLE IF NOT EXISTS public.bible_translations (
-          id SMALLSERIAL PRIMARY KEY,
+          id SERIAL PRIMARY KEY,
           code VARCHAR(32) NOT NULL UNIQUE,
           title VARCHAR(200) NOT NULL,
           language VARCHAR(16) NOT NULL DEFAULT 'ru',
@@ -43,8 +43,8 @@ export async function ensureBibleSchema(): Promise<void> {
 
       await query(`
         CREATE TABLE IF NOT EXISTS public.bible_books (
-          id SMALLSERIAL PRIMARY KEY,
-          translation_id SMALLINT NOT NULL REFERENCES public.bible_translations(id) ON DELETE CASCADE,
+          id SERIAL PRIMARY KEY,
+          translation_id INTEGER NOT NULL REFERENCES public.bible_translations(id) ON DELETE CASCADE,
           ord SMALLINT NOT NULL,
           testament VARCHAR(8) NOT NULL,
           slug VARCHAR(64) NOT NULL,
@@ -59,8 +59,8 @@ export async function ensureBibleSchema(): Promise<void> {
       await query(`
         CREATE TABLE IF NOT EXISTS public.bible_verses (
           id BIGSERIAL PRIMARY KEY,
-          translation_id SMALLINT NOT NULL REFERENCES public.bible_translations(id) ON DELETE CASCADE,
-          book_id SMALLINT NOT NULL REFERENCES public.bible_books(id) ON DELETE CASCADE,
+          translation_id INTEGER NOT NULL REFERENCES public.bible_translations(id) ON DELETE CASCADE,
+          book_id INTEGER NOT NULL REFERENCES public.bible_books(id) ON DELETE CASCADE,
           chapter SMALLINT NOT NULL,
           verse SMALLINT NOT NULL,
           text TEXT NOT NULL,
@@ -82,8 +82,8 @@ export async function ensureBibleSchema(): Promise<void> {
         CREATE TABLE IF NOT EXISTS public.bible_notes (
           id BIGSERIAL PRIMARY KEY,
           member_id INTEGER NOT NULL,
-          translation_id SMALLINT NOT NULL REFERENCES public.bible_translations(id) ON DELETE CASCADE,
-          book_id SMALLINT NOT NULL REFERENCES public.bible_books(id) ON DELETE CASCADE,
+          translation_id INTEGER NOT NULL REFERENCES public.bible_translations(id) ON DELETE CASCADE,
+          book_id INTEGER NOT NULL REFERENCES public.bible_books(id) ON DELETE CASCADE,
           chapter SMALLINT NOT NULL,
           verse_start SMALLINT NOT NULL,
           verse_end SMALLINT NOT NULL,
@@ -101,8 +101,8 @@ export async function ensureBibleSchema(): Promise<void> {
       await query(`
         CREATE TABLE IF NOT EXISTS public.bible_reading_progress (
           member_id INTEGER NOT NULL,
-          translation_id SMALLINT NOT NULL REFERENCES public.bible_translations(id) ON DELETE CASCADE,
-          book_id SMALLINT NOT NULL REFERENCES public.bible_books(id) ON DELETE CASCADE,
+          translation_id INTEGER NOT NULL REFERENCES public.bible_translations(id) ON DELETE CASCADE,
+          book_id INTEGER NOT NULL REFERENCES public.bible_books(id) ON DELETE CASCADE,
           chapter SMALLINT NOT NULL,
           verse SMALLINT NOT NULL DEFAULT 1,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -142,8 +142,8 @@ export async function ensureBibleSchema(): Promise<void> {
         CREATE TABLE IF NOT EXISTS public.bible_commentaries (
           id BIGSERIAL PRIMARY KEY,
           source VARCHAR(32) NOT NULL,
-          translation_id SMALLINT REFERENCES public.bible_translations(id) ON DELETE SET NULL,
-          book_id SMALLINT NOT NULL REFERENCES public.bible_books(id) ON DELETE CASCADE,
+          translation_id INTEGER REFERENCES public.bible_translations(id) ON DELETE SET NULL,
+          book_id INTEGER NOT NULL REFERENCES public.bible_books(id) ON DELETE CASCADE,
           chapter SMALLINT NOT NULL,
           verse_start SMALLINT,
           verse_end SMALLINT,
@@ -164,8 +164,8 @@ export async function ensureBibleSchema(): Promise<void> {
       await query(`
         CREATE TABLE IF NOT EXISTS public.bible_audio_chapters (
           id BIGSERIAL PRIMARY KEY,
-          translation_id SMALLINT NOT NULL REFERENCES public.bible_translations(id) ON DELETE CASCADE,
-          book_id SMALLINT NOT NULL REFERENCES public.bible_books(id) ON DELETE CASCADE,
+          translation_id INTEGER NOT NULL REFERENCES public.bible_translations(id) ON DELETE CASCADE,
+          book_id INTEGER NOT NULL REFERENCES public.bible_books(id) ON DELETE CASCADE,
           chapter SMALLINT NOT NULL,
           audio_url TEXT NOT NULL,
           timings_json JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -175,6 +175,92 @@ export async function ensureBibleSchema(): Promise<void> {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           UNIQUE (translation_id, book_id, chapter, voice_id)
         )
+      `);
+
+      // Migration: id/translation_id/book_id были SMALLSERIAL/SMALLINT — sequence
+      // bible_books_id_seq упирался в 32767 (2200H) и валил все /api/bible-запросы.
+      // Атомарно расширяем до integer и возвращаем sequence к MAX(id)+1.
+      await query(`
+        DO $mig$
+        DECLARE
+          fk record;
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'bible_books'
+              AND column_name = 'id' AND data_type = 'smallint'
+          ) THEN
+            FOR fk IN
+              SELECT conname, conrelid
+              FROM pg_constraint
+              WHERE contype = 'f'
+                AND confrelid IN ('public.bible_translations'::regclass, 'public.bible_books'::regclass)
+            LOOP
+              EXECUTE format('ALTER TABLE %s DROP CONSTRAINT IF EXISTS %I', fk.conrelid::regclass, fk.conname);
+            END LOOP;
+
+            ALTER TABLE public.bible_translations ALTER COLUMN id TYPE integer;
+            ALTER TABLE public.bible_books ALTER COLUMN translation_id TYPE integer;
+            ALTER TABLE public.bible_books ALTER COLUMN id TYPE integer;
+            ALTER TABLE public.bible_verses ALTER COLUMN translation_id TYPE integer;
+            ALTER TABLE public.bible_verses ALTER COLUMN book_id TYPE integer;
+            ALTER TABLE public.bible_notes ALTER COLUMN translation_id TYPE integer;
+            ALTER TABLE public.bible_notes ALTER COLUMN book_id TYPE integer;
+            ALTER TABLE public.bible_reading_progress ALTER COLUMN translation_id TYPE integer;
+            ALTER TABLE public.bible_reading_progress ALTER COLUMN book_id TYPE integer;
+            ALTER TABLE public.bible_commentaries ALTER COLUMN translation_id TYPE integer;
+            ALTER TABLE public.bible_commentaries ALTER COLUMN book_id TYPE integer;
+            ALTER TABLE public.bible_audio_chapters ALTER COLUMN translation_id TYPE integer;
+            ALTER TABLE public.bible_audio_chapters ALTER COLUMN book_id TYPE integer;
+
+            ALTER SEQUENCE public.bible_translations_id_seq NO MAXVALUE;
+            ALTER SEQUENCE public.bible_books_id_seq NO MAXVALUE;
+            PERFORM setval(
+              'public.bible_translations_id_seq',
+              COALESCE((SELECT MAX(id) FROM public.bible_translations), 0) + 1,
+              false
+            );
+            PERFORM setval(
+              'public.bible_books_id_seq',
+              COALESCE((SELECT MAX(id) FROM public.bible_books), 0) + 1,
+              false
+            );
+
+            ALTER TABLE public.bible_books
+              ADD CONSTRAINT bible_books_translation_id_fkey
+              FOREIGN KEY (translation_id) REFERENCES public.bible_translations(id) ON DELETE CASCADE;
+            ALTER TABLE public.bible_verses
+              ADD CONSTRAINT bible_verses_translation_id_fkey
+              FOREIGN KEY (translation_id) REFERENCES public.bible_translations(id) ON DELETE CASCADE;
+            ALTER TABLE public.bible_verses
+              ADD CONSTRAINT bible_verses_book_id_fkey
+              FOREIGN KEY (book_id) REFERENCES public.bible_books(id) ON DELETE CASCADE;
+            ALTER TABLE public.bible_notes
+              ADD CONSTRAINT bible_notes_translation_id_fkey
+              FOREIGN KEY (translation_id) REFERENCES public.bible_translations(id) ON DELETE CASCADE;
+            ALTER TABLE public.bible_notes
+              ADD CONSTRAINT bible_notes_book_id_fkey
+              FOREIGN KEY (book_id) REFERENCES public.bible_books(id) ON DELETE CASCADE;
+            ALTER TABLE public.bible_reading_progress
+              ADD CONSTRAINT bible_reading_progress_translation_id_fkey
+              FOREIGN KEY (translation_id) REFERENCES public.bible_translations(id) ON DELETE CASCADE;
+            ALTER TABLE public.bible_reading_progress
+              ADD CONSTRAINT bible_reading_progress_book_id_fkey
+              FOREIGN KEY (book_id) REFERENCES public.bible_books(id) ON DELETE CASCADE;
+            ALTER TABLE public.bible_commentaries
+              ADD CONSTRAINT bible_commentaries_translation_id_fkey
+              FOREIGN KEY (translation_id) REFERENCES public.bible_translations(id) ON DELETE SET NULL;
+            ALTER TABLE public.bible_commentaries
+              ADD CONSTRAINT bible_commentaries_book_id_fkey
+              FOREIGN KEY (book_id) REFERENCES public.bible_books(id) ON DELETE CASCADE;
+            ALTER TABLE public.bible_audio_chapters
+              ADD CONSTRAINT bible_audio_chapters_translation_id_fkey
+              FOREIGN KEY (translation_id) REFERENCES public.bible_translations(id) ON DELETE CASCADE;
+            ALTER TABLE public.bible_audio_chapters
+              ADD CONSTRAINT bible_audio_chapters_book_id_fkey
+              FOREIGN KEY (book_id) REFERENCES public.bible_books(id) ON DELETE CASCADE;
+          END IF;
+        END $mig$
       `);
 
       // Soft FK to members when table exists

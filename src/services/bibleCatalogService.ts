@@ -42,6 +42,8 @@ const TRANSLATION_SELECT = `
   id, code, title, short_title, description, year, language, scope, availability, license_note, sort_order
 `;
 
+const BOOK_SELECT = `id, translation_id, ord, testament, slug, name, short_name, chapters_count`;
+
 function mapTranslationRow(row: Record<string, unknown>): BibleTranslationRow {
   return {
     id: Number(row.id),
@@ -67,58 +69,151 @@ export async function ensureTranslationBooks(
   const map = new Map<string, BibleBookRow>();
   // nt — только НЗ; partial/full — полный скелет 66 книг (partial может быть неполным по стихам)
   const defs = scope === 'nt' ? BIBLE_BOOK_DEFS.filter((d) => d.testament === 'nt') : BIBLE_BOOK_DEFS;
+
+  // Read-first: в steady state (все книги уже есть) не тратим sequence и не пишем строки.
+  // Раньше upsert DO UPDATE на каждый запрос сжигал bible_books_id_seq (smallint, 32767).
+  const existing = await query(
+    `SELECT ${BOOK_SELECT} FROM bible_books WHERE translation_id = $1`,
+    [translationId],
+  );
+  const bySlug = new Map<string, BibleBookRow>();
+  for (const row of existing.rows as BibleBookRow[]) {
+    bySlug.set(String(row.slug), row);
+  }
+
   for (const def of defs) {
-    const upserted = await query(
-      `INSERT INTO bible_books (translation_id, ord, testament, slug, name, short_name, chapters_count)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (translation_id, slug) DO UPDATE SET
-         ord = EXCLUDED.ord,
-         testament = EXCLUDED.testament,
-         name = EXCLUDED.name,
-         short_name = EXCLUDED.short_name,
-         chapters_count = EXCLUDED.chapters_count
-       RETURNING id, translation_id, ord, testament, slug, name, short_name, chapters_count`,
-      [translationId, def.ord, def.testament, def.slug, def.nameRu, def.shortNameRu, def.chapters],
-    );
-    map.set(def.slug, upserted.rows[0]! as BibleBookRow);
+    let row = bySlug.get(def.slug) ?? undefined;
+    if (!row) {
+      // Новая книга — единственное место, где тратится sequence
+      const upserted = await query(
+        `INSERT INTO bible_books (translation_id, ord, testament, slug, name, short_name, chapters_count)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (translation_id, slug) DO UPDATE SET
+           ord = EXCLUDED.ord,
+           testament = EXCLUDED.testament,
+           name = EXCLUDED.name,
+           short_name = EXCLUDED.short_name,
+           chapters_count = EXCLUDED.chapters_count
+         RETURNING ${BOOK_SELECT}`,
+        [translationId, def.ord, def.testament, def.slug, def.nameRu, def.shortNameRu, def.chapters],
+      );
+      row = upserted.rows[0] as BibleBookRow | undefined;
+    } else if (
+      String(row.testament) !== def.testament ||
+      String(row.name) !== def.nameRu ||
+      String(row.short_name) !== def.shortNameRu ||
+      Number(row.chapters_count) !== def.chapters
+    ) {
+      try {
+        const updated = await query(
+          `UPDATE bible_books
+           SET ord = $1, testament = $2, name = $3, short_name = $4, chapters_count = $5
+           WHERE translation_id = $6 AND slug = $7
+           RETURNING ${BOOK_SELECT}`,
+          [def.ord, def.testament, def.nameRu, def.shortNameRu, def.chapters, translationId, def.slug],
+        );
+        row = (updated.rows[0] as BibleBookRow | undefined) ?? row;
+      } catch {
+        // UNIQUE(translation_id, ord) не даёт менять ord по одной строке; ord из тех же defs и не дрейфает — синхронизируем остальное.
+        const updated = await query(
+          `UPDATE bible_books
+           SET testament = $1, name = $2, short_name = $3, chapters_count = $4
+           WHERE translation_id = $5 AND slug = $6
+           RETURNING ${BOOK_SELECT}`,
+          [def.testament, def.nameRu, def.shortNameRu, def.chapters, translationId, def.slug],
+        );
+        row = (updated.rows[0] as BibleBookRow | undefined) ?? row;
+      }
+    }
+    if (row) map.set(def.slug, row);
   }
   return map;
 }
 
-/** Upsert all catalog translations + book skeletons (NT-only where needed). */
+/** Upsert catalog translations + book skeletons (NT-only where needed). */
 export async function ensureCatalogTranslations(): Promise<BibleTranslationRow[]> {
   await ensureBibleSchema();
+
+  // Read-first: переводы почти всегда уже в БД — не сжигаем sequence и не пишем на каждый запрос.
+  const existing = await query(
+    `SELECT ${TRANSLATION_SELECT} FROM bible_translations`,
+  );
+  const byCode = new Map<string, Record<string, unknown>>();
+  for (const raw of existing.rows as Array<Record<string, unknown>>) {
+    byCode.set(String(raw.code), raw);
+  }
+
   const out: BibleTranslationRow[] = [];
   for (const def of BIBLE_TRANSLATION_DEFS) {
-    const upserted = await query(
-      `INSERT INTO bible_translations
-         (code, title, short_title, description, year, language, scope, availability, license_note, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       ON CONFLICT (code) DO UPDATE SET
-         title = EXCLUDED.title,
-         short_title = EXCLUDED.short_title,
-         description = EXCLUDED.description,
-         year = EXCLUDED.year,
-         language = EXCLUDED.language,
-         scope = EXCLUDED.scope,
-         availability = EXCLUDED.availability,
-         license_note = EXCLUDED.license_note,
-         sort_order = EXCLUDED.sort_order
-       RETURNING ${TRANSLATION_SELECT}`,
-      [
-        def.code,
-        def.title,
-        def.shortTitle,
-        def.description,
-        def.year,
-        def.language,
-        def.scope,
-        def.availability,
-        def.licenseNote,
-        def.sortOrder,
-      ],
-    );
-    const row = mapTranslationRow(upserted.rows[0] as Record<string, unknown>);
+    const existingRow = byCode.get(def.code);
+    let row: BibleTranslationRow;
+    if (!existingRow) {
+      const upserted = await query(
+        `INSERT INTO bible_translations
+           (code, title, short_title, description, year, language, scope, availability, license_note, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (code) DO UPDATE SET
+           title = EXCLUDED.title,
+           short_title = EXCLUDED.short_title,
+           description = EXCLUDED.description,
+           year = EXCLUDED.year,
+           language = EXCLUDED.language,
+           scope = EXCLUDED.scope,
+           availability = EXCLUDED.availability,
+           license_note = EXCLUDED.license_note,
+           sort_order = EXCLUDED.sort_order
+         RETURNING ${TRANSLATION_SELECT}`,
+        [
+          def.code,
+          def.title,
+          def.shortTitle,
+          def.description,
+          def.year,
+          def.language,
+          def.scope,
+          def.availability,
+          def.licenseNote,
+          def.sortOrder,
+        ],
+      );
+      row = mapTranslationRow(upserted.rows[0] as Record<string, unknown>);
+    } else {
+      const current = mapTranslationRow(existingRow);
+      const drift =
+        current.title !== def.title ||
+        current.short_title !== def.shortTitle ||
+        current.description !== def.description ||
+        current.year !== def.year ||
+        current.language !== def.language ||
+        current.scope !== def.scope ||
+        current.availability !== def.availability ||
+        current.license_note !== def.licenseNote ||
+        Number(current.sort_order) !== def.sortOrder;
+      if (drift) {
+        const updated = await query(
+          `UPDATE bible_translations SET
+             title = $1, short_title = $2, description = $3, year = $4, language = $5,
+             scope = $6, availability = $7, license_note = $8, sort_order = $9
+           WHERE code = $10
+           RETURNING ${TRANSLATION_SELECT}`,
+          [
+            def.title,
+            def.shortTitle,
+            def.description,
+            def.year,
+            def.language,
+            def.scope,
+            def.availability,
+            def.licenseNote,
+            def.sortOrder,
+            def.code,
+          ],
+        );
+        row = mapTranslationRow(updated.rows[0] as Record<string, unknown>);
+      } else {
+        row = current;
+      }
+    }
     await ensureTranslationBooks(row.id, def.scope);
     out.push(row);
   }
