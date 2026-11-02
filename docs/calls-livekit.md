@@ -134,8 +134,25 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs li
 - `GET /api/call-invitations/:token` — preview без секретов LiveKit
 - `POST /api/call-invitations/:token/join`
 - `GET /api/calls/history`
+- `POST /api/calls/:id/journal` — пакет клиентских событий звонка (телеметрия, только участник)
+- `GET /api/settings/calls/journal` — админский журнал звонков (фильтры, флаги проблем, курсор)
+- `GET /api/settings/calls/:id/log` — подробный лог звонка для админа (события + участники + проблемы)
 
 Токены выдаются только участникам с правом доступа. Identity: `member:{id}`.
+
+## Журнал звонков (админ-аналитика)
+
+Таблица `call_events` (создаётся в `initDb`): серверные переходы (`call_created`, `accepted`,
+`call_finished`, `token_issued`, `ghost_cleared`, …) + клиентская телеметрия из
+`web-react/src/features/calls/callJournal.ts` (`connected`/`reconnecting`/`device_error`/
+`stats_sample` с RTT/джиттером/потерями и т.д.). Клиент шлёт пакетами каждые 10 c и
+keepalive-fetch при закрытии вкладки; allowlist видов событий и лимиты — в
+`src/services/callEventsService.ts`. Retention: 90 дней (чистит `cleanupStaleCalls`).
+
+Админка → Звонки → Статистика → «Журнал звонков»: фильтры (период, статус, участник,
+«только проблемные»), у каждого звонка — автофлаги проблем (`deriveCallIssues`:
+`media_never_connected`, `reconnect_storm`, `device_error`, `low_quality`, `ghost_cleanup`, …)
+с подсказками по исправлению, участники, отчёты качества и хронология событий.
 
 ## Приглашения
 

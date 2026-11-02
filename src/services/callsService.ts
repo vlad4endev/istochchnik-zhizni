@@ -32,6 +32,7 @@ import {
   type CallRuntimeConfig,
 } from '../types/callSettings';
 import type { CallQualityReport } from './callStatsService';
+import { recordCallEvent } from './callEventsService';
 
 export type CallType = 'direct' | 'group';
 export type CallMediaType = 'audio' | 'video';
@@ -524,7 +525,19 @@ async function finalizeCall(
     if (!current) throw new CallsError('not_found', 'Звонок не найден');
     return current;
   }
-  return mapCallRow(row);
+  const done = mapCallRow(row);
+  recordCallEvent({
+    callId: call.id,
+    kind: 'call_finished',
+    severity: status === 'failed' ? 'error' : 'info',
+    payload: {
+      fromStatus: call.status,
+      toStatus: status,
+      endReason,
+      durationSeconds: done.duration_seconds,
+    },
+  });
+  return done;
 }
 
 async function createInvitationRaw(
@@ -662,6 +675,13 @@ export async function createDirectCall(input: {
          WHERE id = $1::uuid`,
         [call.id],
       );
+      recordCallEvent({
+        callId: call.id,
+        memberId: input.initiatorId,
+        kind: 'call_finished',
+        severity: 'error',
+        payload: { fromStatus: call.status, toStatus: 'failed', endReason: 'livekit_unavailable' },
+      });
       throw new CallsError('livekit_unavailable', 'Сервис звонков временно недоступен');
     }
   }
@@ -688,6 +708,18 @@ export async function createDirectCall(input: {
     url: `/call/${call.id}`,
     ttlSec: ringTimeoutSec(cfg),
   }).catch((e) => console.warn('[calls] wake failed:', e instanceof Error ? e.message : e));
+
+  recordCallEvent({
+    callId: call.id,
+    memberId: input.initiatorId,
+    kind: 'call_created',
+    payload: {
+      type: 'direct',
+      mediaType: input.mediaType,
+      conversationId: input.conversationId,
+      recipientId: input.recipientId,
+    },
+  });
 
   return toPublicCall(call);
 }
@@ -774,6 +806,13 @@ export async function createGroupCall(input: {
          WHERE id = $1::uuid`,
         [call.id],
       );
+      recordCallEvent({
+        callId: call.id,
+        memberId: input.initiatorId,
+        kind: 'call_finished',
+        severity: 'error',
+        payload: { fromStatus: call.status, toStatus: 'failed', endReason: 'livekit_unavailable' },
+      });
       throw new CallsError('livekit_unavailable', 'Сервис звонков временно недоступен');
     }
   }
@@ -873,6 +912,19 @@ export async function createGroupCall(input: {
     console.warn('[calls] group history message:', e instanceof Error ? e.message : e);
   }
 
+  recordCallEvent({
+    callId: call.id,
+    memberId: input.initiatorId,
+    kind: 'call_created',
+    payload: {
+      type: 'group',
+      mediaType: input.mediaType,
+      conversationId: input.conversationId,
+      accessMode,
+      title: callTitle,
+    },
+  });
+
   return toPublicCall(call, { inviteUrl });
 }
 
@@ -938,9 +990,23 @@ export async function createStandaloneLinkCall(input: {
          WHERE id = $1::uuid`,
         [call.id],
       );
+      recordCallEvent({
+        callId: call.id,
+        memberId: input.initiatorId,
+        kind: 'call_finished',
+        severity: 'error',
+        payload: { fromStatus: call.status, toStatus: 'failed', endReason: 'livekit_unavailable' },
+      });
       throw new CallsError('livekit_unavailable', 'Сервис звонков временно недоступен');
     }
   }
+
+  recordCallEvent({
+    callId: call.id,
+    memberId: input.initiatorId,
+    kind: 'call_created',
+    payload: { type: 'standalone', mediaType: input.mediaType, title: callTitle },
+  });
 
   return toPublicCall(call, { inviteUrl: inviteUrlFromToken(invite.rawToken) });
 }
@@ -1017,6 +1083,7 @@ export async function acceptCall(callId: string, memberId: number): Promise<Call
   await sendWs(updated.initiated_by, { type: 'call:accepted', callId: updated.id });
   // Снять CallStyle/CallKit на других устройствах принявшего
   void dismissIncomingCallNative(memberId, updated.id).catch(() => undefined);
+  recordCallEvent({ callId: updated.id, memberId, kind: 'accepted' });
   return toPublicCall(updated);
 }
 
@@ -1045,6 +1112,7 @@ export async function declineCall(callId: string, memberId: number): Promise<Cal
     return finalizeCall(client, call, 'declined', 'declined');
   });
 
+  recordCallEvent({ callId: updated.id, memberId, kind: 'declined' });
   await sendWs(updated.initiated_by, {
     type: 'call:rejected',
     callId: updated.id,
@@ -1101,6 +1169,7 @@ export async function cancelCall(callId: string, memberId: number): Promise<Call
     };
   });
 
+  recordCallEvent({ callId: updated.id, memberId, kind: 'cancelled' });
   for (const rid of recipientIds) {
     await sendWs(rid, { type: 'call:cancelled', callId: updated.id });
     void dismissIncomingCallNative(rid, updated.id).catch(() => undefined);
@@ -1135,6 +1204,7 @@ export async function endCall(
 ): Promise<CallPublic> {
   const leaveLiveKit: { roomName: string; identity: string }[] = [];
   const endForAll = Boolean(opts?.endForAll);
+  let groupLeaveRemaining: number | null = null;
 
   const { updated, notifyIds } = await withTransaction(async (client) => {
     const locked = await client.query(
@@ -1214,6 +1284,7 @@ export async function endCall(
       [callId],
     );
     const count = Number(remaining.rows[0]?.c ?? 0);
+    groupLeaveRemaining = count;
     if (count === 0) {
       const done = await finalizeCall(client, call, 'ended', 'all_left');
       return { updated: done, notifyIds: [] as number[] };
@@ -1238,6 +1309,15 @@ export async function endCall(
     } catch {
       /* ignore */
     }
+  }
+
+  if (groupLeaveRemaining != null) {
+    recordCallEvent({
+      callId,
+      memberId,
+      kind: 'participant_left',
+      payload: { remaining: groupLeaveRemaining },
+    });
   }
 
   const duration = updated.duration_seconds ?? undefined;
@@ -1392,6 +1472,13 @@ export async function issueCallToken(
     canPublish: true,
     canSubscribe: true,
     roomAdmin: isModerator && call.type === 'group',
+  });
+
+  recordCallEvent({
+    callId,
+    memberId,
+    kind: 'token_issued',
+    payload: { role: participant.role ?? 'participant', moderator: isModerator },
   });
 
   const pub = await getCallForMember(callId, memberId);
@@ -1661,6 +1748,7 @@ export async function joinViaInvitation(
     });
   }
 
+  recordCallEvent({ callId, memberId, kind: 'invitation_joined' });
   return issueCallToken(callId, memberId);
 }
 
@@ -1786,6 +1874,20 @@ export async function reportCallQuality(
     callId,
     JSON.stringify(nextMeta),
   ]);
+
+  recordCallEvent({
+    callId,
+    memberId,
+    kind: 'quality_reported',
+    severity: score <= 2 ? 'warn' : 'info',
+    payload: {
+      score,
+      connectionQuality: report.connectionQuality,
+      rttMs: report.rttMs,
+      packetLoss: report.packetLoss,
+      jitterMs: report.jitterMs,
+    },
+  });
 
   return {
     score: Math.round(avg * 10) / 10,
@@ -1913,6 +2015,15 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
         }
         return count;
       });
+
+      if (remaining >= 0) {
+        recordCallEvent({
+          callId: call.id,
+          kind: 'ghost_cleared',
+          severity: 'warn',
+          payload: { userIds: ghosts, remaining },
+        });
+      }
 
       // Не шлём call:ended «призракам» — иначе клиент закрывает UI во время LiveKit reconnect.
       // Если комната реально завершена (remaining === 0), уведомим остальных ниже.
@@ -2092,6 +2203,11 @@ export async function cleanupStaleCalls(): Promise<{
      SET revoked_at = COALESCE(revoked_at, NOW())
      WHERE revoked_at IS NULL AND expires_at < NOW() - INTERVAL '7 days'`,
   ).catch(() => undefined);
+
+  // Retention журнала событий звонков
+  await query(`DELETE FROM call_events WHERE created_at < NOW() - INTERVAL '90 days'`).catch(
+    () => undefined,
+  );
 
   return { missed, endedEmpty, ghostsCleared: ghosts.cleared };
 }

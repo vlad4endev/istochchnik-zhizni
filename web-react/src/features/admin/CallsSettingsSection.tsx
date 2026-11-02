@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import {
   LuActivity,
-  LuCheck,
   LuPhone,
   LuRefreshCw,
   LuServer,
@@ -11,8 +10,13 @@ import {
 } from 'react-icons/lu';
 
 import { IntegerTextInput } from '@/components/IntegerTextInput';
-import { AppAvatar } from '../../components/AppAvatar';
-import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
+import { CallsJournalPanel } from './CallsJournalPanel';
+import {
+  btnPrimary,
+  btnSecondary,
+  fieldClass,
+  formatDuration,
+} from './callsAdminUi';
 import {
   apiErrorMessage,
   fetchCallSettingsAdmin,
@@ -28,84 +32,6 @@ import {
 
 const Q_CALLS = ['admin', 'calls', 'settings'] as const;
 const Q_STATS = ['admin', 'calls', 'stats'] as const;
-
-function fieldClass() {
-  return (
-    'w-full rounded-xl border border-stone-200/90 bg-[var(--surface-elevated)] px-3 py-2.5 text-sm text-[var(--text)] outline-none ' +
-    'focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-[var(--text-muted)]'
-  );
-}
-
-function btnPrimary(c = '') {
-  return `rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 transition hover:opacity-95 disabled:opacity-50 ${c}`;
-}
-
-function btnSecondary(c = '') {
-  return `rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3 py-2 text-sm font-semibold text-[var(--text-secondary)] transition hover:bg-[var(--surface)] ${c}`;
-}
-
-function formatDuration(sec: number | null | undefined): string {
-  if (sec == null || !Number.isFinite(sec)) return '—';
-  const s = Math.max(0, Math.floor(sec));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const r = s % 60;
-  if (h > 0) return `${h}ч ${m}м`;
-  if (m > 0) return `${m}м ${r}с`;
-  return `${r}с`;
-}
-
-function formatWhen(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString('ru-RU', {
-      day: '2-digit',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function qualityBadge(score: number | null | undefined) {
-  if (score == null) return <span className="text-stone-400">нет данных</span>;
-  const color =
-    score >= 4
-      ? 'bg-emerald-100 text-emerald-800'
-      : score >= 2.5
-        ? 'bg-amber-100 text-amber-900'
-        : 'bg-red-100 text-red-800';
-  return (
-    <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-xs font-semibold ${color}`}>
-      {score.toFixed(1)} / 5
-    </span>
-  );
-}
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
-}
-
-function PersonAvatar({ name, src, size = 28 }: { name: string; src?: string | null; size?: number }) {
-  const initials = initialsOf(name);
-  return (
-    <AppAvatar
-      src={src || null}
-      fallback={<span className="text-[10px] font-semibold text-stone-600">{initials}</span>}
-      initialsFallbackText={initials}
-      initialsColorSeed={name}
-      className="flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-200"
-      imgClassName="h-full w-full object-cover"
-      style={{ width: size, height: size }}
-      width={size}
-      height={size}
-    />
-  );
-}
 
 function sourceHint(source: string) {
   if (source === 'db') return 'из админки';
@@ -958,7 +884,6 @@ function CallsStatsPanel() {
         from: new Date(`${from}T00:00:00`).toISOString(),
         to: new Date(`${to}T23:59:59`).toISOString(),
         status: status || undefined,
-        limit: 50,
       }),
   });
 
@@ -1038,74 +963,7 @@ function CallsStatsPanel() {
         />
       </div>
 
-      <section className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 overflow-x-auto">
-        <h3 className="text-sm font-semibold text-stone-900 mb-3">Активность по дням</h3>
-        {data.by_day.length === 0 ? (
-          <p className="text-sm text-stone-500">Нет звонков за период.</p>
-        ) : (
-          <table className="min-w-full text-left text-sm">
-            <thead className="text-xs uppercase text-stone-500">
-              <tr>
-                <th className="py-2 pr-4">День</th>
-                <th className="py-2 pr-4">Звонков</th>
-                <th className="py-2 pr-4">Ср. длительность</th>
-                <th className="py-2">Ср. качество</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.by_day.map((d) => (
-                <tr key={d.day} className="border-t border-stone-100">
-                  <td className="py-2 pr-4 font-medium text-stone-800">{d.day}</td>
-                  <td className="py-2 pr-4">{d.count}</td>
-                  <td className="py-2 pr-4">{formatDuration(d.avg_duration_sec)}</td>
-                  <td className="py-2">{qualityBadge(d.avg_quality)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      <section className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 overflow-x-auto">
-        <h3 className="text-sm font-semibold text-stone-900 mb-3">Кто звонит чаще</h3>
-        {data.top_users.length === 0 ? (
-          <p className="text-sm text-stone-500">Пока нет данных.</p>
-        ) : (
-          <table className="min-w-full text-left text-sm">
-            <thead className="text-xs uppercase text-stone-500">
-              <tr>
-                <th className="py-2 pr-4">Участник</th>
-                <th className="py-2 pr-4">Начал</th>
-                <th className="py-2 pr-4">Участвовал</th>
-                <th className="py-2 pr-4">В эфире</th>
-                <th className="py-2">Качество</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.top_users.map((u) => (
-                <tr key={u.member_id} className="border-t border-stone-100">
-                  <td className="py-2 pr-4">
-                    <div className="flex items-center gap-2">
-                      <PersonAvatar
-                        name={u.name}
-                        src={u.avatar_url ? resolvePublicUrl(u.avatar_url) : null}
-                        size={28}
-                      />
-                      <span className="font-medium text-stone-800">{u.name}</span>
-                    </div>
-                  </td>
-                  <td className="py-2 pr-4">{u.calls_initiated}</td>
-                  <td className="py-2 pr-4">{u.calls_joined}</td>
-                  <td className="py-2 pr-4">{formatDuration(u.total_duration_sec)}</td>
-                  <td className="py-2">{qualityBadge(u.avg_quality)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      <RecentCallsTable recent={data.recent} />
+      <CallsJournalPanel />
     </div>
   );
 }
@@ -1165,94 +1023,3 @@ function BreakdownCard({ title, rows }: { title: string; rows: Array<{ label: st
   );
 }
 
-function RecentCallsTable({ recent }: { recent: CallUsageStatsResponse['recent'] }) {
-  const [openId, setOpenId] = useState<string | null>(null);
-  return (
-    <section className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5">
-      <h3 className="text-sm font-semibold text-stone-900 mb-3">Последние звонки</h3>
-      {recent.length === 0 ? (
-        <p className="text-sm text-stone-500">За период звонков нет.</p>
-      ) : (
-        <ul className="space-y-2">
-          {recent.map((c) => {
-            const open = openId === c.id;
-            return (
-              <li key={c.id} className="rounded-xl border border-stone-100 bg-stone-50/50">
-                <button
-                  type="button"
-                  className="flex w-full flex-wrap items-center gap-3 px-3 py-3 text-left"
-                  onClick={() => setOpenId(open ? null : c.id)}
-                >
-                  <PersonAvatar
-                    name={c.initiator_name}
-                    src={c.initiator_avatar ? resolvePublicUrl(c.initiator_avatar) : null}
-                    size={32}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-stone-900">
-                      {c.title || c.initiator_name}
-                      <span className="ml-2 font-normal text-stone-500">
-                        · {c.media_type === 'video' ? 'видео' : 'аудио'} · {c.type}
-                      </span>
-                    </p>
-                    <p className="text-xs text-stone-500">
-                      {formatWhen(c.created_at)} · {c.status_label}
-                      {c.end_reason_label ? ` · ${c.end_reason_label}` : ''} ·{' '}
-                      {formatDuration(c.duration_seconds)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {qualityBadge(c.quality_score)}
-                    {open ? <LuCheck className="h-4 w-4 text-stone-400" aria-hidden /> : null}
-                  </div>
-                </button>
-                {open ? (
-                  <div className="border-t border-stone-100 px-3 py-3 text-xs text-stone-700 space-y-3">
-                    <div>
-                      <p className="font-semibold text-stone-800 mb-1">Участники</p>
-                      <ul className="space-y-1">
-                        {c.participants.map((p) => (
-                          <li key={p.user_id} className="flex items-center justify-between gap-2">
-                            <span className="inline-flex items-center gap-2">
-                              <PersonAvatar
-                                name={p.name}
-                                src={p.avatar_url ? resolvePublicUrl(p.avatar_url) : null}
-                                size={22}
-                              />
-                              {p.name}
-                              <span className="text-stone-400">({p.role})</span>
-                            </span>
-                            <span className="text-stone-500">{p.status}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    {c.quality_reports.length > 0 ? (
-                      <div>
-                        <p className="font-semibold text-stone-800 mb-1">Отчёты качества</p>
-                        <ul className="space-y-1">
-                          {c.quality_reports.map((r) => (
-                            <li key={`${r.userId}-${r.at}`}>
-                              user #{r.userId}: {r.score}/5
-                              {r.connectionQuality ? ` · ${r.connectionQuality}` : ''}
-                              {r.rttMs != null ? ` · RTT ${Math.round(r.rttMs)}мс` : ''}
-                              {r.packetLoss != null
-                                ? ` · loss ${(r.packetLoss * 100).toFixed(1)}%`
-                                : ''}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : (
-                      <p className="text-stone-500">Отчётов качества пока нет.</p>
-                    )}
-                  </div>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
-  );
-}

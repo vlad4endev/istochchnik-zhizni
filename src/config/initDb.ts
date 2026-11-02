@@ -2456,6 +2456,22 @@ CREATE INDEX IF NOT EXISTS idx_call_invitations_call
   ON call_invitations (call_id)
   WHERE revoked_at IS NULL;
 
+-- Журнал событий звонка: серверные переходы + клиентская телеметрия (для админ-аналитики)
+CREATE TABLE IF NOT EXISTS call_events (
+  id BIGSERIAL PRIMARY KEY,
+  call_id UUID NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
+  member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  source VARCHAR(8) NOT NULL DEFAULT 'server' CHECK (source IN ('server', 'client')),
+  kind VARCHAR(64) NOT NULL,
+  severity VARCHAR(8) NOT NULL DEFAULT 'info' CHECK (severity IN ('info', 'warn', 'error')),
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_call_events_call_created
+  ON call_events (call_id, created_at ASC, id ASC);
+CREATE INDEX IF NOT EXISTS idx_call_events_created
+  ON call_events (created_at);
+
 -- Offline sync MVP columns
 ALTER TABLE songs ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE songs ADD COLUMN IF NOT EXISTS client_id UUID;

@@ -7,6 +7,7 @@ import {
   type CallSettingsPatch,
 } from '../services/callSettingsService';
 import { getCallUsageStats } from '../services/callStatsService';
+import { getCallLogDetail, listCallJournal } from '../services/callEventsService';
 import {
   CALL_END_REASON_IDS,
   CALL_PARTICIPANT_STATUS_IDS,
@@ -251,20 +252,57 @@ export async function getCallUsageStatsHandler(req: Request, res: Response): Pro
       memberIdRaw != null && String(memberIdRaw).trim() !== ''
         ? Number(memberIdRaw)
         : undefined;
-    const limitRaw = req.query.limit;
-    const limit = limitRaw != null ? Number(limitRaw) : undefined;
 
     const stats = await getCallUsageStats({
       from,
       to,
       status,
       memberId: Number.isFinite(memberId) ? memberId : undefined,
-      limit: Number.isFinite(limit) ? limit : undefined,
     });
     res.json(stats);
   } catch (e) {
     console.error('[call-stats] GET error', e);
     res.status(500).json({ error: 'Не удалось загрузить статистику звонков' });
+  }
+}
+
+/** Журнал звонков с агрегатами событий и флагами проблем (только админ). */
+export async function getCallJournalHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    const str = (key: string): string | undefined =>
+      typeof req.query[key] === 'string' ? String(req.query[key]) : undefined;
+    const limitRaw = req.query.limit;
+    const limit = limitRaw != null ? Number(limitRaw) : undefined;
+    const result = await listCallJournal({
+      from: str('from'),
+      to: str('to'),
+      status: str('status'),
+      memberQuery: str('member') ?? str('q'),
+      onlyIssues: req.query.onlyIssues === '1' || req.query.onlyIssues === 'true',
+      cursor: str('cursor'),
+      limit: Number.isFinite(limit) ? limit : undefined,
+    });
+    res.json(result);
+  } catch (e) {
+    console.error('[call-journal] GET error', e);
+    res.status(500).json({ error: 'Не удалось загрузить журнал звонков' });
+  }
+}
+
+/** Подробный лог одного звонка: участники, события, проблемы (только админ). */
+export async function getCallLogDetailHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    const detail = await getCallLogDetail(String(req.params.callId ?? ''));
+    if (!detail) {
+      res.status(404).json({ error: 'Звонок не найден' });
+      return;
+    }
+    res.json(detail);
+  } catch (e) {
+    console.error('[call-journal] GET detail error', e);
+    res.status(500).json({ error: 'Не удалось загрузить детали звонка' });
   }
 }
 

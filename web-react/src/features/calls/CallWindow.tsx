@@ -67,6 +67,7 @@ import {
   ActiveCallMinimizedBar,
   ActiveCallMinimizedBarSimple,
 } from './ActiveCallMinimizedBar';
+import { attachCallJournal, logCallEvent, startCallJournal, stopCallJournal } from './callJournal';
 import {
   cancelCall,
   createCallInvitation,
@@ -331,6 +332,13 @@ function connectionQualityLabel(q: ConnectionQuality): string | null {
 }
 
 /** Собирает ConnectionQuality локального участника и шлёт в API при выходе из комнаты. */
+/** Подписка на события комнаты → клиентский журнал звонка (админ-аналитика). */
+function CallJournalRecorder({ callId }: { callId: string }) {
+  const room = useRoomContext();
+  useEffect(() => attachCallJournal(room, callId), [room, callId]);
+  return null;
+}
+
 function ReportCallQuality({ callId }: { callId: string }) {
   const room = useRoomContext();
   const samplesRef = useRef<number[]>([]);
@@ -2004,9 +2012,19 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     // Звонок закрыт самим пользователем/другой стороной — не воскрешаем UI.
     const stored = useCallStore.getState().activeCall;
     if (!stored || stored.callId !== activeCall.callId || stored.status === 'ended') return;
-    if (rejoinAttemptsRef.current >= 3) return; // дальше — только вручную: завершить и перезвонить
+    if (rejoinAttemptsRef.current >= 3) {
+      if (rejoinAttemptsRef.current === 3) {
+        rejoinAttemptsRef.current = 4;
+        logCallEvent(activeCall.callId, 'rejoin_abandoned', { severity: 'error' });
+      }
+      return; // дальше — только вручную: завершить и перезвонить
+    }
     rejoinAttemptsRef.current += 1;
     const delay = Math.min(2000 * 2 ** (rejoinAttemptsRef.current - 1), 10_000);
+    logCallEvent(activeCall.callId, 'rejoin_attempt', {
+      severity: 'warn',
+      payload: { attempt: rejoinAttemptsRef.current, delayMs: delay },
+    });
     clearRejoinTimer();
     rejoinTimerRef.current = window.setTimeout(() => {
       rejoinTimerRef.current = null;
@@ -2021,6 +2039,12 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   }, [activeCall.callId, clearRejoinTimer]);
 
   useEffect(() => clearRejoinTimer, [clearRejoinTimer]);
+
+  // Журнал звонка: стартует с окном звонка (до комнаты), финальный flush при закрытии.
+  useEffect(() => {
+    startCallJournal(activeCall.callId);
+    return () => stopCallJournal(activeCall.callId);
+  }, [activeCall.callId]);
 
   const videoEnabled = activeCall.callType === 'video';
   const preferMicOn = activeCall.initialMicOn !== false;
@@ -2264,6 +2288,10 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         options={roomOptions}
         connectOptions={connectOptions}
         onError={(e) => {
+          logCallEvent(activeCall.callId, 'room_error', {
+            severity: 'error',
+            payload: { message: e?.message ?? String(e) },
+          });
           const msg = mapDeviceError(e);
           setConnectError(msg);
           emitAppToast(msg, 'error');
@@ -2306,6 +2334,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         className="call-lk-room"
       >
         <KeepAliveCallMedia />
+        <CallJournalRecorder callId={activeCall.callId} />
         <ReportCallQuality callId={activeCall.callId} />
         <ApplyLobbyMediaPrefs micOn={preferMicOn} camOn={preferCamOn} videoEnabled={videoEnabled} />
         {uiMinimized ? (
