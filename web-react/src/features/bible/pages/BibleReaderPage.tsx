@@ -328,7 +328,7 @@ export function BibleReaderPage() {
             onChange={(e) => setNoteBody(e.target.value)}
             rows={3}
             placeholder="Личная заметка…"
-            className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 text-sm outline-none ring-primary/30 focus:ring-2"
+            className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 outline-none ring-primary/30 placeholder:text-stone-400 focus:ring-2"
           />
           <div className="mt-2 flex flex-wrap gap-2">
             <button
@@ -357,7 +357,7 @@ export function BibleReaderPage() {
                 onChange={(e) => setChurchBody(e.target.value)}
                 rows={2}
                 placeholder="Церковный комментарий…"
-                className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 outline-none ring-primary/30 placeholder:text-stone-400 focus:ring-2"
               />
               <button
                 type="button"
