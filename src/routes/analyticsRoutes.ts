@@ -7,12 +7,15 @@ import {
   getOverview,
   getPageDetails,
   getPagesStats,
+  getPrayerStats,
   getRealtimeOnline,
   getTopUsers,
   getUserStats,
   hashIp,
   exportAnalyticsCsv,
+  normalizeAnalyticsPlatform,
   trackFeatureEvent,
+  trackSessionHeartbeat,
 } from '../services/analyticsService';
 
 type AuthReq = Request & { authUserId?: number };
@@ -61,6 +64,7 @@ router.post('/track/page-view', trackPageViewRateLimit, async (req: Request, res
         : Number.isFinite(Number(body.duration_seconds))
           ? Number(body.duration_seconds)
           : null;
+    const platform = normalizeAnalyticsPlatform(body.platform);
     enqueuePageView({
       pageKey,
       pageUrl: typeof body.page_url === 'string' ? body.page_url : null,
@@ -71,6 +75,7 @@ router.post('/track/page-view', trackPageViewRateLimit, async (req: Request, res
       deviceType: typeof body.device_type === 'string' ? body.device_type : null,
       os: typeof body.os === 'string' ? body.os : null,
       browser: typeof body.browser === 'string' ? body.browser : null,
+      platform,
       referrer: typeof body.referrer === 'string' ? body.referrer : req.get('referer') ?? null,
       durationSeconds,
       viewedAt: new Date(),
@@ -79,6 +84,35 @@ router.post('/track/page-view', trackPageViewRateLimit, async (req: Request, res
   } catch (err) {
     console.error('[analytics] track page failed:', err);
     res.status(500).json({ error: 'Failed to track page view' });
+  }
+});
+
+router.post('/track/heartbeat', trackPageViewRateLimit, async (req: Request, res: Response) => {
+  try {
+    if ((process.env.ANALYTICS_ENABLED ?? 'true').toLowerCase() === 'false') {
+      res.json({ ok: true, skipped: true });
+      return;
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const pageKey = String(body.page_key ?? '').trim().slice(0, 100) || null;
+    const authReq = req as AuthReq;
+    const sessionIdRaw = String(body.session_id ?? '').trim();
+    const sessionId = sessionIdRaw ? sessionIdRaw.slice(0, 64) : null;
+    const platform = normalizeAnalyticsPlatform(body.platform);
+    await trackSessionHeartbeat({
+      userId: authReq.authUserId ?? null,
+      sessionId,
+      pageKey,
+      platform,
+      deviceType: typeof body.device_type === 'string' ? body.device_type.slice(0, 20) : null,
+      os: typeof body.os === 'string' ? body.os.slice(0, 50) : null,
+      browser: typeof body.browser === 'string' ? body.browser.slice(0, 50) : null,
+      ipHash: hashIp(req.ip),
+    });
+    res.status(202).json({ ok: true });
+  } catch (err) {
+    console.error('[analytics] heartbeat failed:', err);
+    res.status(500).json({ error: 'Failed to track heartbeat' });
   }
 });
 
@@ -164,6 +198,16 @@ router.get('/users', requireAdmin, async (req: Request, res: Response) => {
   } catch (err) {
     console.error('[analytics] users rating failed:', err);
     res.status(500).json({ error: 'Failed to load users analytics' });
+  }
+});
+
+router.get('/prayer', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const data = await getPrayerStats(req.query.period);
+    res.json(data);
+  } catch (err) {
+    console.error('[analytics] prayer stats failed:', err);
+    res.status(500).json({ error: 'Failed to load prayer analytics' });
   }
 });
 
