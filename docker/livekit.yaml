@@ -20,22 +20,32 @@ rtc:
     enabled: true
     allow_pause: true
 
-# TURN relay — один порт (роутеры без диапазонов).
-# Роутер: UDP 3478 → 3478, UDP 50100 → 50100
+# TURN relay. КАЖДАЯ relay-алокация занимает ОДИН порт из диапазона:
+# диапазон из 1 порта = только 1 участник с relay на весь сервер, остальные
+# за симметричным NAT (мобильные сети) получают «не слышно»/обрыв.
+# Роутер: UDP 3478 → 3478, UDP 50100–50119 → 50100–50119
+# (роутеры без диапазонов — 20 отдельных правил, по одному на порт).
 turn:
   enabled: true
   domain: app.church-tambov.ru
   udp_port: 3478
   relay_range_start: 50100
-  relay_range_end: 50100
+  relay_range_end: 50119
+  # tls_port: 5349  # + cert_file/key_file — для сетей, где UDP закрыт полностью
 
 room:
   empty_timeout: 900
   departure_timeout: 180
+  # auto_create: false — усиление после стабилизации api→7880: запретит вход
+  # по протухшим JWT в удалённые комнаты и гарантирует maxParticipants.
   enabled_codecs:
     - mime: audio/opus
     - mime: audio/red
     - mime: video/vp8
+    # h264 — аппаратный кодек iOS/Android: меньше CPU/нагрев/«зависаний» на слабых
+    # устройствах; обязателен для старых Safari без VP8. vp9 — SVC для групп.
+    - mime: video/h264
+    - mime: video/vp9
 
 logging:
   level: info

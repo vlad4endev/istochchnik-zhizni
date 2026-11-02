@@ -1985,6 +1985,42 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const roomUrlRef = useRef<string | null>(
     activeCall.livekitToken && activeCall.livekitUrl ? activeCall.livekitUrl : null,
   );
+  /**
+   * Перезаход после финального Disconnect (сеть/ICE): внутренний reconnect LiveKit
+   * исчерпан, закэшированный JWT мог протухнуть — берём свежий и монтируем комнату заново.
+   */
+  const [rejoinNonce, setRejoinNonce] = useState(0);
+  const rejoinAttemptsRef = useRef(0);
+  const rejoinTimerRef = useRef<number | null>(null);
+
+  const clearRejoinTimer = useCallback(() => {
+    if (rejoinTimerRef.current != null) {
+      window.clearTimeout(rejoinTimerRef.current);
+      rejoinTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleRejoin = useCallback(() => {
+    // Звонок закрыт самим пользователем/другой стороной — не воскрешаем UI.
+    const stored = useCallStore.getState().activeCall;
+    if (!stored || stored.callId !== activeCall.callId || stored.status === 'ended') return;
+    if (rejoinAttemptsRef.current >= 3) return; // дальше — только вручную: завершить и перезвонить
+    rejoinAttemptsRef.current += 1;
+    const delay = Math.min(2000 * 2 ** (rejoinAttemptsRef.current - 1), 10_000);
+    clearRejoinTimer();
+    rejoinTimerRef.current = window.setTimeout(() => {
+      rejoinTimerRef.current = null;
+      roomTokenRef.current = null;
+      roomUrlRef.current = null;
+      tokenInflight.current = false;
+      setCreds(null);
+      setConnectError(null);
+      setTokenError(null);
+      setRejoinNonce((n) => n + 1);
+    }, delay);
+  }, [activeCall.callId, clearRejoinTimer]);
+
+  useEffect(() => clearRejoinTimer, [clearRejoinTimer]);
 
   const videoEnabled = activeCall.callType === 'video';
   const preferMicOn = activeCall.initialMicOn !== false;
@@ -2114,8 +2150,9 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
       cancelled = true;
     };
     // Не зависеть от status — иначе refetch/remount при active.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: callId + needsLiveKit only
-  }, [activeCall.callId, needsLiveKit, setLiveKitCreds, setStatus]);
+    // rejoinNonce: после финального обрыва эффект перезапускается с уже очищенными refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: callId + needsLiveKit + rejoinNonce only
+  }, [activeCall.callId, needsLiveKit, rejoinNonce, setLiveKitCreds, setStatus]);
 
   const hadConnectedRef = useRef(false);
   useEffect(() => {
@@ -2218,7 +2255,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
       aria-label={uiMinimized ? undefined : 'Активный звонок'}
     >
       <LiveKitRoom
-        key={activeCall.callId}
+        key={`${activeCall.callId}:${rejoinNonce}`}
         token={roomToken}
         serverUrl={roomUrl}
         connect
@@ -2235,6 +2272,8 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
           unlockCallAudio();
           setLkConnected(true);
           setConnectError(null);
+          rejoinAttemptsRef.current = 0;
+          clearRejoinTimer();
         }}
         onMediaDeviceFailure={() => {
           emitAppToast('Не удалось получить доступ к камере или микрофону', 'error');
@@ -2257,7 +2296,12 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
               'info',
             );
             closeCall();
+            return;
           }
+          // Собственный disconnect при unmount/re-mount (key) — не перезаходим.
+          if (reason === DisconnectReason.CLIENT_INITIATED) return;
+          // Финальный обрыв (внутренние reconnect LiveKit исчерпаны): перезаход со свежим JWT.
+          scheduleRejoin();
         }}
         className="call-lk-room"
       >
