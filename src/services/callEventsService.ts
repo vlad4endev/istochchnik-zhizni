@@ -316,10 +316,17 @@ const RECONNECT_STORM_THRESHOLD = 4;
 const SHORT_TALK_SEC = 15;
 const LONG_RING_SEC = 20;
 
+/** Статусы, после которых звонок больше не меняется и его проблемы можно зафиксировать. */
+export const FINISHED_CALL_STATUSES = ['ended', 'missed', 'declined', 'cancelled', 'failed'];
+
+function isFinishedCallStatus(status: string): boolean {
+  return FINISHED_CALL_STATUSES.includes(status);
+}
+
 /** Вычисляет список проблем/наблюдений по звонку из агрегатов событий. */
 export function deriveCallIssues(input: CallIssueInput): CallIssue[] {
   const issues: CallIssue[] = [];
-  const finished = ['ended', 'missed', 'declined', 'cancelled', 'failed'].includes(input.status);
+  const finished = isFinishedCallStatus(input.status);
 
   if (input.status === 'failed') {
     issues.push({
@@ -464,6 +471,121 @@ export function deriveCallIssues(input: CallIssueInput): CallIssue[] {
 }
 
 // ---------------------------------------------------------------------------
+// Персистентные коды проблем (calls.metadata.issues)
+// ---------------------------------------------------------------------------
+// Пишутся один раз после финализации звонка (отложенно, чтобы успели лечь
+// fire-and-forget события и отчёты качества) и при чтении журнала как
+// self-healing для старых строк. Фильтр «только проблемные» использует их как
+// быстрый предикат по карточке звонка вместо агрегатов по всем событиям окна.
+
+/** Читает сохранённые проблемы из metadata. null — ключ отсутствует/битый (нужно derive). */
+export function parsePersistedIssues(meta: unknown): CallIssue[] | null {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null;
+  const raw = (meta as Record<string, unknown>).issues;
+  if (!Array.isArray(raw)) return null;
+  const out: CallIssue[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const o = item as Record<string, unknown>;
+    if (typeof o.code !== 'string' || typeof o.title !== 'string') return null;
+    out.push({
+      code: o.code.slice(0, 64),
+      severity: o.severity === 'warn' || o.severity === 'error' ? o.severity : 'info',
+      title: o.title.slice(0, 300),
+      hint: typeof o.hint === 'string' ? o.hint.slice(0, 2000) : '',
+    });
+  }
+  return out;
+}
+
+function qualitySummary(meta: unknown): { minQualityScore: number | null; qualityReports: number } {
+  const { score, reports } = extractQuality(meta);
+  let minQuality: number | null = null;
+  for (const r of reports) {
+    if (minQuality == null || r.score < minQuality) minQuality = r.score;
+  }
+  if (minQuality == null && score != null && reports.length === 0) minQuality = score;
+  return { minQualityScore: minQuality, qualityReports: reports.length };
+}
+
+const ISSUES_AGGREGATES_SQL = `
+  SELECT
+    COUNT(*) FILTER (WHERE e.kind IN ('reconnecting', 'signal_reconnecting', 'rejoin_attempt')) AS reconnects,
+    COUNT(*) FILTER (WHERE e.kind = 'device_error') AS device_errors,
+    COUNT(*) FILTER (WHERE e.kind = 'room_error') AS room_errors,
+    COUNT(*) FILTER (WHERE e.kind = 'audio_playback_blocked') AS audio_blocked,
+    COUNT(*) FILTER (WHERE e.kind = 'ghost_cleared') AS ghost_cleared,
+    BOOL_OR(e.kind = 'token_issued') AS token_issued,
+    BOOL_OR(e.kind = 'connected' AND e.source = 'client') AS client_connected,
+    BOOL_OR(e.source = 'client') AS has_client_events
+  FROM call_events e
+  WHERE e.call_id = $1::uuid`;
+
+async function computeAndPersistCallIssues(callId: string): Promise<void> {
+  try {
+    const res = await query(
+      `SELECT c.status, c.end_reason, c.type, c.created_at, c.started_at, c.duration_seconds, c.metadata
+       FROM calls c WHERE c.id = $1::uuid LIMIT 1`,
+      [callId],
+    );
+    const row = res.rows[0] as Record<string, unknown> | undefined;
+    if (!row) return;
+    const status = String(row.status);
+    if (!isFinishedCallStatus(status)) return;
+
+    const agg = await query(ISSUES_AGGREGATES_SQL, [callId]);
+    const a = (agg.rows[0] ?? {}) as Record<string, unknown>;
+    const quality = qualitySummary(row.metadata);
+    const issues = deriveCallIssues({
+      status,
+      endReason: row.end_reason != null ? String(row.end_reason) : null,
+      type: String(row.type),
+      createdAt: new Date(String(row.created_at)).toISOString(),
+      startedAt: row.started_at ? new Date(String(row.started_at)).toISOString() : null,
+      durationSeconds: row.duration_seconds != null ? Number(row.duration_seconds) : null,
+      reconnects: Number(a.reconnects ?? 0),
+      deviceErrors: Number(a.device_errors ?? 0),
+      roomErrors: Number(a.room_errors ?? 0),
+      audioBlocked: Number(a.audio_blocked ?? 0),
+      ghostCleared: Number(a.ghost_cleared ?? 0),
+      tokenIssued: Boolean(a.token_issued),
+      clientConnected: Boolean(a.client_connected),
+      hasClientEvents: Boolean(a.has_client_events),
+      minQualityScore: quality.minQualityScore,
+      qualityReports: quality.qualityReports,
+    });
+
+    // jsonb_set по ключу, а не полная перезапись metadata — не затирает
+    // параллельно записанные отчёты качества (reportCallQuality).
+    await query(
+      `UPDATE calls
+       SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{issues}', $2::jsonb, true)
+       WHERE id = $1::uuid`,
+      [callId, JSON.stringify(issues)],
+    );
+  } catch (e) {
+    console.warn('[call-events] persist issues failed:', e instanceof Error ? e.message : e);
+  }
+}
+
+const issuesPersistTimers = new Map<string, NodeJS.Timeout>();
+
+/**
+ * Отложенный снимок проблем в карточку звонка. Дедуплицируется по callId.
+ * Задержка по умолчанию 30 с — чтобы после финализации успели лечь событие
+ * call_finished, поздние клиентские flush'и и отчёты качества.
+ */
+export function scheduleCallIssuesPersist(callId: string, delayMs = 30_000): void {
+  if (issuesPersistTimers.has(callId)) return;
+  const timer = setTimeout(() => {
+    issuesPersistTimers.delete(callId);
+    void computeAndPersistCallIssues(callId);
+  }, delayMs);
+  timer.unref();
+  issuesPersistTimers.set(callId, timer);
+}
+
+// ---------------------------------------------------------------------------
 // Админский журнал
 // ---------------------------------------------------------------------------
 
@@ -536,12 +658,7 @@ const EVENT_AGGREGATES_SQL = `
   ) agg ON TRUE`;
 
 function rowToIssueInput(row: JournalRow): CallIssueInput {
-  const { score, reports } = extractQuality(row.metadata);
-  let minQuality: number | null = null;
-  for (const r of reports) {
-    if (minQuality == null || r.score < minQuality) minQuality = r.score;
-  }
-  if (minQuality == null && score != null && reports.length === 0) minQuality = score;
+  const quality = qualitySummary(row.metadata);
   return {
     status: String(row.status),
     endReason: row.end_reason != null ? String(row.end_reason) : null,
@@ -557,8 +674,8 @@ function rowToIssueInput(row: JournalRow): CallIssueInput {
     tokenIssued: Boolean(row.token_issued),
     clientConnected: Boolean(row.client_connected),
     hasClientEvents: Boolean(row.has_client_events),
-    minQualityScore: minQuality,
-    qualityReports: reports.length,
+    minQualityScore: quality.minQualityScore,
+    qualityReports: quality.qualityReports,
   };
 }
 
@@ -594,25 +711,38 @@ export async function listCallJournal(
   }
 
   if (input.onlyIssues) {
+    // Быстрый путь — сохранённые коды проблем в карточке звонка (пишутся при
+    // финализации и self-healing при чтении). Дорогой fallback по агрегатам
+    // событий — только для строк без ключа metadata.issues: старые звонки до
+    // фичи и ещё не завершённые (у активных звонков снимка ещё нет).
     filters += ` AND (
-      c.status = 'failed'
-      OR c.end_reason IN ('livekit_unavailable', 'stale_direct', 'expired_empty', 'ghost_cleanup')
-      OR COALESCE(agg.reconnects, 0) >= ${RECONNECT_STORM_THRESHOLD}
-      OR COALESCE(agg.device_errors, 0) > 0
-      OR COALESCE(agg.room_errors, 0) > 0
-      OR COALESCE(agg.audio_blocked, 0) > 0
-      OR COALESCE(agg.ghost_cleared, 0) > 0
-      OR (
-        COALESCE(agg.token_issued, FALSE)
-        AND COALESCE(agg.has_client_events, FALSE)
-        AND NOT COALESCE(agg.client_connected, FALSE)
-        AND c.status IN ('ended', 'failed')
+      (
+        jsonb_typeof(c.metadata -> 'issues') = 'array'
+        AND jsonb_array_length(c.metadata -> 'issues') > 0
       )
       OR (
-        jsonb_typeof(c.metadata -> 'quality' -> 'reports') = 'array'
-        AND EXISTS (
-          SELECT 1 FROM jsonb_array_elements(c.metadata -> 'quality' -> 'reports') r
-          WHERE (r ->> 'score')::numeric <= 2
+        c.metadata -> 'issues' IS NULL
+        AND (
+          c.status = 'failed'
+          OR c.end_reason IN ('livekit_unavailable', 'stale_direct', 'expired_empty', 'ghost_cleanup')
+          OR COALESCE(agg.reconnects, 0) >= ${RECONNECT_STORM_THRESHOLD}
+          OR COALESCE(agg.device_errors, 0) > 0
+          OR COALESCE(agg.room_errors, 0) > 0
+          OR COALESCE(agg.audio_blocked, 0) > 0
+          OR COALESCE(agg.ghost_cleared, 0) > 0
+          OR (
+            COALESCE(agg.token_issued, FALSE)
+            AND COALESCE(agg.has_client_events, FALSE)
+            AND NOT COALESCE(agg.client_connected, FALSE)
+            AND c.status IN ('ended', 'failed')
+          )
+          OR (
+            jsonb_typeof(c.metadata -> 'quality' -> 'reports') = 'array'
+            AND EXISTS (
+              SELECT 1 FROM jsonb_array_elements(c.metadata -> 'quality' -> 'reports') r
+              WHERE (r ->> 'score')::numeric <= 2
+            )
+          )
         )
       )
     )`;
@@ -672,6 +802,12 @@ export async function listCallJournal(
         : null;
     const { score } = extractQuality(meta);
     const issueInput = rowToIssueInput(row);
+    const persisted = parsePersistedIssues(meta);
+    if (persisted === null && isFinishedCallStatus(status)) {
+      // Self-healing: завершённые звонки без снимка проблем (старая история,
+      // рестарт в окне задержки) получают его при чтении журнала.
+      scheduleCallIssuesPersist(String(row.id), 5_000);
+    }
     return {
       id: String(row.id),
       type: String(row.type),
@@ -708,7 +844,7 @@ export async function listCallJournal(
       errorCount: Number(row.error_count ?? 0),
       reconnects: issueInput.reconnects,
       lastEventAt: row.last_event_at ? new Date(String(row.last_event_at)).toISOString() : null,
-      issues: deriveCallIssues(issueInput),
+      issues: persisted ?? deriveCallIssues(issueInput),
     };
   });
 
@@ -799,8 +935,12 @@ export async function getCallLogDetail(callId: string): Promise<CallLogDetail | 
       : null;
   const { score, reports } = extractQuality(meta);
   const issueInput = rowToIssueInput(row);
-  const issues = deriveCallIssues(issueInput);
+  const persisted = parsePersistedIssues(meta);
+  const issues = persisted ?? deriveCallIssues(issueInput);
   const status = String(row.status);
+  if (persisted === null && isFinishedCallStatus(status)) {
+    scheduleCallIssuesPersist(callId, 5_000);
+  }
   const endReason = row.end_reason != null ? String(row.end_reason) : null;
 
   const call: CallLogDetail['call'] = {

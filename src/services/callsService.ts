@@ -32,7 +32,7 @@ import {
   type CallRuntimeConfig,
 } from '../types/callSettings';
 import type { CallQualityReport } from './callStatsService';
-import { recordCallEvent } from './callEventsService';
+import { recordCallEvent, scheduleCallIssuesPersist } from './callEventsService';
 
 export type CallType = 'direct' | 'group';
 export type CallMediaType = 'audio' | 'video';
@@ -537,6 +537,9 @@ async function finalizeCall(
       durationSeconds: done.duration_seconds,
     },
   });
+  // Снимок кодов проблем в calls.metadata.issues — отложенно, чтобы легли
+  // fire-and-forget события (включая call_finished выше) и отчёты качества.
+  scheduleCallIssuesPersist(call.id);
   return done;
 }
 
