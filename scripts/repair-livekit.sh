@@ -103,7 +103,7 @@ echo ""
 echo "== 8) порты ICE/TURN на хосте =="
 ss -lntu 2>/dev/null | grep -E ':788[012]\s|:3478\s|:50100\s' || \
   netstat -lntu 2>/dev/null | grep -E '788[012]|3478|50100' || true
-echo "Роутер должен пробрасывать: TCP 7881, UDP 7882, UDP 3478, UDP 50100"
+echo "Роутер должен пробрасывать: TCP 7881, UDP 7882, UDP 3478, UDP 50100–50999 (TURN relay-диапазон, как в docker/livekit.yaml)"
 
 echo ""
 echo "Готово. Проверьте звонок (WAN и в той же Wi‑Fi)."
