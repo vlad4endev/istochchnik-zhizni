@@ -93,6 +93,7 @@ import { startCallRing, stopCallRing, unlockCallAudio } from './callRingtone';
 import { copyInviteShare, formatInviteShareText, shareInviteLink } from './inviteShare';
 import { MeetingAvatar } from './MeetingAvatar';
 import { useCallStore, type ActiveCallState } from './callStore';
+import { useNetworkChangeToast } from './useNetworkChangeToast';
 import './calls.css';
 
 function MinimizeCallButton({ className }: { className?: string }) {
@@ -1214,6 +1215,9 @@ function RoomStage({
       lastWeakToastRef.current = null;
     }
   }, [connected, connectError, localQuality]);
+
+  // Участник видит смену своей сети (Wi‑Fi ↔ LTE, 4G → 3G, пропадание) — объясняет перебои.
+  useNetworkChangeToast(true);
 
   return (
     <div
