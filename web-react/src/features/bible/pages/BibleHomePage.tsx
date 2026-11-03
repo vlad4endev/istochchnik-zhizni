@@ -11,9 +11,11 @@ import {
   fetchBibleProgress,
   fetchBiblePlans,
   fetchBibleTranslations,
+  fetchBibleVerseOfDay,
   searchBible,
 } from '../api';
 import { parseBibleRef } from '../bibleRef';
+import { highlightMatch } from '../highlightMatch';
 import {
   pushRecentBible,
   readRecentBible,
@@ -23,6 +25,7 @@ import {
 } from '../bibleUiMeta';
 import { BooksSheet } from '../components/BooksSheet';
 import { TranslationPicker } from '../components/TranslationPicker';
+import { VerseOfDayCard } from '../components/VerseOfDayCard';
 
 export function BibleHomePage() {
   const navigate = useNavigate();
@@ -58,6 +61,11 @@ export function BibleHomePage() {
   const plansQ = useQuery({
     queryKey: ['bible', 'plans'],
     queryFn: fetchBiblePlans,
+  });
+  const verseOfDayQ = useQuery({
+    queryKey: ['bible', 'verse-of-day', translation],
+    queryFn: () => fetchBibleVerseOfDay(translation),
+    enabled: hasText,
   });
   const searchQ = useQuery({
     queryKey: ['bible', 'search', translation, submitted],
@@ -145,6 +153,14 @@ export function BibleHomePage() {
           </button>
         ) : null}
 
+        {verseOfDayQ.data ? (
+          <VerseOfDayCard
+            verse={verseOfDayQ.data}
+            translation={translation}
+            translationTitle={currentMeta?.title || translation}
+          />
+        ) : null}
+
         <form onSubmit={onSearchSubmit} className="relative mt-4">
           <LuSearch
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
@@ -188,7 +204,9 @@ export function BibleHomePage() {
                 <p className="text-sm font-bold text-stone-900">
                   {hit.short_name} {hit.chapter}:{hit.verse}
                 </p>
-                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-stone-600">{hit.text}</p>
+                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-stone-600">
+                  {highlightMatch(hit.text, submitted)}
+                </p>
               </button>
             ))}
           </div>

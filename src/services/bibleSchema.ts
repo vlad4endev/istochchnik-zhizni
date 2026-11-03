@@ -78,6 +78,19 @@ export async function ensureBibleSchema(): Promise<void> {
           ON public.bible_verses USING gin (text gin_trgm_ops)
       `);
 
+      // Полнотекстовый поиск с русской морфологией (ts_rank), вместо чистого ILIKE substring.
+      // STORED generated column сам поддерживает себя в актуальном виде при INSERT/UPDATE.
+      await query(`
+        ALTER TABLE public.bible_verses
+          ADD COLUMN IF NOT EXISTS text_tsv tsvector
+          GENERATED ALWAYS AS (to_tsvector('russian', text)) STORED
+      `);
+
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_bible_verses_text_tsv
+          ON public.bible_verses USING gin (text_tsv)
+      `);
+
       await query(`
         CREATE TABLE IF NOT EXISTS public.bible_notes (
           id BIGSERIAL PRIMARY KEY,
@@ -96,6 +109,25 @@ export async function ensureBibleSchema(): Promise<void> {
       await query(`
         CREATE INDEX IF NOT EXISTS idx_bible_notes_member_updated
           ON public.bible_notes (member_id, updated_at DESC)
+      `);
+
+      await query(`
+        CREATE TABLE IF NOT EXISTS public.bible_highlights (
+          id BIGSERIAL PRIMARY KEY,
+          member_id INTEGER NOT NULL,
+          translation_id INTEGER NOT NULL REFERENCES public.bible_translations(id) ON DELETE CASCADE,
+          book_id INTEGER NOT NULL REFERENCES public.bible_books(id) ON DELETE CASCADE,
+          chapter SMALLINT NOT NULL,
+          verse_start SMALLINT NOT NULL,
+          verse_end SMALLINT NOT NULL,
+          color VARCHAR(16) NOT NULL DEFAULT 'yellow',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_bible_highlights_lookup
+          ON public.bible_highlights (member_id, translation_id, book_id, chapter)
       `);
 
       await query(`
@@ -299,6 +331,16 @@ export async function ensureBibleSchema(): Promise<void> {
             ) THEN
               ALTER TABLE public.bible_reading_plans
                 ADD CONSTRAINT bible_reading_plans_member_id_fkey
+                FOREIGN KEY (member_id) REFERENCES public.members(id) ON DELETE CASCADE;
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.table_constraints
+              WHERE constraint_schema = 'public'
+                AND table_name = 'bible_highlights'
+                AND constraint_name = 'bible_highlights_member_id_fkey'
+            ) THEN
+              ALTER TABLE public.bible_highlights
+                ADD CONSTRAINT bible_highlights_member_id_fkey
                 FOREIGN KEY (member_id) REFERENCES public.members(id) ON DELETE CASCADE;
             END IF;
           END IF;

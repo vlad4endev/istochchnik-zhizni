@@ -5,8 +5,14 @@ import {
   LuChevronDown,
   LuChevronLeft,
   LuChevronRight,
+  LuColumns2,
+  LuHighlighter,
   LuMessageSquareText,
   LuNotebookPen,
+  LuRows3,
+  LuShare2,
+  LuTrash2,
+  LuType,
   LuX,
 } from 'react-icons/lu';
 
@@ -14,32 +20,67 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
 import { emitAppToast } from '@/lib/uiFeedback';
 import { useAuthStore } from '@/features/auth/authStore';
+import { shareBibleVerse } from '../shareVerse';
 
 import {
+  createBibleHighlight,
   createBibleNote,
   createChurchCommentary,
+  deleteBibleHighlight,
   fetchBibleAudio,
   fetchBibleBooks,
   fetchBibleChapter,
   fetchBibleCommentaries,
+  fetchBibleHighlights,
   fetchBibleNotes,
   fetchBibleTranslations,
   saveBibleProgress,
+  type BibleHighlightColor,
 } from '../api';
 import {
+  BIBLE_READER_SPACING_LINE_HEIGHT,
   pushRecentBible,
+  readReaderSettings,
   readRecentBible,
+  writeReaderSettings,
   writeStoredTranslation,
+  type BibleReaderSettings,
 } from '../bibleUiMeta';
 import { BooksSheet } from '../components/BooksSheet';
+import { ReaderSettingsSheet } from '../components/ReaderSettingsSheet';
 import { SyncedAudioPlayer } from '../components/SyncedAudioPlayer';
 import { TranslationPicker } from '../components/TranslationPicker';
+import { TranslationsSheet } from '../components/TranslationsSheet';
+
+const HIGHLIGHT_BG: Record<BibleHighlightColor, string> = {
+  yellow: 'bg-amber-200/70',
+  green: 'bg-emerald-200/70',
+  blue: 'bg-sky-200/70',
+  pink: 'bg-pink-200/70',
+};
+
+const HIGHLIGHT_SWATCH: Record<BibleHighlightColor, string> = {
+  yellow: 'bg-amber-300',
+  green: 'bg-emerald-300',
+  blue: 'bg-sky-300',
+  pink: 'bg-pink-300',
+};
+
+const HIGHLIGHT_LABEL: Record<BibleHighlightColor, string> = {
+  yellow: 'жёлтый',
+  green: 'зелёный',
+  blue: 'синий',
+  pink: 'розовый',
+};
+
+const HIGHLIGHT_COLORS: BibleHighlightColor[] = ['yellow', 'green', 'blue', 'pink'];
 
 export function BibleReaderPage() {
   const { translation = 'synodal', book = 'john', chapter: chapterParam } = useParams();
   const chapter = Math.max(1, Number(chapterParam) || 1);
-  const [search] = useSearchParams();
+  const [search, setSearchParams] = useSearchParams();
   const focusVerse = search.get('v') != null ? Number(search.get('v')) : null;
+  const compareCode = search.get('cmp');
   const navigate = useNavigate();
   const qc = useQueryClient();
   const roles = useAuthStore((s) => s.roles ?? []);
@@ -49,13 +90,64 @@ export function BibleReaderPage() {
   );
 
   const [selectedVerse, setSelectedVerse] = useState<number | null>(focusVerse);
+  const [rangeEnd, setRangeEnd] = useState<number | null>(null);
+  const [rangeSelectMode, setRangeSelectMode] = useState(false);
   const [activeAudioVerse, setActiveAudioVerse] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [booksOpen, setBooksOpen] = useState(false);
+  const [readerSettingsOpen, setReaderSettingsOpen] = useState(false);
+  const [compareSheetOpen, setCompareSheetOpen] = useState(false);
+  const [readerSettings, setReaderSettings] = useState<BibleReaderSettings>(() =>
+    readReaderSettings(),
+  );
   const [recent, setRecent] = useState(() => readRecentBible());
   const [noteBody, setNoteBody] = useState('');
   const [churchBody, setChurchBody] = useState('');
   const verseRefs = useRef<Map<number, HTMLElement>>(new Map());
+
+  function updateReaderSettings(next: BibleReaderSettings) {
+    setReaderSettings(next);
+    writeReaderSettings(next);
+  }
+
+  const rangeLow = selectedVerse != null ? Math.min(selectedVerse, rangeEnd ?? selectedVerse) : null;
+  const rangeHigh = selectedVerse != null ? Math.max(selectedVerse, rangeEnd ?? selectedVerse) : null;
+
+  function openVerseSheet(verseNum: number) {
+    setSelectedVerse(verseNum);
+    setRangeEnd(null);
+    setRangeSelectMode(false);
+    setSheetOpen(true);
+  }
+
+  function closeVerseSheet() {
+    setSheetOpen(false);
+    setRangeSelectMode(false);
+    setRangeEnd(null);
+  }
+
+  function handleVerseActivate(verseNum: number) {
+    if (rangeSelectMode && selectedVerse != null) {
+      setRangeEnd(verseNum);
+      return;
+    }
+    openVerseSheet(verseNum);
+  }
+
+  function selectedRangeText(): string {
+    if (rangeLow == null || rangeHigh == null) return '';
+    return (chapterQ.data?.verses ?? [])
+      .filter((v) => v.verse >= rangeLow && v.verse <= rangeHigh)
+      .map((v) => v.text)
+      .join(' ');
+  }
+
+  function setCompareCode(code: string | null) {
+    const next = new URLSearchParams(search);
+    if (code) next.set('cmp', code);
+    else next.delete('cmp');
+    setSearchParams(next, { replace: true });
+  }
 
   const translationsQ = useQuery({
     queryKey: ['bible', 'translations'],
@@ -82,6 +174,16 @@ export function BibleReaderPage() {
     queryKey: ['bible', 'audio', translation, book, chapter],
     queryFn: () => fetchBibleAudio(translation, book, chapter),
   });
+  const highlightsQ = useQuery({
+    queryKey: ['bible', 'highlights', translation, book, chapter],
+    queryFn: () => fetchBibleHighlights({ translation, book, chapter }),
+  });
+  const compareChapterQ = useQuery({
+    queryKey: ['bible', 'chapter', compareCode, book, chapter],
+    queryFn: () => fetchBibleChapter(compareCode!, book, chapter),
+    enabled: Boolean(compareCode) && compareCode !== translation,
+  });
+  const compareTranslationMeta = (translationsQ.data ?? []).find((t) => t.code === compareCode);
 
   const bookMeta = useMemo(
     () => (booksQ.data ?? []).find((b) => b.slug === book) ?? chapterQ.data?.book,
@@ -91,6 +193,13 @@ export function BibleReaderPage() {
   useEffect(() => {
     writeStoredTranslation(translation);
   }, [translation]);
+
+  useEffect(() => {
+    if (compareCode && compareCode === translation) {
+      setCompareCode(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [translation, compareCode]);
 
   useEffect(() => {
     if (!chapterQ.data?.verses.length) return;
@@ -142,7 +251,8 @@ export function BibleReaderPage() {
         translation,
         book_slug: book,
         chapter,
-        verse_start: selectedVerse ?? 1,
+        verse_start: rangeLow ?? selectedVerse ?? 1,
+        verse_end: rangeHigh ?? undefined,
         body: noteBody,
       }),
     onSuccess: () => {
@@ -159,7 +269,8 @@ export function BibleReaderPage() {
         translation,
         book_slug: book,
         chapter,
-        verse_start: selectedVerse ?? undefined,
+        verse_start: rangeLow ?? selectedVerse ?? undefined,
+        verse_end: rangeHigh ?? undefined,
         body: churchBody,
       }),
     onSuccess: () => {
@@ -170,11 +281,35 @@ export function BibleReaderPage() {
     onError: () => emitAppToast('Не удалось добавить комментарий', 'error'),
   });
 
+  const createHighlightMut = useMutation({
+    mutationFn: (color: BibleHighlightColor) =>
+      createBibleHighlight({
+        translation,
+        book_slug: book,
+        chapter,
+        verse_start: rangeLow ?? selectedVerse ?? 1,
+        verse_end: rangeHigh ?? selectedVerse ?? undefined,
+        color,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['bible', 'highlights', translation, book, chapter] });
+      emitAppToast('Выделение сохранено', 'success');
+    },
+    onError: () => emitAppToast('Не удалось сохранить выделение', 'error'),
+  });
+
+  const deleteHighlightMut = useMutation({
+    mutationFn: (id: number) => deleteBibleHighlight(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['bible', 'highlights', translation, book, chapter] });
+      emitAppToast('Выделение удалено', 'success');
+    },
+    onError: () => emitAppToast('Не удалось удалить выделение', 'error'),
+  });
+
   const prevChapter = chapter > 1 ? chapter - 1 : null;
   const nextChapter =
     bookMeta && chapter < bookMeta.chapters_count ? chapter + 1 : null;
-
-  const highlightVerse = activeAudioVerse ?? selectedVerse ?? focusVerse;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -205,6 +340,50 @@ export function BibleReaderPage() {
             </span>
             <LuChevronDown size={16} className="shrink-0 text-stone-400" />
           </button>
+          <button
+            type="button"
+            aria-label="Настройки чтения"
+            onClick={() => setReaderSettingsOpen(true)}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-700"
+          >
+            <LuType size={16} />
+          </button>
+          {compareCode && compareTranslationMeta ? (
+            <button
+              type="button"
+              onClick={() => setCompareSheetOpen(true)}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary"
+            >
+              <LuColumns2 size={14} />
+              {compareTranslationMeta.short_title || compareTranslationMeta.title}
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label="Убрать сравнение"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCompareCode(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.stopPropagation();
+                  setCompareCode(null);
+                }}
+                className="ml-0.5 rounded-full p-0.5 hover:bg-primary/20"
+              >
+                <LuX size={12} />
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label="Сравнить переводы"
+              onClick={() => setCompareSheetOpen(true)}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-700"
+            >
+              <LuColumns2 size={16} />
+            </button>
+          )}
         </div>
 
         {audioQ.data ? (
@@ -223,33 +402,101 @@ export function BibleReaderPage() {
             <code>npm run bible:seed -- --translation={translationMeta?.code || translation}</code>
           </p>
         ) : (
-          <div className="space-y-1 pb-36 font-serif text-[17px] leading-8 text-stone-900 sm:text-[18px] lg:pb-24">
+          <div
+            className={[
+              'space-y-1 pb-36 text-stone-900 lg:pb-24',
+              readerSettings.font === 'sans' ? 'font-sans' : 'font-serif',
+            ].join(' ')}
+            style={{
+              fontSize: `${1.0625 * readerSettings.fontScale}rem`,
+              lineHeight: `calc(${BIBLE_READER_SPACING_LINE_HEIGHT[readerSettings.spacing]} * var(--a11y-line-height, 1.55))`,
+            }}
+          >
             {(chapterQ.data?.verses ?? []).map((v) => {
-              const active = highlightVerse === v.verse;
+              const isAudioActive = activeAudioVerse === v.verse;
+              const inSelection =
+                sheetOpen && rangeLow != null && rangeHigh != null && v.verse >= rangeLow && v.verse <= rangeHigh;
+              const storedHighlight = (highlightsQ.data ?? []).find(
+                (h) => h.verse_start <= v.verse && h.verse_end >= v.verse,
+              );
+              const hasNote = (notesQ.data ?? []).some(
+                (n) => n.verse_start <= v.verse && n.verse_end >= v.verse,
+              );
+              const bgClass =
+                isAudioActive || inSelection
+                  ? 'bg-amber-100/90'
+                  : storedHighlight
+                    ? HIGHLIGHT_BG[storedHighlight.color]
+                    : 'hover:bg-stone-100/80';
               return (
                 <p
                   key={v.verse}
                   ref={(el) => {
                     if (el) verseRefs.current.set(v.verse, el);
                   }}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isAudioActive || inSelection}
+                  aria-label={`Стих ${v.verse}: ${v.text}`}
                   className={[
-                    'cursor-pointer rounded-xl px-2 py-1 transition',
-                    active ? 'bg-amber-100/90' : 'hover:bg-stone-100/80',
+                    'cursor-pointer rounded-xl px-2 py-1 outline-none transition focus-visible:ring-2 focus-visible:ring-primary/40',
+                    bgClass,
                   ].join(' ')}
-                  onClick={() => {
-                    setSelectedVerse(v.verse);
-                    setSheetOpen(true);
+                  onClick={() => handleVerseActivate(v.verse)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    handleVerseActivate(v.verse);
                   }}
                 >
-                  <sup className="mr-1 select-none text-[11px] font-sans font-bold text-primary">
+                  <sup className="mr-1 select-none text-[0.6em] font-sans font-bold text-primary">
                     {v.verse}
                   </sup>
+                  {hasNote ? (
+                    <span
+                      aria-hidden="true"
+                      className="mr-1 inline-block h-[0.35em] w-[0.35em] rounded-full bg-primary align-middle"
+                    />
+                  ) : null}
                   {v.text}
                 </p>
               );
             })}
           </div>
         )}
+
+        {compareCode && compareTranslationMeta ? (
+          <section className="border-t border-stone-200 pt-4">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-400">
+              {compareTranslationMeta.title}
+            </p>
+            {compareChapterQ.isLoading ? (
+              <p className="text-sm text-stone-500">Загрузка…</p>
+            ) : (compareChapterQ.data?.verses.length ?? 0) === 0 ? (
+              <p className="text-sm text-stone-500">Текст этого перевода пока не загружен.</p>
+            ) : (
+              <div
+                className={[
+                  'space-y-1 text-stone-700',
+                  readerSettings.font === 'sans' ? 'font-sans' : 'font-serif',
+                ].join(' ')}
+                style={{
+                  fontSize: `${0.95 * readerSettings.fontScale}rem`,
+                  lineHeight: `calc(${BIBLE_READER_SPACING_LINE_HEIGHT[readerSettings.spacing]} * var(--a11y-line-height, 1.55))`,
+                }}
+              >
+                {(compareChapterQ.data?.verses ?? []).map((v) => (
+                  <p key={v.verse}>
+                    <sup className="mr-1 select-none text-[0.6em] font-sans font-bold text-stone-400">
+                      {v.verse}
+                    </sup>
+                    {v.text}
+                  </p>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : null}
 
         {(commentsQ.data ?? []).length > 0 ? (
           <section className="space-y-2 border-t border-stone-200 pb-28 pt-4 lg:pb-16">
@@ -285,6 +532,21 @@ export function BibleReaderPage() {
         }}
       />
 
+      <ReaderSettingsSheet
+        open={readerSettingsOpen}
+        value={readerSettings}
+        onChange={updateReaderSettings}
+        onClose={() => setReaderSettingsOpen(false)}
+      />
+
+      <TranslationsSheet
+        open={compareSheetOpen}
+        translations={(translationsQ.data ?? []).filter((t) => t.code !== translation)}
+        value={compareCode ?? ''}
+        onClose={() => setCompareSheetOpen(false)}
+        onChange={(code) => setCompareCode(code)}
+      />
+
       {/* Главы: круглые кнопки по краям снизу, над таб-баром (как в «Библия») */}
       {!sheetOpen && !booksOpen ? (
         <div className="pointer-events-none fixed inset-x-0 z-[90] flex items-end justify-between px-3 sm:px-4 lg:px-8 bottom-[calc(var(--app-bottom-nav-total-height)+0.55rem)] lg:bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))]">
@@ -313,16 +575,100 @@ export function BibleReaderPage() {
         </div>
       ) : null}
 
-      {sheetOpen && selectedVerse != null ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-2xl rounded-t-3xl border border-stone-200 bg-[var(--surface-elevated)] p-4 shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
+      {sheetOpen && selectedVerse != null && rangeLow != null && rangeHigh != null ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-h-[80dvh] max-w-2xl overflow-y-auto rounded-t-3xl border border-stone-200 bg-[var(--surface-elevated)] p-4 shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
           <div className="mb-3 flex items-center justify-between">
             <p className="font-bold text-stone-900">
-              {bookMeta?.short_name} {chapter}:{selectedVerse}
+              {bookMeta?.short_name} {chapter}:{rangeLow}
+              {rangeHigh !== rangeLow ? `–${rangeHigh}` : ''}
             </p>
-            <button type="button" aria-label="Закрыть" onClick={() => setSheetOpen(false)}>
-              <LuX size={20} className="text-stone-500" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-label="Поделиться стихом"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-stone-500 hover:bg-stone-100"
+                onClick={() => {
+                  void shareBibleVerse({
+                    reference: `${bookMeta?.short_name ?? ''} ${chapter}:${rangeLow}${
+                      rangeHigh !== rangeLow ? `–${rangeHigh}` : ''
+                    }`,
+                    text: selectedRangeText(),
+                    translationTitle: translationMeta?.title ?? translation,
+                    url: `${window.location.origin}/bible/${translation}/${book}/${chapter}?v=${rangeLow}`,
+                  });
+                }}
+              >
+                <LuShare2 size={17} />
+              </button>
+              <button type="button" aria-label="Закрыть" onClick={closeVerseSheet}>
+                <LuX size={20} className="text-stone-500" />
+              </button>
+            </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (rangeSelectMode) {
+                setRangeSelectMode(false);
+                return;
+              }
+              setRangeSelectMode(true);
+            }}
+            className={[
+              'mb-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+              rangeSelectMode
+                ? 'border-primary/40 bg-primary/10 text-primary'
+                : 'border-stone-200 text-stone-600',
+            ].join(' ')}
+          >
+            <LuRows3 size={14} />
+            {rangeSelectMode ? 'Готово · коснитесь стиха, чтобы расширить выбор' : 'Выделить несколько стихов'}
+          </button>
+
+          <div className="mb-3">
+            <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-stone-500">
+              <LuHighlighter size={14} /> Выделить цветом
+            </p>
+            <div className="flex gap-2">
+              {HIGHLIGHT_COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  aria-label={`Выделить ${HIGHLIGHT_LABEL[color]}`}
+                  disabled={createHighlightMut.isPending}
+                  onClick={() => createHighlightMut.mutate(color)}
+                  className={[
+                    'h-8 w-8 rounded-full border border-black/10 transition active:scale-90 disabled:opacity-50',
+                    HIGHLIGHT_SWATCH[color],
+                  ].join(' ')}
+                />
+              ))}
+            </div>
+            {(highlightsQ.data ?? [])
+              .filter((h) => h.verse_start <= rangeHigh && h.verse_end >= rangeLow)
+              .map((h) => (
+                <div
+                  key={h.id}
+                  className="mt-2 flex items-center justify-between rounded-xl bg-stone-50 px-3 py-1.5 text-xs text-stone-600"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className={['h-2.5 w-2.5 rounded-full', HIGHLIGHT_SWATCH[h.color]].join(' ')} />
+                    ст. {h.verse_start}
+                    {h.verse_end !== h.verse_start ? `–${h.verse_end}` : ''} · {HIGHLIGHT_LABEL[h.color]}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Удалить выделение"
+                    onClick={() => deleteHighlightMut.mutate(h.id)}
+                    className="rounded-lg p-1 text-stone-400 hover:text-red-600"
+                  >
+                    <LuTrash2 size={14} />
+                  </button>
+                </div>
+              ))}
+          </div>
+
           <textarea
             value={noteBody}
             onChange={(e) => setNoteBody(e.target.value)}
@@ -344,7 +690,7 @@ export function BibleReaderPage() {
             </Link>
           </div>
           {(notesQ.data ?? [])
-            .filter((n) => n.verse_start <= selectedVerse && n.verse_end >= selectedVerse)
+            .filter((n) => n.verse_start <= rangeHigh && n.verse_end >= rangeLow)
             .map((n) => (
               <p key={n.id} className="mt-2 rounded-xl bg-stone-50 px-3 py-2 text-sm text-stone-700">
                 {n.body}

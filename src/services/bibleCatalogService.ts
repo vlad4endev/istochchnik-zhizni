@@ -4,6 +4,7 @@ import {
   type BibleTranslationAvailability,
   type BibleTranslationScope,
 } from '../bible/bibleTranslationCatalog';
+import { VERSE_OF_DAY_REFS } from '../bible/verseOfDayRefs';
 import { query } from '../config/db';
 import { ensureBibleSchema } from './bibleSchema';
 
@@ -317,6 +318,60 @@ export async function getChapterVerses(
   };
 }
 
+export interface BibleVerseOfDay {
+  book_slug: string;
+  book_name: string;
+  short_name: string;
+  chapter: number;
+  verse_start: number;
+  verse_end: number;
+  text: string;
+  date: string;
+}
+
+function dayOfYear(date: Date): number {
+  const startOfYear = Date.UTC(date.getUTCFullYear(), 0, 1);
+  const today = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return Math.floor((today - startOfYear) / 86_400_000);
+}
+
+/**
+ * Детерминированная ротация по дню года — все пользователи видят один и тот
+ * же «стих дня» без внешнего API/датасета (см. verseOfDayRefs.ts).
+ */
+export async function getVerseOfDay(
+  translationCode: string,
+  date: Date = new Date(),
+): Promise<BibleVerseOfDay | null> {
+  await ensureBibleSchema();
+  const translation = await getTranslationByCode(translationCode);
+  if (!translation || VERSE_OF_DAY_REFS.length === 0) return null;
+
+  const ref = VERSE_OF_DAY_REFS[dayOfYear(date) % VERSE_OF_DAY_REFS.length]!;
+  const book = await getBookBySlug(translationCode, ref.bookSlug);
+  if (!book) return null;
+
+  const verseEnd = ref.verseEnd ?? ref.verseStart;
+  const r = await query(
+    `SELECT verse, text FROM bible_verses
+     WHERE translation_id = $1 AND book_id = $2 AND chapter = $3 AND verse BETWEEN $4 AND $5
+     ORDER BY verse`,
+    [translation.id, book.id, ref.chapter, ref.verseStart, verseEnd],
+  );
+  if (r.rows.length === 0) return null;
+
+  return {
+    book_slug: book.slug,
+    book_name: book.name,
+    short_name: book.short_name,
+    chapter: ref.chapter,
+    verse_start: ref.verseStart,
+    verse_end: verseEnd,
+    text: r.rows.map((row) => String(row.text)).join(' '),
+    date: date.toISOString().slice(0, 10),
+  };
+}
+
 export async function searchVerses(
   translationCode: string,
   q: string,
@@ -336,17 +391,33 @@ export async function searchVerses(
   if (needle.length < 2) return [];
   const capped = Math.min(100, Math.max(1, Math.floor(limit)));
 
-  const r = await query(
+  // Полнотекстовый поиск (русская морфология, ts_rank) — находит словоформы
+  // («возлюбил» по запросу «любовь»), а не только точную подстроку.
+  const fts = await query(
+    `SELECT b.slug AS book_slug, b.name AS book_name, b.short_name, v.chapter, v.verse, v.text
+     FROM bible_verses v
+     JOIN bible_books b ON b.id = v.book_id
+     JOIN bible_translations t ON t.id = v.translation_id
+     WHERE t.code = $1 AND v.text_tsv @@ websearch_to_tsquery('russian', $2)
+     ORDER BY ts_rank(v.text_tsv, websearch_to_tsquery('russian', $2)) DESC, b.ord, v.chapter, v.verse
+     LIMIT $3`,
+    [translationCode, needle, capped],
+  );
+  if (fts.rows.length > 0) return fts.rows;
+
+  // Фолбэк на триграммы: короткие/частичные слова, опечатки, фрагменты имён —
+  // то, что морфологический поиск по целым леммам не находит.
+  const trgm = await query(
     `SELECT b.slug AS book_slug, b.name AS book_name, b.short_name, v.chapter, v.verse, v.text
      FROM bible_verses v
      JOIN bible_books b ON b.id = v.book_id
      JOIN bible_translations t ON t.id = v.translation_id
      WHERE t.code = $1 AND v.text ILIKE '%' || $2 || '%'
-     ORDER BY b.ord, v.chapter, v.verse
+     ORDER BY similarity(v.text, $2) DESC, b.ord, v.chapter, v.verse
      LIMIT $3`,
     [translationCode, needle, capped],
   );
-  return r.rows;
+  return trgm.rows;
 }
 
 export async function countVerses(translationId: number): Promise<number> {

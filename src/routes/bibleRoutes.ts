@@ -7,6 +7,9 @@ import {
   bibleCommentariesCreate,
   bibleCommentariesDelete,
   bibleCommentariesList,
+  bibleHighlightsCreate,
+  bibleHighlightsDelete,
+  bibleHighlightsList,
   bibleNotesCreate,
   bibleNotesDelete,
   bibleNotesList,
@@ -21,6 +24,7 @@ import {
   bibleProgressPut,
   bibleSearch,
   bibleTranslationsList,
+  bibleVerseOfDayGet,
 } from '../controllers/bibleController';
 import { requireAuthSession } from '../middleware/authSession';
 
@@ -31,6 +35,7 @@ router.use(requireAuthSession);
 router.get('/translations', bibleTranslationsList);
 router.get('/books', bibleBooksList);
 router.get('/search', bibleSearch);
+router.get('/verse-of-day', bibleVerseOfDayGet);
 router.get('/parse-ref', bibleParseRef);
 router.get('/chapter/:translation/:book/:chapter', bibleChapterGet);
 router.get('/audio/:translation/:book/:chapter', bibleAudioGet);
@@ -52,5 +57,9 @@ router.delete('/plans/:id', biblePlansDelete);
 router.get('/commentaries', bibleCommentariesList);
 router.post('/commentaries', bibleCommentariesCreate);
 router.delete('/commentaries/:id', bibleCommentariesDelete);
+
+router.get('/highlights', bibleHighlightsList);
+router.post('/highlights', bibleHighlightsCreate);
+router.delete('/highlights/:id', bibleHighlightsDelete);
 
 export default router;
