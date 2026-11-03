@@ -245,6 +245,11 @@ export function LoginPage() {
         registrationStatus: normalizeRegistrationStatus(user.registration_status),
         username: ((user as { username?: string }).username ?? '').trim(),
         memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
+        userId:
+          typeof (user as { user_id?: string }).user_id === 'string' &&
+          (user as { user_id: string }).user_id.trim()
+            ? (user as { user_id: string }).user_id.trim()
+            : null,
       }, { freshLogin: true });
       navigate(postLoginPath, { replace: true });
     } catch (e) {
@@ -355,6 +360,11 @@ export function LoginPage() {
           registrationStatus: normalizeRegistrationStatus(user.registration_status),
           username: ((user as { username?: string }).username ?? '').trim(),
           memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
+          userId:
+            typeof (user as { user_id?: string }).user_id === 'string' &&
+            (user as { user_id: string }).user_id.trim()
+              ? (user as { user_id: string }).user_id.trim()
+              : null,
         }, { freshLogin: true });
         navigate(postLoginPath, { replace: true });
         return;
@@ -377,6 +387,11 @@ export function LoginPage() {
             ),
             username: ((user as { username?: string }).username ?? '').trim(),
             memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
+            userId:
+              typeof (user as { user_id?: string }).user_id === 'string' &&
+              (user as { user_id: string }).user_id.trim()
+                ? (user as { user_id: string }).user_id.trim()
+                : null,
           }, { freshLogin: true });
           navigate(pendingRegistrationLandingPath(), { replace: true });
           return;
