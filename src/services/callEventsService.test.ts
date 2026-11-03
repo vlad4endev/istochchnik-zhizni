@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   CLIENT_CALL_EVENT_KINDS,
   deriveCallIssues,
+  getCallJournalRetentionDays,
+  parsePersistedIssues,
   sanitizeClientEvent,
   sanitizeClientPayload,
   type CallIssueInput,
@@ -165,6 +167,57 @@ async function main(): Promise<void> {
   assert.equal(CLIENT_CALL_EVENT_KINDS.connected, 'info');
   assert.equal(CLIENT_CALL_EVENT_KINDS.room_error, 'error');
   assert.ok(!('sql_injection_attempt' in CLIENT_CALL_EVENT_KINDS));
+
+  // --- getCallJournalRetentionDays: env parsing ---
+  const prevRetentionEnv = process.env.CALL_JOURNAL_RETENTION_DAYS;
+  try {
+    delete process.env.CALL_JOURNAL_RETENTION_DAYS;
+    assert.equal(getCallJournalRetentionDays(), 90);
+    process.env.CALL_JOURNAL_RETENTION_DAYS = '30';
+    assert.equal(getCallJournalRetentionDays(), 30);
+    process.env.CALL_JOURNAL_RETENTION_DAYS = '0';
+    assert.equal(getCallJournalRetentionDays(), 90);
+    process.env.CALL_JOURNAL_RETENTION_DAYS = '-5';
+    assert.equal(getCallJournalRetentionDays(), 90);
+    process.env.CALL_JOURNAL_RETENTION_DAYS = 'abc';
+    assert.equal(getCallJournalRetentionDays(), 90);
+    process.env.CALL_JOURNAL_RETENTION_DAYS = '999999';
+    assert.equal(getCallJournalRetentionDays(), 3650);
+  } finally {
+    if (prevRetentionEnv === undefined) delete process.env.CALL_JOURNAL_RETENTION_DAYS;
+    else process.env.CALL_JOURNAL_RETENTION_DAYS = prevRetentionEnv;
+  }
+
+  // --- parsePersistedIssues: чтение снимка проблем из metadata ---
+  assert.equal(parsePersistedIssues(null), null);
+  assert.equal(parsePersistedIssues('issues'), null);
+  assert.equal(parsePersistedIssues({}), null);
+  assert.equal(parsePersistedIssues({ quality: { score: 5 } }), null);
+  assert.deepEqual(parsePersistedIssues({ issues: [] }), []);
+
+  const persistedOk = parsePersistedIssues({
+    issues: [
+      { code: 'reconnect_storm', severity: 'warn', title: 'Частые переподключения (5)', hint: 'h' },
+      { code: 'device_error', severity: 'fatal', title: 'Ошибка устройства' },
+    ],
+  });
+  assert.ok(persistedOk);
+  assert.equal(persistedOk.length, 2);
+  assert.equal(persistedOk[0].code, 'reconnect_storm');
+  assert.equal(persistedOk[0].severity, 'warn');
+  // Невалидный severity мягко приводится к info
+  assert.equal(persistedOk[1].severity, 'info');
+  assert.equal(persistedOk[1].hint, '');
+
+  // Битый элемент инвалидирует весь снимок → fallback на derive
+  assert.equal(parsePersistedIssues({ issues: [{ title: 'no code' }] }), null);
+  assert.equal(parsePersistedIssues({ issues: 'reconnect_storm' }), null);
+  assert.equal(parsePersistedIssues({ issues: [null] }), null);
+
+  // Снимок, записанный из deriveCallIssues, читается обратно без потерь
+  const derivedForRoundTrip = deriveCallIssues({ ...base, reconnects: 5 });
+  const roundTrip = parsePersistedIssues({ issues: JSON.parse(JSON.stringify(derivedForRoundTrip)) });
+  assert.deepEqual(roundTrip, derivedForRoundTrip);
 
   console.log('callEventsService ok');
 }

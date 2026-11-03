@@ -57,6 +57,7 @@ import { initPushCronJobs } from './cron/pushJobs';
 import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
 import { initBackupJob } from './cron/backupJob';
 import { initCallsCleanupJob } from './cron/callsCleanup';
+import { initCallJournalRetentionJob } from './cron/callJournalRetention';
 import { logLiveKitBootDiagnostics, probeLiveKitRoomService } from './services/livekitService';
 import { warmCallSettingsCache } from './services/callSettingsService';
 import callsRoutes, { callInvitationsRouter } from './routes/callsRoutes';
@@ -632,6 +633,7 @@ async function start(): Promise<void> {
   initTelegramDispatchJob();
   initBackupJob();
   initCallsCleanupJob();
+  initCallJournalRetentionJob();
   startAnalyticsMaintenance();
   void warmCallSettingsCache()
     .then(() => logLiveKitBootDiagnostics())
