@@ -1159,6 +1159,8 @@ export interface AiSettingsAdminResponse {
   max_tokens: number;
   /** Код ассистента GPTunnel для RAG (например ai08158128) */
   gptunnel_assistant_code: string | null;
+  /** Модель embeddings для локальной RAG (1536 dims) */
+  embedding_model: string;
 }
 
 export interface AiProviderModelsResponse {
@@ -1189,6 +1191,7 @@ export async function patchAiSettings(body: {
   temperature?: number | null;
   max_tokens?: number | null;
   gptunnel_assistant_code?: string | null;
+  embedding_model?: string | null;
 }): Promise<AiSettingsAdminResponse> {
   const { data } = await apiClient.patch<AiSettingsAdminResponse>('/api/settings/ai', body);
   return data;
@@ -1205,6 +1208,17 @@ export async function postAiTest(options?: {
   });
   return data;
 }
+
+/** @deprecated импортируйте из `@/features/ai-knowledge` */
+export {
+  createAiKnowledgeText,
+  deleteAiKnowledgeDocument,
+  fetchAiKnowledgeDocuments,
+  reindexAiKnowledgeDocument,
+  uploadAiKnowledgeFile,
+  type AiKnowledgeDocStatus,
+  type AiKnowledgeDocument,
+} from '../ai-knowledge/api';
 
 /** Мониторинг диалогов с ИИ-помощником (админ). */
 export type AssistantMonitorActivity = 'all' | 'today' | '7d';

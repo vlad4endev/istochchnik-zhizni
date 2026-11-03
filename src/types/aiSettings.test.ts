@@ -22,6 +22,7 @@ function baseResolved(over: Partial<ResolvedLlmConfig> = {}): ResolvedLlmConfig 
     temperature: 0.7,
     max_tokens: 2048,
     gptunnel_assistant_code: null,
+    embedding_model: 'text-embedding-3-small',
     ...over,
   };
 }
@@ -41,6 +42,11 @@ function run(): void {
   assert.equal(doc.section_models.songbook, 'openai/gpt-4o');
   assert.equal(doc.section_models.studio, undefined);
   assert.equal((doc.section_models as Record<string, string>).unknown_scope, undefined);
+  assert.equal(doc.embedding_model, 'text-embedding-3-small');
+  assert.equal(
+    normalizeAiSettingsDocument({ embedding_model: '  text-embedding-3-large  ' }).embedding_model,
+    'text-embedding-3-large',
+  );
 
   const view = buildSectionModelsAdminView(
     normalizeAiSettingsDocument({

@@ -105,6 +105,7 @@ export async function getAiSettingsAdmin(): Promise<AiSettingsAdminView> {
     temperature: doc.temperature,
     max_tokens: doc.max_tokens,
     gptunnel_assistant_code: assistantCode,
+    embedding_model: doc.embedding_model,
   };
 }
 
@@ -124,6 +125,8 @@ export interface AiSettingsPatch {
   max_tokens?: number | null;
   /** Код ассистента GPTunnel; null — сбросить */
   gptunnel_assistant_code?: string | null;
+  /** Модель embeddings для локальной RAG */
+  embedding_model?: string | null;
 }
 
 export async function updateAiSettings(patch: AiSettingsPatch): Promise<AiSettingsAdminView> {
@@ -229,6 +232,13 @@ export async function updateAiSettings(patch: AiSettingsPatch): Promise<AiSettin
       next.gptunnel_assistant_code = t.length > 0 ? t : null;
     }
   }
+  if (patch.embedding_model !== undefined) {
+    if (patch.embedding_model === null || (typeof patch.embedding_model === 'string' && !patch.embedding_model.trim())) {
+      next.embedding_model = normalizeAiSettingsDocument(null).embedding_model;
+    } else if (typeof patch.embedding_model === 'string') {
+      next.embedding_model = patch.embedding_model.trim();
+    }
+  }
 
   const normalized = normalizeAiSettingsDocument(next);
   await saveAiSettingsDocument(normalized);
@@ -247,6 +257,7 @@ export interface ResolvedLlmConfig {
   temperature: number;
   max_tokens: number;
   gptunnel_assistant_code: string | null;
+  embedding_model: string;
 }
 
 /** Эффективный системный промпт: для `section` — свой текст, иначе общий `system_prompt`. */
@@ -304,6 +315,7 @@ export async function resolveLlmRuntimeConfig(): Promise<ResolvedLlmConfig> {
     temperature: doc.temperature,
     max_tokens: doc.max_tokens,
     gptunnel_assistant_code: doc.gptunnel_assistant_code ?? envAssistantCode(),
+    embedding_model: doc.embedding_model,
   };
 }
 

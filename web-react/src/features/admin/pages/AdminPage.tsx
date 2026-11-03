@@ -34,6 +34,7 @@ import {
   type AdminTabId,
 } from '../adminTabs';
 import { AccessRequestsSection } from '../AccessRequestsSection';
+import { AiKnowledgeSection } from '@/features/ai-knowledge';
 import { AiAssistantMonitorSection } from '../AiAssistantMonitorSection';
 import { AiSettingsSection } from '../AiSettingsSection';
 import { CallsSettingsSection } from '../CallsSettingsSection';
@@ -449,6 +450,13 @@ export function AdminPage() {
   const tab = parseAdminTabParam(searchParams.get('tab'));
   const [showAddUser, setShowAddUser] = useState(false);
 
+  // Старый URL Интеграции → sub=ai_knowledge переносим в отдельный модуль.
+  useEffect(() => {
+    if (searchParams.get('tab') === 'integrations' && searchParams.get('sub') === 'ai_knowledge') {
+      setSearchParams({ tab: 'ai_knowledge' }, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   const setTab = (next: AdminTabId) => {
     if (next === 'members') {
       setSearchParams({}, { replace: true });
@@ -516,6 +524,7 @@ export function AdminPage() {
         {tab === 'releases' && <AppReleasesSection />}
         {tab === 'calls' && <CallsSettingsSection />}
         {tab === 'diagnostics' && <DiagnosticsDashboardSection />}
+        {tab === 'ai_knowledge' && <AiKnowledgeSection />}
         {tab === 'integrations' && <IntegrationsSection />}
       </div>
     </div>

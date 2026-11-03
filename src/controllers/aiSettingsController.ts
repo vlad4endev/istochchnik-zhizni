@@ -55,6 +55,7 @@ export async function patchAiSettingsHandler(req: Request, res: Response): Promi
     temperature?: number | null;
     max_tokens?: number | null;
     gptunnel_assistant_code?: string | null;
+    embedding_model?: string | null;
   } = {};
 
   if (body.enabled !== undefined) {
@@ -173,6 +174,13 @@ export async function patchAiSettingsHandler(req: Request, res: Response): Promi
       return;
     }
     patch.gptunnel_assistant_code = body.gptunnel_assistant_code as string | null;
+  }
+  if (body.embedding_model !== undefined) {
+    if (body.embedding_model !== null && typeof body.embedding_model !== 'string') {
+      res.status(400).json({ error: 'Поле embedding_model: строка или null' });
+      return;
+    }
+    patch.embedding_model = body.embedding_model as string | null;
   }
 
   try {

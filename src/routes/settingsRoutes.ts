@@ -6,9 +6,16 @@ import {
   postAiTestHandler,
 } from '../controllers/aiSettingsController';
 import {
+  createAiKnowledgeHandler,
+  deleteAiKnowledgeHandler,
+  listAiKnowledgeHandler,
+  reindexAiKnowledgeHandler,
+} from '../controllers/aiKnowledgeController';
+import {
   getAssistantConversationMessagesAdminHandler,
   listAssistantConversationsAdminHandler,
 } from '../controllers/assistantMonitorController';
+import { aiKnowledgeUploadMiddleware } from '../middleware/aiKnowledgeUpload';
 import {
   getNotificationSettingsAdmin,
   getNotificationSettingsPublic,
@@ -51,6 +58,11 @@ router.post('/ai/test', postAiTestHandler);
 /** Мониторинг диалогов с ИИ-помощником (только админ). */
 router.get('/ai/conversations', listAssistantConversationsAdminHandler);
 router.get('/ai/conversations/:id/messages', getAssistantConversationMessagesAdminHandler);
+/** Локальная RAG-база знаний (только админ). */
+router.get('/ai/knowledge', listAiKnowledgeHandler);
+router.post('/ai/knowledge', aiKnowledgeUploadMiddleware, createAiKnowledgeHandler);
+router.delete('/ai/knowledge/:id', deleteAiKnowledgeHandler);
+router.post('/ai/knowledge/:id/reindex', reindexAiKnowledgeHandler);
 router.get('/sections', getSectionVisibilitySettingsPublic);
 router.get('/sections/admin', getSectionVisibilitySettingsAdmin);
 router.patch('/sections', patchSectionVisibilitySettingsHandler);

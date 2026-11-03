@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { LuBot, LuCheck, LuKeyRound, LuLayers, LuRefreshCw, LuServer } from 'react-icons/lu';
+import { Link } from 'react-router-dom';
 
 import { DecimalTextInput } from '@/components/DecimalTextInput';
 import { IntegerTextInput } from '@/components/IntegerTextInput';
@@ -129,6 +130,7 @@ export function AiSettingsSection() {
     temperature: 0.7,
     max_tokens: 2048,
     gptunnel_assistant_code: '',
+    embedding_model: 'text-embedding-3-small',
   });
   const [sectionPrompts, setSectionPrompts] = useState<Record<string, string>>({});
   const [sectionModels, setSectionModels] = useState<Record<string, string>>({});
@@ -158,6 +160,7 @@ export function AiSettingsSection() {
       temperature: data.temperature,
       max_tokens: data.max_tokens,
       gptunnel_assistant_code: data.gptunnel_assistant_code ?? '',
+      embedding_model: data.embedding_model ?? 'text-embedding-3-small',
     });
     const sp: Record<string, string> = {};
     const sm: Record<string, string> = {};
@@ -223,6 +226,7 @@ export function AiSettingsSection() {
         gptunnel_assistant_code: form.gptunnel_assistant_code.trim()
           ? form.gptunnel_assistant_code.trim().replace(/^@+/, '')
           : null,
+        embedding_model: form.embedding_model.trim() || 'text-embedding-3-small',
       });
     },
     onSuccess: (next) => {
@@ -450,10 +454,32 @@ export function AiSettingsSection() {
               autoComplete="off"
             />
             <p className="mt-1 text-xs text-[var(--text-secondary)]">
-              Если задан — чат «ИИ помощник» ходит в{' '}
-              <code className="rounded bg-[var(--surface)] px-1">/v1/assistant/chat</code> и использует
-              векторные базы, привязанные к ассистенту в кабинете GPTunnel. Можно задать через{' '}
+              Внешний RAG GPTunnel. Если в модуле{' '}
+              <Link
+                to="/admin?tab=ai_knowledge"
+                className="font-medium text-stone-800 underline-offset-2 hover:underline"
+              >
+                База знаний ИИ
+              </Link>{' '}
+              есть локальные документы, помощник предпочитает свою RAG. Можно задать через{' '}
               <code className="rounded bg-[var(--surface)] px-1">GPTUNNEL_ASSISTANT_CODE</code>.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-[var(--text-secondary)]">
+              Модель embeddings (локальная RAG)
+            </label>
+            <input
+              className={fieldClass()}
+              value={form.embedding_model}
+              onChange={(e) => setForm((s) => ({ ...s, embedding_model: e.target.value }))}
+              placeholder="text-embedding-3-small"
+              autoComplete="off"
+            />
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              Нужна размерность 1536 (как у <code className="rounded bg-[var(--surface)] px-1">text-embedding-3-small</code>).
+              Без API-ключа индексация базы знаний не запустится.
             </p>
           </div>
 
