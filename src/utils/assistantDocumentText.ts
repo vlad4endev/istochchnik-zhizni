@@ -220,45 +220,47 @@ async function extractSpreadsheet(buffer: Buffer): Promise<string> {
     .join('\n\n');
 }
 
+export type ExtractedDocumentPlainText = {
+  kind: AssistantDocumentKind | null;
+  text: string;
+  warning?: string;
+};
+
 /**
- * Достаёт текст документа для контекста ИИ.
- * Пустой результат всё равно возвращает блок с предупреждением, чтобы модель не выдумывала файл.
+ * Сырой текст документа (для RAG-индексации и разбора вложений).
+ * Без обёртки «Текст документа …» — только содержимое и предупреждение.
  */
-export async function extractAssistantDocumentText(input: {
+export async function extractDocumentPlainText(input: {
   buffer: Buffer;
   fileName: string;
   mimeType?: string | null;
-}): Promise<string> {
+}): Promise<ExtractedDocumentPlainText> {
   const fileName = String(input.fileName ?? '').trim() || 'документ';
   const kind = classifyAssistantDocument(fileName, input.mimeType);
   if (!kind) {
-    return formatAssistantDocumentBlock({
-      fileName,
+    return {
+      kind: null,
       text: '',
       warning: 'Этот формат помощник не разбирает. Пришлите PDF, DOCX, ODT, TXT, RTF, XLSX или PPTX.',
-    });
+    };
   }
   if (kind === 'legacy-doc') {
-    return formatAssistantDocumentBlock({
-      fileName,
+    return {
+      kind,
       text: '',
       warning: 'Старый формат DOC не читается. Сохраните файл как DOCX или PDF и отправьте снова.',
-    });
+    };
   }
   const buffer = input.buffer;
   if (!buffer || buffer.length === 0) {
-    return formatAssistantDocumentBlock({
-      fileName,
-      text: '',
-      warning: 'Файл пустой. Не выдумывай содержание.',
-    });
+    return { kind, text: '', warning: 'Файл пустой. Не выдумывай содержание.' };
   }
   if (buffer.length > ASSISTANT_DOCUMENT_MAX_BYTES) {
-    return formatAssistantDocumentBlock({
-      fileName,
+    return {
+      kind,
       text: '',
       warning: 'Файл больше 8 МБ, текст не разбирался. Пришлите более короткую версию. Не выдумывай содержание.',
-    });
+    };
   }
   try {
     let text = '';
@@ -269,20 +271,34 @@ export async function extractAssistantDocumentText(input: {
     else if (kind === 'xlsx') text = await extractSpreadsheet(buffer);
     else if (kind === 'rtf') text = extractRtf(buffer);
     else text = decodePlainBuffer(buffer).trim();
-    return formatAssistantDocumentBlock({
-      fileName,
+    return {
+      kind,
       text,
       warning: text
         ? undefined
         : 'В файле не найден текст (возможен скан без текстового слоя). Не выдумывай содержание.',
-    });
+    };
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e);
     console.warn('[assistant] document extract failed:', detail);
-    return formatAssistantDocumentBlock({
-      fileName,
-      text: '',
-      warning: 'Файл не удалось разобрать. Не выдумывай содержание.',
-    });
+    return { kind, text: '', warning: 'Файл не удалось разобрать. Не выдумывай содержание.' };
   }
+}
+
+/**
+ * Достаёт текст документа для контекста ИИ.
+ * Пустой результат всё равно возвращает блок с предупреждением, чтобы модель не выдумывала файл.
+ */
+export async function extractAssistantDocumentText(input: {
+  buffer: Buffer;
+  fileName: string;
+  mimeType?: string | null;
+}): Promise<string> {
+  const fileName = String(input.fileName ?? '').trim() || 'документ';
+  const extracted = await extractDocumentPlainText(input);
+  return formatAssistantDocumentBlock({
+    fileName,
+    text: extracted.text,
+    warning: extracted.warning,
+  });
 }

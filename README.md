@@ -117,7 +117,7 @@ cp .env.local.example .env
 # PostgreSQL: docker start istochnik-postgres
 #   или: docker run -d --name istochnik-postgres \
 #        -e POSTGRES_DB=istochik_db -e POSTGRES_USER=postgres \
-#        -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16-alpine
+#        -e POSTGRES_PASSWORD=postgres -p 5432:5432 pgvector/pgvector:pg16
 
 npm ci
 npx ts-node-dev --transpile-only --respawn src/main.ts   # API :40978

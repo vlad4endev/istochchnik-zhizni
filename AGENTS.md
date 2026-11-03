@@ -13,11 +13,11 @@ Package manager: **npm** (lockfiles: `package-lock.json` in root and `web-react/
 ### Prerequisites
 
 - **Node.js 20** (matches Dockerfile)
-- **Docker** — required for PostgreSQL (`postgres:16-alpine`)
+- **Docker** — required for PostgreSQL (`pgvector/pgvector:pg16`, includes `vector` for RAG)
 
 ### Running services
 
-1. **PostgreSQL**: `docker run -d --name istochnik-postgres -e POSTGRES_DB=istochik_db -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16-alpine` (or reuse existing container: `docker start istochnik-postgres`)
+1. **PostgreSQL**: `docker run -d --name istochnik-postgres -e POSTGRES_DB=istochik_db -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 pgvector/pgvector:pg16` (or reuse existing container: `docker start istochnik-postgres`)
 2. **API dev server**: `npx ts-node-dev --transpile-only --respawn src/main.ts` from project root. The `--transpile-only` flag is required because `ts-node-dev` fails to resolve Express type augmentations in `src/types/express.d.ts`; `tsc --noEmit` validates types separately.
 3. **Frontend dev server**: `npm run web:dev` (runs `vite` in `web-react/`)
 4. Alternatively: `npm run dev:all` runs both API and Vite concurrently, but API needs `--transpile-only`.

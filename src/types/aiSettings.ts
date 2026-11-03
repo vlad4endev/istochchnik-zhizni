@@ -37,6 +37,8 @@ export interface AiSettingsDocument {
    * Если задан — мессенджер «ИИ помощник» использует /v1/assistant/chat.
    */
   gptunnel_assistant_code: string | null;
+  /** Модель embeddings для локальной RAG (размерность 1536). */
+  embedding_model: string;
 }
 
 export interface AiPromptScopeOption {
@@ -64,10 +66,12 @@ export interface AiSettingsAdminView {
   temperature: number;
   max_tokens: number;
   gptunnel_assistant_code: string | null;
+  embedding_model: string;
 }
 
 const DEFAULT_BASE = 'https://api.openai.com/v1';
 const DEFAULT_MODEL = 'gpt-4o-mini';
+const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
 
 function clampTemp(v: number): number {
   if (Number.isNaN(v)) return 0.7;
@@ -150,6 +154,11 @@ export function normalizeAiSettingsDocument(raw: unknown): AiSettingsDocument {
       ? o.gptunnel_assistant_code.trim().replace(/^@+/, '')
       : null;
 
+  const embedding_model =
+    typeof o.embedding_model === 'string' && o.embedding_model.trim().length > 0
+      ? o.embedding_model.trim()
+      : DEFAULT_EMBEDDING_MODEL;
+
   return {
     enabled,
     provider,
@@ -163,6 +172,7 @@ export function normalizeAiSettingsDocument(raw: unknown): AiSettingsDocument {
     temperature,
     max_tokens,
     gptunnel_assistant_code,
+    embedding_model,
   };
 }
 
