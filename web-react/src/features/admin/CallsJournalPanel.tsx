@@ -12,6 +12,11 @@ import {
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 import { humanizeCallErrorMessage } from '../calls/callJournal';
 import {
+  isTimelineEventVisible,
+  participantStatusLabel,
+  type TimelineFilterMode,
+} from './callJournalTimeline';
+import {
   apiErrorMessage,
   fetchCallJournal,
   fetchCallLogDetail,
@@ -31,17 +36,50 @@ import {
 
 const Q_JOURNAL = ['admin', 'calls', 'journal'] as const;
 
+// Подписи = серверный каталог статусов звонков (DEFAULT_CALL_STATUS_LABELS) —
+// фильтр и строки журнала говорят на одном языке.
 const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: 'Все статусы' },
-  { value: 'ringing', label: 'Входящий вызов' },
+  { value: 'ringing', label: 'Гудки' },
   { value: 'waiting', label: 'Ожидание участников' },
-  { value: 'active', label: 'Активный' },
+  { value: 'active', label: 'Идёт звонок' },
   { value: 'ended', label: 'Завершён' },
-  { value: 'missed', label: 'Пропущен' },
   { value: 'declined', label: 'Отклонён' },
+  { value: 'missed', label: 'Пропущен' },
   { value: 'cancelled', label: 'Отменён' },
   { value: 'failed', label: 'Ошибка' },
 ];
+
+const CALL_STATUS_BADGE: Record<string, string> = {
+  ringing: 'bg-sky-100 text-sky-800',
+  waiting: 'bg-sky-100 text-sky-800',
+  active: 'bg-emerald-100 text-emerald-800',
+  ended: 'bg-stone-200 text-stone-600',
+  declined: 'bg-amber-100 text-amber-900',
+  missed: 'bg-amber-100 text-amber-900',
+  cancelled: 'bg-stone-200 text-stone-600',
+  failed: 'bg-red-100 text-red-800',
+};
+
+function CallStatusBadge({ status, label }: { status: string; label: string }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${CALL_STATUS_BADGE[status] ?? 'bg-stone-200 text-stone-600'}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+const PARTICIPANT_STATUS_DOT: Record<string, string> = {
+  invited: 'bg-stone-400',
+  ringing: 'bg-sky-500',
+  joined: 'bg-emerald-500',
+  left: 'bg-stone-300',
+  declined: 'bg-amber-500',
+  missed: 'bg-amber-500',
+  busy: 'bg-amber-500',
+};
 
 const ISSUE_STYLES: Record<CallIssue['severity'], string> = {
   error: 'border-red-200 bg-red-50 text-red-900',
@@ -269,7 +307,14 @@ function EventTimelineRow({ event }: { event: CallLogEvent }) {
   );
 }
 
+const TIMELINE_MODES: Array<{ mode: TimelineFilterMode; label: string }> = [
+  { mode: 'important', label: 'Важные' },
+  { mode: 'issues', label: 'Проблемы' },
+  { mode: 'all', label: 'Все' },
+];
+
 function CallLogDetailView({ callId }: { callId: string }) {
+  const [timelineMode, setTimelineMode] = useState<TimelineFilterMode>('important');
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: [...Q_JOURNAL, 'detail', callId],
     queryFn: () => fetchCallLogDetail(callId),
@@ -293,9 +338,16 @@ function CallLogDetailView({ callId }: { callId: string }) {
   if (!data) return null;
 
   const d: CallLogDetail = data;
+  const visibleEvents = d.events.filter((e) => isTimelineEventVisible(e, timelineMode));
   return (
     <div className="space-y-4 text-xs text-stone-700">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-stone-500">
+        <CallStatusBadge status={d.call.status} label={d.call.statusLabel} />
+        {d.call.durationSeconds != null ? (
+          <span className="font-semibold text-stone-700">
+            {formatDuration(d.call.durationSeconds)}
+          </span>
+        ) : null}
         <span>
           ID: <span className="font-mono">{d.call.id}</span>
         </span>
@@ -356,8 +408,12 @@ function CallLogDetailView({ callId }: { callId: string }) {
                   ({p.role === 'initiator' ? 'организатор' : p.role})
                 </span>
               </span>
-              <span className="text-[11px] text-stone-500">
-                {p.status}
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-stone-500">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${PARTICIPANT_STATUS_DOT[p.status] ?? 'bg-stone-300'}`}
+                  aria-hidden
+                />
+                {participantStatusLabel(p.status)}
                 {p.joinedAt ? ` · вошёл ${formatWhen(p.joinedAt)}` : ''}
                 {p.leftAt ? ` · вышел ${formatWhen(p.leftAt)}` : ''}
               </span>
@@ -385,18 +441,52 @@ function CallLogDetailView({ callId }: { callId: string }) {
       ) : null}
 
       <div>
-        <p className="mb-1 font-semibold text-stone-900">Хронология ({d.events.length})</p>
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          <p className="font-semibold text-stone-900">Хронология ({d.events.length})</p>
+          {d.events.length > 0 ? (
+            <div
+              className="ml-auto inline-flex rounded-lg border border-stone-200 p-0.5"
+              role="group"
+              aria-label="Фильтр событий хронологии"
+            >
+              {TIMELINE_MODES.map(({ mode, label }) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
+                    timelineMode === mode
+                      ? 'bg-stone-800 text-white'
+                      : 'text-stone-600 hover:bg-stone-100'
+                  }`}
+                  aria-pressed={timelineMode === mode}
+                  onClick={() => setTimelineMode(mode)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
         {d.events.length === 0 ? (
           <p className="text-stone-500">
             Событий нет — журнал ведётся с момента обновления сервера; для этого звонка доступна
             только сводка.
           </p>
+        ) : visibleEvents.length === 0 ? (
+          <p className="text-stone-500">Под выбранный фильтр событий нет.</p>
         ) : (
-          <ul className="relative ml-1 border-l border-stone-200 pl-3">
-            {d.events.map((e) => (
-              <EventTimelineRow key={e.id} event={e} />
-            ))}
-          </ul>
+          <>
+            {visibleEvents.length !== d.events.length ? (
+              <p className="mb-1 text-[11px] text-stone-400">
+                показано {visibleEvents.length} из {d.events.length}
+              </p>
+            ) : null}
+            <ul className="relative ml-1 border-l border-stone-200 pl-3">
+              {visibleEvents.map((e) => (
+                <EventTimelineRow key={e.id} event={e} />
+              ))}
+            </ul>
+          </>
         )}
       </div>
     </div>
@@ -434,10 +524,11 @@ function JournalRow({
               {call.participantsCount} уч.
             </span>
           </p>
-          <p className="text-xs text-stone-500">
-            {formatWhen(call.createdAt)} · {call.statusLabel}
-            {call.endReasonLabel ? ` · ${call.endReasonLabel}` : ''} ·{' '}
-            {formatDuration(call.durationSeconds)}
+          <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-stone-500">
+            <span>{formatWhen(call.createdAt)}</span>
+            <CallStatusBadge status={call.status} label={call.statusLabel} />
+            {call.endReasonLabel ? <span>· {call.endReasonLabel}</span> : null}
+            <span>· {formatDuration(call.durationSeconds)}</span>
           </p>
           {call.issues.length > 0 ? (
             <p className="mt-1 flex flex-wrap gap-1">
