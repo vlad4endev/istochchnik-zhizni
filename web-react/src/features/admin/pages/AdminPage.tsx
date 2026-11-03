@@ -34,8 +34,8 @@ import {
   type AdminTabId,
 } from '../adminTabs';
 import { AccessRequestsSection } from '../AccessRequestsSection';
+import { AiKnowledgeSection } from '@/features/ai-knowledge';
 import { AiAssistantMonitorSection } from '../AiAssistantMonitorSection';
-import { AiKnowledgeSection } from '../AiKnowledgeSection';
 import { AiSettingsSection } from '../AiSettingsSection';
 import { CallsSettingsSection } from '../CallsSettingsSection';
 import { AppSectionsAccessSection } from '../AppSectionsAccessSection';
@@ -450,6 +450,13 @@ export function AdminPage() {
   const tab = parseAdminTabParam(searchParams.get('tab'));
   const [showAddUser, setShowAddUser] = useState(false);
 
+  // Старый URL Интеграции → sub=ai_knowledge переносим в отдельный модуль.
+  useEffect(() => {
+    if (searchParams.get('tab') === 'integrations' && searchParams.get('sub') === 'ai_knowledge') {
+      setSearchParams({ tab: 'ai_knowledge' }, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   const setTab = (next: AdminTabId) => {
     if (next === 'members') {
       setSearchParams({}, { replace: true });
@@ -517,6 +524,7 @@ export function AdminPage() {
         {tab === 'releases' && <AppReleasesSection />}
         {tab === 'calls' && <CallsSettingsSection />}
         {tab === 'diagnostics' && <DiagnosticsDashboardSection />}
+        {tab === 'ai_knowledge' && <AiKnowledgeSection />}
         {tab === 'integrations' && <IntegrationsSection />}
       </div>
     </div>
@@ -530,18 +538,15 @@ function IntegrationsSection() {
   const initialSub =
     subFromUrl === 'ai' ||
     subFromUrl === 'ai_monitor' ||
-    subFromUrl === 'ai_knowledge' ||
     subFromUrl === 'sms' ||
     subFromUrl === 'song_import'
       ? subFromUrl
       : hasAiChat
         ? 'ai_monitor'
         : 'sms';
-  const [subTab, setSubTab] = useState<'sms' | 'ai' | 'ai_monitor' | 'ai_knowledge' | 'song_import'>(
-    initialSub,
-  );
+  const [subTab, setSubTab] = useState<'sms' | 'ai' | 'ai_monitor' | 'song_import'>(initialSub);
 
-  const openSub = (next: 'sms' | 'ai' | 'ai_monitor' | 'ai_knowledge' | 'song_import') => {
+  const openSub = (next: 'sms' | 'ai' | 'ai_monitor' | 'song_import') => {
     setSubTab(next);
     const params = new URLSearchParams(searchParams);
     if (next === 'sms') params.delete('sub');
@@ -553,7 +558,7 @@ function IntegrationsSection() {
   return (
     <div className="space-y-6">
       <section className="rounded-[10px] bg-stone-100 p-1">
-        <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
           <button
             type="button"
             className={
@@ -579,18 +584,6 @@ function IntegrationsSection() {
             <span aria-hidden>🤖</span>
             ИИ интеграции
             <span className="rounded-lg bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700">Подключено</span>
-          </button>
-          <button
-            type="button"
-            className={
-              subTab === 'ai_knowledge'
-                ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
-                : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
-            }
-            onClick={() => openSub('ai_knowledge')}
-          >
-            <span aria-hidden>📚</span>
-            База знаний
           </button>
           <button
             type="button"
@@ -623,8 +616,6 @@ function IntegrationsSection() {
         <SmsSection />
       ) : subTab === 'ai' ? (
         <AiSettingsSection />
-      ) : subTab === 'ai_knowledge' ? (
-        <AiKnowledgeSection />
       ) : subTab === 'ai_monitor' ? (
         <AiAssistantMonitorSection />
       ) : (

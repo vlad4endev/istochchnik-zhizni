@@ -7,6 +7,7 @@ import {
   LuHardDrive,
   LuHistory,
   LuInbox,
+  LuBookOpen,
   LuLink2,
   LuMessagesSquare,
   LuPackage,
@@ -36,6 +37,7 @@ export interface AdminTabConfig {
     | 'backup'
     | 'releases'
     | 'calls'
+    | 'ai_knowledge'
     | 'integrations'
     | 'diagnostics';
   /** Заголовок раздела в контенте и полная подпись для подсказки в сайдбаре */
@@ -177,6 +179,15 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
       'Интеграционные автотесты (API, БД, безопасность) и полный срез: метрики, скан проекта, журнал и AI-аудит.',
   },
   {
+    id: 'ai_knowledge',
+    label: 'База знаний ИИ',
+    navLabel: 'База знаний',
+    Icon: LuBookOpen,
+    short: 'RAG',
+    description:
+      'Локальная векторная база для ИИ-помощника: загрузка документов и текстов, индексация в pgvector.',
+  },
+  {
     id: 'integrations',
     label: 'Интеграции',
     Icon: LuLink2,
@@ -230,6 +241,7 @@ export const ADMIN_SIDEBAR_GROUPS: readonly AdminSidebarGroup[] = [
       { id: 'releases' },
       { id: 'calls' },
       { id: 'diagnostics' },
+      { id: 'ai_knowledge' },
       { id: 'integrations' },
     ],
   },

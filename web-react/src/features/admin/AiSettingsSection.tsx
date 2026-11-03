@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { LuBot, LuCheck, LuKeyRound, LuLayers, LuRefreshCw, LuServer } from 'react-icons/lu';
+import { Link } from 'react-router-dom';
 
 import { DecimalTextInput } from '@/components/DecimalTextInput';
 import { IntegerTextInput } from '@/components/IntegerTextInput';
@@ -453,8 +454,14 @@ export function AiSettingsSection() {
               autoComplete="off"
             />
             <p className="mt-1 text-xs text-[var(--text-secondary)]">
-              Внешний RAG GPTunnel. Если в разделе «База знаний» есть локальные документы, помощник
-              предпочитает свою RAG. Можно задать через{' '}
+              Внешний RAG GPTunnel. Если в модуле{' '}
+              <Link
+                to="/admin?tab=ai_knowledge"
+                className="font-medium text-stone-800 underline-offset-2 hover:underline"
+              >
+                База знаний ИИ
+              </Link>{' '}
+              есть локальные документы, помощник предпочитает свою RAG. Можно задать через{' '}
               <code className="rounded bg-[var(--surface)] px-1">GPTUNNEL_ASSISTANT_CODE</code>.
             </p>
           </div>
