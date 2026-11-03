@@ -4,6 +4,8 @@ import { deflateRawSync } from 'node:zlib';
 import {
   classifyAssistantDocument,
   extractAssistantDocumentText,
+  extractDocumentPlainText,
+  extractJsonText,
   readZipEntries,
 } from './assistantDocumentText';
 
@@ -54,6 +56,8 @@ async function main(): Promise<void> {
     'docx',
   );
   assert.equal(classifyAssistantDocument('старое.doc', ''), 'legacy-doc');
+  assert.equal(classifyAssistantDocument('data.json', ''), 'json');
+  assert.equal(classifyAssistantDocument('payload', 'application/json'), 'json');
   assert.equal(classifyAssistantDocument('photo.jpg', 'image/jpeg'), null);
   assert.equal(classifyAssistantDocument('voice.ogg', 'audio/ogg'), null);
 
@@ -100,6 +104,32 @@ async function main(): Promise<void> {
   });
   assert.match(rtf, /Мир/);
   assert.match(rtf, /вам/);
+
+  const jsonBuf = Buffer.from(
+    JSON.stringify({ title: 'Устав', sections: [{ name: 'Членство', points: 3 }] }),
+    'utf8',
+  );
+  assert.equal(classifyAssistantDocument('ustav.json', 'application/json'), 'json');
+  const jsonText = extractJsonText(jsonBuf);
+  assert.match(jsonText, /"title": "Устав"/);
+  assert.match(jsonText, /title: Устав/);
+  assert.match(jsonText, /sections\[0\]\.name: Членство/);
+
+  const jsonExtracted = await extractDocumentPlainText({
+    buffer: jsonBuf,
+    fileName: 'ustav.json',
+    mimeType: 'application/json',
+  });
+  assert.equal(jsonExtracted.kind, 'json');
+  assert.match(jsonExtracted.text, /Членство/);
+
+  const badJson = await extractDocumentPlainText({
+    buffer: Buffer.from('{not-json', 'utf8'),
+    fileName: 'broken.json',
+  });
+  assert.equal(badJson.kind, 'json');
+  assert.equal(badJson.text, '');
+  assert.match(String(badJson.warning), /JSON/i);
 
   console.log('assistantDocumentText (unit) ok');
 }

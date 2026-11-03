@@ -14,6 +14,7 @@ const ALLOWED_EXT = new Set([
   '.csv',
   '.md',
   '.markdown',
+  '.json',
   '.rtf',
 ]);
 
@@ -23,7 +24,7 @@ function fileFilter(_req: Request, file: Express.Multer.File, cb: multer.FileFil
   if (!ALLOWED_EXT.has(ext) || !kind || kind === 'legacy-doc') {
     cb(
       new Error(
-        'Разрешены: PDF, DOCX, ODT, XLSX, PPTX, TXT, CSV, MD, RTF. Старый DOC не поддерживается.',
+        'Разрешены: PDF, DOCX, ODT, XLSX, PPTX, TXT, CSV, MD, JSON, RTF. Старый DOC не поддерживается.',
       ),
     );
     return;

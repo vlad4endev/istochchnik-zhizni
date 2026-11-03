@@ -117,7 +117,7 @@ export function AiKnowledgeSection() {
       <section className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5">
         <h3 className="text-base font-semibold text-stone-900">Документы для локальной RAG</h3>
         <p className="mt-1 text-sm text-stone-500">
-          Загружайте PDF, DOCX, ODT, XLSX, PPTX, TXT, MD, CSV, RTF или вставьте текст. Файлы
+          Загружайте PDF, DOCX, ODT, XLSX, PPTX, TXT, MD, CSV, JSON, RTF или вставьте текст. Файлы
           превращаются в векторы и ограничивают ответы «ИИ помощника» вместе с Библией.
         </p>
 
@@ -148,7 +148,7 @@ export function AiKnowledgeSection() {
             <input
               ref={fileRef}
               type="file"
-              accept=".pdf,.docx,.odt,.xlsx,.xls,.pptx,.txt,.csv,.md,.markdown,.rtf,text/plain,application/pdf"
+              accept=".pdf,.docx,.odt,.xlsx,.xls,.pptx,.txt,.csv,.md,.markdown,.json,.rtf,text/plain,application/pdf,application/json"
               className="block w-full max-w-md text-sm text-stone-600 file:mr-3 file:rounded-lg file:border-0 file:bg-stone-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white"
               onChange={(e) => {
                 const file = e.target.files?.[0];
