@@ -67,7 +67,13 @@ import {
   ActiveCallMinimizedBar,
   ActiveCallMinimizedBarSimple,
 } from './ActiveCallMinimizedBar';
-import { attachCallJournal, logCallEvent, startCallJournal, stopCallJournal } from './callJournal';
+import {
+  attachCallJournal,
+  isBenignRoomErrorMessage,
+  logCallEvent,
+  startCallJournal,
+  stopCallJournal,
+} from './callJournal';
 import {
   cancelCall,
   createCallInvitation,
@@ -2288,9 +2294,12 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         options={roomOptions}
         connectOptions={connectOptions}
         onError={(e) => {
+          const rawMessage = e?.message ?? String(e);
+          // Штатный teardown (наш перезаход/завершение) — не сбой: ни журнал, ни тост.
+          if (isBenignRoomErrorMessage(rawMessage)) return;
           logCallEvent(activeCall.callId, 'room_error', {
             severity: 'error',
-            payload: { message: e?.message ?? String(e) },
+            payload: { message: rawMessage },
           });
           const msg = mapDeviceError(e);
           setConnectError(msg);

@@ -19,7 +19,7 @@ import { useAuthStore } from '../auth/authStore';
 
 export type CallJournalSeverity = 'info' | 'warn' | 'error';
 
-type JournalEvent = {
+export type JournalEvent = {
   kind: string;
   severity?: CallJournalSeverity;
   at: string;
@@ -30,6 +30,124 @@ const FLUSH_INTERVAL_MS = 10_000;
 const STATS_INTERVAL_MS = 15_000;
 const MAX_BUFFERED_EVENTS = 400;
 const MAX_BATCH_PER_FLUSH = 100;
+
+/**
+ * Одинаковые подряд ошибки (внутренние ретраи livekit-клиента шлют дубли в ту же секунду)
+ * схлопываются в одно событие со счётчиком `repeat` — иначе хронология и карточка
+ * «Ошибка медиасервера» завышают реальное число сбоев.
+ */
+const ERROR_DEDUPE_KINDS = new Set(['room_error', 'device_error']);
+const ERROR_DEDUPE_WINDOW_MS = 5_000;
+
+function stripRepeat(payload?: Record<string, unknown>): Record<string, unknown> | null {
+  if (!payload) return null;
+  const { repeat: _repeat, ...rest } = payload;
+  return rest;
+}
+
+/** Если next дублирует последнее событие буфера — наращивает его `repeat` и возвращает true. */
+export function mergeDuplicateErrorEvent(buffer: JournalEvent[], next: JournalEvent): boolean {
+  const last = buffer[buffer.length - 1];
+  if (!last || last.kind !== next.kind) return false;
+  if ((last.severity ?? 'info') !== (next.severity ?? 'info')) return false;
+  const lastAt = Date.parse(last.at);
+  const nextAt = Date.parse(next.at);
+  if (!Number.isFinite(lastAt) || !Number.isFinite(nextAt)) return false;
+  if (nextAt - lastAt > ERROR_DEDUPE_WINDOW_MS) return false;
+  if (
+    JSON.stringify(stripRepeat(last.payload) ?? null) !==
+    JSON.stringify(stripRepeat(next.payload) ?? null)
+  ) {
+    return false;
+  }
+  const prevRepeat = typeof last.payload?.repeat === 'number' ? last.payload.repeat : 1;
+  last.payload = { ...(last.payload ?? {}), repeat: prevRepeat + 1 };
+  return true;
+}
+
+/**
+ * «Ошибки», которые на самом деле штатный teardown: наш автоперезаход/завершение
+ * закрывает комнату сам, и livekit-клиент пробрасывает это в onError. Логировать как
+ * сбой нельзя — иначе каждый успешный rejoin рисует ложную «Ошибку медиасервера».
+ */
+const BENIGN_ROOM_ERROR_PATTERNS = [/client initiated disconnect/i];
+
+export function isBenignRoomErrorMessage(message: string): boolean {
+  return BENIGN_ROOM_ERROR_PATTERNS.some((re) => re.test(message));
+}
+
+/** Перевод сырых сообщений livekit/WebRTC на понятный русский для админской хронологии. */
+const CALL_ERROR_PATTERNS: Array<[RegExp, string]> = [
+  [
+    /client initiated disconnect/i,
+    'Штатное отключение клиента (например, автоматический перезаход) — не является сбоем',
+  ],
+  [
+    /cannot establish a signal session/i,
+    'Внутренняя гонка переподключения сигналинга в LiveKit-клиенте — обычно безвредна, соединение восстанавливается само',
+  ],
+  [
+    /could not establish pc connection/i,
+    'Не удалось установить медиасоединение с сервером (ICE/UDP). Частая причина — сеть участника блокирует WebRTC; срабатывает автоматический перезаход',
+  ],
+  [
+    /ice (?:connection )?fail|failed to (?:restart|establish) ice/i,
+    'ICE-подключение к медиасерверу не удалось — у участника недоступны UDP/TURN',
+  ],
+  [/websocket|abnormal closure/i, 'Обрыв WebSocket-сигналинга с медиасервером'],
+  [/timed? ?out/i, 'Таймаут при подключении к медиасерверу'],
+  [/unauthorized|invalid token|token.*expired|\b40[13]\b/i, 'Проблема авторизации подключения (токен доступа)'],
+  [/notallowederror|permission denied/i, 'Нет разрешения на доступ к микрофону/камере'],
+  [/notfounderror|overconstrainederror/i, 'Запрошенное устройство (микрофон/камера) не найдено'],
+  [/notreadableerror|trackstarterror/i, 'Микрофон/камера заняты другим приложением или недоступны'],
+  [/failed to fetch|network ?error/i, 'Сетевая ошибка при обращении к медиасерверу'],
+  [/could not createoffer|negotiation failed|\bsdp\b/i, 'Ошибка согласования медиапараметров (SDP)'],
+];
+
+/** Понятная формулировка ошибки; неизвестные сообщения возвращаются как есть. */
+export function humanizeCallErrorMessage(raw: string): string {
+  const text = String(raw ?? '').trim();
+  if (!text) return text;
+  for (const [re, human] of CALL_ERROR_PATTERNS) {
+    if (re.test(text)) return human;
+  }
+  return text;
+}
+
+export type NetworkSample = {
+  effectiveType: string | null;
+  downlink: number | null;
+  rtt: number | null;
+};
+
+/**
+ * NetworkInformation шлёт `change` на любое шевеление RTT — на нестабильном 3G/4G это
+ * десятки событий за звонок, которые забивают журнал и лимит событий. Пропускаем не чаще
+ * minIntervalMs; подавленные изменения считаем в `flips`, чтобы «мигание» сети осталось видно.
+ */
+export function createNetworkChangeSampler(
+  emit: (sample: NetworkSample & { flips?: number }) => void,
+  opts?: { minIntervalMs?: number; now?: () => number },
+): (sample: NetworkSample) => void {
+  const minInterval = opts?.minIntervalMs ?? 15_000;
+  const now = opts?.now ?? (() => Date.now());
+  let lastSig: string | null = null;
+  let lastAt = Number.NEGATIVE_INFINITY;
+  let flips = 0;
+  return (sample) => {
+    const sig = `${sample.effectiveType ?? ''}|${sample.downlink ?? ''}|${sample.rtt ?? ''}`;
+    if (sig === lastSig) return;
+    lastSig = sig;
+    const t = now();
+    if (t - lastAt < minInterval) {
+      flips += 1;
+      return;
+    }
+    lastAt = t;
+    emit(flips > 0 ? { ...sample, flips } : { ...sample });
+    flips = 0;
+  };
+}
 
 const buffers = new Map<string, JournalEvent[]>();
 const flushTimers = new Map<string, number>();
@@ -70,13 +188,15 @@ export function logCallEvent(
 ): void {
   const buffer = buffers.get(callId);
   if (!buffer) return; // журнал не запущен для этого звонка
-  if (buffer.length >= MAX_BUFFERED_EVENTS) buffer.shift();
-  buffer.push({
+  const event: JournalEvent = {
     kind,
     severity: opts?.severity,
     at: new Date().toISOString(),
     payload: opts?.payload,
-  });
+  };
+  if (ERROR_DEDUPE_KINDS.has(kind) && mergeDuplicateErrorEvent(buffer, event)) return;
+  if (buffer.length >= MAX_BUFFERED_EVENTS) buffer.shift();
+  buffer.push(event);
 }
 
 export function flushCallJournal(callId: string, opts?: { keepalive?: boolean }): void {
@@ -294,14 +414,15 @@ export function attachCallJournal(room: Room, callId: string): () => void {
   const onOffline = () =>
     logCallEvent(callId, 'network_changed', { severity: 'warn', payload: { online: false } });
   const connection = typeof navigator !== 'undefined' ? (navigator as NavigatorWithConnection).connection : undefined;
+  const sampleNetworkChange = createNetworkChangeSampler((sample) =>
+    logCallEvent(callId, 'network_changed', { payload: { ...sample } }),
+  );
   const onConnectionChange = () => {
     if (!connection) return;
-    logCallEvent(callId, 'network_changed', {
-      payload: {
-        effectiveType: connection.effectiveType ?? null,
-        downlink: connection.downlink ?? null,
-        rtt: connection.rtt ?? null,
-      },
+    sampleNetworkChange({
+      effectiveType: connection.effectiveType ?? null,
+      downlink: connection.downlink ?? null,
+      rtt: connection.rtt ?? null,
     });
   };
 

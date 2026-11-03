@@ -10,6 +10,7 @@ import {
 } from 'react-icons/lu';
 
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
+import { humanizeCallErrorMessage } from '../calls/callJournal';
 import {
   apiErrorMessage,
   fetchCallJournal,
@@ -101,6 +102,15 @@ function str(v: unknown): string | null {
   return typeof v === 'string' && v.trim() !== '' ? v : null;
 }
 
+function pluralRu(n: number, one: string, few: string, many: string): string {
+  const mod100 = Math.abs(n) % 100;
+  const mod10 = mod100 % 10;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
+
 function callTypeLabel(c: Pick<CallJournalItem, 'type' | 'accessMode'>): string {
   if (c.type === 'direct') return 'личный';
   return c.accessMode === 'link' ? 'по ссылке' : 'групповой';
@@ -154,9 +164,13 @@ function EventPayloadView({ event }: { event: CallLogEvent }) {
     if (p.online === false) return line('сеть пропала');
     const et = str(p.effectiveType);
     const rtt = num(p.rtt);
+    const flips = num(p.flips);
     const parts = [et ? `тип ${et}` : null, rtt != null ? `RTT ${Math.round(rtt)} мс` : null].filter(
       Boolean,
     ) as string[];
+    if (flips != null && flips > 0) {
+      parts.push(`ещё ${flips} ${pluralRu(flips, 'изменение', 'изменения', 'изменений')} подряд`);
+    }
     return parts.length > 0 ? line(parts.join(' · ')) : null;
   }
   if (event.kind === 'participant_joined' || event.kind === 'participant_left') {
@@ -166,8 +180,26 @@ function EventPayloadView({ event }: { event: CallLogEvent }) {
   if (event.kind === 'device_error' || event.kind === 'room_error') {
     const message = str(p.message);
     const device = str(p.device);
-    const text = [device ? `устройство: ${device}` : null, message].filter(Boolean).join(' · ');
-    return text ? <p className="mt-0.5 text-[11px] font-medium text-red-700">{text}</p> : null;
+    const repeat = num(p.repeat);
+    const friendly = message ? humanizeCallErrorMessage(message) : null;
+    const text = [device ? `устройство: ${device}` : null, friendly ?? message]
+      .filter(Boolean)
+      .join(' · ');
+    return (
+      <>
+        {text ? (
+          <p className="mt-0.5 text-[11px] font-medium text-red-700">
+            {text}
+            {repeat != null && repeat > 1
+              ? ` · повторялась ${repeat} ${pluralRu(repeat, 'раз', 'раза', 'раз')} подряд`
+              : ''}
+          </p>
+        ) : null}
+        {friendly != null && message != null && friendly !== message ? (
+          <p className="mt-0.5 text-[11px] text-stone-400">{message}</p>
+        ) : null}
+      </>
+    );
   }
   if (event.kind === 'disconnected') {
     const reason = str(p.reason);
