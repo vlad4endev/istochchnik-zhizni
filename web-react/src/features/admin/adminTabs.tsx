@@ -1,6 +1,7 @@
 import type { IconType } from 'react-icons';
 import {
   LuBell,
+  LuBookOpen,
   LuCalendarDays,
   LuCalendarRange,
   LuChartColumnBig,
@@ -24,6 +25,7 @@ export interface AdminTabConfig {
     | 'members'
     | 'requests'
     | 'calendar'
+    | 'watch_topics'
     | 'events'
     | 'templates'
     | 'project'
@@ -71,6 +73,15 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     short: 'Молитва',
     description:
       'Дата старта цикла, члены церкви в ежедневной очереди на молитву, глобальные темы, служения и отступники в приложении.',
+  },
+  {
+    id: 'watch_topics',
+    label: 'Темы страж',
+    navLabel: 'Темы страж',
+    Icon: LuBookOpen,
+    short: 'Стражи',
+    description:
+      'Каталог ежедневных молитвенных тем для страж, дата старта цикла, очередь и ручное распределение по дням.',
   },
   {
     id: 'events',
@@ -212,6 +223,7 @@ export const ADMIN_SIDEBAR_GROUPS: readonly AdminSidebarGroup[] = [
     label: 'Контент',
     items: [
       { id: 'calendar' },
+      { id: 'watch_topics' },
       { id: 'events' },
       { id: 'templates' },
       { id: 'project' },

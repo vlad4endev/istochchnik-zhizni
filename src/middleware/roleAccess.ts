@@ -116,6 +116,19 @@ const COORDINATOR_DASHBOARD_NOTES_POST = /^\/api\/calendar\/dashboard-coordinato
 const COORDINATOR_DASHBOARD_NOTES_DELETE =
   /^\/api\/calendar\/dashboard-coordinator-notes\/(urgent_prayer|announcement)\/?$/;
 
+/** Темы страж: детальная проверка `calendar.watch_topics_edit` в контроллере. */
+function isWatchTopicsMutation(method: string, path: string): boolean {
+  if (SAFE_METHODS.has(method)) return false;
+  const p = path.split('?')[0];
+  if (!p.startsWith('/api/calendar/watch-topics')) return false;
+  return (
+    method === 'POST' ||
+    method === 'PATCH' ||
+    method === 'PUT' ||
+    method === 'DELETE'
+  );
+}
+
 /** Web Push / FCM: мутации привязаны к member_id из сессии (requireAuthSession в роутере). */
 const MEMBER_NOTIFICATIONS_POST =
   /^\/api\/notifications\/(?:subscribe|unsubscribe|save-token|save-voip-token|deliveries\/\d+\/open|deliveries\/\d+\/dismiss|deliveries\/open-all|deliveries\/local-reminder)\/?$/;
@@ -352,6 +365,11 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
   }
 
   if (req.method === 'DELETE' && COORDINATOR_DASHBOARD_NOTES_DELETE.test(fullPath) && authId) {
+    next();
+    return;
+  }
+
+  if (isWatchTopicsMutation(req.method, fullPath) && authId) {
     next();
     return;
   }

@@ -100,6 +100,7 @@ import {
 } from '../api';
 import { CHURCH_EVENT_CATEGORY_OPTIONS_FALLBACK } from '../churchEventCategoryOptions';
 import { GlobalNeedsSection } from '../GlobalNeedsSection';
+import { WatchTopicsSection } from '../WatchTopicsSection';
 import { UserListSkeleton } from '../../../components/skeletons/UserListSkeleton';
 import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
 import { BirthDayMonthFields } from '@/components/BirthDayMonthFields';
@@ -503,6 +504,11 @@ export function AdminPage() {
         )}
         {tab === 'requests' && <AccessRequestsSection />}
         {tab === 'calendar' && <CalendarSection />}
+        {tab === 'watch_topics' && (
+          <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+            <WatchTopicsSection />
+          </div>
+        )}
         {tab === 'events' && <EventsSection />}
         {tab === 'templates' && <TemplatesSection />}
         {tab === 'project' && <ProjectSection />}

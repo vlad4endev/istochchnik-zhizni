@@ -42,6 +42,21 @@ import {
   getNextWeekGlobal,
 } from '../controllers/globalNeedsController';
 import {
+  deleteWatchTopicHandler,
+  deleteWatchTopicRosterOrder,
+  getWatchTopicByDate,
+  getWatchTopicRoster,
+  getWatchTopicsCanEdit,
+  getWatchTopicsList,
+  getWatchTopicWeek,
+  patchWatchTopic,
+  postWatchTopic,
+  postWatchTopicAnchor,
+  postWatchTopicCycleStart,
+  putWatchTopicDayOverride,
+  putWatchTopicRosterOrder,
+} from '../controllers/prayerWatchTopicsController';
+import {
   deleteAllEvents,
   deleteEvent,
   deleteOccurrenceOverrideHandler,
@@ -130,6 +145,21 @@ router.get('/global/backsliders', getBacksliders);
 router.post('/global/backsliders', postBackslider);
 router.patch('/global/backsliders/:id', patchBackslider);
 router.delete('/global/backsliders/:id', deleteBacksliderHandler);
+
+/** Молитвенные темы страж (каталог + цикл + расписание). До `/:date`. */
+router.get('/watch-topics/can-edit', requireAuthSession, getWatchTopicsCanEdit);
+router.get('/watch-topics', requireAuthSession, getWatchTopicsList);
+router.post('/watch-topics', requireAuthSession, postWatchTopic);
+router.patch('/watch-topics/:id', requireAuthSession, patchWatchTopic);
+router.delete('/watch-topics/:id', requireAuthSession, deleteWatchTopicHandler);
+router.get('/watch-topics/week', requireAuthSession, getWatchTopicWeek);
+router.get('/watch-topics/roster', requireAuthSession, getWatchTopicRoster);
+router.put('/watch-topics/roster-order', requireAuthSession, putWatchTopicRosterOrder);
+router.delete('/watch-topics/roster-order', requireAuthSession, deleteWatchTopicRosterOrder);
+router.post('/watch-topics/cycle/start', requireAuthSession, postWatchTopicCycleStart);
+router.post('/watch-topics/cycle/anchor', requireAuthSession, postWatchTopicAnchor);
+router.put('/watch-topics/day/:date', requireAuthSession, putWatchTopicDayOverride);
+router.get('/watch-topics/:date', requireAuthSession, getWatchTopicByDate);
 
 router.get('/:date', getPrayerData);
 
