@@ -62,6 +62,7 @@ import { MessengerChatsSection } from '../MessengerChatsSection';
 import { BackupSettingsSection } from '../BackupSettingsSection';
 import { ProjectJournalSection } from '../ProjectJournalSection';
 import { DiagnosticsDashboardSection } from '../DiagnosticsDashboardSection';
+import { SiteContentSection } from '../SiteContentSection';
 import { useBrandingStore } from '../../branding/brandingStore';
 import {
   anchorPrayerCycleMember,
@@ -512,6 +513,7 @@ export function AdminPage() {
         {tab === 'requests' && <AccessRequestsSection />}
         {tab === 'calendar' && <CalendarSection />}
         {tab === 'events' && <EventsSection />}
+        {tab === 'site' && <SiteContentSection />}
         {tab === 'templates' && <TemplatesSection />}
         {tab === 'project' && <ProjectSection />}
         {tab === 'sections' && <AppSectionsAccessSection />}
