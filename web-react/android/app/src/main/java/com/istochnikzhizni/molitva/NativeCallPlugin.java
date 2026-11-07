@@ -86,8 +86,58 @@ public class NativeCallPlugin extends Plugin {
     final String callId = call.getString("callId", "");
     final Context ctx = getContext();
     stopRingtoneInternal();
-    if (ctx != null && callId != null && !callId.isEmpty()) {
-      CallNotificationHelper.cancelIncomingCall(ctx, callId);
+    if (ctx != null) {
+      OngoingCallService.stop(ctx);
+      if (callId != null && !callId.isEmpty()) {
+        CallNotificationHelper.cancelIncomingCall(ctx, callId);
+      }
+    }
+    call.resolve();
+  }
+
+  /**
+   * Keep LiveKit/WebRTC alive when the screen locks or the app is backgrounded.
+   * Starts a microphone(+camera) foreground service with an ongoing CallStyle notification.
+   */
+  @PluginMethod
+  public void startOngoing(PluginCall call) {
+    final Context ctx = getContext();
+    if (ctx == null) {
+      call.reject("no context");
+      return;
+    }
+    final String callId = call.getString("callId", "");
+    if (callId == null || callId.trim().isEmpty()) {
+      call.reject("callId required");
+      return;
+    }
+    final String peerName = call.getString("peerName", "Собеседник");
+    final String callType = call.getString("callType", "audio");
+    final String callKind = call.getString("callKind", "direct");
+    final Boolean hasVideoOpt = call.getBoolean("hasVideo");
+    final boolean hasVideo =
+      hasVideoOpt != null
+        ? hasVideoOpt.booleanValue()
+        : "video".equalsIgnoreCase(callType == null ? "audio" : callType);
+
+    stopRingtoneInternal();
+    CallNotificationHelper.cancelIncomingCall(ctx, callId.trim());
+    OngoingCallService.start(
+      ctx,
+      callId.trim(),
+      peerName == null ? "Собеседник" : peerName,
+      callType == null ? "audio" : callType,
+      callKind == null ? "direct" : callKind,
+      hasVideo
+    );
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void stopOngoing(PluginCall call) {
+    final Context ctx = getContext();
+    if (ctx != null) {
+      OngoingCallService.stop(ctx);
     }
     call.resolve();
   }
@@ -254,6 +304,20 @@ public class NativeCallPlugin extends Plugin {
     data.put("callId", callId == null ? "" : callId);
     if (instance != null) {
       instance.notifyListeners("ended", data);
+    }
+  }
+
+  /** User tapped «Завершить» on the ongoing-call notification (lock screen / shade). */
+  static void notifyHangupRequested(String callId) {
+    stopRingtoneIfPlaying();
+    final Context ctx = instance != null ? instance.getContext() : null;
+    if (ctx != null) {
+      OngoingCallService.stop(ctx);
+    }
+    final JSObject data = new JSObject();
+    data.put("callId", callId == null ? "" : callId);
+    if (instance != null) {
+      instance.notifyListeners("hangupRequested", data);
     }
   }
 
