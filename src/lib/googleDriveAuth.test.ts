@@ -48,7 +48,19 @@ function run(): void {
     resolveDriveOAuthRedirectUri(),
     'https://app.example.ru/api/backup/drive/oauth/callback',
   );
+  process.env.PUBLIC_WEB_ORIGIN = ' https://app.church-tambov.ru/\n';
+  assert.equal(
+    resolveDriveOAuthRedirectUri(),
+    'https://app.church-tambov.ru/api/backup/drive/oauth/callback',
+  );
   delete process.env.PUBLIC_WEB_ORIGIN;
+  assert.equal(
+    resolveDriveOAuthRedirectUri({
+      protocol: 'https',
+      headers: { host: 'app.church-tambov.ru\n' },
+    }),
+    'https://app.church-tambov.ru/api/backup/drive/oauth/callback',
+  );
 
   console.log('googleDriveAuth.test.ts: ok');
 }

@@ -26,10 +26,14 @@ API (только admin): `/api/backup/settings`, `/list`, `/create`, `/drive/st
 
 1. Google Cloud → APIs & Services → включите **Google Drive API**.
 2. Credentials → Create OAuth client ID → **Web application**.
-3. В Authorized redirect URIs добавьте `https://<ваш-домен>/api/backup/drive/oauth/callback`
-   (точный URL показан в админке).
-4. Скачайте JSON клиента, вставьте в «Резервная копия», сохраните, нажмите **Войти через Google**.
-5. Укажите ID папки того же аккаунта.
+3. Authorized JavaScript origins: `https://<ваш-домен>` (без пути и без пробелов).
+4. Authorized redirect URIs — **одной строкой, без пробелов и переносов**
+   (иначе Google: «Invalid Redirect: cannot contain whitespace»):
+   `https://<ваш-домен>/api/backup/drive/oauth/callback`
+   Для продакшена: `https://app.church-tambov.ru/api/backup/drive/oauth/callback`.
+   В админке есть кнопка «Копировать».
+5. Скачайте JSON клиента, вставьте в «Резервная копия», сохраните, нажмите **Войти через Google**.
+6. Укажите ID папки того же аккаунта.
 
 При первом входе Google покажет «приложение не проверено» — это нормально для своего клиента:
 «Дополнительные сведения» → перейти к приложению.
