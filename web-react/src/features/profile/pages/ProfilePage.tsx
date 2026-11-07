@@ -173,6 +173,7 @@ export function ProfilePage() {
         registrationStatus: normalizeRegistrationStatus(me.registration_status),
         username: (me.username ?? '').trim(),
         memberId: typeof me.id === 'number' ? me.id : null,
+        userId: typeof me.user_id === 'string' && me.user_id.trim() ? me.user_id.trim() : null,
       });
       const nextDraft = {
         first_name: me.first_name ?? '',

@@ -23,6 +23,7 @@ function applyRefreshedAccessToken(nextToken: string): void {
     registrationStatus: auth.registrationStatus,
     username: auth.username,
     memberId: auth.memberId,
+    userId: auth.userId,
   });
 }
 

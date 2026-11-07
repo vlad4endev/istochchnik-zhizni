@@ -33,6 +33,7 @@ const LS_ROLE = 'auth_role';
 const LS_REG = 'auth_registration_status';
 const LS_USERNAME = 'auth_username';
 const LS_MEMBER_ID = 'auth_member_id';
+const LS_USER_ID = 'auth_user_id';
 
 export function getAuthToken(): string | null {
   return storage.getString(LS_TOKEN) ?? null;
@@ -54,6 +55,7 @@ export function clearAuthSession(): void {
   storage.remove(LS_REG);
   storage.remove(LS_USERNAME);
   storage.remove(LS_MEMBER_ID);
+  storage.remove(LS_USER_ID);
 }
 
 export function persistAuthProfile(profile: {
@@ -63,6 +65,7 @@ export function persistAuthProfile(profile: {
   registrationStatus: string;
   username: string;
   memberId: number | null;
+  userId: string | null;
 }): void {
   storage.set(LS_FIRST, profile.firstName);
   storage.set(LS_LAST, profile.lastName);
@@ -74,6 +77,12 @@ export function persistAuthProfile(profile: {
   } else {
     storage.remove(LS_MEMBER_ID);
   }
+  const uid = profile.userId?.trim() ?? '';
+  if (uid) {
+    storage.set(LS_USER_ID, uid);
+  } else {
+    storage.remove(LS_USER_ID);
+  }
 }
 
 export function readAuthProfile(): {
@@ -83,9 +92,11 @@ export function readAuthProfile(): {
   registrationStatus: string;
   username: string;
   memberId: number | null;
+  userId: string | null;
 } {
   const memberIdRaw = storage.getString(LS_MEMBER_ID);
   const memberId = memberIdRaw ? Number(memberIdRaw) : null;
+  const userId = storage.getString(LS_USER_ID)?.trim() || null;
   return {
     firstName: storage.getString(LS_FIRST) ?? '',
     lastName: storage.getString(LS_LAST) ?? '',
@@ -93,5 +104,6 @@ export function readAuthProfile(): {
     registrationStatus: storage.getString(LS_REG) ?? 'active',
     username: storage.getString(LS_USERNAME) ?? '',
     memberId: Number.isFinite(memberId) ? memberId : null,
+    userId,
   };
 }
