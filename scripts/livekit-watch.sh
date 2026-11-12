@@ -17,9 +17,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 YAML="$ROOT/docker/livekit.yaml"
 ENV_FILE="$ROOT/.env"
-LOG_DIR="$ROOT/logs"
-LOCK_FILE="$LOG_DIR/livekit-watch.lock"
-COOLDOWN_FILE="$LOG_DIR/livekit-watch.last"
+# /tmp, а не каталог репозитория: таймер идёт от root, ручной запуск — от пользователя.
+# Файл 666, иначе второй пользователь получает Permission denied на flock.
+LOCK_FILE="/tmp/istochnik-livekit-watch.lock"
+COOLDOWN_FILE="/tmp/istochnik-livekit-watch.last"
 COOLDOWN_SEC=120
 # Совпадает с дефолтом NODE_IP в docker-compose.livekit-addon.yml.
 DEFAULT_NODE_IP="77.93.125.36"
@@ -221,10 +222,9 @@ install_timer() {
   fi
   if ! command -v systemctl >/dev/null 2>&1; then
     echo "systemd не найден. Добавьте в cron:" >&2
-    echo "* * * * * cd $ROOT && /usr/bin/bash scripts/livekit-watch.sh --quiet >>$LOG_DIR/livekit-watch.log 2>&1" >&2
+    echo "* * * * * cd $ROOT && /usr/bin/bash scripts/livekit-watch.sh --quiet >>/tmp/istochnik-livekit-watch.log 2>&1" >&2
     exit 1
   fi
-  mkdir -p "$LOG_DIR"
   cat >"/etc/systemd/system/$UNIT_SERVICE" <<EOF
 [Unit]
 Description=Restore Istochnik LiveKit when :7880 is down
@@ -319,12 +319,24 @@ run_fix_config() {
   fi
 }
 
+# 0 — файл можно открыть на запись и он доступен всем локальным пользователям.
+ensure_shared_file() {
+  local f="$1"
+  if [[ -e "$f" && ! -w "$f" ]]; then
+    return 1
+  fi
+  (umask 000; : >>"$f") || return 1
+  chmod 666 "$f" 2>/dev/null || true
+  [[ -w "$f" ]]
+}
+
 run_watch() {
-  mkdir -p "$LOG_DIR"
-  exec 9>"$LOCK_FILE"
-  if ! flock -n 9; then
-    say "уже выполняется"
-    exit 0
+  if ensure_shared_file "$LOCK_FILE"; then
+    exec 9>"$LOCK_FILE"
+    if ! flock -n 9; then
+      say "уже выполняется"
+      exit 0
+    fi
   fi
 
   if calls_disabled; then
@@ -356,7 +368,10 @@ run_watch() {
     exit 0
   fi
 
-  printf '%s\n' "$now" >"$COOLDOWN_FILE"
+  if ensure_shared_file "$COOLDOWN_FILE"; then
+    printf '%s\n' "$now" >"$COOLDOWN_FILE" || true
+    chmod 666 "$COOLDOWN_FILE" 2>/dev/null || true
+  fi
 
   local changed=0
   if config_needs_patch "$ip"; then
@@ -385,7 +400,7 @@ run_watch() {
   recreate_livekit
   if wait_livekit; then
     note "LiveKit снова слушает 127.0.0.1:7880"
-    rm -f "$COOLDOWN_FILE"
+    rm -f "$COOLDOWN_FILE" 2>/dev/null || true
     exit 0
   fi
 
