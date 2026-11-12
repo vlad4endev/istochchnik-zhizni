@@ -10,10 +10,14 @@ bind_addresses:
 rtc:
   udp_port: 7882
   tcp_port: 7881
-  use_external_ip: true
-  # v1.13+: оба кандидата (WAN + LAN) + без self-ping за NAT
+  # Не включать. use_external_ip: true заставляет Validate сходить в STUN до bind :7880.
+  # Если исходящий UDP до STUN недоступен, процесс падает:
+  #   could not validate RTC config: could not resolve external IP: context deadline exceeded
+  # Белый IP передаёт entrypoint флагом --node-ip из NODE_IP (LIVEKIT_RTC_NODE_IP).
+  # При заданном node_ip флаг use_external_ip всё равно имеет приоритет и STUN не пропускается.
+  use_external_ip: false
+  # WAN-кандидат из --node-ip плюс LAN-адреса хоста (клиенты в той же сети).
   advertise_internal_ip: true
-  skip_external_ip_validation: true
   stun_servers:
     - stun.l.google.com:19302
   congestion_control:
