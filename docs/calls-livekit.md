@@ -62,8 +62,11 @@ git pull origin main
 npm run server:update
 # в логе должно быть: Compose: livekit addon (…)
 
-# если LiveKit всё же упал (UFW/iptables после ребута и т.п.):
+# если LiveKit всё же упал (UFW/iptables после ребута, таймаут STUN и т.п.):
 sudo bash scripts/repair-livekit.sh
+
+# автовосстановление раз в минуту (только контейнер livekit, сайт не пересобирает):
+sudo bash scripts/livekit-watch.sh --install
 ```
 
 Если задаёте свой `UPDATE_COMPOSE_FILES`, включите addon явно:
