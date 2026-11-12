@@ -62,8 +62,11 @@ git pull origin main
 npm run server:update
 # в логе должно быть: Compose: livekit addon (…)
 
-# если LiveKit всё же упал (UFW/iptables после ребута и т.п.):
+# если LiveKit всё же упал (UFW/iptables после ребута, таймаут STUN и т.п.):
 sudo bash scripts/repair-livekit.sh
+
+# автовосстановление раз в минуту (только контейнер livekit, сайт не пересобирает):
+sudo bash scripts/livekit-watch.sh --install
 ```
 
 Если задаёте свой `UPDATE_COMPOSE_FILES`, включите addon явно:
@@ -79,7 +82,7 @@ Entrypoint: `docker/livekit-entrypoint.sh`.
 
 ### Сеть и DNS
 
-Host network + `advertise_internal_ip` / `skip_external_ip_validation`: ICE отдаёт белый IP и LAN. Signal: `host.docker.internal:7880` (repair открывает UFW с docker-сетей).
+Host network. Белый IP задаётся `LIVEKIT_RTC_NODE_IP` → `NODE_IP` → `livekit-server --node-ip` (в yaml `use_external_ip: false`). `advertise_internal_ip` добавляет LAN-кандидат. STUN на старте не вызывается: при `use_external_ip: true` таймаут STUN роняет процесс до bind `:7880` (`could not resolve external IP`). Signal: `host.docker.internal:7880` (repair открывает UFW с docker-сетей).
 
 1. Браузер: `wss://app…/lk` → nginx web → host `:7880`.
 2. Роутер → LAN хоста:
@@ -111,10 +114,11 @@ docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml logs li
 ```
 
 - `502`/`504` на `/lk/` / `curl 127.0.0.1:7880` connection refused → LiveKit не запустился. Частые причины:
-  1. В `docker/livekit.yaml` поля не из v1.8.4 (`advertise_internal_ip` / `skip_external_ip_validation`) → `could not parse config`
-  2. `LIVEKIT_KEYS` без пробела после `:` (нужно `KEY: SECRET`)
-  3. Пустые `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` в `.env` — `bash scripts/check-livekit-env.sh`
-  4. Стек без `docker-compose.livekit-addon.yml`  
+  1. Лог `could not resolve external IP: context deadline exceeded` — включён `use_external_ip: true`, STUN с хоста не ответил, процесс не слушает 7880. Должно быть `use_external_ip: false` и `--node-ip` из `LIVEKIT_RTC_NODE_IP`.
+  2. В `docker/livekit.yaml` поля не из v1.13 (`advertise_internal_ip`) → `could not parse config`
+  3. `LIVEKIT_KEYS` без пробела после `:` (нужно `KEY: SECRET`)
+  4. Пустые `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` в `.env` — `bash scripts/check-livekit-env.sh`
+  5. Стек без `docker-compose.livekit-addon.yml`  
   Поднять с **обоими** `-f`:  
   `docker compose -f docker-compose.yml -f docker-compose.livekit-addon.yml up -d --force-recreate livekit`
 - Сообщение UI «Сервис звонков временно недоступен» = API не смог достучаться до LiveKit / неверные ключи / стек без addon.

@@ -304,7 +304,7 @@ export function deriveCallIssues(input: CallIssueInput): CallIssue[] {
       code: 'media_never_connected',
       severity: 'error',
       title: 'Медиаподключение не установлено',
-      hint: 'Клиент получил токен, но так и не подключился к комнате LiveKit. Типичные причины: блокировка UDP/WebRTC в сети участника, отсутствие TURN, агрессивный файрвол. Проверьте порты 7881 и UDP-диапазон.',
+      hint: 'Клиент получил токен, но WebSocket до комнаты не открылся. Если в room_error «websocket» или «signal» — LiveKit не слушает :7880 (часто падение на старте, см. логи контейнера livekit и /health/livekit). Порты 7881 и UDP — только когда сигналинг уже есть, а медиа нет.',
     });
   }
 

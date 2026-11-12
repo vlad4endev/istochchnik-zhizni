@@ -28,7 +28,9 @@ if command -v iptables >/dev/null 2>&1; then
 fi
 
 echo ""
-echo "== 3) recreate livekit (host network, v1.13.9) =="
+echo "== 3) rtc config + recreate livekit (host network, v1.13.9) =="
+# use_external_ip: true роняет процесс до bind :7880, restart: always это не лечит.
+bash "$ROOT/scripts/livekit-watch.sh" --fix-config
 "${COMPOSE[@]}" pull livekit 2>/dev/null || true
 "${COMPOSE[@]}" up -d --force-recreate --no-deps livekit
 
