@@ -44,6 +44,9 @@ String plainSongText(String raw) {
       .replaceAll('&amp;', '&');
 }
 
+/// Моноширинные шрифты по платформам: аккорды должны стоять над своими слогами.
+const _mono = ['Roboto Mono', 'Menlo', 'Courier New', 'Courier', 'monospace'];
+
 final _sectionLine = RegExp(
   r'^\s*\[?\s*((?:припев|куплет|бридж|мост|кода|вступление|проигрыш|окончание|chorus|verse|bridge|intro|outro)[^\]]*?)\s*\]?\s*:?\s*$',
   caseSensitive: false,
@@ -185,11 +188,11 @@ class _StackedLine extends StatelessWidget {
           children: [
             Text(
               chords,
-              style: TextStyle(color: colors.chord, fontWeight: FontWeight.w800, fontFamily: 'monospace', fontSize: fontSize * 0.82),
+              style: TextStyle(color: colors.chord, fontWeight: FontWeight.w800, fontFamily: 'monospace', fontFamilyFallback: _mono, fontSize: fontSize * 0.82),
             ),
             Text(
               lyrics,
-              style: TextStyle(fontFamily: 'monospace', fontSize: fontSize, height: 1.35, color: colors.text),
+              style: TextStyle(fontFamily: 'monospace', fontFamilyFallback: _mono, fontSize: fontSize, height: 1.35, color: colors.text),
             ),
           ],
         ),
