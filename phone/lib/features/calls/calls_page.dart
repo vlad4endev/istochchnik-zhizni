@@ -2,8 +2,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/church_api.dart';
+import '../../core/dates.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
+import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 
 class CallsPage extends StatefulWidget {
@@ -41,31 +43,49 @@ class _CallsPageState extends State<CallsPage> {
     }
   }
 
+  (String, Tone) _status(String status) => switch (status) {
+        'missed' => ('Пропущен', Tone.red),
+        'declined' => ('Отклонён', Tone.red),
+        'ended' || 'completed' => ('Завершён', Tone.neutral),
+        'active' || 'ongoing' => ('Идёт', Tone.green),
+        'ringing' => ('Вызов', Tone.amber),
+        _ => (status, Tone.neutral),
+      };
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Звонки')),
+    return ChurchPage(
+      title: 'Звонки',
+      subtitle: 'Журнал звонков',
       body: AsyncBody(
         loading: _loading,
         error: _error,
         onRetry: _load,
-        child: ListView(
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'Журнал звонков церкви. Разговор внутри приложения (аудио и видео, как на сайте) подключается следующим шагом — для него нужен нативный LiveKit.',
+        child: _items.isEmpty
+            ? const EmptyHint('Звонков пока нет', icon: Icons.call_outlined, hint: 'Позвонить можно из любого чата — кнопка с трубкой вверху.')
+            : SheetList(
+                onRefresh: _load,
+                children: [
+                  ListGroup(
+                    children: [
+                      for (final raw in _items)
+                        Builder(builder: (context) {
+                          final item = asMap(raw);
+                          final video = str(item['call_type']) == 'video';
+                          final (label, tone) = _status(str(item['status']));
+                          return ListRow(
+                            leading: IconTile(video ? Icons.videocam_outlined : Icons.call_outlined, tone: tone == Tone.red ? Tone.red : Tone.violet),
+                            title: str(item['title']).isEmpty ? 'Звонок' : str(item['title']),
+                            subtitle: [video ? 'Видеозвонок' : 'Аудиозвонок', relativeTime(item['created_at'])]
+                                .where((part) => part.isNotEmpty)
+                                .join(' · '),
+                            trailing: label.isEmpty ? null : StatusPill(label, tone: tone),
+                          );
+                        }),
+                    ],
+                  ),
+                ],
               ),
-            ),
-            if (_items.isEmpty) const EmptyHint('Звонков пока нет'),
-            for (final raw in _items)
-              ListTile(
-                leading: Icon(str(asMap(raw)['call_type']) == 'video' ? Icons.videocam_outlined : Icons.call_outlined),
-                title: Text(str(asMap(raw)['title']).isEmpty ? 'Звонок' : str(asMap(raw)['title'])),
-                subtitle: Text('${str(asMap(raw)['status'])} · ${str(asMap(raw)['created_at'])}'),
-              ),
-          ],
-        ),
       ),
     );
   }

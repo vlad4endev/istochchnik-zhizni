@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
+import '../../ui/kit/kit.dart';
 
 class CallPage extends StatefulWidget {
   const CallPage({
@@ -152,62 +153,231 @@ class _CallPageState extends State<CallPage> {
   @override
   Widget build(BuildContext context) {
     final others = _room.remoteParticipants.length;
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
-      body: Center(
+    final ringing = widget.incoming && !_joined && _error == null;
+    final status = _error ??
+        (_joined
+            ? (others == 0 ? 'Ждём собеседника…' : (others == 1 ? 'Идёт разговор' : 'В разговоре: $others'))
+            : widget.incoming
+                ? (widget.video ? 'Входящий видеозвонок' : 'Входящий звонок')
+                : 'Соединяем…');
+    return DarkPage(
+      child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.call, size: 56),
-              const SizedBox(height: 12),
               Text(
-                _error ??
-                    (_joined
-                        ? (others == 0 ? 'Ждём собеседника' : 'В разговоре: $others')
-                        : widget.incoming
-                            ? 'Входящий звонок'
-                            : 'Соединяем…'),
-                textAlign: TextAlign.center,
+                ringing ? (widget.video ? 'ВХОДЯЩИЙ ВИДЕОЗВОНОК' : 'ВХОДЯЩИЙ ЗВОНОК') : (widget.video ? 'ВИДЕОЗВОНОК' : 'ЗВОНОК'),
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 2.2, color: ChurchColors.amber),
               ),
-              const SizedBox(height: 24),
-              if (widget.incoming && !_joined && _error == null)
+              const Spacer(),
+              _Pulse(active: !_joined && _error == null, child: ChurchAvatar(name: widget.title, size: 120)),
+              const SizedBox(height: 28),
+              Text(
+                widget.title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.4),
+              ),
+              const SizedBox(height: 8),
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  status,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15.5, color: _error != null ? const Color(0xFFFFB4C0) : const Color(0xB3FFFFFF)),
+                ),
+              ),
+              const Spacer(),
+              if (ringing)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    FilledButton(onPressed: _connecting ? null : _connect, child: const Text('Ответить')),
-                    const SizedBox(width: 12),
-                    OutlinedButton(onPressed: _decline, child: const Text('Отклонить')),
+                    _CallButton(
+                      icon: Icons.call_end_rounded,
+                      label: 'Отклонить',
+                      color: ChurchColors.danger,
+                      onTap: _decline,
+                    ),
+                    _CallButton(
+                      icon: widget.video ? Icons.videocam_rounded : Icons.call_rounded,
+                      label: 'Ответить',
+                      color: ChurchColors.successBright,
+                      busy: _connecting,
+                      onTap: _connecting ? null : _connect,
+                    ),
                   ],
                 )
               else ...[
-                if (_error != null) FilledButton(onPressed: _connect, child: const Text('Повторить')),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton.filledTonal(
-                      onPressed: !_joined
-                          ? null
-                          : () async {
-                              final next = !_muted;
-                              await _room.localParticipant?.setMicrophoneEnabled(!next);
-                              setState(() => _muted = next);
-                            },
-                      icon: Icon(_muted ? Icons.mic_off : Icons.mic),
-                    ),
-                    const SizedBox(width: 16),
-                    IconButton.filled(
-                      style: IconButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
-                      onPressed: _hangUp,
-                      icon: const Icon(Icons.call_end),
-                    ),
-                  ],
+                if (_error != null) ...[
+                  _CallButton(icon: Icons.refresh_rounded, label: 'Повторить', color: Colors.white.withValues(alpha: 0.16), onTap: _connect),
+                  const SizedBox(height: 20),
+                ],
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _CallButton(
+                        icon: _muted ? Icons.mic_off_rounded : Icons.mic_none_rounded,
+                        label: _muted ? 'Включить' : 'Микрофон',
+                        color: _muted ? Colors.white : Colors.white.withValues(alpha: 0.14),
+                        iconColor: _muted ? ChurchColors.night : Colors.white,
+                        size: 60,
+                        onTap: !_joined
+                            ? null
+                            : () async {
+                                final next = !_muted;
+                                await _room.localParticipant?.setMicrophoneEnabled(!next);
+                                setState(() => _muted = next);
+                              },
+                      ),
+                      const SizedBox(width: 28),
+                      _CallButton(
+                        icon: Icons.call_end_rounded,
+                        label: 'Завершить',
+                        color: ChurchColors.danger,
+                        size: 60,
+                        onTap: _hangUp,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Pulse extends StatefulWidget {
+  const _Pulse({required this.child, required this.active});
+  final Widget child;
+  final bool active;
+
+  @override
+  State<_Pulse> createState() => _PulseState();
+}
+
+class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800));
+
+  @override
+  void initState() {
+    super.initState();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(covariant _Pulse oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _sync();
+  }
+
+  void _sync() {
+    final reduce = WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
+    if (widget.active && !reduce) {
+      if (!_controller.isAnimating) _controller.repeat();
+    } else {
+      _controller.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 220,
+      height: 220,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final t = _controller.value;
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              for (final offset in const [0.0, 0.5])
+                Builder(builder: (context) {
+                  final v = (t + offset) % 1;
+                  return Container(
+                    width: 130 + 90 * v,
+                    height: 130 + 90 * v,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: ChurchColors.amber.withValues(alpha: widget.active ? 0.35 * (1 - v) : 0)),
+                    ),
+                  );
+                }),
+              child!,
+            ],
+          );
+        },
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+class _CallButton extends StatelessWidget {
+  const _CallButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+    this.iconColor = Colors.white,
+    this.size = 68,
+    this.busy = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final Color iconColor;
+  final VoidCallback? onTap;
+  final double size;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      enabled: onTap != null,
+      excludeSemantics: true,
+      child: Opacity(
+        opacity: onTap == null && !busy ? 0.45 : 1,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Material(
+              color: color,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onTap,
+                child: SizedBox(
+                  width: size,
+                  height: size,
+                  child: busy
+                      ? const Padding(padding: EdgeInsets.all(22), child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
+                      : Icon(icon, color: iconColor, size: size * 0.42),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
+          ],
         ),
       ),
     );

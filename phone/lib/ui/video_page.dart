@@ -38,7 +38,11 @@ class _VideoPageState extends State<VideoPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white, title: const Text('Видео')),
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text('Видео', style: TextStyle(fontWeight: FontWeight.w700)),
+      ),
       body: Column(
         children: [
           Expanded(
@@ -47,7 +51,7 @@ class _VideoPageState extends State<VideoPage> {
                   ? Text(_error!, style: const TextStyle(color: Colors.white))
                   : _controller.value.isInitialized
                       ? AspectRatio(aspectRatio: _controller.value.aspectRatio, child: VideoPlayer(_controller))
-                      : const CircularProgressIndicator(),
+                      : const CircularProgressIndicator(color: Color(0xFFF2B879)),
             ),
           ),
           if (widget.caption.isNotEmpty)

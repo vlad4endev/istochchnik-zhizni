@@ -2,8 +2,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/church_api.dart';
+import '../../core/dates.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
+import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 
 class RequestsPage extends StatefulWidget {
@@ -17,6 +19,8 @@ class _RequestsPageState extends State<RequestsPage> {
   bool _loading = true;
   String? _error;
   List<dynamic> _items = const [];
+  String _filter = 'all';
+  final Set<int> _busy = {};
 
   @override
   void initState() {
@@ -46,54 +50,107 @@ class _RequestsPageState extends State<RequestsPage> {
   }
 
   Future<void> _review(int id, {required bool approve}) async {
+    if (_busy.contains(id)) return;
+    setState(() => _busy.add(id));
     try {
       await ChurchApi(context.read<SessionController>()).reviewRequest(id, approve: approve);
       await _load();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(describeDio(error))));
+      showMessage(context, describeDio(error));
+    } finally {
+      if (mounted) setState(() => _busy.remove(id));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Заявки')),
+    final palette = context.palette;
+    final visible = _items.map(asMap).where((item) {
+      if (_filter == 'all') return true;
+      final reset = str(item['request_type']) == 'password_reset';
+      return _filter == 'reset' ? reset : !reset;
+    }).toList();
+    return ChurchPage(
+      title: 'Заявки',
+      subtitle: _items.isEmpty ? 'Новых нет' : '${_items.length} ожидают',
       body: AsyncBody(
         loading: _loading,
         error: _error,
         onRetry: _load,
-        child: _items.isEmpty
-            ? const EmptyHint('Новых заявок нет')
-            : ListView.builder(
-                itemCount: _items.length,
-                itemBuilder: (context, index) {
-                  final item = asMap(_items[index]);
+        child: SheetList(
+          onRefresh: _load,
+          children: [
+            SegmentedPills<String>(
+              segments: const [('all', 'Все'), ('registration', 'Регистрация'), ('reset', 'Сброс пароля')],
+              selected: _filter,
+              onChanged: (value) => setState(() => _filter = value),
+            ),
+            if (visible.isEmpty)
+              const EmptyHint('Новых заявок нет', icon: Icons.how_to_reg_outlined)
+            else
+              for (final item in visible)
+                Builder(builder: (context) {
                   final id = asInt(item['id']);
-                  return Card(
-                    margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('${str(item['first_name'])} ${str(item['last_name'])}', style: Theme.of(context).textTheme.titleMedium),
-                          Text(str(item['phone_number'])),
-                          Text(str(item['request_type']) == 'password_reset' ? 'Сброс пароля' : 'Регистрация'),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              FilledButton(onPressed: () => _review(id, approve: true), child: const Text('Принять')),
-                              const SizedBox(width: 8),
-                              OutlinedButton(onPressed: () => _review(id, approve: false), child: const Text('Отклонить')),
-                            ],
-                          ),
+                  final name = '${str(item['first_name'])} ${str(item['last_name'])}'.trim();
+                  final reset = str(item['request_type']) == 'password_reset';
+                  final when = relativeTime(item['created_at']);
+                  final busy = _busy.contains(id);
+                  return ChurchCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            ChurchAvatar(name: name.isEmpty ? '?' : name),
+                            const SizedBox(width: Space.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(name.isEmpty ? 'Без имени' : name, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: palette.ink)),
+                                  Text(
+                                    [str(item['phone_number']), when].where((part) => part.isNotEmpty).join(' · '),
+                                    style: ChurchType.caption.copyWith(color: palette.inkMuted),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            StatusPill(reset ? 'Сброс пароля' : 'Регистрация'),
+                          ],
+                        ),
+                        if (str(item['review_note']).isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          InfoBanner(str(item['review_note'])),
                         ],
-                      ),
+                        const SizedBox(height: Space.md),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: PrimaryButton(
+                                label: 'Одобрить',
+                                icon: Icons.check_rounded,
+                                height: 48,
+                                busy: busy,
+                                onPressed: () => _review(id, approve: true),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: SecondaryButton(
+                                label: 'Отклонить',
+                                height: 48,
+                                onPressed: busy ? null : () => _review(id, approve: false),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   );
-                },
-              ),
+                }),
+          ],
+        ),
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
+import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 
 class BiblePage extends StatefulWidget {
@@ -45,32 +46,52 @@ class _BiblePageState extends State<BiblePage> {
   Widget build(BuildContext context) {
     final nt = _books.where((b) => str(asMap(b)['testament']) == 'nt').toList();
     final ot = _books.where((b) => str(asMap(b)['testament']) == 'ot').toList();
-    return Scaffold(
-      appBar: AppBar(title: const Text('Библия')),
+    return ChurchPage(
+      title: 'Библия',
+      subtitle: 'Синодальный перевод',
       body: AsyncBody(
         loading: _loading,
         error: _error,
         onRetry: _load,
-        child: ListView(
-          children: [
-            const ListTile(title: Text('Новый Завет')),
-            for (final raw in nt) _book(context, asMap(raw)),
-            const ListTile(title: Text('Ветхий Завет')),
-            for (final raw in ot) _book(context, asMap(raw)),
-            if (_books.isEmpty) const EmptyHint('Текст ещё не загружен на сервере'),
-          ],
-        ),
+        child: _books.isEmpty
+            ? const EmptyHint('Текст ещё не загружен на сервере', icon: Icons.menu_book_outlined)
+            : SheetList(
+                children: [
+                  if (nt.isNotEmpty) ...[
+                    const SectionLabel('Новый Завет'),
+                    ListGroup(children: [for (final raw in nt) _book(context, asMap(raw), Tone.wine)]),
+                  ],
+                  if (ot.isNotEmpty) ...[
+                    const SectionLabel('Ветхий Завет'),
+                    ListGroup(children: [for (final raw in ot) _book(context, asMap(raw), Tone.amber)]),
+                  ],
+                ],
+              ),
       ),
     );
   }
 
-  Widget _book(BuildContext context, Map<String, dynamic> book) {
-    return ListTile(
-      title: Text(str(book['short_name']).isEmpty ? str(book['name']) : str(book['short_name'])),
-      subtitle: Text(str(book['name'])),
+  Widget _book(BuildContext context, Map<String, dynamic> book, Tone tone) {
+    final short = str(book['short_name']).isEmpty ? str(book['name']) : str(book['short_name']);
+    final chapters = asInt(book['chapters_count']);
+    return ListRow(
+      leading: Container(
+        width: 42,
+        height: 42,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: tone.bg(context.palette), borderRadius: BorderRadius.circular(Radii.md)),
+        child: Text(
+          short.isEmpty ? '?' : short.substring(0, short.length >= 2 ? 2 : 1),
+          style: TextStyle(fontWeight: FontWeight.w800, color: tone.fg(context.palette)),
+        ),
+      ),
+      title: short,
+      subtitle: [str(book['name']) == short ? '' : str(book['name']), if (chapters > 0) 'глав: $chapters']
+          .where((part) => part.isNotEmpty)
+          .join(' · '),
       onTap: () => pushPage(
         context,
-        ChapterPage(slug: str(book['slug']), title: str(book['short_name']), chapters: asInt(book['chapters_count'])),
+        ChapterPage(slug: str(book['slug']), title: short, chapters: chapters),
       ),
     );
   }
@@ -129,50 +150,67 @@ class _ChapterPageState extends State<ChapterPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('${widget.title} $_chapter')),
-      body: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(onPressed: _chapter <= 1 ? null : () => _move(-1), icon: const Icon(Icons.chevron_left)),
-              Text('Глава $_chapter'),
-              IconButton(
-                onPressed: widget.chapters > 0 && _chapter >= widget.chapters ? null : () => _move(1),
-                icon: const Icon(Icons.chevron_right),
-              ),
-            ],
-          ),
-          Expanded(
-            child: AsyncBody(
-              loading: _loading,
-              error: _error,
-              onRetry: _load,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
+    final palette = context.palette;
+    final canPrev = _chapter > 1;
+    final canNext = !(widget.chapters > 0 && _chapter >= widget.chapters);
+    return ChurchPage(
+      title: '${widget.title} $_chapter',
+      subtitle: widget.chapters > 0 ? 'Глава $_chapter из ${widget.chapters}' : 'Глава $_chapter',
+      body: AsyncBody(
+        loading: _loading,
+        error: _error,
+        onRetry: _load,
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(22, 22, 22, 24 + MediaQuery.paddingOf(context).bottom),
+          children: [
+            Text(
+              'Глава $_chapter',
+              style: ChurchType.serifTitle.copyWith(fontSize: 26, color: palette.ink),
+            ),
+            const SizedBox(height: 14),
+            Text.rich(
+              TextSpan(
                 children: [
-                  for (final raw in _verses)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(
-                              text: '${asInt(asMap(raw)['verse'])} ',
-                              style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700),
-                            ),
-                            TextSpan(text: str(asMap(raw)['text'])),
-                          ],
+                  for (final raw in _verses) ...[
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.top,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 4, top: 2),
+                        child: Text(
+                          '${asInt(asMap(raw)['verse'])}',
+                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: palette.accent),
                         ),
-                        style: const TextStyle(fontSize: 17, height: 1.45),
                       ),
                     ),
+                    TextSpan(text: '${str(asMap(raw)['text'])} '),
+                  ],
                 ],
               ),
+              style: TextStyle(fontSize: 17.5, height: 1.65, color: palette.ink),
             ),
-          ),
-        ],
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: SecondaryButton(
+                    label: 'Назад',
+                    icon: Icons.chevron_left_rounded,
+                    onPressed: canPrev ? () => _move(-1) : null,
+                  ),
+                ),
+                const SizedBox(width: Space.md),
+                Expanded(
+                  child: PrimaryButton(
+                    label: 'Далее',
+                    icon: Icons.chevron_right_rounded,
+                    height: 50,
+                    onPressed: canNext ? () => _move(1) : null,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
