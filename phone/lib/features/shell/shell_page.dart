@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/session.dart';
+import '../../ui/kit/kit.dart';
 import '../chats/chats_page.dart';
 import '../feed/feed_page.dart';
 import '../home/home_page.dart';
@@ -15,8 +16,15 @@ class ShellPage extends StatefulWidget {
   State<ShellPage> createState() => _ShellPageState();
 }
 
+class _Tab {
+  const _Tab(this.id, this.item, this.page);
+  final String id;
+  final NavItem item;
+  final Widget page;
+}
+
 class _ShellPageState extends State<ShellPage> {
-  int _index = 0;
+  String _current = 'home';
   int _unread = 0;
 
   @override
@@ -38,36 +46,54 @@ class _ShellPageState extends State<ShellPage> {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
-    final pages = <Widget>[
-      if (session.canOpen('dashboard')) const HomePage(),
-      const FeedPage(),
-      if (session.canOpen('prayer')) const PrayerPage(),
-      if (session.canOpen('messenger')) const ChatsPage(),
-      const MorePage(),
+    final tabs = <_Tab>[
+      if (session.canOpen('dashboard'))
+        const _Tab(
+          'home',
+          NavItem(label: 'Главная', icon: Icons.home_outlined, activeIcon: Icons.home_rounded),
+          HomePage(),
+        ),
+      if (session.canOpen('prayer'))
+        const _Tab(
+          'prayer',
+          NavItem(label: 'Молитва', icon: Icons.church_outlined, activeIcon: Icons.church_rounded),
+          PrayerPage(),
+        ),
+      const _Tab(
+        'feed',
+        NavItem(label: 'Лента', icon: Icons.article_outlined, activeIcon: Icons.article_rounded),
+        FeedPage(),
+      ),
+      if (session.canOpen('messenger'))
+        _Tab(
+          'chats',
+          NavItem(
+            label: 'Чаты',
+            icon: Icons.chat_bubble_outline_rounded,
+            activeIcon: Icons.chat_bubble_rounded,
+            badge: _unread,
+          ),
+          const ChatsPage(),
+        ),
+      const _Tab(
+        'more',
+        NavItem(label: 'Ещё', icon: Icons.more_horiz_rounded, activeIcon: Icons.more_horiz_rounded),
+        MorePage(),
+      ),
     ];
-    final safeIndex = _index >= pages.length ? 0 : _index;
+    final found = tabs.indexWhere((tab) => tab.id == _current);
+    final index = found < 0 ? 0 : found;
     return Scaffold(
-      body: IndexedStack(index: safeIndex, children: pages),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: safeIndex,
-        onDestinationSelected: (index) {
-          setState(() => _index = index);
-          if (index == pages.length - 2) _refreshUnread();
+      backgroundColor: ChurchColors.night,
+      extendBody: true,
+      body: IndexedStack(index: index, children: [for (final tab in tabs) tab.page]),
+      bottomNavigationBar: ChurchBottomNav(
+        items: [for (final tab in tabs) tab.item],
+        index: index,
+        onSelect: (next) {
+          setState(() => _current = tabs[next].id);
+          if (tabs[next].id == 'chats') _refreshUnread();
         },
-        destinations: [
-          if (session.canOpen('dashboard'))
-            const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Главная'),
-          const NavigationDestination(icon: Icon(Icons.newspaper_outlined), selectedIcon: Icon(Icons.newspaper), label: 'Лента'),
-          if (session.canOpen('prayer'))
-            const NavigationDestination(icon: Icon(Icons.favorite_outline), selectedIcon: Icon(Icons.favorite), label: 'Молитва'),
-          if (session.canOpen('messenger'))
-            NavigationDestination(
-              icon: Badge(isLabelVisible: _unread > 0, label: Text('$_unread'), child: const Icon(Icons.chat_bubble_outline)),
-              selectedIcon: const Icon(Icons.chat_bubble),
-              label: 'Чаты',
-            ),
-          const NavigationDestination(icon: Icon(Icons.more_horiz), label: 'Ещё'),
-        ],
       ),
     );
   }

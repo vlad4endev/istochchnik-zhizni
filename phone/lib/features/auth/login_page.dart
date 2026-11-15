@@ -3,17 +3,234 @@ import 'package:provider/provider.dart';
 
 import '../../core/phone_format.dart';
 import '../../core/session.dart';
-import '../../core/theme.dart';
+import '../../ui/kit/kit.dart';
+import 'auth_scaffold.dart';
 import 'register_page.dart';
 
-class LoginPage extends StatefulWidget {
+/// Приветствие: фото общины в круге и стеклянная панель с кнопками.
+class LoginPage extends StatelessWidget {
   const LoginPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  Widget build(BuildContext context) {
+    return DarkPage(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final circle = (constraints.maxWidth - 70).clamp(180.0, 340.0).toDouble();
+          final heroSize = constraints.maxHeight < 700 ? circle * 0.78 : circle;
+          return Column(
+            children: [
+              SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                        child: const Icon(Icons.add_rounded, color: ChurchColors.wine, size: 22),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'Источник жизни',
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.17),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: Container(
+                    width: heroSize,
+                    height: heroSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFFFBF3EA),
+                      boxShadow: [
+                        BoxShadow(color: Colors.white.withValues(alpha: 0.45), spreadRadius: 1),
+                        BoxShadow(color: ChurchColors.amber.withValues(alpha: 0.45), blurRadius: 70),
+                        const BoxShadow(color: Color(0x73140408), offset: Offset(0, 24), blurRadius: 50),
+                      ],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Transform.scale(
+                      scale: 1.12,
+                      child: Image.asset(
+                        'assets/images/welcome-hero.webp',
+                        fit: BoxFit.cover,
+                        alignment: const Alignment(0, 0.04),
+                        semanticLabel: 'Община верующих перед крестом',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const _WelcomePanel(),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _WelcomePanel extends StatelessWidget {
+  const _WelcomePanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: const Color(0xB8220810),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(36)),
+        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.2))),
+        boxShadow: const [BoxShadow(color: Color(0x730A0205), offset: Offset(0, -24), blurRadius: 60)],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 30, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Semantics(
+                header: true,
+                child: const Text.rich(
+                  TextSpan(
+                    text: 'Будьте на связи\n',
+                    children: [
+                      TextSpan(
+                        text: 'со своей общиной',
+                        style: TextStyle(
+                          fontFamily: ChurchType.serif,
+                          fontStyle: FontStyle.italic,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 34,
+                          letterSpacing: -0.34,
+                          color: ChurchColors.amber,
+                        ),
+                      ),
+                    ],
+                  ),
+                  style: TextStyle(fontSize: 31, height: 1.12, fontWeight: FontWeight.w800, letterSpacing: -0.78),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Молитва, чаты, звонки и служения вашей церкви — в одном приложении',
+                style: TextStyle(fontSize: 15, height: 1.5, color: Color(0xC7FFFFFF)),
+              ),
+              const SizedBox(height: 22),
+              _CreamButton(
+                label: 'Войти',
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SignInPage())),
+              ),
+              const SizedBox(height: 10),
+              _GhostButton(
+                label: 'Зарегистрироваться',
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RegisterPage())),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CreamButton extends StatelessWidget {
+  const _CreamButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: ChurchColors.creamButton,
+        borderRadius: BorderRadius.circular(Radii.card),
+        elevation: 0,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed,
+          child: SizedBox(
+            height: 58,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 9, 9, 9),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700, color: ChurchColors.amberInk),
+                    ),
+                  ),
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: const Color(0xFF6C2431), borderRadius: BorderRadius.circular(Radii.md)),
+                    child: const Icon(Icons.arrow_forward_rounded, color: ChurchColors.amber, size: 20),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GhostButton extends StatelessWidget {
+  const _GhostButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.06),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Radii.card),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.3), width: 1.5),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed,
+          child: SizedBox(
+            height: 54,
+            child: Center(
+              child: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Форма входа по телефону и паролю.
+class SignInPage extends StatefulWidget {
+  const SignInPage({super.key});
+
+  @override
+  State<SignInPage> createState() => _SignInPageState();
+}
+
+class _SignInPageState extends State<SignInPage> {
   final _phone = TextEditingController();
   final _password = TextEditingController();
   bool _busy = false;
@@ -28,6 +245,11 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _submit() async {
+    if (_busy) return;
+    if (_phone.text.replaceAll(RegExp(r'\D'), '').length < 11) {
+      setState(() => _error = 'Введите номер телефона полностью');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -41,80 +263,63 @@ class _LoginPageState extends State<LoginPage> {
       _busy = false;
       _error = message;
     });
+    if (message == null) Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  void _formatPhone(String value) {
+    final formatted = formatRuPhoneInput(value);
+    if (formatted == value) return;
+    _phone.value = TextEditingValue(text: formatted, selection: TextSelection.collapsed(offset: formatted.length));
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
-          children: [
-            CircleAvatar(
-              radius: 32,
-              backgroundColor: churchBurgundy,
-              child: Icon(Icons.church, color: scheme.onPrimary, size: 32),
-            ),
-            const SizedBox(height: 16),
-            Text('Источник жизни', style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 6),
-            Text(
-              'Молитва, служение и общение церкви — в отдельном приложении',
-              style: TextStyle(color: scheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 28),
-            TextField(
-              controller: _phone,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Телефон'),
-              onChanged: (value) {
-                final formatted = formatRuPhoneInput(value);
-                if (formatted != value) {
-                  _phone.value = TextEditingValue(
-                    text: formatted,
-                    selection: TextSelection.collapsed(offset: formatted.length),
-                  );
-                }
-              },
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _password,
-              obscureText: _obscure,
-              decoration: InputDecoration(
-                labelText: 'Пароль',
-                suffixIcon: IconButton(
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                  icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                ),
-              ),
-              onSubmitted: (_) => _busy ? null : _submit(),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(_error!, style: TextStyle(color: scheme.error)),
-            ],
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: _busy ? null : _submit,
-              child: _busy
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Войти'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RegisterPage()));
-              },
-              child: const Text('Нет аккаунта — подать заявку'),
-            ),
-          ],
+    final palette = context.palette;
+    return AuthScaffold(
+      title: 'Вход в систему',
+      description: 'Укажите телефон и пароль, которые использовали при регистрации.',
+      children: [
+        SegmentedPills<int>(
+          segments: const [(0, 'Вход'), (1, 'Регистрация')],
+          selected: 0,
+          onChanged: (value) {
+            if (value == 1) {
+              Navigator.of(context).pushReplacement(MaterialPageRoute<void>(builder: (_) => const RegisterPage()));
+            }
+          },
         ),
-      ),
+        const SizedBox(height: Space.lg),
+        LabeledField(
+          label: 'Номер телефона',
+          controller: _phone,
+          hint: '+7 (900) 000-00-00',
+          keyboardType: TextInputType.phone,
+          textInputAction: TextInputAction.next,
+          autofillHints: const [AutofillHints.telephoneNumber],
+          onChanged: _formatPhone,
+        ),
+        const SizedBox(height: Space.md),
+        LabeledField(
+          label: 'Пароль',
+          controller: _password,
+          hint: 'Пароль',
+          obscureText: _obscure,
+          textInputAction: TextInputAction.done,
+          autofillHints: const [AutofillHints.password],
+          onSubmitted: (_) => _submit(),
+          suffix: IconButton(
+            tooltip: _obscure ? 'Показать пароль' : 'Скрыть пароль',
+            onPressed: () => setState(() => _obscure = !_obscure),
+            icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: palette.inkFaint),
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: Space.md),
+          InfoBanner(_error!, error: true),
+        ],
+        const SizedBox(height: Space.xl),
+        PrimaryButton(label: 'Войти', icon: Icons.arrow_forward_rounded, busy: _busy, height: 58, onPressed: _submit),
+      ],
     );
   }
 }

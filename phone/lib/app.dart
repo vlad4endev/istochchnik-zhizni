@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'core/nav.dart';
 import 'core/session.dart';
 import 'core/theme.dart';
+import 'ui/kit/kit.dart';
 import 'features/auth/login_page.dart';
 import 'features/auth/pending_page.dart';
 import 'features/shell/shell_page.dart';
@@ -18,6 +19,7 @@ class IstochnikApp extends StatelessWidget {
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Источник жизни',
+      debugShowCheckedModeBanner: false,
       theme: churchTheme(brightness: Brightness.light),
       darkTheme: churchTheme(brightness: Brightness.dark),
       themeMode: session.themeMode,
@@ -28,7 +30,7 @@ class IstochnikApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
       ],
       home: !session.ready
-          ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+          ? const DarkPage(child: Center(child: CircularProgressIndicator(color: ChurchColors.amber)))
           : session.user == null
               ? const LoginPage()
               : session.user!.isActive
