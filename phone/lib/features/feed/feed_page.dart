@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
+import '../../core/dates.dart';
+import '../../ui/kit/kit.dart';
 import '../../ui/video_page.dart';
 import '../../ui/widgets.dart';
 import 'compose_page.dart';
@@ -63,7 +65,7 @@ class _FeedPageState extends State<FeedPage> {
       await _load();
     } on DioException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(readApiError(error))));
+      showMessage(context, readApiError(error));
     }
   }
 
@@ -77,7 +79,6 @@ class _FeedPageState extends State<FeedPage> {
     final draft = TextEditingController();
     await showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetContext) {
         return Padding(
@@ -95,13 +96,15 @@ class _FeedPageState extends State<FeedPage> {
                 SizedBox(
                   height: 240,
                   child: items.isEmpty
-                      ? const EmptyHint('Комментариев пока нет')
+                      ? const EmptyHint('Комментариев пока нет', icon: Icons.chat_bubble_outline_rounded, hint: 'Будьте первым')
                       : ListView(
                           children: [
                             for (final raw in items)
-                              ListTile(
-                                title: Text(_commentAuthor(asMap(raw))),
-                                subtitle: Text(_commentText(asMap(raw))),
+                              ListRow(
+                                leading: ChurchAvatar(name: _commentAuthor(asMap(raw)), size: 36),
+                                title: _commentAuthor(asMap(raw)),
+                                subtitle: _commentText(asMap(raw)),
+                                subtitleMaxLines: 6,
                               ),
                           ],
                         ),
@@ -110,8 +113,11 @@ class _FeedPageState extends State<FeedPage> {
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                   child: Row(
                     children: [
-                      Expanded(child: TextField(controller: draft, decoration: const InputDecoration(hintText: 'Комментарий'))),
-                      IconButton(
+                      Expanded(child: TextField(controller: draft, decoration: const InputDecoration(hintText: 'Напишите комментарий'))),
+                      const SizedBox(width: 8),
+                      IconButton.filled(
+                        tooltip: 'Отправить',
+                        style: IconButton.styleFrom(backgroundColor: ChurchColors.wine, foregroundColor: Colors.white),
                         onPressed: () async {
                           final text = draft.text.trim();
                           if (text.isEmpty) return;
@@ -124,7 +130,7 @@ class _FeedPageState extends State<FeedPage> {
                             ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: Text(describeDio(error))));
                           }
                         },
-                        icon: const Icon(Icons.send),
+                        icon: const Icon(Icons.send_rounded),
                       ),
                     ],
                   ),
@@ -141,54 +147,142 @@ class _FeedPageState extends State<FeedPage> {
 
   @override
   Widget build(BuildContext context) {
-    final origin = context.watch<SessionController>().apiOrigin;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Лента'),
-        actions: [
-          IconButton(tooltip: 'Сторис', onPressed: () => _compose(story: true), icon: const Icon(Icons.add_a_photo_outlined)),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(onPressed: _compose, child: const Icon(Icons.edit)),
+    final session = context.watch<SessionController>();
+    final origin = session.apiOrigin;
+    final me = session.user?.displayName ?? 'Вы';
+    return ChurchPage(
+      title: 'Лента',
+      subtitle: 'Новости и истории общины',
+      actions: [
+        HeaderButton(icon: Icons.add_rounded, tooltip: 'Новая запись', onPressed: _compose),
+      ],
       body: AsyncBody(
         loading: _loading,
         error: _error,
         onRetry: _load,
-        child: RefreshIndicator(
+        child: SheetList(
           onRefresh: _load,
-          child: ListView(
-            children: [
-              if (_stories.isNotEmpty)
-                SizedBox(
-                  height: 96,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    itemCount: _stories.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 12),
-                    itemBuilder: (context, index) {
-                      final group = asMap(_stories[index]);
+          padding: const EdgeInsets.fromLTRB(0, 16, 0, 32),
+          children: [
+            SizedBox(
+              height: 92,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: Space.lg),
+                children: [
+                  _StoryBubble(
+                    name: 'Ваша',
+                    avatarName: me,
+                    add: true,
+                    onTap: () => _compose(story: true),
+                  ),
+                  for (final raw in _stories)
+                    Builder(builder: (context) {
+                      final group = asMap(raw);
                       final author = asMap(group['author']);
                       final name = str(author['display_name']).isEmpty ? str(author['username']) : str(author['display_name']);
-                      return InkWell(
+                      return _StoryBubble(
+                        name: name.split(' ').first,
+                        avatarName: name,
+                        imageUrl: resolveUrl(origin, str(author['avatar_url'])),
+                        seen: asBool(group['all_seen']),
                         onTap: () => pushPage(context, StoryPage(group: group, origin: origin)),
-                        child: Column(
-                          children: [
-                            CircleAvatar(
-                              radius: 26,
-                              backgroundColor: asBool(group['all_seen']) ? Colors.grey : Theme.of(context).colorScheme.primary,
-                              child: Text(name.isEmpty ? '?' : name.substring(0, 1)),
-                            ),
-                            const SizedBox(height: 4),
-                            SizedBox(width: 68, child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center)),
-                          ],
-                        ),
                       );
-                    },
+                    }),
+                ],
+              ),
+            ),
+            if (_posts.isEmpty)
+              const EmptyHint(
+                'В ленте пока нет записей',
+                icon: Icons.article_outlined,
+                hint: 'Поделитесь новостью или фото — нажмите «+» вверху.',
+              ),
+            for (final raw in _posts)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Space.lg),
+                child: _PostCard(post: asMap(raw), origin: origin, onLike: _like, onComments: _comments),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StoryBubble extends StatelessWidget {
+  const _StoryBubble({
+    required this.name,
+    required this.avatarName,
+    required this.onTap,
+    this.imageUrl,
+    this.seen = false,
+    this.add = false,
+  });
+
+  final String name;
+  final String avatarName;
+  final String? imageUrl;
+  final bool seen;
+  final bool add;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Semantics(
+      button: true,
+      label: add ? 'Добавить историю' : 'История: $avatarName',
+      excludeSemantics: true,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Radii.md),
+        onTap: onTap,
+        child: SizedBox(
+          width: 72,
+          child: Column(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(2.5),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: add || seen
+                          ? null
+                          : const SweepGradient(colors: [ChurchColors.amber, Color(0xFFC0304F), ChurchColors.amber]),
+                      color: add ? palette.outline : (seen ? palette.chevron.withValues(alpha: 0.5) : null),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(shape: BoxShape.circle, color: palette.sheet),
+                      child: ChurchAvatar(name: avatarName, imageUrl: imageUrl, size: 50),
+                    ),
                   ),
-                ),
-              if (_posts.isEmpty) const SizedBox(height: 240, child: EmptyHint('В ленте пока нет записей')),
-              for (final raw in _posts) _PostCard(post: asMap(raw), origin: origin, onLike: _like, onComments: _comments),
+                  if (add)
+                    Positioned(
+                      right: -1,
+                      bottom: -1,
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: ChurchColors.amberBlob,
+                          border: Border.all(color: palette.sheet, width: 2),
+                        ),
+                        child: const Icon(Icons.add_rounded, size: 15, color: Colors.white),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: palette.ink),
+              ),
             ],
           ),
         ),
@@ -212,6 +306,7 @@ class _PostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final author = asMap(post['author']);
     final name = str(author['display_name']).isEmpty ? 'Участник' : str(author['display_name']);
     final media = asList(post['media']);
@@ -219,37 +314,127 @@ class _PostCard extends StatelessWidget {
     final mediaUrl = first == null ? '' : resolveUrl(origin, str(first['url']));
     final video = first != null && str(first['type']) == 'video';
     final image = !video ? mediaUrl : '';
-    return Card(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      clipBehavior: Clip.antiAlias,
+    final liked = asBool(post['liked_by_me']);
+    return ChurchCard(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ListTile(title: Text(name), subtitle: Text(str(post['created_at']))),
-          if (str(post['caption']).isNotEmpty)
-            Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 12), child: Text(str(post['caption']))),
-          if (video && mediaUrl.isNotEmpty)
-            ListTile(
-              leading: const Icon(Icons.play_circle_outline),
-              title: const Text('Видео'),
-              onTap: () => pushPage(context, VideoPage(url: mediaUrl, caption: str(post['caption']))),
-            ),
-          if (image.isNotEmpty) Image.network(image, height: 220, width: double.infinity, fit: BoxFit.cover),
           Row(
             children: [
-              IconButton(
-                onPressed: () => onLike(post),
-                icon: Icon(asBool(post['liked_by_me']) ? Icons.favorite : Icons.favorite_border),
+              ChurchAvatar(name: name, imageUrl: resolveUrl(origin, str(author['avatar_url'])), size: 40),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: ChurchType.title.copyWith(fontSize: 15, color: palette.ink)),
+                    Text(relativeTime(post['created_at']), style: TextStyle(fontSize: 12, color: palette.inkFaint)),
+                  ],
+                ),
               ),
-              Text('${asInt(post['like_count'])}'),
-              IconButton(
-                onPressed: () => onComments(str(post['id'])),
-                icon: const Icon(Icons.chat_bubble_outline),
+            ],
+          ),
+          if (str(post['caption']).isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(str(post['caption']), style: ChurchType.body.copyWith(color: palette.ink)),
+          ],
+          if (video && mediaUrl.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            InkWell(
+              borderRadius: BorderRadius.circular(Radii.lg),
+              onTap: () => pushPage(context, VideoPage(url: mediaUrl, caption: str(post['caption']))),
+              child: Container(
+                height: 180,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(Radii.lg),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF6C1E32), ChurchColors.amberBlob],
+                  ),
+                ),
+                child: Center(
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.22)),
+                    child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 34, semanticLabel: 'Смотреть видео'),
+                  ),
+                ),
               ),
-              Text('${asInt(post['comment_count'])}'),
+            ),
+          ],
+          if (image.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(Radii.lg),
+              child: Image.network(
+                image,
+                height: 220,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Container(height: 120, color: palette.accentSoft),
+              ),
+            ),
+          ],
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              _Reaction(
+                icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                color: liked ? ChurchColors.wine : palette.inkMuted,
+                count: asInt(post['like_count']),
+                label: liked ? 'Убрать отметку «нравится»' : 'Нравится',
+                onTap: () => onLike(post),
+              ),
+              _Reaction(
+                icon: Icons.chat_bubble_outline_rounded,
+                color: palette.inkMuted,
+                count: asInt(post['comment_count']),
+                label: 'Комментарии',
+                onTap: () => onComments(str(post['id'])),
+              ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _Reaction extends StatelessWidget {
+  const _Reaction({required this.icon, required this.color, required this.count, required this.label, required this.onTap});
+
+  final IconData icon;
+  final Color color;
+  final int count;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: '$label, $count',
+      excludeSemantics: true,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Radii.sm),
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 21, color: color),
+                const SizedBox(width: 6),
+                Text('$count', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.palette.inkMuted)),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -269,7 +454,13 @@ class StoryPage extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: Text(str(author['display_name'])),
+        title: Row(
+          children: [
+            ChurchAvatar(name: str(author['display_name']), size: 34, ring: true),
+            const SizedBox(width: 10),
+            Expanded(child: Text(str(author['display_name']), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+          ],
+        ),
       ),
       body: PageView(
         children: [

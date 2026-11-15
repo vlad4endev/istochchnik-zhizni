@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
+import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 import 'thread_page.dart';
 
@@ -66,21 +67,29 @@ class _NewChatPageState extends State<NewChatPage> {
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(describeDio(error))));
+      showMessage(context, describeDio(error));
     }
+  }
+
+  String _name(Map<String, dynamic> person) {
+    final name = str(person['name']).isEmpty
+        ? '${str(person['first_name'])} ${str(person['last_name'])}'.trim()
+        : str(person['name']);
+    return name.isEmpty ? 'Участник' : name;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Новый чат')),
+    final origin = context.watch<SessionController>().apiOrigin;
+    return ChurchPage(
+      title: 'Новое сообщение',
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
+            padding: const EdgeInsets.fromLTRB(Space.lg, 18, Space.lg, 0),
+            child: ChurchSearchField(
               controller: _query,
-              decoration: const InputDecoration(hintText: 'Имя'),
+              hint: 'Поиск участников…',
               onSubmitted: (_) => _load(),
             ),
           ),
@@ -89,19 +98,27 @@ class _NewChatPageState extends State<NewChatPage> {
               loading: _loading,
               error: _error,
               onRetry: _load,
-              child: ListView.builder(
-                itemCount: _people.length,
-                itemBuilder: (context, index) {
-                  final person = asMap(_people[index]);
-                  final name = str(person['name']).isEmpty
-                      ? '${str(person['first_name'])} ${str(person['last_name'])}'.trim()
-                      : str(person['name']);
-                  return ListTile(
-                    title: Text(name.isEmpty ? 'Участник' : name),
-                    onTap: () => _open(person),
-                  );
-                },
-              ),
+              child: _people.isEmpty
+                  ? const EmptyHint('Никого не нашли', icon: Icons.person_search_outlined, hint: 'Проверьте имя или фамилию')
+                  : SheetList(
+                      padding: const EdgeInsets.fromLTRB(Space.lg, Space.md, Space.lg, 32),
+                      children: [
+                        ListGroup(
+                          children: [
+                            for (final raw in _people)
+                              ListRow(
+                                leading: ChurchAvatar(
+                                  name: _name(asMap(raw)),
+                                  imageUrl: resolveUrl(origin, str(asMap(raw)['avatar_url'])),
+                                ),
+                                title: _name(asMap(raw)),
+                                trailing: Icon(Icons.chat_bubble_outline_rounded, size: 20, color: context.palette.accent),
+                                onTap: () => _open(asMap(raw)),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
             ),
           ),
         ],

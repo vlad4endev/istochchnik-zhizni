@@ -2,8 +2,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/church_api.dart';
+import '../../core/dates.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
+import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 
 class PrayerPage extends StatefulWidget {
@@ -56,37 +58,78 @@ class _PrayerPageState extends State<PrayerPage> {
     _load();
   }
 
+  Future<void> _pick() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(DateTime.now().year + 2),
+      helpText: 'Дата молитвы',
+    );
+    if (picked == null) return;
+    setState(() => _date = picked);
+    _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final members = asList(_day['members']);
     final themes = asList(_day['global_themes']);
     final ministries = asList(_day['ministries']);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Молитва')),
+    return ChurchPage(
+      title: 'Молитва',
+      subtitle: 'Молитвенный цикл церкви',
       body: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(onPressed: () => _shift(-1), icon: const Icon(Icons.chevron_left)),
-              Text(_iso, style: Theme.of(context).textTheme.titleMedium),
-              IconButton(onPressed: () => _shift(1), icon: const Icon(Icons.chevron_right)),
-            ],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Space.lg, 18, Space.lg, 0),
+            child: _DateBar(date: _date, onPrev: () => _shift(-1), onNext: () => _shift(1), onPick: _pick),
           ),
           Expanded(
             child: AsyncBody(
               loading: _loading,
               error: _error,
               onRetry: _load,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  for (final raw in members) _Block('Член церкви', asMap(raw), 'name', 'prayer_request'),
-                  for (final raw in themes) _Block('Тема дня', asMap(raw), 'title', 'prayer_points'),
-                  for (final raw in ministries) _Block('Служение', asMap(raw), 'title', 'prayer_points'),
-                  if (members.isEmpty && themes.isEmpty) const EmptyHint('На эту дату записей нет'),
-                ],
-              ),
+              child: members.isEmpty && themes.isEmpty && ministries.isEmpty
+                  ? const EmptyHint(
+                      'На эту дату записей нет',
+                      icon: Icons.church_outlined,
+                      hint: 'Выберите другой день — молитвенный цикл составляет администратор.',
+                    )
+                  : SheetList(
+                      onRefresh: _load,
+                      padding: const EdgeInsets.fromLTRB(Space.lg, Space.md, Space.lg, 32),
+                      children: [
+                        if (members.isNotEmpty) const SectionLabel('Сегодня молимся за члена церкви'),
+                        for (final raw in members)
+                          _PrayerBlock(
+                            data: asMap(raw),
+                            titleKey: 'name',
+                            bodyKey: 'prayer_request',
+                            tone: Tone.violet,
+                            icon: Icons.favorite_border_rounded,
+                            withAvatar: true,
+                          ),
+                        if (themes.isNotEmpty) const SectionLabel('Тема дня'),
+                        for (final raw in themes)
+                          _PrayerBlock(
+                            data: asMap(raw),
+                            titleKey: 'title',
+                            bodyKey: 'prayer_points',
+                            tone: Tone.teal,
+                            icon: Icons.menu_book_outlined,
+                          ),
+                        if (ministries.isNotEmpty) const SectionLabel('Служения'),
+                        for (final raw in ministries)
+                          _PrayerBlock(
+                            data: asMap(raw),
+                            titleKey: 'title',
+                            bodyKey: 'prayer_points',
+                            tone: Tone.amber,
+                            icon: Icons.volunteer_activism_outlined,
+                          ),
+                      ],
+                    ),
             ),
           ),
         ],
@@ -95,33 +138,123 @@ class _PrayerPageState extends State<PrayerPage> {
   }
 }
 
-class _Block extends StatelessWidget {
-  const _Block(this.label, this.data, this.titleKey, this.bodyKey);
-  final String label;
-  final Map<String, dynamic> data;
-  final String titleKey;
-  final String bodyKey;
+class _DateBar extends StatelessWidget {
+  const _DateBar({required this.date, required this.onPrev, required this.onNext, required this.onPick});
+
+  final DateTime date;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+  final VoidCallback onPick;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final palette = context.palette;
+    final today = sameDay(date, DateTime.now());
+    return ChurchCard(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Предыдущий день',
+            onPressed: onPrev,
+            icon: Icon(Icons.chevron_left_rounded, color: palette.accent),
+          ),
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(Radii.md),
+              onTap: onPick,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.calendar_today_outlined, size: 18, color: palette.accent),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        longDate(date),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700, color: palette.ink),
+                      ),
+                    ),
+                    if (today) ...[const SizedBox(width: 8), const StatusPill('СЕГОДНЯ')],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Следующий день',
+            onPressed: onNext,
+            icon: Icon(Icons.chevron_right_rounded, color: palette.accent),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrayerBlock extends StatelessWidget {
+  const _PrayerBlock({
+    required this.data,
+    required this.titleKey,
+    required this.bodyKey,
+    required this.tone,
+    required this.icon,
+    this.withAvatar = false,
+  });
+
+  final Map<String, dynamic> data;
+  final String titleKey;
+  final String bodyKey;
+  final Tone tone;
+  final IconData icon;
+  final bool withAvatar;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final title = str(data[titleKey]).isEmpty ? 'Не указано' : str(data[titleKey]);
+    final body = str(data[bodyKey]);
+    final verse = str(data['bible_verse']);
+    return ChurchCard(
+      padding: EdgeInsets.zero,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 6),
-            Text(str(data[titleKey]).isEmpty ? 'Не указано' : str(data[titleKey]), style: Theme.of(context).textTheme.titleMedium),
-            if (str(data[bodyKey]).isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(str(data[bodyKey])),
-            ],
-            if (str(data['bible_verse']).isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(str(data['bible_verse'])),
-            ],
+            Container(width: 4, color: tone.fg(palette)),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (withAvatar) ChurchAvatar(name: title, size: 42) else IconTile(icon, tone: tone),
+                        const SizedBox(width: Space.md),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, height: 1.25, color: palette.ink),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (body.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(body, style: ChurchType.body.copyWith(color: palette.inkMuted)),
+                    ],
+                    if (verse.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      ScriptureQuote(verse),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),

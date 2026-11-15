@@ -285,18 +285,7 @@ class FeatureTile extends StatelessWidget {
                 children: [
                   IconTile(icon, tone: tone),
                   const SizedBox(height: 10),
-                  Text(
-                    label,
-                    maxLines: 2,
-                    textAlign: centered ? TextAlign.center : TextAlign.start,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: centered ? 12.5 : 14,
-                      fontWeight: centered ? FontWeight.w600 : FontWeight.w700,
-                      height: 1.2,
-                      color: palette.ink,
-                    ),
-                  ),
+                  _TileLabel(label: label, centered: centered, color: palette.ink),
                 ],
               ),
             ),
@@ -304,6 +293,38 @@ class FeatureTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Подпись плитки: длинное одно слово ужимается, а не рвётся посередине.
+class _TileLabel extends StatelessWidget {
+  const _TileLabel({required this.label, required this.centered, required this.color});
+
+  final String label;
+  final bool centered;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Text(
+      label,
+      maxLines: 2,
+      softWrap: label.contains(' '),
+      textAlign: centered ? TextAlign.center : TextAlign.start,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: centered ? 12.5 : 14,
+        fontWeight: centered ? FontWeight.w600 : FontWeight.w700,
+        height: 1.2,
+        color: color,
+      ),
+    );
+    if (label.contains(' ')) return text;
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: centered ? Alignment.center : Alignment.centerLeft,
+      child: text,
     );
   }
 }

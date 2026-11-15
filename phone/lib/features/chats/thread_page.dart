@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
@@ -7,9 +8,11 @@ import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/church_api.dart';
+import '../../core/dates.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
 import '../../ui/audio_player_page.dart';
+import '../../ui/kit/kit.dart';
 import '../../ui/video_page.dart';
 import '../../ui/widgets.dart';
 import '../calls/call_page.dart';
@@ -20,11 +23,17 @@ class ThreadPage extends StatefulWidget {
     required this.conversationId,
     required this.title,
     this.otherMemberId,
+    this.avatarUrl,
+    this.lastSeen,
   });
 
   final String conversationId;
   final String title;
   final int? otherMemberId;
+  final String? avatarUrl;
+
+  /// ISO-время последнего входа собеседника — для подписи в шапке.
+  final String? lastSeen;
 
   @override
   State<ThreadPage> createState() => _ThreadPageState();
@@ -42,11 +51,56 @@ class _ThreadPageState extends State<ThreadPage> {
   @override
   void initState() {
     super.initState();
+    _input.addListener(_onInput);
     _load();
+  }
+
+  void _onInput() => setState(() {});
+
+  Future<void> _attach() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.lg),
+          child: ListGroup(
+            children: [
+              ListRow(
+                leading: const IconTile(Icons.image_outlined, tone: Tone.violet),
+                title: 'Фото из галереи',
+                chevron: false,
+                onTap: () => Navigator.pop(context, 'image'),
+              ),
+              ListRow(
+                leading: const IconTile(Icons.insert_drive_file_outlined, tone: Tone.amber),
+                title: 'Файл',
+                chevron: false,
+                onTap: () => Navigator.pop(context, 'file'),
+              ),
+              ListRow(
+                leading: const IconTile(Icons.poll_outlined, tone: Tone.green),
+                title: 'Опрос',
+                chevron: false,
+                onTap: () => Navigator.pop(context, 'poll'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    switch (choice) {
+      case 'image':
+        await _pickImage();
+      case 'file':
+        await _pickFile();
+      case 'poll':
+        await _poll();
+    }
   }
 
   @override
   void dispose() {
+    _input.removeListener(_onInput);
     _input.dispose();
     _recorder.dispose();
     super.dispose();
@@ -82,7 +136,7 @@ class _ThreadPageState extends State<ThreadPage> {
       await _load();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(describeDio(error))));
+      showMessage(context, describeDio(error));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -112,7 +166,7 @@ class _ThreadPageState extends State<ThreadPage> {
       await _load();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(describeDio(error))));
+      showMessage(context, describeDio(error));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -151,7 +205,7 @@ class _ThreadPageState extends State<ThreadPage> {
     final allowed = await _recorder.hasPermission();
     if (!allowed) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Нет доступа к микрофону')));
+      showMessage(context, 'Нет доступа к микрофону — разрешите его в настройках телефона');
       return;
     }
     final dir = await getTemporaryDirectory();
@@ -174,15 +228,18 @@ class _ThreadPageState extends State<ThreadPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: question, decoration: const InputDecoration(labelText: 'Вопрос')),
-            TextField(controller: first, decoration: const InputDecoration(labelText: 'Вариант 1')),
-            TextField(controller: second, decoration: const InputDecoration(labelText: 'Вариант 2')),
-            TextField(controller: extra, decoration: const InputDecoration(labelText: 'Вариант 3, если нужен')),
+            TextField(controller: question, decoration: const InputDecoration(hintText: 'Вопрос')),
+            const SizedBox(height: 10),
+            TextField(controller: first, decoration: const InputDecoration(hintText: 'Вариант 1')),
+            const SizedBox(height: 10),
+            TextField(controller: second, decoration: const InputDecoration(hintText: 'Вариант 2')),
+            const SizedBox(height: 10),
+            TextField(controller: extra, decoration: const InputDecoration(hintText: 'Вариант 3, если нужен')),
           ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Отправить')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Отправить')),
         ],
       ),
     );
@@ -199,7 +256,7 @@ class _ThreadPageState extends State<ThreadPage> {
       await _load();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(describeDio(error))));
+      showMessage(context, describeDio(error));
     }
   }
 
@@ -209,104 +266,211 @@ class _ThreadPageState extends State<ThreadPage> {
       await _load();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(describeDio(error))));
+      showMessage(context, describeDio(error));
     }
+  }
+
+  String _presence() {
+    final seen = parseApiDate(widget.lastSeen);
+    if (seen == null) return '';
+    if (DateTime.now().difference(seen).inMinutes < 3) return 'в сети';
+    return 'был(а) ${relativeTime(widget.lastSeen)}';
   }
 
   @override
   Widget build(BuildContext context) {
     final me = context.watch<SessionController>().user?.id;
     final origin = context.watch<SessionController>().apiOrigin;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        actions: [
-          IconButton(
-            tooltip: 'Позвонить',
-            onPressed: () => pushPage(
-              context,
-              CallPage(
-                conversationId: widget.conversationId,
-                recipientId: widget.otherMemberId,
-                title: widget.title,
-              ),
+    final palette = context.palette;
+    final hasText = _input.text.trim().isNotEmpty;
+    return ChurchPage(
+      title: widget.title,
+      subtitle: _presence(),
+      leading: ChurchAvatar(name: widget.title, imageUrl: widget.avatarUrl, size: 40),
+      sheetColor: palette.isDark ? palette.sheet : const Color(0xFFF3ECE3),
+      actions: [
+        HeaderButton(
+          icon: Icons.call_outlined,
+          tooltip: 'Позвонить',
+          onPressed: () => pushPage(
+            context,
+            CallPage(
+              conversationId: widget.conversationId,
+              recipientId: widget.otherMemberId,
+              title: widget.title,
             ),
-            icon: const Icon(Icons.call),
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: AsyncBody(
-              loading: _loading,
-              error: _error,
-              onRetry: _load,
-              child: ListView.builder(
+        ),
+      ],
+      body: AsyncBody(
+        loading: _loading,
+        error: _error,
+        onRetry: _load,
+        child: _messages.isEmpty
+            ? const EmptyHint('Сообщений пока нет', icon: Icons.waving_hand_outlined, hint: 'Напишите первым')
+            : ListView.builder(
                 reverse: true,
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                 itemCount: _messages.length,
                 itemBuilder: (context, index) {
                   final message = asMap(_messages[index]);
                   final mine = asInt(message['sender_id']) == me;
+                  final deleted = asBool(message['is_deleted']);
+                  final time = parseApiDate(message['created_at']);
                   return Align(
                     alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                     child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      margin: const EdgeInsets.symmetric(vertical: 3),
+                      padding: const EdgeInsets.fromLTRB(14, 9, 12, 7),
                       constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
                       decoration: BoxDecoration(
-                        color: mine
-                            ? Theme.of(context).colorScheme.primaryContainer
-                            : Theme.of(context).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(16),
+                        gradient: mine && !deleted ? wineGradient : null,
+                        color: deleted ? palette.accentSoft.withValues(alpha: 0.7) : (mine ? null : palette.card),
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(18),
+                          topRight: const Radius.circular(18),
+                          bottomLeft: Radius.circular(mine ? 18 : 6),
+                          bottomRight: Radius.circular(mine ? 6 : 18),
+                        ),
+                        boxShadow: mine || deleted ? null : palette.cardShadow,
                       ),
-                      child: _MessageBody(
-                        message: message,
-                        origin: origin,
-                        onVote: (index) => _vote(str(message['id']), index),
+                      child: DefaultTextStyle.merge(
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          height: 1.35,
+                          color: deleted ? palette.inkFaint : (mine ? Colors.white : palette.ink),
+                          fontStyle: deleted ? FontStyle.italic : FontStyle.normal,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _MessageBody(
+                              message: message,
+                              origin: origin,
+                              mine: mine,
+                              onVote: (index) => _vote(str(message['id']), index),
+                            ),
+                            if (time != null && !deleted)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  DateFormat('HH:mm').format(time),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontStyle: FontStyle.normal,
+                                    color: mine ? Colors.white.withValues(alpha: 0.7) : palette.inkFaint,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   );
                 },
               ),
-            ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-              child: Row(
-                children: [
-                  IconButton(onPressed: _sending ? null : _pickImage, icon: const Icon(Icons.image_outlined)),
-                  IconButton(onPressed: _sending ? null : _pickFile, icon: const Icon(Icons.attach_file)),
-                  IconButton(onPressed: _sending ? null : _poll, icon: const Icon(Icons.poll_outlined)),
-                  Expanded(
-                    child: TextField(
-                      controller: _input,
-                      minLines: 1,
-                      maxLines: 4,
-                      decoration: const InputDecoration(hintText: 'Сообщение'),
+      ),
+      bottom: DecoratedBox(
+        decoration: BoxDecoration(
+          color: palette.sheet,
+          border: Border(top: BorderSide(color: palette.hairline)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 8, 10, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                IconButton(
+                  tooltip: 'Прикрепить',
+                  onPressed: _sending ? null : _attach,
+                  icon: Icon(Icons.attach_file_rounded, color: palette.inkMuted),
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _input,
+                    minLines: 1,
+                    maxLines: 4,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(
+                      hintText: _recording ? 'Идёт запись голосового…' : 'Сообщение',
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide(color: palette.outline)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide(color: palette.outline)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide(color: palette.accent, width: 1.4)),
                     ),
                   ),
-                  IconButton(
-                    onPressed: _sending ? null : _toggleRecord,
-                    icon: Icon(_recording ? Icons.stop_circle : Icons.mic_none),
-                  ),
-                  IconButton(onPressed: _sending ? null : _sendText, icon: const Icon(Icons.send)),
-                ],
+                ),
+                const SizedBox(width: 8),
+                _RoundAction(
+                  icon: hasText ? Icons.send_rounded : (_recording ? Icons.stop_rounded : Icons.mic_none_rounded),
+                  tooltip: hasText ? 'Отправить' : (_recording ? 'Остановить и отправить' : 'Записать голосовое'),
+                  busy: _sending,
+                  danger: _recording,
+                  onPressed: _sending ? null : (hasText ? _sendText : _toggleRecord),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoundAction extends StatelessWidget {
+  const _RoundAction({required this.icon, required this.tooltip, required this.onPressed, this.busy = false, this.danger = false});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final bool busy;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: danger ? null : wineGradient,
+            color: danger ? ChurchColors.danger : null,
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onPressed,
+              child: SizedBox(
+                width: 46,
+                height: 46,
+                child: busy
+                    ? const Padding(
+                        padding: EdgeInsets.all(13),
+                        child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                      )
+                    : Icon(icon, color: Colors.white, size: 22),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
 class _MessageBody extends StatelessWidget {
-  const _MessageBody({required this.message, required this.origin, required this.onVote});
+  const _MessageBody({required this.message, required this.origin, required this.onVote, required this.mine});
   final Map<String, dynamic> message;
   final String origin;
+  final bool mine;
   final ValueChanged<int> onVote;
 
   @override
@@ -320,7 +484,7 @@ class _MessageBody extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Image.network(url, width: 220, fit: BoxFit.cover),
+          ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(url, width: 220, fit: BoxFit.cover)),
           if (caption.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(caption)),
         ],
       );
@@ -332,7 +496,7 @@ class _MessageBody extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.play_circle_fill),
+            Icon(Icons.play_circle_fill_rounded, size: 30, color: mine ? Colors.white : ChurchColors.wine),
             const SizedBox(width: 8),
             Text(voice ? 'Голосовое' : str(payload['name'])),
           ],
@@ -348,7 +512,7 @@ class _MessageBody extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.insert_drive_file_outlined),
+            Icon(Icons.insert_drive_file_outlined, color: mine ? Colors.white : ChurchColors.wine),
             const SizedBox(width: 8),
             Flexible(child: Text(str(payload['name']).isEmpty ? 'Файл' : str(payload['name']))),
           ],
@@ -364,16 +528,74 @@ class _MessageBody extends StatelessWidget {
     if (type == 'poll') {
       final options = asList(payload['options']);
       final tallies = asList(message['poll_tallies']);
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(caption, style: const TextStyle(fontWeight: FontWeight.w700)),
-          for (var i = 0; i < options.length; i++)
-            TextButton(
-              onPressed: () => onVote(i),
-              child: Text('${str(options[i])} · ${i < tallies.length ? asInt(tallies[i]) : 0}'),
+      var total = 0;
+      for (final t in tallies) {
+        total += asInt(t);
+      }
+      final fg = mine ? Colors.white : context.palette.ink;
+      return ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 220),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.poll_outlined, size: 16, color: mine ? ChurchColors.amber : ChurchColors.wine),
+                const SizedBox(width: 6),
+                Flexible(child: Text(caption, style: TextStyle(fontWeight: FontWeight.w700, color: fg))),
+              ],
             ),
-        ],
+            const SizedBox(height: 8),
+            for (var i = 0; i < options.length; i++)
+              Builder(builder: (context) {
+                final votes = i < tallies.length ? asInt(tallies[i]) : 0;
+                final share = total == 0 ? 0.0 : votes / total;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => onVote(i),
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 40),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: fg.withValues(alpha: 0.25)),
+                      ),
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: share,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: (mine ? Colors.white : ChurchColors.wine).withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                            child: Row(
+                              children: [
+                                Expanded(child: Text(str(options[i]), style: TextStyle(fontSize: 14, color: fg))),
+                                Text('$votes', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: fg)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            Text(
+              total == 0 ? 'Голосов пока нет' : 'Голосов: $total',
+              style: TextStyle(fontSize: 12, color: fg.withValues(alpha: 0.7)),
+            ),
+          ],
+        ),
       );
     }
     return Text(caption);
