@@ -2,7 +2,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/session.dart';
-import '../../core/theme.dart';
+import '../../ui/kit/kit.dart';
+import '../../ui/widgets.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -29,51 +30,111 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
-    final user = session.user;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Настройки')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+    return ChurchPage(
+      title: 'Настройки',
+      body: SheetList(
         children: [
-          if (user != null) ...[
-            Text(user.displayName, style: Theme.of(context).textTheme.titleLarge),
-            Text(roleLabel(user.role)),
-            if (user.phone != null) Text(user.phone!),
-            const SizedBox(height: 16),
-          ],
-          Text('Оформление', style: Theme.of(context).textTheme.titleMedium),
-          SegmentedButton<ThemeMode>(
-            segments: const [
-              ButtonSegment(value: ThemeMode.system, label: Text('Система')),
-              ButtonSegment(value: ThemeMode.light, label: Text('Свет')),
-              ButtonSegment(value: ThemeMode.dark, label: Text('Тьма')),
+          const SectionLabel('Тема оформления'),
+          Row(
+            children: [
+              for (final (mode, label, icon) in const [
+                (ThemeMode.system, 'Как в системе', Icons.brightness_auto_outlined),
+                (ThemeMode.light, 'Светлая', Icons.light_mode_outlined),
+                (ThemeMode.dark, 'Тёмная', Icons.dark_mode_outlined),
+              ]) ...[
+                if (mode != ThemeMode.system) const SizedBox(width: 10),
+                Expanded(child: _ThemeTile(label: label, icon: icon, selected: session.themeMode == mode, onTap: () => session.setThemeMode(mode))),
+              ],
             ],
-            selected: {session.themeMode},
-            onSelectionChanged: (value) => session.setThemeMode(value.first),
           ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _origin,
-            decoration: const InputDecoration(
-              labelText: 'Адрес сервера',
-              helperText: 'Тот же адрес, что у сайта. Для локальной проверки можно указать IP компьютера.',
+          const SectionLabel('Сервер'),
+          ChurchCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LabeledField(
+                  label: 'Адрес сервера',
+                  controller: _origin,
+                  keyboardType: TextInputType.url,
+                  hint: 'https://app.church-tambov.ru',
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Тот же адрес, что у сайта. Для локальной проверки можно указать IP компьютера.',
+                  style: TextStyle(fontSize: 12.5, height: 1.4, color: context.palette.inkMuted),
+                ),
+                const SizedBox(height: Space.md),
+                SecondaryButton(
+                  label: 'Сохранить адрес',
+                  icon: Icons.check_rounded,
+                  onPressed: () async {
+                    await session.setApiOrigin(_origin.text);
+                    if (!context.mounted) return;
+                    showMessage(context, 'Адрес сохранён');
+                  },
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          FilledButton(
-            onPressed: () async {
-              await session.setApiOrigin(_origin.text);
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Адрес сохранён')));
-            },
-            child: const Text('Сохранить адрес'),
-          ),
-          const SizedBox(height: 24),
-          OutlinedButton(
-            onPressed: () => session.logout(),
-            child: const Text('Выйти'),
+          const SizedBox(height: Space.sm),
+          ListGroup(
+            children: [
+              ListRow(
+                leading: const IconTile(Icons.logout_rounded, tone: Tone.red),
+                title: 'Выйти из аккаунта',
+                titleColor: ChurchColors.danger,
+                chevron: false,
+                onTap: () => session.logout(),
+              ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ThemeTile extends StatelessWidget {
+  const _ThemeTile({required this.label, required this.icon, required this.selected, required this.onTap});
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Тема: $label',
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: Motion.normal,
+          height: 86,
+          decoration: BoxDecoration(
+            gradient: selected ? wineGradient : null,
+            color: selected ? null : palette.card,
+            borderRadius: BorderRadius.circular(Radii.xl),
+            border: selected ? null : Border.all(color: palette.hairline),
+            boxShadow: selected ? null : palette.cardShadow,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: selected ? Colors.white : palette.inkMuted),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: selected ? Colors.white : palette.ink),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

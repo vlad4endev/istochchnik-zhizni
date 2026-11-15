@@ -6,6 +6,8 @@ import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
+import '../../ui/kit/kit.dart';
+import '../../ui/widgets.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -52,10 +54,10 @@ class _ProfilePageState extends State<ProfilePage> {
         'prayer_request': _need.text,
       });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Профиль сохранён')));
+      showMessage(context, 'Профиль сохранён');
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(describeDio(error))));
+      showMessage(context, describeDio(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -68,10 +70,10 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       await _api.uploadAvatar(file.path, file.name);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Фото обновлено')));
+      showMessage(context, 'Фото обновлено');
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(describeDio(error))));
+      showMessage(context, describeDio(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -79,7 +81,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _password() async {
     if (_currentPassword.text.isEmpty || _newPassword.text.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Новый пароль — не короче 6 символов')));
+      showMessage(context, 'Введите текущий пароль и новый — не короче 6 символов');
       return;
     }
     setState(() => _busy = true);
@@ -88,10 +90,10 @@ class _ProfilePageState extends State<ProfilePage> {
       _currentPassword.clear();
       _newPassword.clear();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Пароль изменён')));
+      showMessage(context, 'Пароль изменён');
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(describeDio(error))));
+      showMessage(context, describeDio(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -99,53 +101,111 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<SessionController>().user;
-    final origin = context.watch<SessionController>().apiOrigin;
-    final avatar = resolveUrl(origin, user?.avatarUrl);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Профиль')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+    final session = context.watch<SessionController>();
+    final user = session.user;
+    final avatar = resolveUrl(session.apiOrigin, user?.avatarUrl);
+    final palette = context.palette;
+    return ChurchPage(
+      title: 'Профиль',
+      body: SheetList(
         children: [
-          Center(
-            child: InkWell(
-              onTap: _busy ? null : _avatar,
-              child: CircleAvatar(
-                radius: 40,
-                backgroundColor: churchBurgundy,
-                backgroundImage: avatar.isEmpty ? null : NetworkImage(avatar),
-                child: avatar.isEmpty
-                    ? Text(
-                        (user?.displayName.isEmpty ?? true) ? '?' : user!.displayName.substring(0, 1).toUpperCase(),
-                        style: const TextStyle(color: Colors.white, fontSize: 28),
-                      )
-                    : null,
-              ),
+          ChurchCard(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Semantics(
+                  button: true,
+                  label: 'Сменить фото',
+                  child: GestureDetector(
+                    onTap: _busy ? null : _avatar,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        ChurchAvatar(name: user?.displayName ?? '?', imageUrl: avatar, size: 64, ring: true),
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: Container(
+                            width: 26,
+                            height: 26,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: ChurchColors.amberBlob,
+                              border: Border.all(color: palette.card, width: 2),
+                            ),
+                            child: const Icon(Icons.photo_camera_outlined, size: 14, color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        user?.displayName ?? 'Участник',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.2, color: palette.ink),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          if (user != null) StatusPill(roleLabel(user.role)),
+                          if ((user?.ministryRole ?? '').isNotEmpty) StatusPill(user!.ministryRole, tone: Tone.green),
+                        ],
+                      ),
+                      if (user?.phone != null) ...[
+                        const SizedBox(height: 6),
+                        Text(user!.phone!, style: TextStyle(fontSize: 13, color: palette.inkMuted)),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          const Center(child: Text('Нажмите на фото, чтобы заменить')),
-          const SizedBox(height: 16),
-          TextField(controller: _first, decoration: const InputDecoration(labelText: 'Имя')),
-          const SizedBox(height: 12),
-          TextField(controller: _last, decoration: const InputDecoration(labelText: 'Фамилия')),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _need,
-            minLines: 3,
-            maxLines: 6,
-            decoration: const InputDecoration(labelText: 'Молитвенная нужда'),
+          const SectionLabel('Личные данные'),
+          ChurchCard(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LabeledField(label: 'Имя', controller: _first, textCapitalization: TextCapitalization.words),
+                const SizedBox(height: Space.md),
+                LabeledField(label: 'Фамилия', controller: _last, textCapitalization: TextCapitalization.words),
+                const SizedBox(height: Space.md),
+                LabeledField(
+                  label: 'Молитвенная нужда',
+                  note: '— видна в молитвенном цикле',
+                  controller: _need,
+                  hint: 'О чём молиться за вас',
+                  minLines: 3,
+                  maxLines: 6,
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+                const SizedBox(height: Space.lg),
+                PrimaryButton(label: 'Сохранить', busy: _busy, height: 50, onPressed: _save),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          FilledButton(onPressed: _busy ? null : _save, child: const Text('Сохранить')),
-          const SizedBox(height: 24),
-          Text('Пароль', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          TextField(controller: _currentPassword, obscureText: true, decoration: const InputDecoration(labelText: 'Текущий пароль')),
-          const SizedBox(height: 12),
-          TextField(controller: _newPassword, obscureText: true, decoration: const InputDecoration(labelText: 'Новый пароль')),
-          const SizedBox(height: 12),
-          OutlinedButton(onPressed: _busy ? null : _password, child: const Text('Сменить пароль')),
+          const SectionLabel('Безопасность'),
+          ChurchCard(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LabeledField(label: 'Текущий пароль', controller: _currentPassword, obscureText: true),
+                const SizedBox(height: Space.md),
+                LabeledField(label: 'Новый пароль', note: '— от 6 символов', controller: _newPassword, obscureText: true),
+                const SizedBox(height: Space.lg),
+                SecondaryButton(label: 'Сменить пароль', icon: Icons.lock_outline_rounded, onPressed: _busy ? null : _password),
+              ],
+            ),
+          ),
         ],
       ),
     );

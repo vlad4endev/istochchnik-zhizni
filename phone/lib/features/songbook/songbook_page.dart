@@ -5,6 +5,7 @@ import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
 import '../../ui/chord_sheet.dart';
+import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 
 class SongbookPage extends StatefulWidget {
@@ -55,18 +56,25 @@ class _SongbookPageState extends State<SongbookPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Песенник')),
+    final palette = context.palette;
+    final songs = _songs.map(asMap).toList()
+      ..sort((a, b) => str(a['title']).toLowerCase().compareTo(str(b['title']).toLowerCase()));
+    final groups = <String, List<Map<String, dynamic>>>{};
+    for (final song in songs) {
+      final title = str(song['title']).trim();
+      final letter = title.isEmpty ? '#' : title.substring(0, 1).toUpperCase();
+      groups.putIfAbsent(RegExp(r'[А-ЯЁA-Z]').hasMatch(letter) ? letter : '#', () => []).add(song);
+    }
+    return ChurchPage(
+      title: 'Песенник',
+      subtitle: _songs.isEmpty ? 'Тексты и аккорды' : 'Тексты и аккорды · ${_songs.length} песен',
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
+            padding: const EdgeInsets.fromLTRB(Space.lg, 18, Space.lg, 0),
+            child: ChurchSearchField(
               controller: _query,
-              decoration: InputDecoration(
-                hintText: 'Поиск песни',
-                suffixIcon: IconButton(onPressed: _load, icon: const Icon(Icons.search)),
-              ),
+              hint: 'Название или строка из песни',
               onSubmitted: (_) => _load(),
             ),
           ),
@@ -76,17 +84,40 @@ class _SongbookPageState extends State<SongbookPage> {
               error: _error,
               onRetry: _load,
               child: _songs.isEmpty
-                  ? const EmptyHint('Ничего не найдено')
-                  : ListView.builder(
-                      itemCount: _songs.length,
-                      itemBuilder: (context, index) {
-                        final song = asMap(_songs[index]);
-                        return ListTile(
-                          title: Text(str(song['title'])),
-                          subtitle: Text(str(song['default_key']).isEmpty ? 'Без тональности' : 'Тональность ${str(song['default_key'])}'),
-                          onTap: () => pushPage(context, SongPage(id: str(song['id']), title: str(song['title']))),
-                        );
-                      },
+                  ? const EmptyHint('Ничего не найдено', icon: Icons.library_music_outlined, hint: 'Попробуйте другое слово')
+                  : SheetList(
+                      onRefresh: _load,
+                      padding: const EdgeInsets.fromLTRB(Space.lg, Space.md, Space.lg, 32),
+                      gap: Space.sm,
+                      children: [
+                        for (final entry in groups.entries) ...[
+                          SectionLabel(entry.key, padding: const EdgeInsets.fromLTRB(6, 6, 4, 0)),
+                          ListGroup(
+                            dividerIndent: 14,
+                            children: [
+                              for (final song in entry.value)
+                                ListRow(
+                                  title: str(song['title']),
+                                  trailing: str(song['default_key']).isEmpty
+                                      ? null
+                                      : Container(
+                                          constraints: const BoxConstraints(minWidth: 30),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(color: palette.accentSoft, borderRadius: BorderRadius.circular(99)),
+                                          child: Text(
+                                            str(song['default_key']),
+                                            textAlign: TextAlign.center,
+                                            semanticsLabel: 'Тональность ${str(song['default_key'])}',
+                                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: palette.accent),
+                                          ),
+                                        ),
+                                  chevron: true,
+                                  onTap: () => pushPage(context, SongPage(id: str(song['id']), title: str(song['title']))),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
             ),
           ),
@@ -135,22 +166,19 @@ class _SongPageState extends State<SongPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
-      body: AsyncBody(
-        loading: _loading,
-        error: _error,
-        onRetry: _load,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (str(_song['default_key']).isNotEmpty)
-              Text('Тональность ${str(_song['default_key'])}', style: const TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-            ChordSheet(content: str(_song['content'])),
-          ],
-        ),
-      ),
+    return SongView(
+      title: str(_song['title']).isEmpty ? widget.title : str(_song['title']),
+      content: str(_song['content']),
+      keyName: str(_song['default_key']),
+      loading: _loading,
+      error: _error,
+      onRetry: () {
+        setState(() {
+          _loading = true;
+          _error = null;
+        });
+        _load();
+      },
     );
   }
 }
