@@ -8,6 +8,16 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>Источник жизни</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Микрофон нужен для голосовых сообщений и звонков.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Камера нужна для фото, сторис и видеозвонка.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Фото и видео нужны, чтобы отправить их в чат, ленту и сторис.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

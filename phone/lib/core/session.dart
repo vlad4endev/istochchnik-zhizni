@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'json.dart';
+import 'realtime.dart';
 
 const defaultApiOrigin = 'https://app.church-tambov.ru';
 
@@ -21,6 +22,8 @@ class AppUser {
     this.phone,
     this.username,
     this.avatarUrl,
+    this.prayerRequest = '',
+    this.ministryRole = '',
   });
 
   final int id;
@@ -33,6 +36,14 @@ class AppUser {
   final String? phone;
   final String? username;
   final String? avatarUrl;
+  final String prayerRequest;
+  final String ministryRole;
+
+  bool get isPreacher =>
+      isAdmin ||
+      role == 'pastor' ||
+      roles.contains('pastor') ||
+      ministryRole.toLowerCase().contains('проповед');
 
   bool get isActive => registrationStatus == 'active';
   bool get isPending => registrationStatus == 'pending_review';
@@ -64,6 +75,8 @@ class AppUser {
       phone: str(json['phone_number']).isEmpty ? null : str(json['phone_number']),
       username: str(json['username']).isEmpty ? null : str(json['username']),
       avatarUrl: str(json['avatar_url']).isEmpty ? null : str(json['avatar_url']),
+      prayerRequest: str(json['prayer_request']),
+      ministryRole: str(json['ministry_role']),
     );
   }
 
@@ -78,6 +91,8 @@ class AppUser {
         'phone_number': phone,
         'username': username,
         'avatar_url': avatarUrl,
+        'prayer_request': prayerRequest,
+        'ministry_role': ministryRole,
       };
 }
 
@@ -122,6 +137,7 @@ class SessionController extends ChangeNotifier {
 
   final FlutterSecureStorage _storage;
   late final Dio dio;
+  late final ChurchRealtime realtime = ChurchRealtime(this);
 
   bool ready = false;
   String apiOrigin = defaultApiOrigin;
@@ -163,6 +179,7 @@ class SessionController extends ChangeNotifier {
     ready = true;
     notifyListeners();
     if (_token != null && user != null) {
+      realtime.start();
       await refreshProfile();
       await loadSections();
     }
@@ -240,8 +257,15 @@ class SessionController extends ChangeNotifier {
     await _writeSecure('auth_token', token);
     await _writeSecure('auth_user', jsonEncode(user!.toJson()));
     notifyListeners();
+    realtime.start();
     await loadSections();
     return null;
+  }
+
+  Future<void> replaceUser(AppUser next) async {
+    user = next;
+    await _writeSecure('auth_user', jsonEncode(next.toJson()));
+    notifyListeners();
   }
 
   Future<void> refreshProfile() async {
@@ -276,6 +300,7 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    realtime.stop();
     try {
       if (_token != null) {
         await dio.post<Object?>('/api/auth/logout');

@@ -1,11 +1,12 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
+import '../../ui/audio_player_page.dart';
 import '../../ui/widgets.dart';
+import 'sermon_editor_page.dart';
 
 class SermonsPage extends StatefulWidget {
   const SermonsPage({super.key});
@@ -49,16 +50,19 @@ class _SermonsPageState extends State<SermonsPage> {
     }
   }
 
-  Future<void> _open(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  Future<void> _edit(Map<String, dynamic>? note) async {
+    final saved = await pushPage<bool>(context, SermonEditorPage(note: note));
+    if (saved == true) _load();
   }
 
   @override
   Widget build(BuildContext context) {
+    final preacher = context.watch<SessionController>().user?.isPreacher == true;
     return Scaffold(
       appBar: AppBar(title: const Text('Проповеди')),
+      floatingActionButton: preacher
+          ? FloatingActionButton(onPressed: () => _edit(null), child: const Icon(Icons.add))
+          : null,
       body: AsyncBody(
         loading: _loading,
         error: _error,
@@ -70,7 +74,8 @@ class _SermonsPageState extends State<SermonsPage> {
               ListTile(
                 leading: const Icon(Icons.edit_note),
                 title: Text(str(asMap(raw)['title']).isEmpty ? 'Конспект' : str(asMap(raw)['title'])),
-                subtitle: Text(str(asMap(raw)['updated_at'])),
+                subtitle: Text(str(asMap(raw)['scripture'])),
+                onTap: () => _edit(asMap(raw)),
               ),
             const ListTile(title: Text('Записи')),
             if (_episodes.isEmpty) const EmptyHint('Записей проповедей нет'),
@@ -79,7 +84,12 @@ class _SermonsPageState extends State<SermonsPage> {
                 leading: const Icon(Icons.play_circle_outline),
                 title: Text(str(asMap(raw)['title'])),
                 subtitle: Text(str(asMap(raw)['description']), maxLines: 2, overflow: TextOverflow.ellipsis),
-                onTap: () => _open(str(asMap(raw)['audioUrl'])),
+                onTap: () {
+                  final episode = asMap(raw);
+                  final url = str(episode['audioUrl']);
+                  if (url.isEmpty) return;
+                  pushPage(context, AudioPlayerPage(url: url, title: str(episode['title'])));
+                },
               ),
           ],
         ),

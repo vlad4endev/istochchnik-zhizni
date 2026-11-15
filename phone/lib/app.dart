@@ -2,6 +2,7 @@ import 'package:flutter_localizations/flutter_localizations.dart' hide GlobalMat
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import 'core/nav.dart';
 import 'core/session.dart';
 import 'core/theme.dart';
 import 'features/auth/login_page.dart';
@@ -15,6 +16,7 @@ class IstochnikApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Источник жизни',
       theme: churchTheme(brightness: Brightness.light),
       darkTheme: churchTheme(brightness: Brightness.dark),

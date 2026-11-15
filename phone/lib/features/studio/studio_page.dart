@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
+import '../../ui/chord_sheet.dart';
 import '../../ui/widgets.dart';
 
 class StudioPage extends StatefulWidget {
@@ -123,6 +124,14 @@ class _SetlistPageState extends State<SetlistPage> {
                     leading: CircleAvatar(child: Text('${index + 1}')),
                     title: Text(str(song['title']).isEmpty ? str(item['effective_content_preview']) : str(song['title'])),
                     subtitle: Text(str(item['effective_key'])),
+                    onTap: () => pushPage(
+                      context,
+                      LyricPage(
+                        title: str(song['title']),
+                        content: str(item['effective_content']).isEmpty ? str(song['content']) : str(item['effective_content']),
+                        keyName: str(item['effective_key']),
+                      ),
+                    ),
                   );
                 },
               ),

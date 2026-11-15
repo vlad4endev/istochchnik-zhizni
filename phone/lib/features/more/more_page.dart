@@ -13,6 +13,7 @@ import '../events/events_page.dart';
 import '../schedule/schedule_page.dart';
 import '../sermons/sermons_page.dart';
 import '../service/service_page.dart';
+import '../profile/profile_page.dart';
 import '../settings/settings_page.dart';
 import '../songbook/songbook_page.dart';
 import '../studio/studio_page.dart';
@@ -27,7 +28,8 @@ class MorePage extends StatelessWidget {
     final items = <_Entry>[
       if (session.canOpen('bible')) _Entry('Библия', Icons.menu_book_outlined, const BiblePage()),
       if (session.canOpen('songbook')) _Entry('Песенник', Icons.music_note_outlined, const SongbookPage()),
-      if (session.canOpen('sermons')) _Entry('Проповеди', Icons.mic_none, const SermonsPage()),
+      if (session.canOpen('sermons') || user?.isPreacher == true)
+        _Entry('Проповеди', Icons.mic_none, const SermonsPage()),
       _Entry('Мероприятия', Icons.event_outlined, const EventsPage()),
       if (session.canOpen('service_planner'))
         _Entry('Служение', Icons.calendar_month_outlined, const ServicePage()),
@@ -52,7 +54,7 @@ class MorePage extends StatelessWidget {
               ),
               title: Text(user.displayName),
               subtitle: Text(roleLabel(user.role)),
-              onTap: () => pushPage(context, const SettingsPage()),
+              onTap: () => pushPage(context, const ProfilePage()),
             ),
           for (final item in items)
             ListTile(

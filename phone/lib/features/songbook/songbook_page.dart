@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
+import '../../ui/chord_sheet.dart';
 import '../../ui/widgets.dart';
 
 class SongbookPage extends StatefulWidget {
@@ -146,10 +147,7 @@ class _SongPageState extends State<SongPage> {
             if (str(_song['default_key']).isNotEmpty)
               Text('Тональность ${str(_song['default_key'])}', style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
-            SelectableText(
-              str(_song['content']),
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 15, height: 1.4),
-            ),
+            ChordSheet(content: str(_song['content'])),
           ],
         ),
       ),

@@ -5,7 +5,9 @@ import 'package:provider/provider.dart';
 import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
+import '../../ui/video_page.dart';
 import '../../ui/widgets.dart';
+import 'compose_page.dart';
 
 class FeedPage extends StatefulWidget {
   const FeedPage({super.key});
@@ -65,40 +67,89 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
+  Future<void> _compose({bool story = false}) async {
+    final created = await pushPage<bool>(context, ComposePage(story: story));
+    if (created == true) _load();
+  }
+
   Future<void> _comments(String postId) async {
     final api = ChurchApi(context.read<SessionController>());
+    final draft = TextEditingController();
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (context) {
-        return FutureBuilder<List<dynamic>>(
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(sheetContext).bottom),
+          child: FutureBuilder<List<dynamic>>(
           future: api.comments(postId),
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const SizedBox(height: 180, child: Center(child: CircularProgressIndicator()));
             }
             final items = snapshot.data ?? const [];
-            if (items.isEmpty) return const SizedBox(height: 160, child: EmptyHint('Комментариев пока нет'));
-            return ListView(
+            return Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                for (final raw in items)
-                  ListTile(
-                    title: Text(_commentAuthor(asMap(raw))),
-                    subtitle: Text(_commentText(asMap(raw))),
+                SizedBox(
+                  height: 240,
+                  child: items.isEmpty
+                      ? const EmptyHint('Комментариев пока нет')
+                      : ListView(
+                          children: [
+                            for (final raw in items)
+                              ListTile(
+                                title: Text(_commentAuthor(asMap(raw))),
+                                subtitle: Text(_commentText(asMap(raw))),
+                              ),
+                          ],
+                        ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  child: Row(
+                    children: [
+                      Expanded(child: TextField(controller: draft, decoration: const InputDecoration(hintText: 'Комментарий'))),
+                      IconButton(
+                        onPressed: () async {
+                          final text = draft.text.trim();
+                          if (text.isEmpty) return;
+                          try {
+                            await api.addComment(postId, text);
+                            if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                            _load();
+                          } catch (error) {
+                            if (!sheetContext.mounted) return;
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: Text(describeDio(error))));
+                          }
+                        },
+                        icon: const Icon(Icons.send),
+                      ),
+                    ],
                   ),
+                ),
               ],
             );
           },
+        ),
         );
       },
     );
+    draft.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final origin = context.watch<SessionController>().apiOrigin;
     return Scaffold(
-      appBar: AppBar(title: const Text('Лента')),
+      appBar: AppBar(
+        title: const Text('Лента'),
+        actions: [
+          IconButton(tooltip: 'Сторис', onPressed: () => _compose(story: true), icon: const Icon(Icons.add_a_photo_outlined)),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(onPressed: _compose, child: const Icon(Icons.edit)),
       body: AsyncBody(
         loading: _loading,
         error: _error,
@@ -165,7 +216,9 @@ class _PostCard extends StatelessWidget {
     final name = str(author['display_name']).isEmpty ? 'Участник' : str(author['display_name']);
     final media = asList(post['media']);
     final first = media.isEmpty ? null : asMap(media.first);
-    final image = first != null && str(first['type']) != 'video' ? resolveUrl(origin, str(first['url'])) : '';
+    final mediaUrl = first == null ? '' : resolveUrl(origin, str(first['url']));
+    final video = first != null && str(first['type']) == 'video';
+    final image = !video ? mediaUrl : '';
     return Card(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       clipBehavior: Clip.antiAlias,
@@ -175,6 +228,12 @@ class _PostCard extends StatelessWidget {
           ListTile(title: Text(name), subtitle: Text(str(post['created_at']))),
           if (str(post['caption']).isNotEmpty)
             Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 12), child: Text(str(post['caption']))),
+          if (video && mediaUrl.isNotEmpty)
+            ListTile(
+              leading: const Icon(Icons.play_circle_outline),
+              title: const Text('Видео'),
+              onTap: () => pushPage(context, VideoPage(url: mediaUrl, caption: str(post['caption']))),
+            ),
           if (image.isNotEmpty) Image.network(image, height: 220, width: double.infinity, fit: BoxFit.cover),
           Row(
             children: [
@@ -231,11 +290,14 @@ class _StorySlide extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = resolveUrl(origin, str(story['media_url']));
     final video = str(story['media_type']) == 'video';
+    if (video && url.isNotEmpty) {
+      return VideoPage(url: url, caption: str(story['caption']));
+    }
     return Column(
       children: [
         Expanded(
-          child: video || url.isEmpty
-              ? const Center(child: Text('Видео откроется в следующем обновлении', style: TextStyle(color: Colors.white)))
+          child: url.isEmpty
+              ? const Center(child: Text('Нет изображения', style: TextStyle(color: Colors.white)))
               : Image.network(url, fit: BoxFit.contain),
         ),
         if (str(story['caption']).isNotEmpty)

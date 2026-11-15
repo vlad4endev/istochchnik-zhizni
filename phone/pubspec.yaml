@@ -43,6 +43,15 @@ dependencies:
   provider: ^6.1.5+1
   intl: ^0.20.3
   url_launcher: ^6.3.3
+  image_picker: ^1.2.4
+  file_picker: ^13.3.3
+  record: ^7.2.0
+  just_audio: ^0.10.6
+  audio_session: ^0.2.4
+  video_player: ^2.14.1
+  livekit_client: ^2.13.2
+  path_provider: ^2.1.6
+  web_socket_channel: ^3.0.3
 
 dev_dependencies:
   flutter_test:
