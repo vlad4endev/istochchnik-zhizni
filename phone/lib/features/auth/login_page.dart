@@ -7,71 +7,78 @@ import '../../ui/kit/kit.dart';
 import 'auth_scaffold.dart';
 import 'register_page.dart';
 
-/// Приветствие: фото общины в круге и стеклянная панель с кнопками.
+/// Приветствие: фото общины на весь экран, снизу — тёмная панель с кнопками.
 class LoginPage extends StatelessWidget {
   const LoginPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return DarkPage(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final circle = (constraints.maxWidth - 70).clamp(180.0, 340.0).toDouble();
-          final heroSize = constraints.maxHeight < 700 ? circle * 0.78 : circle;
-          return Column(
-            children: [
-              SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                        child: const Icon(Icons.add_rounded, color: ChurchColors.wine, size: 22),
-                      ),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'Источник жизни',
-                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.17),
-                      ),
-                    ],
-                  ),
+      extraGlow: false,
+      child: Column(
+        children: [
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  'assets/images/welcome-hero.webp',
+                  fit: BoxFit.cover,
+                  alignment: const Alignment(0, 0.45),
+                  semanticLabel: 'Община верующих перед крестом на закате',
                 ),
-              ),
-              Expanded(
-                child: Center(
-                  child: Container(
-                    width: heroSize,
-                    height: heroSize,
+                // Сверху затемнение под название, снизу фото растворяется в панели.
+                const IgnorePointer(
+                  child: DecoratedBox(
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFFFBF3EA),
-                      boxShadow: [
-                        BoxShadow(color: Colors.white.withValues(alpha: 0.45), spreadRadius: 1),
-                        BoxShadow(color: ChurchColors.amber.withValues(alpha: 0.45), blurRadius: 70),
-                        const BoxShadow(color: Color(0x73140408), offset: Offset(0, 24), blurRadius: 50),
-                      ],
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Transform.scale(
-                      scale: 1.12,
-                      child: Image.asset(
-                        'assets/images/welcome-hero.webp',
-                        fit: BoxFit.cover,
-                        alignment: const Alignment(0, 0.04),
-                        semanticLabel: 'Община верующих перед крестом',
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xB33A0F20), Color(0x003A0F20), Color(0x001E0710), ChurchColors.nightDeep],
+                        stops: [0, 0.28, 0.62, 1],
                       ),
                     ),
                   ),
                 ),
-              ),
-              const _WelcomePanel(),
-            ],
-          );
-        },
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(11),
+                              boxShadow: const [BoxShadow(color: Color(0x4D000000), offset: Offset(0, 6), blurRadius: 18)],
+                            ),
+                            child: const Icon(Icons.add_rounded, color: ChurchColors.wine, size: 26),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Источник жизни',
+                            style: TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.2,
+                              shadows: [Shadow(color: Color(0x66000000), blurRadius: 12)],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const ColoredBox(color: ChurchColors.nightDeep, child: _WelcomePanel()),
+        ],
       ),
     );
   }
@@ -84,16 +91,11 @@ class _WelcomePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xB8220810),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(36)),
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.2))),
-        boxShadow: const [BoxShadow(color: Color(0x730A0205), offset: Offset(0, -24), blurRadius: 60)],
-      ),
+      color: Colors.transparent,
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 30, 24, 24),
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
