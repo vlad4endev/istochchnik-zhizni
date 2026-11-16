@@ -2014,13 +2014,17 @@ ALTER TABLE setlists ALTER COLUMN share_token_issued_at SET DEFAULT NOW();
 ALTER TABLE setlists ALTER COLUMN share_token_issued_at SET NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_setlists_member ON setlists (member_id);
 ALTER TABLE setlists ADD COLUMN IF NOT EXISTS source_service_plan_id BIGINT;
--- Minimal stub so fresh local DBs can boot (full schema comes from planner migrations).
+-- Minimal stub so fresh local DBs can boot (full schema comes from planner ensurePlannerSchema).
 CREATE TABLE IF NOT EXISTS service_plans (
   id BIGSERIAL PRIMARY KEY,
   service_date DATE,
   title TEXT,
+  status VARCHAR(20) NOT NULL DEFAULT 'draft',
+  start_time TIME NOT NULL DEFAULT '10:00',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'draft';
+ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS start_time TIME NOT NULL DEFAULT '10:00';
 ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS created_by_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL;
 ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS last_edited_by_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL;
 ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS music_ministry_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL;

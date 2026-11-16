@@ -277,6 +277,23 @@ async function ensurePlannerSchema(): Promise<void> {
          )`,
       );
 
+      // initDb may create a minimal stub without planner columns; CREATE IF NOT EXISTS won't widen it.
+      await query(`alter table public.service_plans add column if not exists template_id bigint references public.service_templates (id) on delete set null`);
+      await query(`alter table public.service_plans add column if not exists service_date date`);
+      await query(`alter table public.service_plans add column if not exists start_time time not null default '10:00'`);
+      await query(`alter table public.service_plans add column if not exists status varchar(20) not null default 'draft'`);
+      await query(`alter table public.service_plans add column if not exists leader_member_id integer references public.members (id) on delete set null`);
+      await query(`alter table public.service_plans add column if not exists preacher_member_id integer references public.members (id) on delete set null`);
+      await query(`alter table public.service_plans add column if not exists total_duration_minutes integer not null default 0`);
+      await query(`alter table public.service_plans add column if not exists current_block_id bigint`);
+      await query(`alter table public.service_plans add column if not exists share_token uuid default gen_random_uuid()`);
+      await query(`update public.service_plans set share_token = gen_random_uuid() where share_token is null`);
+      await query(`alter table public.service_plans alter column share_token set default gen_random_uuid()`);
+      await query(`alter table public.service_plans alter column share_token set not null`);
+      await query(`create unique index if not exists idx_service_plans_share_token on public.service_plans (share_token)`);
+      await query(`alter table public.service_plans add column if not exists church_event_id bigint`);
+      await query(`alter table public.service_plans add column if not exists notes text`);
+      await query(`alter table public.service_plans add column if not exists updated_at timestamptz not null default now()`);
       await query(`alter table public.service_plans add column if not exists is_archived boolean not null default false`);
       await query(`alter table public.service_plans add column if not exists edit_token uuid`);
       await query(`update public.service_plans set edit_token = gen_random_uuid() where edit_token is null`);
