@@ -4,4 +4,7 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- HTTP разрешён только в отладке: локальный API на эмуляторе (10.0.2.2).
+         В release-сборке приложение ходит только по HTTPS, чтобы токен не уходил открытым текстом. -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>

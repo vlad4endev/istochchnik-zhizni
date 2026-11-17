@@ -27,6 +27,41 @@ class _SettingsPageState extends State<SettingsPage> {
     super.dispose();
   }
 
+  Future<void> _saveOrigin(SessionController session) async {
+    final next = SessionController.normalizeOrigin(_origin.text);
+    if (next == session.apiOrigin) {
+      showMessage(context, 'Этот адрес уже используется');
+      return;
+    }
+    if (!next.startsWith('https://') && !next.startsWith('http://')) {
+      showMessage(context, 'Адрес должен начинаться с https://');
+      return;
+    }
+    final signedIn = session.user != null;
+    if (signedIn) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Сменить сервер?'),
+          content: const Text('Вы выйдете из аккаунта и войдёте заново уже на новом сервере.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
+            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Сменить и выйти')),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    await session.setApiOrigin(next);
+    if (!mounted) return;
+    _origin.text = session.apiOrigin;
+    if (signedIn) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      return;
+    }
+    showMessage(context, 'Адрес сохранён');
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
@@ -67,11 +102,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 SecondaryButton(
                   label: 'Сохранить адрес',
                   icon: Icons.check_rounded,
-                  onPressed: () async {
-                    await session.setApiOrigin(_origin.text);
-                    if (!context.mounted) return;
-                    showMessage(context, 'Адрес сохранён');
-                  },
+                  onPressed: () => _saveOrigin(session),
                 ),
               ],
             ),
@@ -84,7 +115,10 @@ class _SettingsPageState extends State<SettingsPage> {
                 title: 'Выйти из аккаунта',
                 titleColor: ChurchColors.danger,
                 chevron: false,
-                onTap: () => session.logout(),
+                onTap: () async {
+                  await session.logout();
+                  if (context.mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+                },
               ),
             ],
           ),

@@ -185,9 +185,20 @@ class SessionController extends ChangeNotifier {
     }
   }
 
-  Future<void> setApiOrigin(String value) async {
+  /// Адрес сервера, который получится после [setApiOrigin] с этим значением.
+  static String normalizeOrigin(String value) {
     final next = value.trim().replaceAll(RegExp(r'/+$'), '');
-    apiOrigin = next.isEmpty ? defaultApiOrigin : next;
+    return next.isEmpty ? defaultApiOrigin : next;
+  }
+
+  /// Смена сервера завершает сессию: токен выдан одним сервером и не должен
+  /// уходить на другой адрес. Выход отправляется ещё на прежний сервер.
+  Future<void> setApiOrigin(String value) async {
+    final next = normalizeOrigin(value);
+    if (next != apiOrigin && _token != null) {
+      await logout();
+    }
+    apiOrigin = next;
     dio.options.baseUrl = apiOrigin;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('api_origin', apiOrigin);
