@@ -97,7 +97,7 @@ class _SermonsPageState extends State<SermonsPage> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  const CrossTile(size: 72, radius: 20),
+                  const ChurchLogo(size: 76),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -170,7 +170,7 @@ class _EpisodeCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const CrossTile(size: 46),
+              const ChurchLogo(size: 50),
               const SizedBox(width: Space.md),
               Expanded(
                 child: Column(

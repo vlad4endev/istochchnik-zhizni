@@ -77,19 +77,12 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
               LayoutBuilder(
                 builder: (context, constraints) {
                   final size = (constraints.maxWidth - 48).clamp(160.0, 300.0).toDouble();
-                  return Container(
-                    width: size,
-                    height: size,
+                  return DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient: crossTileGradient,
-                      borderRadius: BorderRadius.circular(32),
-                      border: Border.all(color: ChurchColors.amber.withValues(alpha: 0.25)),
-                      boxShadow: [
-                        BoxShadow(color: ChurchColors.amber.withValues(alpha: 0.18), blurRadius: 60),
-                        const BoxShadow(color: Color(0x80000000), offset: Offset(0, 24), blurRadius: 40),
-                      ],
+                      borderRadius: BorderRadius.circular(size * 0.18),
+                      boxShadow: [BoxShadow(color: ChurchColors.amber.withValues(alpha: 0.22), blurRadius: 60)],
                     ),
-                    child: Center(child: CrossTile(size: size * 0.42, radius: size * 0.12)),
+                    child: ChurchLogo(size: size),
                   );
                 },
               ),

@@ -43,7 +43,7 @@ class AuthScaffold extends StatelessWidget {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const CrossTile(size: 56, radius: 18),
+                            const ChurchLogo(size: 60),
                             const SizedBox(width: 14),
                             Expanded(
                               child: Column(

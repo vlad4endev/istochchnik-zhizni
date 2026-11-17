@@ -228,7 +228,7 @@ class _HomePageState extends State<HomePage> {
         onTap: () => pushPage(context, const SermonsPage()),
         child: Row(
           children: [
-            const CrossTile(size: 52, radius: 16),
+            const ChurchLogo(size: 56),
             const SizedBox(width: Space.md),
             Expanded(
               child: Column(

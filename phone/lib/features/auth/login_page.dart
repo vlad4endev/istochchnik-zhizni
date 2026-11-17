@@ -49,16 +49,7 @@ class LoginPage extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(11),
-                              boxShadow: const [BoxShadow(color: Color(0x4D000000), offset: Offset(0, 6), blurRadius: 18)],
-                            ),
-                            child: const Icon(Icons.add_rounded, color: ChurchColors.wine, size: 26),
-                          ),
+                          const ChurchLogo(size: 40),
                           const SizedBox(width: 12),
                           const Text(
                             'Источник жизни',

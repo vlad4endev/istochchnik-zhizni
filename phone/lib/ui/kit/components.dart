@@ -95,42 +95,27 @@ class IconTile extends StatelessWidget {
   }
 }
 
-/// Тёмная плитка с крестом — обложка подкаста и проповеди.
-class CrossTile extends StatelessWidget {
-  const CrossTile({super.key, this.size = 46, this.radius = 14});
+/// Логотип церкви: обложка подкаста и проповеди, знак на входе, аватар канала.
+class ChurchLogo extends StatelessWidget {
+  const ChurchLogo({super.key, this.size = 46, this.circle = false});
 
   final double size;
-  final double radius;
+
+  /// Круглый вариант для списков с круглыми аватарами.
+  final bool circle;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final image = Image.asset(
+      circle ? 'assets/images/logo-square.png' : 'assets/images/logo.png',
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        gradient: crossTileGradient,
-        borderRadius: BorderRadius.circular(radius),
-        boxShadow: [BoxShadow(color: ChurchColors.amber.withValues(alpha: 0.25), spreadRadius: 1)],
-      ),
-      alignment: Alignment.center,
-      child: CustomPaint(size: Size.square(size * 0.42), painter: _CrossPainter()),
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.medium,
+      semanticLabel: 'Логотип церкви',
     );
+    return circle ? ClipOval(child: image) : image;
   }
-}
-
-class _CrossPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = ChurchColors.amber
-      ..strokeWidth = size.width * 0.13
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(Offset(size.width / 2, 0), Offset(size.width / 2, size.height), paint);
-    canvas.drawLine(Offset(size.width * 0.18, size.height * 0.32), Offset(size.width * 0.82, size.height * 0.32), paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 /// Карточка-группа строк с тонкими разделителями.

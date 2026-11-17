@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Фон из логотипа (bgSoft): мягкий светлый градиент. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:angle="315" android:startColor="#F8F8F8" android:endColor="#ECECEC" />
+</shape>

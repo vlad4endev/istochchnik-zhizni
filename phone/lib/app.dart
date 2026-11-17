@@ -30,7 +30,23 @@ class IstochnikApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
       ],
       home: !session.ready
-          ? const DarkPage(child: Center(child: CircularProgressIndicator(color: ChurchColors.amber)))
+          ? const DarkPage(
+              extraGlow: false,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ChurchLogo(size: 96),
+                    SizedBox(height: 28),
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.4, color: ChurchColors.amber),
+                    ),
+                  ],
+                ),
+              ),
+            )
           : session.user == null
               ? const LoginPage()
               : session.user!.isActive

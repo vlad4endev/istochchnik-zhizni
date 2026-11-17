@@ -57,12 +57,6 @@ const wineGradient = LinearGradient(
   colors: [ChurchColors.wine, ChurchColors.wineDark],
 );
 
-const crossTileGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [ChurchColors.wineDeep, Color(0xFF220810)],
-);
-
 /// Цвета листа и карточек. Шапка тёмная в обеих темах, меняется только лист.
 @immutable
 class ChurchPalette extends ThemeExtension<ChurchPalette> {

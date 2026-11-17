@@ -175,7 +175,7 @@ class _ChatRow extends StatelessWidget {
         child: Row(
           children: [
             if (type == 'channel' && avatarUrl.isEmpty)
-              const CrossTile(size: 46, radius: 23)
+              const ChurchLogo(size: 46, circle: true)
             else
               ChurchAvatar(name: title, imageUrl: avatarUrl, size: 46),
             const SizedBox(width: Space.md),
