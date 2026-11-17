@@ -11,7 +11,7 @@ import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 import '../bible/bible_page.dart';
 import '../broadcast/broadcast_page.dart';
-import '../calls/calls_page.dart';
+import '../profile/profile_page.dart';
 import '../events/events_page.dart';
 import '../prayer/prayer_page.dart';
 import '../sermons/sermons_page.dart';
@@ -119,11 +119,11 @@ class _HomePageState extends State<HomePage> {
         onTap: () => pushPage(context, const BroadcastPage()),
       ),
       FeatureTile(
-        icon: Icons.call_outlined,
-        label: 'Звонки',
+        icon: Icons.favorite_border_rounded,
+        label: 'Моя нужда',
         tone: Tone.violet,
         centered: true,
-        onTap: () => pushPage(context, const CallsPage()),
+        onTap: () => pushPage(context, const ProfilePage(focusNeed: true)),
       ),
     ];
     return ChurchPage(
@@ -408,6 +408,8 @@ class _LiveCard extends StatelessWidget {
                   const SizedBox(height: 10),
                   Text(
                     str(broadcast['title']).isEmpty ? 'Трансляция' : str(broadcast['title']),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.white),
                   ),
                   const SizedBox(height: 2),

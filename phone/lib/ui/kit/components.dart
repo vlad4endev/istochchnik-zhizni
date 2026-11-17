@@ -219,7 +219,13 @@ class ListRow extends StatelessWidget {
                 ],
               ),
             ),
-            if (trailing != null) ...[const SizedBox(width: Space.sm), trailing!],
+            if (trailing != null) ...[
+              const SizedBox(width: Space.sm),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.4),
+                child: trailing!,
+              ),
+            ],
             if (showChevron) ...[
               const SizedBox(width: Space.xs),
               Icon(Icons.chevron_right_rounded, color: palette.chevron, size: 22),
@@ -360,13 +366,15 @@ class StatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final bg = solid ? ChurchColors.wine : (tone?.bg(palette) ?? palette.accentSoft);
-    final fg = solid ? Colors.white : (tone?.fg(palette) ?? palette.accent);
+    final fg = solid ? Colors.white : (tone?.text(palette) ?? palette.accent);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
       child: Text(
         text,
         maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        softWrap: false,
         style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.4, color: fg, height: 1.1),
       ),
     );
@@ -737,9 +745,13 @@ class LabeledField extends StatelessWidget {
     this.textInputAction,
     this.autofillHints,
     this.textCapitalization = TextCapitalization.none,
+    this.autofocus = false,
   });
 
   final String label;
+
+  /// Сразу поставить курсор в поле (переход «Моя нужда» → профиль).
+  final bool autofocus;
 
   /// Пояснение рядом с подписью, светлее основного текста.
   final String? note;
@@ -786,6 +798,7 @@ class LabeledField extends StatelessWidget {
           textInputAction: textInputAction,
           autofillHints: autofillHints,
           textCapitalization: textCapitalization,
+          autofocus: autofocus,
           style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w500, color: palette.ink),
           decoration: InputDecoration(hintText: hint, suffixIcon: suffix),
         ),

@@ -97,8 +97,9 @@ class ChurchPalette extends ThemeExtension<ChurchPalette> {
     card: Colors.white,
     ink: Color(0xFF3A1018),
     inkMuted: Color(0xFF6A5555),
-    inkFaint: Color(0xFF8A7774),
-    chevron: Color(0xFFB09A97),
+    // Подобраны под WCAG AA: вторичный текст ≥4.5:1 на листе и карточке, шеврон ≥3:1.
+    inkFaint: Color(0xFF76625F),
+    chevron: Color(0xFF9A8380),
     hairline: Color(0x125A1826),
     outline: Color(0x245A1826),
     accent: ChurchColors.wine,
@@ -192,6 +193,10 @@ enum Tone {
 
   Color fg(ChurchPalette palette) =>
       palette.isDark ? Color.lerp(foreground, Colors.white, 0.45)! : foreground;
+
+  /// Цвет текста на фоне тона (бейджи): в светлой теме темнее иконки, чтобы держать ≥4.5:1.
+  Color text(ChurchPalette palette) =>
+      palette.isDark ? fg(palette) : Color.lerp(foreground, Colors.black, 0.25)!;
 }
 
 /// Типографика: Onest для интерфейса, Playfair Display Italic для акцентных заголовков.

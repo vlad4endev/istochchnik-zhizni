@@ -7,6 +7,7 @@ import '../../core/json.dart';
 import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
+import '../profile/profile_page.dart';
 
 class PrayerPage extends StatefulWidget {
   const PrayerPage({super.key});
@@ -85,6 +86,10 @@ class _PrayerPageState extends State<PrayerPage> {
             padding: const EdgeInsets.fromLTRB(Space.lg, 18, Space.lg, 0),
             child: _DateBar(date: _date, onPrev: () => _shift(-1), onNext: () => _shift(1), onPick: _pick),
           ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(Space.lg, Space.md, Space.lg, 0),
+            child: _MyNeed(),
+          ),
           Expanded(
             child: AsyncBody(
               loading: _loading,
@@ -133,6 +138,25 @@ class _PrayerPageState extends State<PrayerPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Своя молитвенная нужда — в один тап от экрана молитвы.
+class _MyNeed extends StatelessWidget {
+  const _MyNeed();
+
+  @override
+  Widget build(BuildContext context) {
+    final need = context.watch<SessionController>().user?.prayerRequest.trim() ?? '';
+    return ChurchCard(
+      padding: EdgeInsets.zero,
+      child: ListRow(
+        leading: const IconTile(Icons.favorite_border_rounded, tone: Tone.violet),
+        title: 'Моя молитвенная нужда',
+        subtitle: need.isEmpty ? 'Не указана — расскажите, о чём молиться за вас' : need,
+        onTap: () => pushPage(context, const ProfilePage(focusNeed: true)),
       ),
     );
   }

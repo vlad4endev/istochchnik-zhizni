@@ -10,7 +10,10 @@ import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key});
+  const ProfilePage({super.key, this.focusNeed = false});
+
+  /// Открыть сразу с курсором в поле молитвенной нужды.
+  final bool focusNeed;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -182,6 +185,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   label: 'Молитвенная нужда',
                   note: '— видна в молитвенном цикле',
                   controller: _need,
+                  autofocus: widget.focusNeed,
                   hint: 'О чём молиться за вас',
                   minLines: 3,
                   maxLines: 6,

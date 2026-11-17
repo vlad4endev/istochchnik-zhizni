@@ -328,7 +328,12 @@ class _PostCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name, style: ChurchType.title.copyWith(fontSize: 15, color: palette.ink)),
+                    Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: ChurchType.title.copyWith(fontSize: 15, color: palette.ink),
+                    ),
                     Text(relativeTime(post['created_at']), style: TextStyle(fontSize: 12, color: palette.inkFaint)),
                   ],
                 ),
