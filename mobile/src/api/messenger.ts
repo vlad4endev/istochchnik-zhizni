@@ -205,3 +205,50 @@ export async function removeReaction(messageId: string, emoji: string): Promise<
     `${BASE}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`,
   );
 }
+
+export type PatchMyConversationUiBody = {
+  muted?: boolean;
+  uiPinned?: boolean;
+};
+
+/** Личные настройки чата: закрепить в списке, отключить уведомления. */
+export async function patchMyConversationUi(
+  conversationId: string,
+  body: PatchMyConversationUiBody,
+): Promise<void> {
+  await apiClient.patch(`${BASE}/conversations/${encodeURIComponent(conversationId)}/my-ui`, body);
+}
+
+export async function editMessage(messageId: string, content: string): Promise<void> {
+  await apiClient.patch(`${BASE}/messages/${encodeURIComponent(messageId)}`, { content });
+}
+
+export async function fetchParticipantsCount(conversationId: string): Promise<number> {
+  const { data } = await apiClient.get<unknown[]>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/participants`,
+  );
+  return Array.isArray(data) ? data.length : 0;
+}
+
+export async function fetchPinnedMessages(
+  conversationId: string,
+  limit = 15,
+): Promise<MessageWithSender[]> {
+  const { data } = await apiClient.get<MessageWithSender[]>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/pinned-messages`,
+    { params: { limit } },
+  );
+  return data ?? [];
+}
+
+export async function pinChatMessage(conversationId: string, messageId: string): Promise<void> {
+  await apiClient.post(`${BASE}/conversations/${encodeURIComponent(conversationId)}/pins`, {
+    messageId,
+  });
+}
+
+export async function unpinChatMessage(conversationId: string, messageId: string): Promise<void> {
+  await apiClient.delete(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/pins/${encodeURIComponent(messageId)}`,
+  );
+}

@@ -16,15 +16,29 @@ interface ChatInputProps {
   onSend: (text: string) => Promise<void>;
   disabled?: boolean;
   conversationId?: string;
+  /** Режим правки: текст подставляется в поле; `token` меняется при каждой новой правке. */
+  prefill?: { token: number; text: string } | null;
+  placeholder?: string;
 }
 
-export function ChatInput({ onSend, disabled = false, conversationId }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  disabled = false,
+  conversationId,
+  prefill = null,
+  placeholder = 'Сообщение...',
+}: ChatInputProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentRef = useRef(0);
+
+  useEffect(() => {
+    if (prefill) setText(prefill.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill?.token]);
 
   const canSend = text.trim().length > 0 && !disabled && !sending;
 
@@ -86,7 +100,7 @@ export function ChatInput({ onSend, disabled = false, conversationId }: ChatInpu
         value={text}
         onChangeText={handleTextChange}
         onBlur={sendTypingStop}
-        placeholder="Сообщение..."
+        placeholder={placeholder}
         placeholderTextColor={colors.textMuted}
         multiline
         maxLength={8000}
@@ -128,19 +142,19 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     input: {
       flex: 1,
-      minHeight: 40,
-      maxHeight: 120,
+      minHeight: 44,
+      maxHeight: 140,
       borderRadius: 20,
       paddingHorizontal: 16,
       paddingVertical: 10,
-      fontSize: 16,
+      fontSize: 17,
       color: colors.text,
       backgroundColor: colors.surface,
     },
     sendBtn: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       alignItems: 'center',
       justifyContent: 'center',
     },

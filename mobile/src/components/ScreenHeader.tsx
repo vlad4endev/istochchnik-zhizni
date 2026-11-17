@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
 import { useTheme, type ThemeColors } from '../theme';
@@ -6,16 +7,21 @@ import { useTheme, type ThemeColors } from '../theme';
 interface ScreenHeaderProps {
   title: string;
   subtitle?: string;
+  /** Кнопки справа в шапке (например, действия раздела). */
+  right?: ReactNode;
 }
 
-export function ScreenHeader({ title, subtitle }: ScreenHeaderProps) {
+export function ScreenHeader({ title, subtitle, right }: ScreenHeaderProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <View style={styles.header}>
-      <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      <View style={styles.texts}>
+        <Text style={styles.title}>{title}</Text>
+        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      </View>
+      {right ? <View style={styles.right}>{right}</View> : null}
     </View>
   );
 }
@@ -27,7 +33,12 @@ function createStyles(colors: ThemeColors) {
       paddingHorizontal: 20,
       paddingTop: 8,
       paddingBottom: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
     },
+    texts: { flex: 1, minWidth: 0 },
+    right: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     title: {
       color: colors.textOnPrimary,
       fontSize: 26,

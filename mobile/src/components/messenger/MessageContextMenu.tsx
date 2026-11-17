@@ -24,6 +24,9 @@ interface MessageContextMenuProps {
   onReply: (message: MessageWithSender) => void;
   onReact: (messageId: string, emoji: string) => void;
   onDelete: (messageId: string) => void;
+  onEdit?: (message: MessageWithSender) => void;
+  onPin?: (message: MessageWithSender) => void;
+  isPinned?: boolean;
 }
 
 export function MessageContextMenu({
@@ -34,6 +37,9 @@ export function MessageContextMenu({
   onReply,
   onReact,
   onDelete,
+  onEdit,
+  onPin,
+  isPinned = false,
 }: MessageContextMenuProps) {
   const styles = useMemo(() => createStyles(), []);
 
@@ -53,7 +59,7 @@ export function MessageContextMenu({
   };
 
   const handlePin = () => {
-    Alert.alert('Скоро', 'Закрепление сообщений появится в следующем обновлении');
+    onPin?.(message);
     onClose();
   };
 
@@ -94,7 +100,25 @@ export function MessageContextMenu({
           {canCopy ? (
             <MenuItem styles={styles} emoji="📋" label="Копировать" onPress={() => void handleCopy()} />
           ) : null}
-          <MenuItem styles={styles} emoji="📌" label="Закрепить" onPress={handlePin} />
+          {onPin ? (
+            <MenuItem
+              styles={styles}
+              emoji="📌"
+              label={isPinned ? 'Открепить' : 'Закрепить'}
+              onPress={handlePin}
+            />
+          ) : null}
+          {isOwn && canCopy && onEdit ? (
+            <MenuItem
+              styles={styles}
+              emoji="✏️"
+              label="Изменить"
+              onPress={() => {
+                onEdit(message);
+                onClose();
+              }}
+            />
+          ) : null}
           <MenuItem
             styles={styles}
             emoji="😀"
