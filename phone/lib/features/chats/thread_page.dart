@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/church_api.dart';
 import '../../core/dates.dart';
 import '../../core/json.dart';
+import '../../core/push.dart';
 import '../../core/session.dart';
 import '../../ui/audio_player_page.dart';
 import '../../ui/kit/kit.dart';
@@ -52,6 +53,7 @@ class _ThreadPageState extends State<ThreadPage> {
   void initState() {
     super.initState();
     _input.addListener(_onInput);
+    PushService.activeConversationId = widget.conversationId;
     _load();
   }
 
@@ -100,6 +102,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
   @override
   void dispose() {
+    if (PushService.activeConversationId == widget.conversationId) PushService.activeConversationId = null;
     _input.removeListener(_onInput);
     _input.dispose();
     _recorder.dispose();

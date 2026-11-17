@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -146,6 +147,12 @@ class SessionController extends ChangeNotifier {
   Map<String, SectionRule> sections = {};
   String? _token;
 
+  /// Вызывается после успешного входа или регистрации (например, регистрация пушей).
+  final List<Future<void> Function()> afterLogin = [];
+
+  /// Вызывается перед выходом, пока токен ещё действует (отвязка устройства от пушей).
+  final List<Future<void> Function()> beforeLogout = [];
+
   String? get token => _token;
 
   bool canOpen(String sectionId) {
@@ -270,6 +277,9 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
     realtime.start();
     await loadSections();
+    for (final hook in afterLogin) {
+      unawaited(hook());
+    }
     return null;
   }
 
@@ -311,6 +321,13 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    if (_token != null) {
+      for (final hook in beforeLogout) {
+        try {
+          await hook().timeout(const Duration(seconds: 5));
+        } catch (_) {}
+      }
+    }
     realtime.stop();
     try {
       if (_token != null) {

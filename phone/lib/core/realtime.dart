@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:material_ui/material_ui.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-import '../features/calls/call_page.dart';
-import 'nav.dart';
+import 'call_alerts.dart';
 import 'session.dart';
 
 class ChurchRealtime {
@@ -16,7 +14,10 @@ class ChurchRealtime {
   Timer? _ping;
   StreamSubscription<dynamic>? _sub;
   bool _stopped = true;
-  bool _ringing = false;
+  final _callEvents = StreamController<Map<String, dynamic>>.broadcast();
+
+  /// События звонков из сокета: отмена, отказ, завершение — экран звонка закрывается сам.
+  Stream<Map<String, dynamic>> get callEvents => _callEvents.stream;
 
   void start() {
     final token = session.token;
@@ -72,23 +73,18 @@ class ChurchRealtime {
     } catch (_) {
       return;
     }
-    if (message['type'] == 'call:incoming' && !_ringing) {
+    final type = '${message['type'] ?? ''}';
+    if (type.startsWith('call:')) _callEvents.add(message);
+    if (type == 'call:incoming') {
       final callId = '${message['callId'] ?? ''}'.trim();
       if (callId.isEmpty) return;
-      final nav = navigatorKey.currentState;
-      if (nav == null) return;
-      _ringing = true;
-      nav
-          .push(MaterialPageRoute<void>(
-            fullscreenDialog: true,
-            builder: (_) => CallPage(
-              callId: callId,
-              incoming: true,
-              title: '${message['callerName'] ?? 'Входящий звонок'}',
-              video: message['callType'] == 'video',
-            ),
-          ))
-          .whenComplete(() => _ringing = false);
+      final name = '${message['callerName'] ?? ''}'.trim();
+      CallAlerts.instance.showInApp(CallInvite(
+        callId: callId,
+        callerName: name.isEmpty ? 'Входящий звонок' : name,
+        video: message['callType'] == 'video',
+        conversationId: '${message['conversationId'] ?? ''}',
+      ));
     }
   }
 }

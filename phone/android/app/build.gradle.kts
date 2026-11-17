@@ -6,12 +6,15 @@ plugins {
 
 android {
     namespace = "com.istochnikzhizni.molitva"
-    compileSdk = flutter.compileSdkVersion
+    // 37: так требуют flutter_local_notifications и androidx.core 1.19; targetSdk остаётся от Flutter.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications использует java.time на старых Android.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -42,6 +45,7 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
@@ -54,4 +58,8 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }

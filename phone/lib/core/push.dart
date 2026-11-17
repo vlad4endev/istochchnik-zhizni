@@ -1,0 +1,230 @@
+import 'dart:async';
+import 'dart:math';
+
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../features/chats/thread_page.dart';
+import 'call_alerts.dart';
+import 'firebase_config.dart';
+import 'nav.dart';
+import 'session.dart';
+
+const _messagesChannel = AndroidNotificationChannel(
+  'messages',
+  'Сообщения',
+  description: 'Новые сообщения в чатах',
+  importance: Importance.high,
+);
+
+const _generalChannel = AndroidNotificationChannel(
+  'general',
+  'Уведомления церкви',
+  description: 'Лента, молитва, события и напоминания',
+  importance: Importance.high,
+);
+
+/// Пуш пришёл, когда приложение закрыто или свёрнуто. Сообщения Android показывает
+/// сам (в пуше есть блок notification); здесь только звонки — они приходят без него.
+@pragma('vm:entry-point')
+Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
+  await ensureFirebase();
+  final data = message.data;
+  final invite = CallInvite.fromPush(data);
+  if (invite != null) {
+    await showNativeIncoming(invite);
+    return;
+  }
+  final ended = CallInvite.endedCallId(data);
+  if (ended != null) {
+    await FlutterCallkitIncoming.endCall(ended);
+  }
+}
+
+/// Регистрация устройства на сервере и обработка пушей в открытом приложении.
+class PushService {
+  PushService._();
+  static final PushService instance = PushService._();
+
+  /// Открытый сейчас чат: уведомления о нём не показываем, человек и так его видит.
+  static String? activeConversationId;
+
+  final _local = FlutterLocalNotificationsPlugin();
+  SessionController? _session;
+  StreamSubscription<String>? _tokenRefresh;
+  bool _started = false;
+  String? _registeredToken;
+
+  Future<void> start(SessionController session) async {
+    _session = session;
+    CallAlerts.instance.attach(session);
+    if (_started || !await ensureFirebase()) return;
+    _started = true;
+    session.beforeLogout.add(unregister);
+    session.afterLogin.add(register);
+
+    await _local.initialize(
+      settings: const InitializationSettings(android: AndroidInitializationSettings('ic_stat_notify')),
+      onDidReceiveNotificationResponse: (response) => _openFromPayload(response.payload),
+    );
+    final android = _local.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    await android?.createNotificationChannel(_messagesChannel);
+    await android?.createNotificationChannel(_generalChannel);
+
+    FirebaseMessaging.onMessage.listen(_onForeground);
+    FirebaseMessaging.onMessageOpenedApp.listen((m) => _openFromData(m.data, m.notification?.title));
+    final initial = await FirebaseMessaging.instance.getInitialMessage();
+    if (initial != null) {
+      // Навигатор появляется после первого кадра.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openFromData(initial.data, initial.notification?.title));
+    }
+    // Сервер (firebase-admin sendEachForMulticast) шлёт по классическим FCM-токенам,
+    // а новый register()/onRegistered выдаёт Installation ID — с ним пуши не дойдут.
+    // ignore: deprecated_member_use
+    _tokenRefresh = FirebaseMessaging.instance.onTokenRefresh.listen(_sendToken);
+    WidgetsBinding.instance.addPostFrameCallback((_) => CallAlerts.instance.resumeAcceptedCall());
+    if (session.user?.isActive == true) await register();
+  }
+
+  /// После входа: разрешения и токен устройства на сервер.
+  Future<void> register() async {
+    if (!_started || _session?.token == null) return;
+    try {
+      await FirebaseMessaging.instance.requestPermission();
+      // ignore: deprecated_member_use — см. комментарий у onTokenRefresh
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null) await _sendToken(token);
+    } catch (_) {
+      /* без Google Play Services пушей не будет, приложение продолжает работать */
+    }
+    await _askFullScreenCalls();
+  }
+
+  /// Android 14+: без этого разрешения звонок не откроется поверх экрана блокировки.
+  /// Объясняем зачем, и только потом отправляем в системные настройки. Спрашиваем один раз.
+  Future<void> _askFullScreenCalls() async {
+    try {
+      if (await FlutterCallkitIncoming.canUseFullScreenIntent()) return;
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('asked_full_screen_calls') == true) return;
+      await prefs.setBool('asked_full_screen_calls', true);
+      final context = navigatorKey.currentContext;
+      if (context == null || !context.mounted) return;
+      final allow = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Звонки на весь экран'),
+          content: const Text(
+            'Чтобы входящий звонок появлялся поверх экрана блокировки, как в мессенджерах, '
+            'разрешите это в следующем окне настроек.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Позже')),
+            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Разрешить')),
+          ],
+        ),
+      );
+      if (allow == true) await FlutterCallkitIncoming.requestFullIntentPermission();
+    } catch (_) {}
+  }
+
+  Future<void> _sendToken(String token) async {
+    final session = _session;
+    if (session?.token == null || token == _registeredToken) return;
+    try {
+      await session!.dio.post<Object?>(
+        '/api/notifications/save-token',
+        data: {'fcm_token': token, 'device_id': await deviceId()},
+      );
+      _registeredToken = token;
+    } catch (_) {}
+  }
+
+  /// Перед выходом: устройство больше не должно получать пуши этого человека.
+  Future<void> unregister() async {
+    final session = _session;
+    if (session == null) return;
+    try {
+      await session.dio.post<Object?>('/api/notifications/remove-token', data: {'device_id': await deviceId()});
+    } catch (_) {}
+    try {
+      // ignore: deprecated_member_use — пара к getToken
+      await FirebaseMessaging.instance.deleteToken();
+    } catch (_) {}
+    _registeredToken = null;
+  }
+
+  static Future<String> deviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    var id = prefs.getString('push_device_id');
+    if (id == null || id.isEmpty) {
+      final random = Random.secure();
+      id = 'flutter-${List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join()}';
+      await prefs.setString('push_device_id', id);
+    }
+    return id;
+  }
+
+  Future<void> _onForeground(RemoteMessage message) async {
+    final data = message.data;
+    final invite = CallInvite.fromPush(data);
+    if (invite != null) {
+      CallAlerts.instance.showInApp(invite);
+      return;
+    }
+    final ended = CallInvite.endedCallId(data);
+    if (ended != null) {
+      await CallAlerts.instance.endNative(ended);
+      return;
+    }
+    final title = message.notification?.title ?? '${data['title'] ?? ''}';
+    final body = message.notification?.body ?? '${data['body'] ?? ''}';
+    if (title.isEmpty && body.isEmpty) return;
+    final conversationId = '${data['conversationId'] ?? ''}';
+    if (conversationId.isNotEmpty && conversationId == activeConversationId) return;
+    final channel = conversationId.isNotEmpty ? _messagesChannel : _generalChannel;
+    await _local.show(
+      id: (data['tag'] ?? message.messageId ?? title).hashCode & 0x7fffffff,
+      title: title,
+      body: body,
+      payload: conversationId.isEmpty ? null : '$conversationId|$title',
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          channel.id,
+          channel.name,
+          channelDescription: channel.description,
+          importance: Importance.high,
+          priority: Priority.high,
+          color: const Color(0xFF8A2742),
+          icon: 'ic_stat_notify',
+        ),
+      ),
+    );
+  }
+
+  void _openFromPayload(String? payload) {
+    if (payload == null || !payload.contains('|')) return;
+    final index = payload.indexOf('|');
+    _openConversation(payload.substring(0, index), payload.substring(index + 1));
+  }
+
+  void _openFromData(Map<String, dynamic> data, String? title) {
+    final conversationId = '${data['conversationId'] ?? ''}';
+    if (conversationId.isEmpty || CallInvite.fromPush(data) != null) return;
+    _openConversation(conversationId, title ?? '${data['title'] ?? 'Чат'}');
+  }
+
+  void _openConversation(String conversationId, String title) {
+    if (_session?.user == null) return;
+    navigatorKey.currentState?.push(MaterialPageRoute<void>(
+      builder: (_) => ThreadPage(conversationId: conversationId, title: title.isEmpty ? 'Чат' : title),
+    ));
+  }
+
+  Future<void> dispose() async {
+    await _tokenRefresh?.cancel();
+  }
+}

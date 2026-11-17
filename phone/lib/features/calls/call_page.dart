@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:audio_session/audio_session.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:material_ui/material_ui.dart';
@@ -15,6 +17,7 @@ class CallPage extends StatefulWidget {
     this.conversationId,
     this.recipientId,
     this.incoming = false,
+    this.autoAccept = false,
     this.video = false,
     this.title = 'Звонок',
   });
@@ -23,6 +26,9 @@ class CallPage extends StatefulWidget {
   final String? conversationId;
   final int? recipientId;
   final bool incoming;
+
+  /// Звонок уже принят на системной звонилке — соединяем без второго «Ответить».
+  final bool autoAccept;
   final bool video;
   final String title;
 
@@ -40,6 +46,7 @@ class _CallPageState extends State<CallPage> {
   bool _muted = false;
   bool _declined = false;
   bool _started = false;
+  StreamSubscription<Map<String, dynamic>>? _callEvents;
 
   @override
   void initState() {
@@ -52,10 +59,29 @@ class _CallPageState extends State<CallPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _session ??= context.read<SessionController>();
-    if (!_started && !widget.incoming) {
+    _callEvents ??= _session!.realtime.callEvents.listen(_onCallEvent);
+    if (!_started && (!widget.incoming || widget.autoAccept)) {
       _started = true;
       _connect();
     }
+  }
+
+  void _onCallEvent(Map<String, dynamic> event) {
+    final id = '${event['callId'] ?? ''}';
+    if (id.isEmpty || id != _callId || !mounted) return;
+    final type = '${event['type'] ?? ''}';
+    final message = switch (type) {
+      'call:cancelled' => 'Звонок отменён',
+      'call:rejected' => 'Собеседник отклонил звонок',
+      'call:ended' => 'Звонок завершён',
+      _ => null,
+    };
+    if (message == null) return;
+    // Завершение на время переподключения LiveKit сервер не шлёт, поэтому закрываем сразу.
+    setState(() => _error = message);
+    Future<void>.delayed(const Duration(milliseconds: 1200), () {
+      if (mounted) Navigator.of(context).maybePop();
+    });
   }
 
   void _refresh() {
@@ -138,6 +164,7 @@ class _CallPageState extends State<CallPage> {
 
   @override
   void dispose() {
+    _callEvents?.cancel();
     _room.removeListener(_refresh);
     final id = _callId;
     final session = _session;
