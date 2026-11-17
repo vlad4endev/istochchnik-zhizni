@@ -27,6 +27,14 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appLabel"] = "Источник жизни"
+    }
+
+    // Тестовая сборка для телефона: PREVIEW_BUILD=1 flutter build apk ...
+    // Отдельный пакет и название, чтобы ставилась рядом с основным приложением.
+    if (System.getenv("PREVIEW_BUILD") == "1") {
+        defaultConfig.applicationIdSuffix = ".preview"
+        defaultConfig.manifestPlaceholders["appLabel"] = "Источник жизни тест"
     }
 
     buildTypes {
