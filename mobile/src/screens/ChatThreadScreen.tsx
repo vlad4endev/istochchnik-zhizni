@@ -7,6 +7,7 @@ import { format, isSameDay, isToday, isYesterday } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -33,6 +34,9 @@ import {
   type MessageWithSender,
 } from '../api/messenger';
 import { sendAttachments, sendVoiceMessage } from '../api/messengerUpload';
+import { ForwardSheet } from '../components/messenger/ForwardSheet';
+import { ReadersSheet } from '../components/messenger/ReadersSheet';
+import { isReadByOthers, readUpTo } from '../lib/readReceipts';
 import { ChatHeaderTitle } from '../components/messenger/ChatHeaderTitle';
 import { ChatInput } from '../components/messenger/ChatInput';
 import { CreateMeetingSheet } from '../components/messenger/CreateMeetingSheet';
@@ -89,6 +93,9 @@ export function ChatThreadScreen() {
   const [editing, setEditing] = useState<MessageWithSender | null>(null);
   const [editToken, setEditToken] = useState(0);
   const [meetingOpen, setMeetingOpen] = useState(false);
+  const [forwardId, setForwardId] = useState<string | null>(null);
+  const [readersId, setReadersId] = useState<string | null>(null);
+  const readCursors = useMessengerRealtimeStore((s) => s.readCursorsByConv[conversationId]);
   const [showJump, setShowJump] = useState(false);
   const typingUsers = useMessengerRealtimeStore((s) => s.typingByConv[conversationId] ?? []);
   const onlineMembers = useMessengerRealtimeStore((s) => s.onlineMembers);
@@ -154,6 +161,12 @@ export function ChatThreadScreen() {
     participantsQuery.data,
     typingUsers,
   ]);
+
+  const upTo = useMemo(
+    () =>
+      readUpTo({ cursors: readCursors, myMemberId: memberId, lastMessage: conversation?.last_message }),
+    [readCursors, memberId, conversation?.last_message],
+  );
 
   const headerOnline =
     !isGroup && conversation?.other_member != null && onlineMembers.has(conversation.other_member.id);
@@ -512,6 +525,8 @@ export function ChatThreadScreen() {
                 showSenderName={showSender}
                 onLongPress={handleLongPress}
                 onSwipeReply={handleSwipeReply}
+                readByOthers={isOwn && isReadByOthers(item.id, upTo)}
+                onShowReaders={isGroup && isOwn ? (m) => setReadersId(m.id) : undefined}
               />
             </View>
           );
@@ -573,6 +588,8 @@ export function ChatThreadScreen() {
           setEditToken((t) => t + 1);
         }}
         onPin={(message) => pinMutation.mutate(message)}
+        onForward={(message) => setForwardId(message.id)}
+        onShowReaders={isGroup ? (message) => setReadersId(message.id) : undefined}
         isPinned={menuMessage ? pinnedIds.has(menuMessage.message.id) : false}
       />
 
@@ -586,6 +603,16 @@ export function ChatThreadScreen() {
           <Ionicons name="chevron-down" size={26} color={colors.primary} />
         </Pressable>
       ) : null}
+
+      <ForwardSheet
+        messageId={forwardId}
+        sourceConversationId={conversationId}
+        onClose={() => setForwardId(null)}
+        onForwarded={(n) =>
+          Alert.alert(n === 1 ? 'Сообщение переслано' : `Переслано в чатов: ${n}`)
+        }
+      />
+      <ReadersSheet messageId={readersId} onClose={() => setReadersId(null)} />
 
       <CreateMeetingSheet
         visible={meetingOpen}

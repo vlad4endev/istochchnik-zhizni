@@ -27,6 +27,9 @@ interface MessageContextMenuProps {
   onEdit?: (message: MessageWithSender) => void;
   onPin?: (message: MessageWithSender) => void;
   isPinned?: boolean;
+  onForward?: (message: MessageWithSender) => void;
+  /** Только для автора в групповых чатах. */
+  onShowReaders?: (message: MessageWithSender) => void;
 }
 
 export function MessageContextMenu({
@@ -40,6 +43,8 @@ export function MessageContextMenu({
   onEdit,
   onPin,
   isPinned = false,
+  onForward,
+  onShowReaders,
 }: MessageContextMenuProps) {
   const styles = useMemo(() => createStyles(), []);
 
@@ -99,6 +104,28 @@ export function MessageContextMenu({
           />
           {canCopy ? (
             <MenuItem styles={styles} emoji="📋" label="Копировать" onPress={() => void handleCopy()} />
+          ) : null}
+          {onForward && !message.is_deleted && /^\d+$/.test(message.id) && message.payload_type !== 'access_request' ? (
+            <MenuItem
+              styles={styles}
+              emoji="↪️"
+              label="Переслать"
+              onPress={() => {
+                onForward(message);
+                onClose();
+              }}
+            />
+          ) : null}
+          {isOwn && onShowReaders && /^\d+$/.test(message.id) ? (
+            <MenuItem
+              styles={styles}
+              emoji="👁"
+              label="Кто прочитал"
+              onPress={() => {
+                onShowReaders(message);
+                onClose();
+              }}
+            />
           ) : null}
           {onPin ? (
             <MenuItem

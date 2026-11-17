@@ -53,6 +53,8 @@ export interface MessageWithSender {
   payload_type?: MessagePayloadType;
   payload?: Record<string, unknown>;
   reply_to_message_id: string | null;
+  /** Откуда переслано: `{ sender_name, ... }` (объект или JSON-строка). */
+  forwarded_from?: unknown;
   is_edited: boolean;
   is_deleted: boolean;
   created_at: string;
@@ -258,4 +260,40 @@ export async function unpinChatMessage(conversationId: string, messageId: string
   await apiClient.delete(
     `${BASE}/conversations/${encodeURIComponent(conversationId)}/pins/${encodeURIComponent(messageId)}`,
   );
+}
+
+export type MessageReader = {
+  member_id: number;
+  display_name: string;
+  avatar_url: string | null;
+  read_at: string | null;
+};
+
+export type MessageReadersResponse = {
+  readers: MessageReader[];
+  /** Сколько всего других участников в чате (для «Прочитали 3 из 8»). */
+  other_member_count: number;
+};
+
+/** Кто прочитал сообщение — только автор и только в группах и каналах. */
+export async function fetchMessageReaders(messageId: string): Promise<MessageReadersResponse> {
+  const { data } = await apiClient.get<Partial<MessageReadersResponse>>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/readers`,
+  );
+  return {
+    readers: Array.isArray(data?.readers) ? data.readers : [],
+    other_member_count: Number(data?.other_member_count) || 0,
+  };
+}
+
+/** Переслать сообщение в один или несколько чатов. Возвращает, сколько чатов получили копию. */
+export async function forwardMessage(
+  messageId: string,
+  conversationIds: string[],
+): Promise<number> {
+  const { data } = await apiClient.post<{ forwarded?: unknown[] }>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/forward`,
+    { conversationIds },
+  );
+  return Array.isArray(data?.forwarded) ? data.forwarded.length : conversationIds.length;
 }

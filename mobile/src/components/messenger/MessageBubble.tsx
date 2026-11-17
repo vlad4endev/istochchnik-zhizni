@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   PanResponder,
   Platform,
+  Pressable,
   StyleSheet,
   Vibration,
   View,
@@ -20,6 +21,7 @@ import {
   messagePreviewText,
 } from '../../lib/messengerUtils';
 import { MESSENGER_BRAND } from '../../theme/messenger';
+import { forwardedFromName } from '../../lib/readReceipts';
 import { MessageAttachments, hasAttachment } from './MessageAttachments';
 import { MessengerText, MessengerTimeText } from './MessengerText';
 import { useTheme } from '../../theme';
@@ -33,6 +35,10 @@ interface MessageBubbleProps {
   showSenderName: boolean;
   onLongPress?: (message: MessageWithSender) => void;
   onSwipeReply?: (message: MessageWithSender) => void;
+  /** Своё сообщение прочитали другие (две галочки). */
+  readByOthers?: boolean;
+  /** Нажатие на двойную галочку в группе открывает «кто прочитал». */
+  onShowReaders?: (message: MessageWithSender) => void;
 }
 
 export function MessageBubble({
@@ -41,8 +47,10 @@ export function MessageBubble({
   showSenderName,
   onLongPress,
   onSwipeReply,
+  readByOthers = false,
+  onShowReaders,
 }: MessageBubbleProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const styles = useMemo(() => createStyles(colors, isOwn), [colors, isOwn]);
   const translateX = useSharedValue(0);
   const replyOpacity = useSharedValue(0);
@@ -52,6 +60,9 @@ export function MessageBubble({
   const isPending = message.status === 'sending';
   const isError = message.status === 'error';
   const payloadType = message.payload_type ?? 'text';
+  const readColor = isDark ? '#075985' : '#BAE6FD';
+  const sentColor = isDark ? 'rgba(28,25,23,0.6)' : 'rgba(255,255,255,0.75)';
+  const forwardedFrom = forwardedFromName(message.forwarded_from);
   const withAttachment = hasAttachment(payloadType) && !message.is_deleted;
 
   // У вложений текст — это подпись; без подписи показываем только само вложение.
@@ -144,6 +155,15 @@ export function MessageBubble({
         </MessengerText>
       ) : null}
 
+      {forwardedFrom && !message.is_deleted ? (
+        <View style={styles.forwarded}>
+          <Ionicons name="arrow-redo" size={13} color={isOwn ? colors.textOnPrimary : colors.primary} />
+          <MessengerText style={styles.forwardedText} numberOfLines={1}>
+            Переслано от {forwardedFrom}
+          </MessengerText>
+        </View>
+      ) : null}
+
       {message.reply_preview && !message.is_deleted ? (
         <View style={styles.reply}>
           <MessengerText style={styles.replyAuthor} numberOfLines={1}>
@@ -175,6 +195,25 @@ export function MessageBubble({
           {formatMessageTime(message.created_at)}
         </MessengerTimeText>
         {isPending ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
+        {isOwn && !isPending && !isError && !message.is_deleted ? (
+          readByOthers && onShowReaders ? (
+            <Pressable
+              onPress={() => onShowReaders(message)}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Прочитано. Нажмите, чтобы увидеть, кто прочитал"
+            >
+              <Ionicons name="checkmark-done" size={16} color={readColor} />
+            </Pressable>
+          ) : (
+            <Ionicons
+              name={readByOthers ? 'checkmark-done' : 'checkmark'}
+              size={16}
+              color={readByOthers ? readColor : sentColor}
+              accessibilityLabel={readByOthers ? 'Прочитано' : 'Отправлено'}
+            />
+          )
+        ) : null}
         {isError ? (
           <MessengerText bidiSafe={false} style={styles.errorText}>
             !
@@ -286,6 +325,13 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isOwn: bool
       paddingLeft: 8,
       marginBottom: 4,
       opacity: 0.9,
+    },
+    forwarded: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
+    forwardedText: {
+      flexShrink: 1,
+      fontSize: 13,
+      fontWeight: '700',
+      color: isOwn ? colors.textOnPrimary : colors.primary,
     },
     replyAuthor: {
       fontSize: 11,
