@@ -1,6 +1,8 @@
 String formatRuPhoneInput(String raw) {
   var digits = raw.replaceAll(RegExp(r'\D'), '');
-  if (digits.startsWith('8') && digits.length > 1) {
+  // Российские номера часто набирают с 8: заменяем её на 7 уже на первой цифре,
+  // иначе при вводе по одной цифре восьмёрка становится частью номера.
+  if (digits.startsWith('8')) {
     digits = '7${digits.substring(1)}';
   }
   if (digits.isNotEmpty && !digits.startsWith('7')) {
