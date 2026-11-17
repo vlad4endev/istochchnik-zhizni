@@ -61,11 +61,11 @@ function createStyles(colors: ThemeColors, accentColor: string) {
       paddingVertical: 18,
     },
     label: {
-      fontSize: 11,
+      fontSize: 12.5,
       fontWeight: '800',
-      letterSpacing: 0.66,
+      letterSpacing: 0.6,
       textTransform: 'uppercase',
-      color: colors.textMuted,
+      color: colors.textSecondary,
       marginBottom: 10,
     },
     header: {
@@ -87,10 +87,10 @@ function createStyles(colors: ThemeColors, accentColor: string) {
     },
     title: {
       flex: 1,
-      fontSize: 18,
+      fontSize: 20,
       fontWeight: '800',
       color: colors.text,
-      lineHeight: 24,
+      lineHeight: 27,
       paddingTop: 2,
     },
     body: {
@@ -102,7 +102,7 @@ function createStyles(colors: ThemeColors, accentColor: string) {
 export function PrayerBodyText({ children }: { children: string }) {
   const { colors } = useTheme();
   return (
-    <Text style={{ fontSize: 15, lineHeight: 22, color: colors.textSecondary }}>
+    <Text style={{ fontSize: 17, lineHeight: 26, color: colors.text }}>
       {children}
     </Text>
   );
@@ -111,7 +111,7 @@ export function PrayerBodyText({ children }: { children: string }) {
 export function PrayerMutedText({ children }: { children: string }) {
   const { colors } = useTheme();
   return (
-    <Text style={{ fontSize: 15, lineHeight: 22, color: colors.textMuted, fontStyle: 'italic' }}>
+    <Text style={{ fontSize: 16, lineHeight: 24, color: colors.textSecondary, fontStyle: 'italic' }}>
       {children}
     </Text>
   );
@@ -140,13 +140,13 @@ export function PrayerHighlightBox({
         paddingVertical: 12,
       }}
     >
-      <Ionicons name={icon} size={18} color={accentColor} style={{ marginTop: 2 }} />
+      <Ionicons name={icon} size={20} color={accentColor} style={{ marginTop: 3 }} />
       <Text
         style={{
           flex: 1,
-          fontSize: 15,
-          lineHeight: 22,
-          color: colors.textSecondary,
+          fontSize: 17,
+          lineHeight: 26,
+          color: colors.text,
           fontStyle: 'italic',
         }}
       >

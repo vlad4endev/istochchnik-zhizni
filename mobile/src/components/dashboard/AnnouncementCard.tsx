@@ -5,7 +5,7 @@ import { useTheme } from '../../theme';
 
 const COLLAPSED_LINES = 4;
 
-export function AnnouncementCard({ text }: { text: string }) {
+export function AnnouncementCard({ text, onEdit }: { text: string; onEdit?: () => void }) {
   const { isDark } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [truncated, setTruncated] = useState(false);
@@ -13,7 +13,14 @@ export function AnnouncementCard({ text }: { text: string }) {
 
   return (
     <View style={styles.card} accessibilityLabel="Объявление">
-      <Text style={styles.label}>Объявление</Text>
+      <View style={styles.head}>
+        <Text style={styles.label}>Объявление</Text>
+        {onEdit ? (
+          <Pressable onPress={onEdit} accessibilityRole="button" style={styles.edit}>
+            <Text style={styles.moreText}>Изменить</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <Text
         style={styles.text}
         numberOfLines={expanded ? undefined : COLLAPSED_LINES}
@@ -47,8 +54,10 @@ function createStyles(isDark: boolean) {
       borderWidth: 1,
       borderColor: isDark ? '#6B5220' : '#F5D99A',
     },
-    label: { fontSize: 11, fontWeight: '700', letterSpacing: 0.4, color: accent },
-    text: { marginTop: 8, fontSize: 15, fontWeight: '600', lineHeight: 23, color: ink },
+    head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    edit: { minHeight: 44, justifyContent: 'center' },
+    label: { fontSize: 13, fontWeight: '700', letterSpacing: 0.4, color: accent },
+    text: { marginTop: 8, fontSize: 17, fontWeight: '600', lineHeight: 25, color: ink },
     more: { marginTop: 4, minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
     moreText: { fontSize: 14, fontWeight: '700', color: accent, textDecorationLine: 'underline' },
   });

@@ -3,9 +3,10 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 import {
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -16,22 +17,27 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchPrayerByDate, postPrayerSectionVisit } from '../api/prayer';
+import {
+  deleteCoordinatorNote,
+  fetchCoordinatorNotes,
+  type NoteKind,
+} from '../api/prayerAdmin';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
+import { PrayerDatePicker } from '../components/prayer/DatePicker';
 import {
   BacksliderPrayerCard,
   MemberPrayerCard,
   MinistryPrayerCard,
   ThemePrayerCard,
 } from '../components/prayer/PrayerDayCards';
+import { NoteEditorModal } from '../components/prayer/NoteEditorModal';
+import { TelegramDispatchModal } from '../components/prayer/TelegramDispatchModal';
+import { UrgentPrayerCard } from '../components/prayer/UrgentPrayerCard';
+import { PrayerViewersCard } from '../components/prayer/ViewersCard';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { usePrayerPlanAccess } from '../hooks/usePrayerPlanAccess';
-import {
-  addDaysIso,
-  formatDisplayDateLong,
-  isTodayIso,
-  todayIsoUtc,
-} from '../lib/date';
+import { todayIsoLocal } from '../lib/date';
 import { storage } from '../lib/storage';
 import { resolveApiOrigin } from '../lib/config';
 import type { MainTabParamList, RootStackParamList } from '../navigation/types';
@@ -54,39 +60,79 @@ function isPrayerEmpty(data: DayPrayerData): boolean {
   );
 }
 
+function memberSectionTitle(date: string, today: string): string {
+  if (date < today) return 'Молитвенная нужда за этот день';
+  if (date > today) return 'Молитвенная нужда (по очереди цикла)';
+  return 'Сегодня молимся за члена церкви';
+}
+
 export function PrayerScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const navigation = useNavigation<PrayerNav>();
-  const { canManage: canManageCyclePlan } = usePrayerPlanAccess();
-  const [date, setDate] = useState(todayIsoUtc);
+  const qc = useQueryClient();
+  const {
+    canManage: canManageCyclePlan,
+    canManageNotes,
+    canTelegram,
+    canViewViewers,
+  } = usePrayerPlanAccess();
+  const [date, setDate] = useState(todayIsoLocal);
+  const [editorKind, setEditorKind] = useState<NoteKind | null>(null);
+  const [telegramOpen, setTelegramOpen] = useState(false);
 
   const prayerQuery = useQuery({
     queryKey: ['prayer', date],
     queryFn: () => fetchPrayerByDate(date),
   });
 
+  const notesQuery = useQuery({
+    queryKey: ['calendar', 'dashboard-coordinator-notes', date],
+    queryFn: () => fetchCoordinatorNotes(date),
+    staleTime: 0,
+  });
+
+  const deleteUrgent = useMutation({
+    mutationFn: () => deleteCoordinatorNote('urgent_prayer', date),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['calendar', 'dashboard-coordinator-notes'] });
+    },
+    onError: (e: unknown) =>
+      Alert.alert('Не удалось удалить', e instanceof Error ? e.message : 'Попробуйте ещё раз.'),
+  });
+
+  const confirmDeleteUrgent = () =>
+    Alert.alert('Удалить срочную нужду?', 'Её перестанут показывать в приложении.', [
+      { text: 'Отмена', style: 'cancel' },
+      { text: 'Удалить', style: 'destructive', onPress: () => deleteUrgent.mutate() },
+    ]);
+
   // Отметка о посещении раздела «Молитва» — не чаще раза в день (паритет с вебом).
   useFocusEffect(
     useCallback(() => {
-      const today = todayIsoUtc();
+      const today = todayIsoLocal();
       if (storage.getString(PRAYER_VISIT_DATE_KEY) === today) return;
       storage.set(PRAYER_VISIT_DATE_KEY, today);
-      void postPrayerSectionVisit().catch(() => {
-        storage.remove(PRAYER_VISIT_DATE_KEY);
-      });
-    }, []),
+      void postPrayerSectionVisit()
+        .then(() => qc.invalidateQueries({ queryKey: ['calendar', 'prayer-section'] }))
+        .catch(() => {
+          storage.remove(PRAYER_VISIT_DATE_KEY);
+        });
+    }, [qc]),
   );
 
   const data = prayerQuery.data;
-  const isToday = isTodayIso(date);
+  const today = todayIsoLocal();
+  const urgentText = notesQuery.data?.urgent_prayer?.text ?? '';
+
+  const onRefresh = () => {
+    void prayerQuery.refetch();
+    void notesQuery.refetch();
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader
-        title="Молитва"
-        subtitle={isToday ? 'План на сегодня' : 'Ежедневный молитвенный план'}
-      />
+      <ScreenHeader title="Молитва" subtitle="Ежедневный молитвенный план" />
 
       <ScrollView
         style={styles.scroll}
@@ -94,73 +140,80 @@ export function PrayerScreen() {
         refreshControl={
           <RefreshControl
             refreshing={prayerQuery.isFetching && !prayerQuery.isPending}
-            onRefresh={() => void prayerQuery.refetch()}
+            onRefresh={onRefresh}
             tintColor={colors.primary}
           />
         }
       >
+        <PrayerDatePicker value={date} onChange={setDate} />
+
         {canManageCyclePlan ? (
           <Pressable
             onPress={() => navigation.navigate('PrayerCyclePlan')}
-            style={({ pressed }) => [styles.cyclePlanBtn, pressed && { opacity: 0.92 }]}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.actionCard, pressed && { opacity: 0.92 }]}
           >
-            <View style={styles.cyclePlanIcon}>
-              <Ionicons name="clipboard-outline" size={20} color={colors.textOnPrimary} />
+            <View style={styles.actionIcon}>
+              <Ionicons name="clipboard-outline" size={22} color={colors.textOnPrimary} />
             </View>
-            <View style={styles.cyclePlanMeta}>
-              <Text style={styles.cyclePlanTitle}>Сбор нужд · очередь недели</Text>
-              <Text style={styles.cyclePlanSub}>
+            <View style={styles.actionMeta}>
+              <Text style={styles.actionTitle}>Сбор нужд · очередь недели</Text>
+              <Text style={styles.actionSub}>
                 Распределение участников цикла и назначение кураторов
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+            <Ionicons name="chevron-forward" size={22} color={colors.textSecondary} />
           </Pressable>
         ) : null}
 
-        <View style={styles.dateCard}>
-          <View style={styles.dateTop}>
-            <Text style={styles.dateLabel}>Дата</Text>
-            {!isToday ? (
+        {canTelegram ? (
+          <Pressable
+            onPress={() => setTelegramOpen(true)}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.actionCard, pressed && { opacity: 0.92 }]}
+          >
+            <View style={[styles.actionIcon, { backgroundColor: '#2563eb' }]}>
+              <Ionicons name="paper-plane-outline" size={22} color="#fff" />
+            </View>
+            <View style={styles.actionMeta}>
+              <Text style={styles.actionTitle}>Рассылка в Telegram</Text>
+              <Text style={styles.actionSub}>Молитва на выбранный день: расписание и получатели</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={22} color={colors.textSecondary} />
+          </Pressable>
+        ) : null}
+
+        {urgentText ? (
+          <UrgentPrayerCard
+            text={urgentText}
+            canManage={canManageNotes}
+            onEdit={() => setEditorKind('urgent_prayer')}
+            onDelete={confirmDeleteUrgent}
+          />
+        ) : null}
+
+        {canManageNotes ? (
+          <View style={styles.noteButtons}>
+            {!urgentText ? (
               <Pressable
-                onPress={() => setDate(todayIsoUtc())}
-                style={({ pressed }) => [styles.todayBtn, pressed && { opacity: 0.85 }]}
+                onPress={() => setEditorKind('urgent_prayer')}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.noteBtn, pressed && { opacity: 0.8 }]}
               >
-                <Ionicons name="today-outline" size={14} color={colors.primary} />
-                <Text style={styles.todayBtnText}>Сегодня</Text>
+                <Ionicons name="flame-outline" size={20} color={colors.primary} />
+                <Text style={styles.noteBtnText}>Срочная нужда</Text>
               </Pressable>
             ) : null}
-          </View>
-
-          <View style={styles.dateControls}>
             <Pressable
-              onPress={() => setDate((d) => addDaysIso(d, -1))}
-              style={({ pressed }) => [styles.dateArrow, pressed && { opacity: 0.7 }]}
-              accessibilityLabel="Предыдущий день"
+              onPress={() => setEditorKind('announcement')}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.noteBtn, pressed && { opacity: 0.8 }]}
             >
-              <Ionicons name="chevron-back" size={22} color={colors.text} />
-            </Pressable>
-            <View style={styles.dateCaptionWrap}>
-              <Text style={styles.dateCaption}>{formatDisplayDateLong(date)}</Text>
-            </View>
-            <Pressable
-              onPress={() => setDate((d) => addDaysIso(d, 1))}
-              style={({ pressed }) => [styles.dateArrow, pressed && { opacity: 0.7 }]}
-              accessibilityLabel="Следующий день"
-            >
-              <Ionicons name="chevron-forward" size={22} color={colors.text} />
+              <Ionicons name="megaphone-outline" size={20} color={colors.primary} />
+              <Text style={styles.noteBtnText}>Объявление</Text>
             </Pressable>
           </View>
-
-          {data?.prayer_cycle ? (
-            <View style={styles.cycleBadge}>
-              <Ionicons name="refresh-circle-outline" size={16} color={colors.primary} />
-              <Text style={styles.cycleText}>
-                Цикл {data.prayer_cycle.number} · день {data.prayer_cycle.day_index} из{' '}
-                {data.prayer_cycle.member_count}
-              </Text>
-            </View>
-          ) : null}
-        </View>
+        ) : null}
 
         {prayerQuery.isPending ? <LoadingView label="Загрузка молитвенного плана…" /> : null}
 
@@ -180,7 +233,7 @@ export function PrayerScreen() {
               <View style={styles.section}>
                 <SectionTitle
                   icon="people-outline"
-                  title="Сегодня молимся за члена церкви"
+                  title={memberSectionTitle(date, today)}
                   colors={colors}
                 />
                 {data.members.map((m) => (
@@ -203,7 +256,11 @@ export function PrayerScreen() {
 
             {data.backsliders.length > 0 ? (
               <View style={styles.section}>
-                <SectionTitle icon="heart-dislike-outline" title="Отпавшие" colors={colors} />
+                <SectionTitle
+                  icon="heart-outline"
+                  title="Молимся за отпавшего"
+                  colors={colors}
+                />
                 {data.backsliders.map((b) => (
                   <BacksliderPrayerCard key={b.id} backslider={b} />
                 ))}
@@ -214,14 +271,25 @@ export function PrayerScreen() {
 
         {data && isPrayerEmpty(data) ? (
           <View style={styles.empty}>
-            <Ionicons name="calendar-outline" size={40} color={colors.textMuted} />
+            <Ionicons name="calendar-outline" size={44} color={colors.textSecondary} />
             <Text style={styles.emptyTitle}>На этот день план не заполнен</Text>
             <Text style={styles.emptyBody}>
               Выберите другую дату или обратитесь к координатору молитвы.
             </Text>
           </View>
         ) : null}
+
+        <PrayerViewersCard enabled={canViewViewers} />
       </ScrollView>
+
+      <NoteEditorModal kind={editorKind} onClose={() => setEditorKind(null)} />
+      {canTelegram ? (
+        <TelegramDispatchModal
+          visible={telegramOpen}
+          onClose={() => setTelegramOpen(false)}
+          dateYmd={date}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -236,165 +304,86 @@ function SectionTitle({
   colors: ThemeColors;
 }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+    <View
+      accessibilityRole="header"
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}
+    >
       <View
         style={{
-          width: 40,
-          height: 40,
-          borderRadius: 12,
-          backgroundColor: `${colors.primary}14`,
+          width: 44,
+          height: 44,
+          borderRadius: 14,
+          backgroundColor: `${colors.primary}1A`,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <Ionicons name={icon} size={20} color={colors.primary} />
+        <Ionicons name={icon} size={22} color={colors.primary} />
       </View>
-      <Text style={{ flex: 1, fontSize: 16, fontWeight: '800', color: colors.text }}>{title}</Text>
+      <Text
+        style={{ flex: 1, fontSize: 19, lineHeight: 25, fontWeight: '800', color: colors.text }}
+      >
+        {title}
+      </Text>
     </View>
   );
 }
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    safe: {
-      flex: 1,
-      backgroundColor: colors.surface,
-    },
-    scroll: {
-      flex: 1,
-    },
-    content: {
-      paddingHorizontal: 16,
-      paddingTop: 16,
-      paddingBottom: 32,
-    },
-    cyclePlanBtn: {
+    safe: { flex: 1, backgroundColor: colors.surface },
+    scroll: { flex: 1 },
+    content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40, gap: 14 },
+    actionCard: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      marginBottom: 16,
       padding: 14,
+      minHeight: 72,
       borderRadius: colors.radius,
       backgroundColor: colors.surfaceElevated,
       borderWidth: 1,
       borderColor: `${colors.primary}40`,
-      shadowColor: '#1c1917',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.05,
-      shadowRadius: 12,
-      elevation: 2,
     },
-    cyclePlanIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 10,
+    actionIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
       backgroundColor: colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    cyclePlanMeta: { flex: 1, minWidth: 0 },
-    cyclePlanTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
-    cyclePlanSub: { fontSize: 12, color: colors.textMuted, marginTop: 2, lineHeight: 16 },
-    dateCard: {
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: colors.radius,
-      paddingHorizontal: 18,
-      paddingVertical: 16,
-      marginBottom: 20,
-      shadowColor: '#1c1917',
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.06,
-      shadowRadius: 16,
-      elevation: 3,
-    },
-    dateTop: {
+    actionMeta: { flex: 1, minWidth: 0 },
+    actionTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+    actionSub: { fontSize: 14, color: colors.textSecondary, marginTop: 2, lineHeight: 20 },
+    noteButtons: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+    noteBtn: {
+      flexGrow: 1,
+      minHeight: 48,
       flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 12,
-    },
-    dateLabel: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: colors.textMuted,
-    },
-    todayBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 8,
-      backgroundColor: `${colors.primary}12`,
-    },
-    todayBtnText: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: colors.primary,
-    },
-    dateControls: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-    },
-    dateArrow: {
-      width: 44,
-      height: 44,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: 'rgba(28, 25, 23, 0.1)',
-      backgroundColor: colors.surface,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    dateCaptionWrap: {
-      flex: 1,
-    },
-    dateCaption: {
-      textAlign: 'center',
-      fontWeight: '700',
-      fontSize: 15,
-      color: colors.text,
-      lineHeight: 20,
-      textTransform: 'capitalize',
-    },
-    cycleBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      marginTop: 14,
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: 'rgba(28,25,23,0.06)',
-    },
-    cycleText: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: colors.textSecondary,
-    },
-    cards: {
       gap: 8,
+      paddingHorizontal: 14,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: `${colors.primary}66`,
     },
-    section: {
-      marginBottom: 8,
-    },
-    empty: {
-      alignItems: 'center',
-      paddingVertical: 48,
-      paddingHorizontal: 24,
-      gap: 8,
-    },
+    noteBtnText: { fontSize: 16, fontWeight: '700', color: colors.primary },
+    cards: { gap: 8 },
+    section: { marginBottom: 8 },
+    empty: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 24, gap: 8 },
     emptyTitle: {
-      fontSize: 17,
+      fontSize: 19,
       fontWeight: '700',
       color: colors.text,
       textAlign: 'center',
     },
     emptyBody: {
-      fontSize: 14,
+      fontSize: 16,
       color: colors.textSecondary,
       textAlign: 'center',
-      lineHeight: 20,
+      lineHeight: 24,
     },
   });
 }

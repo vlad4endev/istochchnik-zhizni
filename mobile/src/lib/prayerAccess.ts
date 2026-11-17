@@ -20,3 +20,33 @@ export function canViewPrayerCyclePlan(
   if (apiBoolean(me?.is_collection_coordinator)) return true;
   return false;
 }
+
+function rolesLower(role: AuthRole | undefined, roles?: AuthRole[]): string[] {
+  return normalizeRoles(role, roles).map((x) => String(x).toLowerCase());
+}
+
+/** Срочная нужда и объявление: админ или ответственный за сбор (как на вебе). */
+export function canManageCoordinatorNotes(
+  role: AuthRole | undefined,
+  roles: AuthRole[] | undefined,
+  me?: MeProfile | null,
+): boolean {
+  return rolesLower(role, roles).includes('admin') || apiBoolean(me?.is_collection_coordinator);
+}
+
+/** Рассылка молитвы в Telegram — только администратор. */
+export function canTelegramPrayerDispatch(
+  role: AuthRole | undefined,
+  roles: AuthRole[] | undefined,
+): boolean {
+  return rolesLower(role, roles).includes('admin');
+}
+
+/** Кто сегодня открывал раздел — админ и пастор. */
+export function canViewPrayerViewers(
+  role: AuthRole | undefined,
+  roles: AuthRole[] | undefined,
+): boolean {
+  const r = rolesLower(role, roles);
+  return r.includes('admin') || r.includes('pastor');
+}

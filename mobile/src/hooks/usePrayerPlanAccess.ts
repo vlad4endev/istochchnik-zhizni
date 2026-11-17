@@ -1,7 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchMe } from '../api/profile';
-import { canViewPrayerCyclePlan } from '../lib/prayerAccess';
+import {
+  canManageCoordinatorNotes,
+  canTelegramPrayerDispatch,
+  canViewPrayerCyclePlan,
+  canViewPrayerViewers,
+} from '../lib/prayerAccess';
 import { useAuthStore } from '../stores/authStore';
 
 export function usePrayerPlanAccess() {
@@ -16,6 +21,9 @@ export function usePrayerPlanAccess() {
 
   return {
     canManage: canViewPrayerCyclePlan(role, roles, meQuery.data),
+    canManageNotes: canManageCoordinatorNotes(role, roles, meQuery.data),
+    canTelegram: canTelegramPrayerDispatch(role, roles),
+    canViewViewers: canViewPrayerViewers(role, roles),
     memberId: useAuthStore((s) => s.memberId),
     isLoading: meQuery.isLoading,
   };

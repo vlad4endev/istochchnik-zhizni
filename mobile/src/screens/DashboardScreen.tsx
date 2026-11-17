@@ -25,6 +25,7 @@ import { fetchPodcastFeed } from '../api/resources';
 import { AnnouncementCard } from '../components/dashboard/AnnouncementCard';
 import { BirthdayCard } from '../components/dashboard/BirthdayCard';
 import { BroadcastCard } from '../components/dashboard/BroadcastCard';
+import { NoteEditorModal } from '../components/prayer/NoteEditorModal';
 import { MyServiceWeekCard } from '../components/dashboard/MyServiceWeekCard';
 import { SectionLabel } from '../components/dashboard/SectionLabel';
 import { ServiceCard } from '../components/dashboard/ServiceCard';
@@ -32,7 +33,7 @@ import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { useSermonPlayer } from '../contexts/SermonPlayerContext';
-import { formatDisplayDate, todayIsoUtc } from '../lib/date';
+import { formatDisplayDate, todayIsoLocal } from '../lib/date';
 import {
   birthdaysThisWeek,
   extractNearestSermonData,
@@ -42,6 +43,7 @@ import {
   shouldShowBroadcast,
 } from '../lib/dashboardHome';
 import { resolvePublicUrl } from '../lib/resolvePublicUrl';
+import { usePrayerPlanAccess } from '../hooks/usePrayerPlanAccess';
 import { useMyServiceWeek } from '../hooks/useMyServiceWeek';
 import { pickFirstUpcomingOccurrence } from '../lib/eventSchedule';
 import { memberRosterName } from '../lib/memberRosterName';
@@ -85,8 +87,10 @@ export function DashboardScreen() {
   const { canView: canViewMediaSchedule } = useMediaScheduleAccess();
   const { canView: canViewServicePlanner } = useServicePlannerAccess();
   const { canView: canViewStudio } = useStudioAccess();
+  const { canManageNotes } = usePrayerPlanAccess();
+  const [editingAnnouncement, setEditingAnnouncement] = useState(false);
   const { activeEpisode, playing, playEpisode, togglePlayPause } = useSermonPlayer();
-  const today = todayIsoUtc();
+  const today = todayIsoLocal();
   const localToday = format(new Date(), 'yyyy-MM-dd');
 
   const [now, setNow] = useState(() => new Date());
@@ -358,7 +362,12 @@ export function DashboardScreen() {
 
         <MyServiceWeekCard cards={myService.cards} />
 
-        {announcement ? <AnnouncementCard text={announcement.text} /> : null}
+        {announcement ? (
+          <AnnouncementCard
+            text={announcement.text}
+            onEdit={canManageNotes ? () => setEditingAnnouncement(true) : undefined}
+          />
+        ) : null}
 
         {!isParishioner ? (
           <>
@@ -473,6 +482,10 @@ export function DashboardScreen() {
           <Text style={styles.emptyText}>Ближайших мероприятий нет.</Text>
         )}
       </ScrollView>
+      <NoteEditorModal
+        kind={editingAnnouncement ? 'announcement' : null}
+        onClose={() => setEditingAnnouncement(false)}
+      />
     </SafeAreaView>
   );
 }
