@@ -127,10 +127,17 @@ export async function sendMessage(
   content: string,
   clientMsgId?: string,
   replyToMessageId?: string | null,
+  opts?: { payloadType?: MessagePayloadType; payload?: Record<string, unknown> },
 ): Promise<MessageWithSender> {
   const { data } = await apiClient.post<MessageWithSender>(
     `${BASE}/conversations/${encodeURIComponent(conversationId)}/messages`,
-    { content, clientMsgId, replyToMessageId: replyToMessageId ?? null, payloadType: 'text' },
+    {
+      content,
+      clientMsgId,
+      replyToMessageId: replyToMessageId ?? null,
+      payloadType: opts?.payloadType ?? 'text',
+      ...(opts?.payload ? { payload: opts.payload } : {}),
+    },
   );
   return data;
 }

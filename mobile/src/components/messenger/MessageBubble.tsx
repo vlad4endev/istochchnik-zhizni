@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -16,13 +15,12 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { MessageWithSender } from '../../api/messenger';
-import { resolveApiOrigin } from '../../lib/config';
-import { getAuthToken } from '../../lib/storage';
 import {
   formatMessageTime,
   messagePreviewText,
 } from '../../lib/messengerUtils';
 import { MESSENGER_BRAND } from '../../theme/messenger';
+import { MessageAttachments, hasAttachment } from './MessageAttachments';
 import { MessengerText, MessengerTimeText } from './MessengerText';
 import { useTheme } from '../../theme';
 
@@ -54,23 +52,16 @@ export function MessageBubble({
   const isPending = message.status === 'sending';
   const isError = message.status === 'error';
   const payloadType = message.payload_type ?? 'text';
-  const showImage = payloadType === 'image' && !message.is_deleted;
+  const withAttachment = hasAttachment(payloadType) && !message.is_deleted;
 
-  const imageUri = useMemo(() => {
-    if (!showImage) return null;
-    const token = getAuthToken();
-    const path = `/api/messenger/messages/${encodeURIComponent(message.id)}/attachment-file`;
-    return {
-      uri: `${resolveApiOrigin()}${path}`,
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    };
-  }, [message.id, showImage]);
-
+  // У вложений текст — это подпись; без подписи показываем только само вложение.
   const bodyText = message.is_deleted
     ? 'Сообщение удалено'
     : payloadType === 'text'
       ? String(message.content ?? '')
-      : messagePreviewText(message);
+      : withAttachment
+        ? String(message.content ?? '').trim()
+        : messagePreviewText(message);
 
   const clearLongPressTimer = () => {
     if (longPressTimer.current) {
@@ -166,13 +157,13 @@ export function MessageBubble({
         </View>
       ) : null}
 
-      {showImage && imageUri ? (
-        <Image source={imageUri} style={styles.image} contentFit="cover" />
-      ) : null}
+      {withAttachment ? <MessageAttachments message={message} isOwn={isOwn} /> : null}
 
-      <MessengerText style={[styles.text, message.is_deleted && styles.deletedText]}>
-        {bodyText}
-      </MessengerText>
+      {bodyText ? (
+        <MessengerText style={[styles.text, message.is_deleted && styles.deletedText]}>
+          {bodyText}
+        </MessengerText>
+      ) : null}
 
       <View style={styles.meta}>
         {message.is_edited && !message.is_deleted ? (

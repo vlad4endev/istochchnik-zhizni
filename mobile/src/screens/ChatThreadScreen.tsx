@@ -32,6 +32,7 @@ import {
   unpinChatMessage,
   type MessageWithSender,
 } from '../api/messenger';
+import { sendAttachments, sendVoiceMessage } from '../api/messengerUpload';
 import { ChatHeaderTitle } from '../components/messenger/ChatHeaderTitle';
 import { ChatInput } from '../components/messenger/ChatInput';
 import { CreateMeetingSheet } from '../components/messenger/CreateMeetingSheet';
@@ -361,6 +362,43 @@ export function ChatThreadScreen() {
     }
   }, [conversationId, hasMore, loadingOlder, mergedMessages, queryClient]);
 
+  const refreshAfterSend = useCallback(async () => {
+    setReplyTo(null);
+    await queryClient.invalidateQueries({ queryKey: ['messenger', 'messages', conversationId] });
+    await queryClient.invalidateQueries({ queryKey: ['messenger', 'conversations'] });
+  }, [conversationId, queryClient]);
+
+  const handleSendAttachments = useCallback(
+    async (
+      items: Parameters<typeof sendAttachments>[0]['items'],
+      caption: string,
+      onProgress: (pct: number) => void,
+    ) => {
+      await sendAttachments({
+        conversationId,
+        items,
+        caption,
+        replyToMessageId: replyTo?.id ?? null,
+        onProgress,
+      });
+      await refreshAfterSend();
+    },
+    [conversationId, refreshAfterSend, replyTo?.id],
+  );
+
+  const handleSendVoice = useCallback(
+    async (file: Parameters<typeof sendVoiceMessage>[0]['file'], durationSec: number) => {
+      await sendVoiceMessage({
+        conversationId,
+        file,
+        durationSec,
+        replyToMessageId: replyTo?.id ?? null,
+      });
+      await refreshAfterSend();
+    },
+    [conversationId, refreshAfterSend, replyTo?.id],
+  );
+
   const handleLongPress = useCallback(
     (message: MessageWithSender) => {
       const isOwn = message.sender_id != null && memberId != null && message.sender_id === memberId;
@@ -503,6 +541,8 @@ export function ChatThreadScreen() {
         ) : null}
         <ChatInput
           conversationId={conversationId}
+          onSendAttachments={handleSendAttachments}
+          onSendVoice={handleSendVoice}
           prefill={editing ? { token: editToken, text: String(editing.content ?? '') } : null}
           onSend={async (text) => {
             if (editing) {
