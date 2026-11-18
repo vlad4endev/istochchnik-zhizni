@@ -7,6 +7,7 @@ import {
   subscribeRealtimeWs,
 } from '../lib/realtimeWs';
 import { useAuthStore } from '../stores/authStore';
+import { useCallStore } from '../stores/callStore';
 import { useMessengerRealtimeStore } from '../stores/messengerRealtimeStore';
 
 const MessengerWsContext = createContext(true);
@@ -34,6 +35,7 @@ export function MessengerWsProvider({ children }: { children: ReactNode }) {
       const type = typeof msg.type === 'string' ? msg.type : '';
 
       handleWsMessage(msg);
+      useCallStore.getState().handleWsMessage(msg);
 
       if (
         type === 'msg:new' ||
