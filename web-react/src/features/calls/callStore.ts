@@ -30,7 +30,7 @@ interface CallStore {
   isMuted: boolean;
   isVideoOff: boolean;
   isScreenSharing: boolean;
-  /** Режим «Музыка» (без фильтров браузера) — настройка устройства, переживает звонки. */
+  /** Режим «Прославление» (без фильтров браузера) — настройка устройства, переживает звонки. */
   musicMode: boolean;
   setMusicMode: (v: boolean) => void;
   openCall: (call: Omit<ActiveCallState, 'status'> & { status?: ActiveCallState['status'] }) => void;
