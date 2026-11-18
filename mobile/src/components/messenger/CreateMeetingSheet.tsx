@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
+import { useNavigation } from '@react-navigation/native';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -29,6 +29,7 @@ import { formatApiError } from '../../api/client';
 import { sendMessage } from '../../api/messenger';
 import { usePrayerPlanAccess } from '../../hooks/usePrayerPlanAccess';
 import { createClientMsgId } from '../../lib/messengerUtils';
+import { openGroupCall } from '../../lib/openCall';
 import { useTheme, type ThemeColors } from '../../theme';
 
 const MAX_TITLE = 80;
@@ -59,6 +60,7 @@ export function CreateMeetingSheet({
   const styles = useMemo(() => createStyles(colors), [colors]);
   const qc = useQueryClient();
   const { canManageNotes } = usePrayerPlanAccess();
+  const navigation = useNavigation<{ navigate: (screen: 'Call') => void }>();
   const [mediaType, setMediaType] = useState<CallMediaType>(initialType);
   const [title, setTitle] = useState('');
   const [created, setCreated] = useState<CreatedCall | null>(null);
@@ -115,7 +117,15 @@ export function CreateMeetingSheet({
   };
 
   const open = () => {
-    if (created?.inviteUrl) void Linking.openURL(created.inviteUrl);
+    if (!created?.inviteUrl) return;
+    const how = openGroupCall(navigation, {
+      inviteUrl: created.inviteUrl,
+      title: shownTitle,
+      mediaType: created.mediaType,
+      callId: created.id,
+      asHost: true,
+    });
+    if (how === 'in-app') onClose();
   };
 
   return (

@@ -36,6 +36,7 @@ import {
 import { sendAttachments, sendVoiceMessage } from '../api/messengerUpload';
 import { fetchChatMembers } from '../api/chatManage';
 import { denormalizeMentions } from '../lib/mentions';
+import { openGroupCall } from '../lib/openCall';
 import { PollCreateModal } from '../components/messenger/PollCreateModal';
 import { ForwardSheet } from '../components/messenger/ForwardSheet';
 import { ReadersSheet } from '../components/messenger/ReadersSheet';
@@ -570,6 +571,9 @@ export function ChatThreadScreen() {
                 readByOthers={isOwn && isReadByOthers(item.id, upTo)}
                 onShowReaders={isGroup && isOwn ? (m) => setReadersId(m.id) : undefined}
                 mentionNames={mentionNames}
+                onJoinCall={(inv) =>
+                  openGroupCall(navigation, { inviteUrl: inv.url, title: inv.title, mediaType: 'video' })
+                }
               />
             </View>
           );

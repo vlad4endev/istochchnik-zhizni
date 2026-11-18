@@ -18,6 +18,7 @@ export type RootStackParamList = {
   Events: undefined;
   ChatThread: { conversationId: string; title?: string; isGroup?: boolean };
   NewChat: undefined;
+  Call: undefined;
   ChatProfile: { conversationId: string; title?: string; isGroup: boolean };
   ChatMembers: { conversationId: string; isChannel: boolean };
   ChatMedia: { conversationId: string };

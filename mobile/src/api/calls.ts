@@ -187,10 +187,12 @@ export function parseInviteToken(urlOrToken: string | null | undefined): string 
 }
 
 /** Первая ссылка-приглашение в тексте сообщения (для кнопки «Присоединиться»). */
-export function findInviteInText(text: string | null | undefined): { token: string; title: string } | null {
+export function findInviteInText(
+  text: string | null | undefined,
+): { token: string; title: string; url: string } | null {
   const body = String(text ?? '');
   const m = /https?:\/\/[^\s]*\/call\/join\/([A-Za-z0-9_-]{8,})/.exec(body);
   if (!m) return null;
   const title = body.slice(0, m.index).trim().split('\n')[0]?.trim() ?? '';
-  return { token: m[1]!, title: title || 'Встреча' };
+  return { token: m[1]!, title: title || 'Встреча', url: m[0] };
 }

@@ -13,7 +13,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.istochnikzhizni.molitva"
+      "bundleIdentifier": "com.istochnikzhizni.molitva",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
     },
     "android": {
       "package": "com.istochnikzhizni.molitva",
@@ -45,7 +50,15 @@
         }
       ],
       "expo-document-picker",
-      "react-native-reanimated"
+      "react-native-reanimated",
+      "@livekit/react-native-expo-plugin",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Приложению нужна камера для видеозвонков.",
+          "microphonePermission": "Приложению нужен микрофон для звонков."
+        }
+      ]
     ]
   }
 }

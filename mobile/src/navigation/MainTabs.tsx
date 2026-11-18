@@ -10,6 +10,7 @@ import { SermonPlayerProvider } from '../contexts/SermonPlayerContext';
 import { fetchUnreadCount } from '../api/messenger';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { ChatsScreen } from '../screens/ChatsScreen';
+import { CallScreen } from '../screens/CallScreen';
 import { ChatMediaScreen } from '../screens/ChatMediaScreen';
 import { ChatMembersScreen } from '../screens/ChatMembersScreen';
 import { ChatPermissionsScreen } from '../screens/ChatPermissionsScreen';
@@ -205,6 +206,11 @@ export function MainStack() {
         options={({ route }) => ({
           title: route.params.title ?? 'Чат',
         })}
+      />
+      <Stack.Screen
+        name="Call"
+        component={CallScreen}
+        options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
       />
       <Stack.Screen name="ChatProfile" component={ChatProfileScreen} options={{ title: 'Профиль чата' }} />
       <Stack.Screen name="ChatMembers" component={ChatMembersScreen} options={{ title: 'Участники' }} />

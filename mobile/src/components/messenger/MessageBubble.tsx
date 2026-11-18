@@ -22,6 +22,7 @@ import {
 } from '../../lib/messengerUtils';
 import { MESSENGER_BRAND } from '../../theme/messenger';
 import { displayMessengerText } from '../../lib/messengerUtils';
+import { findInviteInText } from '../../api/calls';
 import { hasMentions, splitMentions, stripMentions } from '../../lib/mentions';
 import { forwardedFromName } from '../../lib/readReceipts';
 import { MessageAttachments, hasAttachment } from './MessageAttachments';
@@ -44,6 +45,8 @@ interface MessageBubbleProps {
   onShowReaders?: (message: MessageWithSender) => void;
   /** Имена участников по id для подсветки упоминаний `@[id]`. */
   mentionNames?: Record<number, string>;
+  /** Нажатие «Присоединиться» под ссылкой-приглашением на созвон. */
+  onJoinCall?: (invite: { url: string; title: string }) => void;
 }
 
 export function MessageBubble({
@@ -55,6 +58,7 @@ export function MessageBubble({
   readByOthers = false,
   onShowReaders,
   mentionNames = {},
+  onJoinCall,
 }: MessageBubbleProps) {
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => createStyles(colors, isOwn), [colors, isOwn]);
@@ -68,6 +72,7 @@ export function MessageBubble({
   const payloadType = message.payload_type ?? 'text';
   const readColor = isDark ? '#075985' : '#BAE6FD';
   const sentColor = isDark ? 'rgba(28,25,23,0.6)' : 'rgba(255,255,255,0.75)';
+  const invite = !message.is_deleted && payloadType === 'text' && onJoinCall ? findInviteInText(message.content) : null;
   const forwardedFrom = forwardedFromName(message.forwarded_from);
   const isPoll = payloadType === 'poll' && !message.is_deleted;
   const withAttachment = hasAttachment(payloadType) && !message.is_deleted;
@@ -204,6 +209,20 @@ export function MessageBubble({
               )
             : displayMessengerText(bodyText)}
         </MessengerText>
+      ) : null}
+
+      {invite ? (
+        <Pressable
+          onPress={() => onJoinCall?.({ url: invite.url, title: invite.title })}
+          accessibilityRole="button"
+          accessibilityLabel={`Присоединиться к созвону ${invite.title}`}
+          style={({ pressed }) => [styles.join, pressed && { opacity: 0.8 }]}
+        >
+          <Ionicons name="videocam" size={20} color={isOwn ? colors.primary : colors.textOnPrimary} />
+          <MessengerText bidiSafe={false} style={styles.joinText}>
+            Присоединиться
+          </MessengerText>
+        </Pressable>
       ) : null}
 
       <View style={styles.meta}>
@@ -347,6 +366,18 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isOwn: bool
       marginBottom: 4,
       opacity: 0.9,
     },
+    join: {
+      minHeight: 44,
+      marginTop: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderRadius: 12,
+      backgroundColor: isOwn ? colors.textOnPrimary : colors.primary,
+      paddingHorizontal: 14,
+    },
+    joinText: { fontSize: 16, fontWeight: '800', color: isOwn ? colors.primary : colors.textOnPrimary },
     mention: {
       fontWeight: '800',
       color: isOwn ? colors.textOnPrimary : colors.primary,
