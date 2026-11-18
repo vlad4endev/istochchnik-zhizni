@@ -11,6 +11,7 @@ import 'core/call_alerts.dart';
 import 'core/firebase_config.dart';
 import 'core/push.dart';
 import 'core/session.dart';
+import 'features/songbook/data/songbook_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,6 +23,7 @@ Future<void> main() async {
     } catch (_) {}
   }
   final session = SessionController();
+  session.beforeLogout.add(SongbookRepository.clearAll);
   await session.bootstrap();
   unawaited(PushService.instance.start(session));
   runApp(

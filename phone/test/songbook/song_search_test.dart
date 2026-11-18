@@ -81,6 +81,11 @@ void main() {
       expect(ids('нет_текста'), isEmpty);
     });
 
+    test('точная тональность выше совпадения по началу названия', () {
+      final idx = SongIndex([song(1, 'Amazing', key: 'D'), song(2, 'Утренняя', key: 'Am')]);
+      expect(idx.search('Am').map((h) => h.song.id), [2, 1]);
+    });
+
     test('пустой запрос — нет результатов поиска', () {
       expect(ids(''), isEmpty);
       expect(ids('  '), isEmpty);
@@ -92,6 +97,13 @@ void main() {
       final hit = index.search('агнец').first;
       expect(hit.titleMarks.map((r) => 'Агнец Божий'.substring(r.start, r.end)), ['Агнец']);
       expect(hit.snippet, isNull, reason: 'цитата нужна только если в названии не нашлось');
+    });
+
+    test('совпадение в теге подсвечивается в строке тегов', () {
+      final hit = index.search('причастие').single;
+      final line = tagsLine(hit.song);
+      expect(hit.tagMarks.map((r) => line.substring(r.start, r.end)), ['Причастие']);
+      expect(hit.snippet, isNull);
     });
 
     test('совпадение только в тексте даёт цитату строки', () {
@@ -152,6 +164,7 @@ void main() {
       expect(groupLetter('агнец'), 'А');
       expect(groupLetter('Ёлка'), 'Е', reason: 'Ё сортируется вместе с Е');
       expect(groupLetter('10 000 причин'), '#');
+      expect(groupLetter('Amazing Grace'), '#', reason: 'латинская A неотличима от русской А');
       expect(groupLetter('«Слава»'), 'С');
       expect(groupLetter(''), '#');
     });

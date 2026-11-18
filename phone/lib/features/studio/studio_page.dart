@@ -5,7 +5,8 @@ import '../../core/church_api.dart';
 import '../../core/dates.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
-import '../../ui/chord_sheet.dart';
+import '../songbook/models/song.dart';
+import '../songbook/song_reader_page.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 
@@ -153,10 +154,12 @@ class _SetlistPageState extends State<SetlistPage> {
                             chevron: true,
                             onTap: () => pushPage(
                               context,
-                              LyricPage(
-                                title: str(song['title']),
-                                content: str(item['effective_content']).isEmpty ? str(song['content']) : str(item['effective_content']),
-                                keyName: key,
+                              SongReaderPage(
+                                song: Song.adHoc(
+                                  title: str(song['title']),
+                                  content: str(item['effective_content']).isEmpty ? str(song['content']) : str(item['effective_content']),
+                                  key: key.isEmpty ? null : key,
+                                ),
                               ),
                             ),
                           );

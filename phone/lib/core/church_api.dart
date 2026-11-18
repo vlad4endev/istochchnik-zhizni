@@ -72,11 +72,6 @@ class ChurchApi {
         await get('/api/bible/chapter/synodal/$book/$chapter'),
       );
 
-  Future<List<dynamic>> songs(String query) async =>
-      asList(await get('/api/songs', query: query.trim().isEmpty ? null : {'q': query.trim()}));
-
-  Future<Map<String, dynamic>> song(String id) async => asMap(await get('/api/songs/$id'));
-
   Future<List<dynamic>> conversations() async => asList(await get('/api/messenger/conversations'));
 
   Future<int> unread() async => asInt(asMap(await get('/api/messenger/unread-count'))['count']);

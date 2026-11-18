@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molitva/core/dates.dart';
-import 'package:molitva/ui/chord_sheet.dart';
+import 'package:molitva/features/songbook/logic/song_format.dart';
 import 'package:molitva/ui/kit/components.dart';
 
 void main() {
@@ -12,10 +12,10 @@ void main() {
   });
 
   test('подписи частей песни', () {
-    expect(sectionLabel('[Припев]'), 'Припев');
-    expect(sectionLabel('Куплет 1:'), 'Куплет 1');
-    expect(sectionLabel('Бога благослови, о, душа моя'), isNull);
-    expect(sectionLabel('[A]'), isNull);
+    expect(parseSectionTitle('[Припев]'), 'Припев');
+    expect(parseSectionTitle('Куплет 1:'), 'Куплет 1');
+    expect(parseSectionTitle('Бога благослови, о, душа моя'), isNull);
+    expect(parseSectionTitle('[A]'), isNull);
   });
 
   test('относительное время и длительность', () {

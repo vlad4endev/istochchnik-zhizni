@@ -48,6 +48,9 @@ int _find(String folded, String token, [int from = 0]) {
 
 bool _wordStart(String folded, int i) => i == 0 || folded[i - 1] == ' ';
 
+/// Теги, как их показывает строка списка.
+String tagsLine(Song song) => song.visibleTags.take(3).join(' · ');
+
 class Snippet {
   const Snippet(this.text, this.marks);
   final String text;
@@ -55,10 +58,13 @@ class Snippet {
 }
 
 class SearchHit {
-  const SearchHit(this.song, this.score, this.titleMarks, this.snippet);
+  const SearchHit(this.song, this.score, this.titleMarks, this.snippet, [this.tagMarks = const []]);
   final Song song;
   final int score;
   final List<MatchRange> titleMarks;
+
+  /// Совпадения в строке тегов [tagsLine] (первые три тега через « · »).
+  final List<MatchRange> tagMarks;
 
   /// Строка из текста песни, если совпало не в названии.
   final Snippet? snippet;
@@ -68,6 +74,7 @@ class _Entry {
   _Entry(this.song)
       : titleF = foldForSearch(song.title),
         tagsF = [for (final t in song.visibleTags) foldForSearch(t)],
+        tagsLineF = foldForSearch(tagsLine(song)),
         keyL = song.keyLabel?.toLowerCase(),
         numberS = song.number?.toString(),
         lines = [for (final l in songPlainText(song.content).split('\n')) if (l.trim().isNotEmpty) l.trim()] {
@@ -77,6 +84,7 @@ class _Entry {
   final Song song;
   final String titleF;
   final List<String> tagsF;
+  final String tagsLineF;
   final String? keyL;
   final String? numberS;
   final List<String> lines;
@@ -112,10 +120,11 @@ class SongIndex {
   SearchHit? _match(_Entry e, List<String> tokens, String rawKey) {
     // «Am», «F#m»: запрос целиком совпал с тональностью песни.
     if (e.keyL != null && e.keyL == rawKey) {
-      return SearchHit(e.song, 50, const [], null);
+      return SearchHit(e.song, 80, const [], null);
     }
     var score = 0;
     final titleMarks = <MatchRange>[];
+    final tagMarks = <MatchRange>[];
     final lyricsTokens = <String>[];
     for (final token in tokens) {
       var best = 0;
@@ -135,6 +144,8 @@ class SongIndex {
         final i = _find(tag, token);
         if (i >= 0) best = best < 22 ? (_wordStart(tag, i) ? 30 : 22) : best;
       }
+      final inLine = _find(e.tagsLineF, token);
+      if (inLine >= 0) tagMarks.add(MatchRange(inLine, inLine + token.length));
       if (best == 0) {
         for (final line in e.linesF) {
           final i = _find(line, token);
@@ -149,7 +160,7 @@ class SongIndex {
       if (inLyricsOnly) lyricsTokens.add(token);
       score += best;
     }
-    return SearchHit(e.song, score, _merge(titleMarks), lyricsTokens.isEmpty ? null : _snippet(e, lyricsTokens));
+    return SearchHit(e.song, score, _merge(titleMarks), lyricsTokens.isEmpty ? null : _snippet(e, lyricsTokens), _merge(tagMarks));
   }
 
   Snippet? _snippet(_Entry e, List<String> tokens) {
@@ -291,12 +302,13 @@ List<Song> sortSongs(List<Song> songs, SongSort sort) {
   return copy;
 }
 
-/// Буква для группы в списке: «Ё» относим к «Е», цифры и знаки — к «#».
+/// Буква для группы в списке: «Ё» относим к «Е». Цифры, латиница и знаки — в «#»:
+/// латинская «A» неотличима от кириллической «А», и две одинаковые буквы сбивали бы с толку.
 String groupLetter(String title) {
   for (final rune in title.runes) {
     final ch = String.fromCharCode(rune);
     if (!RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(ch)) continue;
-    if (!RegExp(r'\p{L}', unicode: true).hasMatch(ch)) return '#';
+    if (!RegExp(r'[А-яЁё]').hasMatch(ch)) return '#';
     final up = ch.toUpperCase();
     return up == 'Ё' ? 'Е' : up;
   }

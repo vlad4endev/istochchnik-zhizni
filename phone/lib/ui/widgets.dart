@@ -84,11 +84,14 @@ class ErrorView extends StatelessWidget {
 
 /// Пустое состояние: иконка, заголовок и пояснение.
 class EmptyHint extends StatelessWidget {
-  const EmptyHint(this.text, {super.key, this.icon = Icons.inbox_outlined, this.hint});
+  const EmptyHint(this.text, {super.key, this.icon = Icons.inbox_outlined, this.hint, this.action});
 
   final String text;
   final IconData icon;
   final String? hint;
+
+  /// Что можно сделать прямо отсюда: «Сбросить поиск», «Показать все».
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -110,6 +113,7 @@ class EmptyHint extends StatelessWidget {
               const SizedBox(height: 6),
               Text(hint!, textAlign: TextAlign.center, style: TextStyle(fontSize: 13.5, height: 1.4, color: palette.inkMuted)),
             ],
+            if (action != null) ...[const SizedBox(height: 18), action!],
           ],
         ),
       ),
