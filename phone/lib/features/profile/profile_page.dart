@@ -8,6 +8,7 @@ import '../../core/session.dart';
 import '../../core/theme.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
+import 'notifications_card.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key, this.focusNeed = false});
@@ -196,6 +197,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ],
             ),
           ),
+          const NotificationsCard(),
           const SectionLabel('Безопасность'),
           ChurchCard(
             padding: const EdgeInsets.all(14),

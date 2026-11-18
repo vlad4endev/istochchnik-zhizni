@@ -11,7 +11,9 @@ import '../features/chats/thread_page.dart';
 import 'call_alerts.dart';
 import 'firebase_config.dart';
 import 'nav.dart';
+import 'push_status.dart';
 import 'session.dart';
+import 'token_uploader.dart';
 
 const _messagesChannel = AndroidNotificationChannel(
   'messages',
@@ -45,8 +47,10 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
 }
 
 /// Регистрация устройства на сервере и обработка пушей в открытом приложении.
-class PushService {
-  PushService._();
+class PushService with WidgetsBindingObserver {
+  PushService._() {
+    _uploader = TokenUploader(send: _post, onChange: () => PushStatus.instance.setToken(registered: _uploader.registered));
+  }
   static final PushService instance = PushService._();
 
   /// Открытый сейчас чат: уведомления о нём не показываем, человек и так его видит.
@@ -56,7 +60,7 @@ class PushService {
   SessionController? _session;
   StreamSubscription<String>? _tokenRefresh;
   bool _started = false;
-  String? _registeredToken;
+  late final TokenUploader _uploader;
 
   Future<void> start(SessionController session) async {
     _session = session;
@@ -84,7 +88,9 @@ class PushService {
     // Сервер (firebase-admin sendEachForMulticast) шлёт по классическим FCM-токенам,
     // а новый register()/onRegistered выдаёт Installation ID — с ним пуши не дойдут.
     // ignore: deprecated_member_use
-    _tokenRefresh = FirebaseMessaging.instance.onTokenRefresh.listen(_sendToken);
+    _tokenRefresh = FirebaseMessaging.instance.onTokenRefresh.listen((token) => unawaited(_uploader.submit(token)));
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(PushStatus.instance.refresh());
     WidgetsBinding.instance.addPostFrameCallback((_) => CallAlerts.instance.resumeAcceptedCall());
     if (session.user?.isActive == true) await register();
   }
@@ -94,13 +100,63 @@ class PushService {
     if (!_started || _session?.token == null) return;
     try {
       await FirebaseMessaging.instance.requestPermission();
+    } catch (_) {}
+    try {
       // ignore: deprecated_member_use — см. комментарий у onTokenRefresh
       final token = await FirebaseMessaging.instance.getToken();
-      if (token != null) await _sendToken(token);
+      if (token == null) {
+        PushStatus.instance.setFirebaseProblem('Firebase не выдал токен устройства');
+      } else {
+        PushStatus.instance.setFirebaseProblem(null);
+        await _uploader.submit(token);
+      }
     } catch (_) {
-      /* без Google Play Services пушей не будет, приложение продолжает работать */
+      // Без Google Play Services или если проект Firebase не принял приложение пушей не будет;
+      // приложение работает, а причина видна в профиле.
+      PushStatus.instance.setFirebaseProblem('Не удалось связаться с Firebase');
     }
+    await PushStatus.instance.refresh();
     await _askFullScreenCalls();
+    _hintIfNotificationsOff();
+  }
+
+  /// Вернулись в приложение: человек мог включить разрешение в настройках или появилась сеть.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !_started) return;
+    unawaited(PushStatus.instance.refresh());
+    if (_session?.token == null) return;
+    if (_uploader.hasToken) {
+      unawaited(_uploader.retryNow());
+    } else {
+      unawaited(register());
+    }
+  }
+
+  /// Уведомления выключены в системе: без них не придут ни сообщения, ни звонки.
+  /// Напоминаем не чаще раза в неделю и всегда оставляем кнопку в профиле.
+  Future<void> _hintIfNotificationsOff() async {
+    if (PushStatus.instance.notificationsAllowed != false) return;
+    if (!await _dueAgain('hinted_notifications_off')) return;
+    final context = navigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        duration: const Duration(seconds: 10),
+        content: const Text('Уведомления выключены — сообщения и звонки не придут.'),
+        action: SnackBarAction(label: 'Включить', onPressed: PushStatus.instance.openNotificationSettings),
+      ));
+  }
+
+  /// Не чаще раза в [days] дней; отметка ставится при проверке.
+  Future<bool> _dueAgain(String key, {int days = 7}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final last = prefs.getInt(key) ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - last < Duration(days: days).inMilliseconds) return false;
+    await prefs.setInt(key, now);
+    return true;
   }
 
   /// Android 14+: без этого разрешения звонок не откроется поверх экрана блокировки.
@@ -108,9 +164,8 @@ class PushService {
   Future<void> _askFullScreenCalls() async {
     try {
       if (await FlutterCallkitIncoming.canUseFullScreenIntent()) return;
-      final prefs = await SharedPreferences.getInstance();
-      if (prefs.getBool('asked_full_screen_calls') == true) return;
-      await prefs.setBool('asked_full_screen_calls', true);
+      // Раньше спрашивали один раз навсегда; теперь повторяем раз в неделю, пока не разрешат.
+      if (!await _dueAgain('asked_full_screen_calls_at')) return;
       final context = navigatorKey.currentContext;
       if (context == null || !context.mounted) return;
       final allow = await showDialog<bool>(
@@ -127,20 +182,18 @@ class PushService {
           ],
         ),
       );
-      if (allow == true) await FlutterCallkitIncoming.requestFullIntentPermission();
+      if (allow == true) await PushStatus.instance.openFullScreenSettings();
     } catch (_) {}
   }
 
-  Future<void> _sendToken(String token) async {
+  /// Бросает исключение при сбое — [TokenUploader] повторит попытку.
+  Future<void> _post(String token) async {
     final session = _session;
-    if (session?.token == null || token == _registeredToken) return;
-    try {
-      await session!.dio.post<Object?>(
-        '/api/notifications/save-token',
-        data: {'fcm_token': token, 'device_id': await deviceId()},
-      );
-      _registeredToken = token;
-    } catch (_) {}
+    if (session?.token == null) throw StateError('нет сессии');
+    await session!.dio.post<Object?>(
+      '/api/notifications/save-token',
+      data: {'fcm_token': token, 'device_id': await deviceId()},
+    );
   }
 
   /// Перед выходом: устройство больше не должно получать пуши этого человека.
@@ -154,7 +207,7 @@ class PushService {
       // ignore: deprecated_member_use — пара к getToken
       await FirebaseMessaging.instance.deleteToken();
     } catch (_) {}
-    _registeredToken = null;
+    _uploader.reset();
   }
 
   static Future<String> deviceId() async {
@@ -225,6 +278,8 @@ class PushService {
   }
 
   Future<void> dispose() async {
+    WidgetsBinding.instance.removeObserver(this);
+    _uploader.dispose();
     await _tokenRefresh?.cancel();
   }
 }
