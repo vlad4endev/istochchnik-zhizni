@@ -9,24 +9,8 @@ import { AudioPresets, type AudioCaptureOptions, type TrackPublishOptions } from
  * битрейт выше. Нужны наушники: без эхоподавления собеседники слышат себя.
  */
 
-const MUSIC_MODE_STORAGE_KEY = 'call_music_mode';
-
-export function loadMusicModePref(): boolean {
-  try {
-    return localStorage.getItem(MUSIC_MODE_STORAGE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-export function saveMusicModePref(enabled: boolean): void {
-  try {
-    if (enabled) localStorage.setItem(MUSIC_MODE_STORAGE_KEY, '1');
-    else localStorage.removeItem(MUSIC_MODE_STORAGE_KEY);
-  } catch {
-    /* приватный режим Safari — просто не запоминаем */
-  }
-}
+// Хранение выбора — в callAudioPrefs.ts (без LiveKit), этот модуль грузится только с окном звонка.
+export { loadMusicModePref, saveMusicModePref } from './callAudioPrefs';
 
 export function micCaptureOptions(musicMode: boolean): AudioCaptureOptions {
   return {

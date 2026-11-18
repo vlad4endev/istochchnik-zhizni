@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
-import { loadMusicModePref, saveMusicModePref } from './callAudioProfile';
+// Не callAudioProfile: тот тянет livekit-client, а store входит в основной бандл.
+import { loadMusicModePref, saveMusicModePref } from './callAudioPrefs';
 import type { CallMediaType, CallPublic } from './callsApi';
 
 export interface ActiveCallState {

@@ -53,7 +53,6 @@ import {
   IcVideo,
   IcVideoOff,
   IcClose,
-  IcMusic,
 } from './callIcons';
 import { useNavigate } from 'react-router-dom';
 
@@ -460,8 +459,8 @@ function CallControls({
   const setMuted = useCallStore((s) => s.setMuted);
   const setVideoOff = useCallStore((s) => s.setVideoOff);
   const setScreenSharing = useCallStore((s) => s.setScreenSharing);
+  // Профиль микрофона выбирается в «Настройках»; новый трек (после mute) создаётся с ним.
   const musicMode = useCallStore((s) => s.musicMode);
-  const setMusicMode = useCallStore((s) => s.setMusicMode);
   const showScreenShare = !isMobileUa();
 
   // Источник истины — LiveKit participant, не zustand (иначе рассинхрон после mute).
@@ -523,39 +522,6 @@ function CallControls({
     }
   }, [isMuted, localParticipant, mediaBusy, musicMode, room]);
 
-  /**
-   * Смена профиля микрофона: фильтры и DTX задаются при захвате/публикации, поэтому трек
-   * пересоздаётся (короткая пауза в звуке ~0,5 с). Если микрофон выключен — трек просто
-   * убираем, новый с нужным профилем создастся при включении (без «утечки» звука).
-   */
-  const toggleMusicMode = useCallback(async () => {
-    if (mediaBusy) return;
-    const next = !musicMode;
-    setMediaBusy(true);
-    try {
-      const wasOn = localParticipant.isMicrophoneEnabled;
-      const pub = localParticipant.getTrackPublication(Track.Source.Microphone);
-      if (pub?.track) await localParticipant.unpublishTrack(pub.track, true);
-      if (wasOn) {
-        await localParticipant.setMicrophoneEnabled(
-          true,
-          micCaptureOptions(next),
-          micPublishOptions(next),
-        );
-      }
-      setMusicMode(next);
-      emitAppToast(
-        next
-          ? 'Режим «Прославление»: голос и инструменты звучат без фильтров. Наденьте наушники, чтобы не было эха.'
-          : 'Обычный режим: шумоподавление снова включено.',
-        'info',
-      );
-    } catch (e) {
-      emitAppToast(mapDeviceError(e), 'error');
-    } finally {
-      setMediaBusy(false);
-    }
-  }, [localParticipant, mediaBusy, musicMode, setMusicMode]);
 
   const toggleCam = useCallback(async () => {
     if (!videoEnabled || mediaBusy) return;
@@ -640,28 +606,6 @@ function CallControls({
             <span className="call-ctrl__label">Камера</span>
           </button>
         ) : null}
-        <button
-          type="button"
-          className={['call-ctrl', musicMode ? 'call-ctrl--active' : ''].join(' ')}
-          onClick={() => void toggleMusicMode()}
-          disabled={mediaBusy}
-          aria-pressed={musicMode}
-          aria-label={
-            musicMode
-              ? 'Режим «Прославление» включён: пение и инструменты без фильтров. Нажмите, чтобы вернуть обычный режим'
-              : 'Включить режим «Прославление» — для пения и инструментов'
-          }
-          title={
-            musicMode
-              ? 'Прославление включено — звук без фильтров'
-              : 'Прославление — для пения и инструментов'
-          }
-        >
-          <span className="call-ctrl__icon">
-            <IcMusic size={22} />
-          </span>
-          <span className="call-ctrl__label">Прославление</span>
-        </button>
         {showScreenShare ? (
           <button
             type="button"

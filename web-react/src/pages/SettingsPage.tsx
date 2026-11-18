@@ -4,6 +4,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { useAppearanceStore } from '../stores/useAppearanceStore';
 import { useAccessibilitySettings } from '@/lib/accessibility/AccessibilityProvider';
 import type { AccessibilityColorTheme } from '@/lib/accessibility/types';
+import { useCallStore } from '../features/calls/callStore';
 
 const THEME_SWATCHES: {
   key: AccessibilityColorTheme;
@@ -23,6 +24,8 @@ const THEME_SWATCHES: {
 export function SettingsPage() {
   const { fontSize, setFontSize } = useAppearanceStore();
   const { state, patchA11y } = useAccessibilitySettings();
+  const worshipAudio = useCallStore((s) => s.musicMode);
+  const setWorshipAudio = useCallStore((s) => s.setMusicMode);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6">
@@ -121,6 +124,44 @@ export function SettingsPage() {
             <p className="mt-3 rounded-xl bg-[var(--surface)] p-3 text-sm text-[var(--text-secondary)]">
               Пример текста молитвы при данном размере шрифта. Текст адаптируется по всему приложению.
             </p>
+          </div>
+
+          <div>
+            <h3 className="mb-3 text-base font-semibold text-[var(--text)]">Звонки</h3>
+            <div className="flex items-start justify-between gap-4 rounded-2xl bg-[var(--surface)] p-4">
+              <div className="min-w-0">
+                <p id="worship-audio-label" className="text-sm font-semibold text-[var(--text)]">
+                  Звук для прославления
+                </p>
+                <p id="worship-audio-hint" className="mt-1 text-sm text-[var(--text-secondary)]">
+                  Пение и инструменты передаются без шумо- и эхоподавления. Включайте только с
+                  наушниками. Действует со следующего звонка на этом устройстве.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={worshipAudio}
+                aria-labelledby="worship-audio-label"
+                aria-describedby="worship-audio-hint"
+                onClick={() => setWorshipAudio(!worshipAudio)}
+                className="-m-2 inline-flex h-11 min-h-[44px] w-16 min-w-[44px] shrink-0 items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+              >
+                {/* Зона нажатия 44px, визуально — компактный переключатель. */}
+                <span
+                  aria-hidden
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                    worshipAudio ? 'bg-[var(--primary)]' : 'bg-stone-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                      worshipAudio ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       </section>

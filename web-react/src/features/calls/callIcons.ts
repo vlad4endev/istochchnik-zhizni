@@ -26,5 +26,4 @@ export {
   PiMoonFill as IcMoon,
   PiSunFill as IcSun,
   PiArrowRightBold as IcArrowRight,
-  PiMusicNotesFill as IcMusic,
 } from 'react-icons/pi';
