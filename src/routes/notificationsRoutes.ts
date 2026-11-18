@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
 import { deleteFcmTokenForDevice, saveFcmToken } from '../services/fcmSubscriptionService';
-import { saveVoipToken } from '../services/voipTokenService';
+import { deleteVoipTokenForDevice, saveVoipToken } from '../services/voipTokenService';
 import {
   getUnreadNotificationDeliveryCount,
   insertMemberNotificationDelivery,
@@ -302,6 +302,15 @@ router.post('/remove-token', requireAuthSession, async (req: Request, res: Respo
   }
   try {
     await deleteFcmTokenForDevice(memberId, device_id);
+    // iPhone: VoIP-токен тоже снимаем, иначе вышедший из аккаунта телефон продолжит принимать чужие звонки.
+    try {
+      await deleteVoipTokenForDevice(memberId, device_id);
+    } catch (voipErr) {
+      // Таблицы VoIP-токенов может не быть на окружении без миграции — это не ошибка выхода.
+      if (!(voipErr && typeof voipErr === 'object' && (voipErr as { code?: string }).code === '42P01')) {
+        console.warn('[notifications] remove voip token failed:', voipErr);
+      }
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error('[notifications] remove-token error:', e);

@@ -2,7 +2,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 
-import { acceptCall, declineCall, fetchCallStatus } from '../api/calls';
+import { declineCall, fetchCallStatus } from '../api/calls';
+import { answerIncomingCall } from '../lib/answerCall';
 import { decideIntent, intentFromNotification, parseCallPush } from '../lib/callPush';
 import { useAuthStore } from '../stores/authStore';
 import { useCallStore } from '../stores/callStore';
@@ -77,22 +78,13 @@ export function PushBootstrap() {
         });
         return;
       }
-      try {
-        await acceptCall(c.callId);
-        store.openCall({
-          callId: c.callId,
-          kind: 'direct',
-          mediaType: c.callType,
-          title: c.callerName,
-          peerName: c.callerName,
-          isInitiator: false,
-          conversationId: c.conversationId,
-          phase: 'connecting',
-        });
-        navigation.navigate('Call');
-      } catch (e) {
-        Alert.alert('Не удалось принять звонок', e instanceof Error ? e.message : 'Попробуйте ещё раз.');
-      }
+      const err = await answerIncomingCall(navigation, {
+        callId: c.callId,
+        callerName: c.callerName,
+        callType: c.callType,
+        conversationId: c.conversationId,
+      });
+      if (err) Alert.alert('Не удалось принять звонок', err);
     };
 
     const sub = N.addNotificationResponseReceivedListener((r) => void handle(r));

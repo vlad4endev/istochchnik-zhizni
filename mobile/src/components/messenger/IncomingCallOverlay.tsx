@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { acceptCall, declineCall } from '../../api/calls';
+import { declineCall } from '../../api/calls';
+import { answerIncomingCall } from '../../lib/answerCall';
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 import { useCallStore } from '../../stores/callStore';
 import { ChatAvatar } from './ChatAvatar';
@@ -36,23 +37,15 @@ export function IncomingCallOverlay() {
   const accept = async () => {
     setBusy('accept');
     setError(null);
-    try {
-      await acceptCall(incoming.callId);
-      useCallStore.getState().openCall({
-        callId: incoming.callId,
-        kind: 'direct',
-        mediaType: incoming.callType,
-        title: incoming.callerName,
-        peerName: incoming.callerName,
-        isInitiator: false,
-        conversationId: incoming.conversationId,
-        phase: 'connecting',
-      });
-      useCallStore.getState().setIncoming(null);
-      navigation.navigate('Call');
-    } catch (e) {
+    const err = await answerIncomingCall(navigation, {
+      callId: incoming.callId,
+      callerName: incoming.callerName,
+      callType: incoming.callType,
+      conversationId: incoming.conversationId,
+    });
+    if (err) {
       setBusy(null);
-      setError(e instanceof Error ? e.message : 'Не удалось принять звонок');
+      setError(err);
     }
   };
 

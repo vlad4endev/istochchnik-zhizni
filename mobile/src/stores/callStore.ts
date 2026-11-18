@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import type { CallMediaType } from '../api/calls';
+import { callKitReportEnded, isCallKitReported } from '../lib/callKit';
 import { applyCallEvent, type ActiveCall, type CallEvent, type CallPhase } from '../lib/callState';
 
 export type IncomingCall = {
@@ -49,6 +50,8 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     if (type === 'call:incoming') {
       const callerId = Number(msg.callerId);
       if (!callId || !Number.isFinite(callerId)) return;
+      // Звонок уже показывает системный экран iPhone — второй экран не нужен.
+      if (isCallKitReported(callId)) return;
       // Уже в звонке — второй входящий не показываем (сервер ответит «занят»).
       if (get().active && get().active!.phase !== 'ended') return;
       set({
@@ -62,6 +65,11 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
         },
       });
       return;
+    }
+
+    // Звонок закончился на сервере — убираем его и с системного экрана iPhone.
+    if ((type === 'call:cancelled' || type === 'call:ended' || type === 'call:rejected') && isCallKitReported(callId)) {
+      callKitReportEnded(callId);
     }
 
     // Звонящий передумал или звонок завершён — убираем «входящий».

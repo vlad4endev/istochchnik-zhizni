@@ -7,7 +7,9 @@ const path = require('path');
  * Пуши (в том числе звонки при закрытом приложении) идут через Firebase:
  *  - Android: google-services.json лежит в проекте;
  *  - iOS: нужен GoogleService-Info.plist из консоли Firebase (положите рядом с app.json).
- *    Пока его нет, iOS-сборка собирается без пушей, чтобы не ломаться.
+ *    Пока его нет, iOS-сборка собирается без обычных пушей, чтобы не ломаться.
+ *    Звонки на iPhone при закрытом приложении (CallKit + VoIP-пуш, модуль modules/expo-callkit)
+ *    от Firebase не зависят: им нужен только ключ APNs на сервере.
  */
 module.exports = ({ config }) => {
   const iosPlist = path.join(__dirname, 'GoogleService-Info.plist');
@@ -28,6 +30,11 @@ module.exports = ({ config }) => {
     ios: {
       ...config.ios,
       ...(hasIosPlist ? { googleServicesFile: './GoogleService-Info.plist' } : {}),
+      infoPlist: {
+        ...config.ios?.infoPlist,
+        // voip — приём VoIP-пушей и CallKit при закрытом приложении; remote-notification — фоновые пуши.
+        UIBackgroundModes: ['audio', 'voip', 'remote-notification'],
+      },
     },
     plugins: [...(config.plugins ?? []), ...(useFirebase ? ['@react-native-firebase/app'] : [])],
   };

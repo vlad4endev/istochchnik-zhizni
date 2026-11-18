@@ -10,6 +10,7 @@ import {
   isRingExpired,
   parseCallPush,
 } from '../lib/callPush';
+import { callKitAvailable, callKitReportEnded } from '../lib/callKit';
 import { getNotifications } from './pushNative';
 
 /** Канал и кнопки «Принять/Отклонить» — готовим перед показом первого входящего. */
@@ -52,9 +53,14 @@ export async function handleCallPushData(
   data: Record<string, unknown> | undefined,
   sentTimeMs?: number | null,
   nowMs: number = Date.now(),
-): Promise<'shown' | 'dismissed' | 'ignored' | 'expired' | 'unavailable'> {
+): Promise<'shown' | 'dismissed' | 'ignored' | 'expired' | 'unavailable' | 'callkit'> {
   const parsed = parseCallPush(data);
   if (!parsed) return 'ignored';
+  // iPhone: входящий звонок показывает CallKit (по VoIP-пушу). Пуш о завершении закрывает его экран.
+  if (callKitAvailable) {
+    if (parsed.kind === 'ended') callKitReportEnded(parsed.callId);
+    return 'callkit';
+  }
   const N = getNotifications();
   if (!N) return 'unavailable';
   const identifier = callNotificationId(parsed.callId);
