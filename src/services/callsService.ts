@@ -429,6 +429,13 @@ async function loadCallById(callId: string, client?: DbClient): Promise<CallRow 
   return row ? mapCallRow(row) : null;
 }
 
+async function loadCallForUpdate(client: DbClient, callId: string): Promise<CallRow> {
+  const res = await client.query(`SELECT * FROM calls WHERE id = $1::uuid FOR UPDATE`, [callId]);
+  const row = res.rows[0];
+  if (!row) throw new CallsError('not_found', 'Звонок не найден');
+  return mapCallRow(row);
+}
+
 async function assertCanViewCall(call: CallRow, memberId: number): Promise<void> {
   if (!isStandaloneCall(call) && call.conversation_id) {
     const inConv = await isMemberInConversation(call.conversation_id, memberId);
@@ -1081,6 +1088,8 @@ export async function acceptCall(callId: string, memberId: number): Promise<Call
   });
 
   await sendWs(updated.initiated_by, { type: 'call:accepted', callId: updated.id });
+  // Другие вкладки/устройства принявшего продолжали звонить — снимаем входящий у них.
+  await sendWs(memberId, { type: 'call:answered_elsewhere', callId: updated.id });
   // Снять CallStyle/CallKit на других устройствах принявшего
   void dismissIncomingCallNative(memberId, updated.id).catch(() => undefined);
   recordCallEvent({ callId: updated.id, memberId, kind: 'accepted' });
@@ -1118,6 +1127,8 @@ export async function declineCall(callId: string, memberId: number): Promise<Cal
     callId: updated.id,
     reason: 'declined',
   });
+  // Другие вкладки/устройства отклонившего иначе звонят до таймаута.
+  await sendWs(memberId, { type: 'call:rejected', callId: updated.id, reason: 'declined' });
   void dismissIncomingCallNative(memberId, updated.id).catch(() => undefined);
   void sendPushNotification(updated.initiated_by, {
     title: 'Звонок отклонён',
@@ -1202,6 +1213,20 @@ export async function endCall(
   memberId: number,
   opts?: { endForAll?: boolean },
 ): Promise<CallPublic> {
+  // «Положить трубку» до ответа в личном звонке — это отмена (инициатор) или отклонение (получатель):
+  // только эти пути снимают нативный входящий, шлют корректное событие и пишут запись в чат.
+  const pre = await loadCallById(callId);
+  if (pre?.type === 'direct' && pre.status === 'ringing') {
+    try {
+      return pre.initiated_by === memberId
+        ? await cancelCall(callId, memberId)
+        : await declineCall(callId, memberId);
+    } catch (e) {
+      // Статус успел смениться (принят/завершён) — продолжаем обычным путём завершения.
+      if (!(e instanceof CallsError && e.code === 'conflict')) throw e;
+    }
+  }
+
   const leaveLiveKit: { roomName: string; identity: string }[] = [];
   const endForAll = Boolean(opts?.endForAll);
   let groupLeaveRemaining: number | null = null;
@@ -1422,6 +1447,18 @@ export async function issueCallToken(
         notifyJoinedConversationId = callRow.conversation_id;
       } else {
         throw new CallsError('forbidden', 'Нет доступа');
+      }
+    }
+
+    if (callRow.type === 'group' && participantRow.status === 'left') {
+      // Повторный вход после выхода: лимит участников действует так же, как для новых.
+      const joinedCount = await client.query(
+        `SELECT COUNT(*)::int AS c FROM call_participants
+         WHERE call_id = $1::uuid AND status = 'joined'`,
+        [callId],
+      );
+      if (Number(joinedCount.rows[0]?.c ?? 0) >= maxGroupParticipants(cfg)) {
+        throw new CallsError('full', 'Достигнут лимит участников');
       }
     }
 
@@ -1828,9 +1865,6 @@ export async function reportCallQuality(
     throw new CallsError('forbidden', 'Вы не участник этого звонка');
   }
 
-  const call = await loadCallById(callId);
-  if (!call) throw new CallsError('not_found', 'Звонок не найден');
-
   const report: CallQualityReport = {
     userId: memberId,
     score,
@@ -1845,35 +1879,41 @@ export async function reportCallQuality(
     at: new Date().toISOString(),
   };
 
-  const prevQuality =
-    call.metadata.quality && typeof call.metadata.quality === 'object'
-      ? (call.metadata.quality as Record<string, unknown>)
-      : {};
-  const prevReports = Array.isArray(prevQuality.reports) ? [...prevQuality.reports] : [];
-  const filtered = prevReports.filter((r) => {
-    if (!r || typeof r !== 'object') return false;
-    return Number((r as Record<string, unknown>).userId) !== memberId;
+  // Read-modify-write metadata под блокировкой строки: участники отчитываются одновременно
+  // при завершении звонка, без FOR UPDATE один отчёт затирал другой.
+  const { avg, filtered } = await withTransaction(async (client) => {
+    const call = await loadCallForUpdate(client, callId);
+    const prevQuality =
+      call.metadata.quality && typeof call.metadata.quality === 'object'
+        ? (call.metadata.quality as Record<string, unknown>)
+        : {};
+    const prevReports = Array.isArray(prevQuality.reports) ? [...prevQuality.reports] : [];
+    const kept = prevReports.filter((r) => {
+      if (!r || typeof r !== 'object') return false;
+      return Number((r as Record<string, unknown>).userId) !== memberId;
+    });
+    kept.push(report);
+
+    const scores = kept
+      .map((r) => (r && typeof r === 'object' ? Number((r as Record<string, unknown>).score) : NaN))
+      .filter((n) => Number.isFinite(n));
+    const mean = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : score;
+
+    await client.query(
+      `UPDATE calls
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('quality', $2::jsonb)
+       WHERE id = $1::uuid`,
+      [
+        callId,
+        JSON.stringify({
+          score: Math.round(mean * 10) / 10,
+          reports: kept,
+          updated_at: new Date().toISOString(),
+        }),
+      ],
+    );
+    return { avg: mean, filtered: kept };
   });
-  filtered.push(report);
-
-  const scores = filtered
-    .map((r) => (r && typeof r === 'object' ? Number((r as Record<string, unknown>).score) : NaN))
-    .filter((n) => Number.isFinite(n));
-  const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : score;
-
-  const nextMeta = {
-    ...call.metadata,
-    quality: {
-      score: Math.round(avg * 10) / 10,
-      reports: filtered,
-      updated_at: new Date().toISOString(),
-    },
-  };
-
-  await query(`UPDATE calls SET metadata = $2::jsonb WHERE id = $1::uuid`, [
-    callId,
-    JSON.stringify(nextMeta),
-  ]);
 
   recordCallEvent({
     callId,
@@ -1905,6 +1945,13 @@ function ghostMissKey(callId: string, userId: number): string {
   return `${callId}:${userId}`;
 }
 
+/** Момент входа участника для grace-периода; без joined_at — старт/создание звонка. */
+function joinedAtMs(raw: unknown, call: Pick<CallRow, 'started_at' | 'created_at'>): number {
+  const src = raw ?? call.started_at ?? call.created_at;
+  const t = src ? new Date(String(src)).getTime() : NaN;
+  return Number.isFinite(t) ? t : Date.now();
+}
+
 /**
  * Sync DB «joined» with LiveKit presence so closed tabs don't leave users permanently busy.
  * Grace: ignore recent joins; require several consecutive misses so ICE blips don't kill meetings.
@@ -1934,6 +1981,7 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
 
   for (const row of active.rows) {
     const call = mapCallRow(row);
+    let peerLost = false;
     try {
       const identities = await listLiveKitParticipantIdentities(call.livekit_room_name);
       if (identities === null) continue; // Room Service unreachable — skip this tick
@@ -1956,8 +2004,9 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
           ghostMissStreak.delete(key);
           continue;
         }
-        const joinedAt = p.joined_at ? new Date(String(p.joined_at)).getTime() : 0;
-        if (joinedAt && Date.now() - joinedAt < graceSec * 1000) {
+        // Инициатор личного звонка вставляется как joined без joined_at — отсчитываем grace от старта звонка.
+        const joinedAt = joinedAtMs(p.joined_at, call);
+        if (Date.now() - joinedAt < graceSec * 1000) {
           ghostMissStreak.delete(key);
           continue;
         }
@@ -1969,11 +2018,7 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
 
       if (ghosts.length === 0 && present.size === 0 && parts.rows.length > 0) {
         // Empty LiveKit room: first loop already bumped streaks; promote those at threshold.
-        const oldest = Math.min(
-          ...parts.rows.map((p) =>
-            p.joined_at ? new Date(String(p.joined_at)).getTime() : Date.now(),
-          ),
-        );
+        const oldest = Math.min(...parts.rows.map((p) => joinedAtMs(p.joined_at, call)));
         if (Date.now() - oldest >= graceSec * 1000) {
           for (const p of parts.rows) {
             const uid = Number(p.user_id);
@@ -2013,6 +2058,13 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
           await finalizeCall(client, mapCallRow(locked.rows[0]), 'ended', 'ghost_cleanup');
           return 0;
         }
+        // Личный звонок вдвоём: собеседник пропал (закрыл вкладку, умер телефон/сеть) —
+        // оставшийся иначе сидит один «в звонке» и остаётся «занят» для всех.
+        if (call.type === 'direct') {
+          peerLost = true;
+          await finalizeCall(client, mapCallRow(locked.rows[0]), 'ended', 'peer_lost');
+          return 0;
+        }
         return count;
       });
 
@@ -2032,14 +2084,27 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
           `SELECT user_id FROM call_participants WHERE call_id = $1::uuid`,
           [call.id],
         );
+        const reason = peerLost ? 'peer_lost' : 'ghost_cleanup';
         for (const r of others.rows) {
           await sendWs(Number(r.user_id), {
             type: 'call:ended',
             callId: call.id,
-            reason: 'ghost_cleanup',
+            reason,
           }).catch(() => undefined);
         }
         await endLiveKitRoom(call.livekit_room_name);
+        if (peerLost) {
+          const done = await loadCallById(call.id);
+          await insertCallHistoryMessage({
+            conversationId: call.conversation_id,
+            callId: call.id,
+            mediaType: call.media_type,
+            callType: call.type,
+            status: 'ended',
+            durationSeconds: done?.duration_seconds ?? null,
+            initiatedBy: call.initiated_by,
+          });
+        }
         endedEmpty += 1;
       }
     } catch (e) {

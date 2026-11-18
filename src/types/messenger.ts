@@ -239,6 +239,8 @@ export type WsMessengerEvent =
       error: 'busy' | 'already_in_call' | 'user_offline' | 'forbidden' | 'invalid';
     }
   | { type: 'call:accepted'; callId: string }
+  /** Звонок принят на другом устройстве этого же пользователя — снять входящий. */
+  | { type: 'call:answered_elsewhere'; callId: string }
   | { type: 'call:rejected'; callId: string; reason?: string }
   | { type: 'call:cancelled'; callId: string }
   | { type: 'call:ended'; callId: string; reason?: string; duration?: number }
