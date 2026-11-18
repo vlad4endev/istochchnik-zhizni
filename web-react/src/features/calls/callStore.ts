@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { loadMusicModePref, saveMusicModePref } from './callAudioProfile';
 import type { CallMediaType, CallPublic } from './callsApi';
 
 export interface ActiveCallState {
@@ -29,6 +30,9 @@ interface CallStore {
   isMuted: boolean;
   isVideoOff: boolean;
   isScreenSharing: boolean;
+  /** Режим «Музыка» (без фильтров браузера) — настройка устройства, переживает звонки. */
+  musicMode: boolean;
+  setMusicMode: (v: boolean) => void;
   openCall: (call: Omit<ActiveCallState, 'status'> & { status?: ActiveCallState['status'] }) => void;
   setStatus: (status: ActiveCallState['status']) => void;
   setLiveKitCreds: (url: string, token: string) => void;
@@ -48,6 +52,12 @@ export const useCallStore = create<CallStore>((set) => ({
   isMuted: false,
   isVideoOff: false,
   isScreenSharing: false,
+  musicMode: loadMusicModePref(),
+
+  setMusicMode: (musicMode) => {
+    saveMusicModePref(musicMode);
+    set({ musicMode });
+  },
 
   openCall: (call) =>
     set({

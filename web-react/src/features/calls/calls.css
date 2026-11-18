@@ -654,6 +654,67 @@
   z-index: 1;
 }
 
+/* Уведомления поверх окна звонка: не модальные, не перекрывают кнопки управления. */
+.call-toast-layer {
+  position: fixed;
+  top: calc(68px + var(--call-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10060;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(420px, calc(100% - 32px));
+  pointer-events: none;
+}
+
+.call-toast {
+  pointer-events: auto;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-left: 4px solid rgba(255, 255, 255, 0.5);
+  border-radius: 12px;
+  background: rgba(23, 25, 34, 0.94);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  animation: call-toast-in 180ms ease-out;
+}
+
+.call-toast--error {
+  border-left-color: var(--call-decline, #ff3b30);
+}
+
+.call-toast--success {
+  border-left-color: var(--call-accept, #4cd964);
+}
+
+.call-toast:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+@keyframes call-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-toast {
+    animation: none;
+  }
+}
+
 /* Связь потеряна после исчерпания автоповторов: явное действие вместо «тупика». */
 .call-rejoin-banner {
   position: absolute;

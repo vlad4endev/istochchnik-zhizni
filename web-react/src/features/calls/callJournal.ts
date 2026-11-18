@@ -173,6 +173,7 @@ export function startCallJournal(callId: string): void {
 }
 
 export function stopCallJournal(callId: string): void {
+  latestStats.delete(callId);
   const timer = flushTimers.get(callId);
   if (timer != null) {
     window.clearInterval(timer);
@@ -326,6 +327,31 @@ async function sampleRtcStats(room: Room, callId: string): Promise<void> {
   logCallEvent(callId, 'stats_sample', {
     payload: { rttMs, jitterMs, packetsLost, packetsReceived, packetsSent },
   });
+  latestStats.set(callId, {
+    rttMs,
+    jitterMs,
+    packetLoss: lossRatio(packetsLost, packetsReceived),
+  });
+}
+
+export type CallNetworkStats = {
+  rttMs: number | null;
+  jitterMs: number | null;
+  /** Доля потерянных входящих пакетов 0–1 (накопительно за соединение). */
+  packetLoss: number | null;
+};
+
+const latestStats = new Map<string, CallNetworkStats>();
+
+export function lossRatio(lost: number, received: number): number | null {
+  const total = lost + received;
+  if (!Number.isFinite(total) || total <= 0) return null;
+  return Math.round((lost / total) * 10000) / 10000;
+}
+
+/** Последний замер WebRTC для отчёта качества (null — замеров ещё не было). */
+export function getLatestCallStats(callId: string): CallNetworkStats | null {
+  return latestStats.get(callId) ?? null;
 }
 
 function participantLabel(p: Participant): string {

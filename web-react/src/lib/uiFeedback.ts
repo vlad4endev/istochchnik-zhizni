@@ -21,6 +21,21 @@ export type AppToastPayload = {
   adminOnly?: boolean;
 };
 
+/**
+ * Перехватчик тостов: возвращает true, если показал уведомление сам (например, окно звонка
+ * поверх приложения — модальный тост оказался бы под ним и всплыл бы уже после звонка).
+ */
+type AppToastInterceptor = (payload: AppToastPayload) => boolean;
+let toastInterceptor: AppToastInterceptor | null = null;
+
+/** Установить перехватчик; возвращает функцию снятия (снимает только «свой»). */
+export function setAppToastInterceptor(fn: AppToastInterceptor): () => void {
+  toastInterceptor = fn;
+  return () => {
+    if (toastInterceptor === fn) toastInterceptor = null;
+  };
+}
+
 export function emitAppToast(message: string, kind?: AppToastKind): void;
 export function emitAppToast(payload: AppToastPayload): void;
 export function emitAppToast(
@@ -37,6 +52,8 @@ export function emitAppToast(
         };
   const text = String(payload.message || '').trim();
   if (!text) return;
+  // adminOnly-фильтр живёт в AppToastHost — такие тосты не перехватываем.
+  if (!payload.adminOnly && toastInterceptor?.({ ...payload, message: text })) return;
   window.dispatchEvent(
     new CustomEvent('app:toast', {
       detail: {

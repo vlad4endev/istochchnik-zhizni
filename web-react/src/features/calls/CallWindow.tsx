@@ -53,6 +53,7 @@ import {
   IcVideo,
   IcVideoOff,
   IcClose,
+  IcMusic,
 } from './callIcons';
 import { useNavigate } from 'react-router-dom';
 
@@ -69,11 +70,14 @@ import {
 } from './ActiveCallMinimizedBar';
 import {
   attachCallJournal,
+  getLatestCallStats,
+  type CallNetworkStats,
   isBenignRoomErrorMessage,
   logCallEvent,
   startCallJournal,
   stopCallJournal,
 } from './callJournal';
+import { micCaptureOptions, micPublishOptions } from './callAudioProfile';
 import { callEndedMessage } from './callStateSync';
 import {
   CallApiError,
@@ -93,6 +97,7 @@ import {
 } from './callConnectionQuality';
 import { startCallRing, stopCallRing, unlockCallAudio } from './callRingtone';
 import { copyInviteShare, formatInviteShareText, shareInviteLink } from './inviteShare';
+import { CallToastLayer } from './CallToastLayer';
 import { MeetingAvatar } from './MeetingAvatar';
 import { useCallStore, type ActiveCallState } from './callStore';
 import { useNetworkChangeToast } from './useNetworkChangeToast';
@@ -348,11 +353,16 @@ function CallJournalRecorder({ callId }: { callId: string }) {
   return null;
 }
 
+/** Как часто отправлять отчёт качества: если вкладку закроют, на сервере останется свежий. */
+const QUALITY_REPORT_INTERVAL_MS = 60_000;
+
+/** Качество связи локального участника → API: периодически и при выходе из комнаты. */
 function ReportCallQuality({ callId }: { callId: string }) {
   const room = useRoomContext();
   const samplesRef = useRef<number[]>([]);
   const lastLabelRef = useRef<string | null>(null);
-  const sentRef = useRef(false);
+  const lastStatsRef = useRef<CallNetworkStats | null>(null);
+  const sentSamplesRef = useRef(0);
 
   useEffect(() => {
     const onQuality = (quality: ConnectionQuality) => {
@@ -363,17 +373,29 @@ function ReportCallQuality({ callId }: { callId: string }) {
     room.localParticipant.on(ParticipantEvent.ConnectionQualityChanged, onQuality);
     onQuality(room.localParticipant.connectionQuality);
 
-    return () => {
-      room.localParticipant.off(ParticipantEvent.ConnectionQualityChanged, onQuality);
-      if (sentRef.current) return;
+    const send = (force: boolean) => {
       const samples = samplesRef.current;
       if (samples.length === 0) return;
-      sentRef.current = true;
+      // Без новых замеров повторно не шлём (кроме финального отчёта).
+      if (!force && samples.length === sentSamplesRef.current) return;
+      sentSamplesRef.current = samples.length;
+      const stats = getLatestCallStats(callId) ?? lastStatsRef.current;
+      if (stats) lastStatsRef.current = stats;
       const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
       void reportCallQuality(callId, {
         score: Math.round(avg * 10) / 10,
         connectionQuality: lastLabelRef.current,
+        rttMs: stats?.rttMs ?? null,
+        jitterMs: stats?.jitterMs ?? null,
+        packetLoss: stats?.packetLoss ?? null,
       });
+    };
+
+    const timer = window.setInterval(() => send(false), QUALITY_REPORT_INTERVAL_MS);
+    return () => {
+      window.clearInterval(timer);
+      room.localParticipant.off(ParticipantEvent.ConnectionQualityChanged, onQuality);
+      send(true);
     };
   }, [callId, room]);
 
@@ -438,6 +460,8 @@ function CallControls({
   const setMuted = useCallStore((s) => s.setMuted);
   const setVideoOff = useCallStore((s) => s.setVideoOff);
   const setScreenSharing = useCallStore((s) => s.setScreenSharing);
+  const musicMode = useCallStore((s) => s.musicMode);
+  const setMusicMode = useCallStore((s) => s.setMusicMode);
   const showScreenShare = !isMobileUa();
 
   // Источник истины — LiveKit participant, не zustand (иначе рассинхрон после mute).
@@ -486,13 +510,52 @@ function CallControls({
     setMediaBusy(true);
     try {
       resumeCallMedia(room);
-      await localParticipant.setMicrophoneEnabled(isMuted);
+      // Новый трек (после смены режима) создаётся с текущим профилем микрофона.
+      await localParticipant.setMicrophoneEnabled(
+        isMuted,
+        micCaptureOptions(musicMode),
+        micPublishOptions(musicMode),
+      );
     } catch (e) {
       emitAppToast(mapDeviceError(e), 'error');
     } finally {
       setMediaBusy(false);
     }
-  }, [isMuted, localParticipant, mediaBusy, room]);
+  }, [isMuted, localParticipant, mediaBusy, musicMode, room]);
+
+  /**
+   * Смена профиля микрофона: фильтры и DTX задаются при захвате/публикации, поэтому трек
+   * пересоздаётся (короткая пауза в звуке ~0,5 с). Если микрофон выключен — трек просто
+   * убираем, новый с нужным профилем создастся при включении (без «утечки» звука).
+   */
+  const toggleMusicMode = useCallback(async () => {
+    if (mediaBusy) return;
+    const next = !musicMode;
+    setMediaBusy(true);
+    try {
+      const wasOn = localParticipant.isMicrophoneEnabled;
+      const pub = localParticipant.getTrackPublication(Track.Source.Microphone);
+      if (pub?.track) await localParticipant.unpublishTrack(pub.track, true);
+      if (wasOn) {
+        await localParticipant.setMicrophoneEnabled(
+          true,
+          micCaptureOptions(next),
+          micPublishOptions(next),
+        );
+      }
+      setMusicMode(next);
+      emitAppToast(
+        next
+          ? 'Режим «Музыка»: шумо- и эхоподавление выключены. Используйте наушники, чтобы не было эха.'
+          : 'Режим «Речь»: шумо- и эхоподавление включены.',
+        'info',
+      );
+    } catch (e) {
+      emitAppToast(mapDeviceError(e), 'error');
+    } finally {
+      setMediaBusy(false);
+    }
+  }, [localParticipant, mediaBusy, musicMode, setMusicMode]);
 
   const toggleCam = useCallback(async () => {
     if (!videoEnabled || mediaBusy) return;
@@ -577,6 +640,24 @@ function CallControls({
             <span className="call-ctrl__label">Камера</span>
           </button>
         ) : null}
+        <button
+          type="button"
+          className={['call-ctrl', musicMode ? 'call-ctrl--active' : ''].join(' ')}
+          onClick={() => void toggleMusicMode()}
+          disabled={mediaBusy}
+          aria-pressed={musicMode}
+          aria-label={
+            musicMode
+              ? 'Режим «Музыка» включён: фильтры звука выключены. Нажмите, чтобы вернуть режим речи'
+              : 'Включить режим «Музыка» для пения и инструментов'
+          }
+          title={musicMode ? 'Режим «Музыка» включён' : 'Режим «Музыка»'}
+        >
+          <span className="call-ctrl__icon">
+            <IcMusic size={22} />
+          </span>
+          <span className="call-ctrl__label">Музыка</span>
+        </button>
         {showScreenShare ? (
           <button
             type="button"
@@ -690,8 +771,9 @@ function ApplyLobbyMediaPrefs({
   useEffect(() => {
     if (connectionState !== ConnectionState.Connected || applied.current) return;
     applied.current = true;
+    const musicMode = useCallStore.getState().musicMode;
     void room.localParticipant
-      .setMicrophoneEnabled(micOn)
+      .setMicrophoneEnabled(micOn, micCaptureOptions(musicMode), micPublishOptions(musicMode))
       .catch((e) => {
         emitAppToast(mapDeviceError(e), 'error');
       });
@@ -2028,6 +2110,13 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const [connectError, setConnectError] = useState<string | null>(null);
   const [lkConnected, setLkConnected] = useState(false);
   const tokenInflight = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   /** Стабильные props для LiveKitRoom — смена JWT иначе делает leave/rejoin. */
   const roomTokenRef = useRef<string | null>(
     activeCall.livekitToken && activeCall.livekitUrl ? activeCall.livekitToken : null,
@@ -2040,6 +2129,8 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
    * исчерпан, закэшированный JWT мог протухнуть — берём свежий и монтируем комнату заново.
    */
   const [rejoinNonce, setRejoinNonce] = useState(0);
+  const rejoinNonceRef = useRef(rejoinNonce);
+  rejoinNonceRef.current = rejoinNonce;
   const rejoinAttemptsRef = useRef(0);
   const rejoinTimerRef = useRef<number | null>(null);
   /** Автоматические перезаходы исчерпаны — показываем «Переподключиться». */
@@ -2232,11 +2323,15 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     }
     if (tokenInflight.current) return;
     tokenInflight.current = true;
-    let cancelled = false;
+    // Результат запроса не привязан к «жизни» эффекта: при его перезапуске (StrictMode,
+    // смена зависимостей) второй запрос не стартует, пока первый в полёте, — значит,
+    // первый обязан применить токен. Отбрасываем только если окно закрыто или начат перезаход.
+    const nonce = rejoinNonce;
+    const stale = () => !mountedRef.current || rejoinNonceRef.current !== nonce;
     void (async () => {
       try {
-        const t = await fetchCallTokenWithRetry(activeCall.callId, () => cancelled);
-        if (cancelled) return;
+        const t = await fetchCallTokenWithRetry(activeCall.callId, stale);
+        if (stale()) return;
         // Зафиксировать первый успешный JWT — повторный setCreds ломает LiveKitRoom.
         if (roomTokenRef.current && roomUrlRef.current) return;
         roomTokenRef.current = t.token;
@@ -2245,15 +2340,12 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         setLiveKitCreds(t.url, t.token);
         if (activeCall.status !== 'active') setStatus('active');
       } catch (e) {
-        if (cancelled) return;
+        if (stale()) return;
         setTokenError(e instanceof Error ? e.message : 'Ошибка подключения');
       } finally {
         tokenInflight.current = false;
       }
     })();
-    return () => {
-      cancelled = true;
-    };
     // Не зависеть от status — иначе refetch/remount при active.
     // rejoinNonce: после финального обрыва эффект перезапускается с уже очищенными refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: callId + needsLiveKit + rejoinNonce only
@@ -2276,6 +2368,8 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   }, [creds?.token, creds?.url, connectError, lkConnected]);
 
   const isGroupCall = activeCall.callKind === 'group';
+  // Профиль на момент входа; переключение во время звонка пересоздаёт трек, а не комнату.
+  const [musicModeAtJoin] = useState(() => useCallStore.getState().musicMode);
   const roomOptions = useMemo<RoomOptions>(
     () => ({
       // Группы: adaptive/dynacast снижают нагрузку при многих участниках.
@@ -2287,21 +2381,16 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         resolution: isGroupCall ? VideoPresets.h360.resolution : VideoPresets.h540.resolution,
         facingMode: 'user',
       },
-      audioCaptureDefaults: {
-        autoGainControl: true,
-        echoCancellation: true,
-        noiseSuppression: true,
-      },
+      audioCaptureDefaults: micCaptureOptions(musicModeAtJoin),
       publishDefaults: {
         // Не останавливать mic track при mute — иначе часто мигает/падает камера и autoplay.
         stopMicTrackOnMute: false,
         videoCodec: 'vp8',
-        dtx: true,
-        red: true,
+        ...micPublishOptions(musicModeAtJoin),
         ...(isGroupCall ? { videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360] } : {}),
       },
     }),
-    [isGroupCall],
+    [isGroupCall, musicModeAtJoin],
   );
 
   const connectOptions = useMemo<RoomConnectOptions>(
@@ -2496,6 +2585,8 @@ export function CallWindow() {
   return (
     <BodyPortal>
       <CallWindowInner key={activeCall.callId} activeCall={activeCall} />
+      {/* Пока окно развёрнуто — уведомления поверх него; свёрнуто — обычные тосты приложения. */}
+      {callUiExpanded ? <CallToastLayer /> : null}
     </BodyPortal>
   );
 }
