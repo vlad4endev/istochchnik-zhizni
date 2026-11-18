@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import type { CallMediaType } from '../api/calls';
 import { callKitReportEnded, isCallKitReported } from '../lib/callKit';
+import { dismissIncomingCallScreen } from '../lib/callScreen';
 import { applyCallEvent, type ActiveCall, type CallEvent, type CallPhase } from '../lib/callState';
 
 export type IncomingCall = {
@@ -40,7 +41,12 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
 
   closeCall: () => set({ active: null }),
 
-  setIncoming: (incoming) => set({ incoming }),
+  setIncoming: (incoming) => {
+    const prev = get().incoming;
+    // Экран «Входящий» закрыт (ответили, отклонили, сбросили) — полноэкранное уведомление больше не нужно.
+    if (prev && !incoming) dismissIncomingCallScreen(prev.callId);
+    set({ incoming });
+  },
 
   handleWsMessage: (msg) => {
     const type = str(msg.type);
@@ -65,6 +71,10 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
         },
       });
       return;
+    }
+
+    if (type === 'call:cancelled' || type === 'call:ended' || type === 'call:rejected') {
+      dismissIncomingCallScreen(callId);
     }
 
     // Звонок закончился на сервере — убираем его и с системного экрана iPhone.

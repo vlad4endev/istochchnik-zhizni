@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { declineCall } from '../../api/calls';
 import { answerIncomingCall } from '../../lib/answerCall';
+import { setShowOverLockScreen } from '../../lib/callScreen';
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 import { useCallStore } from '../../stores/callStore';
 import { ChatAvatar } from './ChatAvatar';
@@ -30,6 +32,20 @@ export function IncomingCallOverlay() {
   useEffect(() => {
     setBusy(null);
     setError(null);
+  }, [callId]);
+
+  // Android: пока звонит, показываем приложение поверх экрана блокировки. Дольше нельзя: иначе
+  // открытые чаты были бы видны на заблокированном телефоне.
+  useEffect(() => {
+    if (!callId) return;
+    setShowOverLockScreen(true);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') setShowOverLockScreen(false);
+    });
+    return () => {
+      sub.remove();
+      setShowOverLockScreen(false);
+    };
   }, [callId]);
 
   if (!incoming) return null;

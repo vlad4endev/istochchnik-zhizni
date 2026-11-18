@@ -11,6 +11,7 @@ import {
   parseCallPush,
 } from '../lib/callPush';
 import { callKitAvailable, callKitReportEnded } from '../lib/callKit';
+import { callScreenAvailable, dismissIncomingCallScreen, showIncomingCallScreen } from '../lib/callScreen';
 import { getNotifications } from './pushNative';
 
 /** Канал и кнопки «Принять/Отклонить» — готовим перед показом первого входящего. */
@@ -61,15 +62,21 @@ export async function handleCallPushData(
     if (parsed.kind === 'ended') callKitReportEnded(parsed.callId);
     return 'callkit';
   }
+  const useNativeScreen = Platform.OS === 'android' && callScreenAvailable;
   const N = getNotifications();
-  if (!N) return 'unavailable';
   const identifier = callNotificationId(parsed.callId);
 
   if (parsed.kind === 'ended') {
-    await N.dismissNotificationAsync(identifier).catch(() => undefined);
-    return 'dismissed';
+    dismissIncomingCallScreen(parsed.callId);
+    await N?.dismissNotificationAsync(identifier).catch(() => undefined);
+    return N || useNativeScreen ? 'dismissed' : 'unavailable';
   }
   if (isRingExpired(sentTimeMs, nowMs)) return 'expired';
+
+  // Android: полноэкранный звонок (поверх экрана блокировки). Если он недоступен или уведомления
+  // запрещены, ниже остаётся обычное уведомление с кнопками.
+  if (useNativeScreen && showIncomingCallScreen(parsed)) return 'shown';
+  if (!N) return 'unavailable';
   if (!(await ensureCallNotificationSetup())) return 'unavailable';
 
   const content = buildIncomingNotification(parsed);
