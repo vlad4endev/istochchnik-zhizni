@@ -21,8 +21,11 @@ import {
   messagePreviewText,
 } from '../../lib/messengerUtils';
 import { MESSENGER_BRAND } from '../../theme/messenger';
+import { displayMessengerText } from '../../lib/messengerUtils';
+import { hasMentions, splitMentions, stripMentions } from '../../lib/mentions';
 import { forwardedFromName } from '../../lib/readReceipts';
 import { MessageAttachments, hasAttachment } from './MessageAttachments';
+import { PollCard } from './PollCard';
 import { MessengerText, MessengerTimeText } from './MessengerText';
 import { useTheme } from '../../theme';
 
@@ -39,6 +42,8 @@ interface MessageBubbleProps {
   readByOthers?: boolean;
   /** Нажатие на двойную галочку в группе открывает «кто прочитал». */
   onShowReaders?: (message: MessageWithSender) => void;
+  /** Имена участников по id для подсветки упоминаний `@[id]`. */
+  mentionNames?: Record<number, string>;
 }
 
 export function MessageBubble({
@@ -49,6 +54,7 @@ export function MessageBubble({
   onSwipeReply,
   readByOthers = false,
   onShowReaders,
+  mentionNames = {},
 }: MessageBubbleProps) {
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => createStyles(colors, isOwn), [colors, isOwn]);
@@ -63,6 +69,7 @@ export function MessageBubble({
   const readColor = isDark ? '#075985' : '#BAE6FD';
   const sentColor = isDark ? 'rgba(28,25,23,0.6)' : 'rgba(255,255,255,0.75)';
   const forwardedFrom = forwardedFromName(message.forwarded_from);
+  const isPoll = payloadType === 'poll' && !message.is_deleted;
   const withAttachment = hasAttachment(payloadType) && !message.is_deleted;
 
   // У вложений текст — это подпись; без подписи показываем только само вложение.
@@ -172,16 +179,30 @@ export function MessageBubble({
           <MessengerText style={styles.replyText} numberOfLines={2}>
             {message.reply_preview.is_deleted
               ? 'Сообщение удалено'
-              : String(message.reply_preview.content ?? '')}
+              : stripMentions(String(message.reply_preview.content ?? ''))}
           </MessengerText>
         </View>
       ) : null}
 
+      {isPoll ? <PollCard message={message} isOwn={isOwn} /> : null}
       {withAttachment ? <MessageAttachments message={message} isOwn={isOwn} /> : null}
 
-      {bodyText ? (
-        <MessengerText style={[styles.text, message.is_deleted && styles.deletedText]}>
-          {bodyText}
+      {bodyText && !isPoll ? (
+        <MessengerText
+          bidiSafe={false}
+          style={[styles.text, message.is_deleted && styles.deletedText]}
+        >
+          {payloadType === 'text' && hasMentions(bodyText)
+            ? splitMentions(bodyText, mentionNames).map((seg, i) =>
+                seg.mentionId != null ? (
+                  <MessengerText key={i} bidiSafe={false} style={styles.mention}>
+                    {seg.text}
+                  </MessengerText>
+                ) : (
+                  displayMessengerText(seg.text)
+                ),
+              )
+            : displayMessengerText(bodyText)}
         </MessengerText>
       ) : null}
 
@@ -325,6 +346,11 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isOwn: bool
       paddingLeft: 8,
       marginBottom: 4,
       opacity: 0.9,
+    },
+    mention: {
+      fontWeight: '800',
+      color: isOwn ? colors.textOnPrimary : colors.primary,
+      textDecorationLine: isOwn ? 'underline' : 'none',
     },
     forwarded: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
     forwardedText: {

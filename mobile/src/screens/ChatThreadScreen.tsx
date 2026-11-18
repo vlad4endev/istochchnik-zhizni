@@ -34,6 +34,9 @@ import {
   type MessageWithSender,
 } from '../api/messenger';
 import { sendAttachments, sendVoiceMessage } from '../api/messengerUpload';
+import { fetchChatMembers } from '../api/chatManage';
+import { denormalizeMentions } from '../lib/mentions';
+import { PollCreateModal } from '../components/messenger/PollCreateModal';
 import { ForwardSheet } from '../components/messenger/ForwardSheet';
 import { ReadersSheet } from '../components/messenger/ReadersSheet';
 import { isReadByOthers, readUpTo } from '../lib/readReceipts';
@@ -93,6 +96,7 @@ export function ChatThreadScreen() {
   const [editing, setEditing] = useState<MessageWithSender | null>(null);
   const [editToken, setEditToken] = useState(0);
   const [meetingOpen, setMeetingOpen] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
   const [forwardId, setForwardId] = useState<string | null>(null);
   const [readersId, setReadersId] = useState<string | null>(null);
   const readCursors = useMessengerRealtimeStore((s) => s.readCursorsByConv[conversationId]);
@@ -122,6 +126,32 @@ export function ChatThreadScreen() {
     enabled: isGroup,
     staleTime: 5 * 60_000,
   });
+
+  const membersQuery = useQuery({
+    queryKey: ['messenger', 'members', conversationId],
+    queryFn: () => fetchChatMembers(conversationId),
+    enabled: isGroup,
+    staleTime: 5 * 60_000,
+  });
+  const mentionNames = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const m of membersQuery.data ?? []) {
+      map[m.member_id] = [m.first_name, m.last_name].filter(Boolean).join(' ').trim() || m.name;
+    }
+    return map;
+  }, [membersQuery.data]);
+  const mentionParticipants = useMemo(
+    () =>
+      (membersQuery.data ?? [])
+        .filter((m) => m.member_id !== memberId)
+        .map((m) => ({ id: m.member_id, label: mentionNames[m.member_id]! })),
+    [membersQuery.data, memberId, mentionNames],
+  );
+  const editPrefill = useMemo(() => {
+    if (!editing) return null;
+    const d = denormalizeMentions(String(editing.content ?? ''), mentionNames);
+    return { token: editToken, text: d.text, mentions: d.picks };
+  }, [editing, editToken, mentionNames]);
 
   const pinnedQuery = useQuery({
     queryKey: ['messenger', 'pinned', conversationId],
@@ -475,7 +505,7 @@ export function ChatThreadScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.pinLabel}>Закреплённое сообщение</Text>
             <Text style={styles.pinText} numberOfLines={1}>
-              {String(pinnedMessages[0]!.content ?? '').trim() || 'Вложение'}
+              {denormalizeMentions(String(pinnedMessages[0]!.content ?? ''), mentionNames).text.trim() || 'Вложение'}
             </Text>
           </View>
         </View>
@@ -539,6 +569,7 @@ export function ChatThreadScreen() {
                 onSwipeReply={handleSwipeReply}
                 readByOthers={isOwn && isReadByOthers(item.id, upTo)}
                 onShowReaders={isGroup && isOwn ? (m) => setReadersId(m.id) : undefined}
+                mentionNames={mentionNames}
               />
             </View>
           );
@@ -553,7 +584,7 @@ export function ChatThreadScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.pinLabel}>Редактирование</Text>
               <Text style={styles.pinText} numberOfLines={1}>
-                {String(editing.content ?? '')}
+                {denormalizeMentions(String(editing.content ?? ''), mentionNames).text}
               </Text>
             </View>
             <Pressable
@@ -570,7 +601,9 @@ export function ChatThreadScreen() {
           conversationId={conversationId}
           onSendAttachments={handleSendAttachments}
           onSendVoice={handleSendVoice}
-          prefill={editing ? { token: editToken, text: String(editing.content ?? '') } : null}
+          onCreatePoll={() => setPollOpen(true)}
+          prefill={editPrefill}
+          mentionParticipants={mentionParticipants}
           onSend={async (text) => {
             if (editing) {
               await editMutation.mutateAsync({ id: editing.id, text });
@@ -616,6 +649,7 @@ export function ChatThreadScreen() {
         </Pressable>
       ) : null}
 
+      <PollCreateModal visible={pollOpen} conversationId={conversationId} onClose={() => setPollOpen(false)} />
       <ForwardSheet
         messageId={forwardId}
         sourceConversationId={conversationId}

@@ -297,3 +297,29 @@ export async function forwardMessage(
   );
   return Array.isArray(data?.forwarded) ? data.forwarded.length : conversationIds.length;
 }
+
+export type PollVoter = { member_id: number; display_name: string; avatar_url: string | null };
+
+export type PollVotersResponse = {
+  anonymous: boolean;
+  options: Array<{ index: number; voters: PollVoter[] }>;
+};
+
+/** Проголосовать: пустой список снимает голос. Для опроса с одним ответом — не больше одного номера. */
+export async function votePoll(
+  messageId: string,
+  optionIndexes: number[],
+): Promise<{ tallies: number[]; my_options: number[] }> {
+  const { data } = await apiClient.post<{ tallies?: number[]; my_options?: number[] }>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/poll-vote`,
+    { optionIndexes },
+  );
+  return { tallies: data?.tallies ?? [], my_options: data?.my_options ?? [] };
+}
+
+export async function fetchPollVoters(messageId: string): Promise<PollVotersResponse> {
+  const { data } = await apiClient.get<Partial<PollVotersResponse>>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/poll-voters`,
+  );
+  return { anonymous: data?.anonymous === true, options: Array.isArray(data?.options) ? data.options : [] };
+}

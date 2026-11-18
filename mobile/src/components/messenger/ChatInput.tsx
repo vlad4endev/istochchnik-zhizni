@@ -17,10 +17,18 @@ import {
   formatDurationSec,
   type AttachmentDraft,
 } from '../../lib/attachments';
+import {
+  applyMention,
+  canonicalizeMentions,
+  filterMentionCandidates,
+  findMentionQuery,
+  type MentionPick,
+} from '../../lib/mentions';
 import { pickFiles, pickFromCamera, pickFromGallery } from '../../lib/pickAttachments';
 import { sendRealtimeJson } from '../../lib/realtimeWs';
 import { androidRipple, messengerTextProps } from '../../theme/messenger';
 import { useTheme } from '../../theme';
+import { ChatAvatar } from './ChatAvatar';
 import { AttachSheet, type AttachSource } from './AttachSheet';
 import { PendingAttachments } from './PendingAttachments';
 
@@ -33,10 +41,14 @@ interface ChatInputProps {
     onProgress: (pct: number) => void,
   ) => Promise<void>;
   onSendVoice?: (file: AttachmentDraft, durationSec: number) => Promise<void>;
+  /** Открыть создание опроса (пункт «Опрос» в меню вложений). */
+  onCreatePoll?: () => void;
   disabled?: boolean;
   conversationId?: string;
   /** Режим правки: текст подставляется в поле; `token` меняется при каждой новой правке. */
-  prefill?: { token: number; text: string } | null;
+  prefill?: { token: number; text: string; mentions?: MentionPick[] } | null;
+  /** Участники группы, которых можно упомянуть через @. Для личных чатов не передаётся. */
+  mentionParticipants?: MentionPick[];
   placeholder?: string;
 }
 
@@ -44,9 +56,11 @@ export function ChatInput({
   onSend,
   onSendAttachments,
   onSendVoice,
+  onCreatePoll,
   disabled = false,
   conversationId,
   prefill = null,
+  mentionParticipants = [],
   placeholder = 'Сообщение...',
 }: ChatInputProps) {
   const { colors } = useTheme();
@@ -57,21 +71,45 @@ export function ChatInput({
   const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [picks, setPicks] = useState<MentionPick[]>([]);
+  const [cursor, setCursor] = useState(0);
+  const [forcedSelection, setForcedSelection] = useState<{ start: number; end: number } | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentRef = useRef(0);
   const voiceFinishRef = useRef<() => void>(() => undefined);
 
   const voice = useVoiceRecorder(() => voiceFinishRef.current());
   const editing = prefill != null;
-  const canAttach = !editing && onSendAttachments != null;
+  const canAttach = !editing && (onSendAttachments != null || onCreatePoll != null);
   const hasContent = text.trim().length > 0 || pending.length > 0;
   const canSend = hasContent && !disabled && !sending;
   const showMic = !hasContent && !editing && onSendVoice != null;
 
   useEffect(() => {
-    if (prefill) setText(prefill.text);
+    if (prefill) {
+      setText(prefill.text);
+      setPicks(prefill.mentions ?? []);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill?.token]);
+
+  const mentionQuery = useMemo(
+    () => (mentionParticipants.length > 0 ? findMentionQuery(text, cursor) : null),
+    [text, cursor, mentionParticipants.length],
+  );
+  const suggestions = useMemo(
+    () => (mentionQuery ? filterMentionCandidates(mentionParticipants, mentionQuery.query) : []),
+    [mentionQuery, mentionParticipants],
+  );
+
+  const pickMention = (pick: MentionPick) => {
+    if (!mentionQuery) return;
+    const next = applyMention(text, mentionQuery.start, cursor, pick);
+    setText(next.text);
+    setPicks((prev) => [...prev, pick]);
+    setCursor(next.cursor);
+    setForcedSelection({ start: next.cursor, end: next.cursor });
+  };
 
   const sendTypingStop = useCallback(() => {
     if (!conversationId) return;
@@ -125,6 +163,10 @@ export function ChatInput({
   };
 
   const handlePick = async (source: AttachSource) => {
+    if (source === 'poll') {
+      onCreatePoll?.();
+      return;
+    }
     try {
       const res =
         source === 'camera'
@@ -139,7 +181,7 @@ export function ChatInput({
   };
 
   const handleSend = async () => {
-    const value = text.trim();
+    const value = canonicalizeMentions(text.trim(), picks);
     if (!canSend) return;
     setSending(true);
     setNotice(null);
@@ -150,8 +192,10 @@ export function ChatInput({
         await onSendAttachments(pending, value, setUploadPct);
         setPending([]);
         setText('');
+        setPicks([]);
       } else {
         setText('');
+        setPicks([]);
         await onSend(value);
       }
     } catch (e) {
@@ -159,7 +203,8 @@ export function ChatInput({
       if (pending.length > 0) {
         setNotice(`Не удалось отправить: ${formatApiError(e)}. Нажмите отправить ещё раз.`);
       } else {
-        setText(value);
+        setText(text);
+        setPicks(picks);
         setNotice(`Не удалось отправить: ${formatApiError(e)}`);
       }
     } finally {
@@ -233,6 +278,24 @@ export function ChatInput({
           <Text style={styles.noticeText}>{notice}</Text>
         </Pressable>
       ) : null}
+      {suggestions.length > 0 ? (
+        <View style={styles.suggest} accessibilityLabel="Кого упомянуть">
+          {suggestions.map((p) => (
+            <Pressable
+              key={p.id}
+              onPress={() => pickMention(p)}
+              accessibilityRole="button"
+              accessibilityLabel={`Упомянуть ${p.label}`}
+              style={({ pressed }) => [styles.suggestRow, pressed && { backgroundColor: colors.primary + '14' }]}
+            >
+              <ChatAvatar name={p.label} seed={String(p.id)} size={34} />
+              <Text style={styles.suggestText} numberOfLines={1}>
+                {p.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
       <View style={styles.pendingWrap}>
         <PendingAttachments
           items={pending}
@@ -262,6 +325,11 @@ export function ChatInput({
           style={styles.input}
           value={text}
           onChangeText={handleTextChange}
+          onSelectionChange={(e) => {
+            setCursor(e.nativeEvent.selection.end);
+            if (forcedSelection) setForcedSelection(null);
+          }}
+          selection={forcedSelection ?? undefined}
           onBlur={sendTypingStop}
           placeholder={pending.length > 0 ? 'Добавить подпись…' : placeholder}
           placeholderTextColor={colors.textMuted}
@@ -306,6 +374,7 @@ export function ChatInput({
         visible={attachOpen}
         onClose={() => setAttachOpen(false)}
         onPick={(s) => void handlePick(s)}
+        allowPoll={onCreatePoll != null}
       />
     </View>
   );
@@ -343,6 +412,13 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors']) {
       alignItems: 'center',
       justifyContent: 'center',
     },
+    suggest: {
+      backgroundColor: colors.surfaceElevated,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: 'rgba(28,25,23,0.12)',
+    },
+    suggestRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingHorizontal: 16 },
+    suggestText: { flex: 1, fontSize: 17, fontWeight: '600', color: colors.text },
     pendingWrap: { backgroundColor: colors.surfaceElevated },
     progressTrack: {
       height: 4,

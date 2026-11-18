@@ -149,7 +149,7 @@ export function messagePreviewText(msg: MessageWithSender | ConversationListItem
     const label = PAYLOAD_LABELS[payloadType];
     if (label) return label;
   }
-  const content = normalizeChatDisplayText(String(msg.content || '').trim());
+  const content = normalizeChatDisplayText(String(msg.content || '').trim()).replace(/@\[\d+\]/g, '@участник');
   return content || 'Сообщение';
 }
 

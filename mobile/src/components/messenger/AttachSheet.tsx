@@ -5,12 +5,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme, type ThemeColors } from '../../theme';
 
-export type AttachSource = 'camera' | 'gallery' | 'file';
+export type AttachSource = 'camera' | 'gallery' | 'file' | 'poll';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   onPick: (source: AttachSource) => void;
+  /** Показывать пункт «Опрос». */
+  allowPoll?: boolean;
 };
 
 const OPTIONS: Array<{
@@ -22,10 +24,11 @@ const OPTIONS: Array<{
   { id: 'camera', label: 'Камера', icon: 'camera', color: '#0F766E' },
   { id: 'gallery', label: 'Фото и видео', icon: 'images', color: '#2563EB' },
   { id: 'file', label: 'Файл', icon: 'document', color: '#EA580C' },
+  { id: 'poll', label: 'Опрос', icon: 'stats-chart', color: '#7C3AED' },
 ];
 
 /** Что прикрепить: как в Telegram — камера, галерея, файл. */
-export function AttachSheet({ visible, onClose, onPick }: Props) {
+export function AttachSheet({ visible, onClose, onPick, allowPoll = false }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -39,7 +42,7 @@ export function AttachSheet({ visible, onClose, onPick }: Props) {
         >
           <View style={styles.grabber} />
           <View style={styles.row}>
-            {OPTIONS.map((o) => (
+            {OPTIONS.filter((o) => o.id !== 'poll' || allowPoll).map((o) => (
               <Pressable
                 key={o.id}
                 onPress={() => {
@@ -81,8 +84,8 @@ function createStyles(colors: ThemeColors) {
       backgroundColor: colors.textMuted + '88',
       marginBottom: 16,
     },
-    row: { flexDirection: 'row', justifyContent: 'space-around' },
-    item: { alignItems: 'center', gap: 8, minWidth: 96, minHeight: 96 },
+    row: { flexDirection: 'row', justifyContent: 'space-around', flexWrap: 'wrap', rowGap: 8 },
+    item: { alignItems: 'center', gap: 8, minWidth: 80, minHeight: 96 },
     circle: {
       width: 60,
       height: 60,

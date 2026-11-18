@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
 import type { MessageWithSender } from '../../api/messenger';
+import { stripMentions } from '../../lib/mentions';
 import { androidRipple, MESSENGER_BRAND } from '../../theme/messenger';
 import { MessengerText } from './MessengerText';
 
@@ -23,7 +24,7 @@ export function ReplyBar({ replyTo, onCancel }: ReplyBarProps) {
     'Сообщение';
   const text = replyTo.is_deleted
     ? 'Сообщение удалено'
-    : String(replyTo.content ?? '');
+    : stripMentions(String(replyTo.content ?? ''));
 
   return (
     <Animated.View
