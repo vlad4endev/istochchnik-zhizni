@@ -1953,6 +1953,107 @@ function joinedAtMs(raw: unknown, call: Pick<CallRow, 'started_at' | 'created_at
 }
 
 /**
+ * Участники точно ушли из LiveKit (cron: N промахов подряд; вебхук: participant_left + проверка).
+ * Помечает их left; если никого не осталось — завершает звонок, личный звонок завершает
+ * при пропаже собеседника (peer_lost). Идемпотентно: повторный вызов ничего не ломает.
+ */
+async function markParticipantsGone(
+  call: CallRow,
+  userIds: number[],
+  source: 'cron' | 'webhook',
+): Promise<{ cleared: number; callEnded: boolean }> {
+  if (userIds.length === 0) return { cleared: 0, callEnded: false };
+  let peerLost = false;
+  let cleared = 0;
+
+  const remaining = await withTransaction(async (client) => {
+    const locked = await client.query(
+      `SELECT * FROM calls WHERE id = $1::uuid AND status IN ('waiting', 'active') FOR UPDATE`,
+      [call.id],
+    );
+    if (!locked.rows[0]) return -1;
+
+    const upd = await client.query(
+      `UPDATE call_participants
+       SET status = 'left', left_at = NOW()
+       WHERE call_id = $1::uuid
+         AND user_id = ANY($2::int[])
+         AND status = 'joined'`,
+      [call.id, userIds],
+    );
+    cleared = upd.rowCount ?? 0;
+    for (const uid of userIds) ghostMissStreak.delete(ghostMissKey(call.id, uid));
+    if (cleared === 0) return -1; // уже обработано (повтор вебхука / cron успел раньше)
+
+    const rem = await client.query(
+      `SELECT COUNT(*)::int AS c FROM call_participants
+       WHERE call_id = $1::uuid AND status = 'joined'`,
+      [call.id],
+    );
+    const count = Number(rem.rows[0]?.c ?? 0);
+    if (count === 0) {
+      await finalizeCall(client, mapCallRow(locked.rows[0]), 'ended', 'ghost_cleanup');
+      return 0;
+    }
+    // Личный звонок вдвоём: собеседник пропал (закрыл вкладку, умер телефон/сеть) —
+    // оставшийся иначе сидит один «в звонке» и остаётся «занят» для всех.
+    if (call.type === 'direct') {
+      peerLost = true;
+      await finalizeCall(client, mapCallRow(locked.rows[0]), 'ended', 'peer_lost');
+      return 0;
+    }
+    return count;
+  });
+
+  if (remaining < 0) return { cleared: 0, callEnded: false };
+
+  recordCallEvent({
+    callId: call.id,
+    kind: 'ghost_cleared',
+    severity: 'warn',
+    payload: { userIds, remaining, source },
+  });
+
+  if (remaining > 0) {
+    if (call.conversation_id) {
+      for (const uid of userIds) {
+        await sendWsRoom(call.conversation_id, {
+          type: 'call:participant_left',
+          callId: call.id,
+          userId: uid,
+        });
+      }
+    }
+    return { cleared, callEnded: false };
+  }
+
+  // Не шлём call:ended «призракам» по отдельности — только когда звонок реально завершён.
+  const others = await query(`SELECT user_id FROM call_participants WHERE call_id = $1::uuid`, [
+    call.id,
+  ]);
+  const reason = peerLost ? 'peer_lost' : 'ghost_cleanup';
+  for (const r of others.rows) {
+    await sendWs(Number(r.user_id), { type: 'call:ended', callId: call.id, reason }).catch(
+      () => undefined,
+    );
+  }
+  await endLiveKitRoom(call.livekit_room_name);
+  if (peerLost) {
+    const done = await loadCallById(call.id);
+    await insertCallHistoryMessage({
+      conversationId: call.conversation_id,
+      callId: call.id,
+      mediaType: call.media_type,
+      callType: call.type,
+      status: 'ended',
+      durationSeconds: done?.duration_seconds ?? null,
+      initiatedBy: call.initiated_by,
+    });
+  }
+  return { cleared, callEnded: true };
+}
+
+/**
  * Sync DB «joined» with LiveKit presence so closed tabs don't leave users permanently busy.
  * Grace: ignore recent joins; require several consecutive misses so ICE blips don't kill meetings.
  */
@@ -1981,7 +2082,6 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
 
   for (const row of active.rows) {
     const call = mapCallRow(row);
-    let peerLost = false;
     try {
       const identities = await listLiveKitParticipantIdentities(call.livekit_room_name);
       if (identities === null) continue; // Room Service unreachable — skip this tick
@@ -2030,83 +2130,9 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
 
       if (ghosts.length === 0) continue;
 
-      const remaining = await withTransaction(async (client) => {
-        const locked = await client.query(
-          `SELECT * FROM calls WHERE id = $1::uuid AND status IN ('waiting', 'active') FOR UPDATE`,
-          [call.id],
-        );
-        if (!locked.rows[0]) return -1;
-
-        await client.query(
-          `UPDATE call_participants
-           SET status = 'left', left_at = NOW()
-           WHERE call_id = $1::uuid
-             AND user_id = ANY($2::int[])
-             AND status = 'joined'`,
-          [call.id, ghosts],
-        );
-        cleared += ghosts.length;
-        for (const uid of ghosts) ghostMissStreak.delete(ghostMissKey(call.id, uid));
-
-        const rem = await client.query(
-          `SELECT COUNT(*)::int AS c FROM call_participants
-           WHERE call_id = $1::uuid AND status = 'joined'`,
-          [call.id],
-        );
-        const count = Number(rem.rows[0]?.c ?? 0);
-        if (count === 0) {
-          await finalizeCall(client, mapCallRow(locked.rows[0]), 'ended', 'ghost_cleanup');
-          return 0;
-        }
-        // Личный звонок вдвоём: собеседник пропал (закрыл вкладку, умер телефон/сеть) —
-        // оставшийся иначе сидит один «в звонке» и остаётся «занят» для всех.
-        if (call.type === 'direct') {
-          peerLost = true;
-          await finalizeCall(client, mapCallRow(locked.rows[0]), 'ended', 'peer_lost');
-          return 0;
-        }
-        return count;
-      });
-
-      if (remaining >= 0) {
-        recordCallEvent({
-          callId: call.id,
-          kind: 'ghost_cleared',
-          severity: 'warn',
-          payload: { userIds: ghosts, remaining },
-        });
-      }
-
-      // Не шлём call:ended «призракам» — иначе клиент закрывает UI во время LiveKit reconnect.
-      // Если комната реально завершена (remaining === 0), уведомим остальных ниже.
-      if (remaining === 0) {
-        const others = await query(
-          `SELECT user_id FROM call_participants WHERE call_id = $1::uuid`,
-          [call.id],
-        );
-        const reason = peerLost ? 'peer_lost' : 'ghost_cleanup';
-        for (const r of others.rows) {
-          await sendWs(Number(r.user_id), {
-            type: 'call:ended',
-            callId: call.id,
-            reason,
-          }).catch(() => undefined);
-        }
-        await endLiveKitRoom(call.livekit_room_name);
-        if (peerLost) {
-          const done = await loadCallById(call.id);
-          await insertCallHistoryMessage({
-            conversationId: call.conversation_id,
-            callId: call.id,
-            mediaType: call.media_type,
-            callType: call.type,
-            status: 'ended',
-            durationSeconds: done?.duration_seconds ?? null,
-            initiatedBy: call.initiated_by,
-          });
-        }
-        endedEmpty += 1;
-      }
+      const outcome = await markParticipantsGone(call, ghosts, 'cron');
+      cleared += outcome.cleared;
+      if (outcome.callEnded) endedEmpty += 1;
     } catch (e) {
       console.warn('[calls] ghost reconcile:', e instanceof Error ? e.message : e);
     }
@@ -2120,12 +2146,130 @@ async function reconcileGhostParticipants(): Promise<{ cleared: number; endedEmp
   return { cleared, endedEmpty };
 }
 
-/** Cron: ringing past timeout → missed; ghost joined → left; empty rooms → ended */
-export async function cleanupStaleCalls(): Promise<{
-  missed: number;
-  endedEmpty: number;
-  ghostsCleared: number;
-}> {
+// ─── LiveKit webhooks ────────────────────────────────────────────────────────
+// Вебхуки дают реакцию за секунды вместо grace 180 с + промахов cron. Cron остаётся страховкой
+// (вебхук мог не дойти). participant_left не значит «ушёл навсегда»: клиент может перезайти
+// со свежим токеном, поэтому сначала короткая пауза, затем сверка с LiveKit.
+
+const pendingLeaveChecks = new Map<string, ReturnType<typeof setTimeout>>();
+
+function webhookLeaveGraceMs(): number {
+  const raw = Number(process.env.CALL_WEBHOOK_LEAVE_GRACE_SEC ?? 20);
+  const sec = Number.isFinite(raw) ? Math.min(120, Math.max(0, raw)) : 20;
+  return sec * 1000;
+}
+
+/** `member:42` → 42; чужие identity (агенты, egress) → null. */
+export function memberIdFromLiveKitIdentity(identity: string | null | undefined): number | null {
+  const m = /^member:(\d+)$/.exec(String(identity ?? '').trim());
+  if (!m) return null;
+  const id = Number(m[1]);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+async function loadLiveCallByRoom(roomName: string): Promise<CallRow | null> {
+  const res = await query(
+    `SELECT * FROM calls WHERE livekit_room_name = $1 AND status IN ('waiting', 'active') LIMIT 1`,
+    [roomName],
+  );
+  return res.rows[0] ? mapCallRow(res.rows[0]) : null;
+}
+
+/** Проверка после паузы: участника всё ещё нет в комнате → он ушёл. */
+async function confirmParticipantGone(roomName: string, memberId: number): Promise<boolean> {
+  const call = await loadLiveCallByRoom(roomName);
+  if (!call) return false;
+  const identities = await listLiveKitParticipantIdentities(roomName);
+  if (identities === null) return false; // LiveKit недоступен — решит cron
+  if (identities.includes(livekitIdentityForMember(memberId))) return false; // перезашёл
+  const outcome = await markParticipantsGone(call, [memberId], 'webhook');
+  return outcome.cleared > 0;
+}
+
+export type LiveKitWebhookInput = {
+  event: string;
+  roomName?: string | null;
+  identity?: string | null;
+};
+
+export type LiveKitWebhookResult = 'ignored' | 'rejoined' | 'leave_scheduled' | 'room_finished';
+
+export async function handleLiveKitWebhookEvent(
+  input: LiveKitWebhookInput,
+): Promise<LiveKitWebhookResult> {
+  const roomName = String(input.roomName ?? '').trim();
+  if (!roomName) return 'ignored';
+
+  if (input.event === 'room_finished') {
+    const call = await loadLiveCallByRoom(roomName);
+    if (!call) return 'ignored';
+    const joined = await query(
+      `SELECT user_id FROM call_participants WHERE call_id = $1::uuid AND status = 'joined'`,
+      [call.id],
+    );
+    const ids = joined.rows.map((r) => Number(r.user_id));
+    if (ids.length > 0) await markParticipantsGone(call, ids, 'webhook');
+    return 'room_finished';
+  }
+
+  const memberId = memberIdFromLiveKitIdentity(input.identity);
+  if (memberId == null) return 'ignored';
+  const key = `${roomName}:${memberId}`;
+
+  if (input.event === 'participant_joined') {
+    const t = pendingLeaveChecks.get(key);
+    if (t) clearTimeout(t);
+    pendingLeaveChecks.delete(key);
+    return 'rejoined';
+  }
+
+  if (input.event === 'participant_left' || input.event === 'participant_connection_aborted') {
+    const prev = pendingLeaveChecks.get(key);
+    if (prev) clearTimeout(prev);
+    const timer = setTimeout(() => {
+      pendingLeaveChecks.delete(key);
+      void confirmParticipantGone(roomName, memberId).catch((e) =>
+        console.warn('[calls] webhook leave check:', e instanceof Error ? e.message : e),
+      );
+    }, webhookLeaveGraceMs());
+    timer.unref?.();
+    pendingLeaveChecks.set(key, timer);
+    return 'leave_scheduled';
+  }
+
+  return 'ignored';
+}
+
+type CleanupResult = { missed: number; endedEmpty: number; ghostsCleared: number; skipped?: boolean };
+
+/** Ключ session-level advisory lock: одна очистка на кластер API (и без наложения тиков). */
+const CLEANUP_LOCK_KEY = 87201402;
+
+/**
+ * Cron: ringing past timeout → missed; ghost joined → left; empty rooms → ended.
+ * При нескольких экземплярах API выполняется только там, где взят advisory lock;
+ * если предыдущий тик ещё идёт, новый пропускается.
+ */
+export async function cleanupStaleCalls(): Promise<CleanupResult> {
+  if (!pool) throw new Error('DATABASE_URL is not defined');
+  const lockClient = await pool.connect();
+  let locked = false;
+  try {
+    const r = await lockClient.query('SELECT pg_try_advisory_lock($1) AS ok', [CLEANUP_LOCK_KEY]);
+    locked = r.rows[0]?.ok === true;
+    if (!locked) return { missed: 0, endedEmpty: 0, ghostsCleared: 0, skipped: true };
+    return await runCleanupStaleCalls();
+  } finally {
+    if (locked) {
+      await lockClient
+        .query('SELECT pg_advisory_unlock($1)', [CLEANUP_LOCK_KEY])
+        .catch(() => undefined);
+    }
+    lockClient.release();
+  }
+}
+
+async function runCleanupStaleCalls(): Promise<CleanupResult> {
   const timeout = ringTimeoutSec();
   const ringing = await query(
     `SELECT * FROM calls

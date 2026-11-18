@@ -1,4 +1,4 @@
-import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
+import { AccessToken, RoomServiceClient, WebhookReceiver } from 'livekit-server-sdk';
 
 export type LiveKitJoinTokenInput = {
   roomName: string;
@@ -610,5 +610,31 @@ export async function mintLiveKitJoinToken(input: LiveKitJoinTokenInput): Promis
     token,
     url: getLiveKitPublicUrl(),
     identity: input.identity,
+  };
+}
+
+export type VerifiedLiveKitWebhook = {
+  event: string;
+  roomName: string | null;
+  identity: string | null;
+};
+
+/**
+ * Проверяет подпись вебхука LiveKit (JWT в Authorization с sha256 тела, теми же ключами API)
+ * и возвращает нужные поля. Бросает ошибку при неверной подписи или не настроенных ключах.
+ */
+export async function verifyLiveKitWebhook(
+  rawBody: string,
+  authHeader: string | undefined,
+): Promise<VerifiedLiveKitWebhook> {
+  const apiKey = resolveApiKey();
+  const apiSecret = resolveApiSecret();
+  if (!apiKey || !apiSecret) throw new Error('livekit_not_configured');
+  if (!authHeader) throw new Error('missing_authorization');
+  const evt = await new WebhookReceiver(apiKey, apiSecret).receive(rawBody, authHeader);
+  return {
+    event: String(evt.event ?? ''),
+    roomName: evt.room?.name ? String(evt.room.name) : null,
+    identity: evt.participant?.identity ? String(evt.participant.identity) : null,
   };
 }

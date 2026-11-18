@@ -72,11 +72,15 @@ async function main(): Promise<void> {
   process.env.CALL_GHOST_GRACE_SEC = '60';
   process.env.CALL_GHOST_MISS_TICKS = '2';
   process.env.CALL_MAX_GROUP_PARTICIPANTS = '2';
+  process.env.CALL_WEBHOOK_LEAVE_GRACE_SEC = '0';
 
   const { query, pool } = await import('../config/db');
   const hub = await import('../realtime/wsHub');
   const svc = await import('./callsService');
-  const { livekitIdentityForMember } = await import('./livekitService');
+  const { livekitIdentityForMember, verifyLiveKitWebhook } = await import('./livekitService');
+  const { AccessToken } = await import('livekit-server-sdk');
+  const { createHash } = await import('node:crypto');
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const settings = await import('./callSettingsService');
   // Тест опирается на env-значения, а не на сохранённые в БД настройки админки.
   await query(`UPDATE global_settings SET call_settings_json = NULL WHERE id = 1`).catch(() => undefined);
@@ -323,6 +327,98 @@ async function main(): Promise<void> {
       (e: unknown) => e instanceof svc.CallsError && e.code === 'full',
       'rejoin over the limit must be rejected',
     );
+  });
+
+  await scenario('вебхук: собеседник ушёл из LiveKit → личный звонок завершается за секунды', async () => {
+    const c = await direct();
+    await svc.acceptCall(c.id, bob);
+    const room = `direct_${c.id.replace(/-/g, '')}`;
+    lk.rooms.set(room, new Set([livekitIdentityForMember(alice)])); // bob уже отключён
+    const r = await svc.handleLiveKitWebhookEvent({
+      event: 'participant_left',
+      roomName: room,
+      identity: livekitIdentityForMember(bob),
+    });
+    assert.equal(r, 'leave_scheduled');
+    await sleep(300);
+    const row = await callRow(c.id);
+    assert.equal(row.status, 'ended', 'ended without waiting for grace/cron');
+    assert.equal(row.end_reason, 'peer_lost');
+    assert.equal(evFor(alice, c.id, 'call:ended')[0]?.event.reason, 'peer_lost');
+  });
+
+  await scenario('вебхук: участник перезашёл до проверки → звонок продолжается', async () => {
+    const c = await direct();
+    await svc.acceptCall(c.id, bob);
+    const room = `direct_${c.id.replace(/-/g, '')}`;
+    // В LiveKit оба на месте (bob переподключился новым соединением).
+    lk.rooms.set(room, new Set([livekitIdentityForMember(alice), livekitIdentityForMember(bob)]));
+    await svc.handleLiveKitWebhookEvent({ event: 'participant_left', roomName: room, identity: livekitIdentityForMember(bob) });
+    await sleep(300);
+    assert.equal((await callRow(c.id)).status, 'active');
+  });
+
+  await scenario('вебхук: повторная доставка и чужие identity не ломают состояние', async () => {
+    const c = await groupCall();
+    await svc.issueCallToken(c.id, bob);
+    const room = `group_${c.id.replace(/-/g, '')}`;
+    lk.rooms.set(room, new Set([livekitIdentityForMember(alice)]));
+    for (let i = 0; i < 3; i += 1) {
+      await svc.handleLiveKitWebhookEvent({ event: 'participant_left', roomName: room, identity: livekitIdentityForMember(bob) });
+    }
+    assert.equal(
+      await svc.handleLiveKitWebhookEvent({ event: 'participant_left', roomName: room, identity: 'EG_recorder' }),
+      'ignored',
+    );
+    await sleep(300);
+    const row = await callRow(c.id);
+    assert.equal(row.status, 'active', 'group continues with the host');
+    const parts = await query(
+      `SELECT user_id, status FROM call_participants WHERE call_id = $1 ORDER BY user_id`,
+      [c.id],
+    );
+    assert.deepEqual(
+      parts.rows.map((p) => [Number(p.user_id), p.status]),
+      [[alice, 'joined'], [bob, 'left']],
+    );
+  });
+
+  await scenario('вебхук: room_finished закрывает «висящую» встречу', async () => {
+    const c = await groupCall();
+    const room = `group_${c.id.replace(/-/g, '')}`;
+    lk.rooms.delete(room);
+    assert.equal(await svc.handleLiveKitWebhookEvent({ event: 'room_finished', roomName: room }), 'room_finished');
+    const row = await callRow(c.id);
+    assert.equal(row.status, 'ended');
+    assert.equal(await svc.isMemberBusyInCall(alice), false);
+  });
+
+  await scenario('вебхук: подпись проверяется (верная принимается, подделка — нет)', async () => {
+    const body = JSON.stringify({
+      event: 'participant_left',
+      room: { name: 'direct_x' },
+      participant: { identity: 'member:1' },
+    });
+    const sign = async (secret: string, payload: string) => {
+      const at = new AccessToken('devkey', secret);
+      at.sha256 = createHash('sha256').update(payload).digest('base64');
+      return at.toJwt();
+    };
+    const ok = await verifyLiveKitWebhook(body, await sign('secret_secret_secret_secret_secret_1234', body));
+    assert.deepEqual(ok, { event: 'participant_left', roomName: 'direct_x', identity: 'member:1' });
+    await assert.rejects(verifyLiveKitWebhook(body, await sign('wrong_secret_wrong_secret_wrong_1234', body)));
+    await assert.rejects(
+      verifyLiveKitWebhook(body.replace('member:1', 'member:2'), await sign('secret_secret_secret_secret_secret_1234', body)),
+      'tampered body must be rejected',
+    );
+    await assert.rejects(verifyLiveKitWebhook(body, undefined));
+  });
+
+  await scenario('cron: параллельные тики не выполняют очистку дважды', async () => {
+    const r = await Promise.all([svc.cleanupStaleCalls(), svc.cleanupStaleCalls(), svc.cleanupStaleCalls()]);
+    const ran = r.filter((x) => !x.skipped).length;
+    assert.ok(ran >= 1, 'at least one tick ran');
+    assert.ok(r.some((x) => x.skipped), 'overlapping ticks are skipped');
   });
 
   // cleanup test data

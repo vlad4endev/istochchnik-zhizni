@@ -40,6 +40,8 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY in .env}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET in .env}
       NODE_IP: ${LIVEKIT_RTC_NODE_IP:-77.93.125.36}
+      # LiveKit (host network) → API, опубликованный на 127.0.0.1:PORT. off — выключить.
+      LIVEKIT_WEBHOOK_URL: ${LIVEKIT_WEBHOOK_URL:-http://127.0.0.1:40978/api/livekit/webhook}
     volumes:
       - ./docker/livekit.yaml:/etc/livekit.yaml:ro
       - ./docker/livekit-entrypoint.sh:/entrypoint.sh:ro

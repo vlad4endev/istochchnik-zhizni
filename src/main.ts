@@ -60,6 +60,7 @@ import { initCallsCleanupJob } from './cron/callsCleanup';
 import { logLiveKitBootDiagnostics, probeLiveKitRoomService } from './services/livekitService';
 import { warmCallSettingsCache } from './services/callSettingsService';
 import callsRoutes, { callInvitationsRouter } from './routes/callsRoutes';
+import livekitWebhookRoutes from './routes/livekitWebhookRoutes';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel, ensureMediykaMessengerChannel, ensureServicePlanPlanningMessengerChannel } from './services/messengerService';
 import { ensurePushSubscriptionsSchema } from './services/pushSubscriptionsSchema';
@@ -278,6 +279,8 @@ app.use((req, res, next) => {
   );
   next();
 });
+// Вебхуки LiveKit: сырое тело для проверки подписи, без сессии — поэтому до json/auth.
+app.use('/api/livekit/webhook', livekitWebhookRoutes);
 // 100kb — дефолт express, задаём явно; при необходимости JSON_BODY_LIMIT (например '1mb').
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '100kb' }));
 app.use(resolveAuthSession);
