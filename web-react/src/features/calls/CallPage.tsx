@@ -16,6 +16,7 @@ import {
   GlassCallShell,
   GlassCallTitle,
 } from './glassCallUi';
+import { markCallAcceptedLocally } from './callStateSync';
 import { useCallStore } from './callStore';
 import './calls.css';
 
@@ -215,6 +216,7 @@ export function CallPage() {
             type="button"
             className="glass-call__pill glass-call__pill--accept"
             onClick={() => {
+              markCallAcceptedLocally(call.id);
               void acceptCall(call.id)
                 .then(() => {
                   useCallStore.getState().setStatus('active');

@@ -119,6 +119,8 @@ const EVENT_KIND_LABELS: Record<string, string> = {
   disconnected: 'Отключено от комнаты',
   rejoin_attempt: 'Попытка перезахода в звонок',
   rejoin_abandoned: 'Перезаход прекращён (не удалось)',
+  rejoin_manual: 'Перезаход вручную / после восстановления сети',
+  token_retry: 'Повтор запроса доступа к комнате',
   quality_changed: 'Изменилось качество связи',
   stats_sample: 'Замер WebRTC',
   device_error: 'Ошибка микрофона/камеры',

@@ -74,7 +74,9 @@ import {
   startCallJournal,
   stopCallJournal,
 } from './callJournal';
+import { callEndedMessage } from './callStateSync';
 import {
+  CallApiError,
   cancelCall,
   createCallInvitation,
   endCall,
@@ -1003,6 +1005,9 @@ function RoomStage({
   const connected = connectionState === ConnectionState.Connected;
   const stageRef = useRef<HTMLDivElement | null>(null);
   const isGroup = callKind === 'group';
+  /** Собеседник уже был в комнате — его пропажа = переподключение, а не ожидание. */
+  const peerSeenRef = useRef(false);
+  if (remotes.length > 0) peerSeenRef.current = true;
   const weakNetLabel =
     connected && !connectError ? connectionQualityStatusLabel(localQuality) : null;
 
@@ -1085,7 +1090,10 @@ function RoomStage({
   // Прямой звонок: таймер / статусы. Слабая сеть — как в Telegram вместо таймера.
   let statusLabel = 'Соединение…';
   if (connectError) statusLabel = connectError;
-  else if (connectionState === ConnectionState.Connected) {
+  else if (connectionState === ConnectionState.Connected && !isGroup && remotes.length === 0) {
+    // Иначе таймер «идёт», хотя собеседника нет и его не слышно.
+    statusLabel = peerSeenRef.current ? 'Собеседник переподключается…' : 'Ожидание собеседника…';
+  } else if (connectionState === ConnectionState.Connected) {
     statusLabel = weakNetLabel ?? formatDuration(elapsed);
   } else if (connectionState === ConnectionState.Connecting) statusLabel = 'Подключение к серверу…';
   else if (connectionState === ConnectionState.Reconnecting) {
@@ -1977,6 +1985,30 @@ function CallShell({
   );
 }
 
+const TOKEN_RETRY_DELAYS_MS = [1000, 2500, 5000];
+
+/** Токен комнаты: сетевые сбои/5xx повторяем, отказ сервера (4xx) — сразу пользователю. */
+async function fetchCallTokenWithRetry(
+  callId: string,
+  isCancelled: () => boolean,
+): Promise<CallTokenResponse> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await fetchCallToken(callId);
+    } catch (e) {
+      const retryable = e instanceof CallApiError && e.retryable;
+      const delay = TOKEN_RETRY_DELAYS_MS[attempt];
+      if (!retryable || delay == null || isCancelled()) throw e;
+      logCallEvent(callId, 'token_retry', {
+        severity: 'warn',
+        payload: { attempt: attempt + 1, status: e.status },
+      });
+      await new Promise((r) => window.setTimeout(r, delay));
+      if (isCancelled()) throw e;
+    }
+  }
+}
+
 function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const closeCall = useCallStore((s) => s.closeCall);
   const uiMinimized = useCallStore((s) => s.uiMinimized);
@@ -2010,6 +2042,8 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const [rejoinNonce, setRejoinNonce] = useState(0);
   const rejoinAttemptsRef = useRef(0);
   const rejoinTimerRef = useRef<number | null>(null);
+  /** Автоматические перезаходы исчерпаны — показываем «Переподключиться». */
+  const [rejoinAbandoned, setRejoinAbandoned] = useState(false);
 
   const clearRejoinTimer = useCallback(() => {
     if (rejoinTimerRef.current != null) {
@@ -2026,8 +2060,9 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
       if (rejoinAttemptsRef.current === 3) {
         rejoinAttemptsRef.current = 4;
         logCallEvent(activeCall.callId, 'rejoin_abandoned', { severity: 'error' });
+        setRejoinAbandoned(true);
       }
-      return; // дальше — только вручную: завершить и перезвонить
+      return; // дальше — кнопка «Переподключиться» или автоповтор при возврате сети
     }
     rejoinAttemptsRef.current += 1;
     const delay = Math.min(2000 * 2 ** (rejoinAttemptsRef.current - 1), 10_000);
@@ -2049,6 +2084,41 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   }, [activeCall.callId, clearRejoinTimer]);
 
   useEffect(() => clearRejoinTimer, [clearRejoinTimer]);
+
+  /** Перезаход «с нуля»: свежий JWT и новая комната; счётчик автопопыток сбрасывается. */
+  const rejoinNow = useCallback(
+    (source: 'manual' | 'online' | 'visible') => {
+      const stored = useCallStore.getState().activeCall;
+      if (!stored || stored.callId !== activeCall.callId || stored.status === 'ended') return;
+      logCallEvent(activeCall.callId, 'rejoin_manual', { payload: { source } });
+      clearRejoinTimer();
+      rejoinAttemptsRef.current = 0;
+      roomTokenRef.current = null;
+      roomUrlRef.current = null;
+      tokenInflight.current = false;
+      setRejoinAbandoned(false);
+      setCreds(null);
+      setConnectError(null);
+      setTokenError(null);
+      setRejoinNonce((n) => n + 1);
+    },
+    [activeCall.callId, clearRejoinTimer],
+  );
+
+  // Сеть вернулась / вкладка снова на экране — пробуем сами, без нажатия.
+  useEffect(() => {
+    if (!rejoinAbandoned) return;
+    const onOnline = () => rejoinNow('online');
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine !== false) rejoinNow('visible');
+    };
+    window.addEventListener('online', onOnline);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [rejoinAbandoned, rejoinNow]);
 
   // Журнал звонка: стартует с окном звонка (до комнаты), финальный flush при закрытии.
   useEffect(() => {
@@ -2135,8 +2205,9 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         }
         if (m.type === 'call:rejected') emitAppToast('Звонок отклонён', 'info');
         if (m.type === 'call:cancelled') emitAppToast('Звонок отменён', 'info');
-        if (m.type === 'call:ended' && m.reason === 'no_answer') {
-          emitAppToast('Абонент не ответил', 'info');
+        if (m.type === 'call:ended') {
+          const msg = callEndedMessage(m.reason);
+          if (msg) emitAppToast(msg, 'info');
         }
         closeCall();
       }
@@ -2164,7 +2235,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     let cancelled = false;
     void (async () => {
       try {
-        const t = await fetchCallToken(activeCall.callId);
+        const t = await fetchCallTokenWithRetry(activeCall.callId, () => cancelled);
         if (cancelled) return;
         // Зафиксировать первый успешный JWT — повторный setCreds ломает LiveKitRoom.
         if (roomTokenRef.current && roomUrlRef.current) return;
@@ -2288,6 +2359,25 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
       role={uiMinimized ? 'presentation' : 'dialog'}
       aria-label={uiMinimized ? undefined : 'Активный звонок'}
     >
+      {rejoinAbandoned && !uiMinimized ? (
+        <div className="call-rejoin-banner" role="alert">
+          <p className="call-rejoin-banner__text">
+            Связь потеряна. Проверьте интернет — переподключимся автоматически, когда сеть вернётся.
+          </p>
+          <div className="call-rejoin-banner__actions">
+            <button
+              type="button"
+              className="call-rejoin-banner__btn call-rejoin-banner__btn--primary"
+              onClick={() => rejoinNow('manual')}
+            >
+              Переподключиться
+            </button>
+            <button type="button" className="call-rejoin-banner__btn" onClick={() => void hangup()}>
+              Завершить
+            </button>
+          </div>
+        </div>
+      ) : null}
       <LiveKitRoom
         key={`${activeCall.callId}:${rejoinNonce}`}
         token={roomToken}
@@ -2314,6 +2404,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
           setLkConnected(true);
           setConnectError(null);
           rejoinAttemptsRef.current = 0;
+          setRejoinAbandoned(false);
           clearRejoinTimer();
         }}
         onMediaDeviceFailure={() => {

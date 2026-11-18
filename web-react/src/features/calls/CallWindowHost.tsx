@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 
 import { useCallStore } from './callStore';
+import { useCallLifecycleSync } from './useCallLifecycleSync';
 
 /**
  * LiveKit + CallWindow тяжёлые (~сотни KB). Раньше тянулись в entry через Layout
@@ -16,6 +17,9 @@ const CallWindow = lazy(async () => {
 });
 
 export function CallWindowHost() {
+  // Без LiveKit: сверка гудков/входящего с сервером, если WS-событие потерялось.
+  useCallLifecycleSync();
+
   /**
    * `ringing_in` тоже триггерит preload: к моменту Accept чанк LiveKit уже в полёте.
    * Сам CallWindow при ringing_in возвращает null (UI — IncomingCallOverlay).

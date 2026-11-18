@@ -52,6 +52,29 @@ function errMessage(err: unknown, fallback: string): string {
   return ax.response?.data?.error || ax.message || fallback;
 }
 
+/** Ошибка API звонков с HTTP-статусом: отличаем «нет сети / сервер лёг» от «нельзя войти». */
+export class CallApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number | null,
+    public readonly code: string | null,
+  ) {
+    super(message);
+    this.name = 'CallApiError';
+  }
+
+  /** Повтор имеет смысл: нет ответа (сеть/таймаут) или 5xx. 4xx — окончательный отказ. */
+  get retryable(): boolean {
+    return this.status == null || this.status >= 500;
+  }
+}
+
+function toCallApiError(err: unknown, fallback: string): CallApiError {
+  const ax = err as { response?: { status?: number; data?: ApiErrorBody } };
+  const status = typeof ax.response?.status === 'number' ? ax.response.status : null;
+  return new CallApiError(errMessage(err, fallback), status, ax.response?.data?.code ?? null);
+}
+
 export async function createDirectCall(input: {
   conversationId: string;
   recipientId: number;
@@ -166,7 +189,7 @@ export async function fetchCallToken(callId: string): Promise<CallTokenResponse>
     const { data } = await apiClient.post<CallTokenResponse>(`/api/calls/${callId}/token`);
     return data;
   } catch (e) {
-    throw new Error(errMessage(e, 'Не удалось получить доступ к комнате'));
+    throw toCallApiError(e, 'Не удалось получить доступ к комнате');
   }
 }
 

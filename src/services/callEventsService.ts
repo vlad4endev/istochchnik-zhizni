@@ -39,6 +39,8 @@ export const CLIENT_CALL_EVENT_KINDS: Readonly<Record<string, CallEventSeverity>
   disconnected: 'warn',
   rejoin_attempt: 'warn',
   rejoin_abandoned: 'error',
+  rejoin_manual: 'info',
+  token_retry: 'warn',
   quality_changed: 'info',
   stats_sample: 'info',
   device_error: 'error',

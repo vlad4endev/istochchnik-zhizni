@@ -6,7 +6,13 @@ import { subscribeRealtimeMessages } from '../../lib/realtimeWsClient';
 import { isCapacitorNative } from '../../lib/nativeApp';
 import { NativeCall, type NativeIncomingCallPayload } from '../../plugins/nativeCall';
 
-import { acceptCall, declineCall } from './callsApi';
+import { acceptCall, declineCall, fetchCall } from './callsApi';
+import {
+  CALL_SYNC_POLL_MS,
+  markCallAcceptedLocally,
+  resolveCallSync,
+  wasCallAcceptedLocally,
+} from './callStateSync';
 import { useCallStore } from './callStore';
 import {
   dismissIncomingCallBrowserNotification,
@@ -115,6 +121,12 @@ export function useIncomingCall() {
       }
       if (m.type === 'call:cancelled' || m.type === 'call:ended' || m.type === 'call:rejected') {
         clearIncoming(String(m.callId ?? ''));
+        return;
+      }
+      // Принят на другом устройстве этого же пользователя — перестать звонить здесь.
+      if (m.type === 'call:answered_elsewhere') {
+        const id = String(m.callId ?? '');
+        if (id && !wasCallAcceptedLocally(id)) clearIncoming(id);
       }
     });
 
@@ -183,6 +195,7 @@ export function useIncomingCall() {
                   : fromNativePayload(ev as NativeIncomingCallPayload);
               void (async () => {
                 try {
+                  markCallAcceptedLocally(callId);
                   await acceptCall(callId);
                   useCallStore.getState().openCall({
                     callId: payload.callId,
@@ -238,10 +251,45 @@ export function useIncomingCall() {
     };
   }, [navigate]);
 
+  // Страховка: если `call:cancelled`/`call:ended` потерялись (WS переподключался),
+  // входящий не должен звонить вечно — сверяемся с сервером, пока он на экране.
+  const incomingCallId = incomingCall?.callId ?? null;
+  useEffect(() => {
+    if (!incomingCallId) return;
+    let disposed = false;
+    const check = async () => {
+      try {
+        const call = await fetchCall(incomingCallId);
+        if (disposed) return;
+        const action = resolveCallSync(
+          'ringing_in',
+          call.status,
+          wasCallAcceptedLocally(incomingCallId),
+        );
+        if (action.kind === 'close') {
+          dismissIncomingCallBrowserNotification(incomingCallId);
+          setIncomingCall((cur) => (cur && cur.callId === incomingCallId ? null : cur));
+          setSuppressWebRingtone(false);
+          if (isCapacitorNative()) {
+            void NativeCall.endCall({ callId: incomingCallId }).catch(() => undefined);
+          }
+        }
+      } catch {
+        /* сеть мигнула — следующая попытка по таймеру */
+      }
+    };
+    const timer = window.setInterval(() => void check(), CALL_SYNC_POLL_MS);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [incomingCallId]);
+
   const accept = async () => {
     if (!incomingCall) return;
     dismissIncomingCallBrowserNotification(incomingCall.callId);
     try {
+      markCallAcceptedLocally(incomingCall.callId);
       await acceptCall(incomingCall.callId);
       if (isCapacitorNative()) {
         void NativeCall.endCall({ callId: incomingCall.callId }).catch(() => undefined);
