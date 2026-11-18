@@ -177,6 +177,17 @@ export function ChatThreadScreen() {
     navigation.setOptions({
       title: headerTitleText,
       headerTitle: () => (
+        <Pressable
+          onPress={() =>
+            navigation.navigate('ChatProfile', {
+              conversationId,
+              title: headerTitleText,
+              isGroup,
+            })
+          }
+          accessibilityRole="button"
+          accessibilityLabel={`Профиль чата ${headerTitleText}`}
+        >
         <ChatHeaderTitle
           title={headerTitleText}
           subtitle={headerInfo.subtitle}
@@ -189,6 +200,7 @@ export function ChatThreadScreen() {
           subtitleColor={colors.textSecondary}
           accentColor={colors.primary}
         />
+        </Pressable>
       ),
       headerRight: () => (
         <Pressable

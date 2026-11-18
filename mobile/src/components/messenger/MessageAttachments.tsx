@@ -41,7 +41,8 @@ export function imageCount(payload: Record<string, unknown> | undefined): number
   return str(payload.url) ? 1 : 0;
 }
 
-function imageSource(messageId: string, slot: number, multi: boolean) {
+/** Источник фото вложения с авторизацией; `multi` — фото из альбома (по номеру слота). */
+export function attachmentImageSource(messageId: string, slot: number, multi: boolean) {
   const token = getAuthToken();
   const url = `${resolveApiOrigin()}${buildAttachmentFileUrl(messageId, multi ? { slot } : undefined)}`;
   return { uri: url, headers: token ? { Authorization: `Bearer ${token}` } : undefined };
@@ -73,7 +74,7 @@ function ImageGrid({ message }: { message: MessageWithSender }) {
             style={{ width: cell, height: single ? 180 : cell }}
           >
             <Image
-              source={imageSource(message.id, slot, multi)}
+              source={attachmentImageSource(message.id, slot, multi)}
               style={styles.fill}
               contentFit="cover"
               transition={120}
@@ -113,7 +114,7 @@ function ImageGrid({ message }: { message: MessageWithSender }) {
               renderItem={({ item }) => (
                 <View style={{ width: SCREEN_W, flex: 1, justifyContent: 'center' }}>
                   <Image
-                    source={imageSource(message.id, item, multi)}
+                    source={attachmentImageSource(message.id, item, multi)}
                     style={{ width: SCREEN_W, height: '100%' }}
                     contentFit="contain"
                   />
