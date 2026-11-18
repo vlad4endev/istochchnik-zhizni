@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { Platform, Text, View } from 'react-native';
 
+import { IncomingCallOverlay } from '../components/messenger/IncomingCallOverlay';
 import { SermonPlayerBar } from '../components/SermonPlayerBar';
 import { SermonPlayerProvider } from '../contexts/SermonPlayerContext';
 import { fetchUnreadCount } from '../api/messenger';
@@ -165,6 +166,7 @@ function MainTabs() {
   return (
     <SermonPlayerProvider>
       <MainTabsInner />
+      <IncomingCallOverlay />
     </SermonPlayerProvider>
   );
 }

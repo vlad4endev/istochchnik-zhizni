@@ -37,6 +37,7 @@ import { sendAttachments, sendVoiceMessage } from '../api/messengerUpload';
 import { fetchChatMembers } from '../api/chatManage';
 import { denormalizeMentions } from '../lib/mentions';
 import { openGroupCall } from '../lib/openCall';
+import { startDirectCall } from '../lib/startDirectCall';
 import { PollCreateModal } from '../components/messenger/PollCreateModal';
 import { ForwardSheet } from '../components/messenger/ForwardSheet';
 import { ReadersSheet } from '../components/messenger/ReadersSheet';
@@ -204,6 +205,20 @@ export function ChatThreadScreen() {
   const headerTitleText = conversation ? getConversationTitle(conversation) : title || 'Чат';
   const headerAvatar = conversation ? getConversationAvatarUrl(conversation) : null;
 
+  const callPeer = useCallback(
+    async (mediaType: 'audio' | 'video') => {
+      const other = conversation?.other_member;
+      if (!other) return;
+      const err = await startDirectCall(
+        { conversationId, recipientId: other.id, peerName: headerTitleText },
+        mediaType,
+      );
+      if (err) Alert.alert('Звонок', err);
+      else navigation.navigate('Call');
+    },
+    [conversation?.other_member, conversationId, headerTitleText, navigation],
+  );
+
   useEffect(() => {
     navigation.setOptions({
       title: headerTitleText,
@@ -234,15 +249,40 @@ export function ChatThreadScreen() {
         </Pressable>
       ),
       headerRight: () => (
-        <Pressable
-          onPress={() => setMeetingOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Созвон в этом чате"
-          hitSlop={8}
-          style={({ pressed }) => [{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.6 }]}
-        >
-          <Ionicons name="videocam-outline" size={26} color={colors.primary} />
-        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {!isGroup && conversation?.other_member ? (
+            <>
+              <Pressable
+                onPress={() => void callPeer('audio')}
+                accessibilityRole="button"
+                accessibilityLabel="Аудиозвонок"
+                hitSlop={6}
+                style={({ pressed }) => [{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="call-outline" size={24} color={colors.primary} />
+              </Pressable>
+              <Pressable
+                onPress={() => void callPeer('video')}
+                accessibilityRole="button"
+                accessibilityLabel="Видеозвонок"
+                hitSlop={6}
+                style={({ pressed }) => [{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="videocam-outline" size={26} color={colors.primary} />
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              onPress={() => setMeetingOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Созвон в этом чате"
+              hitSlop={8}
+              style={({ pressed }) => [{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.6 }]}
+            >
+              <Ionicons name="videocam-outline" size={26} color={colors.primary} />
+            </Pressable>
+          )}
+        </View>
       ),
     });
   }, [
@@ -254,6 +294,7 @@ export function ChatThreadScreen() {
     conversationId,
     isGroup,
     conversation?.other_member,
+    callPeer,
     colors.text,
     colors.textSecondary,
     colors.primary,
