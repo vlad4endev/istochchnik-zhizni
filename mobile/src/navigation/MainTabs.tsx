@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { Platform, Text, View } from 'react-native';
 
 import { IncomingCallOverlay } from '../components/messenger/IncomingCallOverlay';
+import { PushBootstrap } from '../push/PushBootstrap';
 import { SermonPlayerBar } from '../components/SermonPlayerBar';
 import { SermonPlayerProvider } from '../contexts/SermonPlayerContext';
 import { fetchUnreadCount } from '../api/messenger';
@@ -167,6 +168,7 @@ function MainTabs() {
     <SermonPlayerProvider>
       <MainTabsInner />
       <IncomingCallOverlay />
+      <PushBootstrap />
     </SermonPlayerProvider>
   );
 }

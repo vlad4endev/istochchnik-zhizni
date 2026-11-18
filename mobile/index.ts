@@ -1,3 +1,6 @@
+// Должен идти первым: принимает пуши о звонках, пока приложение закрыто.
+import './src/push/backgroundHandler';
+
 import { registerRootComponent } from 'expo';
 
 import App from './App';

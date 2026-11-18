@@ -219,6 +219,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     const token = get().token;
     try {
+      // Пока сессия жива: сервер должен перестать слать звонки на это устройство.
+      const { unregisterPush } = await import('../push/registerPush');
+      await unregisterPush();
+    } catch {
+      /* пуши в этой сборке не подключены */
+    }
+    try {
       if (token) {
         await axios.post(
           `${resolveApiOrigin()}${AUTH_API_PREFIX}/logout`,

@@ -196,3 +196,13 @@ export function findInviteInText(
   const title = body.slice(0, m.index).trim().split('\n')[0]?.trim() ?? '';
   return { token: m[1]!, title: title || 'Встреча', url: m[0] };
 }
+
+/** Статус звонка на сервере (`ringing`, `active`, `ended`, …) или null, если звонок не найден. */
+export async function fetchCallStatus(callId: string): Promise<string | null> {
+  try {
+    const { data } = await apiClient.get<{ call?: { status?: string } }>(`/api/calls/${encodeURIComponent(callId)}`);
+    return typeof data?.call?.status === 'string' ? data.call.status : null;
+  } catch {
+    return null;
+  }
+}

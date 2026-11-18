@@ -28,7 +28,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -57,6 +58,13 @@
         {
           "cameraPermission": "Приложению нужна камера для видеозвонков.",
           "microphonePermission": "Приложению нужен микрофон для звонков."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#7d3640",
+          "defaultChannel": "default"
         }
       ]
     ]
