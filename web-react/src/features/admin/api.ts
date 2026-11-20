@@ -44,13 +44,22 @@ export function apiErrorMessage(err: unknown, fallback: string): string {
       else if (code) parts.push(`код ${code}`);
       if (parts.length) return parts.join(': ');
     }
+    const code = String(err.code ?? '');
+    const msg = String(err.message ?? '');
+    if (!err.response && (code === 'ERR_NETWORK' || /network error|failed to fetch/i.test(msg))) {
+      return 'Нет ответа от сервера. Обновите страницу (Ctrl+Shift+R) — часто помогает сброс кэша service worker — и повторите.';
+    }
+    if (!err.response && (code === 'ECONNABORTED' || /timeout/i.test(msg))) {
+      return 'Сервер слишком долго отвечает. Повторите через несколько секунд.';
+    }
   }
   if (err instanceof Error && err.message) return err.message;
   return fallback;
 }
 
 export async function fetchAdminMembers(): Promise<AppUser[]> {
-  const { data } = await apiClient.get<AppUser[]>(USERS);
+  // Список всех участников + нужда цикла; на слабом VPS может быть дольше дефолтных 25 с.
+  const { data } = await apiClient.get<AppUser[]>(USERS, { timeout: 60_000 });
   return data;
 }
 
