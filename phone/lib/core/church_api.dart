@@ -217,14 +217,20 @@ class ChurchApi {
   Future<Map<String, dynamic>> createCall({
     required String type,
     required String mediaType,
-    required String conversationId,
+    String conversationId = '',
     int? recipientId,
+    String? accessMode,
+    bool standalone = false,
+    String? title,
   }) async {
     return asMap(await post('/api/calls', data: {
       'type': type,
       'mediaType': mediaType,
-      'conversationId': conversationId,
+      if (conversationId.isNotEmpty) 'conversationId': conversationId,
       'recipientId': ?recipientId,
+      'accessMode': ?accessMode,
+      if (standalone) 'standalone': true,
+      'title': ?title,
     }));
   }
 

@@ -96,6 +96,21 @@ void main() {
     UrlLauncherPlatform.instance = launcher;
   });
 
+  group('конференции', () {
+    testWidgets('кнопка в шапке открывает выбор видео/аудиоконференции, затем форму', (tester) async {
+      await _open(tester, _chat());
+      await tester.tap(find.byTooltip('Конференция по ссылке'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('meeting-kind-video')), findsOneWidget);
+      expect(find.byKey(const ValueKey('meeting-kind-audio')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('meeting-kind-audio')));
+      await tester.pumpAndSettle();
+      expect(find.text('Создать аудиовстречу'), findsWidgets);
+      expect(find.text('Название встречи'), findsOneWidget);
+      expect(find.byKey(const ValueKey('meeting-cam')), findsNothing);
+    });
+  });
+
   group('группа: от кого сообщение', () {
     testWidgets('имя автора над первым сообщением пачки, у подряд идущих — один раз, у своих — нет', (tester) async {
       await _open(tester, _chat());

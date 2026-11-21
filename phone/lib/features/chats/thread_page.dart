@@ -15,6 +15,7 @@ import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 import '../calls/call_page.dart';
+import '../calls/widgets/meeting_sheet.dart';
 import '../prayer/widgets/sheet_frame.dart' show actionError;
 import 'chat_profile_page.dart';
 import 'data/attachment_picker.dart';
@@ -373,6 +374,11 @@ class _ThreadPageState extends State<ThreadPage> {
           onTitleTap: _openProfile,
           sheetColor: palette.isDark ? palette.sheet : const Color(0xFFF3ECE3),
           actions: [
+            HeaderButton(
+              icon: Icons.video_call_outlined,
+              tooltip: 'Конференция по ссылке',
+              onPressed: () => showMeetingKindSheet(context, conversationId: widget.conversationId),
+            ),
             HeaderButton(
               icon: Icons.call_outlined,
               tooltip: 'Позвонить',

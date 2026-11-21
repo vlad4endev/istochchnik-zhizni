@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:audio_session/audio_session.dart';
+import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +10,7 @@ import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
+import 'logic/meeting_logic.dart';
 
 class CallPage extends StatefulWidget {
   const CallPage({
@@ -20,6 +22,7 @@ class CallPage extends StatefulWidget {
     this.autoAccept = false,
     this.video = false,
     this.title = 'Звонок',
+    this.meeting,
   });
 
   final String? callId;
@@ -31,6 +34,9 @@ class CallPage extends StatefulWidget {
   final bool autoAccept;
   final bool video;
   final String title;
+
+  /// Новая конференция по ссылке (из чата или отдельная встреча).
+  final MeetingLaunch? meeting;
 
   @override
   State<CallPage> createState() => _CallPageState();
@@ -44,6 +50,10 @@ class _CallPageState extends State<CallPage> {
   bool _connecting = false;
   bool _joined = false;
   bool _muted = false;
+  late bool _camOn = widget.video || (widget.meeting?.media.isVideo ?? false);
+  String? _inviteUrl;
+  String? _meetingTitle;
+  bool _linkCopied = false;
   bool _declined = false;
   bool _started = false;
   StreamSubscription<Map<String, dynamic>>? _callEvents;
@@ -52,6 +62,8 @@ class _CallPageState extends State<CallPage> {
   void initState() {
     super.initState();
     _callId = widget.callId;
+    _muted = !(widget.meeting?.micOn ?? true);
+    _camOn = widget.meeting != null ? (widget.meeting!.media.isVideo && widget.meeting!.camOn) : widget.video;
     _room.addListener(_refresh);
   }
 
@@ -97,20 +109,37 @@ class _CallPageState extends State<CallPage> {
     final session = _session ?? context.read<SessionController>();
     final api = ChurchApi(session);
     try {
-      final session = await AudioSession.instance;
-      await session.configure(const AudioSessionConfiguration.speech());
+      final audio = await AudioSession.instance;
+      await audio.configure(const AudioSessionConfiguration.speech());
       if (widget.incoming && _callId != null) {
         await api.acceptCall(_callId!);
       } else if (_callId == null) {
-        final created = await api.createCall(
-          type: widget.recipientId != null ? 'direct' : 'group',
-          mediaType: widget.video ? 'video' : 'audio',
-          conversationId: widget.conversationId ?? '',
-          recipientId: widget.recipientId,
-        );
-        _callId = str(asMap(created['call'])['id']);
+        final meeting = widget.meeting;
+        final created = meeting != null
+            ? await api.createCall(
+                type: 'group',
+                mediaType: meeting.media.apiValue,
+                conversationId: meeting.conversationId ?? '',
+                accessMode: 'link',
+                standalone: meeting.standalone,
+                title: cleanMeetingTitle(meeting.title),
+              )
+            : await api.createCall(
+                type: widget.recipientId != null ? 'direct' : 'group',
+                mediaType: widget.video ? 'video' : 'audio',
+                conversationId: widget.conversationId ?? '',
+                recipientId: widget.recipientId,
+              );
+        final call = asMap(created['call']);
+        _callId = str(call['id']);
         if (_callId == null || _callId!.isEmpty) {
           throw StateError('Сервер не вернул звонок');
+        }
+        final invite = str(call['inviteUrl']);
+        if (invite.isNotEmpty) {
+          _inviteUrl = absoluteInviteUrl(invite, session.apiOrigin);
+          final title = str(call['title']);
+          _meetingTitle = title.isNotEmpty ? title : null;
         }
       }
       final tokenBody = await api.callToken(_callId!);
@@ -120,8 +149,8 @@ class _CallPageState extends State<CallPage> {
         throw StateError('Сервер не выдал доступ в комнату звонка');
       }
       await _room.connect(url, token);
-      await _room.localParticipant?.setMicrophoneEnabled(true);
-      if (widget.video) {
+      await _room.localParticipant?.setMicrophoneEnabled(!_muted);
+      if (_camOn) {
         await _room.localParticipant?.setCameraEnabled(true);
       }
       if (!mounted) return;
@@ -129,6 +158,7 @@ class _CallPageState extends State<CallPage> {
         _joined = true;
         _connecting = false;
       });
+      if (_inviteUrl != null) unawaited(_copyInvite(announce: true));
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -136,6 +166,38 @@ class _CallPageState extends State<CallPage> {
         _error = error is StateError ? error.message : describeDio(error);
       });
     }
+  }
+
+  String get _displayTitle => _meetingTitle ?? (widget.meeting?.title?.trim().isNotEmpty == true ? widget.meeting!.title!.trim() : (widget.meeting?.media.defaultTitle ?? widget.title));
+
+  Future<void> _copyInvite({bool announce = false}) async {
+    final url = _inviteUrl;
+    if (url == null) return;
+    final media = widget.meeting?.media ?? (widget.video ? MeetingMedia.video : MeetingMedia.audio);
+    await Clipboard.setData(ClipboardData(text: inviteShareText(_displayTitle, url, media: media)));
+    if (!mounted) return;
+    setState(() => _linkCopied = true);
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(content: Text(announce ? 'Название и ссылка скопированы — отправьте участникам' : 'Ссылка скопирована')),
+    );
+  }
+
+  Future<void> _toggleCamera() async {
+    final next = !_camOn;
+    await _room.localParticipant?.setCameraEnabled(next);
+    if (mounted) setState(() => _camOn = next);
+  }
+
+  List<VideoTrack> _videoTracks() {
+    final tracks = <VideoTrack>[];
+    final participants = <Participant>[?_room.localParticipant, ..._room.remoteParticipants.values];
+    for (final participant in participants) {
+      for (final pub in participant.videoTrackPublications) {
+        final track = pub.track;
+        if (track is VideoTrack && !pub.muted) tracks.add(track);
+      }
+    }
+    return tracks;
   }
 
   Future<void> _hangUp() async {
@@ -180,10 +242,14 @@ class _CallPageState extends State<CallPage> {
   @override
   Widget build(BuildContext context) {
     final others = _room.remoteParticipants.length;
+    final isMeeting = widget.meeting != null;
+    final videoCall = widget.video || (widget.meeting?.media.isVideo ?? false);
+    final tracks = _joined && videoCall ? _videoTracks() : const <VideoTrack>[];
+    final title = isMeeting ? _displayTitle : widget.title;
     final ringing = widget.incoming && !_joined && _error == null;
     final status = _error ??
         (_joined
-            ? (others == 0 ? 'Ждём собеседника…' : (others == 1 ? 'Идёт разговор' : 'В разговоре: $others'))
+            ? (others == 0 ? (isMeeting ? 'Ждём участников — отправьте ссылку' : 'Ждём собеседника…') : (others == 1 ? 'Идёт разговор' : 'В разговоре: $others'))
             : widget.incoming
                 ? (widget.video ? 'Входящий видеозвонок' : 'Входящий звонок')
                 : 'Соединяем…');
@@ -194,14 +260,22 @@ class _CallPageState extends State<CallPage> {
           child: Column(
             children: [
               Text(
-                ringing ? (widget.video ? 'ВХОДЯЩИЙ ВИДЕОЗВОНОК' : 'ВХОДЯЩИЙ ЗВОНОК') : (widget.video ? 'ВИДЕОЗВОНОК' : 'ЗВОНОК'),
+                ringing
+                    ? (widget.video ? 'ВХОДЯЩИЙ ВИДЕОЗВОНОК' : 'ВХОДЯЩИЙ ЗВОНОК')
+                    : isMeeting
+                        ? (videoCall ? 'ВИДЕОВСТРЕЧА' : 'АУДИОВСТРЕЧА')
+                        : (widget.video ? 'ВИДЕОЗВОНОК' : 'ЗВОНОК'),
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 2.2, color: ChurchColors.amber),
               ),
-              const Spacer(),
-              _Pulse(active: !_joined && _error == null, child: ChurchAvatar(name: widget.title, size: 120)),
-              const SizedBox(height: 28),
+              if (tracks.isNotEmpty)
+                Expanded(child: Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: _VideoGrid(tracks: tracks)))
+              else ...[
+                const Spacer(),
+                _Pulse(active: !_joined && _error == null, child: ChurchAvatar(name: title, size: 120)),
+                const SizedBox(height: 28),
+              ],
               Text(
-                widget.title,
+                title,
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.4),
               ),
@@ -214,7 +288,11 @@ class _CallPageState extends State<CallPage> {
                   style: TextStyle(fontSize: 15.5, color: _error != null ? const Color(0xFFFFB4C0) : const Color(0xB3FFFFFF)),
                 ),
               ),
-              const Spacer(),
+              if (_inviteUrl != null) ...[
+                const SizedBox(height: 16),
+                _InviteBar(url: _inviteUrl!, copied: _linkCopied, onCopy: _copyInvite),
+              ],
+              if (tracks.isEmpty) const Spacer() else const SizedBox(height: 16),
               if (ringing)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -263,7 +341,18 @@ class _CallPageState extends State<CallPage> {
                                 setState(() => _muted = next);
                               },
                       ),
-                      const SizedBox(width: 28),
+                      if (videoCall) ...[
+                        const SizedBox(width: 20),
+                        _CallButton(
+                          icon: _camOn ? Icons.videocam_rounded : Icons.videocam_off_rounded,
+                          label: _camOn ? 'Камера' : 'Включить',
+                          color: _camOn ? Colors.white.withValues(alpha: 0.14) : Colors.white,
+                          iconColor: _camOn ? Colors.white : ChurchColors.night,
+                          size: 60,
+                          onTap: _joined ? _toggleCamera : null,
+                        ),
+                      ],
+                      const SizedBox(width: 20),
                       _CallButton(
                         icon: Icons.call_end_rounded,
                         label: 'Завершить',
@@ -279,6 +368,81 @@ class _CallPageState extends State<CallPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _InviteBar extends StatelessWidget {
+  const _InviteBar({required this.url, required this.copied, required this.onCopy});
+
+  final String url;
+  final bool copied;
+  final Future<void> Function({bool announce}) onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Скопировать ссылку-приглашение',
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => onCopy(),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(copied ? Icons.check_rounded : Icons.link_rounded, size: 20, color: ChurchColors.amber),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(url, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, color: Colors.white)),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(copied ? 'Скопировано' : 'Копировать', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: ChurchColors.amber)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VideoGrid extends StatelessWidget {
+  const _VideoGrid({required this.tracks});
+
+  final List<VideoTrack> tracks;
+
+  @override
+  Widget build(BuildContext context) {
+    final columns = tracks.length <= 1 ? 1 : 2;
+    return LayoutBuilder(
+      builder: (context, box) {
+        final rows = (tracks.length / columns).ceil();
+        const gap = 8.0;
+        final tileW = (box.maxWidth - gap * (columns - 1)) / columns;
+        final tileH = (box.maxHeight - gap * (rows - 1)) / rows;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          alignment: WrapAlignment.center,
+          runAlignment: WrapAlignment.center,
+          children: [
+            for (final track in tracks)
+              SizedBox(
+                width: tileW,
+                height: tileH.clamp(80.0, double.infinity),
+                child: ClipRRect(borderRadius: BorderRadius.circular(18), child: VideoTrackRenderer(track)),
+              ),
+          ],
+        );
+      },
     );
   }
 }

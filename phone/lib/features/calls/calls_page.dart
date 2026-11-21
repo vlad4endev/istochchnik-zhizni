@@ -7,6 +7,7 @@ import '../../core/json.dart';
 import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
+import 'widgets/meeting_sheet.dart';
 
 class CallsPage extends StatefulWidget {
   const CallsPage({super.key});
@@ -57,12 +58,15 @@ class _CallsPageState extends State<CallsPage> {
     return ChurchPage(
       title: 'Звонки',
       subtitle: 'Журнал звонков',
+      actions: [
+        HeaderButton(icon: Icons.video_call_outlined, tooltip: 'Создать встречу по ссылке', onPressed: () => showMeetingKindSheet(context)),
+      ],
       body: AsyncBody(
         loading: _loading,
         error: _error,
         onRetry: _load,
         child: _items.isEmpty
-            ? const EmptyHint('Звонков пока нет', icon: Icons.call_outlined, hint: 'Позвонить можно из любого чата — кнопка с трубкой вверху.')
+            ? const EmptyHint('Звонков пока нет', icon: Icons.call_outlined, hint: 'Позвонить можно из любого чата. Встречу по ссылке — кнопкой вверху.')
             : SheetList(
                 onRefresh: _load,
                 children: [
