@@ -35,6 +35,7 @@ import {
 import { runServicePlanMondayMailing, notifyServicePlanPublished } from '../services/servicePlanMondayMailingService';
 import { normalizeAppRole, normalizeAppRoles, type AppRole } from '../types/appRole';
 import { roleHasPermission } from '../types/appPermissions';
+import { redactEditToken, redactEditTokens } from '../services/planTokenAccess';
 import { loadRolePermissionsSettings } from '../services/rolePermissionsSettingsService';
 
 function parseId(raw: unknown): number | null {
@@ -75,6 +76,11 @@ async function hasPlannerManagePermission(req: Request): Promise<boolean> {
 async function hasPlannerSectionPermission(req: Request): Promise<boolean> {
   const permissions = await loadRolePermissionsSettings();
   return roleHasPermission(permissions, plannerSessionRoles(req), 'section.service_planner');
+}
+
+/** Кто вправе править блоки плана, тому и токен редактирования нужен; остальным он даёт лишь обход проверки роли. */
+async function canSeePlanEditToken(req: Request): Promise<boolean> {
+  return (await hasPlannerManagePermission(req)) || (await hasPlannerSectionPermission(req));
 }
 
 async function ensurePlannerManager(req: Request, res: Response): Promise<boolean> {
@@ -495,13 +501,12 @@ export async function getServicePlans(req: Request, res: Response): Promise<void
     req.query.include_archived === '1' ||
     req.query.include_archived === 'true';
   try {
-    res.json(
-      await listPlans({
-        from: from ?? undefined,
-        to: to ?? undefined,
-        include_archived: includeArchived,
-      }),
-    );
+    const plans = await listPlans({
+      from: from ?? undefined,
+      to: to ?? undefined,
+      include_archived: includeArchived,
+    });
+    res.json(redactEditTokens(plans, await canSeePlanEditToken(req)));
   } catch (e) {
     console.error('[service-planner] getServicePlans:', e);
     res.status(500).json({ error: 'Не удалось получить планы' });
@@ -520,7 +525,7 @@ export async function getServicePlanById(req: Request, res: Response): Promise<v
       res.status(404).json({ error: 'План не найден' });
       return;
     }
-    res.json(plan);
+    res.json(redactEditToken(plan, await canSeePlanEditToken(req)));
   } catch (e) {
     console.error('[service-planner] getServicePlanById:', e);
     res.status(500).json({ error: 'Не удалось получить план' });

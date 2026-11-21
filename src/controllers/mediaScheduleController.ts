@@ -1,7 +1,6 @@
 import type { Request, Response } from 'express';
 import { query } from '../config/db';
 import { requireAuthSession } from '../middleware/authSession';
-import { hasMediaMinistryDirection } from '../utils/ministryRoleMatch';
 import {
   assignMember,
   createRole,
@@ -24,7 +23,10 @@ import {
   type AssignmentStatus,
 } from '../services/mediaScheduleService';
 import { sessionCanModerateCatalog, rolesOfSession, type SessionRoleSource } from '../types/appRole';
-import { canManageMediaSchedule as canManageMediaScheduleByProfile } from '../utils/ministryScheduleAccess';
+import {
+  canManageMediaSchedule as canManageMediaScheduleByProfile,
+  canViewMediaSchedule as canViewMediaScheduleByProfile,
+} from '../utils/ministryScheduleAccess';
 
 type AuthReq = Request & SessionRoleSource & { authUserId?: number };
 
@@ -49,9 +51,12 @@ async function canViewMediaSchedule(req: Request): Promise<boolean> {
   const r = req as AuthReq;
   if (sessionCanModerateCatalog(r)) return true;
   if (!r.authUserId) return false;
-  const result = await query(`SELECT ministry_direction FROM members WHERE id = $1 LIMIT 1`, [r.authUserId]);
-  const row = result.rows[0] as { ministry_direction?: string | null } | undefined;
-  return hasMediaMinistryDirection(row?.ministry_direction);
+  const result = await query(`SELECT ministry_direction, ministry_role FROM members WHERE id = $1 LIMIT 1`, [r.authUserId]);
+  const row = result.rows[0] as { ministry_direction?: string | null; ministry_role?: string | null } | undefined;
+  return canViewMediaScheduleByProfile({
+    ministry_direction: row?.ministry_direction,
+    ministry_role: row?.ministry_role,
+  });
 }
 
 async function ensureAuth(req: Request, res: Response): Promise<number | null> {

@@ -53,6 +53,22 @@ export function canViewMusicSchedule(input: {
   return hasMusicMinistryDirection(input.ministry_direction);
 }
 
+/**
+ * Кто видит медиа-расписание. Одно правило и для списка служений, и для самих эндпоинтов:
+ * раньше они расходились (список учитывал «Медиа менеджера», эндпоинты отвечали ему 403).
+ */
+export function canViewMediaSchedule(input: {
+  ministry_direction?: unknown;
+  ministry_role?: unknown;
+  canModerateCatalog?: boolean;
+}): boolean {
+  return (
+    Boolean(input.canModerateCatalog) ||
+    hasMediaMinistryDirection(input.ministry_direction) ||
+    memberHasMinistryRole(input.ministry_role, 'Медиа менеджер')
+  );
+}
+
 export function listAccessibleScheduleMinistries(input: {
   ministry_direction?: unknown;
   ministry_role?: unknown;
@@ -61,11 +77,7 @@ export function listAccessibleScheduleMinistries(input: {
   app_roles?: unknown;
 }): ScheduleMinistryKey[] {
   const out: ScheduleMinistryKey[] = [];
-  if (
-    input.canModerateCatalog ||
-    hasMediaMinistryDirection(input.ministry_direction) ||
-    memberHasMinistryRole(input.ministry_role, 'Медиа менеджер')
-  ) {
+  if (canViewMediaSchedule(input)) {
     out.push('media');
   }
   if (
