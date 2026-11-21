@@ -20,7 +20,7 @@ Widget _app({double width = 360, double scale = 1, Brightness b = Brightness.lig
       theme: churchTheme(brightness: b),
       home: MediaQuery(
         data: MediaQueryData(size: Size(width, 700), textScaler: TextScaler.linear(scale)),
-        child: Scaffold(body: const SizedBox.expand(), bottomNavigationBar: ChurchBottomNav(items: _items, index: index, onSelect: onSelect ?? (_) {})),
+        child: Scaffold(extendBody: true, body: ListView(children: [for (var i = 0; i < 8; i++) Container(height: 90, margin: const EdgeInsets.all(8), color: i.isEven ? const Color(0xFFD9A441) : const Color(0xFF8A2742))]), bottomNavigationBar: ChurchBottomNav(items: _items, index: index, onSelect: onSelect ?? (_) {})),
       ),
     );
 
@@ -65,7 +65,7 @@ void main() {
     }
     final l = FontLoader('MaterialIcons')..addFont(Future.value(ByteData.sublistView(File('/root/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf').readAsBytesSync())));
     await l.load();
-    tester.view.physicalSize = const Size(780, 220);
+    tester.view.physicalSize = const Size(780, 420);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     for (final b in [Brightness.light, Brightness.dark]) {

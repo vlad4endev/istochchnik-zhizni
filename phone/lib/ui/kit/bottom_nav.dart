@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:material_ui/material_ui.dart';
 
 import 'components.dart';
@@ -12,8 +14,8 @@ class NavItem {
   final int badge;
 }
 
-/// Плавающая «таблетка» вкладок: светлая карточка с мягкой тенью,
-/// активный пункт подсвечен скруглённой плашкой в фирменном цвете.
+/// Полупрозрачная панель вкладок на всю ширину, как в iOS: размытый фон, тонкая линия сверху,
+/// контент страницы виден и прокручивается под ней. Активная вкладка — тонированная плашка.
 class ChurchBottomNav extends StatelessWidget {
   const ChurchBottomNav({super.key, required this.items, required this.index, required this.onSelect});
 
@@ -28,22 +30,18 @@ class ChurchBottomNav extends StatelessWidget {
     final media = MediaQuery.of(context);
     return MediaQuery(
       data: media.copyWith(textScaler: media.textScaler.clamp(maxScaleFactor: 1.25)),
-      // Фон под панелью совпадает с листом страницы, поэтому «парит» только сама таблетка.
-      child: ColoredBox(
-        color: palette.sheet,
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: palette.card,
-                borderRadius: BorderRadius.circular(34),
-                border: Border.all(color: palette.hairline),
-                boxShadow: [BoxShadow(color: palette.shadow.withValues(alpha: 0.18), blurRadius: 24, offset: const Offset(0, 8))],
-              ),
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: palette.sheet.withValues(alpha: palette.isDark ? 0.74 : 0.78),
+              border: Border(top: BorderSide(color: palette.hairline)),
+            ),
+            child: SafeArea(
+              top: false,
               child: Padding(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
                 child: Row(
                   children: [
                     for (var i = 0; i < items.length; i++)
@@ -84,10 +82,10 @@ class _NavButton extends StatelessWidget {
         child: AnimatedContainer(
           duration: Motion.normal,
           curve: Curves.easeOut,
-          constraints: const BoxConstraints(minHeight: 56),
+          constraints: const BoxConstraints(minHeight: 52),
           padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
           decoration: BoxDecoration(
-            color: active ? palette.accentSoft : Colors.transparent,
+            color: active ? palette.accentSoft.withValues(alpha: 0.9) : Colors.transparent,
             borderRadius: BorderRadius.circular(28),
           ),
           child: Column(
@@ -102,7 +100,7 @@ class _NavButton extends StatelessWidget {
                     Positioned(
                       top: -7,
                       right: -12,
-                      child: CountBadge(item.badge, outline: active ? palette.accentSoft : palette.card),
+                      child: CountBadge(item.badge, outline: palette.sheet),
                     ),
                 ],
               ),
