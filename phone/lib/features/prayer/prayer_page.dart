@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -8,9 +10,23 @@ import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 import '../profile/profile_page.dart';
+import 'collection_page.dart';
+import 'data/prayer_source.dart';
+import 'logic/prayer_access.dart';
+import 'models/prayer_models.dart';
+import 'prayer_controllers.dart';
+import 'widgets/note_card.dart';
+import 'widgets/note_editor.dart';
+import 'widgets/share_need_sheet.dart';
+import 'widgets/telegram_sheet.dart';
+import 'widgets/viewers_sheet.dart';
 
 class PrayerPage extends StatefulWidget {
-  const PrayerPage({super.key});
+  const PrayerPage({super.key, this.source, this.loadDay});
+
+  /// Для тестов; в приложении берётся из сессии.
+  final PrayerSource? source;
+  final Future<Map<String, dynamic>> Function(String iso)? loadDay;
 
   @override
   State<PrayerPage> createState() => _PrayerPageState();
@@ -21,11 +37,23 @@ class _PrayerPageState extends State<PrayerPage> {
   bool _loading = true;
   String? _error;
   Map<String, dynamic> _day = {};
+  late final PrayerSource _source;
+  late final NotesController _notes;
+  ViewersToday? _viewers;
 
   @override
   void initState() {
     super.initState();
+    _source = widget.source ?? PrayerApi(context.read<SessionController>());
+    _notes = NotesController(_source);
     _load();
+    _registerVisit();
+  }
+
+  @override
+  void dispose() {
+    _notes.dispose();
+    super.dispose();
   }
 
   String get _iso {
@@ -33,13 +61,38 @@ class _PrayerPageState extends State<PrayerPage> {
     return '${utc.year.toString().padLeft(4, '0')}-${utc.month.toString().padLeft(2, '0')}-${utc.day.toString().padLeft(2, '0')}';
   }
 
+  PrayerAccess get _access => PrayerAccess(context.read<SessionController>().user);
+
+  /// Фиксируем визит (раз в сутки на человека) и, если можно, считаем посетителей.
+  Future<void> _registerVisit() async {
+    try {
+      await _source.registerVisit();
+    } catch (_) {
+      // Сеть или сессия — странице это не мешает.
+    }
+    await _loadViewers();
+  }
+
+  Future<void> _loadViewers() async {
+    if (!mounted || !_access.canViewViewers) return;
+    try {
+      final viewers = await _source.viewers();
+      if (mounted) setState(() => _viewers = viewers);
+    } catch (_) {
+      // Статистика — необязательная часть экрана.
+    }
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
+    unawaited(_notes.load(_date));
     try {
-      final day = await ChurchApi(context.read<SessionController>()).day(_iso);
+      final day = widget.loadDay != null
+          ? await widget.loadDay!(_iso)
+          : await ChurchApi(context.read<SessionController>()).day(_iso);
       if (!mounted) return;
       setState(() {
         _day = day;
@@ -72,11 +125,23 @@ class _PrayerPageState extends State<PrayerPage> {
     _load();
   }
 
+  Future<void> _editNote(NoteKind kind) async {
+    final changed = await showNoteEditor(context, _notes, kind, DateTime.now());
+    if (changed && mounted) _notes.load(_date);
+  }
+
+  String _memberTitle() {
+    final today = DateTime.now();
+    final day = DateTime(_date.year, _date.month, _date.day);
+    final start = DateTime(today.year, today.month, today.day);
+    if (day.isBefore(start)) return 'Молитвенная нужда за этот день';
+    if (day.isAfter(start)) return 'Молитвенная нужда (по очереди цикла)';
+    return 'Сегодня молимся за члена церкви';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final members = asList(_day['members']);
-    final themes = asList(_day['global_themes']);
-    final ministries = asList(_day['ministries']);
+    final access = PrayerAccess(context.watch<SessionController>().user);
     return ChurchPage(
       title: 'Молитва',
       subtitle: 'Молитвенный цикл церкви',
@@ -86,56 +151,164 @@ class _PrayerPageState extends State<PrayerPage> {
             padding: const EdgeInsets.fromLTRB(Space.lg, 18, Space.lg, 0),
             child: _DateBar(date: _date, onPrev: () => _shift(-1), onNext: () => _shift(1), onPick: _pick),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(Space.lg, Space.md, Space.lg, 0),
-            child: _MyNeed(),
-          ),
           Expanded(
-            child: AsyncBody(
-              loading: _loading,
-              error: _error,
-              onRetry: _load,
-              child: members.isEmpty && themes.isEmpty && ministries.isEmpty
-                  ? const EmptyHint(
-                      'На эту дату записей нет',
-                      icon: Icons.church_outlined,
-                      hint: 'Выберите другой день — молитвенный цикл составляет администратор.',
-                    )
-                  : SheetList(
-                      onRefresh: _load,
-                      padding: const EdgeInsets.fromLTRB(Space.lg, Space.md, Space.lg, 32),
-                      children: [
-                        if (members.isNotEmpty) const SectionLabel('Сегодня молимся за члена церкви'),
-                        for (final raw in members)
-                          _PrayerBlock(
-                            data: asMap(raw),
-                            titleKey: 'name',
-                            bodyKey: 'prayer_request',
-                            tone: Tone.violet,
-                            icon: Icons.favorite_border_rounded,
-                            withAvatar: true,
-                          ),
-                        if (themes.isNotEmpty) const SectionLabel('Тема дня'),
-                        for (final raw in themes)
-                          _PrayerBlock(
-                            data: asMap(raw),
-                            titleKey: 'title',
-                            bodyKey: 'prayer_points',
-                            tone: Tone.teal,
-                            icon: Icons.menu_book_outlined,
-                          ),
-                        if (ministries.isNotEmpty) const SectionLabel('Служения'),
-                        for (final raw in ministries)
-                          _PrayerBlock(
-                            data: asMap(raw),
-                            titleKey: 'title',
-                            bodyKey: 'prayer_points',
-                            tone: Tone.amber,
-                            icon: Icons.volunteer_activism_outlined,
-                          ),
-                      ],
+            child: ListenableBuilder(
+              listenable: _notes,
+              builder: (context, _) => SheetList(
+                onRefresh: () async {
+                  await _load();
+                  await _loadViewers();
+                },
+                padding: const EdgeInsets.fromLTRB(Space.lg, Space.md, Space.lg, 32),
+                children: [
+                  if (_notes.notes.urgent != null)
+                    NoteCard(
+                      kind: NoteKind.urgentPrayer,
+                      note: _notes.notes.urgent!,
+                      onEdit: access.canManageNotes ? () => _editNote(NoteKind.urgentPrayer) : null,
+                      onDelete: access.canManageNotes
+                          ? () => deleteNoteWithConfirm(context, _notes, NoteKind.urgentPrayer, _date)
+                          : null,
                     ),
+                  _MyNeed(onShare: () => showShareNeedSheet(context, _source, context.read<SessionController>().user)),
+                  if (access.canViewCollection || access.canManageNotes) ..._coordinatorTools(access),
+                  ..._dayContent(),
+                  if (access.canViewViewers && _viewers != null) _ViewersCard(viewers: _viewers!),
+                ],
+              ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _coordinatorTools(PrayerAccess access) {
+    final urgent = _notes.notes.urgent;
+    final announcement = _notes.notes.announcement;
+    return [
+      const SectionLabel('Координаторам'),
+      ListGroup(
+        dividerIndent: 70,
+        children: [
+          if (access.canViewCollection)
+            ListRow(
+              leading: const IconTile(Icons.assignment_outlined, tone: Tone.wine),
+              title: 'Сбор нужд · очередь недели',
+              subtitle: 'Кто в очереди, кто собирает нужды',
+              onTap: () => pushPage(context, const CollectionPage()),
+            ),
+          if (access.canManageNotes && urgent == null)
+            ListRow(
+              leading: const IconTile(Icons.local_fire_department_rounded, tone: Tone.red),
+              title: 'Срочная молитвенная нужда',
+              subtitle: 'Показать всем участникам',
+              onTap: () => _editNote(NoteKind.urgentPrayer),
+            ),
+          if (access.canManageNotes)
+            ListRow(
+              leading: const IconTile(Icons.campaign_rounded, tone: Tone.amber),
+              title: 'Объявление на главной',
+              subtitle: announcement == null ? 'Не задано — добавить' : announcement.text,
+              onTap: () => _editNote(NoteKind.announcement),
+            ),
+          if (access.canTelegramDispatch)
+            ListRow(
+              leading: const IconTile(Icons.send_rounded, tone: Tone.teal),
+              title: 'Рассылка в Telegram',
+              subtitle: 'Отправить молитву на ${longDate(_date)}',
+              onTap: () => showTelegramDispatchSheet(context, _source, _date),
+            ),
+        ],
+      ),
+    ];
+  }
+
+  List<Widget> _dayContent() {
+    if (_loading) {
+      return const [Padding(padding: EdgeInsets.symmetric(vertical: 40), child: LoadingView())];
+    }
+    if (_error != null) return [SizedBox(height: 260, child: ErrorView(message: _error!, onRetry: _load))];
+    final members = asList(_day['members']);
+    final themes = asList(_day['global_themes']);
+    final ministries = asList(_day['ministries']);
+    final backsliders = Backslider.parseList(_day['backsliders']);
+    if (members.isEmpty && themes.isEmpty && ministries.isEmpty && backsliders.isEmpty) {
+      return [
+        const EmptyHint(
+          'На эту дату записей нет',
+          icon: Icons.church_outlined,
+          hint: 'Выберите другой день — молитвенный цикл составляет администратор.',
+        ),
+      ];
+    }
+    return [
+      if (members.isNotEmpty) SectionLabel(_memberTitle()),
+      for (final raw in members)
+        _PrayerBlock(
+          data: asMap(raw),
+          titleKey: 'name',
+          bodyKey: 'prayer_request',
+          tone: Tone.violet,
+          icon: Icons.favorite_border_rounded,
+          withAvatar: true,
+        ),
+      if (themes.isNotEmpty) const SectionLabel('Тема дня'),
+      for (final raw in themes)
+        _PrayerBlock(
+          data: asMap(raw),
+          titleKey: 'title',
+          bodyKey: 'prayer_points',
+          tone: Tone.teal,
+          icon: Icons.menu_book_outlined,
+        ),
+      if (ministries.isNotEmpty) const SectionLabel('Служения'),
+      for (final raw in ministries)
+        _PrayerBlock(
+          data: asMap(raw),
+          titleKey: 'title',
+          bodyKey: 'prayer_points',
+          tone: Tone.amber,
+          icon: Icons.volunteer_activism_outlined,
+        ),
+      if (backsliders.isNotEmpty) const SectionLabel('Молимся за отпавшего'),
+      for (final b in backsliders)
+        _PrayerBlock(
+          data: {'name': b.name, 'prayer_request': 'Отпавший — нуждается в молитве о возвращении'},
+          titleKey: 'name',
+          bodyKey: 'prayer_request',
+          tone: Tone.rose,
+          icon: Icons.person_off_outlined,
+        ),
+    ];
+  }
+}
+
+/// Своя молитвенная нужда — в один тап от экрана молитвы, и возможность поделиться ею с чатом.
+class _MyNeed extends StatelessWidget {
+  const _MyNeed({required this.onShare});
+
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final need = context.watch<SessionController>().user?.prayerRequest.trim() ?? '';
+    return ChurchCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          ListRow(
+            leading: const IconTile(Icons.favorite_border_rounded, tone: Tone.violet),
+            title: 'Моя молитвенная нужда',
+            subtitle: need.isEmpty ? 'Не указана — расскажите, о чём молиться за вас' : need,
+            onTap: () => pushPage(context, const ProfilePage(focusNeed: true)),
+          ),
+          Divider(height: 1, color: context.palette.hairline),
+          ListRow(
+            leading: const IconTile(Icons.send_rounded, tone: Tone.teal, size: 34),
+            title: 'Поделиться нуждой с чатом',
+            subtitle: 'Отправим в молитвенный чат церкви',
+            onTap: onShare,
           ),
         ],
       ),
@@ -143,20 +316,21 @@ class _PrayerPageState extends State<PrayerPage> {
   }
 }
 
-/// Своя молитвенная нужда — в один тап от экрана молитвы.
-class _MyNeed extends StatelessWidget {
-  const _MyNeed();
+/// «Сегодня раздел открыли N человек» — для пастора и администратора.
+class _ViewersCard extends StatelessWidget {
+  const _ViewersCard({required this.viewers});
+
+  final ViewersToday viewers;
 
   @override
   Widget build(BuildContext context) {
-    final need = context.watch<SessionController>().user?.prayerRequest.trim() ?? '';
     return ChurchCard(
       padding: EdgeInsets.zero,
       child: ListRow(
-        leading: const IconTile(Icons.favorite_border_rounded, tone: Tone.violet),
-        title: 'Моя молитвенная нужда',
-        subtitle: need.isEmpty ? 'Не указана — расскажите, о чём молиться за вас' : need,
-        onTap: () => pushPage(context, const ProfilePage(focusNeed: true)),
+        leading: const IconTile(Icons.visibility_outlined, tone: Tone.neutral, size: 38),
+        title: viewersCaption(viewers.count),
+        subtitle: 'Посмотреть список',
+        onTap: () => showViewersSheet(context, viewers),
       ),
     );
   }
@@ -202,7 +376,7 @@ class _DateBar extends StatelessWidget {
                         style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700, color: palette.ink),
                       ),
                     ),
-                    if (today) ...[const SizedBox(width: 8), const StatusPill('СЕГОДНЯ')],
+                    if (today) ...[const SizedBox(width: 8), const Flexible(child: StatusPill('СЕГОДНЯ'))],
                   ],
                 ),
               ),

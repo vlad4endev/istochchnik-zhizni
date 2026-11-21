@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -13,12 +15,25 @@ import '../bible/bible_page.dart';
 import '../broadcast/broadcast_page.dart';
 import '../profile/profile_page.dart';
 import '../events/events_page.dart';
+import '../chats/thread_page.dart';
+import '../prayer/collection_page.dart';
+import '../prayer/data/prayer_source.dart';
+import '../prayer/logic/prayer_access.dart';
+import '../prayer/models/prayer_models.dart';
+import '../prayer/prayer_controllers.dart';
 import '../prayer/prayer_page.dart';
+import '../prayer/widgets/home_blocks.dart';
+import '../prayer/widgets/note_card.dart';
+import '../prayer/widgets/note_editor.dart';
+import '../prayer/widgets/sheet_frame.dart';
 import '../sermons/sermons_page.dart';
 import '../songbook/songbook_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({super.key, this.prayerSource});
+
+  /// Для тестов; в приложении берётся из сессии.
+  final PrayerSource? prayerSource;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -31,11 +46,39 @@ class _HomePageState extends State<HomePage> {
   List<dynamic> _events = const [];
   Map<String, dynamic> _podcasts = {};
   Map<String, dynamic> _broadcast = {};
+  late final HomeExtrasController _extras;
 
   @override
   void initState() {
     super.initState();
+    final session = context.read<SessionController>();
+    _extras = HomeExtrasController(
+      widget.prayerSource ?? PrayerApi(session),
+      access: PrayerAccess(session.user),
+      meId: session.user?.id ?? 0,
+    );
     _load();
+  }
+
+  @override
+  void dispose() {
+    _extras.dispose();
+    super.dispose();
+  }
+
+  Future<void> _editNote(NoteKind kind) async {
+    final changed = await showNoteEditor(context, _extras.notesController, kind, DateTime.now());
+    if (changed && mounted) _extras.notesController.load(DateTime.now());
+  }
+
+  Future<void> _message(Birthday person) async {
+    try {
+      final id = await ChurchApi(context.read<SessionController>()).openPersonal(person.id);
+      if (!mounted || id.isEmpty) return;
+      await pushPage(context, ThreadPage(conversationId: id, title: person.name, otherMemberId: person.id));
+    } catch (error) {
+      if (mounted) showMessage(context, actionError(error));
+    }
   }
 
   Future<void> _load() async {
@@ -45,6 +88,7 @@ class _HomePageState extends State<HomePage> {
     });
     final api = ChurchApi(context.read<SessionController>());
     final today = DateTime.now();
+    unawaited(_extras.load(today));
     final iso =
         '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
     try {
@@ -135,19 +179,74 @@ class _HomePageState extends State<HomePage> {
         loading: _loading,
         error: _error,
         onRetry: _load,
-        child: SheetList(
+        child: ListenableBuilder(
+          listenable: Listenable.merge([_extras, _extras.notesController]),
+          builder: (context, _) => SheetList(
           onRefresh: _load,
           children: [
             TileGrid(children: tiles),
             if (live) _LiveCard(broadcast: asMap(_broadcast['broadcast'])),
+            ..._notes(session),
             const SectionLabel('Молитва сегодня'),
             _PrayerCard(day: _day),
+            ..._coordinator(session),
+            ..._birthdays(),
             ..._nextEvent(context),
             ..._latestSermon(context),
           ],
+          ),
         ),
       ),
     );
+  }
+
+  /// Срочная нужда и объявление от координаторов; править может только тот, кому разрешено.
+  List<Widget> _notes(SessionController session) {
+    final access = PrayerAccess(session.user);
+    final notes = _extras.notes;
+    final today = DateTime.now();
+    return [
+      if (notes.urgent != null)
+        NoteCard(
+          kind: NoteKind.urgentPrayer,
+          note: notes.urgent!,
+          onEdit: access.canManageNotes ? () => _editNote(NoteKind.urgentPrayer) : null,
+          onDelete: access.canManageNotes
+              ? () => deleteNoteWithConfirm(context, _extras.notesController, NoteKind.urgentPrayer, today)
+              : null,
+        ),
+      if (notes.announcement != null)
+        NoteCard(
+          kind: NoteKind.announcement,
+          note: notes.announcement!,
+          onEdit: access.canManageNotes ? () => _editNote(NoteKind.announcement) : null,
+          onDelete: access.canManageNotes
+              ? () => deleteNoteWithConfirm(context, _extras.notesController, NoteKind.announcement, today)
+              : null,
+        ),
+    ];
+  }
+
+  List<Widget> _coordinator(SessionController session) {
+    final summary = _extras.coordinator;
+    if (summary == null) return const [];
+    return [
+      CoordinatorSummaryCard(
+        summary: summary,
+        meId: session.user?.id ?? 0,
+        onOpen: () => pushPage(context, CollectionPage(initialKind: summary.week)).then((_) {
+          if (mounted) _extras.load(DateTime.now());
+        }),
+      ),
+    ];
+  }
+
+  List<Widget> _birthdays() {
+    if (_extras.birthdays.isEmpty) return const [];
+    return [
+      const SectionLabel('Дни рождения'),
+      BirthdaysCard(birthdays: _extras.birthdays, now: DateTime.now(), onMessage: _message),
+    ];
   }
 
   List<Widget> _nextEvent(BuildContext context) {
@@ -287,15 +386,25 @@ class _PrayerCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             decoration: const BoxDecoration(gradient: wineGradient),
-            child: Row(
+            // Wrap: при крупном шрифте на узком экране дата уходит на вторую строку, а не за край.
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
               children: [
-                const Icon(Icons.church_outlined, size: 16, color: ChurchColors.amber),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'МОЛИТВЕННЫЙ ЦИКЛ',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: Colors.white),
-                  ),
+                const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.church_outlined, size: 16, color: ChurchColors.amber),
+                    SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'МОЛИТВЕННЫЙ ЦИКЛ',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: Colors.white),
+                      ),
+                    ),
+                  ],
                 ),
                 Text(
                   DateFormat('EE, d MMMM', 'ru').format(DateTime.now()),

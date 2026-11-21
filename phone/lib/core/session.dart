@@ -26,6 +26,7 @@ class AppUser {
     this.prayerRequest = '',
     this.ministryRole = '',
     this.ministryDirection = '',
+    this.isCollectionCoordinator = false,
   });
 
   final int id;
@@ -41,6 +42,9 @@ class AppUser {
   final String prayerRequest;
   final String ministryRole;
 
+  /// Ответственный за сбор молитвенных нужд (флаг от администратора).
+  final bool isCollectionCoordinator;
+
   /// Направления служения через запятую или «;» — по ним открывается расписание команды.
   final String ministryDirection;
 
@@ -53,6 +57,7 @@ class AppUser {
   bool get isActive => registrationStatus == 'active';
   bool get isPending => registrationStatus == 'pending_review';
   bool get isAdmin => role == 'admin' || roles.contains('admin');
+  bool get isPastor => role == 'pastor' || roles.contains('pastor');
 
   String get displayName {
     final full = '$firstName $lastName'.trim();
@@ -83,6 +88,7 @@ class AppUser {
       prayerRequest: str(json['prayer_request']),
       ministryRole: str(json['ministry_role']),
       ministryDirection: str(json['ministry_direction']),
+      isCollectionCoordinator: asBool(json['is_collection_coordinator']),
     );
   }
 
@@ -100,6 +106,7 @@ class AppUser {
         'prayer_request': prayerRequest,
         'ministry_role': ministryRole,
         'ministry_direction': ministryDirection,
+        'is_collection_coordinator': isCollectionCoordinator,
       };
 }
 
