@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:material_ui/material_ui.dart';
 
 import 'components.dart';
@@ -14,7 +12,8 @@ class NavItem {
   final int badge;
 }
 
-/// Тёмная полупрозрачная панель вкладок с янтарной «таблеткой» активного пункта.
+/// Плавающая «таблетка» вкладок: светлая карточка с мягкой тенью,
+/// активный пункт подсвечен скруглённой плашкой в фирменном цвете.
 class ChurchBottomNav extends StatelessWidget {
   const ChurchBottomNav({super.key, required this.items, required this.index, required this.onSelect});
 
@@ -24,23 +23,33 @@ class ChurchBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: ChurchColors.nightBar,
-            border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.14))),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(6, 10, 6, 8),
-              child: Row(
-                children: [
-                  for (var i = 0; i < items.length; i++)
-                    Expanded(child: _NavButton(item: items[i], active: i == index, onTap: () => onSelect(i))),
-                ],
+    final palette = context.palette;
+    // Подписи вкладок не должны ломать панель при крупном системном шрифте.
+    final media = MediaQuery.of(context);
+    return MediaQuery(
+      data: media.copyWith(textScaler: media.textScaler.clamp(maxScaleFactor: 1.25)),
+      // Фон под панелью совпадает с листом страницы, поэтому «парит» только сама таблетка.
+      child: ColoredBox(
+        color: palette.sheet,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: palette.card,
+                borderRadius: BorderRadius.circular(34),
+                border: Border.all(color: palette.hairline),
+                boxShadow: [BoxShadow(color: palette.shadow.withValues(alpha: 0.18), blurRadius: 24, offset: const Offset(0, 8))],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Row(
+                  children: [
+                    for (var i = 0; i < items.length; i++)
+                      Expanded(child: _NavButton(item: items[i], active: i == index, onTap: () => onSelect(i))),
+                  ],
+                ),
               ),
             ),
           ),
@@ -59,59 +68,54 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final label = item.badge > 0 ? '${item.label}, непрочитанных ${item.badge}' : item.label;
+    final color = active ? palette.accent : palette.inkMuted;
     return Semantics(
       selected: active,
       button: true,
       label: label,
       excludeSemantics: true,
-      child: InkResponse(
+      child: InkWell(
         onTap: onTap,
-        radius: 36,
+        borderRadius: BorderRadius.circular(28),
         highlightColor: Colors.transparent,
-        splashColor: Colors.white.withValues(alpha: 0.08),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                AnimatedContainer(
-                  duration: Motion.normal,
-                  curve: Curves.easeOut,
-                  width: 58,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: active ? ChurchColors.amber : Colors.transparent,
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: Icon(
-                    active ? item.activeIcon : item.icon,
-                    size: 21,
-                    color: active ? ChurchColors.amberInk : Colors.white.withValues(alpha: 0.74),
-                  ),
-                ),
-                if (item.badge > 0)
-                  Positioned(
-                    top: -6,
-                    right: 2,
-                    child: CountBadge(item.badge, outline: const Color(0xFF2A0B15)),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              item.label,
-              maxLines: 1,
-              overflow: TextOverflow.fade,
-              softWrap: false,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                color: active ? Colors.white : Colors.white.withValues(alpha: 0.7),
+        splashColor: palette.accent.withValues(alpha: 0.08),
+        child: AnimatedContainer(
+          duration: Motion.normal,
+          curve: Curves.easeOut,
+          constraints: const BoxConstraints(minHeight: 56),
+          padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
+          decoration: BoxDecoration(
+            color: active ? palette.accentSoft : Colors.transparent,
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(item.icon, size: 26, color: color),
+                  if (item.badge > 0)
+                    Positioned(
+                      top: -7,
+                      right: -12,
+                      child: CountBadge(item.badge, outline: active ? palette.accentSoft : palette.card),
+                    ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 3),
+              Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                softWrap: false,
+                style: TextStyle(fontSize: 12, fontWeight: active ? FontWeight.w700 : FontWeight.w500, color: color),
+              ),
+            ],
+          ),
         ),
       ),
     );

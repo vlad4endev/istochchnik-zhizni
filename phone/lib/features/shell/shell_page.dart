@@ -85,7 +85,6 @@ class _ShellPageState extends State<ShellPage> {
     final index = found < 0 ? 0 : found;
     return Scaffold(
       backgroundColor: ChurchColors.night,
-      extendBody: true,
       body: IndexedStack(index: index, children: [for (final tab in tabs) tab.page]),
       bottomNavigationBar: ChurchBottomNav(
         items: [for (final tab in tabs) tab.item],
