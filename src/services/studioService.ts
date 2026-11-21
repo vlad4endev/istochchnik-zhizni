@@ -1,4 +1,5 @@
-import { query } from '../config/db';
+import { pool, query } from '../config/db';
+import { mergeReorder, toYmd } from './studioSetlistLogic';
 
 import type { SongRow } from './songService';
 
@@ -405,7 +406,7 @@ function mapSetlistRow(row: Record<string, unknown>): SetlistRow {
     id: String(row.id),
     member_id: Number(row.member_id),
     title: String(row.title),
-    event_date: row.event_date != null ? String(row.event_date).slice(0, 10) : null,
+    event_date: toYmd(row.event_date),
     is_public: Boolean(row.is_public),
     share_token: row.share_token != null ? String(row.share_token) : '',
     source_service_plan_id:
@@ -776,6 +777,9 @@ export async function updateSetlistItemMusicianNotes(
   return (result.rowCount ?? 0) > 0;
 }
 
+/** Сдвиг позиций на время перестановки (см. reorderSetlistItems). */
+const REORDER_POSITION_OFFSET = 1_000_000;
+
 export async function reorderSetlistItems(
   memberId: number,
   setlistId: number,
@@ -788,13 +792,39 @@ export async function reorderSetlistItems(
   if (check.rows.length === 0) {
     throw new Error('setlist not found');
   }
-  let pos = 0;
-  for (const id of orderedItemIds) {
-    await query(
-      `UPDATE setlist_items SET position = $1 WHERE id = $2 AND setlist_id = $3`,
-      [pos, id, setlistId]
+  if (!pool) throw new Error('Database pool not configured');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Блокируем сетлист: параллельные перестановки выстраиваются в очередь.
+    await client.query(`SELECT 1 FROM setlists WHERE id = $1 FOR UPDATE`, [setlistId]);
+    const current = await client.query(
+      `SELECT id FROM setlist_items WHERE setlist_id = $1 ORDER BY position, id`,
+      [setlistId]
     );
-    pos += 1;
+    const merged = mergeReorder(
+      current.rows.map((r: { id: string | number }) => Number(r.id)),
+      orderedItemIds
+    );
+    // UNIQUE (setlist_id, position) не отложенный: сначала уводим позиции в
+    // безопасный диапазон, затем выставляем итоговые — всё в одной транзакции.
+    await client.query(
+      `UPDATE setlist_items SET position = position + $2 WHERE setlist_id = $1`,
+      [setlistId, REORDER_POSITION_OFFSET]
+    );
+    await client.query(
+      `UPDATE setlist_items AS si
+          SET position = o.ord - 1
+         FROM unnest($2::bigint[]) WITH ORDINALITY AS o(id, ord)
+        WHERE si.id = o.id AND si.setlist_id = $1`,
+      [setlistId, merged]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
   }
 }
 

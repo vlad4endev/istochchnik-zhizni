@@ -101,6 +101,12 @@ class SetlistController extends ChangeNotifier {
   DateTime? staleSince;
   bool _disposed = false;
 
+  /// Порядок элементов, который сервер подтвердил последним.
+  List<int> _confirmedIds = const [];
+
+  /// Хвост очереди отправки порядка: запросы идут строго по одному.
+  Future<void> _tail = Future<void>.value();
+
   Setlist get setlist => detail.setlist;
   List<SetlistItem> get items => detail.items;
 
@@ -120,6 +126,7 @@ class SetlistController extends ChangeNotifier {
       final result = await source.performance(setlist.id);
       if (_disposed) return;
       detail = result.value;
+      _confirmedIds = [for (final i in items) i.id];
       staleSince = result.staleSince;
     } catch (_) {
       if (_disposed) return;
@@ -130,6 +137,7 @@ class SetlistController extends ChangeNotifier {
   }
 
   Future<void> addSong(int songId, {int? versionId}) async {
+    await _tail;
     await source.addItem(setlist.id, songId: songId, versionId: versionId);
     await load();
   }
@@ -140,6 +148,7 @@ class SetlistController extends ChangeNotifier {
     notifyListeners();
     try {
       await source.removeItem(setlist.id, item.id);
+      _confirmedIds = [for (final id in _confirmedIds) if (id != item.id) id];
     } catch (_) {
       detail = before;
       if (!_disposed) notifyListeners();
@@ -148,24 +157,55 @@ class SetlistController extends ChangeNotifier {
   }
 
   /// Перетаскивание в списке: индексы как у ReorderableListView.
-  Future<void> move(int oldIndex, int newIndex) async {
-    if (oldIndex < 0 || oldIndex >= items.length) return;
+  ///
+  /// Экран обновляется сразу, а порядок уходит на сервер по очереди: одновременно
+  /// летит не больше одного запроса, и каждый несёт актуальный порядок экрана
+  /// (быстрые подряд перестановки схлопываются в один запрос).
+  Future<void> move(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= items.length) return Future<void>.value();
     var target = newIndex;
     if (target > oldIndex) target -= 1;
     target = target.clamp(0, items.length - 1);
-    if (target == oldIndex) return;
-    final before = detail;
+    if (target == oldIndex) return Future<void>.value();
     final next = [...items];
     next.insert(target, next.removeAt(oldIndex));
     detail = detail.copyWith(items: next);
     notifyListeners();
+    final job = _tail.then((_) => _flushOrder());
+    _tail = job.then((_) {}, onError: (_) {});
+    return job;
+  }
+
+  Future<void> _flushOrder() async {
+    if (_disposed) return;
+    final ids = [for (final i in items) i.id];
+    if (_sameIds(ids, _confirmedIds)) return;
     try {
-      await source.reorder(setlist.id, [for (final i in next) i.id]);
+      await source.reorder(setlist.id, ids);
+      _confirmedIds = ids;
     } catch (_) {
-      detail = before;
-      if (!_disposed) notifyListeners();
+      _restoreConfirmedOrder();
       rethrow;
     }
+  }
+
+  /// Откат: возвращаем порядок, подтверждённый сервером (элементы — текущие, по id).
+  void _restoreConfirmedOrder() {
+    final byId = {for (final i in items) i.id: i};
+    final restored = <SetlistItem>[
+      for (final id in _confirmedIds) ?byId.remove(id),
+      ...byId.values,
+    ];
+    detail = detail.copyWith(items: restored);
+    if (!_disposed) notifyListeners();
+  }
+
+  static bool _sameIds(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   Future<void> rename(String title) => _patch(detail.setlist.copyWith(title: title.trim()), title: title.trim());

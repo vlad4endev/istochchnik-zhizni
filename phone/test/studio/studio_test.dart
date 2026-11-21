@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molitva/features/studio/data/studio_repository.dart';
 import 'package:molitva/features/studio/models/studio_models.dart';
@@ -62,7 +64,20 @@ class FakeStudio implements StudioSource {
   Future<void> reorder(int setlistId, List<int> ids) async {
     _need();
     calls.add('reorder:${ids.join(',')}');
+    reorderInFlight += 1;
+    if (reorderInFlight > maxReorderInFlight) maxReorderInFlight = reorderInFlight;
+    try {
+      final gate = reorderGates.isEmpty ? null : reorderGates.removeAt(0);
+      if (gate != null) await gate.future;
+    } finally {
+      reorderInFlight -= 1;
+    }
   }
+
+  /// Тест управляет моментом ответа сервера на перестановку: по одному Completer на запрос.
+  final List<Completer<void>> reorderGates = [];
+  int reorderInFlight = 0;
+  int maxReorderInFlight = 0;
 
   @override
   Future<List<MyVersion>> myVersions() async => const [];
@@ -227,6 +242,39 @@ void main() {
       s.fail = false;
       await c.remove(c.items.first);
       expect([for (final i in c.items) i.title], ['Б']);
+    });
+
+    test('быстрые перестановки идут по одному запросу, последний = порядок на экране', () async {
+      final s = studioWith([item(1, 'А'), item(2, 'Б'), item(3, 'В')]);
+      final gate1 = Completer<void>();
+      s.reorderGates.add(gate1);
+      final c = make(s);
+      await c.load();
+      final first = c.move(0, 3); // Б В А — запрос ушёл и ждёт ответа
+      await Future<void>.delayed(Duration.zero);
+      final second = c.move(2, 0); // А Б В
+      final third = c.move(0, 2); // Б А В
+      expect([for (final i in c.items) i.title], ['Б', 'А', 'В'], reason: 'экран реагирует сразу');
+      expect(s.calls, ['reorder:2,3,1'], reason: 'пока нет ответа, второй запрос не уходит');
+      gate1.complete();
+      await Future.wait([first, second, third]);
+      expect(s.maxReorderInFlight, 1);
+      expect(s.calls, ['reorder:2,3,1', 'reorder:2,1,3'], reason: 'остальные схлопнулись в один с итоговым порядком');
+      expect([for (final i in c.items) i.title], ['Б', 'А', 'В']);
+    });
+
+    test('сбой отправки возвращает порядок, подтверждённый сервером', () async {
+      final s = studioWith([item(1, 'А'), item(2, 'Б'), item(3, 'В')]);
+      final c = make(s);
+      await c.load();
+      await c.move(0, 3); // Б В А — подтверждено
+      s.fail = true;
+      await expectLater(c.move(2, 0), throwsException);
+      expect([for (final i in c.items) i.title], ['Б', 'В', 'А']);
+      s.fail = false;
+      await c.move(0, 2); // после сбоя очередь жива
+      expect([for (final i in c.items) i.title], ['В', 'Б', 'А']);
+      expect(s.calls.last, 'reorder:3,2,1');
     });
 
     test('добавление песни: с моей версией и без', () async {
