@@ -135,7 +135,8 @@ void main() {
       await tester.pumpWidget(_app(_page(_fake(), day: (_) async => throw StateError('net')), _session()));
       await tester.pumpAndSettle();
       expect(find.text('Повторить'), findsOneWidget);
-      expect(find.text('Моя молитвенная нужда'), findsOneWidget);
+      expect(find.text('Моя молитвенная нужда'), findsNothing);
+      expect(find.text('Поделиться нуждой с чатом'), findsOneWidget);
     });
 
     testWidgets('поделиться нуждой: короткий текст не отправить, длинный уходит в чат', (tester) async {

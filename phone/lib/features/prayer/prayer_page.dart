@@ -9,7 +9,6 @@ import '../../core/json.dart';
 import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
-import '../profile/profile_page.dart';
 import 'collection_page.dart';
 import 'data/prayer_source.dart';
 import 'logic/prayer_access.dart';
@@ -170,7 +169,7 @@ class _PrayerPageState extends State<PrayerPage> {
                           ? () => deleteNoteWithConfirm(context, _notes, NoteKind.urgentPrayer, _date)
                           : null,
                     ),
-                  _MyNeed(onShare: () => showShareNeedSheet(context, _source, context.read<SessionController>().user)),
+                  _ShareNeed(onShare: () => showShareNeedSheet(context, _source, context.read<SessionController>().user)),
                   if (access.canViewCollection || access.canManageNotes) ..._coordinatorTools(access),
                   ..._dayContent(),
                   if (access.canViewViewers && _viewers != null) _ViewersCard(viewers: _viewers!),
@@ -284,33 +283,21 @@ class _PrayerPageState extends State<PrayerPage> {
   }
 }
 
-/// Своя молитвенная нужда — в один тап от экрана молитвы, и возможность поделиться ею с чатом.
-class _MyNeed extends StatelessWidget {
-  const _MyNeed({required this.onShare});
+/// Поделиться нуждой с молитвенным чатом церкви.
+class _ShareNeed extends StatelessWidget {
+  const _ShareNeed({required this.onShare});
 
   final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
-    final need = context.watch<SessionController>().user?.prayerRequest.trim() ?? '';
     return ChurchCard(
       padding: EdgeInsets.zero,
-      child: Column(
-        children: [
-          ListRow(
-            leading: const IconTile(Icons.favorite_border_rounded, tone: Tone.violet),
-            title: 'Моя молитвенная нужда',
-            subtitle: need.isEmpty ? 'Не указана — расскажите, о чём молиться за вас' : need,
-            onTap: () => pushPage(context, const ProfilePage(focusNeed: true)),
-          ),
-          Divider(height: 1, color: context.palette.hairline),
-          ListRow(
-            leading: const IconTile(Icons.send_rounded, tone: Tone.teal, size: 34),
-            title: 'Поделиться нуждой с чатом',
-            subtitle: 'Отправим в молитвенный чат церкви',
-            onTap: onShare,
-          ),
-        ],
+      child: ListRow(
+        leading: const IconTile(Icons.send_rounded, tone: Tone.teal),
+        title: 'Поделиться нуждой с чатом',
+        subtitle: 'Отправим в молитвенный чат церкви',
+        onTap: onShare,
       ),
     );
   }
