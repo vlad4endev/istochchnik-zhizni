@@ -171,6 +171,101 @@ void main() {
     expect(find.text('Координаторам сбора'), findsNothing);
   });
 
+  group('кнопка «+» и «Отправить нужду»', () {
+    const fabTip = 'Срочная нужда и объявление: добавить или изменить';
+
+    testWidgets('«+» есть у координатора и админа, у участника и пастора нет', (tester) async {
+      for (final (role, coordinator, expected) in [
+        ('member', false, false),
+        ('pastor', false, false),
+        ('member', true, true),
+        ('admin', false, true),
+      ]) {
+        _size(tester);
+        await tester.pumpWidget(_app(_fake(), _session(role: role, coordinator: coordinator)));
+        await tester.pumpAndSettle();
+        expect(find.byTooltip(fabTip), expected ? findsOneWidget : findsNothing, reason: '$role/$coordinator');
+      }
+    });
+
+    testWidgets('«+» → меню → срочная нужда со сроком → появляется на главной', (tester) async {
+      _size(tester);
+      final s = _fake()..notesNow = CoordinatorNotes.empty;
+      await tester.pumpWidget(_app(s, _session(coordinator: true)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip(fabTip));
+      await tester.pumpAndSettle();
+      expect(find.text('Срочная молитвенная нужда'), findsOneWidget);
+      expect(find.text('Объявление'), findsOneWidget);
+      await tester.tap(find.text('Срочная молитвенная нужда'));
+      await tester.pumpAndSettle();
+      final publish = find.widgetWithText(InkWell, 'Опубликовать');
+      expect(tester.widget<InkWell>(publish).onTap, isNull, reason: 'без текста публиковать нельзя');
+      await tester.enterText(find.descendant(of: find.byType(BottomSheet), matching: find.byType(TextField)), 'Срочно помолитесь о Пете');
+      await tester.pump();
+      await tester.tap(find.text('До конца этой недели'));
+      await tester.pump();
+      await tester.tap(publish);
+      await tester.pumpAndSettle();
+      expect(s.calls.firstWhere((c) => c.startsWith('save:')), startsWith('save:urgent_prayer:Срочно помолитесь о Пете:week:'));
+      expect(find.text('Срочно помолитесь о Пете'), findsOneWidget);
+    });
+
+    testWidgets('ошибка сохранения видна в листе, текст не пропадает', (tester) async {
+      _size(tester);
+      final s = _fake()..notesNow = CoordinatorNotes.empty;
+      await tester.pumpWidget(_app(s, _session(coordinator: true)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip(fabTip));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Объявление'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.descendant(of: find.byType(BottomSheet), matching: find.byType(TextField)), 'Собрание в 18:00');
+      await tester.pump();
+      s.fail = true;
+      await tester.tap(find.widgetWithText(InkWell, 'Опубликовать'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Не удалось выполнить действие'), findsOneWidget);
+      expect(find.text('Собрание в 18:00'), findsOneWidget);
+    });
+
+    testWidgets('«Отправить нужду»: короткий текст не отправить, нормальный уходит в чат', (tester) async {
+      _size(tester);
+      final s = _fake();
+      await tester.pumpWidget(_app(s, _session()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Отправить нужду'));
+      await tester.pumpAndSettle();
+      final field = find.descendant(of: find.byType(BottomSheet), matching: find.byType(TextField));
+      final send = find.widgetWithText(InkWell, 'Отправить в чат');
+      await tester.enterText(field, 'abc');
+      await tester.pump();
+      expect(tester.widget<InkWell>(send).onTap, isNull, reason: 'меньше 5 символов');
+      await tester.enterText(field, 'Прошу молитвы о работе');
+      await tester.pump();
+      await tester.tap(send);
+      await tester.pumpAndSettle();
+      expect(s.calls, contains('submit:Прошу молитвы о работе'));
+      expect(find.text('Нужда отправлена в молитвенный чат'), findsOneWidget);
+    });
+
+    testWidgets('«Отправить нужду»: ошибка сервера показана, введённый текст остаётся', (tester) async {
+      _size(tester);
+      final s = _fake();
+      await tester.pumpWidget(_app(s, _session()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Отправить нужду'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.descendant(of: find.byType(BottomSheet), matching: find.byType(TextField)), 'Прошу молитвы о работе');
+      await tester.pump();
+      s.fail = true;
+      await tester.tap(find.widgetWithText(InkWell, 'Отправить в чат'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Не удалось выполнить действие'), findsOneWidget);
+      expect(find.text('Прошу молитвы о работе'), findsOneWidget);
+    });
+  });
+
   for (final (width, scale) in [(320.0, 1.0), (320.0, 2.0)]) {
     testWidgets('вёрстка главной: ширина $width, шрифт $scale', (tester) async {
       _size(tester, width: width);
@@ -180,6 +275,9 @@ void main() {
       await _scrollTo(tester, find.text('Заполнить нужды'));
       expect(tester.takeException(), isNull);
       await _scrollTo(tester, find.text('Пётр Сидоров'));
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byTooltip('Срочная нужда и объявление: добавить или изменить'));
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
   }

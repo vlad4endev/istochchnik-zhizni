@@ -536,8 +536,16 @@ class SecondaryButton extends StatelessWidget {
 
 /// Круглая винная кнопка «+» в правом нижнем углу.
 class ChurchFab extends StatelessWidget {
-  const ChurchFab({super.key, required this.onPressed, required this.tooltip, this.icon = Icons.add_rounded});
+  const ChurchFab({
+    super.key,
+    required this.onPressed,
+    required this.tooltip,
+    this.icon = Icons.add_rounded,
+    this.circle = false,
+  });
 
+  /// Круглая кнопка «+», как на главной сайта.
+  final bool circle;
   final VoidCallback onPressed;
   final String tooltip;
   final IconData icon;
@@ -552,12 +560,12 @@ class ChurchFab extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             gradient: const LinearGradient(colors: [Color(0xFFC0304F), ChurchColors.wine]),
-            borderRadius: BorderRadius.circular(Radii.card),
+            borderRadius: BorderRadius.circular(circle ? 29 : Radii.card),
             boxShadow: const [BoxShadow(color: Color(0x668A2742), offset: Offset(0, 12), blurRadius: 24, spreadRadius: -4)],
           ),
           child: Material(
             type: MaterialType.transparency,
-            borderRadius: BorderRadius.circular(Radii.card),
+            borderRadius: BorderRadius.circular(circle ? 29 : Radii.card),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: onPressed,

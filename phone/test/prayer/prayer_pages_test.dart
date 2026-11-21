@@ -94,22 +94,47 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('экран «Молитва»: участник', () {
-    testWidgets('видит блок «Молимся за отпавшего» и не видит инструментов координатора', (tester) async {
+    testWidgets('карточки как на сайте: член церкви, тема со стихом, служение, отпавший', (tester) async {
       _size(tester);
       final s = _fake()..notesNow = const CoordinatorNotes(urgent: CoordinatorNote(text: 'Помолитесь за Ивана'));
       await tester.pumpWidget(_app(_page(s), _session()));
       await tester.pumpAndSettle();
-      expect(find.text('СРОЧНАЯ МОЛИТВЕННАЯ НУЖДА'), findsOneWidget);
-      expect(find.text('Помолитесь за Ивана'), findsOneWidget);
-      expect(find.text('Изменить'), findsNothing, reason: 'участник не правит срочные нужды');
-      expect(find.text('КООРДИНАТОРАМ'), findsNothing);
+      expect(find.text('Сегодня молимся за члена церкви'), findsOneWidget);
+      expect(find.text('Иван Петров'), findsOneWidget);
+      expect(find.text('О здоровье семьи'), findsOneWidget);
       await _reveal(tester, find.text('Пётр Сидоров'));
-      expect(find.text('МОЛИМСЯ ЗА ОТПАВШЕГО'), findsOneWidget);
-      expect(find.text('Пётр Сидоров'), findsOneWidget);
+      expect(find.text('Единство'), findsOneWidget);
+      expect(find.text('Молодёжь'), findsOneWidget);
+      expect(find.text('Молимся за отпавшего'), findsOneWidget);
       expect(find.text('Отпавший — нуждается в молитве о возвращении'), findsOneWidget);
-      expect(find.textContaining('раздел открыли'), findsNothing);
       expect(s.calls, contains('visit'), reason: 'визит раздела фиксируется');
       expect(s.calls, isNot(contains('viewers')), reason: 'статистику участнику не грузим');
+    });
+
+    testWidgets('срочной нужды, объявления, «Моей нужды» и «поделиться» здесь нет — они на главной', (tester) async {
+      _size(tester);
+      final s = _fake()
+        ..notesNow = const CoordinatorNotes(
+          urgent: CoordinatorNote(text: 'Помолитесь за Ивана'),
+          announcement: CoordinatorNote(text: 'Собрание'),
+        );
+      await tester.pumpWidget(_app(_page(s), _session(coordinator: true)));
+      await tester.pumpAndSettle();
+      expect(find.text('Помолитесь за Ивана'), findsNothing);
+      expect(find.text('Срочная молитвенная нужда'), findsNothing);
+      expect(find.text('Объявление на главной'), findsNothing);
+      expect(find.text('Моя молитвенная нужда'), findsNothing);
+      expect(find.textContaining('Поделиться нуждой'), findsNothing);
+      expect(s.calls.where((c) => c.startsWith('notes')), isEmpty, reason: 'заметки здесь даже не грузим');
+    });
+
+    testWidgets('участник не видит «Сбор нужд», статистику и Telegram', (tester) async {
+      _size(tester);
+      await tester.pumpWidget(_app(_page(_fake()), _session()));
+      await tester.pumpAndSettle();
+      expect(find.text('Сбор нужд · очередь недели'), findsNothing);
+      expect(find.byTooltip('Рассылка молитвы в Telegram'), findsNothing);
+      expect(find.textContaining('раздел открыли'), findsNothing);
     });
 
     testWidgets('только отпавшие на этот день — это не «пусто»', (tester) async {
@@ -120,81 +145,108 @@ void main() {
       ));
       await tester.pumpAndSettle();
       expect(find.text('Пётр'), findsOneWidget);
-      expect(find.text('На эту дату записей нет'), findsNothing);
+      expect(find.text('Нет данных на эту дату'), findsNothing);
     });
 
     testWidgets('ничего нет — понятное пустое состояние', (tester) async {
       _size(tester);
       await tester.pumpWidget(_app(_page(_fake(), day: (_) async => {}), _session()));
       await tester.pumpAndSettle();
-      expect(find.text('На эту дату записей нет'), findsOneWidget);
+      expect(find.text('Нет данных на эту дату'), findsOneWidget);
+      expect(find.textContaining('Выберите другую дату в календаре'), findsOneWidget);
     });
 
-    testWidgets('ошибка загрузки дня — «Повторить», а свои инструменты остаются', (tester) async {
+    testWidgets('у члена церкви без текста — «Нет указанных нужд»', (tester) async {
+      _size(tester);
+      await tester.pumpWidget(_app(
+        _page(_fake(), day: (_) async => {'members': [{'id': 1, 'name': 'Иван Петров', 'prayer_request': ''}]}),
+        _session(),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.text('Нет указанных нужд'), findsOneWidget);
+    });
+
+    testWidgets('ошибка загрузки дня — «Повторить», календарь остаётся', (tester) async {
       _size(tester);
       await tester.pumpWidget(_app(_page(_fake(), day: (_) async => throw StateError('net')), _session()));
       await tester.pumpAndSettle();
       expect(find.text('Повторить'), findsOneWidget);
-      expect(find.text('Моя молитвенная нужда'), findsNothing);
-      expect(find.text('Поделиться нуждой с чатом'), findsOneWidget);
+      expect(find.text('СЕГОДНЯ'), findsOneWidget);
+    });
+  });
+
+  group('календарь молитвы', () {
+    testWidgets('плашка раскрывает неделю; выбор дня грузит его и сворачивает календарь', (tester) async {
+      _size(tester);
+      final loaded = <String>[];
+      await tester.pumpWidget(_app(
+        _page(_fake(), day: (iso) async {
+          loaded.add(iso);
+          return {};
+        }),
+        _session(),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.text('Весь месяц'), findsNothing);
+      await tester.tap(find.text('СЕГОДНЯ'));
+      await tester.pumpAndSettle();
+      expect(find.text('Весь месяц'), findsOneWidget);
+      expect(find.text('Пн'), findsOneWidget);
+      final today = DateTime.now();
+      final other = today.subtract(Duration(days: today.weekday == 1 ? -1 : 1));
+      await tester.tap(find.text('${other.day}'));
+      await tester.pumpAndSettle();
+      expect(loaded.length, 2, reason: 'новая дата загружена');
+      expect(loaded.last, isNot(loaded.first));
+      expect(find.text('Весь месяц'), findsNothing, reason: 'календарь свернулся');
     });
 
-    testWidgets('поделиться нуждой: короткий текст не отправить, длинный уходит в чат', (tester) async {
+    testWidgets('«Весь месяц» показывает месячный календарь, «Неделя» возвращает полоску', (tester) async {
       _size(tester);
-      final s = _fake();
-      await tester.pumpWidget(_app(_page(s), _session()));
+      await tester.pumpWidget(_app(_page(_fake()), _session()));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Поделиться нуждой с чатом'));
+      await tester.tap(find.text('СЕГОДНЯ'));
       await tester.pumpAndSettle();
-      Finder send() => find.widgetWithText(InkWell, 'Отправить в чат');
-      await tester.enterText(find.byType(TextField), 'abc');
-      await tester.pump();
-      expect(tester.widget<InkWell>(send()).onTap, isNull, reason: 'меньше 5 символов');
-      await tester.enterText(find.byType(TextField), 'Прошу молитвы о работе');
-      await tester.pump();
-      await tester.tap(send());
+      await tester.tap(find.text('Весь месяц'));
       await tester.pumpAndSettle();
-      expect(s.calls, contains('submit:Прошу молитвы о работе'));
-      expect(find.text('Нужда отправлена в молитвенный чат'), findsOneWidget);
-    });
-
-    testWidgets('поделиться нуждой: ошибка сервера показана, текст сохранён', (tester) async {
-      _size(tester);
-      final s = _fake()..fail = true;
-      await tester.pumpWidget(_app(_page(s), _session()));
+      expect(find.byType(CalendarDatePicker), findsOneWidget);
+      expect(find.text('Неделя'), findsOneWidget);
+      await tester.tap(find.text('Неделя'));
       await tester.pumpAndSettle();
-      // fail=true ломает и registerVisit/notes — они молча игнорируются
-      await tester.tap(find.text('Поделиться нуждой с чатом'));
+      expect(find.byType(CalendarDatePicker), findsNothing);
+      await tester.tap(find.byTooltip('Свернуть календарь'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'Прошу молитвы о работе');
-      await tester.pump();
-      await tester.tap(find.widgetWithText(InkWell, 'Отправить в чат'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Не удалось выполнить действие'), findsOneWidget);
-      expect(find.text('Прошу молитвы о работе'), findsOneWidget);
+      expect(find.text('Весь месяц'), findsNothing);
     });
   });
 
   group('экран «Молитва»: координатор, пастор, админ', () {
-    testWidgets('координатор: очередь, срочная нужда, объявление; без Telegram и статистики', (tester) async {
+    testWidgets('координатор: «Сбор нужд · очередь недели», без Telegram и статистики', (tester) async {
       _size(tester);
       await tester.pumpWidget(_app(_page(_fake()), _session(coordinator: true)));
       await tester.pumpAndSettle();
-      expect(find.text('КООРДИНАТОРАМ'), findsOneWidget);
       expect(find.text('Сбор нужд · очередь недели'), findsOneWidget);
-      expect(find.text('Срочная молитвенная нужда'), findsOneWidget);
-      expect(find.text('Объявление на главной'), findsOneWidget);
-      expect(find.text('Рассылка в Telegram'), findsNothing);
+      expect(find.byTooltip('Рассылка молитвы в Telegram'), findsNothing);
       expect(find.textContaining('раздел открыли'), findsNothing);
     });
 
-    testWidgets('пастор: очередь и статистика посещений, но не правка заметок', (tester) async {
+    testWidgets('«Сбор нужд» открывает очередь', (tester) async {
+      _size(tester);
+      await tester.pumpWidget(_app(_page(_fake()), _session(role: 'pastor')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Сбор нужд · очередь недели'));
+      await tester.pumpAndSettle();
+      expect(find.text('Автораспределить кураторов'), findsNothing, reason: 'это подсказка кнопки, не текст');
+      expect(find.byType(CollectionPage), findsOneWidget);
+    });
+
+    testWidgets('пастор: очередь и статистика посещений', (tester) async {
       _size(tester);
       final s = _fake();
       await tester.pumpWidget(_app(_page(s), _session(role: 'pastor')));
       await tester.pumpAndSettle();
       expect(find.text('Сбор нужд · очередь недели'), findsOneWidget);
-      expect(find.text('Объявление на главной'), findsNothing);
+      expect(find.byTooltip('Рассылка молитвы в Telegram'), findsNothing);
       await _reveal(tester, find.text('Посмотреть список'));
       expect(find.text('Сегодня раздел открыли 2 человека'), findsOneWidget);
       await tester.tap(find.text('Посмотреть список'));
@@ -203,13 +255,12 @@ void main() {
       expect(find.text('Орлова Анна'), findsOneWidget);
     });
 
-    testWidgets('админ: рассылка в Telegram — превью, подтверждение и отправка', (tester) async {
+    testWidgets('админ: значок Telegram рядом с «Сбором нужд» — превью, подтверждение, отправка', (tester) async {
       _size(tester);
       final s = _fake();
       await tester.pumpWidget(_app(_page(s), _session(role: 'admin')));
       await tester.pumpAndSettle();
-      await _reveal(tester, find.text('Рассылка в Telegram'));
-      await tester.tap(find.text('Рассылка в Telegram'));
+      await tester.tap(find.byTooltip('Рассылка молитвы в Telegram'));
       await tester.pumpAndSettle();
       expect(find.text('Молитва дня: Иван Петров'), findsOneWidget);
       await tester.tap(find.widgetWithText(InkWell, 'Отправить сейчас'));
@@ -221,75 +272,24 @@ void main() {
       expect(s.calls.where((c) => c.startsWith('tg-send')).length, 1);
       expect(find.text('Рассылка отправлена: 5'), findsOneWidget);
     });
-
-    testWidgets('срочная нужда: публикация со сроком «до конца недели»', (tester) async {
-      _size(tester);
-      final s = _fake();
-      await tester.pumpWidget(_app(_page(s), _session(coordinator: true)));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Срочная молитвенная нужда'));
-      await tester.pumpAndSettle();
-      final publish = find.widgetWithText(InkWell, 'Опубликовать');
-      expect(tester.widget<InkWell>(publish).onTap, isNull, reason: 'без текста публиковать нельзя');
-      await tester.enterText(find.byType(TextField), 'Срочно помолитесь о Пете');
-      await tester.pump();
-      await tester.tap(find.text('До конца этой недели'));
-      await tester.pump();
-      await tester.tap(publish);
-      await tester.pumpAndSettle();
-      final save = s.calls.firstWhere((c) => c.startsWith('save:'));
-      expect(save, startsWith('save:urgent_prayer:Срочно помолитесь о Пете:week:'));
-      expect(find.text('Срочно помолитесь о Пете'), findsOneWidget, reason: 'карточка появилась на экране');
-    });
-
-    testWidgets('удаление срочной нужды требует подтверждения', (tester) async {
-      _size(tester);
-      final s = _fake()..notesNow = const CoordinatorNotes(urgent: CoordinatorNote(text: 'Срочно!'));
-      await tester.pumpWidget(_app(_page(s), _session(coordinator: true)));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Удалить'));
-      await tester.pumpAndSettle();
-      expect(find.text('Удалить срочную нужду?'), findsOneWidget);
-      await tester.tap(find.widgetWithText(TextButton, 'Отмена'));
-      await tester.pumpAndSettle();
-      expect(s.calls.where((c) => c.startsWith('delete')), isEmpty);
-      await tester.tap(find.text('Удалить'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(TextButton, 'Удалить').last);
-      await tester.pumpAndSettle();
-      expect(s.calls, contains('delete:urgent_prayer'));
-      expect(find.text('Срочно!'), findsNothing);
-    });
-
-    testWidgets('ошибка сохранения заметки показана внутри листа', (tester) async {
-      _size(tester);
-      final s = _fake();
-      await tester.pumpWidget(_app(_page(s), _session(coordinator: true)));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Объявление на главной'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'Собрание в 18:00');
-      await tester.pump();
-      s.fail = true;
-      await tester.tap(find.widgetWithText(InkWell, 'Опубликовать'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Не удалось выполнить действие'), findsOneWidget);
-      expect(find.text('Собрание в 18:00'), findsOneWidget, reason: 'введённый текст не пропал');
-    });
   });
 
   group('вёрстка без переполнений', () {
     for (final (width, scale) in [(320.0, 1.0), (320.0, 2.0), (390.0, 1.3)]) {
       testWidgets('«Молитва» админа: ширина $width, шрифт $scale', (tester) async {
         _size(tester, width: width);
-        final s = _fake()
-          ..notesNow = CoordinatorNotes(
-            urgent: CoordinatorNote(text: 'Очень длинная срочная молитвенная нужда ' * 8),
-            announcement: CoordinatorNote(text: 'Длинное объявление ' * 10),
-          );
+        final s = _fake();
         await tester.pumpWidget(_app(_page(s), _session(role: 'admin', coordinator: true), width: width, scale: scale));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
+        await tester.tap(find.text('СЕГОДНЯ'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.text('Весь месяц'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.byTooltip('Свернуть календарь'));
+        await tester.pumpAndSettle();
         await _reveal(tester, find.text('Посмотреть список'));
         expect(tester.takeException(), isNull);
       });

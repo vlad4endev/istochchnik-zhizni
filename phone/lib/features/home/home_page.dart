@@ -13,7 +13,6 @@ import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 import '../bible/bible_page.dart';
 import '../broadcast/broadcast_page.dart';
-import '../profile/profile_page.dart';
 import '../events/events_page.dart';
 import '../chats/thread_page.dart';
 import '../prayer/collection_page.dart';
@@ -25,6 +24,8 @@ import '../prayer/prayer_page.dart';
 import '../prayer/widgets/home_blocks.dart';
 import '../prayer/widgets/note_card.dart';
 import '../prayer/widgets/note_editor.dart';
+import '../prayer/widgets/note_menu.dart';
+import '../prayer/widgets/share_need_sheet.dart';
 import '../prayer/widgets/sheet_frame.dart';
 import '../sermons/sermons_page.dart';
 import '../songbook/songbook_page.dart';
@@ -69,6 +70,11 @@ class _HomePageState extends State<HomePage> {
   Future<void> _editNote(NoteKind kind) async {
     final changed = await showNoteEditor(context, _extras.notesController, kind, DateTime.now());
     if (changed && mounted) _extras.notesController.load(DateTime.now());
+  }
+
+  Future<void> _openNoteMenu() async {
+    final kind = await showNoteMenu(context, _extras.notes);
+    if (kind != null && mounted) await _editNote(kind);
   }
 
   Future<void> _message(Birthday person) async {
@@ -163,15 +169,23 @@ class _HomePageState extends State<HomePage> {
         onTap: () => pushPage(context, const BroadcastPage()),
       ),
       FeatureTile(
-        icon: Icons.favorite_border_rounded,
-        label: 'Моя нужда',
-        tone: Tone.violet,
+        icon: Icons.volunteer_activism_outlined,
+        label: 'Отправить нужду',
+        tone: Tone.rose,
         centered: true,
-        onTap: () => pushPage(context, const ProfilePage(focusNeed: true)),
+        onTap: () => showShareNeedSheet(context, _extras.source, session.user),
       ),
     ];
+    final canManageNotes = PrayerAccess(session.user).canManageNotes;
     return ChurchPage(
       title: 'Главная',
+      floatingActionButton: canManageNotes
+          ? ChurchFab(
+              circle: true,
+              tooltip: 'Срочная нужда и объявление: добавить или изменить',
+              onPressed: _openNoteMenu,
+            )
+          : null,
       subtitle: name.isEmpty
           ? DateFormat('EEEE, d MMMM', 'ru').format(DateTime.now())
           : 'Здравствуйте, $name · ${DateFormat('EEEE, d MMMM', 'ru').format(DateTime.now())}',
@@ -183,6 +197,8 @@ class _HomePageState extends State<HomePage> {
           listenable: Listenable.merge([_extras, _extras.notesController]),
           builder: (context, _) => SheetList(
           onRefresh: _load,
+          // Запас снизу: кнопка «+» не должна закрывать последнюю карточку.
+          padding: EdgeInsets.fromLTRB(Space.lg, 18, Space.lg, canManageNotes ? 96 : 32),
           children: [
             TileGrid(children: tiles),
             if (live) _LiveCard(broadcast: asMap(_broadcast['broadcast'])),
