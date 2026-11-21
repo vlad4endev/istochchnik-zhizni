@@ -221,3 +221,21 @@ String programText(PlanView plan) {
   }
   return buf.toString().trimRight();
 }
+
+/// Подставляет названия и тональность песен из песенника туда, где программа пришла без них
+/// (запасной путь загрузки). Блоки, у которых название уже есть, не трогаем.
+PlanView fillSongTitles(PlanView plan, Map<int, ({String title, String key})> songs) {
+  var changed = false;
+  final blocks = [
+    for (final b in plan.blocks)
+      if (b.songId != null && b.songTitle.isEmpty && songs[b.songId] != null)
+        () {
+          changed = true;
+          final song = songs[b.songId]!;
+          return b.withSong(title: song.title, key: song.key);
+        }()
+      else
+        b,
+  ];
+  return changed ? plan.withBlocks(blocks) : plan;
+}

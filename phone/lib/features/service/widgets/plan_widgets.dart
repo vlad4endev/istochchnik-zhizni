@@ -132,8 +132,15 @@ class TimelineBlock extends StatelessWidget {
                             ),
                           ),
                         if (details.speaker.isNotEmpty) _Line(icon: Icons.person_outline_rounded, text: details.speaker),
-                        if (details.songLine.isNotEmpty)
-                          _Action(icon: Icons.music_note_outlined, text: details.songLine, hint: onSong == null ? null : 'Открыть текст и аккорды', busy: songBusy, onTap: onSong),
+                        // Название песни неизвестно (запасной режим), а переход возможен — всё равно даём открыть.
+                        if (details.songLine.isNotEmpty || onSong != null)
+                          _Action(
+                            icon: Icons.music_note_outlined,
+                            text: details.songLine.isNotEmpty ? details.songLine : 'Открыть песню',
+                            hint: onSong == null ? null : 'Открыть текст и аккорды',
+                            busy: songBusy,
+                            onTap: onSong,
+                          ),
                         if (details.subline.isNotEmpty) _Line(icon: Icons.edit_note_rounded, text: details.subline),
                         if (details.scripture.isNotEmpty)
                           _Action(icon: Icons.menu_book_outlined, text: details.scripture, hint: onScripture == null ? null : 'Открыть в Библии', onTap: onScripture),

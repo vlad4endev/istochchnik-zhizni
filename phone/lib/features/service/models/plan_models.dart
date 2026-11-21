@@ -91,6 +91,21 @@ class PlanBlock {
   final String songTitle;
   final String songKey;
   final Map<String, dynamic> content;
+
+  PlanBlock withSong({required String title, String key = ''}) => PlanBlock(
+        id: id,
+        order: order,
+        title: this.title,
+        durationMinutes: durationMinutes,
+        kind: kind,
+        typeName: typeName,
+        assignedId: assignedId,
+        assignedName: assignedName,
+        songId: songId,
+        songTitle: title,
+        songKey: key,
+        content: content,
+      );
 }
 
 class BroadcastPerson {
@@ -128,6 +143,17 @@ class PlanView {
   final String preacherName;
   final List<BroadcastPerson> broadcast;
   final LinkedSermon? sermon;
+
+  PlanView withBlocks(List<PlanBlock> next) => PlanView(
+        summary: summary,
+        blocks: next,
+        notes: notes,
+        leaderName: leaderName,
+        preacherName: preacherName,
+        broadcast: broadcast,
+        sermon: sermon,
+        namesComplete: namesComplete,
+      );
 
   /// false — программа загружена запасным путём: названий песен и имён может не хватать.
   final bool namesComplete;

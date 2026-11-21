@@ -39,10 +39,13 @@ class ScheduleController extends ChangeNotifier {
   List<AgendaItem> agenda = const [];
   Set<Ministry> failedMinistries = {};
   DateTime? staleSince;
-  final Set<int> _busy = {};
+  /// Ключ — служение и id: в медиа и музыке номера назначений считаются отдельно и могут совпасть.
+  final Set<String> _busy = {};
+
+  static String _busyKey(AgendaItem item) => '${item.ministry.name}:${item.assignmentId}';
   bool _disposed = false;
 
-  bool isBusy(AgendaItem item) => item.assignmentId != null && _busy.contains(item.assignmentId);
+  bool isBusy(AgendaItem item) => item.assignmentId != null && _busy.contains(_busyKey(item));
 
   DateTime get today => dateOnly(_clock());
 
@@ -138,7 +141,8 @@ class ScheduleController extends ChangeNotifier {
   /// Подтвердить или отказаться. Экран отвечает сразу, при ошибке сети откат и исключение для сообщения.
   Future<void> answer(AgendaItem item, AssignmentStatus status) async {
     final id = item.assignmentId;
-    if (id == null || !_busy.add(id)) return;
+    final key = _busyKey(item);
+    if (id == null || !_busy.add(key)) return;
     final before = agenda;
     agenda = [for (final i in agenda) i.assignmentId == id && i.ministry == item.ministry ? i.withStatus(status) : i];
     notifyListeners();
@@ -148,7 +152,7 @@ class ScheduleController extends ChangeNotifier {
       agenda = before;
       rethrow;
     } finally {
-      _busy.remove(id);
+      _busy.remove(key);
       if (!_disposed) notifyListeners();
     }
   }

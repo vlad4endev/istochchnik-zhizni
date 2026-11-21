@@ -16,10 +16,13 @@ enum _Tab { upcoming, past }
 
 /// Программы богослужений: предстоящие с ближайшей сверху и прошедшие.
 class ServicePage extends StatefulWidget {
-  const ServicePage({super.key, this.source});
+  const ServicePage({super.key, this.source, this.songTitles});
 
   /// Для тестов; в приложении источник создаётся из сессии.
   final PlanSource? source;
+
+  /// Для тестов: названия песен вместо чтения копии песенника.
+  final Future<Map<int, ({String title, String key})>> Function()? songTitles;
 
   @override
   State<ServicePage> createState() => _ServicePageState();
@@ -43,7 +46,7 @@ class _ServicePageState extends State<ServicePage> {
     super.dispose();
   }
 
-  void _open(PlanSummary plan) => pushPage(context, PlanPage(summary: plan, source: _source));
+  void _open(PlanSummary plan) => pushPage(context, PlanPage(summary: plan, source: _source, songTitles: widget.songTitles));
 
   @override
   Widget build(BuildContext context) {

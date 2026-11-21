@@ -77,14 +77,47 @@ class PlanRepository implements PlanSource {
     } catch (_) {}
   }
 
+  /// В копию на телефон идёт только нужное для показа. Токен редактирования (edit_token) не нужен приложению
+  /// и позволяет менять программу, поэтому на диск не попадает.
+  static const _cachedPlanFields = [
+    'id',
+    'service_date',
+    'start_time',
+    'status',
+    'is_archived',
+    'blocks_count',
+    'template_name',
+    'total_duration_minutes',
+    'leader_member_id',
+    'preacher_member_id',
+    'current_block_id',
+    'share_token',
+  ];
+
+  static List<Map<String, dynamic>> stripSecrets(List<dynamic> raw) => [
+        for (final item in raw)
+          {for (final key in _cachedPlanFields) if (asMap(item).containsKey(key)) key: asMap(item)[key]},
+      ];
+
   List<PlanSummary> _summaries(Object? raw) => [for (final item in asList(raw)) ?PlanSummary.fromJson(asMap(item))];
+
+  /// Копии, записанные прежней версией приложения, содержали токены редактирования: убираем их сразу,
+  /// не дожидаясь успешной загрузки.
+  Future<void> _scrubOldCopy() async {
+    final cached = await _read('list');
+    final raw = cached?.data;
+    if (raw is List && raw.any((item) => asMap(item).containsKey('edit_token'))) {
+      await _write('list', stripSecrets(raw));
+    }
+  }
 
   @override
   Future<Loaded<List<PlanSummary>>> plans(DateTime from, DateTime to) async {
+    await _scrubOldCopy();
     try {
       final response = await session.dio.get<Object?>('/api/service-plans', queryParameters: {'from': _ymd(from), 'to': _ymd(to)});
       final raw = asList(response.data);
-      await _write('list', raw);
+      await _write('list', stripSecrets(raw));
       return Loaded(_summaries(raw));
     } catch (_) {
       final cached = await _read('list');

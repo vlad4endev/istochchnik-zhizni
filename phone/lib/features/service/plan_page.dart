@@ -18,10 +18,13 @@ import 'widgets/plan_widgets.dart';
 
 /// Программа одного служения: ход по времени, мои блоки, песни и Писание — в одно нажатие.
 class PlanPage extends StatefulWidget {
-  const PlanPage({super.key, required this.summary, required this.source});
+  const PlanPage({super.key, required this.summary, required this.source, this.songTitles});
 
   final PlanSummary summary;
   final PlanSource source;
+
+  /// Названия песен из песенника на телефоне. Для тестов; по умолчанию читается копия песенника.
+  final Future<Map<int, ({String title, String key})>> Function()? songTitles;
 
   @override
   State<PlanPage> createState() => _PlanPageState();
@@ -47,9 +50,10 @@ class _PlanPageState extends State<PlanPage> {
     });
     try {
       final result = await widget.source.view(widget.summary);
+      final plan = await _withSongTitles(result.value);
       if (!mounted) return;
       setState(() {
-        _plan = result.value;
+        _plan = plan;
         _stale = result.staleSince;
         _loading = false;
       });
@@ -59,6 +63,23 @@ class _PlanPageState extends State<PlanPage> {
         _loading = false;
         _error = isNotFound(error) ? 'Эту программу удалили или она больше недоступна.' : describeDio(error);
       });
+    }
+  }
+
+  /// Если в программе нет названий песен, берём их из песенника на телефоне (без сети).
+  Future<Map<int, ({String title, String key})>> _songsFromCache() async {
+    final songs = (await SongbookRepository(context.read<SessionController>()).readCache())?.songs ?? const [];
+    return {for (final s in songs) s.id: (title: s.title, key: s.key ?? '')};
+  }
+
+  Future<PlanView> _withSongTitles(PlanView plan) async {
+    if (!plan.blocks.any((b) => b.songId != null && b.songTitle.isEmpty)) return plan;
+    try {
+      final loader = widget.songTitles ?? _songsFromCache;
+      // Программа должна открыться, даже если файл песенника читается медленно.
+      return fillSongTitles(plan, await loader().timeout(const Duration(seconds: 3)));
+    } catch (_) {
+      return plan;
     }
   }
 
