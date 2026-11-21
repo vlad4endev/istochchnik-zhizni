@@ -65,13 +65,6 @@ class ChurchApi {
 
   Future<Map<String, dynamic>> stories() async => asMap(await get('/api/stories'));
 
-  Future<List<dynamic>> books() async =>
-      asList(asMap(await get('/api/bible/books', query: {'translation': 'synodal'}))['books']);
-
-  Future<Map<String, dynamic>> chapter(String book, int chapter) async => asMap(
-        await get('/api/bible/chapter/synodal/$book/$chapter'),
-      );
-
   Future<List<dynamic>> conversations() async => asList(await get('/api/messenger/conversations'));
 
   Future<int> unread() async => asInt(asMap(await get('/api/messenger/unread-count'))['count']);

@@ -151,6 +151,7 @@ class ListRow extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
+    this.subtitleWidget,
     this.leading,
     this.trailing,
     this.meta,
@@ -163,6 +164,9 @@ class ListRow extends StatelessWidget {
 
   final String title;
   final String? subtitle;
+
+  /// Своё содержимое вместо строки подзаголовка (например, текст с подсветкой найденных слов).
+  final Widget? subtitleWidget;
   final Widget? leading;
   final Widget? trailing;
 
@@ -206,7 +210,9 @@ class ListRow extends StatelessWidget {
                       ],
                     ],
                   ),
-                  if ((subtitle ?? '').isNotEmpty)
+                  if (subtitleWidget != null)
+                    Padding(padding: const EdgeInsets.only(top: 4), child: subtitleWidget)
+                  else if ((subtitle ?? '').isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
