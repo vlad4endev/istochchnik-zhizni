@@ -1,8 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../calls/logic/meeting_logic.dart';
-import '../calls/join_meeting_page.dart';
 import '../calls/widgets/meeting_sheet.dart';
 import '../../core/church_api.dart';
 import '../../core/dates.dart';
@@ -108,19 +106,9 @@ class _ChatsPageState extends State<ChatsPage> {
       title: 'Чаты',
       actions: [
         HeaderButton(
-          icon: Icons.link_rounded,
-          tooltip: 'Войти по ссылке',
-          onPressed: () => showJoinByLinkSheet(context),
-        ),
-        HeaderButton(
-          icon: Icons.videocam_outlined,
-          tooltip: 'Видеовстреча',
-          onPressed: () => showMeetingSheet(context, media: MeetingMedia.video),
-        ),
-        HeaderButton(
-          icon: Icons.mic_none_rounded,
-          tooltip: 'Аудиовстреча',
-          onPressed: () => showMeetingSheet(context, media: MeetingMedia.audio),
+          icon: Icons.video_call_outlined,
+          tooltip: 'Конференция',
+          onPressed: () => showMeetingKindSheet(context),
         ),
         HeaderButton(
           icon: Icons.edit_outlined,

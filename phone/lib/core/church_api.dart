@@ -251,8 +251,9 @@ class ChurchApi {
     await post('/api/calls/$callId/decline');
   }
 
-  Future<void> endCall(String callId) async {
-    await post('/api/calls/$callId/end', data: {'endForAll': true});
+  /// [endForAll] — завершить встречу для всех (может только организатор); иначе просто выйти.
+  Future<void> endCall(String callId, {bool endForAll = true}) async {
+    await post('/api/calls/$callId/end', data: {'endForAll': endForAll});
   }
 }
 

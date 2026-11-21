@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 
 void main() {
   for (final (width, scale) in [(320.0, 1.0), (320.0, 2.0), (390.0, 1.3)]) {
-    testWidgets('шапка «Чаты»: ссылка, видео, аудио, новый чат — ширина $width, шрифт $scale', (tester) async {
+    testWidgets('шапка «Чаты»: одна кнопка «Конференция» и новый чат — ширина $width, шрифт $scale', (tester) async {
       tester.view.physicalSize = Size(width, 700);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -23,14 +23,23 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.byTooltip('Войти по ссылке'), findsOneWidget);
-      expect(find.byTooltip('Видеовстреча'), findsOneWidget);
-      expect(find.byTooltip('Аудиовстреча'), findsOneWidget);
+      expect(find.byTooltip('Конференция'), findsOneWidget, reason: 'одна кнопка вместо трёх');
+      expect(find.byTooltip('Видеовстреча'), findsNothing);
+      expect(find.byTooltip('Аудиовстреча'), findsNothing);
+      expect(find.byTooltip('Войти по ссылке'), findsNothing);
       expect(find.byTooltip('Новое сообщение'), findsOneWidget);
-      await tester.tap(find.byTooltip('Видеовстреча'));
-      await tester.pump(const Duration(milliseconds: 600));
+      await tester.tap(find.byTooltip('Конференция'));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+      expect(find.byKey(const ValueKey('meeting-kind-video')), findsOneWidget);
+      expect(find.byKey(const ValueKey('meeting-kind-audio')), findsOneWidget);
+      expect(find.byKey(const ValueKey('meeting-kind-join')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('meeting-kind-video')));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 400));
+      }
       expect(find.text('Создать видеовстречу'), findsWidgets);
-      expect(find.byKey(const ValueKey('meeting-cam')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }

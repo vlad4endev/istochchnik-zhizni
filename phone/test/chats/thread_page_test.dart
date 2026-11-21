@@ -96,18 +96,18 @@ void main() {
     UrlLauncherPlatform.instance = launcher;
   });
 
-  group('конференции', () {
-    testWidgets('кнопка в шапке открывает выбор видео/аудиоконференции, затем форму', (tester) async {
+  group('звонки из чата', () {
+    testWidgets('конференций в шапке чата нет; в личном чате есть аудио- и видеозвонок', (tester) async {
+      await _open(tester, _chat(), type: 'private');
+      expect(find.byTooltip('Конференция по ссылке'), findsNothing);
+      expect(find.byTooltip('Видеозвонок'), findsOneWidget);
+      expect(find.byTooltip('Позвонить'), findsOneWidget);
+    });
+
+    testWidgets('в группе — только обычный звонок, без видеозвонка и конференций', (tester) async {
       await _open(tester, _chat());
-      await tester.tap(find.byTooltip('Конференция по ссылке'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('meeting-kind-video')), findsOneWidget);
-      expect(find.byKey(const ValueKey('meeting-kind-audio')), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('meeting-kind-audio')));
-      await tester.pumpAndSettle();
-      expect(find.text('Создать аудиовстречу'), findsWidgets);
-      expect(find.text('Название встречи'), findsOneWidget);
-      expect(find.byKey(const ValueKey('meeting-cam')), findsNothing);
+      expect(find.byTooltip('Конференция по ссылке'), findsNothing);
+      expect(find.byTooltip('Видеозвонок'), findsNothing);
     });
   });
 
