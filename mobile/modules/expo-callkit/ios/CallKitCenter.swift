@@ -56,6 +56,11 @@ final class CallKitCenter: NSObject, CXProviderDelegate, PKPushRegistryDelegate 
       config.maximumCallsPerCallGroup = 1
       config.supportedHandleTypes = [.generic]
       config.includesCallsInRecents = false
+      // Своя мелодия: файл лежит в основном бандле (его кладёт плагин expo-notifications).
+      // Если файла нет, CallKit играет системный рингтон.
+      if Bundle.main.url(forResource: "call_ringtone", withExtension: "wav") != nil {
+        config.ringtoneSound = "call_ringtone.wav"
+      }
       let provider = CXProvider(configuration: config)
       provider.setDelegate(self, queue: nil)
       self.provider = provider

@@ -32,17 +32,34 @@ data class IncomingCall(
  * кнопками «Принять» и «Отклонить». Звонок и вибрация повторяются, пока уведомление не снято.
  */
 object CallNotifications {
-  /** Канал создаётся один раз и потом не меняется, поэтому у него собственное имя. */
-  const val CHANNEL_ID = "incoming_calls_fullscreen"
+  /**
+   * Канал создаётся один раз и потом не меняется (звук канала после создания не поменять),
+   * поэтому при смене мелодии у канала новое имя, а старый удаляется.
+   */
+  const val CHANNEL_ID = "incoming_calls_v2"
+  private const val OLD_CHANNEL_ID = "incoming_calls_fullscreen"
+  /** Файл мелодии: res/raw/call_ringtone.wav (его кладёт плагин expo-notifications из assets/sounds). */
+  private const val RINGTONE_RES = "call_ringtone"
   private const val TAG = "incoming_call"
   private const val SCHEME = "istochnik"
   private const val HOST = "incoming-call"
 
   private fun notificationId(callId: String): Int = callId.hashCode()
 
+  /** Своя мелодия звонка; если файла нет в сборке — системный рингтон. */
+  private fun ringtoneUri(context: Context): Uri {
+    val res = context.resources.getIdentifier(RINGTONE_RES, "raw", context.packageName)
+    return if (res != 0) {
+      Uri.parse("android.resource://${context.packageName}/$res")
+    } else {
+      RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+    }
+  }
+
   fun ensureChannel(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    manager.deleteNotificationChannel(OLD_CHANNEL_ID)
     if (manager.getNotificationChannel(CHANNEL_ID) != null) return
     val channel = NotificationChannel(CHANNEL_ID, "Входящие звонки", NotificationManager.IMPORTANCE_HIGH).apply {
       description = "Полноэкранный экран входящего аудио- и видеозвонка"
@@ -50,7 +67,7 @@ object CallNotifications {
       enableVibration(true)
       vibrationPattern = longArrayOf(0, 900, 700, 900, 700)
       setBypassDnd(false)
-      val ringtone: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+      val ringtone: Uri = ringtoneUri(context)
       val attrs = AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
