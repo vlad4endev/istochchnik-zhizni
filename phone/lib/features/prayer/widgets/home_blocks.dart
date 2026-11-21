@@ -129,15 +129,40 @@ class _Row extends StatelessWidget {
   }
 }
 
-String birthdayWhen(DateTime date, DateTime now) {
-  final today = DateTime(now.year, now.month, now.day);
-  final diff = DateTime(date.year, date.month, date.day).difference(today).inDays;
-  if (diff == 0) return 'Сегодня';
-  if (diff == 1) return 'Завтра';
-  return DateFormat('EEEE, d MMMM', 'ru').format(date);
+/// Подпись даты именинника: «пт, 21 ноября».
+String birthdayDate(DateTime date) => DateFormat('EEE, d MMMM', 'ru').format(date);
+
+enum BirthdayStatus { today, tomorrow, soon }
+
+BirthdayStatus birthdayStatus(DateTime date, DateTime now) {
+  final diff = DateTime(date.year, date.month, date.day).difference(DateTime(now.year, now.month, now.day)).inDays;
+  return diff <= 0 ? BirthdayStatus.today : (diff == 1 ? BirthdayStatus.tomorrow : BirthdayStatus.soon);
 }
 
-/// Дни рождения ближайшей недели; тап по человеку — написать ему.
+const _avatarPalettes = [
+  (Color(0xFFFDE8E8), Color(0xFF7D3640)),
+  (Color(0xFFEEEDFE), Color(0xFF4A3AAA)),
+  (Color(0xFFE1F5EE), Color(0xFF0B6E56)),
+  (Color(0xFFFAEEDA), Color(0xFF854F0B)),
+  (Color(0xFFF4C0D1), Color(0xFF72243E)),
+];
+
+/// Цвет аватара зависит только от имени — один и тот же человек всегда одного цвета.
+(Color, Color) birthdayPalette(String name) {
+  var hash = 0;
+  for (final unit in name.codeUnits) {
+    hash = (unit + ((hash << 5) - hash)) & 0x7fffffff;
+  }
+  return _avatarPalettes[hash % _avatarPalettes.length];
+}
+
+String _initials(String name) {
+  final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).take(2);
+  return parts.map((p) => String.fromCharCode(p.runes.first).toUpperCase()).join();
+}
+
+/// «Дни рождения» недели, как на сайте: значок торта, строки с аватаром, плашкой «Сегодня/Завтра»
+/// и кнопкой «написать поздравление».
 class BirthdaysCard extends StatelessWidget {
   const BirthdaysCard({super.key, required this.birthdays, required this.now, this.onMessage});
 
@@ -148,22 +173,137 @@ class BirthdaysCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    return ChurchCard(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
+          child: Row(
+            children: [
+              Icon(Icons.cake_outlined, size: 14, color: palette.accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    'ДНИ РОЖДЕНИЯ',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: palette.inkMuted),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: palette.card,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: palette.hairline),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              for (var i = 0; i < birthdays.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: palette.hairline),
+                _BirthdayRow(person: birthdays[i], now: now, onMessage: onMessage == null ? null : () => onMessage!(birthdays[i])),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BirthdayRow extends StatelessWidget {
+  const _BirthdayRow({required this.person, required this.now, required this.onMessage});
+
+  final Birthday person;
+  final DateTime now;
+  final VoidCallback? onMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final (bg, fg) = birthdayPalette(person.name);
+    final status = birthdayStatus(person.date, now);
+    final avatarBg = palette.isDark ? fg.withValues(alpha: 0.25) : bg;
+    final avatarFg = palette.isDark ? Color.lerp(fg, Colors.white, 0.55)! : fg;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
         children: [
-          for (var i = 0; i < birthdays.length; i++) ...[
-            if (i > 0) Divider(height: 1, indent: 70, color: palette.hairline),
-            ListRow(
-              leading: ChurchAvatar(name: birthdays[i].name, size: 42),
-              title: birthdays[i].name,
-              subtitle: birthdayWhen(birthdays[i].date, now),
-              trailing: onMessage == null ? null : Icon(Icons.chat_bubble_outline_rounded, color: palette.accent, size: 20),
-              onTap: onMessage == null ? null : () => onMessage!(birthdays[i]),
+          Container(
+            width: 46,
+            height: 46,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: avatarBg, shape: BoxShape.circle),
+            child: Text(_initials(person.name), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: avatarFg)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      person.name,
+                      style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: palette.ink),
+                    ),
+                    if (status == BirthdayStatus.today)
+                      _Pill('🎉 Сегодня', bg: ChurchColors.wine, fg: Colors.white)
+                    else if (status == BirthdayStatus.tomorrow)
+                      _Pill('Завтра', bg: palette.accentSoft, fg: palette.accent),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(birthdayDate(person.date), style: TextStyle(fontSize: 12.5, color: palette.inkMuted)),
+              ],
             ),
-          ],
+          ),
+          if (onMessage != null)
+            Semantics(
+              button: true,
+              label: 'Написать поздравление: ${person.name}',
+              excludeSemantics: true,
+              child: SizedBox(
+                width: 48,
+                height: 48,
+                child: Center(
+                  child: Material(
+                    color: avatarBg,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: onMessage,
+                      child: SizedBox(width: 38, height: 38, child: Icon(Icons.chat_bubble_outline_rounded, size: 18, color: avatarFg)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill(this.text, {required this.bg, required this.fg});
+  final String text;
+  final Color bg;
+  final Color fg;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
+        child: Text(text, softWrap: false, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: fg)),
+      );
 }

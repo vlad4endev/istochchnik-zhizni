@@ -48,7 +48,11 @@ class FakePrayer implements PrayerSource {
   Future<void> saveNote(NoteKind kind, String text, NoteDuration duration, String todayYmd) async {
     calls.add('save:${kind.api}:$text:${duration.api}:$todayYmd');
     _need();
-    notesNow = CoordinatorNotes(urgent: kind == NoteKind.urgentPrayer ? CoordinatorNote(text: text) : null);
+    final note = CoordinatorNote(text: text);
+    notesNow = CoordinatorNotes(
+      urgent: kind == NoteKind.urgentPrayer ? note : notesNow.urgent,
+      announcement: kind == NoteKind.announcement ? note : notesNow.announcement,
+    );
   }
 
   @override
