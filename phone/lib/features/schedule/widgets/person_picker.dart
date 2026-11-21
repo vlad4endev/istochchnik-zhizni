@@ -133,7 +133,7 @@ class _PickerSheetState extends State<_PickerSheet> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(Radii.sheet)),
       ),
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: SafeArea(
+      child: Material(type: MaterialType.transparency, child: SafeArea(
         top: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -259,7 +259,7 @@ class _PickerSheetState extends State<_PickerSheet> {
               ),
           ],
         ),
-      ),
+      )),
     );
   }
 }

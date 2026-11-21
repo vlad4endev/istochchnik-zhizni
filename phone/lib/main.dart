@@ -14,6 +14,7 @@ import 'core/session.dart';
 import 'features/schedule/data/schedule_repository.dart';
 import 'features/service/data/plan_repository.dart';
 import 'features/songbook/data/songbook_repository.dart';
+import 'features/studio/data/studio_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +29,7 @@ Future<void> main() async {
   session.beforeLogout.add(SongbookRepository.clearAll);
   session.beforeLogout.add(ScheduleRepository.clearAll);
   session.beforeLogout.add(PlanRepository.clearAll);
+  session.beforeLogout.add(StudioRepository.clearAll);
   await session.bootstrap();
   unawaited(PushService.instance.start(session));
   runApp(

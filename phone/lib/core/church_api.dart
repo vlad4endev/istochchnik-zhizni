@@ -111,11 +111,6 @@ class ChurchApi {
     await post('/api/messenger/messages/$messageId/poll-vote', data: {'optionIndexes': optionIndexes});
   }
 
-  Future<List<dynamic>> setlists() async => asList(await get('/api/studio/setlists'));
-
-  Future<List<dynamic>> setlistItems(String id) async =>
-      asList(await get('/api/studio/setlists/$id/items'));
-
   Future<Map<String, dynamic>> broadcast() async => asMap(await get('/api/broadcasts/active'));
 
   Future<Object?> broadcastHistory() async => get('/api/broadcasts/history');

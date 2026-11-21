@@ -17,7 +17,16 @@ import 'widgets/song_text.dart';
 
 /// Читалка песни: аккорды над слогами, тональность, каподастр, автопрокрутка.
 class SongReaderPage extends StatefulWidget {
-  const SongReaderPage({super.key, required this.song, this.songbook, this.source, this.useMyVersion = false});
+  const SongReaderPage({
+    super.key,
+    required this.song,
+    this.songbook,
+    this.source,
+    this.useMyVersion = false,
+    this.footerBuilder,
+    this.afterTextBuilder,
+    this.manageWakelock = true,
+  });
 
   final Song song;
 
@@ -27,6 +36,15 @@ class SongReaderPage extends StatefulWidget {
 
   /// Показать мою версию из студии, если она есть.
   final bool useMyVersion;
+
+  /// Полоса под текстом на всю ширину (например, «Песня 3 из 8» в режиме выступления).
+  final Widget Function(BuildContext context, ReaderPalette palette)? footerBuilder;
+
+  /// Блок в конце прокручиваемого текста (заметки музыканта).
+  final Widget Function(BuildContext context, ReaderPalette palette)? afterTextBuilder;
+
+  /// false — экран не гасит родитель (режим выступления листает много песен подряд).
+  final bool manageWakelock;
 
   @override
   State<SongReaderPage> createState() => _SongReaderPageState();
@@ -55,13 +73,15 @@ class _SongReaderPageState extends State<SongReaderPage> with SingleTickerProvid
     _scroll.dispose();
     _c.removeListener(_syncAwake);
     _c.dispose();
-    unawaited(_setAwake(false));
+    if (widget.manageWakelock) unawaited(_setAwake(false));
     super.dispose();
   }
 
   // ------------------------------------------------------------ экран не гаснет
 
-  void _syncAwake() => unawaited(_setAwake(_c.settings.keepAwake));
+  void _syncAwake() {
+    if (widget.manageWakelock) unawaited(_setAwake(_c.settings.keepAwake));
+  }
 
   Future<void> _setAwake(bool value) async {
     if (_awake == value) return;
@@ -163,6 +183,7 @@ class _SongReaderPageState extends State<SongReaderPage> with SingleTickerProvid
                                   fontSize: _c.settings.fontSize,
                                   showChords: _c.settings.showChords,
                                   controller: _scroll,
+                                  footer: widget.afterTextBuilder?.call(context, p),
                                 ),
                         ),
                       ),
@@ -181,6 +202,7 @@ class _SongReaderPageState extends State<SongReaderPage> with SingleTickerProvid
                     ],
                   ),
                 ),
+                if (widget.footerBuilder != null) widget.footerBuilder!(context, p),
               ],
             ),
           ),

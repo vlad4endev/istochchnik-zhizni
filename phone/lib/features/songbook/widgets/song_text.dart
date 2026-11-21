@@ -53,6 +53,7 @@ class SongText extends StatelessWidget {
     required this.showChords,
     required this.controller,
     this.bottomPadding = 120,
+    this.footer,
   });
 
   final List<SongBlock> blocks;
@@ -62,6 +63,9 @@ class SongText extends StatelessWidget {
   final ScrollController controller;
   final double bottomPadding;
 
+  /// Блок после текста песни (например, заметки музыканта).
+  final Widget? footer;
+
   @override
   Widget build(BuildContext context) {
     // Размер задаётся настройкой песни, поэтому системный масштаб не умножаем второй раз.
@@ -69,8 +73,8 @@ class SongText extends StatelessWidget {
       child: ListView.builder(
         controller: controller,
         padding: EdgeInsets.fromLTRB(18, 14, 18, bottomPadding + MediaQuery.paddingOf(context).bottom),
-        itemCount: blocks.length,
-        itemBuilder: (context, index) => _block(blocks[index], index),
+        itemCount: blocks.length + (footer == null ? 0 : 1),
+        itemBuilder: (context, index) => index == blocks.length ? footer! : _block(blocks[index], index),
       ),
     );
   }
