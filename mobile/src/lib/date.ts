@@ -8,11 +8,12 @@ export function formatDisplayDate(iso: string): string {
   }).format(d);
 }
 
-export function todayIsoUtc(): string {
+/** Сегодняшняя дата по часовому поясу устройства (как на вебе), а не по UTC. */
+export function todayIsoLocal(): string {
   const n = new Date();
-  return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()))
-    .toISOString()
-    .slice(0, 10);
+  const mm = String(n.getMonth() + 1).padStart(2, '0');
+  const dd = String(n.getDate()).padStart(2, '0');
+  return `${n.getFullYear()}-${mm}-${dd}`;
 }
 
 export function addDaysIso(iso: string, delta: number): string {
@@ -22,7 +23,7 @@ export function addDaysIso(iso: string, delta: number): string {
 }
 
 export function isTodayIso(iso: string): boolean {
-  return iso === todayIsoUtc();
+  return iso === todayIsoLocal();
 }
 
 export function formatDisplayDateLong(iso: string): string {

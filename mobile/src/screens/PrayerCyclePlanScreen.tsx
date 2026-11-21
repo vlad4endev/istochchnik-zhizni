@@ -24,6 +24,7 @@ import {
   patchMemberCyclePrayer,
   runCuratorAutoDistribution,
 } from '../api/prayer';
+import { improvePrayerNeedText } from '../api/prayerAdmin';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
 import { ScreenHeader } from '../components/ScreenHeader';
@@ -126,6 +127,18 @@ export function PrayerCyclePlanScreen() {
     },
     onError: (err: unknown) => {
       Alert.alert('Ошибка', err instanceof Error ? err.message : 'Не удалось сохранить нужду');
+    },
+  });
+
+  const improveMut = useMutation({
+    mutationFn: (input: { text: string; memberLabel: string }) =>
+      improvePrayerNeedText(input.text, input.memberLabel),
+    onSuccess: (text) => setPrayerDraft(text),
+    onError: (err: unknown) => {
+      Alert.alert(
+        'Не удалось улучшить текст',
+        err instanceof Error ? err.message : 'Попробуйте ещё раз.',
+      );
     },
   });
 
@@ -375,6 +388,12 @@ export function PrayerCyclePlanScreen() {
                 });
               }}
               savePending={savePrayerMut.isPending}
+              onImprove={() => {
+                const m = item.member;
+                if (!m || !prayerDraft.trim()) return;
+                improveMut.mutate({ text: prayerDraft, memberLabel: memberRosterName(m) });
+              }}
+              improvePending={improveMut.isPending}
               onPickCurator={() => {
                 if (item.member?.id != null) setPickerMemberId(item.member.id);
               }}
@@ -419,6 +438,8 @@ function DayRow({
   onDraftChange,
   onSavePrayer,
   savePending,
+  onImprove,
+  improvePending,
   onPickCurator,
   assignPending,
   colors,
@@ -434,6 +455,8 @@ function DayRow({
   onDraftChange: (t: string) => void;
   onSavePrayer: () => void;
   savePending: boolean;
+  onImprove: () => void;
+  improvePending: boolean;
   onPickCurator: () => void;
   assignPending: boolean;
   colors: ThemeColors;
@@ -511,17 +534,36 @@ function DayRow({
                 placeholderTextColor={colors.textMuted}
                 maxLength={8000}
               />
-              <Pressable
-                onPress={onSavePrayer}
-                disabled={savePending}
-                style={({ pressed }) => [
-                  styles.saveBtn,
-                  pressed && { opacity: 0.9 },
-                  savePending && { opacity: 0.6 },
-                ]}
-              >
-                <Text style={styles.saveBtnText}>{savePending ? 'Сохранение…' : 'Сохранить'}</Text>
-              </Pressable>
+              <View style={styles.editorActions}>
+                <Pressable
+                  onPress={onSavePrayer}
+                  disabled={savePending || improvePending}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [
+                    styles.saveBtn,
+                    pressed && { opacity: 0.9 },
+                    (savePending || improvePending) && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text style={styles.saveBtnText}>{savePending ? 'Сохранение…' : 'Сохранить'}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={onImprove}
+                  disabled={savePending || improvePending || !prayerDraft.trim()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Улучшить текст нужды с помощью ИИ"
+                  style={({ pressed }) => [
+                    styles.improveBtn,
+                    pressed && { opacity: 0.8 },
+                    (savePending || improvePending || !prayerDraft.trim()) && { opacity: 0.5 },
+                  ]}
+                >
+                  <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
+                  <Text style={styles.improveBtnText}>
+                    {improvePending ? 'Улучшаем…' : 'Улучшить текст (ИИ)'}
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           ) : null}
         </>
@@ -600,8 +642,8 @@ function createStyles(colors: ThemeColors) {
       padding: 32,
       gap: 8,
     },
-    deniedTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-    deniedBody: { fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+    deniedTitle: { fontSize: 19, fontWeight: '700', color: colors.text },
+    deniedBody: { fontSize: 16, color: colors.textSecondary, textAlign: 'center', lineHeight: 23 },
     tabs: {
       flexDirection: 'row',
       marginHorizontal: 16,
@@ -612,7 +654,7 @@ function createStyles(colors: ThemeColors) {
     },
     tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
     tabActive: { backgroundColor: colors.primary },
-    tabText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
+    tabText: { fontSize: 15, fontWeight: '600', color: colors.textSecondary },
     tabTextActive: { color: colors.textOnPrimary, fontWeight: '700' },
     list: { paddingHorizontal: 16, paddingBottom: 32 },
     headerBlock: { gap: 10, marginBottom: 12 },
@@ -623,7 +665,7 @@ function createStyles(colors: ThemeColors) {
       borderWidth: 1,
       borderColor: 'rgba(28,25,23,0.08)',
     },
-    distHint: { fontSize: 13, color: colors.textSecondary, lineHeight: 18 },
+    distHint: { fontSize: 15, color: colors.textSecondary, lineHeight: 21 },
     distBtn: {
       marginTop: 10,
       backgroundColor: colors.primary,
@@ -631,9 +673,9 @@ function createStyles(colors: ThemeColors) {
       paddingVertical: 12,
       alignItems: 'center',
     },
-    distBtnText: { color: colors.textOnPrimary, fontWeight: '700', fontSize: 14 },
-    distOk: { marginTop: 8, fontSize: 12, fontWeight: '600', color: '#0F6636' },
-    stats: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+    distBtnText: { color: colors.textOnPrimary, fontWeight: '700', fontSize: 16 },
+    distOk: { marginTop: 8, fontSize: 14, fontWeight: '600', color: '#0F6636' },
+    stats: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
     searchWrap: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -645,7 +687,7 @@ function createStyles(colors: ThemeColors) {
       borderWidth: 1,
       borderColor: 'rgba(28,25,23,0.08)',
     },
-    searchInput: { flex: 1, fontSize: 15, color: colors.text, padding: 0 },
+    searchInput: { flex: 1, fontSize: 16, color: colors.text, padding: 0 },
     filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     filterChip: {
       paddingHorizontal: 12,
@@ -656,10 +698,10 @@ function createStyles(colors: ThemeColors) {
       borderColor: 'rgba(28,25,23,0.08)',
     },
     filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-    filterChipText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
+    filterChipText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
     filterChipTextActive: { color: colors.textOnPrimary },
-    warn: { fontSize: 12, color: '#b45309' },
-    empty: { textAlign: 'center', color: colors.textMuted, marginTop: 24 },
+    warn: { fontSize: 14, color: '#b45309' },
+    empty: { textAlign: 'center', color: colors.textSecondary, marginTop: 24 },
   });
 }
 
@@ -675,8 +717,8 @@ function createRowStyles(colors: ThemeColors) {
     },
     top: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
     main: { flex: 1, minWidth: 0 },
-    date: { fontSize: 11, fontWeight: '700', color: colors.textMuted, textTransform: 'capitalize' },
-    name: { fontSize: 16, fontWeight: '800', color: colors.text, marginTop: 2 },
+    date: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, textTransform: 'capitalize' },
+    name: { fontSize: 17, fontWeight: '800', color: colors.text, marginTop: 2 },
     badge: {
       alignSelf: 'flex-start',
       marginTop: 6,
@@ -686,10 +728,10 @@ function createRowStyles(colors: ThemeColors) {
     },
     badgeOk: { backgroundColor: 'rgba(16,185,129,0.12)' },
     badgeWarn: { backgroundColor: 'rgba(245,158,11,0.12)' },
-    badgeText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
+    badgeText: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
     badgeTextOk: { color: '#065f46' },
     badgeTextWarn: { color: '#92400e' },
-    needPreview: { fontSize: 12, color: colors.textMuted, marginTop: 6, lineHeight: 17 },
+    needPreview: { fontSize: 14, color: colors.textSecondary, marginTop: 6, lineHeight: 20 },
     curatorBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -700,7 +742,7 @@ function createRowStyles(colors: ThemeColors) {
       borderRadius: 10,
       backgroundColor: `${colors.primary}10`,
     },
-    curatorLabel: { flex: 1, fontSize: 11, fontWeight: '700', color: colors.primary },
+    curatorLabel: { flex: 1, fontSize: 13, fontWeight: '700', color: colors.primary },
     expandBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -710,7 +752,7 @@ function createRowStyles(colors: ThemeColors) {
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: 'rgba(28,25,23,0.08)',
     },
-    expandText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
+    expandText: { fontSize: 15, fontWeight: '700', color: colors.textSecondary },
     editor: { marginTop: 10, gap: 10 },
     textarea: {
       minHeight: 100,
@@ -718,18 +760,30 @@ function createRowStyles(colors: ThemeColors) {
       borderColor: 'rgba(28,25,23,0.1)',
       borderRadius: 10,
       padding: 12,
-      fontSize: 14,
+      fontSize: 16,
       color: colors.text,
       textAlignVertical: 'top',
       backgroundColor: colors.surface,
     },
+    editorActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     saveBtn: {
-      alignSelf: 'flex-start',
+      minHeight: 48,
+      justifyContent: 'center',
       backgroundColor: colors.primary,
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderRadius: 10,
+      paddingHorizontal: 18,
+      borderRadius: 12,
     },
+    improveBtn: {
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.primary + '66',
+    },
+    improveBtnText: { fontSize: 15, fontWeight: '700', color: colors.primary },
     saveBtnText: { color: colors.textOnPrimary, fontWeight: '700' },
   });
 }
@@ -745,7 +799,7 @@ function createModalStyles(colors: ThemeColors) {
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: 'rgba(28,25,23,0.08)',
     },
-    title: { fontSize: 17, fontWeight: '700', color: colors.text },
+    title: { fontSize: 18, fontWeight: '700', color: colors.text },
     option: {
       paddingHorizontal: 16,
       paddingVertical: 14,
@@ -753,6 +807,6 @@ function createModalStyles(colors: ThemeColors) {
       borderBottomColor: 'rgba(28,25,23,0.06)',
     },
     optionActive: { backgroundColor: `${colors.primary}12` },
-    optionText: { fontSize: 15, fontWeight: '600', color: colors.text },
+    optionText: { fontSize: 16, fontWeight: '600', color: colors.text },
   });
 }

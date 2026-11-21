@@ -24,6 +24,12 @@ interface MessageContextMenuProps {
   onReply: (message: MessageWithSender) => void;
   onReact: (messageId: string, emoji: string) => void;
   onDelete: (messageId: string) => void;
+  onEdit?: (message: MessageWithSender) => void;
+  onPin?: (message: MessageWithSender) => void;
+  isPinned?: boolean;
+  onForward?: (message: MessageWithSender) => void;
+  /** Только для автора в групповых чатах. */
+  onShowReaders?: (message: MessageWithSender) => void;
 }
 
 export function MessageContextMenu({
@@ -34,6 +40,11 @@ export function MessageContextMenu({
   onReply,
   onReact,
   onDelete,
+  onEdit,
+  onPin,
+  isPinned = false,
+  onForward,
+  onShowReaders,
 }: MessageContextMenuProps) {
   const styles = useMemo(() => createStyles(), []);
 
@@ -53,7 +64,7 @@ export function MessageContextMenu({
   };
 
   const handlePin = () => {
-    Alert.alert('Скоро', 'Закрепление сообщений появится в следующем обновлении');
+    onPin?.(message);
     onClose();
   };
 
@@ -94,7 +105,47 @@ export function MessageContextMenu({
           {canCopy ? (
             <MenuItem styles={styles} emoji="📋" label="Копировать" onPress={() => void handleCopy()} />
           ) : null}
-          <MenuItem styles={styles} emoji="📌" label="Закрепить" onPress={handlePin} />
+          {onForward && !message.is_deleted && /^\d+$/.test(message.id) && message.payload_type !== 'access_request' ? (
+            <MenuItem
+              styles={styles}
+              emoji="↪️"
+              label="Переслать"
+              onPress={() => {
+                onForward(message);
+                onClose();
+              }}
+            />
+          ) : null}
+          {isOwn && onShowReaders && /^\d+$/.test(message.id) ? (
+            <MenuItem
+              styles={styles}
+              emoji="👁"
+              label="Кто прочитал"
+              onPress={() => {
+                onShowReaders(message);
+                onClose();
+              }}
+            />
+          ) : null}
+          {onPin ? (
+            <MenuItem
+              styles={styles}
+              emoji="📌"
+              label={isPinned ? 'Открепить' : 'Закрепить'}
+              onPress={handlePin}
+            />
+          ) : null}
+          {isOwn && canCopy && onEdit ? (
+            <MenuItem
+              styles={styles}
+              emoji="✏️"
+              label="Изменить"
+              onPress={() => {
+                onEdit(message);
+                onClose();
+              }}
+            />
+          ) : null}
           <MenuItem
             styles={styles}
             emoji="😀"

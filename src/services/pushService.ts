@@ -1,3 +1,4 @@
+import { buildCallApnsConfig } from './callApnsPayload';
 import { pushProxyForEndpoint } from '../lib/pushProxy';
 import webpush from 'web-push';
 import { getFirebaseMessaging } from '../config/firebaseAdmin';
@@ -761,12 +762,8 @@ export async function sendIncomingCallWake(
     ],
   }).catch((e) => console.warn('[calls] web push wake failed:', e instanceof Error ? e.message : e));
 
-  // Android Capacitor: data-only FCM → AppFirebaseMessagingService CallStyle
-  void sendFcmCallDataOnly(memberId, title, body, data, ttlSec).catch((e) =>
-    console.warn('[calls] fcm call wake failed:', e instanceof Error ? e.message : e),
-  );
-
-  // iOS PushKit VoIP
+  // iOS PushKit VoIP: CallKit показывает звонок. Сначала VoIP — от его результата зависит, нужен ли iOS баннер.
+  let voipDelivered = false;
   if (isApnsVoipConfigured()) {
     const voipTokens = await getVoipTokensForMember(memberId);
     for (const token of voipTokens) {
@@ -783,11 +780,18 @@ export async function sendIncomingCallWake(
         },
         ttlSec,
       );
+      if (outcome === 'sent') voipDelivered = true;
       if (outcome === 'invalid') {
         await deleteVoipToken(token).catch(() => undefined);
       }
     }
   }
+
+  // Android Capacitor: data-only FCM → AppFirebaseMessagingService CallStyle.
+  // iOS: если VoIP доставлен, CallKit уже звонит — второй баннер «Входящий звонок» не показываем.
+  void sendFcmCallDataOnly(memberId, title, body, data, ttlSec, { iosSilent: voipDelivered }).catch((e) =>
+    console.warn('[calls] fcm call wake failed:', e instanceof Error ? e.message : e),
+  );
 }
 
 /** Снять системный UI входящего на native (cancel / end / miss). */
@@ -809,13 +813,24 @@ async function sendFcmCallDataOnly(
   body: string,
   data: Record<string, string>,
   ttlSec: number,
+  opts?: { iosSilent?: boolean },
 ): Promise<PushChannelSummary> {
   const summary = emptyChannel();
+  const iosSilent = opts?.iosSilent === true && data.type === 'incoming_call';
   const messaging = getFirebaseMessaging();
-  if (!messaging) return summary;
+  if (!messaging) {
+    console.warn('[push] call wake skipped: Firebase не настроен (FIREBASE_SERVICE_ACCOUNT_*)', { memberId, type: data.type });
+    return summary;
+  }
 
   const tokens = await getFcmTokensForMember(memberId);
-  if (tokens.length === 0) return summary;
+  if (tokens.length === 0) {
+    console.warn('[push] call wake skipped: у пользователя нет FCM-токенов (приложение не зарегистрировало телефон)', {
+      memberId,
+      type: data.type,
+    });
+    return summary;
+  }
 
   const dataStrings = toFcmDataStrings(title, body, data, undefined, undefined);
   dataStrings.type = data.type || dataStrings.type || 'incoming_call';
@@ -832,26 +847,13 @@ async function sendFcmCallDataOnly(
           priority: 'high',
           ttl: ttlSec * 1000,
         },
-        apns: {
-          headers: {
-            'apns-priority': '10',
-            'apns-push-type': 'alert',
-            'apns-expiration': String(Math.floor(Date.now() / 1000) + ttlSec),
-          },
-          payload: {
-            aps: {
-              // content-available помогает разбудить; CallKit на iOS идёт через VoIP отдельно
-              contentAvailable: true,
-              sound: dataStrings.type === 'incoming_call' ? 'default' : undefined,
-              alert:
-                dataStrings.type === 'incoming_call' && title
-                  ? { title, body }
-                  : undefined,
-              category: dataStrings.type === 'incoming_call' ? 'INCOMING_CALL' : undefined,
-              interruptionLevel: 'time-sensitive',
-            },
-          },
-        },
+        apns: buildCallApnsConfig({
+          type: dataStrings.type ?? '',
+          title,
+          body,
+          ttlSec,
+          iosSilent,
+        }),
       });
     } catch (e) {
       console.warn('[push] FCM call data-only failed', {
@@ -879,5 +881,6 @@ async function sendFcmCallDataOnly(
       }
     }
   }
+  console.info('[push] call wake', { memberId, type: data.type, ...summary });
   return summary;
 }

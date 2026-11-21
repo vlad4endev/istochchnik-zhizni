@@ -5,11 +5,19 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { Platform, Text, View } from 'react-native';
 
+import { IncomingCallOverlay } from '../components/messenger/IncomingCallOverlay';
+import { CallKitBootstrap } from '../push/CallKitBootstrap';
+import { PushBootstrap } from '../push/PushBootstrap';
 import { SermonPlayerBar } from '../components/SermonPlayerBar';
 import { SermonPlayerProvider } from '../contexts/SermonPlayerContext';
 import { fetchUnreadCount } from '../api/messenger';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { ChatsScreen } from '../screens/ChatsScreen';
+import { CallScreen } from '../screens/CallScreen';
+import { ChatMediaScreen } from '../screens/ChatMediaScreen';
+import { ChatMembersScreen } from '../screens/ChatMembersScreen';
+import { ChatPermissionsScreen } from '../screens/ChatPermissionsScreen';
+import { ChatProfileScreen } from '../screens/ChatProfileScreen';
 import { ChatThreadScreen } from '../screens/ChatThreadScreen';
 import { EventsScreen } from '../screens/EventsScreen';
 import { MediaScheduleScreen } from '../screens/MediaScheduleScreen';
@@ -160,6 +168,9 @@ function MainTabs() {
   return (
     <SermonPlayerProvider>
       <MainTabsInner />
+      <IncomingCallOverlay />
+      <PushBootstrap />
+      <CallKitBootstrap />
     </SermonPlayerProvider>
   );
 }
@@ -202,6 +213,15 @@ export function MainStack() {
           title: route.params.title ?? 'Чат',
         })}
       />
+      <Stack.Screen
+        name="Call"
+        component={CallScreen}
+        options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
+      />
+      <Stack.Screen name="ChatProfile" component={ChatProfileScreen} options={{ title: 'Профиль чата' }} />
+      <Stack.Screen name="ChatMembers" component={ChatMembersScreen} options={{ title: 'Участники' }} />
+      <Stack.Screen name="ChatMedia" component={ChatMediaScreen} options={{ title: 'Медиа, файлы и ссылки' }} />
+      <Stack.Screen name="ChatPermissions" component={ChatPermissionsScreen} options={{ title: 'Разрешения' }} />
       <Stack.Screen
         name="NewChat"
         component={NewChatScreen}

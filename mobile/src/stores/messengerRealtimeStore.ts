@@ -35,6 +35,8 @@ interface MessengerRealtimeState {
   onlineMembers: Set<number>;
   memberLastSeenAt: Record<number, string>;
   typingByConv: Record<string, TypingUser[]>;
+  /** Чат → участник → id последнего прочитанного им сообщения (из событий прочтения). */
+  readCursorsByConv: Record<string, Record<number, string>>;
   handleWsMessage: (msg: Record<string, unknown>) => void;
 }
 
@@ -42,6 +44,7 @@ export const useMessengerRealtimeStore = create<MessengerRealtimeState>((set, ge
   onlineMembers: new Set<number>(),
   memberLastSeenAt: {},
   typingByConv: {},
+  readCursorsByConv: {},
 
   handleWsMessage: (msg) => {
     const type = typeof msg.type === 'string' ? msg.type : '';
@@ -78,6 +81,30 @@ export const useMessengerRealtimeStore = create<MessengerRealtimeState>((set, ge
             ? { ...state.memberLastSeenAt, [memberId]: lastSeenAt }
             : state.memberLastSeenAt,
       }));
+      return;
+    }
+
+    if (type === 'read:updated' || type === 'messages_read') {
+      const convId = String(
+        msg.conversationId ?? msg.conversation_id ?? msg.chatId ?? msg.chat_id ?? '',
+      ).trim();
+      const memberId = Number(msg.memberId ?? msg.member_id ?? msg.userId ?? msg.user_id);
+      const lastRead = String(
+        msg.lastReadMessageId ?? msg.last_read_message_id ?? msg.messageId ?? msg.message_id ?? '',
+      ).trim();
+      if (!convId || !Number.isFinite(memberId) || memberId <= 0 || !/^\d+$/.test(lastRead)) return;
+      set((state) => {
+        const existing = state.readCursorsByConv[convId] ?? {};
+        const prev = existing[memberId];
+        // Курсор только вперёд: старое событие не откатывает «прочитано».
+        if (prev && /^\d+$/.test(prev) && BigInt(prev) >= BigInt(lastRead)) return state;
+        return {
+          readCursorsByConv: {
+            ...state.readCursorsByConv,
+            [convId]: { ...existing, [memberId]: lastRead },
+          },
+        };
+      });
       return;
     }
 

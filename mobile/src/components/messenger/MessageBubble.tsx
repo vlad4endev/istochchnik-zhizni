@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   PanResponder,
   Platform,
+  Pressable,
   StyleSheet,
   Vibration,
   View,
@@ -16,13 +16,17 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { MessageWithSender } from '../../api/messenger';
-import { resolveApiOrigin } from '../../lib/config';
-import { getAuthToken } from '../../lib/storage';
 import {
   formatMessageTime,
   messagePreviewText,
 } from '../../lib/messengerUtils';
 import { MESSENGER_BRAND } from '../../theme/messenger';
+import { displayMessengerText } from '../../lib/messengerUtils';
+import { findInviteInText } from '../../api/calls';
+import { hasMentions, splitMentions, stripMentions } from '../../lib/mentions';
+import { forwardedFromName } from '../../lib/readReceipts';
+import { MessageAttachments, hasAttachment } from './MessageAttachments';
+import { PollCard } from './PollCard';
 import { MessengerText, MessengerTimeText } from './MessengerText';
 import { useTheme } from '../../theme';
 
@@ -35,6 +39,14 @@ interface MessageBubbleProps {
   showSenderName: boolean;
   onLongPress?: (message: MessageWithSender) => void;
   onSwipeReply?: (message: MessageWithSender) => void;
+  /** Своё сообщение прочитали другие (две галочки). */
+  readByOthers?: boolean;
+  /** Нажатие на двойную галочку в группе открывает «кто прочитал». */
+  onShowReaders?: (message: MessageWithSender) => void;
+  /** Имена участников по id для подсветки упоминаний `@[id]`. */
+  mentionNames?: Record<number, string>;
+  /** Нажатие «Присоединиться» под ссылкой-приглашением на созвон. */
+  onJoinCall?: (invite: { url: string; title: string }) => void;
 }
 
 export function MessageBubble({
@@ -43,8 +55,12 @@ export function MessageBubble({
   showSenderName,
   onLongPress,
   onSwipeReply,
+  readByOthers = false,
+  onShowReaders,
+  mentionNames = {},
+  onJoinCall,
 }: MessageBubbleProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const styles = useMemo(() => createStyles(colors, isOwn), [colors, isOwn]);
   const translateX = useSharedValue(0);
   const replyOpacity = useSharedValue(0);
@@ -54,23 +70,21 @@ export function MessageBubble({
   const isPending = message.status === 'sending';
   const isError = message.status === 'error';
   const payloadType = message.payload_type ?? 'text';
-  const showImage = payloadType === 'image' && !message.is_deleted;
+  const readColor = isDark ? '#075985' : '#BAE6FD';
+  const sentColor = isDark ? 'rgba(28,25,23,0.6)' : 'rgba(255,255,255,0.75)';
+  const invite = !message.is_deleted && payloadType === 'text' && onJoinCall ? findInviteInText(message.content) : null;
+  const forwardedFrom = forwardedFromName(message.forwarded_from);
+  const isPoll = payloadType === 'poll' && !message.is_deleted;
+  const withAttachment = hasAttachment(payloadType) && !message.is_deleted;
 
-  const imageUri = useMemo(() => {
-    if (!showImage) return null;
-    const token = getAuthToken();
-    const path = `/api/messenger/messages/${encodeURIComponent(message.id)}/attachment-file`;
-    return {
-      uri: `${resolveApiOrigin()}${path}`,
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    };
-  }, [message.id, showImage]);
-
+  // У вложений текст — это подпись; без подписи показываем только само вложение.
   const bodyText = message.is_deleted
     ? 'Сообщение удалено'
     : payloadType === 'text'
       ? String(message.content ?? '')
-      : messagePreviewText(message);
+      : withAttachment
+        ? String(message.content ?? '').trim()
+        : messagePreviewText(message);
 
   const clearLongPressTimer = () => {
     if (longPressTimer.current) {
@@ -153,6 +167,15 @@ export function MessageBubble({
         </MessengerText>
       ) : null}
 
+      {forwardedFrom && !message.is_deleted ? (
+        <View style={styles.forwarded}>
+          <Ionicons name="arrow-redo" size={13} color={isOwn ? colors.textOnPrimary : colors.primary} />
+          <MessengerText style={styles.forwardedText} numberOfLines={1}>
+            Переслано от {forwardedFrom}
+          </MessengerText>
+        </View>
+      ) : null}
+
       {message.reply_preview && !message.is_deleted ? (
         <View style={styles.reply}>
           <MessengerText style={styles.replyAuthor} numberOfLines={1}>
@@ -161,18 +184,46 @@ export function MessageBubble({
           <MessengerText style={styles.replyText} numberOfLines={2}>
             {message.reply_preview.is_deleted
               ? 'Сообщение удалено'
-              : String(message.reply_preview.content ?? '')}
+              : stripMentions(String(message.reply_preview.content ?? ''))}
           </MessengerText>
         </View>
       ) : null}
 
-      {showImage && imageUri ? (
-        <Image source={imageUri} style={styles.image} contentFit="cover" />
+      {isPoll ? <PollCard message={message} isOwn={isOwn} /> : null}
+      {withAttachment ? <MessageAttachments message={message} isOwn={isOwn} /> : null}
+
+      {bodyText && !isPoll ? (
+        <MessengerText
+          bidiSafe={false}
+          style={[styles.text, message.is_deleted && styles.deletedText]}
+        >
+          {payloadType === 'text' && hasMentions(bodyText)
+            ? splitMentions(bodyText, mentionNames).map((seg, i) =>
+                seg.mentionId != null ? (
+                  <MessengerText key={i} bidiSafe={false} style={styles.mention}>
+                    {seg.text}
+                  </MessengerText>
+                ) : (
+                  displayMessengerText(seg.text)
+                ),
+              )
+            : displayMessengerText(bodyText)}
+        </MessengerText>
       ) : null}
 
-      <MessengerText style={[styles.text, message.is_deleted && styles.deletedText]}>
-        {bodyText}
-      </MessengerText>
+      {invite ? (
+        <Pressable
+          onPress={() => onJoinCall?.({ url: invite.url, title: invite.title })}
+          accessibilityRole="button"
+          accessibilityLabel={`Присоединиться к созвону ${invite.title}`}
+          style={({ pressed }) => [styles.join, pressed && { opacity: 0.8 }]}
+        >
+          <Ionicons name="videocam" size={20} color={isOwn ? colors.primary : colors.textOnPrimary} />
+          <MessengerText bidiSafe={false} style={styles.joinText}>
+            Присоединиться
+          </MessengerText>
+        </Pressable>
+      ) : null}
 
       <View style={styles.meta}>
         {message.is_edited && !message.is_deleted ? (
@@ -184,6 +235,25 @@ export function MessageBubble({
           {formatMessageTime(message.created_at)}
         </MessengerTimeText>
         {isPending ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
+        {isOwn && !isPending && !isError && !message.is_deleted ? (
+          readByOthers && onShowReaders ? (
+            <Pressable
+              onPress={() => onShowReaders(message)}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Прочитано. Нажмите, чтобы увидеть, кто прочитал"
+            >
+              <Ionicons name="checkmark-done" size={16} color={readColor} />
+            </Pressable>
+          ) : (
+            <Ionicons
+              name={readByOthers ? 'checkmark-done' : 'checkmark'}
+              size={16}
+              color={readByOthers ? readColor : sentColor}
+              accessibilityLabel={readByOthers ? 'Прочитано' : 'Отправлено'}
+            />
+          )
+        ) : null}
         {isError ? (
           <MessengerText bidiSafe={false} style={styles.errorText}>
             !
@@ -295,6 +365,30 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isOwn: bool
       paddingLeft: 8,
       marginBottom: 4,
       opacity: 0.9,
+    },
+    join: {
+      minHeight: 44,
+      marginTop: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderRadius: 12,
+      backgroundColor: isOwn ? colors.textOnPrimary : colors.primary,
+      paddingHorizontal: 14,
+    },
+    joinText: { fontSize: 16, fontWeight: '800', color: isOwn ? colors.primary : colors.textOnPrimary },
+    mention: {
+      fontWeight: '800',
+      color: isOwn ? colors.textOnPrimary : colors.primary,
+      textDecorationLine: isOwn ? 'underline' : 'none',
+    },
+    forwarded: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
+    forwardedText: {
+      flexShrink: 1,
+      fontSize: 13,
+      fontWeight: '700',
+      color: isOwn ? colors.textOnPrimary : colors.primary,
     },
     replyAuthor: {
       fontSize: 11,

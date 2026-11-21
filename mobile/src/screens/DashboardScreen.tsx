@@ -6,7 +6,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
 import { format, isToday, isTomorrow } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -18,13 +18,33 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchActiveEvents, fetchOccurrenceOverrides } from '../api/events';
-import { fetchUnreadCount } from '../api/messenger';
+import { fetchDashboardBundle } from '../api/dashboard';
+import { createPersonalChat, fetchUnreadCount } from '../api/messenger';
 import { fetchPrayerByDate } from '../api/prayer';
 import { fetchPodcastFeed } from '../api/resources';
+import { AnnouncementCard } from '../components/dashboard/AnnouncementCard';
+import { BirthdayCard } from '../components/dashboard/BirthdayCard';
+import { BroadcastCard } from '../components/dashboard/BroadcastCard';
+import { NoteEditorModal } from '../components/prayer/NoteEditorModal';
+import { MyServiceWeekCard } from '../components/dashboard/MyServiceWeekCard';
+import { SectionLabel } from '../components/dashboard/SectionLabel';
+import { ServiceCard } from '../components/dashboard/ServiceCard';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { formatDisplayDate, todayIsoUtc } from '../lib/date';
+import { useSermonPlayer } from '../contexts/SermonPlayerContext';
+import { formatDisplayDate, todayIsoLocal } from '../lib/date';
+import {
+  birthdaysThisWeek,
+  extractNearestSermonData,
+  formatServiceCardDate,
+  pickNearestPlan,
+  profileDisplayName,
+  shouldShowBroadcast,
+} from '../lib/dashboardHome';
+import { resolvePublicUrl } from '../lib/resolvePublicUrl';
+import { usePrayerPlanAccess } from '../hooks/usePrayerPlanAccess';
+import { useMyServiceWeek } from '../hooks/useMyServiceWeek';
 import { pickFirstUpcomingOccurrence } from '../lib/eventSchedule';
 import { memberRosterName } from '../lib/memberRosterName';
 import { roleLabelRu } from '../lib/roleLabels';
@@ -62,11 +82,29 @@ export function DashboardScreen() {
   const navigation = useNavigation<DashboardNav>();
   const displayName = useAuthDisplayName();
   const role = useAuthStore((s) => s.role);
+  const memberId = useAuthStore((s) => s.memberId);
   const isParishioner = role === 'parishioner';
   const { canView: canViewMediaSchedule } = useMediaScheduleAccess();
   const { canView: canViewServicePlanner } = useServicePlannerAccess();
   const { canView: canViewStudio } = useStudioAccess();
-  const today = todayIsoUtc();
+  const { canManageNotes } = usePrayerPlanAccess();
+  const [editingAnnouncement, setEditingAnnouncement] = useState(false);
+  const { activeEpisode, playing, playEpisode, togglePlayPause } = useSermonPlayer();
+  const today = todayIsoLocal();
+  const localToday = format(new Date(), 'yyyy-MM-dd');
+
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const bundleQuery = useQuery({
+    queryKey: ['dashboard', 'bundle', localToday],
+    queryFn: () => fetchDashboardBundle(localToday),
+    staleTime: 60_000,
+  });
+  const bundle = bundleQuery.data;
 
   const prayerQuery = useQuery({
     queryKey: ['prayer', today],
@@ -94,21 +132,60 @@ export function DashboardScreen() {
     refetchInterval: 60_000,
   });
 
-  const todayLabel = format(new Date(), 'EEEE, d MMMM', { locale: ru });
+  const todayLabel = format(now, 'EEEE, d MMMM', { locale: ru });
   const member = prayerQuery.data?.members[0];
   const theme = prayerQuery.data?.global_themes[0];
   const unreadCount = unreadQuery.data ?? 0;
 
   const nextEvent = useMemo(() => {
     if (!eventsQuery.data) return null;
-    return pickFirstUpcomingOccurrence(
-      eventsQuery.data,
-      overridesQuery.data,
-      new Date(),
-    );
-  }, [eventsQuery.data, overridesQuery.data]);
+    return pickFirstUpcomingOccurrence(eventsQuery.data, overridesQuery.data, now);
+  }, [eventsQuery.data, overridesQuery.data, now]);
 
   const latestEpisode = sermonsQuery.data?.episodes[0] ?? null;
+
+  /* Богослужение: ближайший план, проповедник и ведущий. */
+  const nearestPlan = useMemo(
+    () => (bundle ? pickNearestPlan(bundle.plans, now) : null),
+    [bundle, now],
+  );
+  const nearestDetails = nearestPlan ? bundle?.planDetails[nearestPlan.plan.id] ?? null : null;
+  const sermonData = useMemo(() => extractNearestSermonData(nearestDetails), [nearestDetails]);
+  const preacherProfile = sermonData ? bundle?.profiles[sermonData.preacherMemberId] : undefined;
+  const hostProfile =
+    sermonData?.leaderMemberId != null ? bundle?.profiles[sermonData.leaderMemberId] : undefined;
+
+  const birthdays = useMemo(
+    () => birthdaysThisWeek(bundle?.birthdays ?? [], now),
+    [bundle?.birthdays, now],
+  );
+  const myService = useMyServiceWeek({
+    memberId,
+    anchorServiceDate: nearestPlan?.plan.service_date ?? null,
+    anchorPlan: nearestDetails,
+  });
+  const broadcast = bundle?.broadcast ?? null;
+  const showBroadcast = shouldShowBroadcast(now.getTime(), broadcast);
+  const announcement = !isParishioner ? (bundle?.announcement ?? null) : null;
+
+  const openChat = useCallback(
+    async (otherMemberId: number, title: string) => {
+      try {
+        const { conversationId } = await createPersonalChat(otherMemberId);
+        navigation.navigate('ChatThread', { conversationId, title });
+      } catch {
+        navigation.navigate('Chats');
+      }
+    },
+    [navigation],
+  );
+
+  const episodeIsActive = latestEpisode != null && activeEpisode?.id === latestEpisode.id;
+  const onPlayLatest = () => {
+    if (!latestEpisode) return;
+    if (episodeIsActive) togglePlayPause();
+    else playEpisode(latestEpisode);
+  };
 
   const quickActions = useMemo((): QuickActionDef[] => {
     const items: QuickActionDef[] = [
@@ -125,7 +202,6 @@ export function DashboardScreen() {
         label: isParishioner ? 'Молитва' : 'Нужда',
         color: colors.primary,
         onPress: (nav) => nav.navigate('Prayer'),
-        hidden: false,
       },
       {
         id: 'sermons',
@@ -179,7 +255,7 @@ export function DashboardScreen() {
       });
     }
 
-    return items.filter((a) => !a.hidden);
+    return items;
   }, [
     canViewMediaSchedule,
     canViewServicePlanner,
@@ -189,20 +265,15 @@ export function DashboardScreen() {
     unreadCount,
   ]);
 
-  const initials = useMemo(() => {
-    const parts = displayName.trim().split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) {
-      return `${parts[0]![0] ?? ''}${parts[1]![0] ?? ''}`.toUpperCase();
-    }
-    return (displayName[0] ?? '?').toUpperCase();
-  }, [displayName]);
-
   const refreshing =
+    bundleQuery.isFetching ||
     prayerQuery.isFetching ||
     eventsQuery.isFetching ||
     sermonsQuery.isFetching;
 
   const onRefresh = () => {
+    void bundleQuery.refetch();
+    void myService.refetch();
     void prayerQuery.refetch();
     void eventsQuery.refetch();
     void overridesQuery.refetch();
@@ -221,22 +292,11 @@ export function DashboardScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Pressable
-          onPress={() => navigation.navigate('Settings')}
-          style={({ pressed }) => [styles.profileCard, pressed && { opacity: 0.92 }]}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.quickRow}
         >
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </View>
-          <View style={styles.profileMeta}>
-            <Text style={styles.profileName}>{displayName || 'Участник'}</Text>
-            <Text style={styles.profileRole}>{roleLabelRu(role)}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-        </Pressable>
-
-        <Text style={styles.sectionTitle}>Разделы</Text>
-        <View style={styles.quickGrid}>
           {quickActions.map((action) => (
             <QuickAction
               key={action.id}
@@ -247,37 +307,71 @@ export function DashboardScreen() {
               onPress={() => action.onPress(navigation)}
             />
           ))}
-        </View>
+        </ScrollView>
 
-        {nextEvent ? (
-          <>
-            <Text style={styles.sectionTitle}>Ближайшее событие</Text>
-            <Pressable
-              onPress={() => navigation.navigate('Events')}
-              style={({ pressed }) => [styles.card, styles.eventCard, pressed && { opacity: 0.92 }]}
-            >
-              <View style={styles.eventStripe} />
-              <View style={styles.eventInner}>
-                <Text style={styles.eventWhen}>{eventWhenLabel(nextEvent.startsAt)}</Text>
-                <Text style={styles.cardTitle}>{nextEvent.item.title}</Text>
-                <Text style={styles.eventTime}>
-                  {format(nextEvent.startsAt, 'HH:mm')}
-                  {nextEvent.item.category ? ` · ${nextEvent.item.category}` : ''}
-                </Text>
-                {nextEvent.item.description?.trim() ? (
-                  <Text style={styles.cardBody} numberOfLines={2}>
-                    {nextEvent.item.description.trim()}
-                  </Text>
-                ) : null}
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-            </Pressable>
-          </>
+        {bundleQuery.isError ? (
+          <ErrorView
+            message={
+              bundleQuery.error instanceof Error
+                ? bundleQuery.error.message
+                : 'Не удалось загрузить главную'
+            }
+            onRetry={() => void bundleQuery.refetch()}
+          />
+        ) : null}
+        {bundleQuery.isLoading ? <LoadingView /> : null}
+
+        <BirthdayCard
+          items={birthdays}
+          onMessage={(id) => {
+            const person = birthdays.find((b) => b.id === id);
+            void openChat(id, person?.name ?? 'Чат');
+          }}
+        />
+
+        {sermonData && nearestPlan ? (
+          <ServiceCard
+            dateLabel={formatServiceCardDate(nearestPlan.startsAt)}
+            preacher={{
+              memberId: sermonData.preacherMemberId,
+              name: profileDisplayName(preacherProfile, 'Проповедник'),
+              avatarUrl: resolvePublicUrl(preacherProfile?.avatar_url),
+            }}
+            host={
+              sermonData.leaderMemberId != null
+                ? {
+                    memberId: sermonData.leaderMemberId,
+                    name: profileDisplayName(hostProfile, 'Ведущий'),
+                    avatarUrl: resolvePublicUrl(hostProfile?.avatar_url),
+                  }
+                : null
+            }
+            topic={sermonData.topic}
+            scripture={sermonData.scripture}
+            currentMemberId={memberId}
+            onMessage={(id) =>
+              void openChat(
+                id,
+                id === sermonData.preacherMemberId
+                  ? profileDisplayName(preacherProfile, 'Проповедник')
+                  : profileDisplayName(hostProfile, 'Ведущий'),
+              )
+            }
+          />
+        ) : null}
+
+        <MyServiceWeekCard cards={myService.cards} />
+
+        {announcement ? (
+          <AnnouncementCard
+            text={announcement.text}
+            onEdit={canManageNotes ? () => setEditingAnnouncement(true) : undefined}
+          />
         ) : null}
 
         {!isParishioner ? (
           <>
-            <Text style={styles.sectionTitle}>Молитва сегодня</Text>
+            <SectionLabel>Молимся сегодня</SectionLabel>
             {prayerQuery.isLoading ? <LoadingView /> : null}
             {prayerQuery.isError ? (
               <ErrorView
@@ -290,15 +384,18 @@ export function DashboardScreen() {
             {prayerQuery.data ? (
               <Pressable
                 onPress={() => navigation.navigate('Prayer')}
+                accessibilityRole="button"
                 style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}
               >
                 <Text style={styles.cardLabel}>Член церкви</Text>
                 <Text style={styles.cardTitle}>
-                  {member ? memberRosterName(member) : 'Не назначен'}
+                  {member ? memberRosterName(member) : 'Сегодня в цикле участник не назначен'}
                 </Text>
-                <Text style={styles.cardBody} numberOfLines={3}>
-                  {(member?.prayer_request?.trim() || 'Нужда не указана').trim()}
-                </Text>
+                {member ? (
+                  <Text style={styles.cardBody} numberOfLines={3}>
+                    {(member.prayer_request?.trim() || 'Нужда не указана').trim()}
+                  </Text>
+                ) : null}
                 {theme?.title ? (
                   <>
                     <View style={styles.divider} />
@@ -312,39 +409,83 @@ export function DashboardScreen() {
           </>
         ) : null}
 
-        {latestEpisode ? (
-          <>
-            <Text style={styles.sectionTitle}>Проповеди</Text>
-            <Pressable
-              onPress={() => navigation.navigate('Sermons')}
-              style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}
-            >
-              <View style={styles.sermonRow}>
-                <View style={styles.sermonIcon}>
-                  <Ionicons name="mic" size={22} color="#0A5A4C" />
-                </View>
-                <View style={styles.sermonMeta}>
-                  <Text style={styles.cardTitle} numberOfLines={2}>
-                    {latestEpisode.title}
-                  </Text>
-                  {sermonsQuery.data?.feed.title ? (
-                    <Text style={styles.sermonFeed} numberOfLines={1}>
-                      {sermonsQuery.data.feed.title}
-                    </Text>
-                  ) : null}
-                </View>
-                <Ionicons name="play-circle-outline" size={32} color={colors.primary} />
-              </View>
-            </Pressable>
-          </>
-        ) : null}
+        {showBroadcast && broadcast ? <BroadcastCard broadcast={broadcast} /> : null}
 
-        {eventsQuery.isLoading && !nextEvent ? (
-          <View style={{ marginTop: 8 }}>
-            <LoadingView />
+        <SectionLabel>Медиа</SectionLabel>
+        {latestEpisode ? (
+          <View style={styles.card}>
+            <View style={styles.sermonRow}>
+              <View style={styles.sermonIcon}>
+                <Ionicons name="mic" size={22} color="#0A5A4C" />
+              </View>
+              <View style={styles.sermonMeta}>
+                <Text style={styles.cardTitle} numberOfLines={2}>
+                  {latestEpisode.title}
+                </Text>
+                {sermonsQuery.data?.feed.title ? (
+                  <Text style={styles.sermonFeed} numberOfLines={1}>
+                    {sermonsQuery.data.feed.title}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+            <Pressable
+              onPress={onPlayLatest}
+              accessibilityRole="button"
+              accessibilityLabel={
+                episodeIsActive && playing ? 'Пауза' : 'Воспроизвести проповедь'
+              }
+              style={({ pressed }) => [styles.playBtn, pressed && { opacity: 0.85 }]}
+            >
+              <Ionicons
+                name={episodeIsActive && playing ? 'pause' : 'play'}
+                size={18}
+                color="#fff"
+              />
+              <Text style={styles.playBtnText}>
+                {episodeIsActive ? (playing ? 'Пауза' : 'Продолжить') : 'Воспроизвести'}
+              </Text>
+            </Pressable>
           </View>
-        ) : null}
+        ) : sermonsQuery.isLoading ? (
+          <LoadingView />
+        ) : (
+          <Text style={styles.emptyText}>Новая проповедь пока не найдена.</Text>
+        )}
+
+        <SectionLabel>Мероприятия</SectionLabel>
+        {nextEvent ? (
+          <Pressable
+            onPress={() => navigation.navigate('Events')}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.card, styles.eventCard, pressed && { opacity: 0.92 }]}
+          >
+            <View style={styles.eventStripe} />
+            <View style={styles.eventInner}>
+              <Text style={styles.eventWhen}>{eventWhenLabel(nextEvent.startsAt)}</Text>
+              <Text style={styles.cardTitle}>{nextEvent.item.title}</Text>
+              <Text style={styles.eventTime}>
+                {format(nextEvent.startsAt, 'HH:mm')}
+                {nextEvent.item.category ? ` · ${nextEvent.item.category}` : ''}
+              </Text>
+              {nextEvent.item.description?.trim() ? (
+                <Text style={styles.cardBody} numberOfLines={2}>
+                  {nextEvent.item.description.trim()}
+                </Text>
+              ) : null}
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+          </Pressable>
+        ) : eventsQuery.isLoading ? (
+          <LoadingView />
+        ) : (
+          <Text style={styles.emptyText}>Ближайших мероприятий нет.</Text>
+        )}
       </ScrollView>
+      <NoteEditorModal
+        kind={editingAnnouncement ? 'announcement' : null}
+        onClose={() => setEditingAnnouncement(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -387,9 +528,7 @@ function QuickAction({
 function createQuickStyles(colors: ThemeColors) {
   return StyleSheet.create({
     tile: {
-      width: '31%',
-      minWidth: 100,
-      flexGrow: 1,
+      width: 92,
       backgroundColor: colors.surfaceElevated,
       borderRadius: colors.radius,
       paddingVertical: 14,
@@ -439,62 +578,31 @@ function createStyles(colors: ThemeColors) {
     content: {
       padding: 16,
       paddingBottom: 32,
-      gap: 4,
+      gap: 12,
     },
-    profileCard: {
+    quickRow: {
+      gap: 10,
+      paddingRight: 4,
+    },
+    emptyText: {
+      fontSize: 14,
+      color: colors.textMuted,
+      paddingHorizontal: 4,
+    },
+    playBtn: {
+      marginTop: 14,
+      minHeight: 48,
+      borderRadius: 14,
+      backgroundColor: '#0E7E6A',
       flexDirection: 'row',
-      alignItems: 'center',
-      gap: 14,
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: colors.radius,
-      padding: 16,
-      marginBottom: 8,
-      shadowColor: '#1c1917',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.05,
-      shadowRadius: 12,
-      elevation: 2,
-    },
-    avatar: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      backgroundColor: `${colors.primary}22`,
       alignItems: 'center',
       justifyContent: 'center',
+      gap: 8,
     },
-    avatarText: {
-      fontSize: 17,
+    playBtnText: {
+      color: '#fff',
+      fontSize: 15,
       fontWeight: '800',
-      color: colors.primary,
-    },
-    profileMeta: {
-      flex: 1,
-      minWidth: 0,
-    },
-    profileName: {
-      fontSize: 17,
-      fontWeight: '800',
-      color: colors.text,
-    },
-    profileRole: {
-      fontSize: 13,
-      color: colors.textMuted,
-      marginTop: 2,
-    },
-    sectionTitle: {
-      fontSize: 13,
-      fontWeight: '700',
-      textTransform: 'uppercase',
-      letterSpacing: 0.6,
-      color: colors.textMuted,
-      marginTop: 16,
-      marginBottom: 8,
-    },
-    quickGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 10,
     },
     card: {
       backgroundColor: colors.surfaceElevated,

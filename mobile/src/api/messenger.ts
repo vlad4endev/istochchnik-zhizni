@@ -53,6 +53,8 @@ export interface MessageWithSender {
   payload_type?: MessagePayloadType;
   payload?: Record<string, unknown>;
   reply_to_message_id: string | null;
+  /** Откуда переслано: `{ sender_name, ... }` (объект или JSON-строка). */
+  forwarded_from?: unknown;
   is_edited: boolean;
   is_deleted: boolean;
   created_at: string;
@@ -127,10 +129,17 @@ export async function sendMessage(
   content: string,
   clientMsgId?: string,
   replyToMessageId?: string | null,
+  opts?: { payloadType?: MessagePayloadType; payload?: Record<string, unknown> },
 ): Promise<MessageWithSender> {
   const { data } = await apiClient.post<MessageWithSender>(
     `${BASE}/conversations/${encodeURIComponent(conversationId)}/messages`,
-    { content, clientMsgId, replyToMessageId: replyToMessageId ?? null, payloadType: 'text' },
+    {
+      content,
+      clientMsgId,
+      replyToMessageId: replyToMessageId ?? null,
+      payloadType: opts?.payloadType ?? 'text',
+      ...(opts?.payload ? { payload: opts.payload } : {}),
+    },
   );
   return data;
 }
@@ -204,4 +213,113 @@ export async function removeReaction(messageId: string, emoji: string): Promise<
   await apiClient.delete(
     `${BASE}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`,
   );
+}
+
+export type PatchMyConversationUiBody = {
+  muted?: boolean;
+  uiPinned?: boolean;
+};
+
+/** Личные настройки чата: закрепить в списке, отключить уведомления. */
+export async function patchMyConversationUi(
+  conversationId: string,
+  body: PatchMyConversationUiBody,
+): Promise<void> {
+  await apiClient.patch(`${BASE}/conversations/${encodeURIComponent(conversationId)}/my-ui`, body);
+}
+
+export async function editMessage(messageId: string, content: string): Promise<void> {
+  await apiClient.patch(`${BASE}/messages/${encodeURIComponent(messageId)}`, { content });
+}
+
+export async function fetchParticipantsCount(conversationId: string): Promise<number> {
+  const { data } = await apiClient.get<unknown[]>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/participants`,
+  );
+  return Array.isArray(data) ? data.length : 0;
+}
+
+export async function fetchPinnedMessages(
+  conversationId: string,
+  limit = 15,
+): Promise<MessageWithSender[]> {
+  const { data } = await apiClient.get<MessageWithSender[]>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/pinned-messages`,
+    { params: { limit } },
+  );
+  return data ?? [];
+}
+
+export async function pinChatMessage(conversationId: string, messageId: string): Promise<void> {
+  await apiClient.post(`${BASE}/conversations/${encodeURIComponent(conversationId)}/pins`, {
+    messageId,
+  });
+}
+
+export async function unpinChatMessage(conversationId: string, messageId: string): Promise<void> {
+  await apiClient.delete(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/pins/${encodeURIComponent(messageId)}`,
+  );
+}
+
+export type MessageReader = {
+  member_id: number;
+  display_name: string;
+  avatar_url: string | null;
+  read_at: string | null;
+};
+
+export type MessageReadersResponse = {
+  readers: MessageReader[];
+  /** Сколько всего других участников в чате (для «Прочитали 3 из 8»). */
+  other_member_count: number;
+};
+
+/** Кто прочитал сообщение — только автор и только в группах и каналах. */
+export async function fetchMessageReaders(messageId: string): Promise<MessageReadersResponse> {
+  const { data } = await apiClient.get<Partial<MessageReadersResponse>>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/readers`,
+  );
+  return {
+    readers: Array.isArray(data?.readers) ? data.readers : [],
+    other_member_count: Number(data?.other_member_count) || 0,
+  };
+}
+
+/** Переслать сообщение в один или несколько чатов. Возвращает, сколько чатов получили копию. */
+export async function forwardMessage(
+  messageId: string,
+  conversationIds: string[],
+): Promise<number> {
+  const { data } = await apiClient.post<{ forwarded?: unknown[] }>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/forward`,
+    { conversationIds },
+  );
+  return Array.isArray(data?.forwarded) ? data.forwarded.length : conversationIds.length;
+}
+
+export type PollVoter = { member_id: number; display_name: string; avatar_url: string | null };
+
+export type PollVotersResponse = {
+  anonymous: boolean;
+  options: Array<{ index: number; voters: PollVoter[] }>;
+};
+
+/** Проголосовать: пустой список снимает голос. Для опроса с одним ответом — не больше одного номера. */
+export async function votePoll(
+  messageId: string,
+  optionIndexes: number[],
+): Promise<{ tallies: number[]; my_options: number[] }> {
+  const { data } = await apiClient.post<{ tallies?: number[]; my_options?: number[] }>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/poll-vote`,
+    { optionIndexes },
+  );
+  return { tallies: data?.tallies ?? [], my_options: data?.my_options ?? [] };
+}
+
+export async function fetchPollVoters(messageId: string): Promise<PollVotersResponse> {
+  const { data } = await apiClient.get<Partial<PollVotersResponse>>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/poll-voters`,
+  );
+  return { anonymous: data?.anonymous === true, options: Array.isArray(data?.options) ? data.options : [] };
 }

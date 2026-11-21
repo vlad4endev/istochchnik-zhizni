@@ -2,11 +2,16 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { format, isSameDay, isToday, isYesterday } from 'date-fns';
+import { ru } from 'date-fns/locale';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -16,14 +21,30 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   addReaction,
   deleteMessage,
+  editMessage,
   fetchConversations,
   fetchMessages,
+  fetchParticipantsCount,
+  fetchPinnedMessages,
   markConversationRead,
+  pinChatMessage,
   removeReaction,
   sendMessage,
+  unpinChatMessage,
   type MessageWithSender,
 } from '../api/messenger';
+import { sendAttachments, sendVoiceMessage } from '../api/messengerUpload';
+import { fetchChatMembers } from '../api/chatManage';
+import { denormalizeMentions } from '../lib/mentions';
+import { openGroupCall } from '../lib/openCall';
+import { startDirectCall } from '../lib/startDirectCall';
+import { PollCreateModal } from '../components/messenger/PollCreateModal';
+import { ForwardSheet } from '../components/messenger/ForwardSheet';
+import { ReadersSheet } from '../components/messenger/ReadersSheet';
+import { isReadByOthers, readUpTo } from '../lib/readReceipts';
+import { ChatHeaderTitle } from '../components/messenger/ChatHeaderTitle';
 import { ChatInput } from '../components/messenger/ChatInput';
+import { CreateMeetingSheet } from '../components/messenger/CreateMeetingSheet';
 import { MessageBubble } from '../components/messenger/MessageBubble';
 import { MessageContextMenu } from '../components/messenger/MessageContextMenu';
 import { ReplyBar } from '../components/messenger/ReplyBar';
@@ -36,6 +57,7 @@ import {
   getConversationTitle,
   sortMessagesChronological,
 } from '../lib/messengerUtils';
+import { formatLastSeen, membersWord } from '../lib/lastSeen';
 import { setActiveMessengerConversation } from '../lib/realtimeWs';
 import type { RootStackParamList } from '../navigation/types';
 import { useAuthStore } from '../stores/authStore';
@@ -44,6 +66,15 @@ import { messengerTextProps } from '../theme/messenger';
 import { useTheme } from '../theme';
 
 type ChatRoute = RouteProp<RootStackParamList, 'ChatThread'>;
+
+function dayChipLabel(iso: string): string {
+  const d = new Date(iso);
+  if (isToday(d)) return 'Сегодня';
+  if (isYesterday(d)) return 'Вчера';
+  return format(d, d.getFullYear() === new Date().getFullYear() ? 'd MMMM' : 'd MMMM yyyy', {
+    locale: ru,
+  });
+}
 
 export function ChatThreadScreen() {
   const { colors } = useTheme();
@@ -64,7 +95,17 @@ export function ChatThreadScreen() {
     isOwn: boolean;
   } | null>(null);
 
+  const [editing, setEditing] = useState<MessageWithSender | null>(null);
+  const [editToken, setEditToken] = useState(0);
+  const [meetingOpen, setMeetingOpen] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [forwardId, setForwardId] = useState<string | null>(null);
+  const [readersId, setReadersId] = useState<string | null>(null);
+  const readCursors = useMessengerRealtimeStore((s) => s.readCursorsByConv[conversationId]);
+  const [showJump, setShowJump] = useState(false);
   const typingUsers = useMessengerRealtimeStore((s) => s.typingByConv[conversationId] ?? []);
+  const onlineMembers = useMessengerRealtimeStore((s) => s.onlineMembers);
+  const memberLastSeenAt = useMessengerRealtimeStore((s) => s.memberLastSeenAt);
 
   const conversationsQuery = useQuery({
     queryKey: ['messenger', 'conversations'],
@@ -81,9 +122,183 @@ export function ChatThreadScreen() {
     return typingUsers.find((u) => u.memberId !== memberId) ?? null;
   }, [typingUsers, memberId]);
 
+  const participantsQuery = useQuery({
+    queryKey: ['messenger', 'participants-count', conversationId],
+    queryFn: () => fetchParticipantsCount(conversationId),
+    enabled: isGroup,
+    staleTime: 5 * 60_000,
+  });
+
+  const membersQuery = useQuery({
+    queryKey: ['messenger', 'members', conversationId],
+    queryFn: () => fetchChatMembers(conversationId),
+    enabled: isGroup,
+    staleTime: 5 * 60_000,
+  });
+  const mentionNames = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const m of membersQuery.data ?? []) {
+      map[m.member_id] = [m.first_name, m.last_name].filter(Boolean).join(' ').trim() || m.name;
+    }
+    return map;
+  }, [membersQuery.data]);
+  const mentionParticipants = useMemo(
+    () =>
+      (membersQuery.data ?? [])
+        .filter((m) => m.member_id !== memberId)
+        .map((m) => ({ id: m.member_id, label: mentionNames[m.member_id]! })),
+    [membersQuery.data, memberId, mentionNames],
+  );
+  const editPrefill = useMemo(() => {
+    if (!editing) return null;
+    const d = denormalizeMentions(String(editing.content ?? ''), mentionNames);
+    return { token: editToken, text: d.text, mentions: d.picks };
+  }, [editing, editToken, mentionNames]);
+
+  const pinnedQuery = useQuery({
+    queryKey: ['messenger', 'pinned', conversationId],
+    queryFn: () => fetchPinnedMessages(conversationId, 15),
+    staleTime: 30_000,
+  });
+  const pinnedMessages = pinnedQuery.data ?? [];
+  const pinnedIds = useMemo(() => new Set(pinnedMessages.map((m) => m.id)), [pinnedMessages]);
+
+  const headerInfo = useMemo(() => {
+    const other = conversation?.other_member ?? null;
+    const typing = typingUsers.find((u) => u.memberId !== memberId) ?? null;
+    if (typing) {
+      return {
+        subtitle: isGroup ? `${typing.memberName.split(' ')[0]} печатает…` : 'печатает…',
+        accent: true,
+      };
+    }
+    if (isGroup) {
+      const n = participantsQuery.data;
+      return { subtitle: n ? membersWord(n) : 'Групповой чат', accent: false };
+    }
+    if (other) {
+      if (onlineMembers.has(other.id)) return { subtitle: 'в сети', accent: true };
+      return {
+        subtitle: formatLastSeen(memberLastSeenAt[other.id] ?? other.last_seen_at ?? null),
+        accent: false,
+      };
+    }
+    return { subtitle: '', accent: false };
+  }, [
+    conversation?.other_member,
+    isGroup,
+    memberId,
+    memberLastSeenAt,
+    onlineMembers,
+    participantsQuery.data,
+    typingUsers,
+  ]);
+
+  const upTo = useMemo(
+    () =>
+      readUpTo({ cursors: readCursors, myMemberId: memberId, lastMessage: conversation?.last_message }),
+    [readCursors, memberId, conversation?.last_message],
+  );
+
+  const headerOnline =
+    !isGroup && conversation?.other_member != null && onlineMembers.has(conversation.other_member.id);
+  const headerTitleText = conversation ? getConversationTitle(conversation) : title || 'Чат';
+  const headerAvatar = conversation ? getConversationAvatarUrl(conversation) : null;
+
+  const callPeer = useCallback(
+    async (mediaType: 'audio' | 'video') => {
+      const other = conversation?.other_member;
+      if (!other) return;
+      const err = await startDirectCall(
+        { conversationId, recipientId: other.id, peerName: headerTitleText },
+        mediaType,
+      );
+      if (err) Alert.alert('Звонок', err);
+      else navigation.navigate('Call');
+    },
+    [conversation?.other_member, conversationId, headerTitleText, navigation],
+  );
+
   useEffect(() => {
-    navigation.setOptions({ title: title || 'Чат' });
-  }, [navigation, title]);
+    navigation.setOptions({
+      title: headerTitleText,
+      headerTitle: () => (
+        <Pressable
+          onPress={() =>
+            navigation.navigate('ChatProfile', {
+              conversationId,
+              title: headerTitleText,
+              isGroup,
+            })
+          }
+          accessibilityRole="button"
+          accessibilityLabel={`Профиль чата ${headerTitleText}`}
+        >
+        <ChatHeaderTitle
+          title={headerTitleText}
+          subtitle={headerInfo.subtitle}
+          accent={headerInfo.accent}
+          avatarUrl={headerAvatar}
+          avatarSeed={conversationId}
+          isOnline={headerOnline}
+          showOnline={!isGroup && conversation?.other_member != null}
+          textColor={colors.text}
+          subtitleColor={colors.textSecondary}
+          accentColor={colors.primary}
+        />
+        </Pressable>
+      ),
+      headerRight: () => (
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {!isGroup && conversation?.other_member ? (
+            <>
+              <Pressable
+                onPress={() => void callPeer('audio')}
+                accessibilityRole="button"
+                accessibilityLabel="Аудиозвонок"
+                hitSlop={6}
+                style={({ pressed }) => [{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="call-outline" size={24} color={colors.primary} />
+              </Pressable>
+              <Pressable
+                onPress={() => void callPeer('video')}
+                accessibilityRole="button"
+                accessibilityLabel="Видеозвонок"
+                hitSlop={6}
+                style={({ pressed }) => [{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="videocam-outline" size={26} color={colors.primary} />
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              onPress={() => setMeetingOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Созвон в этом чате"
+              hitSlop={8}
+              style={({ pressed }) => [{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.6 }]}
+            >
+              <Ionicons name="videocam-outline" size={26} color={colors.primary} />
+            </Pressable>
+          )}
+        </View>
+      ),
+    });
+  }, [
+    navigation,
+    headerTitleText,
+    headerInfo,
+    headerAvatar,
+    headerOnline,
+    conversationId,
+    isGroup,
+    conversation?.other_member,
+    callPeer,
+    colors.text,
+    colors.textSecondary,
+    colors.primary,
+  ]);
 
   useEffect(() => {
     setActiveMessengerConversation(conversationId);
@@ -176,6 +391,25 @@ export function ChatThreadScreen() {
     },
   });
 
+  const editMutation = useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) => editMessage(id, text),
+    onSuccess: () => {
+      setEditing(null);
+      void queryClient.invalidateQueries({ queryKey: ['messenger', 'messages', conversationId] });
+      void queryClient.invalidateQueries({ queryKey: ['messenger', 'conversations'] });
+    },
+  });
+
+  const pinMutation = useMutation({
+    mutationFn: async (message: MessageWithSender) => {
+      if (pinnedIds.has(message.id)) await unpinChatMessage(conversationId, message.id);
+      else await pinChatMessage(conversationId, message.id);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['messenger', 'pinned', conversationId] });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: deleteMessage,
     onSuccess: () => {
@@ -225,6 +459,43 @@ export function ChatThreadScreen() {
     }
   }, [conversationId, hasMore, loadingOlder, mergedMessages, queryClient]);
 
+  const refreshAfterSend = useCallback(async () => {
+    setReplyTo(null);
+    await queryClient.invalidateQueries({ queryKey: ['messenger', 'messages', conversationId] });
+    await queryClient.invalidateQueries({ queryKey: ['messenger', 'conversations'] });
+  }, [conversationId, queryClient]);
+
+  const handleSendAttachments = useCallback(
+    async (
+      items: Parameters<typeof sendAttachments>[0]['items'],
+      caption: string,
+      onProgress: (pct: number) => void,
+    ) => {
+      await sendAttachments({
+        conversationId,
+        items,
+        caption,
+        replyToMessageId: replyTo?.id ?? null,
+        onProgress,
+      });
+      await refreshAfterSend();
+    },
+    [conversationId, refreshAfterSend, replyTo?.id],
+  );
+
+  const handleSendVoice = useCallback(
+    async (file: Parameters<typeof sendVoiceMessage>[0]['file'], durationSec: number) => {
+      await sendVoiceMessage({
+        conversationId,
+        file,
+        durationSec,
+        replyToMessageId: replyTo?.id ?? null,
+      });
+      await refreshAfterSend();
+    },
+    [conversationId, refreshAfterSend, replyTo?.id],
+  );
+
   const handleLongPress = useCallback(
     (message: MessageWithSender) => {
       const isOwn = message.sender_id != null && memberId != null && message.sender_id === memberId;
@@ -270,8 +541,21 @@ export function ChatThreadScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
+      {pinnedMessages.length > 0 ? (
+        <View style={styles.pinBar} accessibilityLabel="Закреплённое сообщение">
+          <Ionicons name="pin" size={18} color={colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.pinLabel}>Закреплённое сообщение</Text>
+            <Text style={styles.pinText} numberOfLines={1}>
+              {denormalizeMentions(String(pinnedMessages[0]!.content ?? ''), mentionNames).text.trim() || 'Вложение'}
+            </Text>
+          </View>
+        </View>
+      ) : null}
       <FlatList
         ref={listRef}
+        onScroll={(e) => setShowJump(e.nativeEvent.contentOffset.y > 400)}
+        scrollEventThrottle={100}
         data={displayMessages}
         keyExtractor={(item) => item.client_msg_id ?? item.id}
         inverted
@@ -311,26 +595,68 @@ export function ChatThreadScreen() {
             isGroup &&
             !isOwn &&
             (prev == null || prev.sender_id !== item.sender_id);
+          const showDay = prev == null || !isSameDay(new Date(prev.created_at), new Date(item.created_at));
           return (
-            <MessageBubble
-              message={item}
-              isOwn={isOwn}
-              showSenderName={showSender}
-              onLongPress={handleLongPress}
-              onSwipeReply={handleSwipeReply}
-            />
+            <View>
+              {showDay ? (
+                <View style={styles.dayChipWrap}>
+                  <Text style={styles.dayChip}>{dayChipLabel(item.created_at)}</Text>
+                </View>
+              ) : null}
+              <MessageBubble
+                message={item}
+                isOwn={isOwn}
+                showSenderName={showSender}
+                onLongPress={handleLongPress}
+                onSwipeReply={handleSwipeReply}
+                readByOthers={isOwn && isReadByOthers(item.id, upTo)}
+                onShowReaders={isGroup && isOwn ? (m) => setReadersId(m.id) : undefined}
+                mentionNames={mentionNames}
+                onJoinCall={(inv) =>
+                  openGroupCall(navigation, { inviteUrl: inv.url, title: inv.title, mediaType: 'video' })
+                }
+              />
+            </View>
           );
         }}
       />
 
       <View style={{ paddingBottom: insets.bottom }}>
         <ReplyBar replyTo={replyTo} onCancel={() => setReplyTo(null)} />
+        {editing ? (
+          <View style={styles.editBar}>
+            <Ionicons name="pencil" size={18} color={colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pinLabel}>Редактирование</Text>
+              <Text style={styles.pinText} numberOfLines={1}>
+                {denormalizeMentions(String(editing.content ?? ''), mentionNames).text}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setEditing(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Отменить правку"
+              style={styles.editClose}
+            >
+              <Ionicons name="close" size={22} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+        ) : null}
         <ChatInput
           conversationId={conversationId}
+          onSendAttachments={handleSendAttachments}
+          onSendVoice={handleSendVoice}
+          onCreatePoll={() => setPollOpen(true)}
+          prefill={editPrefill}
+          mentionParticipants={mentionParticipants}
           onSend={async (text) => {
+            if (editing) {
+              await editMutation.mutateAsync({ id: editing.id, text });
+              return;
+            }
             await sendMutation.mutateAsync(text);
           }}
-          disabled={sendMutation.isPending}
+          disabled={sendMutation.isPending || editMutation.isPending}
         />
       </View>
 
@@ -346,6 +672,44 @@ export function ChatThreadScreen() {
         onDelete={(messageId) => {
           void deleteMutation.mutateAsync(messageId);
         }}
+        onEdit={(message) => {
+          setReplyTo(null);
+          setEditing(message);
+          setEditToken((t) => t + 1);
+        }}
+        onPin={(message) => pinMutation.mutate(message)}
+        onForward={(message) => setForwardId(message.id)}
+        onShowReaders={isGroup ? (message) => setReadersId(message.id) : undefined}
+        isPinned={menuMessage ? pinnedIds.has(menuMessage.message.id) : false}
+      />
+
+      {showJump ? (
+        <Pressable
+          onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
+          accessibilityRole="button"
+          accessibilityLabel="К последним сообщениям"
+          style={[styles.jump, { bottom: insets.bottom + 84 }]}
+        >
+          <Ionicons name="chevron-down" size={26} color={colors.primary} />
+        </Pressable>
+      ) : null}
+
+      <PollCreateModal visible={pollOpen} conversationId={conversationId} onClose={() => setPollOpen(false)} />
+      <ForwardSheet
+        messageId={forwardId}
+        sourceConversationId={conversationId}
+        onClose={() => setForwardId(null)}
+        onForwarded={(n) =>
+          Alert.alert(n === 1 ? 'Сообщение переслано' : `Переслано в чатов: ${n}`)
+        }
+      />
+      <ReadersSheet messageId={readersId} onClose={() => setReadersId(null)} />
+
+      <CreateMeetingSheet
+        visible={meetingOpen}
+        onClose={() => setMeetingOpen(false)}
+        conversationId={conversationId}
+        conversationTitle={headerTitleText}
       />
     </KeyboardAvoidingView>
   );
@@ -376,6 +740,55 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors']) {
     loader: {
       paddingVertical: 12,
       transform: [{ scaleY: -1 }],
+    },
+    dayChipWrap: { alignItems: 'center', paddingVertical: 8 },
+    dayChip: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textSecondary,
+      backgroundColor: colors.surfaceElevated,
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      borderRadius: 12,
+      overflow: 'hidden',
+    },
+    pinBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      backgroundColor: colors.surfaceElevated,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.textMuted + '66',
+    },
+    pinLabel: { fontSize: 13, fontWeight: '800', color: colors.primary },
+    pinText: { fontSize: 15, color: colors.textSecondary },
+    editBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      backgroundColor: colors.surfaceElevated,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.textMuted + '66',
+    },
+    editClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+    jump: {
+      position: 'absolute',
+      right: 16,
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: colors.surfaceElevated,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 6,
+      elevation: 5,
     },
   });
 }

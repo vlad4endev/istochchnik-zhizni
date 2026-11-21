@@ -52,7 +52,9 @@ export function MemberPrayerCard({
     >
       {isMe ? (
         <View style={{ gap: 10 }}>
-          <Text style={styles.fieldLabel}>Ваша молитвенная нужда</Text>
+          <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
+            Ваша молитвенная нужда
+          </Text>
           <TextInput
             style={[
               styles.textarea,
@@ -158,11 +160,10 @@ export function BacksliderPrayerCard({ backslider }: { backslider: Backslider })
 
 const styles = StyleSheet.create({
   fieldLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    color: '#78716c',
   },
   textarea: {
     minHeight: 110,
@@ -170,23 +171,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 17,
+    lineHeight: 24,
   },
   error: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#b91c1c',
   },
   saveBtn: {
     alignSelf: 'flex-start',
     paddingHorizontal: 20,
     paddingVertical: 12,
+    minHeight: 48,
+    justifyContent: 'center',
     borderRadius: 12,
     minWidth: 120,
     alignItems: 'center',
   },
   saveBtnText: {
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: 16,
   },
 });
