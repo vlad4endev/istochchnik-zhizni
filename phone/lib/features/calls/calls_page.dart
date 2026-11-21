@@ -7,6 +7,7 @@ import '../../core/json.dart';
 import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
+import 'join_meeting_page.dart';
 import 'widgets/meeting_sheet.dart';
 
 class CallsPage extends StatefulWidget {
@@ -59,6 +60,7 @@ class _CallsPageState extends State<CallsPage> {
       title: 'Звонки',
       subtitle: 'Журнал звонков',
       actions: [
+        HeaderButton(icon: Icons.link_rounded, tooltip: 'Войти по ссылке', onPressed: () => showJoinByLinkSheet(context)),
         HeaderButton(icon: Icons.video_call_outlined, tooltip: 'Создать встречу по ссылке', onPressed: () => showMeetingKindSheet(context)),
       ],
       body: AsyncBody(

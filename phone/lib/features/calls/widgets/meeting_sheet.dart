@@ -6,6 +6,7 @@ import '../../../ui/kit/kit.dart';
 import '../../../ui/widgets.dart';
 import '../../prayer/widgets/sheet_frame.dart';
 import '../call_page.dart';
+import '../join_meeting_page.dart';
 import '../logic/meeting_logic.dart';
 
 /// Диалог создания конференции по ссылке: название, микрофон/камера, шаблоны стражи.
@@ -117,7 +118,7 @@ class _MeetingFormState extends State<MeetingForm> {
 
 /// Выбор вида конференции (видео / аудио) и переход к форме создания.
 Future<void> showMeetingKindSheet(BuildContext context, {String? conversationId}) async {
-  final media = await showPrayerSheet<MeetingMedia>(
+  final choice = await showPrayerSheet<String>(
     context,
     title: 'Конференция по ссылке',
     subtitle: conversationId == null ? 'Отдельная встреча — участники подключаются по ссылке' : 'Ссылка-приглашение для участников',
@@ -129,7 +130,7 @@ Future<void> showMeetingKindSheet(BuildContext context, {String? conversationId}
           leading: const IconTile(Icons.videocam_outlined, tone: Tone.red),
           title: 'Видеоконференция',
           subtitle: 'С камерой и голосом',
-          onTap: () => Navigator.pop(sheetContext, MeetingMedia.video),
+          onTap: () => Navigator.pop(sheetContext, 'video'),
         ),
         const SizedBox(height: 8),
         ListRow(
@@ -137,11 +138,23 @@ Future<void> showMeetingKindSheet(BuildContext context, {String? conversationId}
           leading: const IconTile(Icons.mic_none_rounded, tone: Tone.violet),
           title: 'Аудиоконференция',
           subtitle: 'Только голос',
-          onTap: () => Navigator.pop(sheetContext, MeetingMedia.audio),
+          onTap: () => Navigator.pop(sheetContext, 'audio'),
+        ),
+        const SizedBox(height: 8),
+        ListRow(
+          key: const ValueKey('meeting-kind-join'),
+          leading: const IconTile(Icons.link_rounded, tone: Tone.amber),
+          title: 'Войти по ссылке',
+          subtitle: 'Есть приглашение на чужую встречу',
+          onTap: () => Navigator.pop(sheetContext, 'join'),
         ),
       ],
     ),
   );
-  if (media == null || !context.mounted) return;
-  await showMeetingSheet(context, media: media, conversationId: conversationId);
+  if (choice == null || !context.mounted) return;
+  if (choice == 'join') {
+    await showJoinByLinkSheet(context);
+    return;
+  }
+  await showMeetingSheet(context, media: choice == 'audio' ? MeetingMedia.audio : MeetingMedia.video, conversationId: conversationId);
 }

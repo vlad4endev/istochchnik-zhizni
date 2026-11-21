@@ -15,6 +15,7 @@ import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 import '../calls/call_page.dart';
+import '../calls/join_meeting_page.dart';
 import '../calls/widgets/meeting_sheet.dart';
 import '../prayer/widgets/sheet_frame.dart' show actionError;
 import 'chat_profile_page.dart';
@@ -117,6 +118,7 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Future<void> _openUrl(String raw) async {
+    if (openInviteIfAny(context, raw)) return;
     final uri = Uri.tryParse(raw);
     if (uri == null) return;
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);

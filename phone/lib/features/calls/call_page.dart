@@ -23,6 +23,10 @@ class CallPage extends StatefulWidget {
     this.video = false,
     this.title = 'Звонок',
     this.meeting,
+    this.inviteToken,
+    this.inviteMedia,
+    this.micOn = true,
+    this.camOn = true,
   });
 
   final String? callId;
@@ -37,6 +41,12 @@ class CallPage extends StatefulWidget {
 
   /// Новая конференция по ссылке (из чата или отдельная встреча).
   final MeetingLaunch? meeting;
+
+  /// Вход в чужую встречу по приглашению (`/call/join/<токен>`).
+  final String? inviteToken;
+  final MeetingMedia? inviteMedia;
+  final bool micOn;
+  final bool camOn;
 
   @override
   State<CallPage> createState() => _CallPageState();
@@ -62,8 +72,12 @@ class _CallPageState extends State<CallPage> {
   void initState() {
     super.initState();
     _callId = widget.callId;
-    _muted = !(widget.meeting?.micOn ?? true);
-    _camOn = widget.meeting != null ? (widget.meeting!.media.isVideo && widget.meeting!.camOn) : widget.video;
+    _muted = !(widget.meeting?.micOn ?? widget.micOn);
+    _camOn = widget.meeting != null
+        ? (widget.meeting!.media.isVideo && widget.meeting!.camOn)
+        : widget.inviteToken != null
+            ? ((widget.inviteMedia?.isVideo ?? false) && widget.camOn)
+            : widget.video;
     _room.addListener(_refresh);
   }
 
@@ -113,7 +127,7 @@ class _CallPageState extends State<CallPage> {
       await audio.configure(const AudioSessionConfiguration.speech());
       if (widget.incoming && _callId != null) {
         await api.acceptCall(_callId!);
-      } else if (_callId == null) {
+      } else if (_callId == null && widget.inviteToken == null) {
         final meeting = widget.meeting;
         final created = meeting != null
             ? await api.createCall(
@@ -142,7 +156,13 @@ class _CallPageState extends State<CallPage> {
           _meetingTitle = title.isNotEmpty ? title : null;
         }
       }
-      final tokenBody = await api.callToken(_callId!);
+      final Map<String, dynamic> tokenBody;
+      if (widget.inviteToken != null && _callId == null) {
+        tokenBody = await api.joinInvitation(widget.inviteToken!);
+        _callId = str(asMap(tokenBody['call'])['id']);
+      } else {
+        tokenBody = await api.callToken(_callId!);
+      }
       final url = str(tokenBody['url']);
       final token = str(tokenBody['token']);
       if (url.isEmpty || token.isEmpty) {

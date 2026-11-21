@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 
 void main() {
   for (final (width, scale) in [(320.0, 1.0), (320.0, 2.0), (390.0, 1.3)]) {
-    testWidgets('шапка «Чаты»: видео, аудио, новый чат — ширина $width, шрифт $scale', (tester) async {
+    testWidgets('шапка «Чаты»: ссылка, видео, аудио, новый чат — ширина $width, шрифт $scale', (tester) async {
       tester.view.physicalSize = Size(width, 700);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -23,6 +23,7 @@ void main() {
         ),
       );
       await tester.pump();
+      expect(find.byTooltip('Войти по ссылке'), findsOneWidget);
       expect(find.byTooltip('Видеовстреча'), findsOneWidget);
       expect(find.byTooltip('Аудиовстреча'), findsOneWidget);
       expect(find.byTooltip('Новое сообщение'), findsOneWidget);

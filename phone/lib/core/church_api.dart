@@ -234,6 +234,12 @@ class ChurchApi {
     }));
   }
 
+  Future<Map<String, dynamic>> invitationPreview(String token) async =>
+      asMap(await get('/api/call-invitations/${Uri.encodeComponent(token)}'));
+
+  Future<Map<String, dynamic>> joinInvitation(String token) async =>
+      asMap(await post('/api/call-invitations/${Uri.encodeComponent(token)}/join'));
+
   Future<Map<String, dynamic>> callToken(String callId) async =>
       asMap(await post('/api/calls/$callId/token'));
 
