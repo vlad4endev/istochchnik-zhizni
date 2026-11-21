@@ -25,6 +25,7 @@ import {
 } from '../api/calls';
 import { ActionSheet } from '../components/messenger/ActionSheet';
 import { disconnectMessage, elapsedLabel, gridColumns, isHardEnd, type ActiveCall } from '../lib/callState';
+import { useRingback } from '../hooks/useRingback';
 import { initialsOf } from '../lib/dashboardHome';
 import { loadLiveKit, type LiveKitLoad } from '../lib/livekitNative';
 import type { RootStackParamList } from '../navigation/types';
@@ -45,6 +46,17 @@ export function CallScreen() {
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const lk = useMemo(() => loadLiveKit(), []);
+  const isCalling = call?.phase === 'calling';
+  useRingback(isCalling);
+  const callingSince = useRef(Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isCalling) return;
+    callingSince.current = Date.now();
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isCalling]);
 
   const leave = useCallback(() => {
     closeCall();
@@ -126,7 +138,7 @@ export function CallScreen() {
   if (call.phase === 'calling') {
     return (
       <Shell>
-        <Center icon={call.mediaType === 'video' ? 'videocam' : 'call'} title={call.peerName ?? call.title} text="Звоним…" pulse>
+        <Center icon={call.mediaType === 'video' ? 'videocam' : 'call'} title={call.peerName ?? call.title} text={`Вызов… ${elapsedLabel(callingSince.current, now)}`} pulse>
           <RoundButton
             icon="call"
             color="#DC2626"
@@ -447,7 +459,7 @@ function Center({
   children?: React.ReactNode;
 }) {
   return (
-    <View style={styles.center} accessibilityLiveRegion="polite">
+    <View style={styles.center} accessibilityLiveRegion={pulse ? 'none' : 'polite'}>
       <View style={[styles.bigIcon, pulse && { opacity: 0.9 }]}>
         <Ionicons name={icon} size={44} color="#fff" />
       </View>

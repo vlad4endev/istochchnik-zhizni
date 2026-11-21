@@ -818,10 +818,19 @@ async function sendFcmCallDataOnly(
   const summary = emptyChannel();
   const iosSilent = opts?.iosSilent === true && data.type === 'incoming_call';
   const messaging = getFirebaseMessaging();
-  if (!messaging) return summary;
+  if (!messaging) {
+    console.warn('[push] call wake skipped: Firebase не настроен (FIREBASE_SERVICE_ACCOUNT_*)', { memberId, type: data.type });
+    return summary;
+  }
 
   const tokens = await getFcmTokensForMember(memberId);
-  if (tokens.length === 0) return summary;
+  if (tokens.length === 0) {
+    console.warn('[push] call wake skipped: у пользователя нет FCM-токенов (приложение не зарегистрировало телефон)', {
+      memberId,
+      type: data.type,
+    });
+    return summary;
+  }
 
   const dataStrings = toFcmDataStrings(title, body, data, undefined, undefined);
   dataStrings.type = data.type || dataStrings.type || 'incoming_call';
@@ -872,5 +881,6 @@ async function sendFcmCallDataOnly(
       }
     }
   }
+  console.info('[push] call wake', { memberId, type: data.type, ...summary });
   return summary;
 }

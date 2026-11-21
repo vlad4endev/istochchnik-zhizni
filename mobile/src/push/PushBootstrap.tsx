@@ -51,6 +51,14 @@ export function PushBootstrap() {
     if (!token) return;
     void registerPush().then((result) => {
       // Android 14+: пользователь мог запретить полноэкранные звонки — один раз подсказываем, как включить.
+      if (result === 'denied') {
+        Alert.alert(
+          'Уведомления выключены',
+          'Без них входящие звонки и сообщения не придут, пока приложение закрыто. Включите уведомления в настройках.',
+          [{ text: 'Позже', style: 'cancel' }, { text: 'Открыть настройки', onPress: () => void Linking.openSettings() }],
+        );
+        return;
+      }
       if (result !== 'ok') return;
       const prompt = shouldPromptFullScreen({
         available: callScreenAvailable,
