@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../../ui/kit/kit.dart';
 import '../logic/chat_logic.dart';
 import '../models/chat_models.dart';
+import '../thread_controller.dart' show UploadProgress;
 import 'emoji_panel.dart';
 
 /// Панель ввода: баннер «ответ / правка», кнопка эмодзи, поле, вложения, отправка и голосовое.
@@ -17,6 +18,7 @@ class ChatComposer extends StatefulWidget {
     required this.canSendMedia,
     required this.replyTo,
     required this.editing,
+    this.uploading,
     required this.onCancelMode,
     required this.onSend,
     required this.onAttach,
@@ -31,6 +33,9 @@ class ChatComposer extends StatefulWidget {
   final bool canSendMedia;
   final ChatMessage? replyTo;
   final ChatMessage? editing;
+
+  /// Идёт загрузка вложений: показываем прогресс над полем.
+  final UploadProgress? uploading;
   final VoidCallback onCancelMode;
   final VoidCallback onSend;
   final VoidCallback onAttach;
@@ -112,6 +117,7 @@ class _ChatComposerState extends State<ChatComposer> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (widget.uploading != null) _UploadBanner(progress: widget.uploading!),
               if (modeMessage != null)
                 _ModeBanner(message: modeMessage, editing: editing, onCancel: widget.onCancelMode),
               Padding(
@@ -177,6 +183,50 @@ class _ChatComposerState extends State<ChatComposer> {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UploadBanner extends StatelessWidget {
+  const _UploadBanner({required this.progress});
+  final UploadProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final percent = (progress.fraction * 100).round();
+    final many = progress.total > 1;
+    return Semantics(
+      liveRegion: true,
+      label: 'Отправка вложения: $percent%',
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: palette.hairline))),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    many ? 'Отправка ${progress.index} из ${progress.total} · ${progress.name}' : 'Отправка · ${progress.name}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: palette.ink),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text('$percent%', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: palette.accent)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(value: progress.fraction <= 0 ? null : progress.fraction, minHeight: 4, color: palette.accent, backgroundColor: palette.outline),
+            ),
+          ],
         ),
       ),
     );

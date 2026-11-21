@@ -3,8 +3,20 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'data/chat_source.dart';
+import 'logic/attachment_logic.dart';
 import 'logic/chat_logic.dart';
 import 'models/chat_models.dart';
+
+/// Идёт отправка вложений: какой файл по счёту и сколько загружено.
+class UploadProgress {
+  const UploadProgress({required this.index, required this.total, required this.name, this.fraction = 0});
+  final int index;
+  final int total;
+  final String name;
+  final double fraction;
+
+  UploadProgress copyWith({double? fraction}) => UploadProgress(index: index, total: total, name: name, fraction: fraction ?? this.fraction);
+}
 
 /// Состояние открытого чата: сообщения, ответ и правка, реакции, участники и права.
 class ThreadController extends ChangeNotifier {
@@ -24,6 +36,9 @@ class ThreadController extends ChangeNotifier {
   String? error;
   bool sending = false;
   bool loadingOlder = false;
+
+  /// Идёт загрузка вложений (null — не идёт).
+  UploadProgress? uploading;
   bool hasMore = false;
 
   /// Ответ на это сообщение уйдёт вместе со следующим текстом.
@@ -187,6 +202,52 @@ class ThreadController extends ChangeNotifier {
       sending = false;
       _notify();
     }
+  }
+
+  /// Загрузить и отправить вложения по очереди. Сбой одного файла не мешает остальным.
+  /// Возвращает тексты ошибок по файлам, которые не ушли (пусто — всё отправлено).
+  Future<List<String>> sendAttachments(List<PickedAttachment> items, {bool voice = false}) async {
+    if (items.isEmpty || uploading != null) return const [];
+    final failures = <String>[];
+    sending = true;
+    try {
+      for (var i = 0; i < items.length; i++) {
+        final item = items[i];
+        uploading = UploadProgress(index: i + 1, total: items.length, name: item.name);
+        _notify();
+        try {
+          final uploaded = await source.upload(
+            path: item.path,
+            name: item.name,
+            conversationId: conversationId,
+            onProgress: (fraction) {
+              uploading = uploading?.copyWith(fraction: fraction);
+              _notify();
+            },
+          );
+          final mime = '${uploaded['mimeType'] ?? ''}'.isNotEmpty ? '${uploaded['mimeType']}' : item.mimeType;
+          final type = voice ? 'audio' : payloadTypeFor(item.name, mime);
+          final reply = replyTo?.id;
+          final sent = await source.send(conversationId, '', replyTo: reply, payloadType: type, payload: {
+            'url': '${uploaded['url'] ?? ''}',
+            'name': '${uploaded['name'] ?? ''}'.isEmpty ? item.name : '${uploaded['name']}',
+            'objectPath': '${uploaded['objectPath'] ?? ''}',
+            'mimeType': mime ?? '',
+            'size': uploaded['size'] is num ? (uploaded['size'] as num).toInt() : 0,
+            if (voice) 'kind': 'voice',
+          });
+          replyTo = null;
+          _append(sent);
+        } catch (e) {
+          failures.add(attachmentError(item.name, e is ChatException ? e.message : 'проверьте интернет и попробуйте снова'));
+        }
+      }
+    } finally {
+      uploading = null;
+      sending = false;
+      _notify();
+    }
+    return failures;
   }
 
   void _append(ChatMessage? sent) {

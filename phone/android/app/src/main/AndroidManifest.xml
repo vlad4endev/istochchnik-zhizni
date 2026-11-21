@@ -13,10 +13,13 @@
         android:label="${appLabel}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- singleTask, а не singleInstance: с singleInstance Android отменяет результат у системных
+             окон выбора (фото, видео, файл) — вложения в чате «молча» не работали. singleTask так же
+             возвращает приложение на передний план по уведомлению и звонку, но выбор файла работает. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleInstance"
+            android:launchMode="singleTask"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"

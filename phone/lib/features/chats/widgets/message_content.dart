@@ -5,6 +5,7 @@ import '../../../ui/audio_player_page.dart';
 import '../../../ui/kit/kit.dart';
 import '../../../ui/video_page.dart';
 import '../../../ui/widgets.dart';
+import '../logic/attachment_logic.dart';
 import '../models/chat_models.dart';
 import 'linkified_text.dart';
 
@@ -67,6 +68,43 @@ class MessageContent extends StatelessWidget {
         );
 
     switch (message.payloadType) {
+      // Видео уходит тем же типом «image» (как на сайте): отличаем по типу содержимого.
+      case 'image' when url.isNotEmpty && isVideoPayload(mimeType: str(payload['mimeType']), url: url, name: str(payload['name'])):
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(
+              button: true,
+              label: 'Открыть видео',
+              child: GestureDetector(
+                onTap: () => pushPage(context, VideoPage(url: url)),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: 240,
+                    height: 150,
+                    color: Colors.black87,
+                    alignment: Alignment.center,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        const Icon(Icons.play_circle_fill_rounded, size: 56, color: Colors.white),
+                        if (str(payload['name']).isNotEmpty)
+                          Positioned(
+                            left: 10,
+                            right: 10,
+                            bottom: 8,
+                            child: Text(str(payload['name']), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (caption.isNotEmpty) captionText(),
+          ],
+        );
       case 'image' when url.isNotEmpty:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,8 +1,6 @@
 import 'dart:async';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -19,7 +17,9 @@ import '../../ui/widgets.dart';
 import '../calls/call_page.dart';
 import '../prayer/widgets/sheet_frame.dart' show actionError;
 import 'chat_profile_page.dart';
+import 'data/attachment_picker.dart';
 import 'data/chat_source.dart';
+import 'logic/attachment_logic.dart';
 import 'logic/chat_logic.dart';
 import 'models/chat_models.dart';
 import 'thread_controller.dart';
@@ -40,6 +40,7 @@ class ThreadPage extends StatefulWidget {
     this.muted = false,
     this.source,
     this.events,
+    this.picker,
   });
 
   final String conversationId;
@@ -57,6 +58,7 @@ class ThreadPage extends StatefulWidget {
   /// Для тестов; в приложении берутся из сессии.
   final ChatSource? source;
   final Stream<Map<String, dynamic>>? events;
+  final AttachmentPicker? picker;
 
   @override
   State<ThreadPage> createState() => _ThreadPageState();
@@ -71,6 +73,7 @@ class _ThreadPageState extends State<ThreadPage> {
   /// Рекордер нужен только для голосовых — создаём при первой записи, а не при открытии чата.
   AudioRecorder get _recorder => _recorderInstance ??= AudioRecorder();
   late final ChatSource _source;
+  late final AttachmentPicker _picker = widget.picker ?? DeviceAttachmentPicker();
   late final ThreadController _c;
   bool _recording = false;
 
@@ -132,22 +135,20 @@ class _ThreadPageState extends State<ThreadPage> {
     }
   }
 
-  Future<void> _sendUpload(String path, String name, String payloadType) async {
+  /// Загрузить и отправить выбранное; ошибки по файлам — одним сообщением, текст не теряется.
+  Future<void> _sendFiles(List<PickedAttachment> items, {bool voice = false}) async {
+    if (items.isEmpty) return;
+    final failures = await _c.sendAttachments(items, voice: voice);
+    if (!mounted || failures.isEmpty) return;
+    showMessage(context, failures.length == 1 ? failures.first : '${failures.first}\nИ ещё ${failures.length - 1}: не отправлены');
+  }
+
+  /// Выбор вложения; сбой выбора (нет доступа и т. п.) показываем, а не глотаем.
+  Future<void> _pick(Future<List<PickedAttachment>> Function() choose) async {
     try {
-      final uploaded = await _source.upload(path: path, name: name, conversationId: widget.conversationId);
-      await _c.sendPayload(
-        payloadType: payloadType,
-        payload: {
-          'url': str(uploaded['url']),
-          'name': str(uploaded['name']).isEmpty ? name : str(uploaded['name']),
-          'objectPath': str(uploaded['objectPath']),
-          'mimeType': str(uploaded['mimeType']),
-          'size': asInt(uploaded['size']),
-          if (payloadType == 'audio') 'kind': 'voice',
-        },
-      );
-    } catch (error) {
-      _toast(error);
+      await _sendFiles(await choose());
+    } on PickerException catch (e) {
+      if (mounted) showMessage(context, e.message);
     }
   }
 
@@ -159,8 +160,10 @@ class _ThreadPageState extends State<ThreadPage> {
           padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.lg),
           child: ListGroup(
             children: [
-              ListRow(leading: const IconTile(Icons.image_outlined, tone: Tone.violet), title: 'Фото из галереи', chevron: false, onTap: () => Navigator.pop(context, 'image')),
-              ListRow(leading: const IconTile(Icons.insert_drive_file_outlined, tone: Tone.amber), title: 'Файл', chevron: false, onTap: () => Navigator.pop(context, 'file')),
+              ListRow(leading: const IconTile(Icons.image_outlined, tone: Tone.violet), title: 'Фото из галереи', chevron: false, onTap: () => Navigator.pop(context, 'photos')),
+              ListRow(leading: const IconTile(Icons.videocam_outlined, tone: Tone.red), title: 'Видео', chevron: false, onTap: () => Navigator.pop(context, 'video')),
+              ListRow(leading: const IconTile(Icons.photo_camera_outlined, tone: Tone.teal), title: 'Снять фото', chevron: false, onTap: () => Navigator.pop(context, 'camera')),
+              ListRow(leading: const IconTile(Icons.insert_drive_file_outlined, tone: Tone.amber), title: 'Файл', chevron: false, onTap: () => Navigator.pop(context, 'files')),
               ListRow(leading: const IconTile(Icons.poll_outlined, tone: Tone.green), title: 'Опрос', chevron: false, onTap: () => Navigator.pop(context, 'poll')),
             ],
           ),
@@ -168,18 +171,14 @@ class _ThreadPageState extends State<ThreadPage> {
       ),
     );
     switch (choice) {
-      case 'image':
-        final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
-        if (file != null) await _sendUpload(file.path, file.name, 'image');
-      case 'file':
-        final files = await FilePicker.pickFiles();
-        if (files.isEmpty || files.first.path == null) return;
-        final name = files.first.name;
-        final lower = name.toLowerCase();
-        final type = ['.jpg', '.jpeg', '.png', '.webp'].any(lower.endsWith)
-            ? 'image'
-            : (['.m4a', '.mp3', '.aac', '.ogg'].any(lower.endsWith) ? 'audio' : 'file');
-        await _sendUpload(files.first.path!, name, type);
+      case 'photos':
+        await _pick(_picker.photos);
+      case 'video':
+        await _pick(() async => [?await _picker.video()]);
+      case 'camera':
+        await _pick(() async => [?await _picker.camera()]);
+      case 'files':
+        await _pick(_picker.files);
       case 'poll':
         await _poll();
     }
@@ -190,7 +189,7 @@ class _ThreadPageState extends State<ThreadPage> {
       final path = await _recorder.stop();
       setState(() => _recording = false);
       if (path == null || path.isEmpty) return;
-      await _sendUpload(path, 'voice.m4a', 'audio');
+      await _sendFiles([PickedAttachment(path: path, name: 'voice.m4a', mimeType: 'audio/mp4')], voice: true);
       return;
     }
     if (!await _recorder.hasPermission()) {
@@ -431,6 +430,7 @@ class _ThreadPageState extends State<ThreadPage> {
             canSendMedia: _c.canSendMedia,
             replyTo: _c.replyTo,
             editing: _c.editing,
+            uploading: _c.uploading,
             onCancelMode: () {
               if (_c.editing != null) _input.clear();
               _c.cancelComposerMode();

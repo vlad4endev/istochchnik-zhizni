@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:molitva/features/chats/data/attachment_picker.dart';
 import 'package:molitva/features/chats/data/chat_source.dart';
+import 'package:molitva/features/chats/logic/attachment_logic.dart';
 import 'package:molitva/features/chats/models/chat_models.dart';
 
 ChatMessage msg(
@@ -127,7 +131,72 @@ class FakeChat implements ChatSource {
   @override
   Future<List<Map<String, dynamic>>> conversations() async => conversationsNow;
 
+  /// Файлы, загрузка которых «не удалась» (по названию), и текст причины.
+  final failUpload = <String, String>{};
+  final uploads = <String>[];
+
+  /// Пока не завершён, загрузка «идёт» — проверяем полосу прогресса.
+  Completer<void>? uploadGate;
+
   @override
-  Future<Map<String, dynamic>> upload({required String path, required String name, required String conversationId}) async =>
-      {'url': '/uploads/x', 'name': name};
+  Future<Map<String, dynamic>> upload({required String path, required String name, required String conversationId, void Function(double fraction)? onProgress}) async {
+    uploads.add(name);
+    onProgress?.call(0.5);
+    if (uploadGate != null) await uploadGate!.future;
+    final reason = failUpload[name];
+    if (reason != null) throw ChatException(reason);
+    onProgress?.call(1);
+    final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+    final mime = switch (ext) {
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      'mp4' => 'video/mp4',
+      'pdf' => 'application/pdf',
+      'm4a' => 'audio/mp4',
+      _ => 'application/octet-stream',
+    };
+    return {'url': 'https://cdn/$name', 'name': name, 'objectPath': 'c1/$name', 'mimeType': mime, 'size': 1234};
+  }
+}
+
+/// Выбор вложений без телефона: что «выбрал» человек, задаётся в полях.
+class FakePicker implements AttachmentPicker {
+  List<PickedAttachment> photosNow = const [];
+  PickedAttachment? videoNow;
+  PickedAttachment? cameraNow;
+  List<PickedAttachment> filesNow = const [];
+  PickerException? error;
+  final calls = <String>[];
+
+  void _maybeFail() {
+    if (error != null) throw error!;
+  }
+
+  @override
+  Future<List<PickedAttachment>> photos() async {
+    calls.add('photos');
+    _maybeFail();
+    return photosNow;
+  }
+
+  @override
+  Future<PickedAttachment?> video() async {
+    calls.add('video');
+    _maybeFail();
+    return videoNow;
+  }
+
+  @override
+  Future<PickedAttachment?> camera() async {
+    calls.add('camera');
+    _maybeFail();
+    return cameraNow;
+  }
+
+  @override
+  Future<List<PickedAttachment>> files() async {
+    calls.add('files');
+    _maybeFail();
+    return filesNow;
+  }
 }

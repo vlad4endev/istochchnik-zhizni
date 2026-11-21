@@ -1,6 +1,5 @@
-import 'package:dio/dio.dart' show Options;
+import 'package:dio/dio.dart' show DioException, FormData, MultipartFile, Options;
 
-import '../../../core/church_api.dart';
 import '../../../core/json.dart';
 import '../../../core/session.dart';
 import '../models/chat_models.dart';
@@ -22,7 +21,16 @@ abstract class ChatSource {
   Future<void> setMuted(String conversationId, bool muted);
   Future<void> pin(String conversationId, String messageId, {required bool pinned});
   Future<List<Map<String, dynamic>>> conversations();
-  Future<Map<String, dynamic>> upload({required String path, required String name, required String conversationId});
+  /// Загрузить файл на сервер; [onProgress] — доля от 0 до 1. Ошибку отдаёт как [ChatException] с понятным текстом.
+  Future<Map<String, dynamic>> upload({required String path, required String name, required String conversationId, void Function(double fraction)? onProgress});
+}
+
+/// Сервер или сеть отказали; [message] можно показывать человеку.
+class ChatException implements Exception {
+  const ChatException(this.message);
+  final String message;
+  @override
+  String toString() => message;
 }
 
 class ChatApi implements ChatSource {
@@ -120,6 +128,43 @@ class ChatApi implements ChatSource {
       [for (final raw in asList(await _get('$_base/conversations'))) asMap(raw)];
 
   @override
-  Future<Map<String, dynamic>> upload({required String path, required String name, required String conversationId}) =>
-      ChurchApi(session).uploadChatFile(path: path, name: name, conversationId: conversationId);
+  Future<Map<String, dynamic>> upload({
+    required String path,
+    required String name,
+    required String conversationId,
+    void Function(double fraction)? onProgress,
+  }) async {
+    // Как на сайте: до трёх попыток; а загрузка видео может идти долго, поэтому таймауты большие
+    // (обычные 25 секунд обрывали бы загрузку, пока сервер сохраняет файл в хранилище).
+    const attempts = 3;
+    Object? last;
+    for (var attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        final form = FormData.fromMap({
+          'file': await MultipartFile.fromFile(path, filename: name),
+          'conversationId': conversationId,
+          'originalFileName': name,
+        });
+        final response = await session.dio.post<Object?>(
+          '$_base/upload',
+          data: form,
+          options: Options(sendTimeout: const Duration(hours: 1), receiveTimeout: const Duration(minutes: 10)),
+          onSendProgress: (sent, total) {
+            if (total > 0) onProgress?.call((sent / total).clamp(0.0, 1.0));
+          },
+        );
+        return asMap(response.data);
+      } on DioException catch (e) {
+        last = e;
+        final status = e.response?.statusCode ?? 0;
+        // Ответ сервера «нельзя» (слишком большой, нет доступа, нет хранилища) повтором не лечится.
+        if (status >= 400 && status < 500) break;
+        if (attempt < attempts) await Future<void>.delayed(Duration(milliseconds: 400 * attempt));
+      } catch (e) {
+        last = e;
+        break;
+      }
+    }
+    throw ChatException(last is DioException ? readApiError(last) : 'Не удалось прочитать файл');
+  }
 }
