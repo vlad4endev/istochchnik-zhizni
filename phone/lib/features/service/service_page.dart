@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -7,19 +9,26 @@ import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 import '../schedule/logic/schedule_labels.dart';
 import 'data/plan_repository.dart';
+import 'editor/data/editor_source.dart';
+import 'editor/logic/editor_logic.dart';
+import 'editor/plan_editor_page.dart';
+import 'editor/widgets/new_plan_sheet.dart';
 import 'logic/plan_logic.dart';
 import 'models/plan_models.dart';
 import 'plan_page.dart';
 import 'service_controller.dart';
 
-enum _Tab { upcoming, past }
+enum _Tab { upcoming, past, archive }
 
 /// Программы богослужений: предстоящие с ближайшей сверху и прошедшие.
 class ServicePage extends StatefulWidget {
-  const ServicePage({super.key, this.source, this.songTitles});
+  const ServicePage({super.key, this.source, this.songTitles, this.editorSource});
 
   /// Для тестов; в приложении источник создаётся из сессии.
   final PlanSource? source;
+
+  /// Для тестов: источник редактора (создание, архив).
+  final PlanEditorSource? editorSource;
 
   /// Для тестов: названия песен вместо чтения копии песенника.
   final Future<Map<int, ({String title, String key})>> Function()? songTitles;
@@ -31,12 +40,19 @@ class ServicePage extends StatefulWidget {
 class _ServicePageState extends State<ServicePage> {
   late final PlanSource _source;
   late final ServiceController _c;
+  late final PlanEditorSource _editorSource;
+  late final bool _canEdit;
   _Tab _tab = _Tab.upcoming;
+  List<PlanSummary>? _archived;
+  String? _archiveError;
 
   @override
   void initState() {
     super.initState();
-    _source = widget.source ?? PlanRepository(context.read<SessionController>());
+    final session = context.read<SessionController>();
+    _source = widget.source ?? PlanRepository(session);
+    _editorSource = widget.editorSource ?? PlanEditorApi(session);
+    _canEdit = canManagePlan(session.user);
     _c = ServiceController(_source)..load();
   }
 
@@ -46,7 +62,33 @@ class _ServicePageState extends State<ServicePage> {
     super.dispose();
   }
 
-  void _open(PlanSummary plan) => pushPage(context, PlanPage(summary: plan, source: _source, songTitles: widget.songTitles));
+  Future<void> _open(PlanSummary plan) async {
+    if (_canEdit) {
+      await pushPage(context, PlanEditorPage(planId: plan.id, source: _editorSource, viewSource: _source, songTitles: widget.songTitles));
+      if (!mounted) return;
+      unawaited(_c.load());
+      if (_tab == _Tab.archive) unawaited(_loadArchive());
+      return;
+    }
+    await pushPage(context, PlanPage(summary: plan, source: _source, songTitles: widget.songTitles));
+  }
+
+  Future<void> _create() async {
+    final id = await showNewPlanSheet(context, _editorSource);
+    if (id == null || !mounted) return;
+    await pushPage(context, PlanEditorPage(planId: id, source: _editorSource, viewSource: _source, songTitles: widget.songTitles));
+    if (mounted) unawaited(_c.load());
+  }
+
+  Future<void> _loadArchive() async {
+    setState(() => _archiveError = null);
+    try {
+      final list = await _editorSource.archived();
+      if (mounted) setState(() => _archived = list);
+    } catch (_) {
+      if (mounted) setState(() => _archiveError = 'Не удалось загрузить архив. Проверьте интернет и попробуйте снова.');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,15 +99,19 @@ class _ServicePageState extends State<ServicePage> {
         return ChurchPage(
           title: 'Служение',
           subtitle: 'Программы богослужений',
+          floatingActionButton: _canEdit ? ChurchFab(circle: true, tooltip: 'Новая программа', onPressed: _create) : null,
           body: Column(
             children: [
-              if (_c.hasPlans)
+              if (_c.hasPlans || _canEdit)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(Space.lg, 14, Space.lg, 4),
                   child: SegmentedPills<_Tab>(
-                    segments: [(_Tab.upcoming, 'Предстоящие · ${_c.upcoming.length}'), (_Tab.past, 'Прошедшие')],
+                    segments: [(_Tab.upcoming, 'Предстоящие · ${_c.upcoming.length}'), (_Tab.past, 'Прошедшие'), if (_canEdit) (_Tab.archive, 'Архив')],
                     selected: _tab,
-                    onChanged: (t) => setState(() => _tab = t),
+                    onChanged: (t) {
+                      setState(() => _tab = t);
+                      if (t == _Tab.archive && _archived == null) unawaited(_loadArchive());
+                    },
                   ),
                 ),
               Expanded(child: _content(me)),
@@ -76,11 +122,23 @@ class _ServicePageState extends State<ServicePage> {
     );
   }
 
+  Widget _archiveList(int me) {
+    if (_archiveError != null) return ErrorView(message: _archiveError!, onRetry: _loadArchive);
+    final list = _archived;
+    if (list == null) return const LoadingView();
+    if (list.isEmpty) return const EmptyHint('Архив пуст', icon: Icons.inventory_2_outlined, hint: 'Сюда попадают программы, отправленные в архив.');
+    return SheetList(
+      onRefresh: _loadArchive,
+      children: [for (final p in list) _PlanCard(plan: p, today: _c.today, me: me, nearest: false, onTap: () => _open(p))],
+    );
+  }
+
   Widget _content(int me) {
     if (_c.loading && !_c.hasPlans) return const LoadingView();
     if (_c.error != null && !_c.hasPlans) return ErrorView(message: _c.error!, onRetry: _c.load);
+    if (_tab == _Tab.archive) return _archiveList(me);
     if (!_c.hasPlans) {
-      return const EmptyHint('Программ служения пока нет', icon: Icons.event_note_outlined, hint: 'Программы составляют на сайте в разделе «Служение». Когда появится — она будет здесь.');
+      return EmptyHint('Программ служения пока нет', icon: Icons.event_note_outlined, hint: _canEdit ? 'Нажмите «+», чтобы создать программу по шаблону.' : 'Когда программу составят — она появится здесь.');
     }
     final plans = _tab == _Tab.upcoming ? _c.upcoming : _c.past;
     final stale = _c.staleSince;
