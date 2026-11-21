@@ -970,18 +970,29 @@ class DateBadge extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(Radii.md),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            _weekdays[date.weekday - 1],
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.8, color: Color(0xCCFFFFFF)),
+      // Плитка квадратная и фиксированная: при крупном системном шрифте цифры уменьшаются, а не вылезают.
+      child: Semantics(
+        label: '${date.day} ${_weekdays[date.weekday - 1]}',
+        excludeSemantics: true,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _weekdays[date.weekday - 1],
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.8, color: Color(0xCCFFFFFF)),
+                ),
+                Text(
+                  '${date.day}',
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white, height: 1.05),
+                ),
+              ],
+            ),
           ),
-          Text(
-            '${date.day}',
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white, height: 1.05),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -12,6 +12,7 @@ import '../broadcast/broadcast_page.dart';
 import '../calls/calls_page.dart';
 import '../events/events_page.dart';
 import '../profile/profile_page.dart';
+import '../schedule/logic/ministry_access.dart';
 import '../schedule/schedule_page.dart';
 import '../sermons/sermons_page.dart';
 import '../service/service_page.dart';
@@ -60,12 +61,13 @@ class MorePage extends StatelessWidget {
           tone: Tone.green,
           onTap: () => pushPage(context, const ServicePage()),
         ),
-      FeatureTile(
-        icon: Icons.schedule_rounded,
-        label: 'Расписание',
-        tone: Tone.amber,
-        onTap: () => pushPage(context, const SchedulePage()),
-      ),
+      if (MinistryAccess.of(user).viewable.isNotEmpty)
+        FeatureTile(
+          icon: Icons.schedule_rounded,
+          label: 'Расписание',
+          tone: Tone.amber,
+          onTap: () => pushPage(context, const SchedulePage()),
+        ),
       if (session.canOpen('studio'))
         FeatureTile(
           icon: Icons.play_circle_outline_rounded,

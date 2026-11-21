@@ -11,6 +11,8 @@ import 'core/call_alerts.dart';
 import 'core/firebase_config.dart';
 import 'core/push.dart';
 import 'core/session.dart';
+import 'features/schedule/data/schedule_repository.dart';
+import 'features/service/data/plan_repository.dart';
 import 'features/songbook/data/songbook_repository.dart';
 
 Future<void> main() async {
@@ -24,6 +26,8 @@ Future<void> main() async {
   }
   final session = SessionController();
   session.beforeLogout.add(SongbookRepository.clearAll);
+  session.beforeLogout.add(ScheduleRepository.clearAll);
+  session.beforeLogout.add(PlanRepository.clearAll);
   await session.bootstrap();
   unawaited(PushService.instance.start(session));
   runApp(

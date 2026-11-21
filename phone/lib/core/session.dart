@@ -25,6 +25,7 @@ class AppUser {
     this.avatarUrl,
     this.prayerRequest = '',
     this.ministryRole = '',
+    this.ministryDirection = '',
   });
 
   final int id;
@@ -39,6 +40,9 @@ class AppUser {
   final String? avatarUrl;
   final String prayerRequest;
   final String ministryRole;
+
+  /// Направления служения через запятую или «;» — по ним открывается расписание команды.
+  final String ministryDirection;
 
   bool get isPreacher =>
       isAdmin ||
@@ -78,6 +82,7 @@ class AppUser {
       avatarUrl: str(json['avatar_url']).isEmpty ? null : str(json['avatar_url']),
       prayerRequest: str(json['prayer_request']),
       ministryRole: str(json['ministry_role']),
+      ministryDirection: str(json['ministry_direction']),
     );
   }
 
@@ -94,6 +99,7 @@ class AppUser {
         'avatar_url': avatarUrl,
         'prayer_request': prayerRequest,
         'ministry_role': ministryRole,
+        'ministry_direction': ministryDirection,
       };
 }
 

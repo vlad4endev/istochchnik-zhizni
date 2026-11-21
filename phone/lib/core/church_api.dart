@@ -111,20 +111,10 @@ class ChurchApi {
     await post('/api/messenger/messages/$messageId/poll-vote', data: {'optionIndexes': optionIndexes});
   }
 
-  Future<List<dynamic>> plans() async => asList(await get('/api/service-plans'));
-
-  Future<Map<String, dynamic>> plan(String id) async => asMap(await get('/api/service-plans/$id'));
-
   Future<List<dynamic>> setlists() async => asList(await get('/api/studio/setlists'));
 
   Future<List<dynamic>> setlistItems(String id) async =>
       asList(await get('/api/studio/setlists/$id/items'));
-
-  Future<List<dynamic>> mediaMine(String from, String to) async =>
-      asList(asMap(await get('/api/media-schedule/my-schedule', query: {'from': from, 'to': to}))['events']);
-
-  Future<List<dynamic>> musicMine(String from, String to) async =>
-      asList(asMap(await get('/api/music-schedule/my-schedule', query: {'from': from, 'to': to}))['events']);
 
   Future<Map<String, dynamic>> broadcast() async => asMap(await get('/api/broadcasts/active'));
 
