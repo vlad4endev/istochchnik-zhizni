@@ -76,3 +76,26 @@ export function addUtcDaysToIsoDate(isoDate: string, deltaDays: number): string 
   d.setUTCDate(d.getUTCDate() + deltaDays);
   return d.toISOString().slice(0, 10);
 }
+
+const YMD_PREFIX = /^\d{4}-\d{2}-\d{2}/;
+
+function padNumber(value: number, width: number): string {
+  return String(value).padStart(width, '0');
+}
+
+/**
+ * Календарная дата `YYYY-MM-DD` из значения колонки DATE.
+ *
+ * node-postgres отдаёт DATE как `Date` в ЛОКАЛЬНОЙ полночи, поэтому
+ * `String(date).slice(0, 10)` даёт «Sun Nov 22», а `toISOString()` может сдвинуть день.
+ * Берём локальные компоненты — они совпадают с датой в БД.
+ */
+export function toYmd(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return `${padNumber(value.getFullYear(), 4)}-${padNumber(value.getMonth() + 1, 2)}-${padNumber(value.getDate(), 2)}`;
+  }
+  const text = String(value);
+  return YMD_PREFIX.test(text) ? text.slice(0, 10) : null;
+}

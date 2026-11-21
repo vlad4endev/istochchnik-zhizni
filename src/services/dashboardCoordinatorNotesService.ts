@@ -1,4 +1,5 @@
 import { query } from '../config/db';
+import { toYmd as dateToYmd } from '../utils/isoDates';
 
 export type NoteKind = 'urgent_prayer' | 'announcement';
 export type DurationPreset = 'day' | 'week' | 'month';
@@ -62,13 +63,13 @@ export async function getCoordinatorNotesVisibleOnDate(viewDateYmd: string): Pro
   for (const row of result.rows as Array<{
     kind: string;
     body: string;
-    start_date: string;
-    end_date: string;
+    start_date: unknown;
+    end_date: unknown;
   }>) {
     const item: CoordinatorNotePublic = {
       text: String(row.body ?? '').trim(),
-      start_date: String(row.start_date),
-      end_date: String(row.end_date),
+      start_date: dateToYmd(row.start_date) ?? '',
+      end_date: dateToYmd(row.end_date) ?? '',
     };
     if (row.kind === 'urgent_prayer') urgent_prayer = item;
     if (row.kind === 'announcement') announcement = item;
@@ -92,13 +93,13 @@ export async function getCoordinatorNotesManageSnapshot(): Promise<{
   for (const row of result.rows as Array<{
     kind: string;
     body: string;
-    start_date: string;
-    end_date: string;
+    start_date: unknown;
+    end_date: unknown;
   }>) {
     const item: CoordinatorNotePublic = {
       text: String(row.body ?? '').trim(),
-      start_date: String(row.start_date),
-      end_date: String(row.end_date),
+      start_date: dateToYmd(row.start_date) ?? '',
+      end_date: dateToYmd(row.end_date) ?? '',
     };
     if (row.kind === 'urgent_prayer') urgent_prayer = item;
     if (row.kind === 'announcement') announcement = item;
