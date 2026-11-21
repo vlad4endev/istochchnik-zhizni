@@ -119,12 +119,15 @@ class _ChatComposerState extends State<ChatComposer> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    IconButton(
-                      tooltip: _emojiOpen ? 'Клавиатура' : 'Эмодзи',
-                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                      onPressed: _toggleEmoji,
-                      icon: Icon(_emojiOpen ? Icons.keyboard_alt_outlined : Icons.emoji_emotions_outlined, color: palette.inkMuted),
-                    ),
+                    if (widget.canSendMedia && !editing)
+                      IconButton(
+                        tooltip: 'Прикрепить',
+                        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                        onPressed: widget.sending ? null : widget.onAttach,
+                        icon: Icon(Icons.attach_file_rounded, color: palette.inkMuted),
+                      )
+                    else
+                      const SizedBox(width: 8),
                     Expanded(
                       child: TextField(
                         controller: widget.controller,
@@ -134,21 +137,22 @@ class _ChatComposerState extends State<ChatComposer> {
                         textCapitalization: TextCapitalization.sentences,
                         decoration: InputDecoration(
                           hintText: widget.recording ? 'Идёт запись голосового…' : (editing ? 'Изменить сообщение' : 'Сообщение'),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: const EdgeInsets.only(left: 16, top: 12, bottom: 12),
+                          // Смайлик внутри строки ввода, справа — как в Telegram.
+                          suffixIcon: IconButton(
+                            tooltip: _emojiOpen ? 'Клавиатура' : 'Эмодзи',
+                            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                            onPressed: _toggleEmoji,
+                            icon: Icon(_emojiOpen ? Icons.keyboard_alt_outlined : Icons.emoji_emotions_outlined, color: palette.inkMuted),
+                          ),
+                          suffixIconConstraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide(color: palette.outline)),
                           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide(color: palette.outline)),
                           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide(color: palette.accent, width: 1.4)),
                         ),
                       ),
                     ),
-                    if (widget.canSendMedia && !editing)
-                      IconButton(
-                        tooltip: 'Прикрепить',
-                        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                        onPressed: widget.sending ? null : widget.onAttach,
-                        icon: Icon(Icons.attach_file_rounded, color: palette.inkMuted),
-                      ),
-                    const SizedBox(width: 2),
+                    const SizedBox(width: 8),
                     _RoundAction(
                       icon: hasText ? (editing ? Icons.check_rounded : Icons.send_rounded) : (widget.recording ? Icons.stop_rounded : Icons.mic_none_rounded),
                       tooltip: hasText ? (editing ? 'Сохранить' : 'Отправить') : (widget.recording ? 'Остановить и отправить' : 'Записать голосовое'),
