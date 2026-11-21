@@ -1,5 +1,7 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
-import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
@@ -12,11 +14,19 @@ import '../../core/dates.dart';
 import '../../core/json.dart';
 import '../../core/push.dart';
 import '../../core/session.dart';
-import '../../ui/audio_player_page.dart';
 import '../../ui/kit/kit.dart';
-import '../../ui/video_page.dart';
 import '../../ui/widgets.dart';
 import '../calls/call_page.dart';
+import '../prayer/widgets/sheet_frame.dart' show actionError;
+import 'chat_profile_page.dart';
+import 'data/chat_source.dart';
+import 'logic/chat_logic.dart';
+import 'models/chat_models.dart';
+import 'thread_controller.dart';
+import 'widgets/chat_sheets.dart';
+import 'widgets/composer.dart';
+import 'widgets/message_bubble.dart';
+import 'widgets/message_menu.dart';
 
 class ThreadPage extends StatefulWidget {
   const ThreadPage({
@@ -26,6 +36,10 @@ class ThreadPage extends StatefulWidget {
     this.otherMemberId,
     this.avatarUrl,
     this.lastSeen,
+    this.type = 'private',
+    this.muted = false,
+    this.source,
+    this.events,
   });
 
   final String conversationId;
@@ -36,126 +50,92 @@ class ThreadPage extends StatefulWidget {
   /// ISO-время последнего входа собеседника — для подписи в шапке.
   final String? lastSeen;
 
+  /// `private`, `group` или `channel`: в группах показываем авторов и аватары.
+  final String type;
+  final bool muted;
+
+  /// Для тестов; в приложении берутся из сессии.
+  final ChatSource? source;
+  final Stream<Map<String, dynamic>>? events;
+
   @override
   State<ThreadPage> createState() => _ThreadPageState();
 }
 
 class _ThreadPageState extends State<ThreadPage> {
   final _input = TextEditingController();
-  final _recorder = AudioRecorder();
-  bool _loading = true;
-  String? _error;
-  List<dynamic> _messages = const [];
-  bool _sending = false;
+  final _focus = FocusNode();
+  final _scroll = ScrollController();
+  AudioRecorder? _recorderInstance;
+
+  /// Рекордер нужен только для голосовых — создаём при первой записи, а не при открытии чата.
+  AudioRecorder get _recorder => _recorderInstance ??= AudioRecorder();
+  late final ChatSource _source;
+  late final ThreadController _c;
   bool _recording = false;
 
   @override
   void initState() {
     super.initState();
-    _input.addListener(_onInput);
+    final session = context.read<SessionController>();
+    _source = widget.source ?? ChatApi(session);
+    _c = ThreadController(_source, conversationId: widget.conversationId, meId: session.user?.id ?? 0)
+      ..listen(widget.events ?? session.realtime.chatEvents)
+      ..load();
+    _scroll.addListener(_onScroll);
     PushService.activeConversationId = widget.conversationId;
-    _load();
-  }
-
-  void _onInput() => setState(() {});
-
-  Future<void> _attach() async {
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.lg),
-          child: ListGroup(
-            children: [
-              ListRow(
-                leading: const IconTile(Icons.image_outlined, tone: Tone.violet),
-                title: 'Фото из галереи',
-                chevron: false,
-                onTap: () => Navigator.pop(context, 'image'),
-              ),
-              ListRow(
-                leading: const IconTile(Icons.insert_drive_file_outlined, tone: Tone.amber),
-                title: 'Файл',
-                chevron: false,
-                onTap: () => Navigator.pop(context, 'file'),
-              ),
-              ListRow(
-                leading: const IconTile(Icons.poll_outlined, tone: Tone.green),
-                title: 'Опрос',
-                chevron: false,
-                onTap: () => Navigator.pop(context, 'poll'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    switch (choice) {
-      case 'image':
-        await _pickImage();
-      case 'file':
-        await _pickFile();
-      case 'poll':
-        await _poll();
-    }
   }
 
   @override
   void dispose() {
     if (PushService.activeConversationId == widget.conversationId) PushService.activeConversationId = null;
-    _input.removeListener(_onInput);
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
     _input.dispose();
-    _recorder.dispose();
+    _focus.dispose();
+    _c.dispose();
+    _recorderInstance?.dispose();
     super.dispose();
   }
 
-  ChurchApi get _api => ChurchApi(context.read<SessionController>());
-
-  Future<void> _load() async {
-    try {
-      final messages = await _api.messages(widget.conversationId);
-      if (!mounted) return;
-      setState(() {
-        _messages = messages.reversed.toList();
-        _loading = false;
-        _error = null;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = describeDio(error);
-      });
-    }
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    // Список перевёрнут: «вверх по истории» — это конец прокрутки.
+    if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 400) _c.loadOlder();
   }
 
+  SessionController get _session => context.read<SessionController>();
+  String get _origin => _session.apiOrigin;
+  bool get _isGroup => (_c.meta?.type ?? widget.type) != 'private';
+
+  void _toast(Object error) {
+    if (mounted) showMessage(context, actionError(error));
+  }
+
+  Future<void> _openUrl(String raw) async {
+    final uri = Uri.tryParse(raw);
+    if (uri == null) return;
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) showMessage(context, 'Не удалось открыть ссылку');
+  }
+
+  // ───────────── отправка ─────────────
+
   Future<void> _sendText() async {
-    final text = _input.text.trim();
-    if (text.isEmpty || _sending) return;
-    setState(() => _sending = true);
+    final text = _input.text;
+    if (text.trim().isEmpty) return;
     try {
-      await _api.sendMessage(widget.conversationId, text);
+      await _c.submit(text);
       _input.clear();
-      await _load();
     } catch (error) {
-      if (!mounted) return;
-      showMessage(context, describeDio(error));
-    } finally {
-      if (mounted) setState(() => _sending = false);
+      _toast(error);
     }
   }
 
   Future<void> _sendUpload(String path, String name, String payloadType) async {
-    setState(() => _sending = true);
     try {
-      final uploaded = await _api.uploadChatFile(
-        path: path,
-        name: name,
-        conversationId: widget.conversationId,
-      );
-      await _api.sendMessage(
-        widget.conversationId,
-        '',
+      final uploaded = await _source.upload(path: path, name: name, conversationId: widget.conversationId);
+      await _c.sendPayload(
         payloadType: payloadType,
         payload: {
           'url': str(uploaded['url']),
@@ -166,35 +146,43 @@ class _ThreadPageState extends State<ThreadPage> {
           if (payloadType == 'audio') 'kind': 'voice',
         },
       );
-      await _load();
     } catch (error) {
-      if (!mounted) return;
-      showMessage(context, describeDio(error));
-    } finally {
-      if (mounted) setState(() => _sending = false);
+      _toast(error);
     }
   }
 
-  Future<void> _pickImage() async {
-    final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
-    if (file == null) return;
-    await _sendUpload(file.path, file.name, 'image');
-  }
-
-  Future<void> _pickFile() async {
-    final files = await FilePicker.pickFiles();
-    if (files.isEmpty) return;
-    final file = files.first;
-    final path = file.path;
-    if (path == null) return;
-    final name = file.name;
-    final lower = name.toLowerCase();
-    final type = lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.webp')
-        ? 'image'
-        : lower.endsWith('.m4a') || lower.endsWith('.mp3') || lower.endsWith('.aac') || lower.endsWith('.ogg')
-            ? 'audio'
-            : 'file';
-    await _sendUpload(path, name, type);
+  Future<void> _attach() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.lg),
+          child: ListGroup(
+            children: [
+              ListRow(leading: const IconTile(Icons.image_outlined, tone: Tone.violet), title: 'Фото из галереи', chevron: false, onTap: () => Navigator.pop(context, 'image')),
+              ListRow(leading: const IconTile(Icons.insert_drive_file_outlined, tone: Tone.amber), title: 'Файл', chevron: false, onTap: () => Navigator.pop(context, 'file')),
+              ListRow(leading: const IconTile(Icons.poll_outlined, tone: Tone.green), title: 'Опрос', chevron: false, onTap: () => Navigator.pop(context, 'poll')),
+            ],
+          ),
+        ),
+      ),
+    );
+    switch (choice) {
+      case 'image':
+        final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+        if (file != null) await _sendUpload(file.path, file.name, 'image');
+      case 'file':
+        final files = await FilePicker.pickFiles();
+        if (files.isEmpty || files.first.path == null) return;
+        final name = files.first.name;
+        final lower = name.toLowerCase();
+        final type = ['.jpg', '.jpeg', '.png', '.webp'].any(lower.endsWith)
+            ? 'image'
+            : (['.m4a', '.mp3', '.aac', '.ogg'].any(lower.endsWith) ? 'audio' : 'file');
+        await _sendUpload(files.first.path!, name, type);
+      case 'poll':
+        await _poll();
+    }
   }
 
   Future<void> _toggleRecord() async {
@@ -205,40 +193,35 @@ class _ThreadPageState extends State<ThreadPage> {
       await _sendUpload(path, 'voice.m4a', 'audio');
       return;
     }
-    final allowed = await _recorder.hasPermission();
-    if (!allowed) {
-      if (!mounted) return;
-      showMessage(context, 'Нет доступа к микрофону — разрешите его в настройках телефона');
+    if (!await _recorder.hasPermission()) {
+      if (mounted) showMessage(context, 'Нет доступа к микрофону — разрешите его в настройках телефона');
       return;
     }
     final dir = await getTemporaryDirectory();
-    await _recorder.start(
-      const RecordConfig(encoder: AudioEncoder.aacLc),
-      path: '${dir.path}/voice-${DateTime.now().millisecondsSinceEpoch}.m4a',
-    );
+    await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: '${dir.path}/voice-${DateTime.now().millisecondsSinceEpoch}.m4a');
     setState(() => _recording = true);
   }
 
   Future<void> _poll() async {
     final question = TextEditingController();
-    final first = TextEditingController();
-    final second = TextEditingController();
-    final extra = TextEditingController();
+    final fields = [TextEditingController(), TextEditingController(), TextEditingController()];
     final created = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Опрос'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: question, decoration: const InputDecoration(hintText: 'Вопрос')),
-            const SizedBox(height: 10),
-            TextField(controller: first, decoration: const InputDecoration(hintText: 'Вариант 1')),
-            const SizedBox(height: 10),
-            TextField(controller: second, decoration: const InputDecoration(hintText: 'Вариант 2')),
-            const SizedBox(height: 10),
-            TextField(controller: extra, decoration: const InputDecoration(hintText: 'Вариант 3, если нужен')),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: question, decoration: const InputDecoration(hintText: 'Вопрос')),
+              const SizedBox(height: 10),
+              TextField(controller: fields[0], decoration: const InputDecoration(hintText: 'Вариант 1')),
+              const SizedBox(height: 10),
+              TextField(controller: fields[1], decoration: const InputDecoration(hintText: 'Вариант 2')),
+              const SizedBox(height: 10),
+              TextField(controller: fields[2], decoration: const InputDecoration(hintText: 'Вариант 3, если нужен')),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
@@ -246,361 +229,218 @@ class _ThreadPageState extends State<ThreadPage> {
         ],
       ),
     );
-    if (created != true || !mounted) return;
-    final options = [first.text.trim(), second.text.trim(), extra.text.trim()].where((item) => item.isNotEmpty).toList();
-    if (question.text.trim().isEmpty || options.length < 2) return;
+    final options = [for (final f in fields) if (f.text.trim().isNotEmpty) f.text.trim()];
+    final text = question.text.trim();
+    question.dispose();
+    for (final f in fields) {
+      f.dispose();
+    }
+    if (created != true || !mounted || text.isEmpty || options.length < 2) return;
     try {
-      await _api.sendMessage(
-        widget.conversationId,
-        question.text.trim(),
-        payloadType: 'poll',
-        payload: {'options': options, 'allows_multiple': false, 'anonymous': false},
-      );
-      await _load();
+      await _c.sendPayload(payloadType: 'poll', caption: text, payload: {'options': options, 'allows_multiple': false, 'anonymous': false});
     } catch (error) {
-      if (!mounted) return;
-      showMessage(context, describeDio(error));
+      _toast(error);
     }
   }
 
-  Future<void> _vote(String messageId, int index) async {
-    try {
-      await _api.votePoll(messageId, [index]);
-      await _load();
-    } catch (error) {
-      if (!mounted) return;
-      showMessage(context, describeDio(error));
+  // ───────────── меню сообщения ─────────────
+
+  Future<void> _menu(ChatMessage message) async {
+    final me = _c.meId;
+    final actions = actionsFor(message, me: me, groupLike: _isGroup, canPin: _c.canPin);
+    if (!actions.any) return;
+    final choice = await showMessageMenu(context, message: message, actions: actions);
+    if (choice == null || !mounted) return;
+    final emoji = choice.emoji;
+    if (emoji != null) return _react(message, emoji);
+    switch (choice.command!) {
+      case MessageCommand.reply:
+        _c.startReply(message);
+        _focus.requestFocus();
+      case MessageCommand.edit:
+        _c.startEdit(message);
+        _input.text = message.content;
+        _input.selection = TextSelection.collapsed(offset: _input.text.length);
+        _focus.requestFocus();
+      case MessageCommand.copy:
+        await Clipboard.setData(ClipboardData(text: message.content));
+        if (mounted) showMessage(context, 'Текст скопирован');
+      case MessageCommand.forward:
+        await _forward(message);
+      case MessageCommand.readers:
+        await showReadersSheet(context, _source, message.id);
+      case MessageCommand.pin:
+      case MessageCommand.unpin:
+        try {
+          await _c.pin(message, choice.command == MessageCommand.pin);
+        } catch (error) {
+          _toast(error);
+        }
+      case MessageCommand.delete:
+        if (!await confirmDeleteMessage(context)) return;
+        try {
+          await _c.remove(message);
+        } catch (error) {
+          _toast(error);
+        }
     }
   }
 
-  String _presence() {
-    final seen = parseApiDate(widget.lastSeen);
-    if (seen == null) return '';
-    if (DateTime.now().difference(seen).inMinutes < 3) return 'в сети';
-    return 'был(а) ${relativeTime(widget.lastSeen)}';
+  /// Долгое нажатие — сразу реакции (то же меню, реакции сверху).
+  Future<void> _react(ChatMessage message, String emoji) async {
+    try {
+      await _c.react(message, emoji);
+    } catch (error) {
+      _toast(error);
+    }
+  }
+
+  Future<void> _forward(ChatMessage message) async {
+    final ids = await showForwardSheet(context, _source, excludeId: widget.conversationId);
+    if (ids == null || ids.isEmpty || !mounted) return;
+    try {
+      await _source.forward(message.id, ids);
+      if (mounted) showMessage(context, ids.length == 1 ? 'Сообщение переслано' : 'Сообщение переслано в ${ids.length} чата');
+    } catch (error) {
+      _toast(error);
+    }
+  }
+
+  Future<void> _vote(ChatMessage message, int option) async {
+    try {
+      await _c.vote(message, option);
+    } catch (error) {
+      _toast(error);
+    }
+  }
+
+  // ───────────── профиль ─────────────
+
+  Future<void> _openProfile() async {
+    await pushPage(
+      context,
+      ChatProfilePage(
+        conversationId: widget.conversationId,
+        title: widget.title,
+        isGroup: _isGroup,
+        channel: (_c.meta?.type ?? widget.type) == 'channel',
+        otherMemberId: widget.otherMemberId,
+        avatarUrl: widget.avatarUrl,
+        muted: widget.muted,
+        source: widget.source,
+      ),
+    );
+  }
+
+  /// Автор из группы: открыть его личный чат.
+  Future<void> _openSender(int memberId) async {
+    if (memberId == _c.meId) return;
+    final member = _c.memberOf(memberId);
+    try {
+      final id = await ChurchApi(_session).openPersonal(memberId);
+      if (!mounted || id.isEmpty) return;
+      await pushPage(context, ThreadPage(conversationId: id, title: member?.name ?? 'Чат', otherMemberId: memberId, avatarUrl: member?.avatarUrl == null ? null : resolveUrl(_origin, member!.avatarUrl)));
+    } catch (error) {
+      if (mounted) showMessage(context, describeDio(error));
+    }
+  }
+
+  ChatMember? _member(int? id) {
+    final m = _c.memberOf(id);
+    if (m == null || m.avatarUrl == null) return m;
+    return ChatMember(id: m.id, name: m.name, avatarUrl: resolveUrl(_origin, m.avatarUrl), role: m.role, online: m.online, lastSeen: m.lastSeen);
+  }
+
+  String _subtitle() {
+    if (_isGroup) {
+      final n = _c.members.length;
+      return n == 0 ? '' : membersCaption(n, channel: (_c.meta?.type ?? widget.type) == 'channel');
+    }
+    return presenceLabel(online: false, lastSeen: parseApiDate(widget.lastSeen), now: DateTime.now());
   }
 
   @override
   Widget build(BuildContext context) {
-    final me = context.watch<SessionController>().user?.id;
-    final origin = context.watch<SessionController>().apiOrigin;
     final palette = context.palette;
-    final hasText = _input.text.trim().isNotEmpty;
-    return ChurchPage(
-      title: widget.title,
-      subtitle: _presence(),
-      leading: ChurchAvatar(name: widget.title, imageUrl: widget.avatarUrl, size: 40),
-      sheetColor: palette.isDark ? palette.sheet : const Color(0xFFF3ECE3),
-      actions: [
-        HeaderButton(
-          icon: Icons.call_outlined,
-          tooltip: 'Позвонить',
-          onPressed: () => pushPage(
-            context,
-            CallPage(
-              conversationId: widget.conversationId,
-              recipientId: widget.otherMemberId,
-              title: widget.title,
+    final ownHost = Uri.tryParse(_origin)?.host;
+    return ListenableBuilder(
+      listenable: _c,
+      builder: (context, _) {
+        final views = groupMessages(_c.messages, DateTime.now());
+        return ChurchPage(
+          title: widget.title,
+          subtitle: _subtitle(),
+          leading: ChurchAvatar(name: widget.title, imageUrl: widget.avatarUrl, size: 40),
+          onTitleTap: _openProfile,
+          sheetColor: palette.isDark ? palette.sheet : const Color(0xFFF3ECE3),
+          actions: [
+            HeaderButton(
+              icon: Icons.call_outlined,
+              tooltip: 'Позвонить',
+              onPressed: () => pushPage(context, CallPage(conversationId: widget.conversationId, recipientId: widget.otherMemberId, title: widget.title)),
             ),
-          ),
-        ),
-      ],
-      body: AsyncBody(
-        loading: _loading,
-        error: _error,
-        onRetry: _load,
-        child: _messages.isEmpty
-            ? const EmptyHint('Сообщений пока нет', icon: Icons.waving_hand_outlined, hint: 'Напишите первым')
-            : ListView.builder(
-                reverse: true,
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                itemCount: _messages.length,
-                itemBuilder: (context, index) {
-                  final message = asMap(_messages[index]);
-                  final mine = asInt(message['sender_id']) == me;
-                  final deleted = asBool(message['is_deleted']);
-                  final time = parseApiDate(message['created_at']);
-                  return Align(
-                    alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 3),
-                      padding: const EdgeInsets.fromLTRB(14, 9, 12, 7),
-                      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
-                      decoration: BoxDecoration(
-                        gradient: mine && !deleted ? wineGradient : null,
-                        color: deleted ? palette.accentSoft.withValues(alpha: 0.7) : (mine ? null : palette.card),
-                        borderRadius: BorderRadius.only(
-                          topLeft: const Radius.circular(18),
-                          topRight: const Radius.circular(18),
-                          bottomLeft: Radius.circular(mine ? 18 : 6),
-                          bottomRight: Radius.circular(mine ? 6 : 18),
-                        ),
-                        boxShadow: mine || deleted ? null : palette.cardShadow,
-                      ),
-                      child: DefaultTextStyle.merge(
-                        style: TextStyle(
-                          fontSize: 15.5,
-                          height: 1.35,
-                          color: deleted ? palette.inkFaint : (mine ? Colors.white : palette.ink),
-                          fontStyle: deleted ? FontStyle.italic : FontStyle.normal,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _MessageBody(
-                              message: message,
-                              origin: origin,
-                              mine: mine,
-                              onVote: (index) => _vote(str(message['id']), index),
-                            ),
-                            if (time != null && !deleted)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  DateFormat('HH:mm').format(time),
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontStyle: FontStyle.normal,
-                                    color: mine ? Colors.white.withValues(alpha: 0.7) : palette.inkFaint,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-      ),
-      bottom: DecoratedBox(
-        decoration: BoxDecoration(
-          color: palette.sheet,
-          border: Border(top: BorderSide(color: palette.hairline)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(6, 8, 10, 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                IconButton(
-                  tooltip: 'Прикрепить',
-                  onPressed: _sending ? null : _attach,
-                  icon: Icon(Icons.attach_file_rounded, color: palette.inkMuted),
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _input,
-                    minLines: 1,
-                    maxLines: 4,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      hintText: _recording ? 'Идёт запись голосового…' : 'Сообщение',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide(color: palette.outline)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide(color: palette.outline)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide(color: palette.accent, width: 1.4)),
-                    ),
+          ],
+          body: AsyncBody(
+            loading: _c.loading,
+            error: _c.error,
+            onRetry: _c.load,
+            child: views.isEmpty
+                ? const EmptyHint('Сообщений пока нет', icon: Icons.waving_hand_outlined, hint: 'Напишите первым')
+                : ListView.builder(
+                    controller: _scroll,
+                    reverse: true,
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+                    itemCount: views.length + (_c.loadingOlder ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index == views.length) {
+                        return const Padding(padding: EdgeInsets.all(16), child: Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4))));
+                      }
+                      final view = views[views.length - 1 - index];
+                      final message = view.message;
+                      return MessageBubble(
+                        key: ValueKey(message.id),
+                        view: view,
+                        me: _c.meId,
+                        groupLike: _isGroup,
+                        origin: _origin,
+                        ownHost: ownHost,
+                        member: _member(message.senderId),
+                        loadPreview: _c.previewOf,
+                        onMenu: () => _menu(message),
+                        onReactionMenu: () => _menu(message),
+                        onReply: () {
+                          if (actionsFor(message, me: _c.meId, groupLike: _isGroup, canPin: false).reply) {
+                            _c.startReply(message);
+                            _focus.requestFocus();
+                          }
+                        },
+                        onOpenUrl: _openUrl,
+                        onVote: (option) => _vote(message, option),
+                        onReact: (emoji) => _react(message, emoji),
+                        onOpenSender: _openSender,
+                      );
+                    },
                   ),
-                ),
-                const SizedBox(width: 8),
-                _RoundAction(
-                  icon: hasText ? Icons.send_rounded : (_recording ? Icons.stop_rounded : Icons.mic_none_rounded),
-                  tooltip: hasText ? 'Отправить' : (_recording ? 'Остановить и отправить' : 'Записать голосовое'),
-                  busy: _sending,
-                  danger: _recording,
-                  onPressed: _sending ? null : (hasText ? _sendText : _toggleRecord),
-                ),
-              ],
-            ),
           ),
-        ),
-      ),
+          bottom: ChatComposer(
+            controller: _input,
+            focusNode: _focus,
+            sending: _c.sending,
+            recording: _recording,
+            canSend: _c.canSend,
+            canSendMedia: _c.canSendMedia,
+            replyTo: _c.replyTo,
+            editing: _c.editing,
+            onCancelMode: () {
+              if (_c.editing != null) _input.clear();
+              _c.cancelComposerMode();
+            },
+            onSend: _sendText,
+            onAttach: _attach,
+            onToggleRecord: _toggleRecord,
+          ),
+        );
+      },
     );
-  }
-}
-
-class _RoundAction extends StatelessWidget {
-  const _RoundAction({required this.icon, required this.tooltip, required this.onPressed, this.busy = false, this.danger = false});
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onPressed;
-  final bool busy;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Semantics(
-        button: true,
-        label: tooltip,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: danger ? null : wineGradient,
-            color: danger ? ChurchColors.danger : null,
-          ),
-          child: Material(
-            type: MaterialType.transparency,
-            shape: const CircleBorder(),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onPressed,
-              child: SizedBox(
-                width: 46,
-                height: 46,
-                child: busy
-                    ? const Padding(
-                        padding: EdgeInsets.all(13),
-                        child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
-                      )
-                    : Icon(icon, color: Colors.white, size: 22),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MessageBody extends StatelessWidget {
-  const _MessageBody({required this.message, required this.origin, required this.onVote, required this.mine});
-  final Map<String, dynamic> message;
-  final String origin;
-  final bool mine;
-  final ValueChanged<int> onVote;
-
-  @override
-  Widget build(BuildContext context) {
-    if (asBool(message['is_deleted'])) return const Text('Сообщение удалено');
-    final type = str(message['payload_type']).isEmpty ? 'text' : str(message['payload_type']);
-    final payload = asMap(message['payload']);
-    final url = resolveUrl(origin, str(payload['url']));
-    final caption = str(message['content']);
-    if (type == 'image' && url.isNotEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(url, width: 220, fit: BoxFit.cover)),
-          if (caption.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(caption)),
-        ],
-      );
-    }
-    if (type == 'audio' && url.isNotEmpty) {
-      final voice = str(payload['kind']) == 'voice' || str(payload['name']).isEmpty;
-      return InkWell(
-        onTap: () => pushPage(context, AudioPlayerPage(url: url, title: voice ? 'Голосовое' : str(payload['name']))),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.play_circle_fill_rounded, size: 30, color: mine ? Colors.white : ChurchColors.wine),
-            const SizedBox(width: 8),
-            Text(voice ? 'Голосовое' : str(payload['name'])),
-          ],
-        ),
-      );
-    }
-    if (type == 'file' && url.isNotEmpty) {
-      return InkWell(
-        onTap: () {
-          final uri = Uri.tryParse(url);
-          if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
-        },
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.insert_drive_file_outlined, color: mine ? Colors.white : ChurchColors.wine),
-            const SizedBox(width: 8),
-            Flexible(child: Text(str(payload['name']).isEmpty ? 'Файл' : str(payload['name']))),
-          ],
-        ),
-      );
-    }
-    if (type == 'video_note' && url.isNotEmpty) {
-      return InkWell(
-        onTap: () => pushPage(context, VideoPage(url: url)),
-        child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.videocam), SizedBox(width: 8), Text('Видео')]),
-      );
-    }
-    if (type == 'poll') {
-      final options = asList(payload['options']);
-      final tallies = asList(message['poll_tallies']);
-      var total = 0;
-      for (final t in tallies) {
-        total += asInt(t);
-      }
-      final fg = mine ? Colors.white : context.palette.ink;
-      return ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 220),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.poll_outlined, size: 16, color: mine ? ChurchColors.amber : ChurchColors.wine),
-                const SizedBox(width: 6),
-                Flexible(child: Text(caption, style: TextStyle(fontWeight: FontWeight.w700, color: fg))),
-              ],
-            ),
-            const SizedBox(height: 8),
-            for (var i = 0; i < options.length; i++)
-              Builder(builder: (context) {
-                final votes = i < tallies.length ? asInt(tallies[i]) : 0;
-                final share = total == 0 ? 0.0 : votes / total;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: () => onVote(i),
-                    child: Container(
-                      constraints: const BoxConstraints(minHeight: 40),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: fg.withValues(alpha: 0.25)),
-                      ),
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: FractionallySizedBox(
-                              alignment: Alignment.centerLeft,
-                              widthFactor: share,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: (mine ? Colors.white : ChurchColors.wine).withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                            child: Row(
-                              children: [
-                                Expanded(child: Text(str(options[i]), style: TextStyle(fontSize: 14, color: fg))),
-                                Text('$votes', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: fg)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            Text(
-              total == 0 ? 'Голосов пока нет' : 'Голосов: $total',
-              style: TextStyle(fontSize: 12, color: fg.withValues(alpha: 0.7)),
-            ),
-          ],
-        ),
-      );
-    }
-    return Text(caption);
   }
 }

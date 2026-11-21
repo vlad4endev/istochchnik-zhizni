@@ -128,10 +128,14 @@ class ChurchPage extends StatelessWidget {
     this.showBack,
     this.sheetColor,
     this.headerExtra,
+    this.onTitleTap,
   });
 
   final String title;
   final String? subtitle;
+
+  /// Тап по аватару и названию в шапке — например, открыть профиль собеседника.
+  final VoidCallback? onTitleTap;
 
   /// Выделенная янтарём часть подзаголовка, например «13 впереди».
   final String? subtitleAccent;
@@ -178,6 +182,7 @@ class ChurchPage extends StatelessWidget {
                           leading: leading,
                           canPop: canPop,
                           actions: actions,
+                          onTitleTap: onTitleTap,
                         ),
                         ?headerExtra,
                       ],
@@ -224,8 +229,10 @@ class _Header extends StatelessWidget {
     required this.leading,
     required this.canPop,
     required this.actions,
+    this.onTitleTap,
   });
 
+  final VoidCallback? onTitleTap;
   final String title;
   final String? subtitle;
   final String? subtitleAccent;
@@ -249,9 +256,14 @@ class _Header extends StatelessWidget {
             ),
             const SizedBox(width: Space.md),
           ],
-          if (leading != null) ...[leading!, const SizedBox(width: Space.md)],
           Expanded(
-            child: Semantics(
+            child: _tappable(
+              onTitleTap,
+              Row(
+                children: [
+                  if (leading != null) ...[leading!, const SizedBox(width: Space.md)],
+                  Expanded(
+                    child: Semantics(
               header: true,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,12 +299,25 @@ class _Header extends StatelessWidget {
                 ],
               ),
             ),
+                  ),
+                ],
+              ),
+            ),
           ),
           for (final action in actions) ...[const SizedBox(width: Space.sm), action],
         ],
       ),
     );
   }
+}
+
+Widget _tappable(VoidCallback? onTap, Widget child) {
+  if (onTap == null) return child;
+  return Semantics(
+    button: true,
+    hint: 'Открыть профиль',
+    child: InkWell(borderRadius: BorderRadius.circular(Radii.md), onTap: onTap, child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: Align(alignment: Alignment.centerLeft, child: child))),
+  );
 }
 
 /// Полностью тёмный экран: приветствие, заявка, звонок, плеер.

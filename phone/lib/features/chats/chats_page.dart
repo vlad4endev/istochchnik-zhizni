@@ -74,6 +74,8 @@ class _ChatsPageState extends State<ChatsPage> {
         otherMemberId: otherId > 0 ? otherId : null,
         avatarUrl: resolveUrl(context.read<SessionController>().apiOrigin, str(other['avatar_url'] ?? item['avatar_url'])),
         lastSeen: str(other['last_seen_at']),
+        type: str(item['type']).isEmpty ? 'private' : str(item['type']),
+        muted: asBool(item['my_muted']),
       ),
     );
     _load();

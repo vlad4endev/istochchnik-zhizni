@@ -15,6 +15,11 @@ class ChurchRealtime {
   StreamSubscription<dynamic>? _sub;
   bool _stopped = true;
   final _callEvents = StreamController<Map<String, dynamic>>.broadcast();
+  final _chatEvents = StreamController<Map<String, dynamic>>.broadcast();
+
+  /// События чатов из сокета (новое, изменённое и удалённое сообщение, реакции, прочтение):
+  /// открытый чат перечитывает себя сам.
+  Stream<Map<String, dynamic>> get chatEvents => _chatEvents.stream;
 
   /// События звонков из сокета: отмена, отказ, завершение — экран звонка закрывается сам.
   Stream<Map<String, dynamic>> get callEvents => _callEvents.stream;
@@ -33,6 +38,9 @@ class ChurchRealtime {
     try {
       final channel = WebSocketChannel.connect(socketUri);
       _channel = channel;
+      // Сбой соединения приходит и в `ready`, и в поток; повтор запускает поток, а здесь ошибку гасим,
+      // иначе без сети она остаётся необработанной.
+      unawaited(channel.ready.then<void>((_) {}, onError: (Object _) {}));
       channel.sink.add(jsonEncode({'type': 'auth', 'token': token}));
       _sub = channel.stream.listen(_onMessage, onDone: _retry, onError: (_) => _retry());
       _ping = Timer.periodic(const Duration(seconds: 20), (_) {
@@ -75,6 +83,9 @@ class ChurchRealtime {
     }
     final type = '${message['type'] ?? ''}';
     if (type.startsWith('call:')) _callEvents.add(message);
+    if (type.startsWith('msg:') || type.startsWith('conv:') || type.startsWith('read:') || type == 'messages_read') {
+      _chatEvents.add(message);
+    }
     if (type == 'call:incoming') {
       final callId = '${message['callId'] ?? ''}'.trim();
       if (callId.isEmpty) return;
