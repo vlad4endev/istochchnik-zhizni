@@ -18,7 +18,7 @@ class IstochnikApp extends StatelessWidget {
     final session = context.watch<SessionController>();
     return MaterialApp(
       navigatorKey: navigatorKey,
-      title: 'Источник жизни',
+      title: 'Моя церковь',
       debugShowCheckedModeBanner: false,
       theme: churchTheme(brightness: Brightness.light),
       darkTheme: churchTheme(brightness: Brightness.dark),

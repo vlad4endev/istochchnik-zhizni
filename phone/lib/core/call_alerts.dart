@@ -55,7 +55,7 @@ class CallInvite {
   CallKitParams toParams() => CallKitParams(
         id: callId,
         nameCaller: callerName,
-        appName: 'Источник жизни',
+        appName: 'Моя церковь',
         avatar: callerAvatar.isEmpty ? null : callerAvatar,
         handle: video ? 'Видеозвонок' : 'Аудиозвонок',
         type: video ? 1 : 0,

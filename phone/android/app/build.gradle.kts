@@ -30,7 +30,7 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["appLabel"] = "Источник жизни"
+        manifestPlaceholders["appLabel"] = "Моя церковь"
     }
 
     // Только телефоны: библиотеки эмуляторов (x86, x86_64) тянут лишние ~25 МБ.
@@ -44,7 +44,7 @@ android {
     // Отдельный пакет и название, чтобы ставилась рядом с основным приложением.
     if (System.getenv("PREVIEW_BUILD") == "1") {
         defaultConfig.applicationIdSuffix = ".preview"
-        defaultConfig.manifestPlaceholders["appLabel"] = "Источник жизни тест"
+        defaultConfig.manifestPlaceholders["appLabel"] = "Моя церковь"
     }
 
     // Общая подпись тестовых сборок. Раньше APK подписывался «отладочным» ключом, который

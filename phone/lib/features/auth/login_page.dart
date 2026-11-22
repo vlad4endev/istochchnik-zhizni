@@ -52,7 +52,7 @@ class LoginPage extends StatelessWidget {
                           const ChurchLogo(size: 40),
                           const SizedBox(width: 12),
                           const Text(
-                            'Источник жизни',
+                            'Моя церковь',
                             style: TextStyle(
                               fontSize: 19,
                               fontWeight: FontWeight.w800,

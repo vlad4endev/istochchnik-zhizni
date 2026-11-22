@@ -95,7 +95,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
                 style: ChurchType.serifTitle.copyWith(fontSize: 26, color: Colors.white),
               ),
               const SizedBox(height: 6),
-              const Text('Источник жизни', style: TextStyle(fontSize: 14, color: Color(0x99FFFFFF))),
+              const Text('Моя церковь', style: TextStyle(fontSize: 14, color: Color(0x99FFFFFF))),
               const Spacer(),
               if (_error != null)
                 Padding(

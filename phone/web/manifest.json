@@ -1,11 +1,11 @@
 {
-    "name": "Источник жизни",
-    "short_name": "Источник жизни",
+    "name": "Моя церковь",
+    "short_name": "Моя церковь",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#1E0710",
     "theme_color": "#230810",
-    "description": "Телефонное приложение церкви «Источник жизни».",
+    "description": "Телефонное приложение церкви «Моя церковь».",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
