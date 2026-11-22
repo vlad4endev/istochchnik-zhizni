@@ -21,6 +21,7 @@ import '../calls/call_page.dart';
 import '../calls/join_meeting_page.dart';
 import '../prayer/widgets/sheet_frame.dart' show actionError;
 import 'chat_profile_page.dart';
+import 'attachment_diagnostics_page.dart';
 import 'data/attachment_picker.dart';
 import 'widgets/message_search.dart';
 import 'logic/mentions.dart';
@@ -412,8 +413,9 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
   Future<void> _attach() async {
     final choice = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       builder: (context) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.lg),
           child: ListGroup(
             children: [
@@ -422,6 +424,7 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
               ListRow(leading: const IconTile(Icons.photo_camera_outlined, tone: Tone.teal), title: 'Снять фото', chevron: false, onTap: () => Navigator.pop(context, 'camera')),
               ListRow(leading: const IconTile(Icons.insert_drive_file_outlined, tone: Tone.amber), title: 'Файл', chevron: false, onTap: () => Navigator.pop(context, 'files')),
               ListRow(leading: const IconTile(Icons.poll_outlined, tone: Tone.green), title: 'Опрос', chevron: false, onTap: () => Navigator.pop(context, 'poll')),
+              ListRow(leading: const IconTile(Icons.bug_report_outlined, tone: Tone.red), title: 'Не открывается выбор? Проверить', chevron: false, onTap: () => Navigator.pop(context, 'diagnose')),
             ],
           ),
         ),
@@ -438,6 +441,8 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
         await _pick(_picker.files);
       case 'poll':
         await _poll();
+      case 'diagnose':
+        if (mounted) await pushPage<void>(context, AttachmentDiagnosticsPage(picker: widget.picker));
     }
   }
 
