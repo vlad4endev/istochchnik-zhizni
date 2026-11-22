@@ -55,6 +55,13 @@ async function main(): Promise<void> {
   const okParish = await run('parishioner', 'POST', '/api/calls');
   assert.equal(okParish.body, 'next', 'parishioner can POST /api/calls');
 
+  for (const role of ['member', 'parishioner']) {
+    for (const path of ['/api/notifications/test', '/api/notifications/test-sample', '/api/notifications/remove-token']) {
+      const r = await run(role, 'POST', path);
+      assert.equal(r.body, 'next', `${role} can POST ${path}`);
+    }
+  }
+
   const denied = await run('member', 'POST', '/api/admin/something');
   assert.equal(denied.status, 403);
 
