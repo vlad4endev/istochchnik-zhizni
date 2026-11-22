@@ -21,6 +21,9 @@ abstract class ChatSource {
   Future<void> setMuted(String conversationId, bool muted);
   Future<void> pin(String conversationId, String messageId, {required bool pinned});
   Future<List<Map<String, dynamic>>> conversations();
+
+  /// Отметить чат прочитанным до сообщения [messageId] включительно (счётчик на сервере обнуляется, собеседник видит «прочитано»).
+  Future<void> markRead(String conversationId, String messageId);
   /// Загрузить файл на сервер; [onProgress] — доля от 0 до 1. Ошибку отдаёт как [ChatException] с понятным текстом.
   Future<Map<String, dynamic>> upload({required String path, required String name, required String conversationId, void Function(double fraction)? onProgress});
 }
@@ -97,6 +100,11 @@ class ChatApi implements ChatSource {
 
   @override
   Future<ChatMeta> meta(String conversationId) async => ChatMeta.fromJson(await _get('$_base/conversations/$conversationId/meta'));
+
+  @override
+  Future<void> markRead(String conversationId, String messageId) async {
+    await _send('POST', '$_base/conversations/${Uri.encodeComponent(conversationId)}/read', data: {'messageId': messageId});
+  }
 
   @override
   Future<PrivateProfile> privateProfile(String conversationId) async =>

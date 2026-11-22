@@ -53,6 +53,17 @@ class FakeChat implements ChatSource {
   bool failMeta = false;
   int nextId = 100;
 
+  final readMarks = <String>[];
+  bool failRead = false;
+  bool failProfile = false;
+
+  @override
+  Future<void> markRead(String conversationId, String messageId) async {
+    calls.add('read:$messageId');
+    if (failRead) throw StateError('net');
+    readMarks.add(messageId);
+  }
+
   @override
   Future<List<ChatMessage>> messages(String conversationId, {String? before, int limit = 50}) async {
     calls.add('messages:${before ?? ''}:$limit');
@@ -109,7 +120,11 @@ class FakeChat implements ChatSource {
   }
 
   @override
-  Future<PrivateProfile> privateProfile(String conversationId) async => profile;
+  Future<PrivateProfile> privateProfile(String conversationId) async {
+    calls.add('profile');
+    if (failProfile) throw StateError('net');
+    return profile;
+  }
 
   @override
   Future<LinkPreview?> linkPreview(String url) async {

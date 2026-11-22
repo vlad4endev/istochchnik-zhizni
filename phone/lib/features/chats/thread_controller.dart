@@ -20,12 +20,23 @@ class UploadProgress {
 
 /// Состояние открытого чата: сообщения, ответ и правка, реакции, участники и права.
 class ThreadController extends ChangeNotifier {
-  ThreadController(this.source, {required this.conversationId, required this.meId, this.pageSize = 50});
+  ThreadController(this.source, {required this.conversationId, required this.meId, this.pageSize = 50, this.knownPeerId, this.onRead}) : peerId = knownPeerId;
 
   final ChatSource source;
   final String conversationId;
   final int meId;
   final int pageSize;
+
+  /// Собеседник личного чата, если уже известен (из списка чатов).
+  final int? knownPeerId;
+
+  /// Вызывается после того, как сервер принял «прочитано» (обновить значок непрочитанных).
+  final void Function()? onRead;
+
+  /// Собеседник личного чата: из списка чатов, а если чат открыт из пуша или поиска — с сервера.
+  /// Без него звонок ушёл бы как групповой, поэтому кнопки звонка ждут этого значения.
+  int? peerId;
+  bool _peerRequested = false;
 
   /// По возрастанию времени.
   List<ChatMessage> messages = const [];
@@ -48,6 +59,11 @@ class ThreadController extends ChangeNotifier {
   ChatMessage? editing;
 
   final Map<String, Future<LinkPreview?>> _previews = {};
+
+  // Последнее сообщение, которое уже отметили прочитанным, и идущий запрос.
+  int _readCommitted = 0;
+  bool _readInFlight = false;
+  bool active = true;
   StreamSubscription<Map<String, dynamic>>? _events;
   Timer? _debounce;
   bool _disposed = false;
@@ -93,7 +109,55 @@ class ThreadController extends ChangeNotifier {
     if (m != null) meta = m;
     loading = false;
     _notify();
+    unawaited(markRead());
+    if (m != null && !m.isGroupLike) unawaited(ensurePeer());
     if (isGroupLike && members.isEmpty) unawaited(_loadMembers());
+  }
+
+  /// Узнаёт собеседника личного чата, если его не передали при открытии.
+  Future<void> ensurePeer() async {
+    if (peerId != null || _peerRequested) return;
+    _peerRequested = true;
+    final profile = await _try(() => source.privateProfile(conversationId));
+    if (_disposed) return;
+    if (profile == null || profile.id <= 0) {
+      _peerRequested = false; // можно повторить при следующем обновлении
+      return;
+    }
+    peerId = profile.id;
+    _notify();
+  }
+
+  /// Отмечает чат прочитанным до последнего полученного сообщения: счётчик на сервере обнуляется,
+  /// собеседник видит «прочитано». Свои неотправленные сообщения не учитываются.
+  Future<void> markRead() async {
+    if (!active || _readInFlight || _disposed) return;
+    var latest = 0;
+    for (final m in messages) {
+      if (m.pending) continue;
+      final id = _numeric(m.id);
+      if (id > latest) latest = id;
+    }
+    if (latest <= _readCommitted) return;
+    _readInFlight = true;
+    try {
+      await source.markRead(conversationId, '$latest');
+      _readCommitted = latest;
+      onRead?.call();
+    } catch (_) {
+      /* повторим при следующем обновлении чата */
+    } finally {
+      _readInFlight = false;
+    }
+    // Пока шёл запрос, могли прийти новые сообщения.
+    if (!_disposed && active) {
+      var newest = 0;
+      for (final m in messages) {
+        if (!m.pending && _numeric(m.id) > newest) newest = _numeric(m.id);
+      }
+      // Только если сообщения пришли за время запроса: при сбое сети не повторяем в цикле.
+      if (newest > latest) unawaited(markRead());
+    }
   }
 
   Future<void> _loadMembers() async {
@@ -115,6 +179,7 @@ class ThreadController extends ChangeNotifier {
     final pendingLocal = messages.where((m) => m.pending).toList();
     messages = [...older, ...loaded, ...pendingLocal];
     _notify();
+    unawaited(markRead());
   }
 
   static int _numeric(String id) => int.tryParse(id) ?? 0;

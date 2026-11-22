@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Экран входящего звонка «Моя церковь». Заменяет макет библиотеки flutter_callkit_incoming:
+     идентификаторы и типы представлений те же (на них опирается код библиотеки),
+     изменены только компоновка и оформление: название приложения сверху, крупный аватар
+     с волнами, имя и тип звонка, две одинаковые кнопки на одной линии. -->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/ivBackground"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#4A1224"
+        android:scaleType="centerCrop"
+        tools:ignore="ContentDescription" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fitsSystemWindows="false"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="64dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/ivLogo"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:adjustViewBounds="true"
+                android:scaleType="fitCenter"
+                android:visibility="invisible"
+                tools:ignore="ContentDescription" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:letterSpacing="0.16"
+                android:text="МОЯ ЦЕРКОВЬ"
+                android:textColor="#F2B879"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                tools:ignore="HardcodedText" />
+        </LinearLayout>
+
+        <com.hiennv.flutter_callkit_incoming.widgets.RippleRelativeLayout
+            android:id="@+id/llBackgroundAnimation"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="-24dp"
+            android:layout_weight="1"
+            android:fitsSystemWindows="false">
+
+            <de.hdodenhof.circleimageview.CircleImageView
+                android:id="@+id/ivAvatar"
+                android:layout_width="148dp"
+                android:layout_height="148dp"
+                android:layout_centerInParent="true"
+                android:src="@drawable/ic_default_avatar"
+                android:visibility="invisible"
+                app:civ_border_color="#66FFFFFF"
+                app:civ_border_width="3dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/ivAvatar"
+                android:layout_marginStart="32dp"
+                android:layout_marginTop="28dp"
+                android:layout_marginEnd="32dp"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvNameCaller"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="2"
+                    android:textColor="@android:color/white"
+                    android:textSize="30sp"
+                    android:textStyle="bold"
+                    tools:text="Анна Орлова" />
+
+                <TextView
+                    android:id="@+id/tvNumber"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:alpha="0.8"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textColor="@color/action_text"
+                    android:textSize="16sp"
+                    tools:text="Видеозвонок" />
+            </LinearLayout>
+        </com.hiennv.flutter_callkit_incoming.widgets.RippleRelativeLayout>
+
+        <LinearLayout
+            android:id="@+id/llAction"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:fitsSystemWindows="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingStart="24dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="24dp"
+            android:paddingBottom="44dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/ivDeclineCall"
+                    android:layout_width="78dp"
+                    android:layout_height="78dp"
+                    android:background="@drawable/bg_button_decline"
+                    android:padding="22dp"
+                    android:src="@drawable/ic_decline"
+                    tools:ignore="ContentDescription" />
+
+                <TextView
+                    android:id="@+id/tvDecline"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center"
+                    android:text="@string/text_decline"
+                    android:textColor="@color/action_text"
+                    android:textSize="15sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/ivAcceptCall"
+                    android:layout_width="78dp"
+                    android:layout_height="78dp"
+                    android:background="@drawable/bg_button_accept"
+                    android:padding="22dp"
+                    android:src="@drawable/ic_accept"
+                    tools:ignore="ContentDescription" />
+
+                <TextView
+                    android:id="@+id/tvAccept"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center"
+                    android:text="@string/text_accept"
+                    android:textColor="@color/action_text"
+                    android:textSize="15sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</RelativeLayout>

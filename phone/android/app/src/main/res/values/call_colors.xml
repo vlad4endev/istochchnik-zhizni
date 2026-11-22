@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Цвета кнопок экрана входящего звонка (перекрывают значения библиотеки flutter_callkit_incoming). -->
+<resources>
+    <color name="accept">#2FBF71</color>
+    <color name="accept_ripple">#A6F0C6</color>
+    <color name="decline">#E5484D</color>
+    <color name="decline_ripple">#F5A3A6</color>
+</resources>

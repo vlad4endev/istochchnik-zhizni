@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/session.dart';
+import '../../core/unread_badge.dart';
 import '../../ui/kit/kit.dart';
 import '../chats/chats_page.dart';
 import '../feed/feed_page.dart';
@@ -23,25 +26,42 @@ class _Tab {
   final Widget page;
 }
 
-class _ShellPageState extends State<ShellPage> {
+class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
   String _current = 'home';
-  int _unread = 0;
+  StreamSubscription<Map<String, dynamic>>? _chatEvents;
+  final _badge = UnreadBadge.instance;
+
+  int get _unread => _badge.count;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _badge.addListener(_onBadge);
+    final session = context.read<SessionController>();
+    _chatEvents = session.realtime.chatEvents.listen((_) => _badge.refreshSoon(session));
     _refreshUnread();
   }
 
-  Future<void> _refreshUnread() async {
-    try {
-      final count = await context.read<SessionController>().dio.get<Object?>('/api/messenger/unread-count');
-      final data = count.data;
-      final value = data is Map ? data['count'] : 0;
-      if (!mounted) return;
-      setState(() => _unread = value is num ? value.toInt() : int.tryParse('$value') ?? 0);
-    } catch (_) {}
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _badge.removeListener(_onBadge);
+    _chatEvents?.cancel();
+    super.dispose();
   }
+
+  void _onBadge() {
+    if (mounted) setState(() {});
+  }
+
+  /// Вернулись в приложение: сообщения могли прийти, пока оно было свёрнуто.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshUnread();
+  }
+
+  Future<void> _refreshUnread() => _badge.refresh(context.read<SessionController>());
 
   @override
   Widget build(BuildContext context) {

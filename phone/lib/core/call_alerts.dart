@@ -56,7 +56,8 @@ class CallInvite {
         id: callId,
         nameCaller: callerName,
         appName: 'Моя церковь',
-        avatar: callerAvatar.isEmpty ? null : callerAvatar,
+        // Без фото звонящего — логотип церкви (файл из ресурсов приложения).
+        avatar: callerAvatar.isEmpty ? 'assets/images/logo.png' : callerAvatar,
         handle: video ? 'Видеозвонок' : 'Аудиозвонок',
         type: video ? 1 : 0,
         duration: 60000,
@@ -73,8 +74,11 @@ class CallInvite {
         },
         android: const AndroidParams(
           isCustomNotification: true,
-          isShowLogo: false,
-          backgroundColor: '#230810',
+          isShowLogo: true,
+          logoUrl: 'assets/images/logo.png',
+          isShowCallID: true,
+          backgroundColor: '#4A1224',
+          backgroundUrl: 'assets/call/call_background.png',
           actionColor: '#2FBF71',
           textColor: '#FFFFFF',
           incomingCallNotificationChannelName: 'Входящие звонки',

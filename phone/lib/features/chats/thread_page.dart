@@ -12,6 +12,7 @@ import '../../core/dates.dart';
 import '../../core/json.dart';
 import '../../core/push.dart';
 import '../../core/session.dart';
+import '../../core/unread_badge.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 import '../calls/call_page.dart';
@@ -65,7 +66,7 @@ class ThreadPage extends StatefulWidget {
   State<ThreadPage> createState() => _ThreadPageState();
 }
 
-class _ThreadPageState extends State<ThreadPage> {
+class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
   final _input = TextEditingController();
   final _focus = FocusNode();
   final _scroll = ScrollController();
@@ -83,15 +84,33 @@ class _ThreadPageState extends State<ThreadPage> {
     super.initState();
     final session = context.read<SessionController>();
     _source = widget.source ?? ChatApi(session);
-    _c = ThreadController(_source, conversationId: widget.conversationId, meId: session.user?.id ?? 0)
+    _c = ThreadController(
+      _source,
+      conversationId: widget.conversationId,
+      meId: session.user?.id ?? 0,
+      knownPeerId: widget.otherMemberId,
+      onRead: () => UnreadBadge.instance.refresh(session),
+    )
       ..listen(widget.events ?? session.realtime.chatEvents)
       ..load();
     _scroll.addListener(_onScroll);
+    WidgetsBinding.instance.addObserver(this);
     PushService.activeConversationId = widget.conversationId;
+  }
+
+  /// Свёрнутое приложение сообщения не читает: отмечаем прочитанным, когда человек вернулся в чат.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _c.active = state == AppLifecycleState.resumed;
+    if (_c.active) {
+      _c.refresh();
+      _c.markRead();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (PushService.activeConversationId == widget.conversationId) PushService.activeConversationId = null;
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
@@ -122,6 +141,27 @@ class _ThreadPageState extends State<ThreadPage> {
     if (uri == null) return;
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) showMessage(context, 'Не удалось открыть ссылку');
+  }
+
+  /// Личный звонок уходит только с известным собеседником — иначе сервер сочтёт его групповым.
+  Future<void> _startCall({bool video = false}) async {
+    if (!_isGroup && _c.peerId == null) {
+      await _c.ensurePeer();
+      if (!mounted) return;
+      if (_c.peerId == null) {
+        showMessage(context, 'Не удалось определить собеседника. Проверьте интернет и попробуйте ещё раз.');
+        return;
+      }
+    }
+    await pushPage(
+      context,
+      CallPage(
+        conversationId: widget.conversationId,
+        recipientId: _isGroup ? null : _c.peerId,
+        title: widget.title,
+        video: video,
+      ),
+    );
   }
 
   // ───────────── отправка ─────────────
@@ -375,16 +415,16 @@ class _ThreadPageState extends State<ThreadPage> {
           onTitleTap: _openProfile,
           sheetColor: palette.isDark ? palette.sheet : const Color(0xFFF3ECE3),
           actions: [
-            if (widget.otherMemberId != null)
+            if (!_isGroup)
               HeaderButton(
                 icon: Icons.videocam_outlined,
                 tooltip: 'Видеозвонок',
-                onPressed: () => pushPage(context, CallPage(conversationId: widget.conversationId, recipientId: widget.otherMemberId, title: widget.title, video: true)),
+                onPressed: () => _startCall(video: true),
               ),
             HeaderButton(
               icon: Icons.call_outlined,
               tooltip: 'Позвонить',
-              onPressed: () => pushPage(context, CallPage(conversationId: widget.conversationId, recipientId: widget.otherMemberId, title: widget.title)),
+              onPressed: () => _startCall(),
             ),
           ],
           body: AsyncBody(

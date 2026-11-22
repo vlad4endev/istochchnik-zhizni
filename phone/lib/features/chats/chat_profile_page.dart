@@ -126,7 +126,9 @@ class _ChatProfilePageState extends State<ChatProfilePage> {
   }
 
   void _call() {
-    pushPage(context, CallPage(conversationId: widget.conversationId, recipientId: widget.otherMemberId, title: widget.title));
+    final peer = _profile?.id ?? widget.otherMemberId;
+    if (peer == null || peer <= 0) return;
+    pushPage(context, CallPage(conversationId: widget.conversationId, recipientId: peer, title: widget.title));
   }
 
   @override
@@ -153,7 +155,7 @@ class _ChatProfilePageState extends State<ChatProfilePage> {
               group: widget.isGroup,
               actions: [
                 _ActionTile(icon: Icons.chat_bubble_outline_rounded, label: 'Чат', onTap: () => Navigator.of(context).maybePop()),
-                if (!widget.isGroup && widget.otherMemberId != null) _ActionTile(icon: Icons.call_outlined, label: 'Звонок', onTap: _call),
+                if (!widget.isGroup && (_profile?.id ?? widget.otherMemberId) != null) _ActionTile(icon: Icons.call_outlined, label: 'Звонок', onTap: _call),
                 _ActionTile(
                   icon: _muted ? Icons.notifications_off_outlined : Icons.notifications_none_rounded,
                   label: _muted ? 'Включить' : 'Звук',

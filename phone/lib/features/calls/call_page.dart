@@ -91,8 +91,8 @@ class _CallPageState extends State<CallPage> {
     _camOn = widget.meeting != null
         ? (widget.meeting!.media.isVideo && widget.meeting!.camOn)
         : widget.inviteToken != null
-            ? ((widget.inviteMedia?.isVideo ?? false) && widget.camOn)
-            : widget.video;
+        ? ((widget.inviteMedia?.isVideo ?? false) && widget.camOn)
+        : widget.video;
     _room.addListener(_refresh);
     // Подписки на треки, смена камеры/микрофона и «говорит» приходят событиями комнаты.
     _events = _room.createListener()..listen((_) => _refresh());
@@ -142,7 +142,11 @@ class _CallPageState extends State<CallPage> {
     try {
       final wantCamera = _camOn;
       final access = await widget.permissions.request(camera: wantCamera);
-      final decision = decideCallAccess(mic: access.mic, cam: access.cam, wantCamera: wantCamera);
+      final decision = decideCallAccess(
+        mic: access.mic,
+        cam: access.cam,
+        wantCamera: wantCamera,
+      );
       if (!decision.canJoin) {
         if (!mounted) return;
         setState(() {
@@ -154,7 +158,9 @@ class _CallPageState extends State<CallPage> {
       }
       if (wantCamera && !decision.useCamera) {
         _camOn = false;
-        if (mounted && decision.notice != null) showMessage(context, decision.notice!);
+        if (mounted && decision.notice != null) {
+          showMessage(context, decision.notice!);
+        }
       }
       _needSettings = false;
       final audio = await AudioSession.instance;
@@ -224,17 +230,31 @@ class _CallPageState extends State<CallPage> {
     }
   }
 
-  String get _displayTitle => _meetingTitle ?? (widget.meeting?.title?.trim().isNotEmpty == true ? widget.meeting!.title!.trim() : (widget.meeting?.media.defaultTitle ?? widget.title));
+  String get _displayTitle =>
+      _meetingTitle ??
+      (widget.meeting?.title?.trim().isNotEmpty == true
+          ? widget.meeting!.title!.trim()
+          : (widget.meeting?.media.defaultTitle ?? widget.title));
 
   Future<void> _copyInvite({bool announce = false}) async {
     final url = _inviteUrl;
     if (url == null) return;
-    final media = widget.meeting?.media ?? (widget.video ? MeetingMedia.video : MeetingMedia.audio);
-    await Clipboard.setData(ClipboardData(text: inviteShareText(_displayTitle, url, media: media)));
+    final media =
+        widget.meeting?.media ??
+        (widget.video ? MeetingMedia.video : MeetingMedia.audio);
+    await Clipboard.setData(
+      ClipboardData(text: inviteShareText(_displayTitle, url, media: media)),
+    );
     if (!mounted) return;
     setState(() => _linkCopied = true);
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(content: Text(announce ? 'Название и ссылка скопированы — отправьте участникам' : 'Ссылка скопирована')),
+      SnackBar(
+        content: Text(
+          announce
+              ? 'Название и ссылка скопированы — отправьте участникам'
+              : 'Ссылка скопирована',
+        ),
+      ),
     );
   }
 
@@ -251,10 +271,21 @@ class _CallPageState extends State<CallPage> {
     final mic = p.getTrackPublicationBySource(TrackSource.microphone);
     final local = p is LocalParticipant;
     final me = _session?.user;
-    final remoteName = widget.meeting == null && widget.inviteToken == null && widget.recipientId != null ? widget.title : '';
-    final name = local ? (me?.displayName ?? 'Вы') : (p.name.trim().isNotEmpty ? p.name.trim() : (remoteName.isNotEmpty ? remoteName : 'Участник'));
+    final remoteName =
+        widget.meeting == null &&
+            widget.inviteToken == null &&
+            widget.recipientId != null
+        ? widget.title
+        : '';
+    final name = local
+        ? (me?.displayName ?? 'Вы')
+        : (p.name.trim().isNotEmpty
+              ? p.name.trim()
+              : (remoteName.isNotEmpty ? remoteName : 'Участник'));
     return CallPerson(
-      identity: p.identity.isEmpty ? (local ? 'local' : p.sid.toString()) : p.identity,
+      identity: p.identity.isEmpty
+          ? (local ? 'local' : p.sid.toString())
+          : p.identity,
       name: name,
       isLocal: local,
       micOn: mic != null && !mic.muted,
@@ -266,9 +297,9 @@ class _CallPageState extends State<CallPage> {
   }
 
   List<CallPerson> _people() => [
-        if (_room.localParticipant != null) _person(_room.localParticipant!),
-        for (final p in _room.remoteParticipants.values) _person(p),
-      ];
+    if (_room.localParticipant != null) _person(_room.localParticipant!),
+    for (final p in _room.remoteParticipants.values) _person(p),
+  ];
 
   Future<void> _hangUp({bool endForAll = false}) async {
     final id = _callId;
@@ -277,7 +308,8 @@ class _CallPageState extends State<CallPage> {
     } catch (_) {}
     if (id != null && id.isNotEmpty && mounted) {
       try {
-        await ChurchApi(context.read<SessionController>()).endCall(id, endForAll: endForAll);
+        await ChurchApi(context.read<SessionController>())
+            .endCall(id, endForAll: endForAll);
       } catch (_) {}
     }
     if (mounted) Navigator.of(context).pop();
@@ -304,7 +336,8 @@ class _CallPageState extends State<CallPage> {
     final session = _session;
     final joined = _joined;
     final declined = _declined;
-    _room.disconnect();
+    // Комната освобождается после отключения: иначе её таймеры живут до закрытия приложения.
+    unawaited(_room.disconnect().catchError((Object _) {}).whenComplete(_room.dispose));
     if (joined && id != null && !declined && session != null) {
       ChurchApi(session).endCall(id, endForAll: false).ignore();
     }
@@ -312,14 +345,16 @@ class _CallPageState extends State<CallPage> {
   }
 
   Future<void> _showParticipants() => showParticipantsSheet(
-        context,
-        people: _people(),
-        inviteUrl: _inviteUrl,
-        onCopyInvite: _inviteUrl == null ? null : () => unawaited(_copyInvite()),
-      );
+    context,
+    people: _people(),
+    inviteUrl: _inviteUrl,
+    onCopyInvite: _inviteUrl == null ? null : () => unawaited(_copyInvite()),
+  );
 
   String _statusText(int others, bool isMeeting) {
-    final time = _joinedAt == null ? '' : callTimer(DateTime.now().difference(_joinedAt!));
+    final time = _joinedAt == null
+        ? ''
+        : callTimer(DateTime.now().difference(_joinedAt!));
     if (others == 0) return isMeeting ? 'Ждём участников' : 'Ждём собеседника…';
     return time;
   }
@@ -340,24 +375,73 @@ class _CallPageState extends State<CallPage> {
                   if (mounted) setState(() => _muted = next);
                 },
         ),
-        if (videoCall) CallControl(icon: _camOn ? Icons.videocam_rounded : Icons.videocam_off_rounded, label: 'Камера', off: !_camOn, onTap: _joined ? _toggleCamera : null),
-        if (isMeeting) CallControl(icon: Icons.people_alt_rounded, label: 'Участники', badge: '${_room.remoteParticipants.length + 1}', onTap: _showParticipants),
-        if (_inviteUrl != null) CallControl(icon: Icons.link_rounded, label: 'Ссылка', onTap: () => unawaited(_copyInvite())),
+        if (videoCall)
+          CallControl(
+            icon: _camOn ? Icons.videocam_rounded : Icons.videocam_off_rounded,
+            label: 'Камера',
+            off: !_camOn,
+            onTap: _joined ? _toggleCamera : null,
+          ),
+        if (isMeeting)
+          CallControl(
+            icon: Icons.people_alt_rounded,
+            label: 'Участники',
+            badge: '${_room.remoteParticipants.length + 1}',
+            onTap: _showParticipants,
+          ),
+        if (_inviteUrl != null)
+          CallControl(
+            icon: Icons.link_rounded,
+            label: 'Ссылка',
+            onTap: () => unawaited(_copyInvite()),
+          ),
         if (host)
           PopupMenuButton<bool>(
             tooltip: 'Выход из встречи',
             offset: const Offset(0, -110),
             color: const Color(0xF51C1C1E),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
             onSelected: (all) => _hangUp(endForAll: all),
             itemBuilder: (_) => const [
-              PopupMenuItem(value: false, child: Text('Выйти из встречи', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
-              PopupMenuItem(value: true, child: Text('Завершить для всех', style: TextStyle(color: Color(0xFFFF7A70), fontWeight: FontWeight.w600))),
+              PopupMenuItem(
+                value: false,
+                child: Text(
+                  'Выйти из встречи',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              PopupMenuItem(
+                value: true,
+                child: Text(
+                  'Завершить для всех',
+                  style: TextStyle(
+                    color: Color(0xFFFF7A70),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             ],
-            child: const IgnorePointer(child: CallControl(icon: Icons.call_end_rounded, label: 'Выйти', hangup: true, onTap: _noop)),
+            child: const IgnorePointer(
+              child: CallControl(
+                icon: Icons.call_end_rounded,
+                label: 'Выйти',
+                hangup: true,
+                onTap: _noop,
+              ),
+            ),
           )
         else
-          CallControl(icon: Icons.call_end_rounded, label: 'Выйти', hangup: true, onTap: () => _hangUp(endForAll: !isMeeting)),
+          CallControl(
+            icon: Icons.call_end_rounded,
+            label: 'Выйти',
+            hangup: true,
+            onTap: () => _hangUp(endForAll: !isMeeting),
+          ),
       ],
     );
   }
@@ -368,19 +452,31 @@ class _CallPageState extends State<CallPage> {
   Widget build(BuildContext context) {
     final others = _room.remoteParticipants.length;
     final isMeeting = widget.meeting != null || widget.inviteToken != null;
-    final videoCall = widget.video || (widget.meeting?.media.isVideo ?? false) || (widget.inviteMedia?.isVideo ?? false);
+    final videoCall =
+        widget.video ||
+        (widget.meeting?.media.isVideo ?? false) ||
+        (widget.inviteMedia?.isVideo ?? false);
     final title = widget.meeting != null ? _displayTitle : widget.title;
     if (_joined && _error == null) {
       final people = _people();
       final inviteBar = _inviteUrl != null && _inviteOpen && others == 0
-          ? InviteBar(title: title, url: _inviteUrl!, copied: _linkCopied, onCopy: () => unawaited(_copyInvite()), onClose: () => setState(() => _inviteOpen = false))
+          ? InviteBar(
+              title: title,
+              url: _inviteUrl!,
+              copied: _linkCopied,
+              onCopy: () => unawaited(_copyInvite()),
+              onClose: () => setState(() => _inviteOpen = false),
+            )
           : null;
       return AnnotatedRegion<SystemUiOverlayStyle>(
         value: SystemUiOverlayStyle.light,
         child: Scaffold(
           backgroundColor: CallColors.bg,
           body: DefaultTextStyle.merge(
-            style: const TextStyle(color: Colors.white, fontFamily: ChurchType.family),
+            style: const TextStyle(
+              color: Colors.white,
+              fontFamily: ChurchType.family,
+            ),
             child: SafeArea(
               child: Stack(
                 children: [
@@ -396,7 +492,12 @@ class _CallPageState extends State<CallPage> {
                       inviteBar: inviteBar,
                     ),
                   ),
-                  Positioned(left: 0, right: 0, bottom: 0, child: _controls(videoCall, isMeeting)),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _controls(videoCall, isMeeting),
+                  ),
                 ],
               ),
             ),
@@ -405,57 +506,159 @@ class _CallPageState extends State<CallPage> {
       );
     }
     final ringing = widget.incoming && !_joined && _error == null;
-    final status = _error ??
-        (widget.incoming
-            ? (widget.video ? 'Входящий видеозвонок' : 'Входящий звонок')
-            : 'Соединяем…');
+    final status =
+        _error ??
+        (widget.incoming ? 'Звонит вам…' : 'Соединяем…');
     return DarkPage(
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
-          child: Column(
-            children: [
-              Text(
-                ringing
-                    ? (widget.video ? 'ВХОДЯЩИЙ ВИДЕОЗВОНОК' : 'ВХОДЯЩИЙ ЗВОНОК')
-                    : isMeeting
-                        ? (videoCall ? 'ВИДЕОВСТРЕЧА' : 'АУДИОВСТРЕЧА')
-                        : (widget.video ? 'ВИДЕОЗВОНОК' : 'ЗВОНОК'),
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 2.2, color: ChurchColors.amber),
+        // Короткие экраны и крупный шрифт: содержимое прокручивается, а на обычных — растягивается на всю высоту.
+        child: LayoutBuilder(
+          builder: (context, box) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: box.maxHeight),
+              child: IntrinsicHeight(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+                  child: Column(
+                    children: [
+                      // Сверху — «Моя церковь» и тип звонка: сразу понятно, откуда и какой.
+                      const _CallBrand(),
+                      const SizedBox(height: 10),
+                      Text(
+                        ringing
+                            ? (widget.video
+                                  ? 'ВХОДЯЩИЙ ВИДЕОЗВОНОК'
+                                  : 'ВХОДЯЩИЙ ЗВОНОК')
+                            : isMeeting
+                            ? (videoCall ? 'ВИДЕОВСТРЕЧА' : 'АУДИОВСТРЕЧА')
+                            : (widget.video ? 'ВИДЕОЗВОНОК' : 'ЗВОНОК'),
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 2.2,
+                          color: Color(0xCCFFFFFF),
+                        ),
+                      ),
+                      const Spacer(flex: 3),
+                      _Pulse(
+                        active: _error == null,
+                        child: ChurchAvatar(name: title, size: 132, ring: true),
+                      ),
+                      const SizedBox(height: 32),
+                      Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                          height: 1.15,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          status,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: _error != null
+                                ? const Color(0xFFFFB4C0)
+                                : const Color(0xB3FFFFFF),
+                          ),
+                        ),
+                      ),
+                      const Spacer(flex: 4),
+                      if (ringing)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Center(
+                                child: _CallButton(
+                                  icon: Icons.call_end_rounded,
+                                  label: 'Отклонить',
+                                  color: const Color(0xFFE5484D),
+                                  onTap: _decline,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Center(
+                                child: _CallButton(
+                                  icon: widget.video
+                                      ? Icons.videocam_rounded
+                                      : Icons.call_rounded,
+                                  label: 'Ответить',
+                                  color: const Color(0xFF2FBF71),
+                                  busy: _connecting,
+                                  onTap: _connecting ? null : _connect,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      else ...[
+                        if (_error != null) ...[
+                          if (_needSettings) ...[
+                            _CallButton(
+                              icon: Icons.settings_rounded,
+                              label: 'Настройки',
+                              color: ChurchColors.amberBlob,
+                              onTap: () => widget.permissions.openSettings(),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          _CallButton(
+                            icon: Icons.refresh_rounded,
+                            label: 'Повторить',
+                            color: Colors.white.withValues(alpha: 0.16),
+                            onTap: _connect,
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+                        _CallButton(
+                          icon: Icons.call_end_rounded,
+                          label: 'Завершить',
+                          color: const Color(0xFFE5484D),
+                          onTap: _hangUp,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
-              const Spacer(),
-              _Pulse(active: _error == null, child: ChurchAvatar(name: title, size: 120)),
-              const SizedBox(height: 28),
-              Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
-              const SizedBox(height: 8),
-              Semantics(
-                liveRegion: true,
-                child: Text(status, textAlign: TextAlign.center, style: TextStyle(fontSize: 15.5, color: _error != null ? const Color(0xFFFFB4C0) : const Color(0xB3FFFFFF))),
-              ),
-              const Spacer(),
-              if (ringing)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _CallButton(icon: Icons.call_end_rounded, label: 'Отклонить', color: ChurchColors.danger, onTap: _decline),
-                    _CallButton(icon: widget.video ? Icons.videocam_rounded : Icons.call_rounded, label: 'Ответить', color: ChurchColors.successBright, busy: _connecting, onTap: _connecting ? null : _connect),
-                  ],
-                )
-              else ...[
-                if (_error != null) ...[
-                  if (_needSettings) ...[
-                    _CallButton(icon: Icons.settings_rounded, label: 'Настройки', color: ChurchColors.amberBlob, onTap: () => widget.permissions.openSettings()),
-                    const SizedBox(height: 16),
-                  ],
-                  _CallButton(icon: Icons.refresh_rounded, label: 'Повторить', color: Colors.white.withValues(alpha: 0.16), onTap: _connect),
-                  const SizedBox(height: 20),
-                ],
-                _CallButton(icon: Icons.call_end_rounded, label: 'Завершить', color: ChurchColors.danger, onTap: _hangUp),
-              ],
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Логотип и название приложения над экраном звонка.
+class _CallBrand extends StatelessWidget {
+  const _CallBrand();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        ChurchLogo(size: 30),
+        SizedBox(width: 10),
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              'МОЯ ЦЕРКОВЬ',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 2.4, color: ChurchColors.amber),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -470,7 +673,10 @@ class _Pulse extends StatefulWidget {
 }
 
 class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800));
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
+  );
 
   @override
   void initState() {
@@ -485,7 +691,11 @@ class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
   }
 
   void _sync() {
-    final reduce = WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
+    final reduce = WidgetsBinding
+        .instance
+        .platformDispatcher
+        .accessibilityFeatures
+        .disableAnimations;
     if (widget.active && !reduce) {
       if (!_controller.isAnimating) _controller.repeat();
     } else {
@@ -512,17 +722,23 @@ class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
             alignment: Alignment.center,
             children: [
               for (final offset in const [0.0, 0.5])
-                Builder(builder: (context) {
-                  final v = (t + offset) % 1;
-                  return Container(
-                    width: 130 + 90 * v,
-                    height: 130 + 90 * v,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: ChurchColors.amber.withValues(alpha: widget.active ? 0.35 * (1 - v) : 0)),
-                    ),
-                  );
-                }),
+                Builder(
+                  builder: (context) {
+                    final v = (t + offset) % 1;
+                    return Container(
+                      width: 130 + 90 * v,
+                      height: 130 + 90 * v,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: ChurchColors.amber.withValues(
+                            alpha: widget.active ? 0.35 * (1 - v) : 0,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
               child!,
             ],
           );
@@ -567,16 +783,31 @@ class _CallButton extends StatelessWidget {
               child: InkWell(
                 onTap: onTap,
                 child: SizedBox(
-                  width: 68,
-                  height: 68,
+                  width: 78,
+                  height: 78,
                   child: busy
-                      ? const Padding(padding: EdgeInsets.all(22), child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
-                      : Icon(icon, color: Colors.white, size: 28),
+                      ? const Padding(
+                          padding: EdgeInsets.all(26),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Icon(icon, color: Colors.white, size: 32),
                 ),
               ),
             ),
             const SizedBox(height: 8),
-            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 124),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: Colors.white),
+                ),
+              ),
+            ),
           ],
         ),
       ),
