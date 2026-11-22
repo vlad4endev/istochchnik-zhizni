@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/push_status.dart';
 import '../../ui/kit/kit.dart';
+import 'push_check_sheet.dart';
 
 /// Состояние уведомлений и звонков с кнопками исправления. Только Android: на других платформах пушей нет.
 class NotificationsCard extends StatefulWidget {
@@ -81,6 +82,13 @@ class _NotificationsCardState extends State<NotificationsCard> with WidgetsBindi
             badText: problem ?? 'Устройство не зарегистрировано — проверьте интернет',
           ),
         ]),
+        const SizedBox(height: Space.sm),
+        SecondaryButton(
+          key: const ValueKey('push-check'),
+          label: 'Проверить уведомления',
+          icon: Icons.notifications_active_outlined,
+          onPressed: () => showPushCheck(context),
+        ),
         if (!_status.allGood)
           Padding(
             padding: const EdgeInsets.fromLTRB(4, Space.sm, 4, 0),

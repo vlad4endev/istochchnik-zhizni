@@ -62,6 +62,14 @@ class PushService with WidgetsBindingObserver {
   bool _started = false;
   late final TokenUploader _uploader;
 
+  SessionController? get session => _session;
+
+  /// Отправить токен на сервер сейчас. Возвращает null при успехе или текст причины.
+  Future<String?> uploadToken(String token) async {
+    final ok = await _uploader.submit(token);
+    return ok ? null : (_uploader.lastError ?? 'сервер не принял токен');
+  }
+
   Future<void> start(SessionController session) async {
     _session = session;
     CallAlerts.instance.attach(session);
@@ -110,14 +118,19 @@ class PushService with WidgetsBindingObserver {
         PushStatus.instance.setFirebaseProblem(null);
         await _uploader.submit(token);
       }
-    } catch (_) {
+    } catch (e) {
       // Без Google Play Services или если проект Firebase не принял приложение пушей не будет;
-      // приложение работает, а причина видна в профиле.
-      PushStatus.instance.setFirebaseProblem('Не удалось связаться с Firebase');
+      // приложение работает, а причина видна в профиле и на экране проверки.
+      PushStatus.instance.setFirebaseProblem('Не удалось связаться с Firebase: ${_short(e)}');
     }
     await PushStatus.instance.refresh();
     await _askFullScreenCalls();
     _hintIfNotificationsOff();
+  }
+
+  static String _short(Object e) {
+    final text = e.toString().replaceAll('\n', ' ');
+    return text.length > 160 ? '${text.substring(0, 160)}…' : text;
   }
 
   /// Вернулись в приложение: человек мог включить разрешение в настройках или появилась сеть.

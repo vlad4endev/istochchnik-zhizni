@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Настройки проекта Firebase церкви (mychurch-29bce) для нативного слоя Android.
+     Без них Firebase не запускается до Flutter, и пуши при закрытом приложении не доходят.
+     Это публичные идентификаторы клиента (как в google-services.json), не секрет.
+     Значения те же, что в lib/core/firebase_config.dart. -->
+<resources>
+    <string name="google_app_id" translatable="false">1:93057601077:android:dd3cc9999ce518472a2b7c</string>
+    <string name="gcm_defaultSenderId" translatable="false">93057601077</string>
+    <string name="google_api_key" translatable="false">AIzaSyBBRmpz20U18Nj7-y-j6G_N3a36-_y2iYQ</string>
+    <string name="google_crash_reporting_api_key" translatable="false">AIzaSyBBRmpz20U18Nj7-y-j6G_N3a36-_y2iYQ</string>
+    <string name="project_id" translatable="false">mychurch-29bce</string>
+    <string name="google_storage_bucket" translatable="false">mychurch-29bce.firebasestorage.app</string>
+</resources>

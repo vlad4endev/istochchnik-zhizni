@@ -22,6 +22,9 @@ class TokenUploader {
   int _attempt = 0;
   bool _busy = false;
 
+  /// Последняя причина отказа сервера или сети — для экрана проверки уведомлений.
+  String? lastError;
+
   bool get registered => _wanted != null && _wanted == _sent;
   bool get hasToken => _wanted != null;
 
@@ -49,8 +52,10 @@ class TokenUploader {
       await send(token);
       _sent = token;
       _attempt = 0;
+      lastError = null;
       return true;
-    } catch (_) {
+    } catch (e) {
+      lastError = e.toString();
       _scheduleRetry();
       return false;
     } finally {
