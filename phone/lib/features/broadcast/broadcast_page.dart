@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/cache_watch.dart';
 import '../../core/church_api.dart';
 import '../../core/dates.dart';
 import '../../core/json.dart';
@@ -16,7 +17,7 @@ class BroadcastPage extends StatefulWidget {
   State<BroadcastPage> createState() => _BroadcastPageState();
 }
 
-class _BroadcastPageState extends State<BroadcastPage> {
+class _BroadcastPageState extends State<BroadcastPage> with CacheWatcher<BroadcastPage> {
   bool _loading = true;
   String? _error;
   Map<String, dynamic> _active = {};
@@ -26,6 +27,7 @@ class _BroadcastPageState extends State<BroadcastPage> {
   void initState() {
     super.initState();
     _load();
+    watchCache(const ['/api/broadcasts'], _load);
   }
 
   Future<void> _load() async {

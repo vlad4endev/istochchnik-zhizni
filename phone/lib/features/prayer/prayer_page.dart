@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/cache_watch.dart';
 import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
@@ -28,7 +29,7 @@ class PrayerPage extends StatefulWidget {
   State<PrayerPage> createState() => _PrayerPageState();
 }
 
-class _PrayerPageState extends State<PrayerPage> {
+class _PrayerPageState extends State<PrayerPage> with CacheWatcher<PrayerPage> {
   static final _first = DateTime(2020);
   static final _last = DateTime(2030, 12, 31);
 
@@ -45,6 +46,7 @@ class _PrayerPageState extends State<PrayerPage> {
     super.initState();
     _source = widget.source ?? PrayerApi(context.read<SessionController>());
     _load();
+    watchCache(const ['/api/calendar/'], () => _load(quiet: true));
     _registerVisit();
   }
 
@@ -73,11 +75,13 @@ class _PrayerPageState extends State<PrayerPage> {
     }
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool quiet = false}) async {
+    if (!quiet) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final day = widget.loadDay != null
           ? await widget.loadDay!(_iso)
@@ -88,7 +92,7 @@ class _PrayerPageState extends State<PrayerPage> {
         _loading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || quiet) return;
       setState(() {
         _loading = false;
         _error = describeDio(error);

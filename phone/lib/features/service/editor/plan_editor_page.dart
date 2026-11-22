@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../../core/http_cache.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -310,7 +311,7 @@ class _PlanEditorPageState extends State<PlanEditorPage> {
   Widget _body(PlanDraft plan) {
     final timed = _c.timed;
     return RefreshIndicator(
-      onRefresh: _c.load,
+      onRefresh: () => HttpCache.fresh(_c.load),
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [

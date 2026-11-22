@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/cache_watch.dart';
 import '../../core/church_api.dart';
 import '../../core/dates.dart';
 import '../../core/json.dart';
@@ -17,7 +18,7 @@ class SermonsPage extends StatefulWidget {
   State<SermonsPage> createState() => _SermonsPageState();
 }
 
-class _SermonsPageState extends State<SermonsPage> {
+class _SermonsPageState extends State<SermonsPage> with CacheWatcher<SermonsPage> {
   final _query = TextEditingController();
   bool _loading = true;
   String? _error;
@@ -29,6 +30,7 @@ class _SermonsPageState extends State<SermonsPage> {
   void initState() {
     super.initState();
     _load();
+    watchCache(const ['/api/resources', '/api/sermon-notes'], _load);
   }
 
   @override

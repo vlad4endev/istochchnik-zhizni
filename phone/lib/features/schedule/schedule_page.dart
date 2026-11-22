@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/cache_watch.dart';
 import '../../core/dates.dart';
 import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
@@ -28,7 +29,7 @@ class SchedulePage extends StatefulWidget {
   State<SchedulePage> createState() => _SchedulePageState();
 }
 
-class _SchedulePageState extends State<SchedulePage> {
+class _SchedulePageState extends State<SchedulePage> with CacheWatcher<SchedulePage> {
   late final ScheduleController _c;
   _Tab _tab = _Tab.mine;
   bool _teamLoaded = false;
@@ -42,6 +43,10 @@ class _SchedulePageState extends State<SchedulePage> {
       access: MinistryAccess.of(session.user),
       userId: session.user?.id ?? 0,
     )..loadMine();
+    watchCache(const ['/api/media-schedule', '/api/music-schedule', '/api/sunday-schedule'], () {
+      _c.loadMine();
+      if (_teamLoaded) _c.loadTeam();
+    });
   }
 
   @override

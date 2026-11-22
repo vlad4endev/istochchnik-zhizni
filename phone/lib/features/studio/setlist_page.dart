@@ -1,3 +1,5 @@
+import '../../core/http_cache.dart';
+import '../../core/cache_watch.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -43,7 +45,7 @@ class SetlistPage extends StatefulWidget {
   State<SetlistPage> createState() => _SetlistPageState();
 }
 
-class _SetlistPageState extends State<SetlistPage> {
+class _SetlistPageState extends State<SetlistPage> with CacheWatcher<SetlistPage> {
   late final SetlistController _c;
   Map<int, MyVersion>? _versions;
 
@@ -57,6 +59,7 @@ class _SetlistPageState extends State<SetlistPage> {
       userId: widget.userId ?? session.user?.id ?? 0,
       origin: widget.origin ?? session.apiOrigin,
     )..load();
+    watchCache(const ['/api/studio/setlists'], _c.load);
   }
 
   @override
@@ -266,7 +269,7 @@ class _SetlistPageState extends State<SetlistPage> {
     final canEdit = _c.editable;
     return RefreshIndicator(
       color: palette.accent,
-      onRefresh: _c.load,
+      onRefresh: () => HttpCache.fresh(_c.load),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(

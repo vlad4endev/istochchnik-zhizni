@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/cache_watch.dart';
 import '../../core/church_api.dart';
 import '../../core/dates.dart';
 import '../../core/session.dart';
@@ -30,7 +31,7 @@ class StudioPage extends StatefulWidget {
   State<StudioPage> createState() => _StudioPageState();
 }
 
-class _StudioPageState extends State<StudioPage> {
+class _StudioPageState extends State<StudioPage> with CacheWatcher<StudioPage> {
   late final StudioSource _source;
   late final StudioController _c;
   _Tab _tab = _Tab.setlists;
@@ -41,6 +42,7 @@ class _StudioPageState extends State<StudioPage> {
     final session = context.read<SessionController>();
     _source = widget.source ?? StudioRepository(session);
     _c = StudioController(_source, userId: widget.userId ?? session.user?.id ?? 0)..load();
+    watchCache(const ['/api/studio', '/api/songs'], _c.load);
   }
 
   @override

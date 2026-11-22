@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/cache_watch.dart';
 import '../../core/church_api.dart';
 import '../../core/dates.dart';
 import '../../core/json.dart';
@@ -15,7 +16,7 @@ class RequestsPage extends StatefulWidget {
   State<RequestsPage> createState() => _RequestsPageState();
 }
 
-class _RequestsPageState extends State<RequestsPage> {
+class _RequestsPageState extends State<RequestsPage> with CacheWatcher<RequestsPage> {
   bool _loading = true;
   String? _error;
   List<dynamic> _items = const [];
@@ -26,13 +27,16 @@ class _RequestsPageState extends State<RequestsPage> {
   void initState() {
     super.initState();
     _load();
+    watchCache(const ['/api/auth/access-requests'], () => _load(quiet: true));
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool quiet = false}) async {
+    if (!quiet) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final items = await ChurchApi(context.read<SessionController>()).accessRequests();
       if (!mounted) return;
@@ -41,7 +45,7 @@ class _RequestsPageState extends State<RequestsPage> {
         _loading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || quiet) return;
       setState(() {
         _loading = false;
         _error = describeDio(error);

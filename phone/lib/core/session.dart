@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'http_cache.dart';
 import 'json.dart';
 import 'realtime.dart';
 
@@ -127,7 +130,7 @@ class SectionRule {
 }
 
 class SessionController extends ChangeNotifier {
-  SessionController({FlutterSecureStorage? storage})
+  SessionController({FlutterSecureStorage? storage, Duration cacheRecheckAfter = const Duration(seconds: 3)})
       : _storage = storage ?? const FlutterSecureStorage() {
     dio = Dio(
       BaseOptions(
@@ -157,10 +160,26 @@ class SessionController extends ChangeNotifier {
         },
       ),
     );
+    cache = HttpCache(dio: dio, userId: () => user?.id, directory: _supportDirectory, recheckAfter: cacheRecheckAfter);
+    dio.interceptors.add(cache);
   }
+
+  static Future<Directory?>? _supportDirectoryFuture;
+
+  /// Папка приложения; ответ запоминаем. Запросы её не ждут: диск нужен только для записи копии и чтения при запуске.
+  static Future<Directory?> _supportDirectory() => _supportDirectoryFuture ??= () async {
+        try {
+          return await getApplicationSupportDirectory();
+        } catch (_) {
+          return null;
+        }
+      }();
 
   final FlutterSecureStorage _storage;
   late final Dio dio;
+
+  /// Копия ответов сервера: разделы открываются мгновенно, свежее подгружается фоном.
+  late final HttpCache cache;
   late final ChurchRealtime realtime = ChurchRealtime(this);
 
   bool ready = false;
@@ -205,6 +224,10 @@ class SessionController extends ChangeNotifier {
       } catch (_) {
         user = null;
       }
+    }
+    if (_token != null && user != null) {
+      // Сохранённое с прошлого раза — в память до первого экрана, чтобы разделы открылись мгновенно.
+      await cache.warm().timeout(const Duration(seconds: 1), onTimeout: () {});
     }
     ready = true;
     notifyListeners();
@@ -359,12 +382,24 @@ class SessionController extends ChangeNotifier {
     } catch (_) {
       /* локальный выход всё равно завершаем */
     }
+    await cache.clear();
+    await _forgetLegacyCache();
     _token = null;
     user = null;
     sections = {};
     await _deleteSecure('auth_token');
     await _deleteSecure('auth_user');
     notifyListeners();
+  }
+
+  /// Прежние копии ответов (до кеша на диске) тоже личные — стираем при выходе.
+  Future<void> _forgetLegacyCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      for (final key in prefs.getKeys().where((k) => k.startsWith('cache:')).toList()) {
+        await prefs.remove(key);
+      }
+    } catch (_) {}
   }
 
   Future<String?> _readSecure(String key) async {

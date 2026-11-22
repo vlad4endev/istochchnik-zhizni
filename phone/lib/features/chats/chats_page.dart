@@ -1,7 +1,10 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import 'dart:async';
+
 import '../calls/widgets/meeting_sheet.dart';
+import '../../core/cache_watch.dart';
 import '../../core/church_api.dart';
 import '../../core/dates.dart';
 import '../../core/json.dart';
@@ -25,7 +28,7 @@ class ChatsPage extends StatefulWidget {
   State<ChatsPage> createState() => _ChatsPageState();
 }
 
-class _ChatsPageState extends State<ChatsPage> {
+class _ChatsPageState extends State<ChatsPage> with CacheWatcher<ChatsPage> {
   bool _loading = true;
   String? _error;
   List<dynamic> _items = const [];
@@ -34,16 +37,33 @@ class _ChatsPageState extends State<ChatsPage> {
 
   @override
   void dispose() {
+    _eventDebounce?.cancel();
+    _chatEvents?.cancel();
     _query.dispose();
     super.dispose();
   }
 
   late final ChatListActions _actions = widget.actions ?? ServerChatListActions(context.read<SessionController>());
 
+  StreamSubscription<Map<String, dynamic>>? _chatEvents;
+  Timer? _eventDebounce;
+
   @override
   void initState() {
     super.initState();
     _load();
+    final session = context.read<SessionController>();
+    // Фоном пришёл свежий список — показываем сразу.
+    watchCache(const ['/api/messenger/conversations'], () => _load(silent: true));
+    // Пришло, изменилось или прочитано сообщение — список обновляется сам, без открытия раздела.
+    _chatEvents = session.realtime.chatEvents.listen((_) {
+      _eventDebounce?.cancel();
+      _eventDebounce = Timer(const Duration(milliseconds: 300), () {
+        if (!mounted) return;
+        session.cache.invalidate('/api/messenger/conversations');
+        _load(silent: true);
+      });
+    });
   }
 
   Future<void> _load({bool silent = false}) async {

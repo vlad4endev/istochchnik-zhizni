@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/cache_watch.dart';
 import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
@@ -53,7 +54,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with CacheWatcher<HomePage> {
   late final HomeController _home;
   late final HomeExtrasController _extras;
   Timer? _tick;
@@ -75,6 +76,8 @@ class _HomePageState extends State<HomePage> {
       meId: meId,
     );
     _reload();
+    // Свежее, пришедшее фоном (расписание, события, эфир), сразу попадает на главную.
+    watchCache(const ['/api/calendar', '/api/resources', '/api/broadcasts', '/api/service-plans', '/api/sunday-schedule', '/api/media-schedule', '/api/music-schedule', '/api/profile'], _reload);
     // Раз в полминуты пересчитываем «сегодня/завтра», фазы служения и показ трансляции.
     _tick = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() => _now = DateTime.now());

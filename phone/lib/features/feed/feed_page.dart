@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/cache_watch.dart';
 import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
@@ -18,7 +19,7 @@ class FeedPage extends StatefulWidget {
   State<FeedPage> createState() => _FeedPageState();
 }
 
-class _FeedPageState extends State<FeedPage> {
+class _FeedPageState extends State<FeedPage> with CacheWatcher<FeedPage> {
   bool _loading = true;
   String? _error;
   List<dynamic> _posts = const [];
@@ -28,13 +29,16 @@ class _FeedPageState extends State<FeedPage> {
   void initState() {
     super.initState();
     _load();
+    watchCache(const ['/api/feed', '/api/stories'], () => _load(quiet: true));
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool quiet = false}) async {
+    if (!quiet) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     final api = ChurchApi(context.read<SessionController>());
     try {
       final feed = await api.feed();
@@ -49,7 +53,7 @@ class _FeedPageState extends State<FeedPage> {
         _loading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || quiet) return;
       setState(() {
         _loading = false;
         _error = describeDio(error);

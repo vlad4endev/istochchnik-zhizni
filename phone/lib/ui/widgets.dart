@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import '../core/http_cache.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'kit/components.dart';
@@ -26,18 +29,48 @@ class AsyncBody extends StatelessWidget {
   }
 }
 
-class LoadingView extends StatelessWidget {
-  const LoadingView({super.key});
+/// Индикатор загрузки. Появляется не сразу: если данные пришли за долю секунды
+/// (например, из сохранённого), экран не мигает спиннером.
+class LoadingView extends StatefulWidget {
+  const LoadingView({super.key, this.delay = const Duration(milliseconds: 220)});
+
+  final Duration delay;
+
+  @override
+  State<LoadingView> createState() => _LoadingViewState();
+}
+
+class _LoadingViewState extends State<LoadingView> {
+  Timer? _timer;
+  bool _shown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(widget.delay, () {
+      if (mounted) setState(() => _shown = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Semantics(
-        label: 'Загрузка',
-        child: SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(strokeWidth: 2.6, color: context.palette.accent),
+    return AnimatedOpacity(
+      opacity: _shown ? 1 : 0,
+      duration: const Duration(milliseconds: 180),
+      child: Center(
+        child: Semantics(
+          label: 'Загрузка',
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.6, color: context.palette.accent),
+          ),
         ),
       ),
     );
@@ -150,7 +183,8 @@ class SheetList extends StatelessWidget {
     return RefreshIndicator(
       color: context.palette.accent,
       backgroundColor: context.palette.card,
-      onRefresh: onRefresh!,
+      // Потянули вниз — просим сервер, а не сохранённое.
+      onRefresh: () => HttpCache.fresh(onRefresh!),
       child: list,
     );
   }

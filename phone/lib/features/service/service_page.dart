@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/cache_watch.dart';
 import '../../core/dates.dart';
 import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
@@ -38,7 +39,7 @@ class ServicePage extends StatefulWidget {
   State<ServicePage> createState() => _ServicePageState();
 }
 
-class _ServicePageState extends State<ServicePage> {
+class _ServicePageState extends State<ServicePage> with CacheWatcher<ServicePage> {
   late final PlanSource _source;
   late final ServiceController _c;
   late final PlanEditorSource _editorSource;
@@ -57,6 +58,7 @@ class _ServicePageState extends State<ServicePage> {
     _canEdit = canManagePlan(session.user);
     _canTemplates = canManageTemplates(session.user);
     _c = ServiceController(_source)..load();
+    watchCache(const ['/api/service-plans'], _c.load);
   }
 
   @override

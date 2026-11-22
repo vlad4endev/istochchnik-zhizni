@@ -21,6 +21,9 @@ class ChurchRealtime {
   /// открытый чат перечитывает себя сам.
   Stream<Map<String, dynamic>> get chatEvents => _chatEvents.stream;
 
+  /// Для тестов: подать событие чата так, будто оно пришло из сокета.
+  void debugEmitChat(Map<String, dynamic> event) => _chatEvents.add(event);
+
   /// События звонков из сокета: отмена, отказ, завершение — экран звонка закрывается сам.
   Stream<Map<String, dynamic>> get callEvents => _callEvents.stream;
 

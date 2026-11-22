@@ -60,4 +60,14 @@ void main() {
     expect(_t({}).destination, PushDestination.none);
     expect(_t({'type': 'что-то новое', 'url': '/unknown'}).destination, PushDestination.none);
   });
+
+  test('какие сохранённые разделы перепроверять по пушу', () {
+    List<String> p(Map<String, String> d) => cachePrefixesFor(_t(d));
+    expect(p({'type': 'new_event', 'url': '/dashboard'}), ['/api/calendar/events']);
+    expect(p({'type': 'feed_new_post', 'url': '/feed'}), contains('/api/feed'));
+    expect(p({'type': 'new_sermon', 'url': '/sermons'}), contains('/api/resources'));
+    expect(p({'type': 'media_reminder', 'url': '/media-schedule/my'}), contains('/api/media-schedule'));
+    expect(p({'type': 'prayer_reminder', 'url': '/prayer'}), ['/api/calendar']);
+    expect(p({'type': 'push_test'}), isEmpty, reason: 'проверочный пуш ничего не обновляет');
+  });
 }

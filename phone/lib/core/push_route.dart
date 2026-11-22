@@ -60,3 +60,20 @@ PushTarget resolvePushTarget(Map<String, dynamic> data) {
   if (path == '/sermons') return const PushTarget(PushDestination.sermons);
   return const PushTarget(PushDestination.none);
 }
+
+/// Какие сохранённые разделы устарели, когда пришёл такой пуш: их перепроверяют сразу,
+/// чтобы к нажатию на уведомление (и на открытом экране) новое уже было на месте.
+List<String> cachePrefixesFor(PushTarget target) => switch (target.destination) {
+      PushDestination.prayer || PushDestination.home => const ['/api/calendar'],
+      PushDestination.feed => const ['/api/feed', '/api/stories'],
+      PushDestination.sermons => const ['/api/resources', '/api/sermon-notes'],
+      PushDestination.events => const ['/api/calendar/events'],
+      PushDestination.broadcast => const ['/api/broadcasts'],
+      PushDestination.service ||
+      PushDestination.schedule ||
+      PushDestination.studio =>
+        const ['/api/service-plans', '/api/sunday-schedule', '/api/media-schedule', '/api/music-schedule', '/api/studio'],
+      PushDestination.calls => const ['/api/calls/history'],
+      PushDestination.chat => const ['/api/messenger/conversations'],
+      PushDestination.web || PushDestination.none => const [],
+    };

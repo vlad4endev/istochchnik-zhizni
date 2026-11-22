@@ -30,6 +30,7 @@ class _Tab {
 class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
   String _current = 'home';
   StreamSubscription<Map<String, dynamic>>? _chatEvents;
+  Timer? _freshness;
   final _badge = UnreadBadge.instance;
 
   int get _unread => _badge.count;
@@ -45,10 +46,18 @@ class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
     final session = context.read<SessionController>();
     _chatEvents = session.realtime.chatEvents.listen((_) => _badge.refreshSoon(session));
     _refreshUnread();
+    // Пока приложение открыто, то, на что смотрят сейчас, раз в минуту сверяется с сервером:
+    // новое появляется само, без перезахода в раздел.
+    _freshness = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (_inForeground) unawaited(session.cache.revalidateRecent(within: const Duration(minutes: 5), max: 8));
+    });
   }
+
+  bool _inForeground = true;
 
   @override
   void dispose() {
+    _freshness?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _badge.removeListener(_onBadge);
     PushNavigator.instance
@@ -72,7 +81,12 @@ class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
   /// Вернулись в приложение: сообщения могли прийти, пока оно было свёрнуто.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _refreshUnread();
+    _inForeground = state == AppLifecycleState.resumed;
+    if (state == AppLifecycleState.resumed) {
+      _refreshUnread();
+      // Пока приложение было свёрнуто, на сервере могло появиться новое — подтягиваем всё недавно открытое.
+      unawaited(context.read<SessionController>().cache.revalidateRecent());
+    }
   }
 
   Future<void> _refreshUnread() => _badge.refresh(context.read<SessionController>());

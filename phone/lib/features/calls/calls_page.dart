@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/cache_watch.dart';
 import '../../core/church_api.dart';
 import '../../core/dates.dart';
 import '../../core/json.dart';
@@ -17,7 +18,7 @@ class CallsPage extends StatefulWidget {
   State<CallsPage> createState() => _CallsPageState();
 }
 
-class _CallsPageState extends State<CallsPage> {
+class _CallsPageState extends State<CallsPage> with CacheWatcher<CallsPage> {
   bool _loading = true;
   String? _error;
   List<dynamic> _items = const [];
@@ -26,6 +27,7 @@ class _CallsPageState extends State<CallsPage> {
   void initState() {
     super.initState();
     _load();
+    watchCache(const ['/api/calls/history'], _load);
   }
 
   Future<void> _load() async {

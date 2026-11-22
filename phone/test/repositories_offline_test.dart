@@ -35,6 +35,8 @@ SessionController _session(_Net net) {
   final s = SessionController();
   s.user = AppUser(id: 1, name: 'И', firstName: 'И', lastName: 'П', role: 'member', roles: const ['member'], registrationStatus: 'active');
   s.dio.httpClientAdapter = net;
+  // Здесь проверяется собственная копия репозитория на диске, поэтому копию ответов в памяти выключаем.
+  s.dio.interceptors.remove(s.cache);
   return s;
 }
 

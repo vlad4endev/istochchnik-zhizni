@@ -1,3 +1,4 @@
+import '../../core/cache_watch.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -30,7 +31,7 @@ class PlanPage extends StatefulWidget {
   State<PlanPage> createState() => _PlanPageState();
 }
 
-class _PlanPageState extends State<PlanPage> {
+class _PlanPageState extends State<PlanPage> with CacheWatcher<PlanPage> {
   bool _loading = true;
   String? _error;
   PlanView? _plan;
@@ -41,6 +42,7 @@ class _PlanPageState extends State<PlanPage> {
   void initState() {
     super.initState();
     _load();
+    watchCache(const ['/api/service-plans'], _load);
   }
 
   Future<void> _load() async {

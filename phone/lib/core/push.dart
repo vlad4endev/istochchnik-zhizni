@@ -249,6 +249,13 @@ class PushService with WidgetsBindingObserver {
     return id;
   }
 
+  /// Пришло напоминание — связанные разделы подтягиваются фоном и обновляются на экране.
+  void _refreshCachedFor(Map<String, dynamic> data) {
+    final prefixes = cachePrefixesFor(resolvePushTarget(data));
+    if (prefixes.isEmpty) return;
+    unawaited(_session?.cache.revalidate((path) => prefixes.any(path.startsWith)));
+  }
+
   Future<void> _onForeground(RemoteMessage message) async {
     final data = message.data;
     final invite = CallInvite.fromPush(data);
@@ -261,6 +268,7 @@ class PushService with WidgetsBindingObserver {
       await CallAlerts.instance.endNative(ended);
       return;
     }
+    _refreshCachedFor(data);
     final title = message.notification?.title ?? '${data['title'] ?? ''}';
     final body = message.notification?.body ?? '${data['body'] ?? ''}';
     if (title.isEmpty && body.isEmpty) return;

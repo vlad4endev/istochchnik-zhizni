@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../core/http_cache.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
@@ -143,7 +144,7 @@ class _ChatProfilePageState extends State<ChatProfilePage> {
       backgroundColor: palette.sheet,
       body: RefreshIndicator(
         color: palette.accent,
-        onRefresh: _load,
+        onRefresh: () => HttpCache.fresh(_load),
         child: ListView(
           padding: EdgeInsets.zero,
           physics: const AlwaysScrollableScrollPhysics(),
