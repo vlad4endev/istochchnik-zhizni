@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molitva/core/theme.dart';
@@ -61,5 +62,16 @@ void main() {
     await tester.pumpWidget(_host(_Src(items: const [])));
     await tester.pump();
     expect(find.text('Примеров пока нет.'), findsOneWidget);
+  });
+
+  test('текст ошибки отправки показывает ответ сервера', () {
+    DioException err(int? code, [Object? data]) => DioException(
+          requestOptions: RequestOptions(path: '/x'),
+          response: code == null ? null : Response(requestOptions: RequestOptions(path: '/x'), statusCode: code, data: data),
+        );
+    expect(describeSendError(err(500, {'error': 'Failed to send sample push'})), contains('Failed to send sample push'));
+    expect(describeSendError(err(404)), contains('код 404'));
+    expect(describeSendError(err(429)), contains('подождите'));
+    expect(describeSendError(err(null)), contains('нет связи'));
   });
 }

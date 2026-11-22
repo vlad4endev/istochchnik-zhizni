@@ -51,6 +51,20 @@ Future<void> showPushSamples(BuildContext context, {PushSamplesSource source = c
   );
 }
 
+/// Причина отказа сервера (если он ответил) — чтобы было понятно, что именно не так.
+String describeSendError(Object e) {
+  const base = 'Не удалось отправить';
+  if (e is DioException) {
+    final code = e.response?.statusCode;
+    final data = e.response?.data;
+    final msg = data is Map && data['error'] is String ? data['error'] as String : null;
+    if (code == 429) return '$base — подождите несколько секунд и попробуйте снова';
+    if (code != null) return '$base: ${msg ?? 'ошибка сервера'} (код $code)';
+    return '$base — нет связи с сервером. Проверьте интернет и попробуйте снова';
+  }
+  return '$base — попробуйте снова';
+}
+
 class PushSamplesView extends StatefulWidget {
   const PushSamplesView({super.key, required this.source});
   final PushSamplesSource source;
@@ -95,8 +109,8 @@ class _PushSamplesViewState extends State<PushSamplesView> {
     try {
       await widget.source.send(s.id);
       if (mounted) setState(() => _sentId = s.id);
-    } catch (_) {
-      if (mounted) setState(() => _sendError = 'Не удалось отправить — подождите несколько секунд и попробуйте снова');
+    } catch (e) {
+      if (mounted) setState(() => _sendError = describeSendError(e));
     } finally {
       if (mounted) setState(() => _sending = null);
     }
