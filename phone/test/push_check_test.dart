@@ -27,6 +27,11 @@ class _Env implements PushCheckEnv {
   @override
   Future<String?> firebaseAppId() async => appId;
 
+  ({bool installations, bool mtalk}) google = (installations: true, mtalk: true);
+
+  @override
+  Future<({bool installations, bool mtalk})> googleReachable() async => google;
+
   @override
   Future<List<Map<String, dynamic>>> channels() async => channelList;
 
@@ -115,14 +120,51 @@ void main() {
       final env = _Env()..channelList = [{'id': 'messages_v2', 'name': 'Сообщения', 'importance': 2, 'hasSound': true, 'lockscreenPublic': true}];
       final steps = await runPushCheck(env);
       expect(steps.where((s) => !s.ok).map((s) => s.title), ['Каналы уведомлений']);
-      expect(steps.length, 7);
+      expect(steps.length, 8);
+    });
+  });
+
+  group('связь с Google и ошибки токена', () {
+    test('ошибка из скриншота «FCM Registration failed» → подсказка про сеть и Google Play Сервисы', () {
+      final hint = explainTokenError('[firebase_messaging/unknown] java.io.IOException: FCM Registration failed!');
+      expect(hint, contains('мобильную сеть'));
+      expect(hint, contains('Google Play Сервисы'));
+      expect(explainTokenError('AUTHENTICATION_FAILED'), contains('ключ'));
+      expect(explainTokenError('что-то'), contains('интернет'));
+    });
+
+    test('сеть блокирует Google — красный шаг с причиной', () {
+      expect(describeGoogle((installations: true, mtalk: true)).ok, isTrue);
+      final a = describeGoogle((installations: false, mtalk: true));
+      expect(a.ok, isFalse);
+      expect(a.detail, contains('firebaseinstallations'));
+      final b = describeGoogle((installations: true, mtalk: false));
+      expect(b.detail, contains('5228'));
+      expect(b.hint, contains('VPN'));
+    });
+
+    test('в цепочке недоступный Google виден до шага токена, проверка идёт дальше', () async {
+      final env = _Env()..google = (installations: false, mtalk: false);
+      final steps = await runPushCheck(env);
+      expect(steps.where((s) => !s.ok).map((s) => s.title), ['Связь с Google']);
+      expect(steps.length, 8);
+    });
+
+    test('токен не выдан при недоступном Google: оба красных шага объясняют сеть', () async {
+      final env = _Env()
+        ..google = (installations: false, mtalk: true)
+        ..tokenError = StateError('java.io.IOException: FCM Registration failed!');
+      final steps = await runPushCheck(env);
+      expect(steps.last.title, 'Токен устройства');
+      expect(steps.last.hint, contains('мобильную сеть'));
+      expect(steps.where((s) => !s.ok).length, 2);
     });
   });
 
   group('проверка цепочки', () {
-    test('всё хорошо: семь шагов, все зелёные', () async {
+    test('всё хорошо: восемь шагов, все зелёные', () async {
       final steps = await runPushCheck(_Env());
-      expect(steps.length, 7);
+      expect(steps.length, 8);
       expect(steps.every((s) => s.ok), isTrue);
     });
 
@@ -130,7 +172,7 @@ void main() {
       final steps = await runPushCheck(_Env()..allowed = false);
       expect(steps.first.ok, isFalse);
       expect(steps.first.hint, contains('включите'));
-      expect(steps.length, 7);
+      expect(steps.length, 8);
     });
 
     test('Firebase не запустился — остановка с подсказкой про Google Play Services', () async {

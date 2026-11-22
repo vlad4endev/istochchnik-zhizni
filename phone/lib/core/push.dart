@@ -115,16 +115,29 @@ class PushService with WidgetsBindingObserver {
         PushStatus.instance.setFirebaseProblem('Firebase не выдал токен устройства');
       } else {
         PushStatus.instance.setFirebaseProblem(null);
+        _tokenAttempt = 0;
         await _uploader.submit(token);
       }
     } catch (e) {
       // Без Google Play Services или если проект Firebase не принял приложение пушей не будет;
       // приложение работает, а причина видна в профиле и на экране проверки.
       PushStatus.instance.setFirebaseProblem('Не удалось связаться с Firebase: ${_short(e)}');
+      _scheduleTokenRetry();
     }
     await PushStatus.instance.refresh();
     await _askFullScreenCalls();
     _hintIfNotificationsOff();
+  }
+
+  Timer? _tokenRetry;
+  int _tokenAttempt = 0;
+
+  /// Сеть могла моргнуть именно в момент регистрации: повторяем с нарастающей паузой.
+  void _scheduleTokenRetry() {
+    const delays = [Duration(seconds: 20), Duration(minutes: 2), Duration(minutes: 10)];
+    if (_tokenAttempt >= delays.length) return;
+    _tokenRetry?.cancel();
+    _tokenRetry = Timer(delays[_tokenAttempt++], () => unawaited(register()));
   }
 
   static String _short(Object e) {

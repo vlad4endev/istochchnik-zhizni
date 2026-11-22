@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -23,6 +26,9 @@ class PushCheckStep {
 abstract class PushCheckEnv {
   Future<bool?> notificationsAllowed();
   Future<String?> firebaseAppId();
+
+  /// Достучался ли телефон до Google: `installations` — регистрация (HTTPS), `mtalk` — доставка пушей (TCP 5228).
+  Future<({bool installations, bool mtalk})> googleReachable();
 
   /// Что система запомнила про каналы: id, importance, hasSound, lockscreenPublic.
   Future<List<Map<String, dynamic>>> channels();
@@ -81,6 +87,37 @@ String describeRequestError(Object e) {
   return e.toString().replaceAll('\n', ' ');
 }
 
+/// Подсказка по тексту ошибки получения токена Firebase.
+String explainTokenError(String message) {
+  final m = message.toLowerCase();
+  if (m.contains('service_not_available') || m.contains('registration failed') || m.contains('ioexception')) {
+    return 'Телефон не смог зарегистрироваться в Google. Обычно это сеть или ограничения: смените Wi‑Fi на мобильную сеть (или наоборот), выключите VPN и блокировщики, '
+        'в настройках телефона откройте «Google Play Сервисы» → «Батарея» → «Без ограничений», включите фоновые данные, перезагрузите телефон.';
+  }
+  if (m.contains('authentication_failed') || m.contains('api key') || m.contains('permission_denied') || m.contains('403')) {
+    return 'Google не принял ключ приложения (ограничение ключа по пакету или подписи). Нужно разрешить пакет в консоли Firebase — сообщите администратору.';
+  }
+  if (m.contains('too_many_registrations')) return 'Слишком много устройств на аккаунте Google. Удалите старые устройства и повторите.';
+  return 'Проверьте интернет и Google Play Services.';
+}
+
+/// Шаг про связь с Google: показывает, блокирует ли сеть регистрацию или доставку пушей.
+PushCheckStep describeGoogle(({bool installations, bool mtalk}) r) {
+  if (r.installations && r.mtalk) {
+    return const PushCheckStep(title: 'Связь с Google', ok: true, detail: 'Регистрация и доставка пушей доступны.');
+  }
+  final bad = <String>[
+    if (!r.installations) 'регистрация (firebaseinstallations.googleapis.com) недоступна',
+    if (!r.mtalk) 'канал доставки пушей (mtalk.google.com:5228) закрыт',
+  ];
+  return PushCheckStep(
+    title: 'Связь с Google',
+    ok: false,
+    detail: 'Не достучались: ${bad.join('; ')}.',
+    hint: 'Это сеть, а не приложение. Попробуйте другую сеть (мобильные данные вместо Wi‑Fi или наоборот), выключите VPN, проверьте, что Google-сервисы не блокирует провайдер или роутер.',
+  );
+}
+
 /// Шаг про каналы: беззвучный или скрытый на экране блокировки канал — частая причина «пуш пришёл, но молча».
 PushCheckStep describeChannels(List<Map<String, dynamic>> channels) {
   if (channels.isEmpty) {
@@ -129,6 +166,12 @@ Future<List<PushCheckStep>> runPushCheck(PushCheckEnv env, {void Function(List<P
   ));
   if (appId == null) return steps;
 
+  try {
+    add(describeGoogle(await env.googleReachable()));
+  } catch (_) {
+    // Не смогли проверить — идём дальше.
+  }
+
   String token;
   try {
     token = await env.token();
@@ -138,7 +181,7 @@ Future<List<PushCheckStep>> runPushCheck(PushCheckEnv env, {void Function(List<P
       title: 'Токен устройства',
       ok: false,
       detail: 'Firebase не выдал токен: ${e.toString().replaceAll('\n', ' ')}',
-      hint: 'Проверьте интернет и Google Play Services. Если так на всех сетях — ключ Firebase не принял это приложение.',
+      hint: explainTokenError(e.toString()),
     ));
     return steps;
   }
@@ -197,6 +240,32 @@ class DevicePushCheckEnv implements PushCheckEnv {
   Future<String?> firebaseAppId() async {
     if (!await ensureFirebase()) return null;
     return Firebase.app().options.appId.split(':').last.substring(0, 8);
+  }
+
+  @override
+  Future<({bool installations, bool mtalk})> googleReachable() async {
+    Future<bool> https() async {
+      try {
+        final r = await Dio(BaseOptions(connectTimeout: const Duration(seconds: 8), receiveTimeout: const Duration(seconds: 8), validateStatus: (_) => true)).get<Object?>('https://firebaseinstallations.googleapis.com/');
+        return r.statusCode != null;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    Future<bool> tcp() async {
+      for (final port in const [5228, 443]) {
+        try {
+          final socket = await Socket.connect('mtalk.google.com', port, timeout: const Duration(seconds: 6));
+          socket.destroy();
+          return true;
+        } catch (_) {}
+      }
+      return false;
+    }
+
+    final results = await Future.wait([https(), tcp()]);
+    return (installations: results[0], mtalk: results[1]);
   }
 
   @override
