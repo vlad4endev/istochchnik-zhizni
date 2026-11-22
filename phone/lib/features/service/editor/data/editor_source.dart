@@ -41,6 +41,13 @@ abstract class PlanEditorSource {
   Future<List<PlanTemplate>> templates();
   Future<List<PlanSummary>> archived();
 
+  /// Все шаблоны, в том числе выключенные, — для управления.
+  Future<List<PlanTemplate>> allTemplates();
+  Future<TemplateDraft> template(int id);
+  Future<int> createTemplate(Map<String, dynamic> body);
+  Future<void> patchTemplate(int id, Map<String, dynamic> body);
+  Future<void> deleteTemplate(int id);
+
   Future<int> createPlan({required int templateId, required DateTime date});
   Future<PublishResult> patchPlan(int id, Map<String, dynamic> body);
   Future<void> deletePlan(int id);
@@ -102,6 +109,35 @@ class PlanEditorApi implements PlanEditorSource {
         for (final raw in asList(await _get('/api/service-templates')))
           ?PlanTemplate.fromJson(asMap(raw)),
       ];
+
+  @override
+  Future<List<PlanTemplate>> allTemplates() async => [
+        for (final raw in asList(await _get('/api/service-templates'))) ?PlanTemplate.fromJson(asMap(raw), onlyActive: false),
+      ];
+
+  @override
+  Future<TemplateDraft> template(int id) async {
+    final t = TemplateDraft.fromJson(asMap(await _get('/api/service-templates/$id')));
+    if (t == null) throw StateError('Шаблон не найден');
+    return t;
+  }
+
+  @override
+  Future<int> createTemplate(Map<String, dynamic> body) async {
+    final id = asInt(asMap((await session.dio.post<Object?>('/api/service-templates', data: body)).data)['id']);
+    if (id <= 0) throw StateError('Сервер не создал шаблон');
+    return id;
+  }
+
+  @override
+  Future<void> patchTemplate(int id, Map<String, dynamic> body) async {
+    await session.dio.patch<Object?>('/api/service-templates/$id', data: body);
+  }
+
+  @override
+  Future<void> deleteTemplate(int id) async {
+    await session.dio.delete<Object?>('/api/service-templates/$id');
+  }
 
   @override
   Future<List<PlanSummary>> archived() async => [

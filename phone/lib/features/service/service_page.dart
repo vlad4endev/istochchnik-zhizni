@@ -12,6 +12,7 @@ import 'data/plan_repository.dart';
 import 'editor/data/editor_source.dart';
 import 'editor/logic/editor_logic.dart';
 import 'editor/plan_editor_page.dart';
+import 'editor/templates_page.dart';
 import 'editor/widgets/new_plan_sheet.dart';
 import 'logic/plan_logic.dart';
 import 'models/plan_models.dart';
@@ -42,6 +43,7 @@ class _ServicePageState extends State<ServicePage> {
   late final ServiceController _c;
   late final PlanEditorSource _editorSource;
   late final bool _canEdit;
+  late final bool _canTemplates;
   _Tab _tab = _Tab.upcoming;
   List<PlanSummary>? _archived;
   String? _archiveError;
@@ -53,6 +55,7 @@ class _ServicePageState extends State<ServicePage> {
     _source = widget.source ?? PlanRepository(session);
     _editorSource = widget.editorSource ?? PlanEditorApi(session);
     _canEdit = canManagePlan(session.user);
+    _canTemplates = canManageTemplates(session.user);
     _c = ServiceController(_source)..load();
   }
 
@@ -99,6 +102,9 @@ class _ServicePageState extends State<ServicePage> {
         return ChurchPage(
           title: 'Служение',
           subtitle: 'Программы богослужений',
+          actions: [
+            if (_canTemplates) HeaderButton(icon: Icons.view_agenda_outlined, tooltip: 'Шаблоны', onPressed: () => pushPage(context, TemplatesPage(source: _editorSource))),
+          ],
           floatingActionButton: _canEdit ? ChurchFab(circle: true, tooltip: 'Новая программа', onPressed: _create) : null,
           body: Column(
             children: [

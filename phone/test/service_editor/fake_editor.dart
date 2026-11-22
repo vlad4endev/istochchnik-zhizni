@@ -58,6 +58,40 @@ class FakeEditor implements PlanEditorSource {
 
   List<PlanSummary> archivedPlans = [];
 
+  /// Шаблоны на «сервере»: id → шаблон.
+  final Map<int, TemplateDraft> templateStore = {
+    1: TemplateDraft(id: 1, name: 'Воскресное служение', description: 'Основное собрание', startTime: '10:00', active: true, rule: {'frequency': 'weekly', 'byWeekday': 0}, blocks: [block(11, 2, title: 'Молитва', order: 0), block(12, 1, title: 'Песня', order: 1, minutes: 10, assigned: 12)]),
+    2: TemplateDraft(id: 2, name: 'Молодёжная встреча', description: '', startTime: '18:30', active: false, rule: {'frequency': 'weekly', 'byWeekday': 5}, blocks: [block(21, 3, title: 'Проповедь', order: 0, minutes: 30)]),
+  };
+  final List<Map<String, dynamic>> templateWrites = [];
+  Object? failTemplateSave;
+
+  @override
+  Future<List<PlanTemplate>> allTemplates() async => [
+        for (final t in templateStore.values) PlanTemplate(id: t.id, name: t.name, description: t.description, startTime: t.startTime, active: t.active, rule: t.rule),
+      ];
+
+  @override
+  Future<TemplateDraft> template(int id) async => templateStore[id]!;
+
+  @override
+  Future<int> createTemplate(Map<String, dynamic> body) async {
+    log.add('createTemplate');
+    if (failTemplateSave != null) throw failTemplateSave!;
+    templateWrites.add(body);
+    return 50;
+  }
+
+  @override
+  Future<void> patchTemplate(int id, Map<String, dynamic> body) async {
+    log.add('patchTemplate $id');
+    if (failTemplateSave != null) throw failTemplateSave!;
+    templateWrites.add(body);
+  }
+
+  @override
+  Future<void> deleteTemplate(int id) async => log.add('deleteTemplate $id');
+
   @override
   Future<List<PlanSummary>> archived() async => archivedPlans;
 

@@ -18,10 +18,11 @@ import 'data/editor_source.dart';
 import 'logic/editor_logic.dart';
 import 'models/editor_models.dart';
 import 'plan_editor_controller.dart';
+import 'templates_page.dart';
 import 'widgets/block_editor_sheet.dart';
 import 'widgets/block_tile.dart';
 
-enum _PlanAction { preview, copyLink, copyProgram, archive, delete }
+enum _PlanAction { preview, copyLink, copyProgram, saveTemplate, archive, delete }
 
 /// Редактор программы служения: настройки, блоки, перетаскивание, ответственные, публикация.
 class PlanEditorPage extends StatefulWidget {
@@ -189,6 +190,12 @@ class _PlanEditorPageState extends State<PlanEditorPage> {
       case _PlanAction.copyProgram:
         await Clipboard.setData(ClipboardData(text: programText(plan, _c.timed, _c.lookups, _c.typeOf)));
         if (mounted) showMessage(context, 'Программа скопирована — вставьте её в чат');
+      case _PlanAction.saveTemplate:
+        await _c.flush();
+        if (!mounted) return;
+        final name = await _askTemplateName(plan);
+        if (name == null || !mounted) return;
+        await pushPage(context, TemplateEditorPage(source: widget.source ?? PlanEditorApi(context.read<SessionController>()), seed: templateFromPlan(_c.draft ?? plan, name)));
       case _PlanAction.archive:
         final to = !plan.archived;
         if (!await _confirm(to ? 'В архив?' : 'Вернуть из архива?', to ? 'Программа уйдёт в архив.' : 'Программа снова станет активной.', to ? 'В архив' : 'Вернуть')) return;
@@ -209,6 +216,23 @@ class _PlanEditorPageState extends State<PlanEditorPage> {
           showMessage(context, _c.saveError ?? 'Не удалось удалить');
         }
     }
+  }
+
+  Future<String?> _askTemplateName(PlanDraft plan) async {
+    final controller = TextEditingController(text: 'Шаблон из программы ${longDate(plan.date)}');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Название шаблона'),
+        content: TextField(controller: controller, autofocus: true, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(hintText: 'Например: Воскресное служение')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Продолжить')),
+        ],
+      ),
+    );
+    // Контроллер не освобождаем вручную: диалог ещё закрывается и держит поле.
+    return (name == null || name.isEmpty) ? null : name;
   }
 
   // ───── настройки ─────
@@ -269,6 +293,7 @@ class _PlanEditorPageState extends State<PlanEditorPage> {
                   if (widget.viewSource != null) const PopupMenuItem(value: _PlanAction.preview, child: Text('Посмотреть как участник')),
                   const PopupMenuItem(value: _PlanAction.copyLink, child: Text('Скопировать ссылку')),
                   const PopupMenuItem(value: _PlanAction.copyProgram, child: Text('Скопировать программу')),
+                  if (canSaveAsTemplate(context.read<SessionController>().user)) const PopupMenuItem(value: _PlanAction.saveTemplate, child: Text('Сохранить как шаблон')),
                   if (_c.canManage) PopupMenuItem(value: _PlanAction.archive, child: Text(plan.archived ? 'Вернуть из архива' : 'В архив')),
                   if (_c.canManage) const PopupMenuItem(value: _PlanAction.delete, child: Text('Удалить программу')),
                 ],

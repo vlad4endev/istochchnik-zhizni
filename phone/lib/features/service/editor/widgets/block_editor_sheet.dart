@@ -19,23 +19,27 @@ Future<EditorBlock?> showBlockEditor(
   required List<Member> members,
   required PlanDraft plan,
   required Future<List<SongChoice>?> Function() loadSongs,
+  bool forTemplate = false,
 }) {
   return showPrayerSheet<EditorBlock>(
     context,
-    title: block.isSeparator ? 'Раздел программы' : 'Блок программы',
+    title: block.isSeparator ? (forTemplate ? 'Раздел шаблона' : 'Раздел программы') : (forTemplate ? 'Блок шаблона' : 'Блок программы'),
     subtitle: 'Нажмите «Готово» — изменения сохранятся',
-    builder: (_) => BlockEditorForm(block: block, types: types, members: members, plan: plan, loadSongs: loadSongs),
+    builder: (_) => BlockEditorForm(block: block, types: types, members: members, plan: plan, loadSongs: loadSongs, forTemplate: forTemplate),
   );
 }
 
 class BlockEditorForm extends StatefulWidget {
-  const BlockEditorForm({super.key, required this.block, required this.types, required this.members, required this.plan, required this.loadSongs});
+  const BlockEditorForm({super.key, required this.block, required this.types, required this.members, required this.plan, required this.loadSongs, this.forTemplate = false});
 
   final EditorBlock block;
   final List<BlockType> types;
   final List<Member> members;
   final PlanDraft plan;
   final Future<List<SongChoice>?> Function() loadSongs;
+
+  /// Шаблон: ответственный и песня — «по умолчанию», без привязки к проповеднику программы.
+  final bool forTemplate;
 
   @override
   State<BlockEditorForm> createState() => _BlockEditorFormState();
@@ -94,7 +98,7 @@ class _BlockEditorFormState extends State<BlockEditorForm> {
   void _changeType(int id) {
     final type = _typesById[id];
     var next = _b.copyWith(typeId: id);
-    if (type != null) {
+    if (type != null && !widget.forTemplate) {
       if (type.isBirthdays) next = next.copyWith(title: 'Дни рождения недели');
       if (type.isSermon) {
         final topic = str(next.content['sermon_topic']).trim();
@@ -120,9 +124,9 @@ class _BlockEditorFormState extends State<BlockEditorForm> {
       onClear: () async => setState(() => _b = _b.copyWith(assignedId: null)),
       onPick: (p) async {
         var next = _b.copyWith(assignedId: p.id);
-        if (_type?.isPoem == true) next = next.copyWith(title: 'СТИХ - ${p.name}');
+        if (_type?.isPoem == true && !widget.forTemplate) next = next.copyWith(title: 'СТИХ - ${p.name}');
         setState(() => _b = next);
-        if (_type?.isPoem == true) _title.text = next.title;
+        if (_type?.isPoem == true && !widget.forTemplate) _title.text = next.title;
       },
     );
   }
@@ -162,7 +166,7 @@ class _BlockEditorFormState extends State<BlockEditorForm> {
     final palette = context.palette;
     final type = _type;
     final sep = _b.isSeparator;
-    final auto = type?.isSermon == true || type?.isSong == true;
+    final auto = !widget.forTemplate && (type?.isSermon == true || type?.isSong == true);
     final responsible = _membersById[_b.assignedId]?.name;
     final autoHint = type?.isSermon == true
         ? (widget.plan.preacherId == null ? 'В настройках программы не выбран проповедник' : _preacherName)
@@ -190,14 +194,14 @@ class _BlockEditorFormState extends State<BlockEditorForm> {
             const SizedBox(height: 12),
             LabeledField(key: const ValueKey('block-minutes'), label: 'Длительность, мин', controller: _minutes, keyboardType: TextInputType.number),
             const SizedBox(height: 12),
-            _FieldLabel(type?.isPoem == true ? 'Чтец' : 'Ответственный'),
+            _FieldLabel(widget.forTemplate ? 'Ответственный по умолчанию' : (type?.isPoem == true ? 'Чтец' : 'Ответственный')),
             ListGroup(
               dividerIndent: 14,
               children: [
                 ListRow(
                   key: const ValueKey('block-responsible'),
                   leading: const IconTile(Icons.person_outline_rounded, tone: Tone.violet, size: 36),
-                  title: auto ? autoHint : (responsible ?? (type?.isPoem == true ? 'Чтец не назначен' : 'Не назначен')),
+                  title: auto ? autoHint : (responsible ?? (widget.forTemplate ? 'Не назначен по умолчанию' : (type?.isPoem == true ? 'Чтец не назначен' : 'Не назначен'))),
                   subtitle: auto ? 'Назначается автоматически из настроек программы' : null,
                   chevron: !auto,
                   onTap: auto ? null : _pickResponsible,
@@ -220,13 +224,13 @@ class _BlockEditorFormState extends State<BlockEditorForm> {
                 ],
               ),
             ],
-            if (type?.isSermon == true) ...[
+            if (type?.isSermon == true && !widget.forTemplate) ...[
               const SizedBox(height: 12),
               LabeledField(key: const ValueKey('block-topic'), label: 'Тема проповеди', controller: _topic, onChanged: _onTopic),
               const SizedBox(height: 12),
               LabeledField(key: const ValueKey('block-scripture'), label: 'Стихи из Библии', controller: _scripture, onChanged: (v) => _content('sermon_scripture', v.trim())),
             ],
-            if (type?.isPoem == true) ...[
+            if (type?.isPoem == true && !widget.forTemplate) ...[
               const SizedBox(height: 12),
               LabeledField(label: 'Автор стиха', controller: _author, onChanged: (v) => _content('poem_author', v.trim())),
               const SizedBox(height: 12),
@@ -285,6 +289,7 @@ class _BlockEditorFormState extends State<BlockEditorForm> {
               )),
             ),
           ],
+          if (!widget.forTemplate)
           SwitchListTile(
             key: const ValueKey('block-hidden'),
             contentPadding: EdgeInsets.zero,

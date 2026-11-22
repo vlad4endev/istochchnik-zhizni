@@ -181,3 +181,75 @@ int parseMinutes(String raw, {int fallback = 0}) {
 }
 
 String ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+// ───── шаблоны ─────
+
+const List<String> weekdayNames = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+
+/// Правило повтора по умолчанию — каждое воскресенье (как на сайте: `byWeekday: 0`).
+Map<String, dynamic> weeklyRule(int weekday) => {'frequency': 'weekly', 'byWeekday': weekday};
+
+/// День недели из правила (0 — воскресенье) или null, если правило не «каждую неделю».
+int? ruleWeekday(Map<String, dynamic> rule) {
+  if (rule['frequency'] != 'weekly') return null;
+  final raw = rule['byWeekday'];
+  final n = raw is num ? raw.toInt() : int.tryParse('$raw');
+  return n != null && n >= 0 && n <= 6 ? n : null;
+}
+
+String ruleSummary(Map<String, dynamic> rule) {
+  if (rule.isEmpty) return 'Без повтора';
+  final d = ruleWeekday(rule);
+  return d == null ? 'Своё правило (задано на сайте)' : 'Каждую неделю: ${weekdayNames[d]}';
+}
+
+/// Тело POST/PATCH шаблона: блоки передаются целиком, порядок — по позиции в списке.
+Map<String, dynamic> templatePayload(TemplateDraft t, {bool withActive = false}) {
+  final sorted = [...t.blocks]..sort((a, b) => a.order.compareTo(b.order));
+  return {
+    'name': t.name.trim(),
+    'description': t.description.trim().isEmpty ? null : t.description.trim(),
+    'default_start_time': t.startTime,
+    'recurrence_rule': t.rule,
+    if (withActive) 'is_active': t.active,
+    'blocks': [
+      for (var i = 0; i < sorted.length; i++) templateBlockPayload(sorted[i], i),
+    ],
+  };
+}
+
+Map<String, dynamic> templateBlockPayload(EditorBlock b, int index) {
+  final content = {...b.content};
+  if (b.assignedId != null) {
+    content['default_assigned_member_id'] = b.assignedId;
+  } else {
+    content.remove('default_assigned_member_id');
+  }
+  return {
+    'block_type_id': b.typeId,
+    'title': b.title.trim().isEmpty ? 'Блок ${index + 1}' : b.title,
+    'order_index': index,
+    'duration_minutes': b.minutes < 1 ? 1 : b.minutes,
+    'default_song_id': b.songId,
+    'default_content_json': content,
+  };
+}
+
+/// Проверка перед сохранением; null — всё в порядке.
+String? validateTemplate(TemplateDraft t) {
+  if (t.name.trim().isEmpty) return 'Укажите название шаблона';
+  if (t.blocks.isEmpty) return 'Добавьте хотя бы один блок';
+  if (!RegExp(r'^\d{2}:\d{2}$').hasMatch(t.startTime)) return 'Укажите время начала';
+  return null;
+}
+
+/// Шаблон из программы (только админ): блоки с ответственными по умолчанию.
+TemplateDraft templateFromPlan(PlanDraft plan, String name, {Map<String, dynamic>? rule}) => TemplateDraft(
+      id: 0,
+      name: name,
+      description: 'Создано из программы от ${plan.date.day.toString().padLeft(2, '0')}.${plan.date.month.toString().padLeft(2, '0')}.${plan.date.year}',
+      startTime: plan.startTime,
+      active: true,
+      rule: rule ?? weeklyRule(0),
+      blocks: [for (final b in [...plan.blocks]..sort((a, b) => a.order.compareTo(b.order))) b],
+    );

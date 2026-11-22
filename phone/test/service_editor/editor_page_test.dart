@@ -265,6 +265,31 @@ void main() {
       expect(copied, contains('Конец 10:55'));
     });
 
+    testWidgets('«Сохранить как шаблон» (админ): имя, затем редактор шаблона с блоками программы', (tester) async {
+      final f = await _open(tester);
+      await tester.tap(find.byTooltip('Действия с программой'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Сохранить как шаблон'));
+      await tester.pumpAndSettle();
+      expect(find.text('Название шаблона'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'Моё воскресенье');
+      await tester.tap(find.text('Продолжить'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tpl-save')), findsOneWidget);
+      expect(find.text('Создать шаблон'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('tpl-save')));
+      await tester.pumpAndSettle();
+      expect(f.templateWrites.single['name'], 'Моё воскресенье');
+      expect((f.templateWrites.single['blocks'] as List).length, 3);
+    });
+
+    testWidgets('служитель не видит «Сохранить как шаблон»', (tester) async {
+      await _open(tester, session: _session(role: 'minister'));
+      await tester.tap(find.byTooltip('Действия с программой'));
+      await tester.pumpAndSettle();
+      expect(find.text('Сохранить как шаблон'), findsNothing);
+    });
+
     testWidgets('удаление программы просит подтверждение', (tester) async {
       final f = await _open(tester);
       await tester.tap(find.byTooltip('Действия с программой'));

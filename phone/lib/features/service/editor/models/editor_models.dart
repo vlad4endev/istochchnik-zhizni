@@ -51,23 +51,85 @@ class Member {
   }
 }
 
-/// Шаблон программы для создания новой.
+/// Шаблон программы: по нему создаётся новая программа.
 class PlanTemplate {
-  const PlanTemplate({required this.id, required this.name, this.description = '', this.startTime = '10:00'});
+  const PlanTemplate({required this.id, required this.name, this.description = '', this.startTime = '10:00', this.active = true, this.rule = const {}});
 
   final int id;
   final String name;
   final String description;
   final String startTime;
+  final bool active;
 
-  static PlanTemplate? fromJson(Map<String, dynamic> json) {
+  /// recurrence_rule с сервера, например `{frequency: weekly, byWeekday: 0}`.
+  final Map<String, dynamic> rule;
+
+  /// [onlyActive] — для выбора при создании программы; список управления показывает все.
+  static PlanTemplate? fromJson(Map<String, dynamic> json, {bool onlyActive = true}) {
     final id = asInt(json['id']);
-    if (id <= 0 || json['is_active'] == false) return null;
+    final active = json['is_active'] != false;
+    if (id <= 0 || (onlyActive && !active)) return null;
     return PlanTemplate(
       id: id,
       name: str(json['name']).trim().isEmpty ? 'Шаблон #$id' : str(json['name']).trim(),
       description: str(json['description']).trim(),
       startTime: shortTime(json['default_start_time']).isEmpty ? '10:00' : shortTime(json['default_start_time']),
+      active: active,
+      rule: Map<String, dynamic>.from(asMap(json['recurrence_rule'])),
+    );
+  }
+}
+
+/// Шаблон целиком (с блоками) в редакторе. Блоки — те же [EditorBlock]: ответственный по умолчанию
+/// лежит в `content.default_assigned_member_id`, как на сайте; новые блоки — с отрицательными id.
+class TemplateDraft {
+  const TemplateDraft({required this.id, required this.name, required this.description, required this.startTime, required this.active, required this.rule, required this.blocks});
+
+  final int id;
+  final String name;
+  final String description;
+  final String startTime;
+  final bool active;
+  final Map<String, dynamic> rule;
+  final List<EditorBlock> blocks;
+
+  bool get isNew => id <= 0;
+
+  TemplateDraft copyWith({String? name, String? description, String? startTime, bool? active, Map<String, dynamic>? rule, List<EditorBlock>? blocks}) => TemplateDraft(
+        id: id,
+        name: name ?? this.name,
+        description: description ?? this.description,
+        startTime: startTime ?? this.startTime,
+        active: active ?? this.active,
+        rule: rule ?? this.rule,
+        blocks: blocks ?? this.blocks,
+      );
+
+  static TemplateDraft? fromJson(Map<String, dynamic> json) {
+    final head = PlanTemplate.fromJson(json, onlyActive: false);
+    if (head == null) return null;
+    final blocks = <EditorBlock>[
+      for (final raw in asList(json['blocks']))
+        ?_block(asMap(raw)),
+    ]..sort((a, b) => a.order.compareTo(b.order));
+    return TemplateDraft(id: head.id, name: head.name, description: head.description, startTime: head.startTime, active: head.active, rule: head.rule, blocks: blocks);
+  }
+
+  static EditorBlock? _block(Map<String, dynamic> json) {
+    final id = asInt(json['id']);
+    if (id <= 0) return null;
+    final content = Map<String, dynamic>.from(asMap(json['default_content_json']));
+    final assigned = asInt(content['default_assigned_member_id']);
+    final song = asInt(json['default_song_id']);
+    return EditorBlock(
+      id: id,
+      typeId: asInt(json['block_type_id']),
+      title: str(json['title']),
+      order: asInt(json['order_index']),
+      minutes: asInt(json['duration_minutes']),
+      assignedId: assigned > 0 ? assigned : null,
+      songId: song > 0 ? song : null,
+      content: content,
     );
   }
 }

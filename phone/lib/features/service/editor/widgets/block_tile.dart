@@ -19,6 +19,7 @@ class BlockTile extends StatelessWidget {
     required this.onEdit,
     required this.onAction,
     this.reorderEnabled = true,
+    this.showVisibilityAction = true,
   });
 
   final PlanSlot slot;
@@ -28,6 +29,9 @@ class BlockTile extends StatelessWidget {
   final VoidCallback onEdit;
   final ValueChanged<BlockAction> onAction;
   final bool reorderEnabled;
+
+  /// В шаблоне «скрыть в публикации» не нужно.
+  final bool showVisibilityAction;
 
   @override
   Widget build(BuildContext context) {
@@ -155,7 +159,7 @@ class BlockTile extends StatelessWidget {
       onSelected: onAction,
       itemBuilder: (_) => [
         const PopupMenuItem(value: BlockAction.edit, child: Text('Редактировать')),
-        if (!slot.block.isSeparator) PopupMenuItem(value: BlockAction.toggleHidden, child: Text(slot.block.isHidden ? 'Показать в публикации' : 'Скрыть из публикации')),
+        if (!slot.block.isSeparator && showVisibilityAction) PopupMenuItem(value: BlockAction.toggleHidden, child: Text(slot.block.isHidden ? 'Показать в публикации' : 'Скрыть из публикации')),
         const PopupMenuItem(value: BlockAction.delete, child: Text('Удалить')),
       ],
     );
