@@ -43,6 +43,7 @@ class ThreadPage extends StatefulWidget {
     this.source,
     this.events,
     this.picker,
+    this.instantClose = const Duration(milliseconds: 1500),
   });
 
   final String conversationId;
@@ -61,6 +62,9 @@ class ThreadPage extends StatefulWidget {
   final ChatSource? source;
   final Stream<Map<String, dynamic>>? events;
   final AttachmentPicker? picker;
+
+  /// Если окно выбора закрылось быстрее и ничего не вернуло — считаем, что оно не сработало.
+  final Duration instantClose;
 
   @override
   State<ThreadPage> createState() => _ThreadPageState();
@@ -186,9 +190,37 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
   }
 
   /// Выбор вложения; сбой выбора (нет доступа и т. п.) показываем, а не глотаем.
-  Future<void> _pick(Future<List<PickedAttachment>> Function() choose) async {
+  ///
+  /// Если окно выбора закрылось мгновенно и ничего не вернуло (на части телефонов галерея так себя ведёт),
+  /// говорим об этом и предлагаем выбрать через «Файлы» — раньше это выглядело как «ничего не произошло».
+  Future<void> _pick(Future<List<PickedAttachment>> Function() choose, {String? kind}) async {
+    final started = DateTime.now();
     try {
-      await _sendFiles(await choose());
+      final picked = await choose();
+      if (picked.isNotEmpty) return await _sendFiles(picked);
+      final quick = DateTime.now().difference(started) < widget.instantClose;
+      if (kind != null && quick && mounted) _offerFiles(kind);
+    } on PickerException catch (e) {
+      if (mounted) showMessage(context, e.message);
+    }
+  }
+
+  void _offerFiles(String kind) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        duration: const Duration(seconds: 10),
+        content: const Text('Окно выбора закрылось, ничего не выбрав. Попробуйте выбрать через «Файлы».'),
+        action: SnackBarAction(label: 'Выбрать', onPressed: () => _viaFiles(kind)),
+      ));
+  }
+
+  Future<void> _viaFiles(String kind) async {
+    try {
+      final picked = await _picker.viaFiles(kind);
+      if (picked.isEmpty) return;
+      await _picker.preferFiles(); // сработало — в следующий раз сразу этот способ
+      await _sendFiles(picked);
     } on PickerException catch (e) {
       if (mounted) showMessage(context, e.message);
     }
@@ -214,9 +246,9 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
     );
     switch (choice) {
       case 'photos':
-        await _pick(_picker.photos);
+        await _pick(_picker.photos, kind: 'image');
       case 'video':
-        await _pick(() async => [?await _picker.video()]);
+        await _pick(() async => [?await _picker.video()], kind: 'video');
       case 'camera':
         await _pick(() async => [?await _picker.camera()]);
       case 'files':

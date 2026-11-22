@@ -214,4 +214,19 @@ class FakePicker implements AttachmentPicker {
     _maybeFail();
     return filesNow;
   }
+
+  List<PickedAttachment> viaFilesNow = const [];
+  bool preferred = false;
+
+  @override
+  Future<List<PickedAttachment>> viaFiles(String kind) async {
+    calls.add('viaFiles:$kind');
+    _maybeFail();
+    return viaFilesNow;
+  }
+
+  @override
+  Future<void> preferFiles() async {
+    preferred = true;
+  }
 }

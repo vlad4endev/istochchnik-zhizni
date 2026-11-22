@@ -130,7 +130,7 @@ void main() {
       return s;
     }
 
-    Future<void> open(WidgetTester tester, FakeChat chat, FakePicker picker, {double width = 360, double scale = 1}) async {
+    Future<void> open(WidgetTester tester, FakeChat chat, FakePicker picker, {double width = 360, double scale = 1, Duration? instantClose}) async {
       tester.view.physicalSize = Size(width, 800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -140,7 +140,7 @@ void main() {
           theme: churchTheme(brightness: Brightness.light),
           home: MediaQuery(
             data: MediaQueryData(size: Size(width, 800), textScaler: TextScaler.linear(scale)),
-            child: ThreadPage(key: UniqueKey(), conversationId: 'c1', title: 'Молодёжь', type: 'group', source: chat, picker: picker, events: const Stream.empty()),
+            child: ThreadPage(key: UniqueKey(), conversationId: 'c1', title: 'Молодёжь', type: 'group', source: chat, picker: picker, events: const Stream.empty(), instantClose: instantClose ?? const Duration(milliseconds: 1500)),
           ),
         ),
       ));
@@ -203,12 +203,34 @@ void main() {
       expect(chat.uploads, ['snap.jpg']);
     });
 
-    testWidgets('человек ничего не выбрал — ничего не происходит и ошибок нет', (tester) async {
+    testWidgets('человек сам отменил выбор (не мгновенно) — ничего не происходит и ошибок нет', (tester) async {
       final chat = FakeChat();
-      await open(tester, chat, FakePicker());
+      await open(tester, chat, FakePicker(), instantClose: Duration.zero);
       await choose(tester, 'Видео');
+      await choose(tester, 'Фото из галереи');
       await choose(tester, 'Файл');
       expect(chat.uploads, isEmpty);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('окно выбора закрылось мгновенно и пусто: подсказка, а по кнопке — выбор через «Файлы», он запоминается', (tester) async {
+      final chat = FakeChat();
+      final picker = FakePicker()..viaFilesNow = [file('снимок.jpg')];
+      await open(tester, chat, picker);
+      await choose(tester, 'Фото из галереи');
+      expect(find.textContaining('закрылось, ничего не выбрав'), findsOneWidget);
+      expect(chat.uploads, isEmpty);
+      await tester.tap(find.text('Выбрать'));
+      await tester.pumpAndSettle();
+      expect(picker.calls, ['photos', 'viaFiles:image']);
+      expect(chat.uploads, ['снимок.jpg']);
+      expect(picker.preferred, isTrue, reason: 'в следующий раз «Файлы» откроются сразу');
+    });
+
+    testWidgets('«Файл» и «Снять фото» без выбора подсказку про «Файлы» не показывают', (tester) async {
+      await open(tester, FakeChat(), FakePicker());
+      await choose(tester, 'Файл');
+      await choose(tester, 'Снять фото');
       expect(find.byType(SnackBar), findsNothing);
     });
 
