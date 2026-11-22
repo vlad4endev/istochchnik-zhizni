@@ -27,6 +27,8 @@ class AppUser {
     this.ministryRole = '',
     this.ministryDirection = '',
     this.isCollectionCoordinator = false,
+    this.birthDate,
+    this.email = '',
   });
 
   final int id;
@@ -44,6 +46,10 @@ class AppUser {
 
   /// Ответственный за сбор молитвенных нужд (флаг от администратора).
   final bool isCollectionCoordinator;
+
+  /// День рождения `ГГГГ-ММ-ДД` или null.
+  final String? birthDate;
+  final String email;
 
   /// Направления служения через запятую или «;» — по ним открывается расписание команды.
   final String ministryDirection;
@@ -89,6 +95,8 @@ class AppUser {
       ministryRole: str(json['ministry_role']),
       ministryDirection: str(json['ministry_direction']),
       isCollectionCoordinator: asBool(json['is_collection_coordinator']),
+      birthDate: str(json['birth_date']).length >= 10 ? str(json['birth_date']).substring(0, 10) : null,
+      email: str(json['email']).trim(),
     );
   }
 
@@ -107,6 +115,8 @@ class AppUser {
         'ministry_role': ministryRole,
         'ministry_direction': ministryDirection,
         'is_collection_coordinator': isCollectionCoordinator,
+        'birth_date': birthDate,
+        'email': email,
       };
 }
 
