@@ -15,6 +15,7 @@ class PushStatus extends ChangeNotifier {
   static final PushStatus instance = PushStatus._();
 
   static const _channel = MethodChannel('church/system');
+  static const systemChannel = _channel;
 
   /// null — ещё не узнали (или платформа не Android).
   bool? notificationsAllowed;
@@ -60,6 +61,12 @@ class PushStatus extends ChangeNotifier {
   Future<void> openNotificationSettings() async {
     try {
       await _channel.invokeMethod<void>('openNotificationSettings');
+    } catch (_) {}
+  }
+
+  Future<void> openChannelSettings(String id) async {
+    try {
+      await _channel.invokeMethod<void>('openChannelSettings', {'id': id});
     } catch (_) {}
   }
 

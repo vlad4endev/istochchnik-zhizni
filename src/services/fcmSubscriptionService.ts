@@ -45,6 +45,19 @@ export async function getFcmTokensForMember(memberId: number): Promise<string[]>
   return (result.rows as { fcm_token: string }[]).map((r) => r.fcm_token).filter(Boolean);
 }
 
+export type FcmTarget = { token: string; deviceId: string | null };
+
+/** Токены вместе с device_id: приложение на Flutter узнаётся по префиксу `flutter-`. */
+export async function getFcmTargetsForMember(memberId: number): Promise<FcmTarget[]> {
+  const result = await query(
+    `SELECT fcm_token, MAX(device_id) AS device_id FROM user_subscriptions WHERE member_id = $1 GROUP BY fcm_token`,
+    [memberId],
+  );
+  return (result.rows as { fcm_token: string; device_id: string | null }[])
+    .filter((r) => Boolean(r.fcm_token))
+    .map((r) => ({ token: r.fcm_token, deviceId: r.device_id ?? null }));
+}
+
 export async function deleteFcmToken(token: string): Promise<void> {
   await query(`DELETE FROM user_subscriptions WHERE fcm_token = $1`, [token]);
 }

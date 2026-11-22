@@ -4,6 +4,7 @@ import { getFirebaseMessaging } from '../config/firebaseAdmin';
 import { query } from '../config/db';
 import {
   deleteFcmToken,
+  getFcmTargetsForMember,
   getFcmTokensForMember,
   isUnrecoverableFcmErrorCode,
 } from './fcmSubscriptionService';
@@ -13,6 +14,7 @@ import {
 } from './notificationDeliveryService';
 import { isParishionerAllowedPushKindOrType } from '../lib/parishionerPushAllowlist';
 import { fitFcmPayload } from '../lib/fcmPayload';
+import { groupFcmTargetsByChannel } from '../lib/fcmChannels';
 import { getVapidConfig, initVapidKeys, type VapidConfig } from './vapidKeys';
 import { sendApnsVoipPush, isApnsVoipConfigured } from './apnsVoipPush';
 import { deleteVoipToken, getVoipTokensForMember } from './voipTokenService';
@@ -570,8 +572,8 @@ async function sendFcmToMember(
     return summary;
   }
 
-  const tokens = await getFcmTokensForMember(memberId);
-  if (tokens.length === 0) {
+  const targets = await getFcmTargetsForMember(memberId);
+  if (targets.length === 0) {
     return summary;
   }
 
@@ -585,13 +587,20 @@ async function sendFcmToMember(
   const notificationCount =
     typeof dataStrings.badgeCount === 'string' ? Number.parseInt(dataStrings.badgeCount, 10) || 0 : 0;
   const senderName = typeof dataStrings.senderName === 'string' ? dataStrings.senderName.trim() : '';
-  const channelId = isMessengerLikePush ? 'messages' : 'general';
+  const baseChannelId = isMessengerLikePush ? 'messages' : 'general';
   // Срок жизни для оффлайн-устройств: сутки (как у Web Push), дальше уведомление неактуально.
   const ttlSeconds = 86400;
   const apnsExpiration = String(Math.floor(Date.now() / 1000) + ttlSeconds);
 
-  for (let i = 0; i < tokens.length; i += FCM_MULTICAST_CHUNK) {
-    const slice = tokens.slice(i, i + FCM_MULTICAST_CHUNK);
+  // Устройства приложения на Flutter получают пуши в свои каналы `_v2` (звук, экран блокировки).
+  const chunks = groupFcmTargetsByChannel(targets, baseChannelId).flatMap(({ channelId, tokens }) => {
+    const out: { channelId: string; slice: string[] }[] = [];
+    for (let i = 0; i < tokens.length; i += FCM_MULTICAST_CHUNK) {
+      out.push({ channelId, slice: tokens.slice(i, i + FCM_MULTICAST_CHUNK) });
+    }
+    return out;
+  });
+  for (const { channelId, slice } of chunks) {
     let res;
     try {
       res = await messaging.sendEachForMulticast({
@@ -607,6 +616,8 @@ async function sendFcmToMember(
             priority: 'high',
             defaultVibrateTimings: true,
             color: '#7D3640',
+            // На экране блокировки показываем текст, а не «скрытое содержимое».
+            visibility: 'public',
             // Один тег на чат: новое сообщение заменяет предыдущее уведомление, а не копится стопкой.
             ...(typeof dataStrings.tag === 'string' && dataStrings.tag ? { tag: dataStrings.tag } : {}),
           },

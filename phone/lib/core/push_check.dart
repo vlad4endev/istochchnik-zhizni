@@ -23,6 +23,9 @@ class PushCheckStep {
 abstract class PushCheckEnv {
   Future<bool?> notificationsAllowed();
   Future<String?> firebaseAppId();
+
+  /// Что система запомнила про каналы: id, importance, hasSound, lockscreenPublic.
+  Future<List<Map<String, dynamic>>> channels();
   Future<String> token();
   Future<String?> uploadToken(String token);
   Future<Map<String, dynamic>> serverStatus();
@@ -78,6 +81,29 @@ String describeRequestError(Object e) {
   return e.toString().replaceAll('\n', ' ');
 }
 
+/// Шаг про каналы: беззвучный или скрытый на экране блокировки канал — частая причина «пуш пришёл, но молча».
+PushCheckStep describeChannels(List<Map<String, dynamic>> channels) {
+  if (channels.isEmpty) {
+    return const PushCheckStep(title: 'Каналы уведомлений', ok: true, detail: 'На этой версии Android каналов нет — настройки общие.');
+  }
+  final problems = <String>[];
+  for (final c in channels) {
+    final name = str(c['name']);
+    if (asInt(c['importance']) < 4) problems.add('«$name»: важность низкая — без звука и всплывающего окна');
+    if (c['hasSound'] != true) problems.add('«$name»: звук выключен');
+    if (c['lockscreenPublic'] != true) problems.add('«$name»: на экране блокировки содержимое скрыто');
+  }
+  if (problems.isEmpty) {
+    return PushCheckStep(title: 'Каналы уведомлений', ok: true, detail: 'Звук и экран блокировки включены (${channels.length} кан.).');
+  }
+  return PushCheckStep(
+    title: 'Каналы уведомлений',
+    ok: false,
+    detail: problems.join('; '),
+    hint: 'Откройте «Настройки уведомлений» ниже → выберите канал → «Важность: срочно / всплывающее» и включите звук. Это настройка телефона, приложение само её менять не может.',
+  );
+}
+
 /// Проходит всю цепочку: разрешение → Firebase → токен → сервер принял → сервер видит устройство → тест.
 Future<List<PushCheckStep>> runPushCheck(PushCheckEnv env, {void Function(List<PushCheckStep> soFar)? onStep}) async {
   final steps = <PushCheckStep>[];
@@ -115,6 +141,12 @@ Future<List<PushCheckStep>> runPushCheck(PushCheckEnv env, {void Function(List<P
       hint: 'Проверьте интернет и Google Play Services. Если так на всех сетях — ключ Firebase не принял это приложение.',
     ));
     return steps;
+  }
+
+  try {
+    add(describeChannels(await env.channels()));
+  } catch (_) {
+    // Каналы не прочитались — остальные шаги важнее.
   }
 
   final uploadError = await env.uploadToken(token);
@@ -165,6 +197,12 @@ class DevicePushCheckEnv implements PushCheckEnv {
   Future<String?> firebaseAppId() async {
     if (!await ensureFirebase()) return null;
     return Firebase.app().options.appId.split(':').last.substring(0, 8);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> channels() async {
+    final raw = await PushStatus.systemChannel.invokeMethod<List<Object?>>('notificationChannels');
+    return [for (final item in raw ?? const <Object?>[]) asMap(item)];
   }
 
   @override

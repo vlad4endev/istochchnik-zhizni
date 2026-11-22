@@ -8,6 +8,9 @@ import 'package:molitva/features/profile/push_check_sheet.dart';
 class _Env implements PushCheckEnv {
   bool? allowed = true;
   String? appId = '1a2b3c4d';
+  List<Map<String, dynamic>> channelList = [
+    {'id': 'messages_v2', 'name': 'Сообщения', 'importance': 4, 'hasSound': true, 'lockscreenPublic': true},
+  ];
   Object? tokenError;
   String? uploadError;
   Object? statusError;
@@ -23,6 +26,9 @@ class _Env implements PushCheckEnv {
 
   @override
   Future<String?> firebaseAppId() async => appId;
+
+  @override
+  Future<List<Map<String, dynamic>>> channels() async => channelList;
 
   @override
   Future<String> token() async {
@@ -81,10 +87,42 @@ void main() {
     });
   });
 
+  group('каналы уведомлений', () {
+    test('нормальные каналы — зелёный шаг', () {
+      final step = describeChannels([
+        {'name': 'Сообщения', 'importance': 4, 'hasSound': true, 'lockscreenPublic': true},
+        {'name': 'Уведомления церкви', 'importance': 5, 'hasSound': true, 'lockscreenPublic': true},
+      ]);
+      expect(step.ok, isTrue);
+    });
+
+    test('тихий канал: причина названа, подсказка про настройки', () {
+      final step = describeChannels([
+        {'name': 'Сообщения', 'importance': 2, 'hasSound': false, 'lockscreenPublic': false},
+      ]);
+      expect(step.ok, isFalse);
+      expect(step.detail, contains('важность низкая'));
+      expect(step.detail, contains('звук выключен'));
+      expect(step.detail, contains('экране блокировки'));
+      expect(step.hint, contains('Важность'));
+    });
+
+    test('старый Android без каналов — не ошибка', () {
+      expect(describeChannels(const []).ok, isTrue);
+    });
+
+    test('в цепочке тихий канал виден, но проверка идёт дальше', () async {
+      final env = _Env()..channelList = [{'id': 'messages_v2', 'name': 'Сообщения', 'importance': 2, 'hasSound': true, 'lockscreenPublic': true}];
+      final steps = await runPushCheck(env);
+      expect(steps.where((s) => !s.ok).map((s) => s.title), ['Каналы уведомлений']);
+      expect(steps.length, 7);
+    });
+  });
+
   group('проверка цепочки', () {
-    test('всё хорошо: шесть шагов, все зелёные', () async {
+    test('всё хорошо: семь шагов, все зелёные', () async {
       final steps = await runPushCheck(_Env());
-      expect(steps.length, 6);
+      expect(steps.length, 7);
       expect(steps.every((s) => s.ok), isTrue);
     });
 
@@ -92,7 +130,7 @@ void main() {
       final steps = await runPushCheck(_Env()..allowed = false);
       expect(steps.first.ok, isFalse);
       expect(steps.first.hint, contains('включите'));
-      expect(steps.length, 6);
+      expect(steps.length, 7);
     });
 
     test('Firebase не запустился — остановка с подсказкой про Google Play Services', () async {
@@ -174,6 +212,23 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('check-again')));
       await tester.pumpAndSettle();
       expect(find.textContaining('Всё настроено верно'), findsOneWidget);
+    });
+
+    testWidgets('тихий канал: кнопка открывает настройки канала', (tester) async {
+      var opened = 0;
+      tester.view.physicalSize = const Size(360, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final env = _Env()..channelList = [{'id': 'messages_v2', 'name': 'Сообщения', 'importance': 2, 'hasSound': false, 'lockscreenPublic': true}];
+      await tester.pumpWidget(MaterialApp(
+        theme: churchTheme(brightness: Brightness.light),
+        home: Scaffold(body: SingleChildScrollView(child: PushCheckView(env: env, onOpenChannel: () => opened++))),
+      ));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('check-open-channel')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('check-open-channel')));
+      expect(opened, 1);
     });
 
     for (final (w, s) in [(320.0, 2.0), (390.0, 1.3)]) {

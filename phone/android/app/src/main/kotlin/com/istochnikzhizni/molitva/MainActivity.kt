@@ -18,6 +18,16 @@ class MainActivity : FlutterActivity() {
                         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                         result.success(manager.areNotificationsEnabled())
                     }
+                    "notificationChannels" -> result.success(NotificationChannels.describe(this))
+                    "openChannelSettings" -> {
+                        val id = call.argument<String>("id") ?: NotificationChannels.MESSAGES
+                        val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                            .putExtra(Settings.EXTRA_CHANNEL_ID, id)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        startActivity(intent)
+                        result.success(null)
+                    }
                     "openNotificationSettings" -> {
                         val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                             .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)

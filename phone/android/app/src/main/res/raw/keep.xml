@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Эти ресурсы запрашиваются по имени из Dart (flutter_local_notifications), поэтому сжатие
+     ресурсов их не видит и удалило бы из сборки. -->
+<resources
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notification_large,@drawable/ic_stat_notify" />

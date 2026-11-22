@@ -15,15 +15,17 @@ import 'push_status.dart';
 import 'session.dart';
 import 'token_uploader.dart';
 
+// Каналы создаёт нативный слой (NotificationChannels.kt) при каждом старте процесса.
+// Здесь только идентификаторы; `_v2` — каналы со звуком и показом на экране блокировки.
 const _messagesChannel = AndroidNotificationChannel(
-  'messages',
+  'messages_v2',
   'Сообщения',
   description: 'Новые сообщения в чатах',
   importance: Importance.high,
 );
 
 const _generalChannel = AndroidNotificationChannel(
-  'general',
+  'general_v2',
   'Уведомления церкви',
   description: 'Лента, молитва, события и напоминания',
   importance: Importance.high,
@@ -82,9 +84,6 @@ class PushService with WidgetsBindingObserver {
       settings: const InitializationSettings(android: AndroidInitializationSettings('ic_stat_notify')),
       onDidReceiveNotificationResponse: (response) => _openFromPayload(response.payload),
     );
-    final android = _local.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    await android?.createNotificationChannel(_messagesChannel);
-    await android?.createNotificationChannel(_generalChannel);
 
     FirebaseMessaging.onMessage.listen(_onForeground);
     FirebaseMessaging.onMessageOpenedApp.listen((m) => _openFromData(m.data, m.notification?.title));
@@ -264,8 +263,14 @@ class PushService with WidgetsBindingObserver {
           channelDescription: channel.description,
           importance: Importance.high,
           priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          visibility: NotificationVisibility.public,
+          category: conversationId.isNotEmpty ? AndroidNotificationCategory.message : AndroidNotificationCategory.reminder,
+          styleInformation: BigTextStyleInformation(body),
           color: const Color(0xFF8A2742),
           icon: 'ic_stat_notify',
+          largeIcon: const DrawableResourceAndroidBitmap('ic_notification_large'),
         ),
       ),
     );

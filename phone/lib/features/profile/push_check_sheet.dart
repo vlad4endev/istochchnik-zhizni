@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/push_check.dart';
+import '../../core/push_status.dart';
 import '../../ui/kit/kit.dart';
 import '../prayer/widgets/sheet_frame.dart';
 
@@ -15,9 +16,12 @@ Future<void> showPushCheck(BuildContext context, {PushCheckEnv env = const Devic
 }
 
 class PushCheckView extends StatefulWidget {
-  const PushCheckView({super.key, required this.env});
+  const PushCheckView({super.key, required this.env, this.onOpenChannel});
 
   final PushCheckEnv env;
+
+  /// Открыть системные настройки канала; по умолчанию — настройки «Сообщений».
+  final VoidCallback? onOpenChannel;
 
   @override
   State<PushCheckView> createState() => _PushCheckViewState();
@@ -97,6 +101,15 @@ class _PushCheckViewState extends State<PushCheckView> {
           else
             InfoBanner('Не прошло шагов: ${failed.length}. Сделайте то, что написано под красным пунктом, и проверьте ещё раз.', error: true),
           const SizedBox(height: 10),
+          if (failed.any((s) => s.title == 'Каналы уведомлений')) ...[
+            PrimaryButton(
+              key: const ValueKey('check-open-channel'),
+              label: 'Открыть настройки уведомлений',
+              icon: Icons.settings_rounded,
+              onPressed: widget.onOpenChannel ?? () => PushStatus.instance.openChannelSettings('messages_v2'),
+            ),
+            const SizedBox(height: 8),
+          ],
           SecondaryButton(key: const ValueKey('check-again'), label: 'Проверить ещё раз', icon: Icons.refresh_rounded, onPressed: _run),
         ],
       ],

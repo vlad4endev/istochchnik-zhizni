@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="${appLabel}"
-        android:name="${applicationName}"
+        android:name=".ChurchApplication"
         android:icon="@mipmap/ic_launcher">
         <!-- singleTask, а не singleInstance: с singleInstance Android отменяет результат у системных
              окон выбора (фото, видео, файл) — вложения в чате «молча» не работали. singleTask так же
@@ -47,7 +47,7 @@
             android:resource="@color/notification_accent" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="general" />
+            android:value="general_v2" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
