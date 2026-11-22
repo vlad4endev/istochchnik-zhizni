@@ -171,3 +171,23 @@ apksigner verify --print-certs releases/moya-cerkov-arm64.apk   # подпись
 ## Что ещё впереди
 
 Пуши и системная звонилка для iPhone: нужны GoogleService-Info.plist, VoIP-ключ Apple (PushKit) и Mac для сборки. Релизный ключ Android и публикация в магазинах тоже впереди.
+
+## Напоминания и переходы по нажатию на пуш
+
+Сервер отправляет все напоминания (молитва, дни рождения, кураторы/координаторы, проповедники, лента, трансляция, служение, медиа/музыка, новые проповеди и события) через один `sendPush` — на устройство они приходят по FCM. По нажатию приложение открывает нужное место (`lib/core/push_route.dart`, `push_nav.dart`):
+
+| Тип / путь | Куда ведёт |
+| --- | --- |
+| чат (`conversationId`) | переписка |
+| `prayer*`, `curator*`, `coordinator*`, `/prayer`, `/calendar` | вкладка «Молитва» |
+| `feed*`, `/feed` | вкладка «Лента» |
+| `birthday*`, `system_update`, `member_joined`, `/dashboard` | «Главная» |
+| `*broadcast*` | страница трансляции |
+| `new_sermon`, `/sermons` | «Проповеди» |
+| `new_event` | «События» |
+| `music_*`, `media_*`, `/music-schedule`, `/media-schedule` | расписание служения |
+| `service_plan` | «Служение» |
+| `planner_setlist`, `/songbook/setlists` | «Студия» |
+| `sermon_feedback`, `/service-plan/sermon-comments` | браузер (веб-версия) |
+
+Проверить доставку и переход можно в «Профиль → Уведомления → Примеры напоминаний»: сервер шлёт тестовый пуш только вам (`POST /api/notifications/test-sample`, список — `GET /api/notifications/samples`).

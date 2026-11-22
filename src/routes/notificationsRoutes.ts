@@ -14,6 +14,7 @@ import { getFirebaseMessaging } from '../config/firebaseAdmin';
 import { query } from '../config/db';
 import { getVapidPublicKeyValue } from '../services/vapidKeys';
 import { ensurePushSubscriptionsSchema } from '../services/pushSubscriptionsSchema';
+import { PUSH_SAMPLES, findPushSample } from '../lib/pushSamples';
 
 let pushSchemaEnsurePromise: Promise<void> | null = null;
 
@@ -282,6 +283,50 @@ router.post('/test', requireAuthSession, async (req: Request, res: Response) => 
   } catch (e) {
     console.error('[notifications] test push error:', e);
     res.status(500).json({ error: 'Failed to send test push' });
+  }
+});
+
+const lastSamplePushByMember = new Map<number, number>();
+
+/**
+ * GET /api/notifications/samples — список примеров напоминаний для проверки на своём устройстве.
+ */
+router.get('/samples', requireAuthSession, (_req: Request, res: Response) => {
+  res.json({ samples: PUSH_SAMPLES.map((s) => ({ id: s.id, label: s.label })) });
+});
+
+/**
+ * POST /api/notifications/test-sample { id }
+ * Шлёт на устройства самого участника пример напоминания (молитва, день рождения, трансляция…) с теми же
+ * полями url/type/kind, что у настоящих, — чтобы проверить доставку и переход по нажатию.
+ */
+router.post('/test-sample', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const sample = findPushSample(req.body?.id);
+  if (!sample) {
+    res.status(400).json({ error: 'Неизвестный пример уведомления' });
+    return;
+  }
+  const now = Date.now();
+  const last = lastSamplePushByMember.get(memberId) ?? 0;
+  if (now - last < 3_000) {
+    res.status(429).json({ error: 'Подождите несколько секунд' });
+    return;
+  }
+  lastSamplePushByMember.set(memberId, now);
+  try {
+    const summary = await sendPush(memberId, sample.title, sample.body, sample.data, {
+      recordDelivery: false,
+      bypassRoleFilter: true,
+    });
+    res.json({ ok: true, summary });
+  } catch (e) {
+    console.error('[notifications] test-sample error:', e);
+    res.status(500).json({ error: 'Failed to send sample push' });
   }
 });
 

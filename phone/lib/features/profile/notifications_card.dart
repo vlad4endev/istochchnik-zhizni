@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/push_status.dart';
 import '../../ui/kit/kit.dart';
 import 'push_check_sheet.dart';
+import 'push_samples_sheet.dart';
 
 /// Состояние уведомлений и звонков с кнопками исправления. Только Android: на других платформах пушей нет.
 class NotificationsCard extends StatefulWidget {
@@ -88,6 +89,13 @@ class _NotificationsCardState extends State<NotificationsCard> with WidgetsBindi
           label: 'Проверить уведомления',
           icon: Icons.notifications_active_outlined,
           onPressed: () => showPushCheck(context),
+        ),
+        const SizedBox(height: Space.sm),
+        SecondaryButton(
+          key: const ValueKey('push-samples'),
+          label: 'Примеры напоминаний',
+          icon: Icons.campaign_outlined,
+          onPressed: () => showPushSamples(context),
         ),
         if (!_status.allGood)
           Padding(

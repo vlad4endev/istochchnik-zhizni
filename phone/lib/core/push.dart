@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -7,10 +8,11 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../features/chats/thread_page.dart';
 import 'call_alerts.dart';
 import 'firebase_config.dart';
 import 'nav.dart';
+import 'push_nav.dart';
+import 'push_route.dart';
 import 'push_status.dart';
 import 'session.dart';
 import 'token_uploader.dart';
@@ -74,6 +76,7 @@ class PushService with WidgetsBindingObserver {
 
   Future<void> start(SessionController session) async {
     _session = session;
+    PushNavigator.instance.attach(session);
     CallAlerts.instance.attach(session);
     if (_started || !await ensureFirebase()) return;
     _started = true;
@@ -268,7 +271,7 @@ class PushService with WidgetsBindingObserver {
       id: (data['tag'] ?? message.messageId ?? title).hashCode & 0x7fffffff,
       title: title,
       body: body,
-      payload: conversationId.isEmpty ? null : '$conversationId|$title',
+      payload: jsonEncode({...data.map((k, v) => MapEntry(k, '$v')), 'title': title}),
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           channel.id,
@@ -289,23 +292,27 @@ class PushService with WidgetsBindingObserver {
     );
   }
 
+  /// Нажатие на уведомление, которое показало приложение (оно было открыто).
   void _openFromPayload(String? payload) {
-    if (payload == null || !payload.contains('|')) return;
-    final index = payload.indexOf('|');
-    _openConversation(payload.substring(0, index), payload.substring(index + 1));
+    if (payload == null || payload.isEmpty) return;
+    Map<String, dynamic> data;
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is! Map) return;
+      data = Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      // Прежний формат «идентификатор|заголовок» — уведомления, показанные старой версией.
+      final index = payload.indexOf('|');
+      if (index < 0) return;
+      data = {'conversationId': payload.substring(0, index), 'title': payload.substring(index + 1)};
+    }
+    _openFromData(data, '${data['title'] ?? ''}');
   }
 
+  /// Нажатие на уведомление системы: данные пуша → нужный экран приложения.
   void _openFromData(Map<String, dynamic> data, String? title) {
-    final conversationId = '${data['conversationId'] ?? ''}';
-    if (conversationId.isEmpty || CallInvite.fromPush(data) != null) return;
-    _openConversation(conversationId, title ?? '${data['title'] ?? 'Чат'}');
-  }
-
-  void _openConversation(String conversationId, String title) {
-    if (_session?.user == null) return;
-    navigatorKey.currentState?.push(MaterialPageRoute<void>(
-      builder: (_) => ThreadPage(conversationId: conversationId, title: title.isEmpty ? 'Чат' : title),
-    ));
+    if (CallInvite.fromPush(data) != null) return;
+    PushNavigator.instance.open(resolvePushTarget(data), title: (title == null || title.isEmpty) ? '${data['title'] ?? ''}' : title);
   }
 
   Future<void> dispose() async {

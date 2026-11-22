@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/push_nav.dart';
 import '../../core/session.dart';
 import '../../core/unread_badge.dart';
 import '../../ui/kit/kit.dart';
@@ -38,6 +39,9 @@ class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _badge.addListener(_onBadge);
+    PushNavigator.instance.addListener(_onPushTab);
+    // Пуш, нажатый до того, как приложение построило вкладки, выполняется теперь.
+    WidgetsBinding.instance.addPostFrameCallback((_) => PushNavigator.instance.shellReady());
     final session = context.read<SessionController>();
     _chatEvents = session.realtime.chatEvents.listen((_) => _badge.refreshSoon(session));
     _refreshUnread();
@@ -47,8 +51,18 @@ class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _badge.removeListener(_onBadge);
+    PushNavigator.instance
+      ..removeListener(_onPushTab)
+      ..shellGone();
     _chatEvents?.cancel();
     super.dispose();
+  }
+
+  /// Пуш просит открыть вкладку (молитва, лента, главная).
+  void _onPushTab() {
+    final tab = PushNavigator.instance.requestedTab;
+    if (tab == null || !mounted) return;
+    setState(() => _current = tab);
   }
 
   void _onBadge() {
