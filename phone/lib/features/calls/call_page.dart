@@ -10,6 +10,8 @@ import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
+import '../../ui/widgets.dart' show showMessage;
+import 'logic/call_access.dart';
 import 'logic/call_layout.dart';
 import 'logic/meeting_logic.dart';
 import 'widgets/call_stage.dart';
@@ -30,6 +32,7 @@ class CallPage extends StatefulWidget {
     this.inviteMedia,
     this.micOn = true,
     this.camOn = true,
+    this.permissions = const DeviceCallPermissionGate(),
   });
 
   final String? callId;
@@ -50,6 +53,9 @@ class CallPage extends StatefulWidget {
   final MeetingMedia? inviteMedia;
   final bool micOn;
   final bool camOn;
+
+  /// Запрос микрофона и камеры; подменяется в тестах.
+  final CallPermissionGate permissions;
 
   @override
   State<CallPage> createState() => _CallPageState();
@@ -72,6 +78,7 @@ class _CallPageState extends State<CallPage> {
   EventsListener<RoomEvent>? _events;
   DateTime? _joinedAt;
   Timer? _ticker;
+  bool _needSettings = false;
   bool _declined = false;
   bool _started = false;
   StreamSubscription<Map<String, dynamic>>? _callEvents;
@@ -133,6 +140,23 @@ class _CallPageState extends State<CallPage> {
     final session = _session ?? context.read<SessionController>();
     final api = ChurchApi(session);
     try {
+      final wantCamera = _camOn;
+      final access = await widget.permissions.request(camera: wantCamera);
+      final decision = decideCallAccess(mic: access.mic, cam: access.cam, wantCamera: wantCamera);
+      if (!decision.canJoin) {
+        if (!mounted) return;
+        setState(() {
+          _connecting = false;
+          _needSettings = decision.offerSettings;
+          _error = decision.error;
+        });
+        return;
+      }
+      if (wantCamera && !decision.useCamera) {
+        _camOn = false;
+        if (mounted && decision.notice != null) showMessage(context, decision.notice!);
+      }
+      _needSettings = false;
       final audio = await AudioSession.instance;
       await audio.configure(const AudioSessionConfiguration.speech());
       if (widget.incoming && _callId != null) {
@@ -419,6 +443,10 @@ class _CallPageState extends State<CallPage> {
                 )
               else ...[
                 if (_error != null) ...[
+                  if (_needSettings) ...[
+                    _CallButton(icon: Icons.settings_rounded, label: 'Настройки', color: ChurchColors.amberBlob, onTap: () => widget.permissions.openSettings()),
+                    const SizedBox(height: 16),
+                  ],
                   _CallButton(icon: Icons.refresh_rounded, label: 'Повторить', color: Colors.white.withValues(alpha: 0.16), onTap: _connect),
                   const SizedBox(height: 20),
                 ],
