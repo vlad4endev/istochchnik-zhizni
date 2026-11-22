@@ -129,7 +129,11 @@ function isMemberProfileMutation(method: string, path: string): boolean {
     if (/^\/api\/posts\/\d+\/(like|comment|repost)\/?$/.test(path)) return true;
     if (path === '/api/stories' || path === '/api/stories/') return true;
     if (/^\/api\/stories\/\d+\/(view|reply)\/?$/.test(path)) return true;
+    // Лента: «новое прочитано» и лайк комментария — действия самого участника.
+    if (path === '/api/feed/mark-seen' || path === '/api/feed/mark-seen/') return true;
+    if (/^\/api\/posts\/\d+\/comments\/\d+\/like\/?$/.test(path)) return true;
   }
+  if (method === 'DELETE' && /^\/api\/posts\/\d+\/comments\/\d+\/like\/?$/.test(path)) return true;
   if (method === 'DELETE' && /^\/api\/posts\/\d+\/like\/?$/.test(path)) return true;
   if (method === 'DELETE' && /^\/api\/posts\/\d+\/comments\/\d+\/?$/.test(path)) return true;
   if (method === 'DELETE' && /^\/api\/posts\/\d+\/?$/.test(path)) return true;

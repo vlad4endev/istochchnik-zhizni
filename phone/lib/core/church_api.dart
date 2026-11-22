@@ -61,10 +61,6 @@ class ChurchApi {
   Future<Map<String, dynamic>> podcasts() async =>
       asMap(await get('/api/resources/podcasts', query: {'limit': 20}));
 
-  Future<Map<String, dynamic>> feed() async => asMap(await get('/api/feed', query: {'limit': 20}));
-
-  Future<Map<String, dynamic>> stories() async => asMap(await get('/api/stories'));
-
   Future<List<dynamic>> conversations() async => asList(await get('/api/messenger/conversations'));
 
   Future<int> unread() async => asInt(asMap(await get('/api/messenger/unread-count'))['count']);
@@ -128,45 +124,6 @@ class ChurchApi {
 
   Future<void> reviewRequest(int id, {required bool approve}) async {
     await post('/api/auth/access-requests/$id/${approve ? 'approve' : 'reject'}');
-  }
-
-  Future<void> like(String postId, {required bool liked}) async {
-    if (liked) {
-      await delete('/api/posts/$postId/like');
-    } else {
-      await post('/api/posts/$postId/like');
-    }
-  }
-
-  Future<List<dynamic>> comments(String postId) async =>
-      asList(asMap(await get('/api/posts/$postId/comments'))['comments']);
-
-  Future<void> addComment(String postId, String text) async {
-    await post('/api/posts/$postId/comment', data: {'text': text});
-  }
-
-  Future<void> createPost({required String caption, String? filePath, String? fileName}) async {
-    if (filePath == null || filePath.isEmpty) {
-      await post('/api/posts', data: {'caption': caption});
-      return;
-    }
-    final form = FormData.fromMap({
-      if (caption.trim().isNotEmpty) 'caption': caption.trim(),
-      'media': await MultipartFile.fromFile(filePath, filename: fileName ?? 'media.jpg'),
-    });
-    await session.dio.post<Object?>('/api/posts', data: form);
-  }
-
-  Future<void> createStory({required String filePath, required String fileName, String? caption}) async {
-    final form = FormData.fromMap({
-      'media': await MultipartFile.fromFile(filePath, filename: fileName),
-      if (caption != null && caption.trim().isNotEmpty) 'caption': caption.trim(),
-    });
-    await session.dio.post<Object?>('/api/stories', data: form);
-  }
-
-  Future<void> markStoryViewed(String storyId) async {
-    await post('/api/stories/$storyId/view');
   }
 
   Future<AppUser> patchMe(Map<String, dynamic> body) async {

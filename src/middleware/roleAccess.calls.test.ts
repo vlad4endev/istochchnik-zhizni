@@ -62,6 +62,21 @@ async function main(): Promise<void> {
     }
   }
 
+  // Лента: участник и прихожанин отмечают прочитанное и лайкают комментарии.
+  for (const role of ['member', 'parishioner']) {
+    for (const [method, path] of [
+      ['POST', '/api/feed/mark-seen'],
+      ['POST', '/api/posts/5/comments/9/like'],
+      ['DELETE', '/api/posts/5/comments/9/like'],
+      ['POST', '/api/posts/5/like'],
+      ['POST', '/api/posts/5/repost'],
+      ['POST', '/api/stories/5/reply'],
+    ]) {
+      const r = await run(role, method, path);
+      assert.equal(r.body, 'next', `${role} can ${method} ${path}`);
+    }
+  }
+
   const denied = await run('member', 'POST', '/api/admin/something');
   assert.equal(denied.status, 403);
 

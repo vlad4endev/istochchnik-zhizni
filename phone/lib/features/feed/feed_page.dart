@@ -1,525 +1,385 @@
-import 'package:dio/dio.dart';
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/cache_watch.dart';
-import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
-import '../../core/dates.dart';
 import '../../ui/kit/kit.dart';
-import '../../ui/video_page.dart';
 import '../../ui/widgets.dart';
 import 'compose_page.dart';
+import 'data/feed_source.dart';
+import 'feed_controller.dart';
+import 'logic/story_logic.dart';
+import 'models/feed_models.dart';
+import 'story_viewer.dart';
+import 'widgets/comments_sheet.dart';
+import 'widgets/likers_sheet.dart';
+import 'widgets/post_card.dart';
+import 'widgets/stories_bar.dart';
 
+/// Раздел «Лента»: истории, записи общины с бесконечной прокруткой, порядок «Для вас / Новые»,
+/// баннер новых записей, лайки, комментарии, репосты.
 class FeedPage extends StatefulWidget {
-  const FeedPage({super.key});
+  const FeedPage({super.key, this.source, this.checkInterval = const Duration(seconds: 45), this.mediaPicker});
+
+  /// Для тестов; в приложении берётся из сессии.
+  final FeedSource? source;
+  final Duration checkInterval;
+  final FeedMediaPicker? mediaPicker;
 
   @override
   State<FeedPage> createState() => _FeedPageState();
 }
 
-class _FeedPageState extends State<FeedPage> with CacheWatcher<FeedPage> {
-  bool _loading = true;
-  String? _error;
-  List<dynamic> _posts = const [];
-  List<dynamic> _stories = const [];
+class _FeedPageState extends State<FeedPage> with WidgetsBindingObserver {
+  late final FeedSource _source;
+  late final FeedController _c;
+  final _scroll = ScrollController();
+  Timer? _poll;
 
   @override
   void initState() {
     super.initState();
-    _load();
-    watchCache(const ['/api/feed', '/api/stories'], () => _load(quiet: true));
+    final session = context.read<SessionController>();
+    _source = widget.source ?? FeedApi(session);
+    _c = FeedController(_source, meId: session.user?.id ?? 0, cacheChanges: session.cache.changes)..load();
+    _scroll.addListener(_onScroll);
+    WidgetsBinding.instance.addObserver(this);
+    // Пока раздел открыт, раз в минуту спрашиваем, нет ли новых записей, — появится баннер.
+    _poll = Timer.periodic(widget.checkInterval, (_) => _c.checkNew());
   }
 
-  Future<void> _load({bool quiet = false}) async {
-    if (!quiet) {
-      setState(() {
-        _loading = true;
-        _error = null;
-      });
-    }
-    final api = ChurchApi(context.read<SessionController>());
+  @override
+  void dispose() {
+    _poll?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _scroll.dispose();
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _c.checkNew();
+  }
+
+  /// Если записей мало и список не прокручивается, прокрутки не будет — догружаем сами.
+  void _fillIfShort() {
+    if (!mounted || !_scroll.hasClients) return;
+    if (_c.hasMore && !_c.loadingMore && !_c.loadMoreFailed && !_c.loading && _scroll.position.maxScrollExtent < 600) _c.loadMore();
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 600) _c.loadMore();
+  }
+
+  void _toast(Object error) {
+    if (mounted) showMessage(context, error is FeedException ? error.message : 'Не удалось выполнить действие. Попробуйте ещё раз.');
+  }
+
+  Future<void> _guard(Future<void> Function() action) async {
     try {
-      final feed = await api.feed();
-      Map<String, dynamic> stories = {};
-      try {
-        stories = await api.stories();
-      } catch (_) {}
-      if (!mounted) return;
-      setState(() {
-        _posts = asList(feed['posts']);
-        _stories = asList(stories['groups']);
-        _loading = false;
-      });
-    } catch (error) {
-      if (!mounted || quiet) return;
-      setState(() {
-        _loading = false;
-        _error = describeDio(error);
-      });
+      await action();
+    } catch (e) {
+      _toast(e);
     }
   }
 
-  Future<void> _like(Map<String, dynamic> post) async {
-    final id = str(post['id']);
-    final liked = asBool(post['liked_by_me']);
-    try {
-      await ChurchApi(context.read<SessionController>()).like(id, liked: liked);
-      await _load();
-    } on DioException catch (error) {
-      if (!mounted) return;
-      showMessage(context, readApiError(error));
-    }
+  Future<void> _openUrl(String raw) async {
+    final uri = Uri.tryParse(raw);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
+
+  // ───────────── действия ─────────────
 
   Future<void> _compose({bool story = false}) async {
-    final created = await pushPage<bool>(context, ComposePage(story: story));
-    if (created == true) _load();
+    final created = await Navigator.of(context).push<bool>(MaterialPageRoute(fullscreenDialog: story, builder: (_) => ComposePage(story: story, source: _source, picker: widget.mediaPicker)));
+    if (created != true || !mounted) return;
+    if (story) {
+      await _c.loadStories();
+    } else {
+      await _c.refresh();
+      if (_scroll.hasClients) _scroll.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    }
   }
 
-  Future<void> _comments(String postId) async {
-    final api = ChurchApi(context.read<SessionController>());
-    final draft = TextEditingController();
-    await showModalBottomSheet<void>(
+  void _openComments(FeedPost post) {
+    showCommentsSheet(context, source: _source, postId: post.id, meId: _c.meId, postOwnerId: post.memberId, onCountChanged: (d) => _c.commentCountChanged(post.id, d));
+  }
+
+  Future<void> _repost(FeedPost post) async {
+    if (post.repostedByMe) {
+      showMessage(context, 'Вы уже поделились этой записью');
+      return;
+    }
+    final caption = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(sheetContext).bottom),
-          child: FutureBuilder<List<dynamic>>(
-          future: api.comments(postId),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const SizedBox(height: 180, child: Center(child: CircularProgressIndicator()));
-            }
-            final items = snapshot.data ?? const [];
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: 240,
-                  child: items.isEmpty
-                      ? const EmptyHint('Комментариев пока нет', icon: Icons.chat_bubble_outline_rounded, hint: 'Будьте первым')
-                      : ListView(
-                          children: [
-                            for (final raw in items)
-                              ListRow(
-                                leading: ChurchAvatar(name: _commentAuthor(asMap(raw)), size: 36),
-                                title: _commentAuthor(asMap(raw)),
-                                subtitle: _commentText(asMap(raw)),
-                                subtitleMaxLines: 6,
-                              ),
-                          ],
-                        ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                  child: Row(
-                    children: [
-                      Expanded(child: TextField(controller: draft, decoration: const InputDecoration(hintText: 'Напишите комментарий'))),
-                      const SizedBox(width: 8),
-                      IconButton.filled(
-                        tooltip: 'Отправить',
-                        style: IconButton.styleFrom(backgroundColor: ChurchColors.wine, foregroundColor: Colors.white),
-                        onPressed: () async {
-                          final text = draft.text.trim();
-                          if (text.isEmpty) return;
-                          try {
-                            await api.addComment(postId, text);
-                            if (sheetContext.mounted) Navigator.of(sheetContext).pop();
-                            _load();
-                          } catch (error) {
-                            if (!sheetContext.mounted) return;
-                            ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: Text(describeDio(error))));
-                          }
-                        },
-                        icon: const Icon(Icons.send_rounded),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-        );
-      },
+      builder: (_) => _RepostSheet(authorName: post.author.label),
     );
-    draft.dispose();
+    if (caption == null || !mounted) return;
+    await _guard(() async {
+      await _c.repost(post, caption: caption);
+      if (mounted) showMessage(context, 'Запись добавлена в вашу ленту');
+    });
   }
+
+  Future<void> _menu(FeedPost post, PostMenuAction action) async {
+    switch (action) {
+      case PostMenuAction.edit:
+        final value = await showDialog<String>(context: context, builder: (_) => _EditCaptionDialog(initial: post.caption));
+        if (value != null && mounted) await _guard(() => _c.edit(post, value));
+      case PostMenuAction.delete:
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (dialog) => AlertDialog(
+            title: const Text('Удалить запись?'),
+            content: const Text('Она пропадёт из ленты у всех.'),
+            actions: [
+              TextButton(key: const ValueKey('delete-cancel'), onPressed: () => Navigator.pop(dialog, false), child: const Text('Отмена')),
+              TextButton(key: const ValueKey('delete-ok'), onPressed: () => Navigator.pop(dialog, true), child: const Text('Удалить')),
+            ],
+          ),
+        );
+        if (ok == true && mounted) await _guard(() => _c.delete(post));
+    }
+  }
+
+  void _openStories(StoryGroup tapped) {
+    final playlist = storyPlaylist(mine: _c.mine, others: _c.others, tapped: tapped);
+    Navigator.of(context).push(PageRouteBuilder<void>(
+      opaque: true,
+      transitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (_, _, _) => StoryViewerPage(groups: playlist.groups, start: playlist.start, source: _source, meId: _c.meId, onSeen: _c.storySeen, onDeleted: _c.storyDeleted),
+      transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: 0.94, end: 1.0).animate(CurvedAnimation(parent: a, curve: Curves.easeOut)), child: child)),
+    ));
+  }
+
+  Future<void> _showNew() async {
+    await _c.refresh();
+    if (_scroll.hasClients) _scroll.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+  }
+
+  // ───────────── интерфейс ─────────────
 
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
-    final origin = session.apiOrigin;
-    final me = session.user?.displayName ?? 'Вы';
-    return ChurchPage(
-      title: 'Лента',
-      subtitle: 'Новости и истории общины',
-      actions: [
-        HeaderButton(icon: Icons.add_rounded, tooltip: 'Новая запись', onPressed: _compose),
-      ],
-      body: AsyncBody(
-        loading: _loading,
-        error: _error,
-        onRetry: _load,
-        child: SheetList(
-          onRefresh: _load,
-          padding: const EdgeInsets.fromLTRB(0, 16, 0, 32),
-          children: [
-            SizedBox(
-              height: 92,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: Space.lg),
-                children: [
-                  _StoryBubble(
-                    name: 'Ваша',
-                    avatarName: me,
-                    add: true,
-                    onTap: () => _compose(story: true),
-                  ),
-                  for (final raw in _stories)
-                    Builder(builder: (context) {
-                      final group = asMap(raw);
-                      final author = asMap(group['author']);
-                      final name = str(author['display_name']).isEmpty ? str(author['username']) : str(author['display_name']);
-                      return _StoryBubble(
-                        name: name.split(' ').first,
-                        avatarName: name,
-                        imageUrl: resolveUrl(origin, str(author['avatar_url'])),
-                        seen: asBool(group['all_seen']),
-                        onTap: () => pushPage(context, StoryPage(group: group, origin: origin)),
-                      );
-                    }),
-                ],
-              ),
-            ),
-            if (_posts.isEmpty)
-              const EmptyHint(
-                'В ленте пока нет записей',
-                icon: Icons.article_outlined,
-                hint: 'Поделитесь новостью или фото — нажмите «+» вверху.',
-              ),
-            for (final raw in _posts)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Space.lg),
-                child: _PostCard(post: asMap(raw), origin: origin, onLike: _like, onComments: _comments),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StoryBubble extends StatelessWidget {
-  const _StoryBubble({
-    required this.name,
-    required this.avatarName,
-    required this.onTap,
-    this.imageUrl,
-    this.seen = false,
-    this.add = false,
-  });
-
-  final String name;
-  final String avatarName;
-  final String? imageUrl;
-  final bool seen;
-  final bool add;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    return Semantics(
-      button: true,
-      label: add ? 'Добавить историю' : 'История: $avatarName',
-      excludeSemantics: true,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(Radii.md),
-        onTap: onTap,
-        child: SizedBox(
-          width: 72,
-          child: Column(
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(2.5),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: add || seen
-                          ? null
-                          : const SweepGradient(colors: [ChurchColors.amber, Color(0xFFC0304F), ChurchColors.amber]),
-                      color: add ? palette.outline : (seen ? palette.chevron.withValues(alpha: 0.5) : null),
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: palette.sheet),
-                      child: ChurchAvatar(name: avatarName, imageUrl: imageUrl, size: 50),
-                    ),
-                  ),
-                  if (add)
-                    Positioned(
-                      right: -1,
-                      bottom: -1,
-                      child: Container(
-                        width: 22,
-                        height: 22,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: ChurchColors.amberBlob,
-                          border: Border.all(color: palette.sheet, width: 2),
-                        ),
-                        child: const Icon(Icons.add_rounded, size: 15, color: Colors.white),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: palette.ink),
-              ),
-            ],
+    final user = session.user;
+    return ListenableBuilder(
+      listenable: _c,
+      builder: (context, _) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _fillIfShort());
+        return ChurchPage(
+        title: 'Лента',
+        subtitle: _c.sort == FeedSort.smart ? 'Новости и истории общины' : 'Сначала новые',
+        actions: [
+          PopupMenuButton<FeedSort>(
+            key: const ValueKey('feed-sort'),
+            tooltip: 'Порядок ленты',
+            icon: const Icon(Icons.tune_rounded),
+            initialValue: _c.sort,
+            onSelected: _c.setSort,
+            itemBuilder: (_) => [for (final s in FeedSort.values) CheckedPopupMenuItem(value: s, checked: s == _c.sort, child: Text(s.label))],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PostCard extends StatelessWidget {
-  const _PostCard({
-    required this.post,
-    required this.origin,
-    required this.onLike,
-    required this.onComments,
-  });
-
-  final Map<String, dynamic> post;
-  final String origin;
-  final Future<void> Function(Map<String, dynamic> post) onLike;
-  final Future<void> Function(String id) onComments;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    final author = asMap(post['author']);
-    final name = str(author['display_name']).isEmpty ? 'Участник' : str(author['display_name']);
-    final media = asList(post['media']);
-    final first = media.isEmpty ? null : asMap(media.first);
-    final mediaUrl = first == null ? '' : resolveUrl(origin, str(first['url']));
-    final video = first != null && str(first['type']) == 'video';
-    final image = !video ? mediaUrl : '';
-    final liked = asBool(post['liked_by_me']);
-    return ChurchCard(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              ChurchAvatar(name: name, imageUrl: resolveUrl(origin, str(author['avatar_url'])), size: 40),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: ChurchType.title.copyWith(fontSize: 15, color: palette.ink),
-                    ),
-                    Text(relativeTime(post['created_at']), style: TextStyle(fontSize: 12, color: palette.inkFaint)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (str(post['caption']).isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(str(post['caption']), style: ChurchType.body.copyWith(color: palette.ink)),
-          ],
-          if (video && mediaUrl.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            InkWell(
-              borderRadius: BorderRadius.circular(Radii.lg),
-              onTap: () => pushPage(context, VideoPage(url: mediaUrl, caption: str(post['caption']))),
-              child: Container(
-                height: 180,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(Radii.lg),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF6C1E32), ChurchColors.amberBlob],
-                  ),
-                ),
-                child: Center(
-                  child: Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.22)),
-                    child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 34, semanticLabel: 'Смотреть видео'),
-                  ),
-                ),
-              ),
-            ),
-          ],
-          if (image.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(Radii.lg),
-              child: Image.network(
-                image,
-                height: 220,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Container(height: 120, color: palette.accentSoft),
-              ),
-            ),
-          ],
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              _Reaction(
-                icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                color: liked ? ChurchColors.wine : palette.inkMuted,
-                count: asInt(post['like_count']),
-                label: liked ? 'Убрать отметку «нравится»' : 'Нравится',
-                onTap: () => onLike(post),
-              ),
-              _Reaction(
-                icon: Icons.chat_bubble_outline_rounded,
-                color: palette.inkMuted,
-                count: asInt(post['comment_count']),
-                label: 'Комментарии',
-                onTap: () => onComments(str(post['id'])),
-              ),
-            ],
-          ),
+          HeaderButton(icon: Icons.add_rounded, tooltip: 'Новая запись', accent: true, onPressed: _compose),
         ],
-      ),
-    );
-  }
-}
-
-class _Reaction extends StatelessWidget {
-  const _Reaction({required this.icon, required this.color, required this.count, required this.label, required this.onTap});
-
-  final IconData icon;
-  final Color color;
-  final int count;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: '$label, $count',
-      excludeSemantics: true,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(Radii.sm),
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 21, color: color),
-                const SizedBox(width: 6),
-                Text('$count', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.palette.inkMuted)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class StoryPage extends StatelessWidget {
-  const StoryPage({super.key, required this.group, required this.origin});
-  final Map<String, dynamic> group;
-  final String origin;
-
-  @override
-  Widget build(BuildContext context) {
-    final stories = asList(group['stories']);
-    final author = asMap(group['author']);
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Row(
+        body: Stack(
           children: [
-            ChurchAvatar(name: str(author['display_name']), size: 34, ring: true),
-            const SizedBox(width: 10),
-            Expanded(child: Text(str(author['display_name']), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+            Positioned.fill(child: _body(user, session.apiOrigin)),
+            Positioned(top: 8, left: 0, right: 0, child: Center(child: AnimatedSwitcher(duration: Motion.fast, child: _c.newCount > 0 ? _NewPill(count: _c.newCount, onTap: _showNew) : const SizedBox.shrink()))),
           ],
         ),
-      ),
-      body: PageView(
-        children: [
-          for (final raw in stories)
-            _StorySlide(story: asMap(raw), origin: origin),
-        ],
+      );
+      },
+    );
+  }
+
+  Widget _body(AppUser? user, String origin) {
+    if (_c.loading) return const FeedSkeleton();
+    if (_c.error != null && _c.posts.isEmpty) return ErrorView(message: _c.error!, onRetry: _c.refresh);
+    final me = FeedAuthor(memberId: user?.id ?? 0, name: user?.displayName ?? 'Вы', avatarUrl: user?.avatarUrl == null || user!.avatarUrl!.isEmpty ? null : resolveUrl(origin, user.avatarUrl));
+    // Истории + (пустая подсказка | записи и «подвал»).
+    final itemCount = _c.posts.isEmpty ? 2 : _c.posts.length + 2;
+    return RefreshIndicator(
+      color: context.palette.accent,
+      backgroundColor: context.palette.card,
+      onRefresh: _c.refresh,
+      child: ListView.builder(
+        key: const ValueKey('feed-list'),
+        controller: _scroll,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(top: 8, bottom: 32),
+        itemCount: itemCount,
+        itemBuilder: (context, i) {
+          if (i == 0) {
+            return StoriesBar(me: me, mine: _c.mine, others: _c.others, loaded: _c.storiesLoaded, onOpen: _openStories, onAdd: () => _compose(story: true));
+          }
+          if (_c.posts.isEmpty) {
+            return const Padding(padding: EdgeInsets.only(top: 40), child: EmptyHint('В ленте пока нет записей', icon: Icons.article_outlined, hint: 'Поделитесь новостью или фото — нажмите «+» вверху.'));
+          }
+          final index = i - 1;
+          if (index == _c.posts.length) return _footer();
+          final post = _c.posts[index];
+          return Padding(
+            key: ValueKey('feed-post-${post.id}'),
+            padding: const EdgeInsets.fromLTRB(Space.lg, 6, Space.lg, 8),
+            child: PostCard(
+              post: post,
+              meId: _c.meId,
+              onLike: () => _guard(() => _c.toggleLike(post)),
+              onDoubleTapLike: () => _guard(() => _c.likeOnly(post)),
+              onComments: () => _openComments(post),
+              onRepost: () => _repost(post),
+              onLikers: () => showLikersSheet(context, source: _source, postId: post.id),
+              onMenu: (a) => _menu(post, a),
+              onOpenUrl: _openUrl,
+            ),
+          );
+        },
       ),
     );
   }
-}
 
-class _StorySlide extends StatelessWidget {
-  const _StorySlide({required this.story, required this.origin});
-  final Map<String, dynamic> story;
-  final String origin;
-
-  @override
-  Widget build(BuildContext context) {
-    final url = resolveUrl(origin, str(story['media_url']));
-    final video = str(story['media_type']) == 'video';
-    if (video && url.isNotEmpty) {
-      return VideoPage(url: url, caption: str(story['caption']));
+  Widget _footer() {
+    final palette = context.palette;
+    if (_c.loadingMore) return const Padding(padding: EdgeInsets.all(20), child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.4))));
+    if (_c.loadMoreFailed) {
+      return Padding(padding: const EdgeInsets.all(16), child: SecondaryButton(key: const ValueKey('feed-more-retry'), label: 'Не удалось загрузить — повторить', icon: Icons.refresh_rounded, onPressed: _c.loadMore));
     }
-    return Column(
-      children: [
-        Expanded(
-          child: url.isEmpty
-              ? const Center(child: Text('Нет изображения', style: TextStyle(color: Colors.white)))
-              : Image.network(url, fit: BoxFit.contain),
+    if (!_c.hasMore) return Padding(key: const ValueKey('feed-end'), padding: const EdgeInsets.all(24), child: Center(child: Text('Вы посмотрели всё', style: TextStyle(color: palette.inkFaint))));
+    return const SizedBox(height: 24);
+  }
+}
+
+/// Плавающая плашка «Новые записи» вверху ленты.
+class _NewPill extends StatelessWidget {
+  const _NewPill({required this.count, required this.onTap});
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      key: const ValueKey('feed-new-pill'),
+      color: ChurchColors.wine,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 18),
+            const SizedBox(width: 6),
+            Text(count == 1 ? 'Новая запись' : 'Новые записи · $count', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+          ]),
         ),
-        if (str(story['caption']).isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(str(story['caption']), style: const TextStyle(color: Colors.white)),
-          ),
+      ),
+    );
+  }
+}
+
+/// Серые заглушки на время первой загрузки.
+class FeedSkeleton extends StatelessWidget {
+  const FeedSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.palette.outline.withValues(alpha: 0.45);
+    Widget bar(double w, double h) => Container(width: w, height: h, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(6)));
+    return ListView(
+      key: const ValueKey('feed-skeleton'),
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(Space.lg),
+      children: [
+        Row(children: [for (var i = 0; i < 4; i++) Padding(padding: const EdgeInsets.only(right: 12), child: Container(width: 56, height: 56, decoration: BoxDecoration(shape: BoxShape.circle, color: c)))]),
+        const SizedBox(height: 18),
+        for (var i = 0; i < 2; i++) ...[
+          Row(children: [Container(width: 40, height: 40, decoration: BoxDecoration(shape: BoxShape.circle, color: c)), const SizedBox(width: 10), Column(crossAxisAlignment: CrossAxisAlignment.start, children: [bar(120, 12), const SizedBox(height: 6), bar(70, 10)])]),
+          const SizedBox(height: 12),
+          bar(double.infinity, 12),
+          const SizedBox(height: 6),
+          bar(220, 12),
+          const SizedBox(height: 12),
+          AspectRatio(aspectRatio: 4 / 3, child: Container(decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(Radii.lg)))),
+          const SizedBox(height: 24),
+        ],
       ],
     );
   }
 }
 
-String _commentAuthor(Map<String, dynamic> comment) {
-  final author = asMap(comment['author']);
-  final name = str(author['display_name']);
-  if (name.isNotEmpty) return name;
-  return str(comment['author_name']).isEmpty ? 'Участник' : str(comment['author_name']);
+/// Шторка «Поделиться в ленте» со своим полем комментария.
+class _RepostSheet extends StatefulWidget {
+  const _RepostSheet({required this.authorName});
+  final String authorName;
+
+  @override
+  State<_RepostSheet> createState() => _RepostSheetState();
 }
 
-String _commentText(Map<String, dynamic> comment) {
-  for (final key in ['text', 'body', 'content', 'caption']) {
-    if (str(comment[key]).isNotEmpty) return str(comment[key]);
+class _RepostSheetState extends State<_RepostSheet> {
+  final _text = TextEditingController();
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
   }
-  return '';
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Поделиться в ленте', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: palette.ink)),
+          const SizedBox(height: 4),
+          Text('Запись «${widget.authorName}» появится в вашей ленте.', style: TextStyle(color: palette.inkMuted)),
+          const SizedBox(height: 12),
+          TextField(key: const ValueKey('repost-caption'), controller: _text, maxLines: 3, minLines: 1, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(hintText: 'Добавьте комментарий (необязательно)')),
+          const SizedBox(height: 12),
+          PrimaryButton(key: const ValueKey('repost-send'), label: 'Поделиться', icon: Icons.repeat_rounded, onPressed: () => Navigator.pop(context, _text.text)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Диалог «Изменить подпись» со своим полем ввода.
+class _EditCaptionDialog extends StatefulWidget {
+  const _EditCaptionDialog({required this.initial});
+  final String initial;
+
+  @override
+  State<_EditCaptionDialog> createState() => _EditCaptionDialogState();
+}
+
+class _EditCaptionDialogState extends State<_EditCaptionDialog> {
+  late final _text = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Изменить подпись'),
+        content: TextField(key: const ValueKey('edit-caption'), controller: _text, autofocus: true, maxLines: 6, minLines: 2, textCapitalization: TextCapitalization.sentences),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+          TextButton(key: const ValueKey('edit-save'), onPressed: () => Navigator.pop(context, _text.text), child: const Text('Сохранить')),
+        ],
+      );
 }
