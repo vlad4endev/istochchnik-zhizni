@@ -36,9 +36,12 @@ DateTime _today() {
   return DateTime(n.year, n.month, n.day);
 }
 
+/// Ближайшее воскресенье строго впереди. Если сегодня воскресенье — следующее: иначе после начала
+/// служения (10:00) главная ведёт себя иначе, и тесты зависели бы от времени суток.
 DateTime _sunday() {
   final t = _today();
-  return t.add(Duration(days: (7 - t.weekday % 7) % 7));
+  final ahead = (7 - t.weekday % 7) % 7;
+  return t.add(Duration(days: ahead == 0 ? 7 : ahead));
 }
 
 String _ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -178,8 +181,7 @@ void main() {
   group('карточка «Богослужение»', () {
     testWidgets('проповедник и ведущий, тема, стих и резюме', (tester) async {
       _size(tester);
-      // Служение — «ещё не прошло» в любой день недели: в воскресенье после 10:00 прежнее время давало «Оценить…».
-      await tester.pumpWidget(_app(_home(plan: _plan(start: '23:59')), _prayer(), _session()));
+      await tester.pumpWidget(_app(_home(), _prayer(), _session()));
       await tester.pumpAndSettle();
       expect(find.text('ПРОПОВЕДНИК'), findsOneWidget);
       expect(find.text('Михаил Самодуров'), findsOneWidget);

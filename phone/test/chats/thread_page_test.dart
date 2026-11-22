@@ -9,6 +9,7 @@ import 'package:molitva/core/session.dart';
 import 'package:molitva/core/theme.dart';
 import 'package:molitva/features/chats/models/chat_models.dart';
 import 'package:molitva/features/chats/thread_page.dart';
+import 'package:molitva/features/chats/widgets/message_bubble.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -79,11 +80,18 @@ FakeChat _chat() => FakeChat()
     msg('4', sender: 9, name: 'Мария Лис', text: 'Отлично!', at: _today(4)),
   ];
 
-Future<void> _open(WidgetTester tester, FakeChat chat, {String type = 'group', SessionController? session}) async {
+Future<void> _open(WidgetTester tester, FakeChat chat, {String type = 'group', SessionController? session, double width = 360, double scale = 1}) async {
   if (type == 'private') chat.metaNow = const ChatMeta(type: 'private');
-  _size(tester);
-  await tester.pumpWidget(_app(chat, type: type, session: session));
+  _size(tester, width: width);
+  await tester.pumpWidget(_app(chat, type: type, session: session, width: width, scale: scale));
   await tester.pumpAndSettle();
+}
+
+/// Насколько проявилась стрелка «ответить» у сообщения с этим текстом (0…1).
+double _arrowOpacity(WidgetTester tester, String text) {
+  final swipe = find.ancestor(of: find.text(text), matching: find.byType(SwipeToReply)).first;
+  final arrow = find.descendant(of: swipe, matching: find.byKey(const ValueKey('swipe-reply-arrow')));
+  return tester.widget<Opacity>(find.ancestor(of: arrow, matching: find.byType(Opacity)).first).opacity;
 }
 
 void main() {
@@ -331,11 +339,99 @@ void main() {
       expect(find.text('Ответ: Анна Орлова'), findsNothing);
     });
 
-    testWidgets('свайп сообщения к центру — «ответить»', (tester) async {
+    testWidgets('свайп влево по чужому сообщению — «ответить» (как в Telegram)', (tester) async {
       await _open(tester, _chat());
-      await tester.drag(find.text('Как дела?'), const Offset(120, 0));
+      await tester.drag(find.text('Как дела?'), const Offset(-140, 0));
       await tester.pumpAndSettle();
       expect(find.text('Ответ: Анна Орлова'), findsOneWidget);
+    });
+
+    testWidgets('свайп влево по своему сообщению — тоже «ответить»', (tester) async {
+      await _open(tester, _chat());
+      await tester.drag(find.text('Отлично!'), const Offset(-140, 0));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Отменить ответ'), findsOneWidget);
+    });
+
+    testWidgets('чужое сообщение можно тянуть и вправо; своё вправо — не отвечает', (tester) async {
+      await _open(tester, _chat());
+      await tester.drag(find.text('Отлично!'), const Offset(140, 0));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Отменить ответ'), findsNothing);
+      await tester.drag(find.text('Как дела?'), const Offset(140, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Ответ: Анна Орлова'), findsOneWidget);
+    });
+
+    testWidgets('короткий свайп не отвечает и сообщение возвращается на место', (tester) async {
+      await _open(tester, _chat());
+      final before = tester.getTopLeft(find.text('Как дела?'));
+      final gesture = await tester.startGesture(tester.getCenter(find.text('Как дела?')));
+      await gesture.moveBy(const Offset(-24, 0)); // первое движение за порог лишь «захватывает» жест
+      await gesture.moveBy(const Offset(-30, 0));
+      await tester.pump();
+      expect(tester.getTopLeft(find.text('Как дела?')).dx, lessThan(before.dx), reason: 'пузырь едет за пальцем');
+      expect(_arrowOpacity(tester, 'Как дела?'), greaterThan(0.2), reason: 'стрелка проявляется по мере движения');
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Отменить ответ'), findsNothing);
+      expect(tester.getTopLeft(find.text('Как дела?')), before);
+    });
+
+    testWidgets('дотянули до отметки, но вернули назад — ответ отменяется', (tester) async {
+      await _open(tester, _chat());
+      final gesture = await tester.startGesture(tester.getCenter(find.text('Как дела?')));
+      await gesture.moveBy(const Offset(-24, 0)); // захват жеста
+      await gesture.moveBy(const Offset(-100, 0));
+      await tester.pump();
+      expect(_arrowOpacity(tester, 'Как дела?'), 1.0, reason: 'дотянули до отметки — стрелка полностью видна');
+      await gesture.moveBy(const Offset(90, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Отменить ответ'), findsNothing);
+    });
+
+    testWidgets('вертикальная прокрутка не принимается за свайп', (tester) async {
+      await _open(tester, _chat());
+      await tester.drag(find.text('Как дела?'), const Offset(0, 60));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Отменить ответ'), findsNothing);
+    });
+
+    testWidgets('при выборе сообщений свайп не отвечает', (tester) async {
+      await _open(tester, _chat());
+      await tester.tap(find.text('Как дела?'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Выбрать'));
+      await tester.pumpAndSettle();
+      await tester.drag(find.text('Отлично!'), const Offset(-140, 0));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Отменить ответ'), findsNothing);
+    });
+
+    testWidgets('после ответа поле ввода получает фокус, баннер показывает цитату', (tester) async {
+      await _open(tester, _chat());
+      await tester.drag(find.text('Как дела?'), const Offset(-140, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Ответ: Анна Орлова'), findsOneWidget);
+      expect(tester.widget<TextField>(find.byType(TextField).last).focusNode!.hasFocus, isTrue);
+    });
+
+    testWidgets('для скринридера есть действие «Ответить» без свайпа', (tester) async {
+      final handle = tester.ensureSemantics();
+      await _open(tester, _chat());
+      final data = tester.getSemantics(find.text('Как дела?')).getSemanticsData();
+      expect(data.customSemanticsActionIds, isNotEmpty);
+      handle.dispose();
+    });
+
+    testWidgets('на 320 px при шрифте 2.0 свайп работает без переполнений', (tester) async {
+      await _open(tester, _chat(), width: 320, scale: 2);
+      await tester.drag(find.text('Как дела?'), const Offset(-140, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Ответ: Анна Орлова'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('«Редактировать»: текст в поле, правка меняет сообщение на месте', (tester) async {

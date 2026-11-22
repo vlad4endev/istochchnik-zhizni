@@ -1,3 +1,4 @@
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
@@ -303,7 +304,9 @@ class _ReactionChip extends StatelessWidget {
   }
 }
 
-/// Свайп пузыря к центру экрана — «ответить»; стрелка проявляется по мере движения.
+/// Свайп пузыря — «ответить», как в Telegram: тянем сообщение влево (любое — своё или чужое),
+/// справа проявляется стрелка, на отметке срабатывает вибрация, отпустили — ответ. Чужие сообщения
+/// можно тянуть и вправо. Без свайпа (скринридер) то же действие доступно как «Ответить».
 class SwipeToReply extends StatefulWidget {
   const SwipeToReply({super.key, required this.child, required this.onReply, required this.mine});
 
@@ -315,61 +318,96 @@ class SwipeToReply extends StatefulWidget {
   State<SwipeToReply> createState() => _SwipeToReplyState();
 }
 
-class _SwipeToReplyState extends State<SwipeToReply> {
-  static const _trigger = 56.0;
-  double _dx = 0;
+class _SwipeToReplyState extends State<SwipeToReply> with SingleTickerProviderStateMixin {
+  /// Сколько нужно протянуть, чтобы ответ сработал.
+  static const _trigger = 64.0;
+  static const _maxPull = 96.0;
+
+  late final AnimationController _settle = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
+  double _dx = 0; // влево — отрицательное
   bool _fired = false;
+  double _settleFrom = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _settle.addListener(() => setState(() => _dx = _settleFrom * (1 - Curves.easeOutCubic.transform(_settle.value))));
+  }
+
+  @override
+  void dispose() {
+    _settle.dispose();
+    super.dispose();
+  }
 
   void _update(DragUpdateDetails d) {
-    // К центру: свои — влево, чужие — вправо.
-    final towardCenter = widget.mine ? -d.delta.dx : d.delta.dx;
-    final next = (_dx + towardCenter).clamp(0.0, 72.0);
-    if (next >= _trigger && !_fired) {
+    _settle.stop();
+    // За отметкой тянется туже — как резинка.
+    final past = _dx.abs() >= _trigger;
+    var next = _dx + d.delta.dx * (past && d.delta.dx.sign == -_dx.sign ? 1 : (past ? 0.45 : 1));
+    next = next.clamp(-_maxPull, widget.mine ? 0.0 : _maxPull);
+    final armed = next.abs() >= _trigger;
+    if (armed && !_fired) {
       _fired = true;
       HapticFeedback.selectionClick();
+    } else if (!armed && _fired) {
+      _fired = false; // вернули назад — отменили
     }
     setState(() => _dx = next);
   }
 
-  void _end(DragEndDetails _) {
-    if (_fired) widget.onReply();
-    setState(() {
-      _dx = 0;
-      _fired = false;
-    });
+  void _release() {
+    final fire = _fired;
+    _fired = false;
+    _settleFrom = _dx;
+    _settle.forward(from: 0);
+    if (fire) widget.onReply();
   }
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final progress = (_dx / _trigger).clamp(0.0, 1.0);
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onHorizontalDragUpdate: _update,
-      onHorizontalDragEnd: _end,
-      onHorizontalDragCancel: () => setState(() {
-        _dx = 0;
-        _fired = false;
-      }),
-      child: Stack(
-        alignment: widget.mine ? Alignment.centerRight : Alignment.centerLeft,
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            right: widget.mine ? -34 : null,
-            left: widget.mine ? null : -34,
-            child: Opacity(
-              opacity: progress,
-              child: Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(color: palette.accent.withValues(alpha: 0.15), shape: BoxShape.circle),
-                child: Icon(Icons.reply_rounded, size: 18, color: palette.accent),
+    final pull = _dx.abs();
+    final progress = (pull / _trigger).clamp(0.0, 1.0);
+    final toLeft = _dx <= 0;
+    return Semantics(
+      customSemanticsActions: {const CustomSemanticsAction(label: 'Ответить'): widget.onReply},
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragUpdate: _update,
+        onHorizontalDragEnd: (_) => _release(),
+        onHorizontalDragCancel: () {
+          _fired = false;
+          _settleFrom = _dx;
+          _settle.forward(from: 0);
+        },
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            // Стрелка — по центру освободившейся полосы, растёт по мере движения.
+            Positioned(
+              right: toLeft ? pull / 2 - 15 : null,
+              left: toLeft ? null : pull / 2 - 15,
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: progress,
+                  child: Transform.scale(
+                    scale: 0.6 + 0.4 * progress,
+                    child: Container(
+                      key: const ValueKey('swipe-reply-arrow'),
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(color: _fired ? palette.accent : palette.accent.withValues(alpha: 0.18), shape: BoxShape.circle),
+                      child: Icon(Icons.reply_rounded, size: 19, color: _fired ? Colors.white : palette.accent),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
-          Transform.translate(offset: Offset(widget.mine ? -_dx : _dx, 0), child: widget.child),
-        ],
+            Transform.translate(offset: Offset(_dx, 0), child: widget.child),
+          ],
+        ),
       ),
     );
   }
