@@ -2,6 +2,7 @@ import 'package:flutter/painting.dart';
 import 'package:intl/intl.dart';
 
 import '../models/chat_models.dart';
+import 'attachment_logic.dart';
 
 /// Быстрые реакции — тот же набор, что на сайте.
 const quickReactions = ['❤️', '👍', '😂', '😮', '😢', '🙏', '🔥'];
@@ -122,6 +123,7 @@ class MessageActions {
     required this.readers,
     required this.pin,
     required this.react,
+    this.select = false,
   });
 
   final bool reply;
@@ -132,6 +134,9 @@ class MessageActions {
   final bool readers;
   final bool pin;
   final bool react;
+
+  /// Начать выделение нескольких сообщений с этого.
+  final bool select;
 
   bool get any => reply || edit || delete || forward || copy || readers || pin || react;
 }
@@ -151,6 +156,7 @@ MessageActions actionsFor(ChatMessage m, {required int me, required bool groupLi
     readers: alive && mine && groupLike,
     pin: alive && canPin,
     react: alive,
+    select: alive,
   );
 }
 
@@ -232,10 +238,14 @@ String messageSummary(ChatMessage m) {
 // ───────────────────────── общие медиа ─────────────────────────
 
 class SharedFile {
-  const SharedFile({required this.messageId, required this.url, required this.name});
+  const SharedFile({required this.messageId, required this.url, required this.name, this.size = 0, this.at});
   final String messageId;
   final String url;
   final String name;
+
+  /// Размер в байтах (0 — неизвестен).
+  final int size;
+  final DateTime? at;
 }
 
 class SharedLink {
@@ -246,17 +256,23 @@ class SharedLink {
 
 /// Фото, файлы и ссылки диалога — новые сверху. Удалённые сообщения не считаются.
 class SharedMedia {
-  const SharedMedia({this.images = const [], this.files = const [], this.links = const []});
+  const SharedMedia({this.images = const [], this.videos = const [], this.files = const [], this.links = const []});
   final List<({String messageId, String url})> images;
+
+  /// Видео (в сообщениях они уходят как «image», отличаются типом содержимого).
+  final List<({String messageId, String url})> videos;
   final List<SharedFile> files;
   final List<SharedLink> links;
 
-  bool get isEmpty => images.isEmpty && files.isEmpty && links.isEmpty;
+  bool get isEmpty => images.isEmpty && videos.isEmpty && files.isEmpty && links.isEmpty;
+
+  int get mediaCount => images.length + videos.length;
 }
 
 /// Собирает «общие медиа» из сообщений (по возрастанию времени). [resolve] превращает путь в полный адрес.
 SharedMedia collectSharedMedia(List<ChatMessage> messages, String Function(String raw) resolve) {
   final images = <({String messageId, String url})>[];
+  final videos = <({String messageId, String url})>[];
   final files = <SharedFile>[];
   final links = <SharedLink>[];
   final seenLinks = <String>{};
@@ -265,10 +281,15 @@ SharedMedia collectSharedMedia(List<ChatMessage> messages, String Function(Strin
     final raw = '${m.payload['url'] ?? ''}'.trim();
     final url = raw.isEmpty ? '' : resolve(raw);
     if (m.payloadType == 'image' && url.isNotEmpty) {
-      images.add((messageId: m.id, url: url));
+      if (isVideoPayload(mimeType: '${m.payload['mimeType'] ?? ''}', url: url, name: '${m.payload['name'] ?? ''}')) {
+        videos.add((messageId: m.id, url: url));
+      } else {
+        images.add((messageId: m.id, url: url));
+      }
     } else if (m.payloadType == 'file' && url.isNotEmpty) {
       final name = '${m.payload['name'] ?? ''}'.trim();
-      files.add(SharedFile(messageId: m.id, url: url, name: name.isEmpty ? 'Файл' : name));
+      final size = m.payload['size'];
+      files.add(SharedFile(messageId: m.id, url: url, name: name.isEmpty ? 'Файл' : name, size: size is num ? size.toInt() : 0, at: m.createdAt));
     }
     if (m.isText) {
       for (final chunk in chunkText(m.content)) {
@@ -277,7 +298,7 @@ SharedMedia collectSharedMedia(List<ChatMessage> messages, String Function(Strin
       }
     }
   }
-  return SharedMedia(images: images, files: files, links: links);
+  return SharedMedia(images: images, videos: videos, files: files, links: links);
 }
 
 /// Дней до ближайшего дня рождения; 0 — сегодня; null — даты нет.

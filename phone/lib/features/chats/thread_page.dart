@@ -2,9 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/church_api.dart';
@@ -25,7 +23,11 @@ import '../prayer/widgets/sheet_frame.dart' show actionError;
 import 'chat_profile_page.dart';
 import 'data/attachment_picker.dart';
 import 'widgets/message_search.dart';
+import 'logic/mentions.dart';
+import 'logic/voice.dart';
+import 'logic/selection.dart';
 import 'widgets/pinned_bar.dart';
+import 'widgets/scroll_down_button.dart';
 import 'data/chat_source.dart';
 import 'logic/attachment_logic.dart';
 import 'logic/chat_logic.dart';
@@ -51,6 +53,8 @@ class ThreadPage extends StatefulWidget {
     this.picker,
     this.instantClose = const Duration(milliseconds: 1500),
     this.jumpToMessageId,
+    this.unreadCount = 0,
+    this.voiceBackend,
   });
 
   final String conversationId;
@@ -70,6 +74,12 @@ class ThreadPage extends StatefulWidget {
   final Stream<Map<String, dynamic>>? events;
   final AttachmentPicker? picker;
 
+  /// Для тестов: микрофон подменяется; в приложении — пакет `record`.
+  final VoiceBackend? voiceBackend;
+
+  /// Сколько сообщений было не прочитано при открытии: к первому из них чат прокрутится, перед ним будет «Новые сообщения».
+  final int unreadCount;
+
   /// Открыть чат сразу на этом сообщении (из поиска по всем чатам).
   final String? jumpToMessageId;
 
@@ -84,22 +94,25 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
   final _input = TextEditingController();
   final _focus = FocusNode();
   final _scroll = ScrollController();
-  AudioRecorder? _recorderInstance;
-
-  /// Рекордер нужен только для голосовых — создаём при первой записи, а не при открытии чата.
-  AudioRecorder get _recorder => _recorderInstance ??= AudioRecorder();
   late final ChatSource _source;
   late final PresenceStore _presence;
   late final TypingStore _typing;
   late final ChurchRealtime _realtime;
   int _pinnedIndex = 0;
+  final Set<String> _selected = {};
+  bool _showDown = false;
+  bool _unreadResolved = false;
+  String? _firstUnreadId;
+
+  /// Последнее сообщение, которое видели, когда чат был прокручен вниз; всё, что пришло позже, — «новое».
+  String? _bottomLatestId;
   String? _highlightId;
   Timer? _highlightTimer;
   DateTime _typingSentAt = DateTime.fromMillisecondsSinceEpoch(0);
   bool _typingSent = false;
   late final AttachmentPicker _picker = widget.picker ?? DeviceAttachmentPicker();
   late final ThreadController _c;
-  bool _recording = false;
+  late final VoiceRecorderController _voice;
 
   @override
   void initState() {
@@ -125,7 +138,9 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
     final draft = DraftStore.instance.textFor(widget.conversationId);
     if (draft.isNotEmpty) _input.text = draft;
     _input.addListener(_onInput);
+    _voice = VoiceRecorderController(widget.voiceBackend ?? RecordVoiceBackend())..addListener(_onVoiceChanged);
     _scroll.addListener(_onScroll);
+    _c.addListener(_onThreadChanged);
     WidgetsBinding.instance.addObserver(this);
     PushService.activeConversationId = widget.conversationId;
   }
@@ -236,16 +251,64 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     if (PushService.activeConversationId == widget.conversationId) PushService.activeConversationId = null;
     _scroll.removeListener(_onScroll);
+    _c.removeListener(_onThreadChanged);
     _scroll.dispose();
     _input.dispose();
     _focus.dispose();
     _c.dispose();
-    _recorderInstance?.dispose();
+    _voice.removeListener(_onVoiceChanged);
+    _voice.dispose();
     super.dispose();
+  }
+
+  bool get _atBottom => !_scroll.hasClients || _scroll.position.pixels < 80;
+
+  String? get _latestId {
+    for (var i = _c.messages.length - 1; i >= 0; i--) {
+      if (!_c.messages[i].pending) return _c.messages[i].id;
+    }
+    return null;
+  }
+
+  /// Сколько сообщений от других пришло, пока чат был прокручен вверх.
+  int get _newBelow {
+    final marker = _bottomLatestId;
+    if (marker == null) return 0;
+    final from = int.tryParse(marker) ?? 0;
+    return _c.messages.where((m) => !m.pending && m.senderId != _c.meId && (int.tryParse(m.id) ?? 0) > from).length;
+  }
+
+  /// Первый раз после загрузки: находим первое непрочитанное, ставим разделитель и прокручиваем к нему.
+  void _onThreadChanged() {
+    if (!_unreadResolved && !_c.loading && _c.messages.isNotEmpty) {
+      _unreadResolved = true;
+      final unread = widget.unreadCount;
+      if (unread > 0 && widget.jumpToMessageId == null) {
+        final others = [for (final m in _c.messages) if (!m.pending && m.senderId != _c.meId) m];
+        if (others.isNotEmpty) {
+          final first = others[(others.length - unread).clamp(0, others.length - 1)];
+          _firstUnreadId = first.id;
+          if (unread > 3) WidgetsBinding.instance.addPostFrameCallback((_) => _jumpAfterFrame(first.id));
+        }
+      }
+      _bottomLatestId = _latestId;
+    }
+    if (_atBottom) _bottomLatestId = _latestId;
+  }
+
+  void _scrollToBottom() {
+    if (!_scroll.hasClients) return;
+    _scroll.animateTo(0, duration: const Duration(milliseconds: 280), curve: Curves.easeOut);
   }
 
   void _onScroll() {
     if (!_scroll.hasClients) return;
+    final away = _scroll.position.pixels > 300;
+    final latest = _latestId;
+    final seen = _atBottom && _bottomLatestId != latest;
+    if (seen) _bottomLatestId = latest;
+    // Счётчик на кнопке обнуляется, как только долистали до низа.
+    if (away != _showDown || seen) setState(() => _showDown = away);
     // Список перевёрнут: «вверх по истории» — это конец прокрутки.
     if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 400) _c.loadOlder();
   }
@@ -293,8 +356,9 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
     final text = _input.text;
     if (text.trim().isEmpty) return;
     try {
-      await _c.submit(text);
+      await _c.submit(normalizeMentions(text));
       _input.clear();
+      _scrollToBottom();
     } catch (error) {
       _toast(error);
     }
@@ -377,21 +441,25 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _toggleRecord() async {
-    if (_recording) {
-      final path = await _recorder.stop();
-      setState(() => _recording = false);
-      if (path == null || path.isEmpty) return;
-      await _sendFiles([PickedAttachment(path: path, name: 'voice.m4a', mimeType: 'audio/mp4')], voice: true);
-      return;
-    }
-    if (!await _recorder.hasPermission()) {
-      if (mounted) showMessage(context, 'Нет доступа к микрофону — разрешите его в настройках телефона');
-      return;
-    }
-    final dir = await getTemporaryDirectory();
-    await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: '${dir.path}/voice-${DateTime.now().millisecondsSinceEpoch}.m4a');
-    setState(() => _recording = true);
+  /// Запись готова: уходит как голосовое с длительностью и волной (в вебе длительность тоже читается).
+  Future<void> _sendVoice(VoiceClip clip) => _sendFiles(
+        [
+          PickedAttachment(
+            path: clip.path,
+            name: 'voice.m4a',
+            mimeType: 'audio/mp4',
+            extra: {'durationSec': clip.duration.inSeconds < 1 ? 1 : clip.duration.inSeconds, 'waveform': clip.waveform},
+          ),
+        ],
+        voice: true,
+      );
+
+  /// Причины, по которым запись не началась или не ушла, показываем, а не глотаем.
+  void _onVoiceChanged() {
+    final problem = _voice.problem;
+    if (problem == null || !mounted) return;
+    _voice.clearProblem();
+    showMessage(context, problem);
   }
 
   Future<void> _poll() async {
@@ -451,11 +519,11 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
         _focus.requestFocus();
       case MessageCommand.edit:
         _c.startEdit(message);
-        _input.text = message.content;
+        _input.text = denormalizeMentions(message.content, _memberNames);
         _input.selection = TextSelection.collapsed(offset: _input.text.length);
         _focus.requestFocus();
       case MessageCommand.copy:
-        await Clipboard.setData(ClipboardData(text: message.content));
+        await Clipboard.setData(ClipboardData(text: mentionsAsText(message.content, _memberNames)));
         if (mounted) showMessage(context, 'Текст скопирован');
       case MessageCommand.forward:
         await _forward(message);
@@ -468,6 +536,8 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
         } catch (error) {
           _toast(error);
         }
+      case MessageCommand.select:
+        _toggleSelect(message);
       case MessageCommand.delete:
         if (!await confirmDeleteMessage(context)) return;
         try {
@@ -476,6 +546,75 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
           _toast(error);
         }
     }
+  }
+
+  // ───────────── выбор нескольких сообщений ─────────────
+
+  Map<int, String> get _memberNames => {for (final m in _c.members.values) m.id: m.name};
+
+  bool get _selecting => _selected.isNotEmpty;
+
+  void _toggleSelect(ChatMessage message) {
+    if (!actionsFor(message, me: _c.meId, groupLike: _isGroup, canPin: false).select) return;
+    setState(() {
+      if (!_selected.remove(message.id)) _selected.add(message.id);
+    });
+  }
+
+  void _clearSelection() => setState(_selected.clear);
+
+  List<ChatMessage> get _selectedMessages => orderedSelection(_c.messages, _selected);
+
+  Future<void> _copySelection() async {
+    final text = selectionText(_selectedMessages, withAuthors: _isGroup, names: _memberNames);
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    _clearSelection();
+    showMessage(context, 'Текст скопирован');
+  }
+
+  Future<void> _forwardSelection() async {
+    final chosen = _selectedMessages;
+    final ids = await showForwardSheet(context, _source, excludeId: widget.conversationId);
+    if (ids == null || ids.isEmpty || !mounted) return;
+    try {
+      for (final m in chosen) {
+        await _source.forward(m.id, ids);
+      }
+      if (!mounted) return;
+      _clearSelection();
+      showMessage(context, chosen.length == 1 ? 'Сообщение переслано' : '${messagesCount(chosen.length)} пересланы');
+    } catch (error) {
+      _toast(error);
+    }
+  }
+
+  Future<void> _deleteSelection() async {
+    final chosen = _selectedMessages;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(chosen.length == 1 ? 'Удалить сообщение?' : 'Удалить ${messagesCount(chosen.length)}?'),
+        content: const Text('Они пропадут у всех участников чата.'),
+        actions: [
+          TextButton(key: const ValueKey('selection-delete-cancel'), onPressed: () => Navigator.pop(dialog, false), child: const Text('Отмена')),
+          TextButton(key: const ValueKey('selection-delete-ok'), onPressed: () => Navigator.pop(dialog, true), child: const Text('Удалить')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    var failed = 0;
+    for (final m in chosen) {
+      try {
+        await _c.remove(m);
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (!mounted) return;
+    _clearSelection();
+    if (failed > 0) showMessage(context, failed == chosen.length ? 'Не удалось удалить — проверьте интернет и попробуйте снова' : 'Не удалось удалить ${messagesCount(failed)}');
   }
 
   /// Долгое нажатие — сразу реакции (то же меню, реакции сверху).
@@ -566,15 +705,30 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
       listenable: _c,
       builder: (context, _) {
         final views = groupMessages(_c.messages, DateTime.now());
-        return ChurchPage(
-          title: widget.title,
+        final selecting = _selecting;
+        final mentionNames = _memberNames;
+        final sel = selectionActions(_selectedMessages, me: _c.meId, groupLike: _isGroup, canPin: false);
+        return PopScope(
+          canPop: !selecting,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && _selecting) _clearSelection();
+          },
+          child: ChurchPage(
+          title: selecting ? 'Выбрано: ${_selected.length}' : widget.title,
           // Пока собеседник печатает — это вместо статуса, акцентным цветом.
-          subtitle: typing == null ? _subtitle() : null,
-          subtitleAccent: typing,
-          leading: ChurchAvatar(name: widget.title, imageUrl: widget.avatarUrl, size: 40),
-          onTitleTap: _openProfile,
+          subtitle: selecting ? null : (typing == null ? _subtitle() : null),
+          subtitleAccent: selecting ? null : typing,
+          leading: selecting ? null : ChurchAvatar(name: widget.title, imageUrl: widget.avatarUrl, size: 40),
+          onTitleTap: selecting ? null : _openProfile,
           sheetColor: palette.isDark ? palette.sheet : const Color(0xFFF3ECE3),
-          actions: [
+          actions: selecting
+              ? [
+                  if (sel.copy) HeaderButton(icon: Icons.content_copy_rounded, tooltip: 'Копировать', onPressed: _copySelection),
+                  if (sel.forward) HeaderButton(icon: Icons.forward_rounded, tooltip: 'Переслать', onPressed: _forwardSelection),
+                  if (sel.delete) HeaderButton(icon: Icons.delete_outline_rounded, tooltip: 'Удалить', onPressed: _deleteSelection),
+                  HeaderButton(icon: Icons.close_rounded, tooltip: 'Отменить выбор', onPressed: _clearSelection),
+                ]
+              : [
             HeaderButton(icon: Icons.search_rounded, tooltip: 'Поиск по чату', onPressed: _openSearch),
             if (!_isGroup)
               HeaderButton(
@@ -597,6 +751,9 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
                 onClose: _c.canPin && _c.pinned.isNotEmpty ? () => _c.pin(_c.pinned[_pinnedIndex.clamp(0, _c.pinned.length - 1)], false) : null,
               ),
               Expanded(
+                child: Stack(
+                  children: [
+                    Positioned.fill(
                 child: AsyncBody(
             loading: _c.loading,
             error: _c.error,
@@ -623,9 +780,10 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
                         ownHost: ownHost,
                         member: _member(message.senderId),
                         loadPreview: _c.previewOf,
-                        onMenu: () => _menu(message),
-                        onReactionMenu: () => _menu(message),
+                        onMenu: () => selecting ? _toggleSelect(message) : _menu(message),
+                        onReactionMenu: () => selecting ? _toggleSelect(message) : _menu(message),
                         onReply: () {
+                          if (selecting) return;
                           if (actionsFor(message, me: _c.meId, groupLike: _isGroup, canPin: false).reply) {
                             _c.startReply(message);
                             _focus.requestFocus();
@@ -635,30 +793,55 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
                         onVote: (option) => _vote(message, option),
                         onReact: (emoji) => _react(message, emoji),
                         onOpenSender: _openSender,
-                        onOpenReply: _jumpTo,
+                        onOpenReply: selecting ? null : _jumpTo,
+                        mentionNames: mentionNames,
                       );
-                      return KeyedSubtree(
+                      final framed = KeyedSubtree(
                         key: GlobalObjectKey('bubble:${message.id}'),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 350),
                           decoration: BoxDecoration(
-                            color: _highlightId == message.id ? palette.accent.withValues(alpha: 0.16) : Colors.transparent,
+                            color: _highlightId == message.id || _selected.contains(message.id) ? palette.accent.withValues(alpha: 0.16) : Colors.transparent,
                             borderRadius: BorderRadius.circular(14),
                           ),
-                          child: bubble,
+                          child: selecting
+                              ? Row(
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 4, right: 2),
+                                      child: Icon(
+                                        key: ValueKey(_selected.contains(message.id) ? 'selected-${message.id}' : 'unselected-${message.id}'),
+                                        _selected.contains(message.id) ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                                        size: 24,
+                                        color: _selected.contains(message.id) ? palette.accent : palette.inkFaint,
+                                      ),
+                                    ),
+                                    Expanded(child: bubble),
+                                  ],
+                                )
+                              : bubble,
                         ),
                       );
+                      if (message.id != _firstUnreadId) return framed;
+                      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [const NewMessagesDivider(), framed]);
                     },
                   ),
+                ),
+                    ),
+                    Positioned(
+                      right: 12,
+                      bottom: 12,
+                      child: ScrollDownButton(visible: _showDown, count: _newBelow, onTap: _scrollToBottom),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          bottom: ChatComposer(
+          bottom: selecting ? null : ChatComposer(
             controller: _input,
             focusNode: _focus,
             sending: _c.sending,
-            recording: _recording,
             canSend: _c.canSend,
             canSendMedia: _c.canSendMedia,
             replyTo: _c.replyTo,
@@ -670,8 +853,12 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
             },
             onSend: _sendText,
             onAttach: _attach,
-            onToggleRecord: _toggleRecord,
+            voice: _voice,
+            onVoiceClip: _sendVoice,
+            mentionMembers: _isGroup ? [for (final id in _c.members.keys) ?_member(id)] : const [],
+            meId: _c.meId,
           ),
+        ),
         );
       },
     );

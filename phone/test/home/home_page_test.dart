@@ -178,7 +178,8 @@ void main() {
   group('карточка «Богослужение»', () {
     testWidgets('проповедник и ведущий, тема, стих и резюме', (tester) async {
       _size(tester);
-      await tester.pumpWidget(_app(_home(), _prayer(), _session()));
+      // Служение — «ещё не прошло» в любой день недели: в воскресенье после 10:00 прежнее время давало «Оценить…».
+      await tester.pumpWidget(_app(_home(plan: _plan(start: '23:59')), _prayer(), _session()));
       await tester.pumpAndSettle();
       expect(find.text('ПРОПОВЕДНИК'), findsOneWidget);
       expect(find.text('Михаил Самодуров'), findsOneWidget);

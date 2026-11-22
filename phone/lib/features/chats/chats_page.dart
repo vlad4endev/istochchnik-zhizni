@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'logic/mentions.dart';
 import 'widgets/message_search.dart';
 import 'data/chat_source.dart';
 import 'models/chat_models.dart';
@@ -166,6 +167,7 @@ class _ChatsPageState extends State<ChatsPage> with CacheWatcher<ChatsPage> {
         type: str(item['type']).isEmpty ? 'private' : str(item['type']),
         muted: asBool(item['my_muted']),
         jumpToMessageId: jumpTo,
+        unreadCount: asInt(item['unread_count']),
       ),
     );
     _load();
@@ -344,7 +346,7 @@ class _ChatRow extends StatelessWidget {
     final sender = str(last['sender_name']);
     final text = asBool(last['is_deleted'])
         ? 'Сообщение удалено'
-        : (str(last['content']).isEmpty ? str(last['payload_type']) : str(last['content']));
+        : mentionsForPreview(str(last['content']).isEmpty ? str(last['payload_type']) : str(last['content']));
     final fromMe = me > 0 && asInt(last['sender_id']) == me && !asBool(last['is_deleted']);
     final isGroupLike = str(item['type']) != 'private';
     final preview = fromMe
@@ -428,7 +430,7 @@ class _ChatRow extends StatelessWidget {
                                     key: const ValueKey('row-draft'),
                                     TextSpan(children: [
                                       const TextSpan(text: 'Черновик: ', style: TextStyle(color: ChurchColors.danger, fontWeight: FontWeight.w600)),
-                                      TextSpan(text: draft!.replaceAll('\n', ' ')),
+                                      TextSpan(text: stripMentionMarkers(draft!).replaceAll('\n', ' ')),
                                     ]),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,

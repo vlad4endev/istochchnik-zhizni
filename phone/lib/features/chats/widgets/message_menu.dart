@@ -6,7 +6,7 @@ import '../logic/chat_logic.dart';
 import '../models/chat_models.dart';
 import 'emoji_panel.dart';
 
-enum MessageCommand { reply, edit, delete, forward, copy, readers, pin, unpin }
+enum MessageCommand { reply, edit, delete, forward, copy, readers, pin, unpin, select }
 
 /// Что выбрал человек в меню: реакцию или действие.
 class MenuChoice {
@@ -127,6 +127,7 @@ class _MenuSheet extends StatelessWidget {
               if (actions.edit) row(Icons.edit_outlined, 'Редактировать', MessageCommand.edit),
               if (actions.pin) row(message.isPinned ? Icons.push_pin : Icons.push_pin_outlined, message.isPinned ? 'Открепить' : 'Закрепить', message.isPinned ? MessageCommand.unpin : MessageCommand.pin),
               if (actions.readers) row(Icons.done_all_rounded, 'Кто прочитал', MessageCommand.readers),
+              if (actions.select) row(Icons.check_circle_outline_rounded, 'Выбрать', MessageCommand.select),
               if (actions.delete) row(Icons.delete_outline_rounded, 'Удалить', MessageCommand.delete, danger: true),
             ],
           ),

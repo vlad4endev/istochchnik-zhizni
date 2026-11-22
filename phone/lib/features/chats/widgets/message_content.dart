@@ -7,7 +7,9 @@ import '../../../ui/video_page.dart';
 import '../../../ui/widgets.dart';
 import '../logic/attachment_logic.dart';
 import '../models/chat_models.dart';
+import '../logic/voice.dart';
 import 'linkified_text.dart';
+import 'voice_player.dart';
 
 /// Полноэкранный просмотр фото: щипком можно приблизить.
 class ImageViewerPage extends StatelessWidget {
@@ -42,7 +44,11 @@ class MessageContent extends StatelessWidget {
     required this.linkColor,
     required this.onOpenUrl,
     required this.onVote,
+    this.mentionNames = const {},
   });
+
+  /// Имена участников для упоминаний `@[id]`.
+  final Map<int, String> mentionNames;
 
   final ChatMessage message;
   final String origin;
@@ -64,7 +70,7 @@ class MessageContent extends StatelessWidget {
 
     Widget captionText() => Padding(
           padding: const EdgeInsets.only(top: 6),
-          child: LinkifiedText(text: caption, style: textStyle, linkColor: linkColor, onOpen: onOpenUrl),
+          child: LinkifiedText(text: caption, style: textStyle, linkColor: linkColor, onOpen: onOpenUrl, mentionNames: mentionNames),
         );
 
     switch (message.payloadType) {
@@ -136,6 +142,18 @@ class MessageContent extends StatelessWidget {
         );
       case 'audio' when url.isNotEmpty:
         final voice = str(payload['kind']) == 'voice' || str(payload['name']).isEmpty;
+        if (voice) {
+          final seconds = payload['durationSec'] ?? payload['duration_sec'];
+          return VoiceMessagePlayer(
+            id: message.id,
+            url: url,
+            waveform: waveformFromPayload(payload['waveform']),
+            durationHint: seconds is num && seconds > 0 ? Duration(seconds: seconds.round()) : null,
+            color: accent,
+            iconColor: mine ? ChurchColors.wine : Colors.white,
+            mutedColor: (mine ? Colors.white : textStyle.color ?? Colors.black).withValues(alpha: 0.6),
+          );
+        }
         return InkWell(
           onTap: () => pushPage(context, AudioPlayerPage(url: url, title: voice ? 'Голосовое' : str(payload['name']))),
           child: ConstrainedBox(
@@ -176,7 +194,7 @@ class MessageContent extends StatelessWidget {
       case 'poll':
         return _Poll(message: message, mine: mine, fg: fg, onVote: onVote);
       default:
-        return LinkifiedText(text: caption, style: textStyle, linkColor: linkColor, onOpen: onOpenUrl);
+        return LinkifiedText(text: caption, style: textStyle, linkColor: linkColor, onOpen: onOpenUrl, mentionNames: mentionNames);
     }
   }
 }

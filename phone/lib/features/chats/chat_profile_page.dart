@@ -18,6 +18,8 @@ import '../prayer/widgets/sheet_frame.dart';
 import 'data/chat_source.dart';
 import 'logic/chat_logic.dart';
 import 'models/chat_models.dart';
+import '../../ui/video_page.dart';
+import 'widgets/media_gallery.dart';
 import 'widgets/message_content.dart';
 import 'thread_page.dart';
 
@@ -62,6 +64,9 @@ class _ChatProfilePageState extends State<ChatProfilePage> {
   String? _error;
   bool _mediaFailed = false;
 
+  /// Прочитали не всю историю (упёрлись в предел страниц).
+  bool _mediaPartial = false;
+
   @override
   void initState() {
     super.initState();
@@ -98,15 +103,20 @@ class _ChatProfilePageState extends State<ChatProfilePage> {
     try {
       final all = <ChatMessage>[];
       String? before;
+      var partial = false;
       for (var page = 0; page < 8; page++) {
         final part = await _source.messages(widget.conversationId, before: before, limit: 50);
         if (part.isEmpty) break;
         all.insertAll(0, part);
         if (part.length < 50) break;
         before = part.first.id;
+        if (page == 7) partial = true;
       }
       if (!mounted) return;
-      setState(() => _media = collectSharedMedia(all, _url));
+      setState(() {
+        _media = collectSharedMedia(all, _url);
+        _mediaPartial = partial;
+      });
     } catch (_) {
       if (mounted) setState(() => _mediaFailed = true);
     }
@@ -195,7 +205,12 @@ class _ChatProfilePageState extends State<ChatProfilePage> {
                   ],
                   if (widget.isGroup) ..._group(palette) else ..._private(palette),
                   const SizedBox(height: Space.lg),
-                  _SharedMediaCard(media: _media, failed: _mediaFailed, onOpen: _open),
+                  _SharedMediaCard(
+                    media: _media,
+                    failed: _mediaFailed,
+                    onOpen: _open,
+                    onShowAll: (tab) => pushPage(context, MediaGalleryPage(media: _media!, onOpenUrl: _open, initial: tab, partial: _mediaPartial)),
+                  ),
                 ],
               ),
             ),
@@ -529,8 +544,9 @@ class _ChipsRow extends StatelessWidget {
 }
 
 class _SharedMediaCard extends StatelessWidget {
-  const _SharedMediaCard({required this.media, required this.failed, required this.onOpen});
+  const _SharedMediaCard({required this.media, required this.failed, required this.onOpen, required this.onShowAll});
   final SharedMedia? media;
+  final void Function(GalleryTab tab) onShowAll;
   final bool failed;
   final void Function(String url) onOpen;
 
@@ -549,8 +565,8 @@ class _SharedMediaCard extends StatelessWidget {
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (m.images.isNotEmpty) ...[
-            _Caption('Фото · ${m.images.length}'),
+          if (m.mediaCount > 0) ...[
+            _Caption('Фото и видео · ${m.mediaCount}'),
             const SizedBox(height: 8),
             GridView.count(
               crossAxisCount: 3,
@@ -559,15 +575,21 @@ class _SharedMediaCard extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: [
-                for (final image in m.images.take(9))
+                for (final item in _preview(m))
                   Semantics(
                     button: true,
-                    label: 'Открыть фото',
+                    label: item.video ? 'Открыть видео' : 'Открыть фото',
                     child: GestureDetector(
-                      onTap: () => pushPage(context, ImageViewerPage(url: image.url)),
+                      onTap: () => item.video ? pushPage(context, VideoPage(url: item.url)) : pushPage(context, ImageViewerPage(url: item.url)),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.network(image.url, fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(color: palette.outline)),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            item.video ? Container(color: palette.outline) : Image.network(item.url, fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(color: palette.outline)),
+                            if (item.video) const Center(child: Icon(Icons.play_circle_fill_rounded, size: 36, color: Colors.white70)),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -608,9 +630,27 @@ class _SharedMediaCard extends StatelessWidget {
           Semantics(header: true, child: Text('Общие медиа', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: palette.ink))),
           const SizedBox(height: 10),
           body,
+          if (m != null && !m.isEmpty) ...[
+            const SizedBox(height: 6),
+            TextButton.icon(
+              key: const ValueKey('media-show-all'),
+              onPressed: () => onShowAll(m.mediaCount > 0 ? GalleryTab.media : (m.files.isNotEmpty ? GalleryTab.files : GalleryTab.links)),
+              icon: const Icon(Icons.photo_library_outlined, size: 20),
+              label: const Text('Показать все: медиа, файлы, ссылки'),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  /// Первые девять фото и видео, новые сверху.
+  List<({String url, bool video})> _preview(SharedMedia m) {
+    final all = <({String id, String url, bool video})>[
+      for (final i in m.images) (id: i.messageId, url: i.url, video: false),
+      for (final v in m.videos) (id: v.messageId, url: v.url, video: true),
+    ]..sort((a, b) => (int.tryParse(b.id) ?? 0).compareTo(int.tryParse(a.id) ?? 0));
+    return [for (final i in all.take(9)) (url: i.url, video: i.video)];
   }
 }
 

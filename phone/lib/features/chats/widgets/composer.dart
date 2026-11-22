@@ -1,7 +1,12 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../../ui/kit/kit.dart';
+import '../../../ui/widgets.dart';
 import '../logic/chat_logic.dart';
+import 'package:flutter/services.dart';
+
+import '../logic/mentions.dart';
+import '../logic/voice.dart';
 import '../models/chat_models.dart';
 import '../thread_controller.dart' show UploadProgress;
 import 'emoji_panel.dart';
@@ -13,7 +18,6 @@ class ChatComposer extends StatefulWidget {
     required this.controller,
     required this.focusNode,
     required this.sending,
-    required this.recording,
     required this.canSend,
     required this.canSendMedia,
     required this.replyTo,
@@ -22,13 +26,15 @@ class ChatComposer extends StatefulWidget {
     required this.onCancelMode,
     required this.onSend,
     required this.onAttach,
-    required this.onToggleRecord,
+    required this.voice,
+    required this.onVoiceClip,
+    this.mentionMembers = const [],
+    this.meId = 0,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool sending;
-  final bool recording;
   final bool canSend;
   final bool canSendMedia;
   final ChatMessage? replyTo;
@@ -39,7 +45,15 @@ class ChatComposer extends StatefulWidget {
   final VoidCallback onCancelMode;
   final VoidCallback onSend;
   final VoidCallback onAttach;
-  final VoidCallback onToggleRecord;
+  /// Запись голосового: удержание кнопки, свайп влево — отмена, вверх — закрепить.
+  final VoiceRecorderController voice;
+
+  /// Запись готова к отправке.
+  final ValueChanged<VoiceClip> onVoiceClip;
+
+  /// Участники группы для подсказок при вводе «@» (в личных чатах пусто).
+  final List<ChatMember> mentionMembers;
+  final int meId;
 
   @override
   State<ChatComposer> createState() => _ChatComposerState();
@@ -52,12 +66,14 @@ class _ChatComposerState extends State<ChatComposer> {
   void initState() {
     super.initState();
     widget.controller.addListener(_rebuild);
+    widget.voice.addListener(_rebuild);
     widget.focusNode.addListener(_onFocus);
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_rebuild);
+    widget.voice.removeListener(_rebuild);
     widget.focusNode.removeListener(_onFocus);
     super.dispose();
   }
@@ -77,6 +93,32 @@ class _ChatComposerState extends State<ChatComposer> {
       widget.focusNode.unfocus();
       setState(() => _emojiOpen = true);
     }
+  }
+
+  Future<void> _sendLocked() async {
+    final clip = await widget.voice.finish();
+    if (clip != null) widget.onVoiceClip(clip);
+  }
+
+  /// Список «кого упомянуть», пока набирается «@имя» в группе.
+  List<Widget> _mentionSuggestions() {
+    if (widget.mentionMembers.isEmpty) return const [];
+    final value = widget.controller.value;
+    final query = activeMentionQuery(value.text, value.selection.isValid ? value.selection.baseOffset : value.text.length);
+    if (query == null) return const [];
+    final list = mentionCandidates(widget.mentionMembers, query.query, me: widget.meId);
+    if (list.isEmpty) return const [];
+    return [
+      MentionSuggestions(
+        members: list,
+        onPick: (member) {
+          final cursor = value.selection.isValid ? value.selection.baseOffset : value.text.length;
+          final next = insertMention(value.text, query, cursor, member);
+          widget.controller.value = TextEditingValue(text: next.text, selection: TextSelection.collapsed(offset: next.cursor));
+          widget.focusNode.requestFocus();
+        },
+      ),
+    ];
   }
 
   @override
@@ -100,6 +142,7 @@ class _ChatComposerState extends State<ChatComposer> {
         ),
       );
     }
+    final voice = widget.voice;
     final hasText = widget.controller.text.trim().isNotEmpty;
     final editing = widget.editing != null;
     final modeMessage = widget.editing ?? widget.replyTo;
@@ -117,6 +160,7 @@ class _ChatComposerState extends State<ChatComposer> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              ..._mentionSuggestions(),
               if (widget.uploading != null) _UploadBanner(progress: widget.uploading!),
               if (modeMessage != null)
                 _ModeBanner(message: modeMessage, editing: editing, onCancel: widget.onCancelMode),
@@ -125,7 +169,7 @@ class _ChatComposerState extends State<ChatComposer> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    if (widget.canSendMedia && !editing)
+                    if (widget.canSendMedia && !editing && !voice.active)
                       IconButton(
                         tooltip: 'Прикрепить',
                         constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
@@ -135,14 +179,16 @@ class _ChatComposerState extends State<ChatComposer> {
                     else
                       const SizedBox(width: 8),
                     Expanded(
-                      child: TextField(
+                      child: voice.active
+                          ? RecordingBar(voice: voice, onCancel: voice.cancel)
+                          : TextField(
                         controller: widget.controller,
                         focusNode: widget.focusNode,
                         minLines: 1,
                         maxLines: 5,
                         textCapitalization: TextCapitalization.sentences,
                         decoration: InputDecoration(
-                          hintText: widget.recording ? 'Идёт запись голосового…' : (editing ? 'Изменить сообщение' : 'Сообщение'),
+                          hintText: editing ? 'Изменить сообщение' : 'Сообщение',
                           contentPadding: const EdgeInsets.only(left: 16, top: 12, bottom: 12),
                           // Смайлик внутри строки ввода, справа — как в Telegram.
                           suffixIcon: IconButton(
@@ -159,14 +205,18 @@ class _ChatComposerState extends State<ChatComposer> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    _RoundAction(
-                      icon: hasText ? (editing ? Icons.check_rounded : Icons.send_rounded) : (widget.recording ? Icons.stop_rounded : Icons.mic_none_rounded),
-                      tooltip: hasText ? (editing ? 'Сохранить' : 'Отправить') : (widget.recording ? 'Остановить и отправить' : 'Записать голосовое'),
-                      busy: widget.sending,
-                      danger: widget.recording,
-                      // Голосовое — это вложение: без права на медиа и при правке микрофон не нужен.
-                      onPressed: widget.sending ? null : (hasText ? widget.onSend : ((widget.canSendMedia && !editing) ? widget.onToggleRecord : null)),
-                    ),
+                    if (hasText || editing)
+                      _RoundAction(
+                        icon: editing ? Icons.check_rounded : Icons.send_rounded,
+                        tooltip: editing ? 'Сохранить' : 'Отправить',
+                        busy: widget.sending,
+                        onPressed: widget.sending ? null : widget.onSend,
+                      )
+                    else if (voice.state == VoiceState.locked)
+                      _RoundAction(icon: Icons.send_rounded, tooltip: 'Отправить запись', busy: widget.sending, onPressed: widget.sending ? null : _sendLocked)
+                    else
+                      // Голосовое — это вложение: без права на медиа микрофон не нужен.
+                      _MicButton(enabled: widget.canSendMedia && !widget.sending, voice: voice, onClip: widget.onVoiceClip),
                   ],
                 ),
               ),
@@ -278,13 +328,12 @@ class _ModeBanner extends StatelessWidget {
 }
 
 class _RoundAction extends StatelessWidget {
-  const _RoundAction({required this.icon, required this.tooltip, required this.onPressed, this.busy = false, this.danger = false});
+  const _RoundAction({required this.icon, required this.tooltip, required this.onPressed, this.busy = false});
 
   final IconData icon;
   final String tooltip;
   final VoidCallback? onPressed;
   final bool busy;
-  final bool danger;
 
   @override
   Widget build(BuildContext context) {
@@ -298,8 +347,7 @@ class _RoundAction extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: danger ? null : wineGradient,
-            color: danger ? ChurchColors.danger : null,
+            gradient: wineGradient,
           ),
           child: Material(
             type: MaterialType.transparency,
@@ -315,6 +363,171 @@ class _RoundAction extends StatelessWidget {
                     : Icon(icon, color: onPressed == null ? Colors.white54 : Colors.white, size: 22),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Подсказки участников над полем ввода: аватар и имя, тап вставляет «@Имя».
+class MentionSuggestions extends StatelessWidget {
+  const MentionSuggestions({super.key, required this.members, required this.onPick});
+
+  final List<ChatMember> members;
+  final ValueChanged<ChatMember> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Container(
+      key: const ValueKey('mention-suggestions'),
+      constraints: const BoxConstraints(maxHeight: 220),
+      decoration: BoxDecoration(color: palette.card, border: Border(top: BorderSide(color: palette.hairline))),
+      child: ListView(
+        shrinkWrap: true,
+        padding: EdgeInsets.zero,
+        children: [
+          for (final m in members)
+            InkWell(
+              key: ValueKey('mention-${m.id}'),
+              onTap: () => onPick(m),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                child: Row(
+                  children: [
+                    ChurchAvatar(name: m.name, imageUrl: m.avatarUrl, size: 32),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(m.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: palette.ink))),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Строка записи вместо поля ввода: красная точка, время и подсказка жестов (или живая волна, если запись закреплена).
+class RecordingBar extends StatelessWidget {
+  const RecordingBar({super.key, required this.voice, required this.onCancel});
+
+  final VoiceRecorderController voice;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final locked = voice.state == VoiceState.locked;
+    final cancelling = voice.willCancel;
+    return Container(
+      key: const ValueKey('recording-bar'),
+      constraints: const BoxConstraints(minHeight: 48),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: cancelling ? ChurchColors.danger : palette.outline),
+        color: cancelling ? ChurchColors.danger.withValues(alpha: 0.08) : null,
+      ),
+      child: Row(
+        children: [
+          Container(width: 10, height: 10, decoration: const BoxDecoration(color: ChurchColors.danger, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Text(clockText(voice.elapsed), key: const ValueKey('recording-clock'), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: palette.ink, fontFeatures: const [FontFeature.tabularFigures()])),
+          const SizedBox(width: 12),
+          Expanded(
+            child: locked
+                ? SizedBox(height: 24, child: CustomPaint(painter: _LiveWavePainter(voice.liveWave, palette.accent)))
+                : Opacity(
+                    opacity: (1 - (-voice.dx / 140)).clamp(0.25, 1.0),
+                    child: Text(cancelling ? 'Отпустите — запись удалится' : '‹ Влево — отмена   ↑ закрепить', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, color: cancelling ? ChurchColors.danger : palette.inkMuted)),
+                  ),
+          ),
+          if (locked)
+            TextButton(key: const ValueKey('recording-cancel'), onPressed: onCancel, child: const Text('Удалить', style: TextStyle(color: ChurchColors.danger, fontWeight: FontWeight.w700))),
+        ],
+      ),
+    );
+  }
+}
+
+class _LiveWavePainter extends CustomPainter {
+  _LiveWavePainter(this.bars, this.color);
+  final List<int> bars;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (bars.isEmpty) return;
+    final paint = Paint()..color = color;
+    final w = size.width / bars.length;
+    for (var i = 0; i < bars.length; i++) {
+      final h = (bars[i] / 100 * size.height).clamp(3.0, size.height);
+      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(i * w, (size.height - h) / 2, (w - 2).clamp(1.5, 5.0), h), const Radius.circular(2)), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LiveWavePainter old) => true;
+}
+
+/// Микрофон: удерживайте, чтобы записать; влево — отмена, вверх — закрепить запись (без удержания).
+class _MicButton extends StatefulWidget {
+  const _MicButton({required this.enabled, required this.voice, required this.onClip});
+  final bool enabled;
+  final VoiceRecorderController voice;
+  final ValueChanged<VoiceClip> onClip;
+
+  @override
+  State<_MicButton> createState() => _MicButtonState();
+}
+
+class _MicButtonState extends State<_MicButton> {
+  Offset _origin = Offset.zero;
+
+  Future<void> _release() async {
+    final clip = await widget.voice.release();
+    if (clip != null) widget.onClip(clip);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recording = widget.voice.state == VoiceState.recording;
+    final cancelling = widget.voice.willCancel;
+    final scale = recording ? 1.35 : 1.0;
+    return Semantics(
+      button: true,
+      enabled: widget.enabled,
+      label: 'Записать голосовое: удерживайте кнопку',
+      onLongPress: widget.enabled ? () => widget.voice.beginLocked() : null,
+      excludeSemantics: true,
+      child: GestureDetector(
+        key: const ValueKey('mic'),
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.enabled ? () => showMessage(context, 'Удерживайте кнопку, чтобы записать голосовое') : null,
+        onLongPressStart: widget.enabled
+            ? (d) {
+                _origin = d.globalPosition;
+                HapticFeedback.mediumImpact();
+                widget.voice.begin();
+              }
+            : null,
+        onLongPressMoveUpdate: widget.enabled ? (d) => widget.voice.drag(d.globalPosition.dx - _origin.dx, d.globalPosition.dy - _origin.dy) : null,
+        onLongPressEnd: widget.enabled ? (_) => _release() : null,
+        onLongPressCancel: widget.enabled ? () => widget.voice.cancel() : null,
+        child: AnimatedScale(
+          scale: scale,
+          duration: const Duration(milliseconds: 120),
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: recording ? null : wineGradient,
+              color: recording ? (cancelling ? context.palette.inkMuted : ChurchColors.danger) : null,
+            ),
+            child: Icon(cancelling ? Icons.delete_outline_rounded : Icons.mic_rounded, color: Colors.white, size: 24),
           ),
         ),
       ),

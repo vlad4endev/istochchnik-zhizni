@@ -322,6 +322,7 @@ class ThreadController extends ChangeNotifier {
             'mimeType': mime ?? '',
             'size': uploaded['size'] is num ? (uploaded['size'] as num).toInt() : 0,
             if (voice) 'kind': 'voice',
+            ...item.extra,
           });
           replyTo = null;
           _append(sent);

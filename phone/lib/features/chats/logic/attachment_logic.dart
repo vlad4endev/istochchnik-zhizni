@@ -2,12 +2,15 @@ import 'package:path/path.dart' as p;
 
 /// Файл, выбранный человеком для отправки.
 class PickedAttachment {
-  const PickedAttachment({required this.path, required this.name, this.mimeType});
+  const PickedAttachment({required this.path, required this.name, this.mimeType, this.extra = const {}});
   final String path;
   final String name;
 
   /// Если плагин выбора знает тип файла; иначе определяем по расширению.
   final String? mimeType;
+
+  /// Дополнительные поля сообщения (у голосового — длительность и волна).
+  final Map<String, Object?> extra;
 }
 
 const _imageExt = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif', '.bmp'};

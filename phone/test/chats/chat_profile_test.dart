@@ -142,11 +142,33 @@ void main() {
       await tester.pumpWidget(_app(chat, group: false));
       await tester.pumpAndSettle();
       expect(find.text('Общие медиа'), findsOneWidget);
-      expect(find.text('ФОТО · 1'), findsOneWidget);
+      expect(find.text('ФОТО И ВИДЕО · 1'), findsOneWidget);
       expect(find.text('ФАЙЛЫ · 1'), findsOneWidget);
       expect(find.text('Отчёт.pdf'), findsOneWidget);
       expect(find.text('ССЫЛКИ · 1'), findsOneWidget);
       expect(find.text('https://example.com/page'), findsOneWidget);
+    });
+
+    testWidgets('«Показать все» открывает галерею: фото и видео считаются вместе, есть файлы и ссылки', (tester) async {
+      final chat = _private()
+        ..all = [
+          msg('1', type: 'image', text: '', payload: {'url': '/u/1.jpg', 'mimeType': 'image/jpeg'}),
+          msg('2', type: 'image', text: '', payload: {'url': '/u/2.mp4', 'mimeType': 'video/mp4'}),
+          msg('3', type: 'file', text: '', payload: {'url': '/u/a.pdf', 'name': 'Отчёт.pdf', 'size': 2048}),
+          msg('4', text: 'Смотри https://example.com/page'),
+        ];
+      _size(tester, height: 1400);
+      await tester.pumpWidget(_app(chat, group: false));
+      await tester.pumpAndSettle();
+      expect(find.text('ФОТО И ВИДЕО · 2'), findsOneWidget);
+      expect(find.byIcon(Icons.play_circle_fill_rounded), findsOneWidget, reason: 'видео — с значком воспроизведения, а не битой картинкой');
+      await tester.ensureVisible(find.byKey(const ValueKey('media-show-all')));
+      await tester.tap(find.byKey(const ValueKey('media-show-all')));
+      await tester.pumpAndSettle();
+      expect(find.text('Медиа, файлы, ссылки'), findsOneWidget);
+      expect(find.text('Фото и видео · 2'), findsOneWidget);
+      expect(find.text('Файлы · 1'), findsOneWidget);
+      expect(find.text('Ссылки · 1'), findsOneWidget);
     });
 
     testWidgets('нет медиа — пояснение', (tester) async {

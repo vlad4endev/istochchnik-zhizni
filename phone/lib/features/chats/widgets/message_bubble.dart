@@ -27,6 +27,7 @@ class MessageBubble extends StatelessWidget {
     required this.onReact,
     required this.onOpenSender,
     this.onOpenReply,
+    this.mentionNames = const {},
     this.ownHost,
   });
 
@@ -47,6 +48,9 @@ class MessageBubble extends StatelessWidget {
 
   /// Тап по цитате «в ответ на…» — перейти к исходному сообщению.
   final ValueChanged<String>? onOpenReply;
+
+  /// Имена участников для упоминаний `@[id]` в тексте.
+  final Map<int, String> mentionNames;
 
   static const _avatarSize = 32.0;
 
@@ -117,6 +121,7 @@ class MessageBubble extends StatelessWidget {
               linkColor: linkColor,
               onOpenUrl: onOpenUrl,
               onVote: onVote,
+              mentionNames: mentionNames,
             ),
             for (final url in urls) LinkPreviewCard(url: url, load: loadPreview, mine: mine, onOpen: onOpenUrl),
             if (message.reactions.isNotEmpty && !deleted)
