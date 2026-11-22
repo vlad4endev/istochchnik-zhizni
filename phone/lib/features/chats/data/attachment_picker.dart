@@ -39,11 +39,11 @@ class DeviceAttachmentPicker implements AttachmentPicker {
       final denied = e.code.toLowerCase().contains('denied') || '${e.message}'.toLowerCase().contains('permission');
       throw PickerException(denied
           ? 'Нет доступа к $what. Разрешите его в настройках телефона.'
-          : 'Не удалось открыть выбор ($what). Попробуйте ещё раз.');
+          : 'Не удалось открыть выбор ($what, код: ${e.code}). Попробуйте ещё раз.');
     } on PickerException {
       rethrow;
-    } catch (_) {
-      throw PickerException('Не удалось открыть выбор ($what). Попробуйте ещё раз.');
+    } catch (e) {
+      throw PickerException('Не удалось открыть выбор ($what, код: ${e.runtimeType}). Попробуйте ещё раз.');
     }
   }
 

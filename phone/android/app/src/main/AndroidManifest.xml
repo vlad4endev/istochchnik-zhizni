@@ -13,13 +13,14 @@
         android:label="${appLabel}"
         android:name=".ChurchApplication"
         android:icon="@mipmap/ic_launcher">
-        <!-- singleTask, а не singleInstance: с singleInstance Android отменяет результат у системных
-             окон выбора (фото, видео, файл) — вложения в чате «молча» не работали. singleTask так же
-             возвращает приложение на передний план по уведомлению и звонку, но выбор файла работает. -->
+        <!-- singleTop (обычный режим Flutter). singleInstance ломал системные окна выбора фото и файлов; singleTask
+             заподозрен в том же на Xiaomi/HyperOS (окно не открывалось).
+             Возврат приложения по уведомлению и звонку работает и так: их запускает обычный
+             launcher-интент, а полноэкранный звонок показывается поверх экрана блокировки. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTask"
+            android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
