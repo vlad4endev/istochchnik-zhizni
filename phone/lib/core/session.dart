@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'drafts.dart';
 import 'http_cache.dart';
 import 'json.dart';
 import 'realtime.dart';
@@ -384,6 +385,7 @@ class SessionController extends ChangeNotifier {
     }
     await cache.clear();
     await _forgetLegacyCache();
+    await DraftStore.instance.forget();
     _token = null;
     user = null;
     sections = {};

@@ -26,6 +26,7 @@ class MessageBubble extends StatelessWidget {
     required this.onVote,
     required this.onReact,
     required this.onOpenSender,
+    this.onOpenReply,
     this.ownHost,
   });
 
@@ -43,6 +44,9 @@ class MessageBubble extends StatelessWidget {
   final ValueChanged<int> onVote;
   final ValueChanged<String> onReact;
   final ValueChanged<int> onOpenSender;
+
+  /// Тап по цитате «в ответ на…» — перейти к исходному сообщению.
+  final ValueChanged<String>? onOpenReply;
 
   static const _avatarSize = 32.0;
 
@@ -103,7 +107,8 @@ class MessageBubble extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 3),
                 child: Text('Пересланное сообщение', style: TextStyle(fontSize: 12.5, fontStyle: FontStyle.italic, fontWeight: FontWeight.w600, color: mine ? Colors.white70 : palette.accent)),
               ),
-            if (message.replyTo != null && !deleted) _ReplyQuote(reply: message.replyTo!, mine: mine),
+            if (message.replyTo != null && !deleted)
+              _ReplyQuote(reply: message.replyTo!, mine: mine, onTap: onOpenReply == null || message.replyTo!.isDeleted ? null : () => onOpenReply!(message.replyTo!.id)),
             MessageContent(
               message: message,
               origin: origin,
@@ -211,15 +216,16 @@ class _DateDivider extends StatelessWidget {
 }
 
 class _ReplyQuote extends StatelessWidget {
-  const _ReplyQuote({required this.reply, required this.mine});
+  const _ReplyQuote({required this.reply, required this.mine, this.onTap});
   final ReplyPreview reply;
   final bool mine;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
     final accent = mine ? ChurchColors.amber : palette.accent;
-    return Container(
+    final quote = Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
       decoration: BoxDecoration(
@@ -240,6 +246,8 @@ class _ReplyQuote extends StatelessWidget {
         ],
       ),
     );
+    if (onTap == null) return quote;
+    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: quote);
   }
 }
 

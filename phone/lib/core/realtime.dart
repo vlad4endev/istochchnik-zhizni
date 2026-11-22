@@ -5,6 +5,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'call_alerts.dart';
 import 'presence.dart';
+import 'typing.dart';
 import 'session.dart';
 
 class ChurchRealtime {
@@ -13,6 +14,9 @@ class ChurchRealtime {
 
   /// Кто в сети (для точки в списке чатов и статуса в шапке чата).
   final PresenceStore presence = PresenceStore();
+
+  /// Кто печатает (для шапки чата и списка чатов).
+  final TypingStore typing = TypingStore();
 
   WebSocketChannel? _channel;
   Timer? _ping;
@@ -64,8 +68,18 @@ class ChurchRealtime {
     }
   }
 
+  /// Сказать серверу, что я печатаю (или перестал) — собеседники увидят «печатает…».
+  void sendTyping(String conversationId, {required bool typing}) {
+    final channel = _channel;
+    if (channel == null || _stopped) return;
+    try {
+      channel.sink.add(jsonEncode({'type': typing ? 'typing:start' : 'typing:stop', 'conversationId': conversationId}));
+    } catch (_) {}
+  }
+
   void stop() {
     presence.reset();
+    typing.reset();
     _stopped = true;
     _ping?.cancel();
     _ping = null;
@@ -78,6 +92,7 @@ class ChurchRealtime {
 
   void _retry() {
     presence.reset();
+    typing.reset();
     if (_stopped) return;
     Future<void>.delayed(const Duration(seconds: 4), () {
       if (!_stopped) start();
@@ -93,8 +108,13 @@ class ChurchRealtime {
     } catch (_) {
       return;
     }
-    if (presence.handle(message)) return;
+    if (presence.handle(message) || typing.handle(message)) return;
     final type = '${message['type'] ?? ''}';
+    if (type == 'msg:new') {
+      final msg = message['message'];
+      final sender = msg is Map ? msg['sender_id'] : null;
+      typing.messageArrived('${message['conversationId'] ?? ''}', sender is num ? sender.toInt() : int.tryParse('$sender'));
+    }
     if (type.startsWith('call:')) _callEvents.add(message);
     if (type.startsWith('msg:') || type.startsWith('conv:') || type.startsWith('read:') || type == 'messages_read') {
       _chatEvents.add(message);

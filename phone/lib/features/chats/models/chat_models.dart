@@ -338,3 +338,16 @@ class Readers {
     );
   }
 }
+
+/// Найденное сообщение (поиск по чату или по всем чатам).
+class SearchHit {
+  const SearchHit({required this.message, this.conversationTitle = ''});
+  final ChatMessage message;
+  final String conversationTitle;
+
+  static SearchHit? tryParse(Object? raw) {
+    final message = ChatMessage.tryParse(raw);
+    if (message == null) return null;
+    return SearchHit(message: message, conversationTitle: str(asMap(raw)['conversationTitle']).trim());
+  }
+}

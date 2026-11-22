@@ -22,6 +22,15 @@ abstract class ChatSource {
   Future<void> pin(String conversationId, String messageId, {required bool pinned});
   Future<List<Map<String, dynamic>>> conversations();
 
+  /// Закреплённые сообщения чата (новые первыми).
+  Future<List<ChatMessage>> pinned(String conversationId);
+
+  /// Поиск по сообщениям одного чата.
+  Future<List<SearchHit>> search(String conversationId, String query);
+
+  /// Поиск по сообщениям всех чатов.
+  Future<List<SearchHit>> searchAll(String query);
+
   /// Отметить чат прочитанным до сообщения [messageId] включительно (счётчик на сервере обнуляется, собеседник видит «прочитано»).
   Future<void> markRead(String conversationId, String messageId);
   /// Загрузить файл на сервер; [onProgress] — доля от 0 до 1. Ошибку отдаёт как [ChatException] с понятным текстом.
@@ -130,6 +139,18 @@ class ChatApi implements ChatSource {
       await _send('DELETE', '$base/${Uri.encodeComponent(messageId)}');
     }
   }
+
+  @override
+  Future<List<ChatMessage>> pinned(String conversationId) async =>
+      [for (final raw in asList(await _get('$_base/conversations/${Uri.encodeComponent(conversationId)}/pinned-messages'))) ?ChatMessage.tryParse(raw)];
+
+  @override
+  Future<List<SearchHit>> search(String conversationId, String query) async =>
+      [for (final raw in asList(await _get('$_base/conversations/${Uri.encodeComponent(conversationId)}/search', query: {'q': query, 'limit': 50}))) ?SearchHit.tryParse(raw)];
+
+  @override
+  Future<List<SearchHit>> searchAll(String query) async =>
+      [for (final raw in asList(await _get('$_base/search', query: {'q': query, 'limit': 30}))) ?SearchHit.tryParse(raw)];
 
   @override
   Future<List<Map<String, dynamic>>> conversations() async =>

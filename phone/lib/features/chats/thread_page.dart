@@ -11,7 +11,10 @@ import '../../core/church_api.dart';
 import '../../core/dates.dart';
 import '../../core/json.dart';
 import '../../core/push.dart';
+import '../../core/drafts.dart';
 import '../../core/presence.dart';
+import '../../core/realtime.dart';
+import '../../core/typing.dart';
 import '../../core/session.dart';
 import '../../core/unread_badge.dart';
 import '../../ui/kit/kit.dart';
@@ -21,6 +24,8 @@ import '../calls/join_meeting_page.dart';
 import '../prayer/widgets/sheet_frame.dart' show actionError;
 import 'chat_profile_page.dart';
 import 'data/attachment_picker.dart';
+import 'widgets/message_search.dart';
+import 'widgets/pinned_bar.dart';
 import 'data/chat_source.dart';
 import 'logic/attachment_logic.dart';
 import 'logic/chat_logic.dart';
@@ -45,6 +50,7 @@ class ThreadPage extends StatefulWidget {
     this.events,
     this.picker,
     this.instantClose = const Duration(milliseconds: 1500),
+    this.jumpToMessageId,
   });
 
   final String conversationId;
@@ -64,6 +70,9 @@ class ThreadPage extends StatefulWidget {
   final Stream<Map<String, dynamic>>? events;
   final AttachmentPicker? picker;
 
+  /// Открыть чат сразу на этом сообщении (из поиска по всем чатам).
+  final String? jumpToMessageId;
+
   /// Если окно выбора закрылось быстрее и ничего не вернуло — считаем, что оно не сработало.
   final Duration instantClose;
 
@@ -81,6 +90,13 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
   AudioRecorder get _recorder => _recorderInstance ??= AudioRecorder();
   late final ChatSource _source;
   late final PresenceStore _presence;
+  late final TypingStore _typing;
+  late final ChurchRealtime _realtime;
+  int _pinnedIndex = 0;
+  String? _highlightId;
+  Timer? _highlightTimer;
+  DateTime _typingSentAt = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _typingSent = false;
   late final AttachmentPicker _picker = widget.picker ?? DeviceAttachmentPicker();
   late final ThreadController _c;
   bool _recording = false;
@@ -92,6 +108,8 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
     _source = widget.source ?? ChatApi(session);
     // Собеседник вошёл или вышел — статус в шапке меняется сразу.
     _presence = session.realtime.presence..addListener(_onPresence);
+    _realtime = session.realtime;
+    _typing = session.realtime.typing..addListener(_onPresence);
     _c = ThreadController(
       _source,
       conversationId: widget.conversationId,
@@ -99,8 +117,14 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
       knownPeerId: widget.otherMemberId,
       onRead: () => UnreadBadge.instance.refresh(session),
     )
-      ..listen(widget.events ?? session.realtime.chatEvents)
-      ..load();
+      ..listen(widget.events ?? session.realtime.chatEvents);
+    final loaded = _c.load();
+    final target = widget.jumpToMessageId;
+    if (target != null) loaded.then((_) => _jumpAfterFrame(target));
+    // Недописанное сообщение возвращается, а набор текста виден собеседникам («печатает…»).
+    final draft = DraftStore.instance.textFor(widget.conversationId);
+    if (draft.isNotEmpty) _input.text = draft;
+    _input.addListener(_onInput);
     _scroll.addListener(_onScroll);
     WidgetsBinding.instance.addObserver(this);
     PushService.activeConversationId = widget.conversationId;
@@ -120,9 +144,95 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
+  /// Текст поменялся: сохраняем черновик и сообщаем, что печатаю (не чаще раза в 3 секунды).
+  void _onInput() {
+    final text = _input.text;
+    if (_c.editing == null) DraftStore.instance.set(widget.conversationId, text);
+    if (text.trim().isEmpty) {
+      _stopTyping();
+      return;
+    }
+    final now = DateTime.now();
+    if (!_typingSent || now.difference(_typingSentAt) > const Duration(seconds: 3)) {
+      _typingSent = true;
+      _typingSentAt = now;
+      _realtime.sendTyping(widget.conversationId, typing: true);
+    }
+  }
+
+  // ───────────── переход к сообщению ─────────────
+
+  static const _averageBubbleHeight = 96.0;
+
+  Future<void> _jumpAfterFrame(String id) async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted) await _jumpTo(id);
+  }
+
+  /// Прокручивает чат к сообщению и ненадолго подсвечивает его. Старые сообщения догружаются сами.
+  Future<void> _jumpTo(String id) async {
+    if (!await _c.ensureLoaded(id)) {
+      if (mounted) showMessage(context, 'Сообщение не найдено — возможно, оно удалено');
+      return;
+    }
+    if (!mounted) return;
+    final views = groupMessages(_c.messages, DateTime.now());
+    final position = views.indexWhere((v) => v.message.id == id);
+    if (position < 0) return;
+    final reversedIndex = views.length - 1 - position;
+    final key = GlobalObjectKey('bubble:$id');
+    // Список ленивый: пока сообщение не построено, прыгаем к примерному месту и подправляем.
+    for (var attempt = 0; attempt < 14 && mounted; attempt++) {
+      final built = key.currentContext;
+      if (built != null && built.mounted) {
+        await Scrollable.ensureVisible(built, alignment: 0.4, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+        _flash(id);
+        return;
+      }
+      if (!_scroll.hasClients) return;
+      final guess = reversedIndex * _averageBubbleHeight;
+      final shift = attempt == 0 ? 0.0 : (attempt.isOdd ? 1 : -1) * 260.0 * ((attempt + 1) ~/ 2);
+      _scroll.jumpTo((guess + shift).clamp(0.0, _scroll.position.maxScrollExtent));
+      await WidgetsBinding.instance.endOfFrame;
+    }
+  }
+
+  void _flash(String id) {
+    _highlightTimer?.cancel();
+    setState(() => _highlightId = id);
+    _highlightTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _highlightId = null);
+    });
+  }
+
+  Future<void> _openSearch() async {
+    final id = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => ChatSearchPage(source: _source, conversationId: widget.conversationId)));
+    if (id != null && mounted) await _jumpTo(id);
+  }
+
+  /// Тап по панели закреплённого: к сообщению, а следующий тап — к следующему закреплённому.
+  Future<void> _openPinned() async {
+    final list = _c.pinned;
+    if (list.isEmpty) return;
+    final i = _pinnedIndex.clamp(0, list.length - 1);
+    setState(() => _pinnedIndex = (i + 1) % list.length);
+    await _jumpTo(list[i].id);
+  }
+
+  void _stopTyping() {
+    if (!_typingSent) return;
+    _typingSent = false;
+    _realtime.sendTyping(widget.conversationId, typing: false);
+  }
+
   @override
   void dispose() {
     _presence.removeListener(_onPresence);
+    _typing.removeListener(_onPresence);
+    _input.removeListener(_onInput);
+    _stopTyping();
+    _highlightTimer?.cancel();
+    unawaited(DraftStore.instance.save());
     WidgetsBinding.instance.removeObserver(this);
     if (PushService.activeConversationId == widget.conversationId) PushService.activeConversationId = null;
     _scroll.removeListener(_onScroll);
@@ -451,17 +561,21 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final ownHost = Uri.tryParse(_origin)?.host;
+    final typing = _typing.label(widget.conversationId, group: _isGroup);
     return ListenableBuilder(
       listenable: _c,
       builder: (context, _) {
         final views = groupMessages(_c.messages, DateTime.now());
         return ChurchPage(
           title: widget.title,
-          subtitle: _subtitle(),
+          // Пока собеседник печатает — это вместо статуса, акцентным цветом.
+          subtitle: typing == null ? _subtitle() : null,
+          subtitleAccent: typing,
           leading: ChurchAvatar(name: widget.title, imageUrl: widget.avatarUrl, size: 40),
           onTitleTap: _openProfile,
           sheetColor: palette.isDark ? palette.sheet : const Color(0xFFF3ECE3),
           actions: [
+            HeaderButton(icon: Icons.search_rounded, tooltip: 'Поиск по чату', onPressed: _openSearch),
             if (!_isGroup)
               HeaderButton(
                 icon: Icons.videocam_outlined,
@@ -474,7 +588,16 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
               onPressed: () => _startCall(),
             ),
           ],
-          body: AsyncBody(
+          body: Column(
+            children: [
+              PinnedBar(
+                pinned: _c.pinned,
+                index: _pinnedIndex,
+                onTap: _openPinned,
+                onClose: _c.canPin && _c.pinned.isNotEmpty ? () => _c.pin(_c.pinned[_pinnedIndex.clamp(0, _c.pinned.length - 1)], false) : null,
+              ),
+              Expanded(
+                child: AsyncBody(
             loading: _c.loading,
             error: _c.error,
             onRetry: _c.load,
@@ -491,7 +614,7 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
                       }
                       final view = views[views.length - 1 - index];
                       final message = view.message;
-                      return MessageBubble(
+                      final bubble = MessageBubble(
                         key: ValueKey(message.id),
                         view: view,
                         me: _c.meId,
@@ -512,9 +635,24 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
                         onVote: (option) => _vote(message, option),
                         onReact: (emoji) => _react(message, emoji),
                         onOpenSender: _openSender,
+                        onOpenReply: _jumpTo,
+                      );
+                      return KeyedSubtree(
+                        key: GlobalObjectKey('bubble:${message.id}'),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 350),
+                          decoration: BoxDecoration(
+                            color: _highlightId == message.id ? palette.accent.withValues(alpha: 0.16) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: bubble,
+                        ),
                       );
                     },
                   ),
+                ),
+              ),
+            ],
           ),
           bottom: ChatComposer(
             controller: _input,

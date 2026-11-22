@@ -53,6 +53,30 @@ class FakeChat implements ChatSource {
   bool failMeta = false;
   int nextId = 100;
 
+  List<ChatMessage> pinnedNow = [];
+  List<SearchHit> searchNow = [];
+  bool failSearch = false;
+
+  @override
+  Future<List<ChatMessage>> pinned(String conversationId) async {
+    calls.add('pinned');
+    return pinnedNow;
+  }
+
+  @override
+  Future<List<SearchHit>> search(String conversationId, String query) async {
+    calls.add('search:$query');
+    if (failSearch) throw StateError('net');
+    return searchNow;
+  }
+
+  @override
+  Future<List<SearchHit>> searchAll(String query) async {
+    calls.add('searchAll:$query');
+    if (failSearch) throw StateError('net');
+    return searchNow;
+  }
+
   final readMarks = <String>[];
   bool failRead = false;
   bool failProfile = false;

@@ -52,6 +52,9 @@ class ThreadController extends ChangeNotifier {
   UploadProgress? uploading;
   bool hasMore = false;
 
+  /// Закреплённые сообщения (новые первыми) — для панели под шапкой.
+  List<ChatMessage> pinned = const [];
+
   /// Ответ на это сообщение уйдёт вместе со следующим текстом.
   ChatMessage? replyTo;
 
@@ -110,8 +113,27 @@ class ThreadController extends ChangeNotifier {
     loading = false;
     _notify();
     unawaited(markRead());
+    unawaited(loadPinned());
     if (m != null && !m.isGroupLike) unawaited(ensurePeer());
     if (isGroupLike && members.isEmpty) unawaited(_loadMembers());
+  }
+
+  Future<void> loadPinned() async {
+    final list = await _try(() => source.pinned(conversationId));
+    if (_disposed || list == null) return;
+    pinned = list;
+    _notify();
+  }
+
+  /// Догружает старые сообщения, пока нужное не окажется в списке (для перехода к цитате, закреплённому, поиску).
+  /// false — не нашли (сообщение удалено или слишком давнее).
+  Future<bool> ensureLoaded(String messageId, {int maxPages = 40}) async {
+    bool has() => messages.any((m) => m.id == messageId);
+    for (var i = 0; i < maxPages && !has(); i++) {
+      if (!hasMore || _disposed) break;
+      await loadOlder();
+    }
+    return has();
   }
 
   /// Узнаёт собеседника личного чата, если его не передали при открытии.
@@ -360,6 +382,7 @@ class ThreadController extends ChangeNotifier {
   Future<void> pin(ChatMessage message, bool pinned) async {
     await source.pin(conversationId, message.id, pinned: pinned);
     _replace(message.id, (m) => m.copyWith(isPinned: pinned));
+    unawaited(loadPinned());
   }
 
   void _replace(String id, ChatMessage Function(ChatMessage) change) {
