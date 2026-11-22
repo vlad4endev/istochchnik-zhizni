@@ -8,11 +8,18 @@ import '../../core/json.dart';
 import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
+import 'data/chat_list_actions.dart';
+import 'logic/chat_list_menu.dart';
 import 'new_chat_page.dart';
 import 'thread_page.dart';
+import 'widgets/chat_list_menu.dart';
 
 class ChatsPage extends StatefulWidget {
-  const ChatsPage({super.key});
+  const ChatsPage({super.key, this.actions, this.loadConversations});
+
+  /// Подмена в тестах; по умолчанию — запросы к серверу.
+  final ChatListActions? actions;
+  final Future<List<dynamic>> Function()? loadConversations;
 
   @override
   State<ChatsPage> createState() => _ChatsPageState();
@@ -31,19 +38,23 @@ class _ChatsPageState extends State<ChatsPage> {
     super.dispose();
   }
 
+  late final ChatListActions _actions = widget.actions ?? ServerChatListActions(context.read<SessionController>());
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
-      final items = await ChurchApi(context.read<SessionController>()).conversations();
+      final items = await (widget.loadConversations?.call() ?? ChurchApi(context.read<SessionController>()).conversations());
       if (!mounted) return;
       setState(() {
         _items = items;
@@ -51,6 +62,7 @@ class _ChatsPageState extends State<ChatsPage> {
       });
     } catch (error) {
       if (!mounted) return;
+      if (silent) return;
       setState(() {
         _loading = false;
         _error = describeDio(error);
@@ -80,6 +92,42 @@ class _ChatsPageState extends State<ChatsPage> {
       ),
     );
     _load();
+  }
+
+  void _patchItem(String id, Map<String, dynamic> Function(Map<String, dynamic>) change) {
+    setState(() => _items = [for (final raw in _items) str(asMap(raw)['id']) == id ? change(asMap(raw)) : raw]);
+  }
+
+  /// Долгое нажатие на чат: меню действий, как на сайте.
+  Future<void> _showMenu(Map<String, dynamic> item) async {
+    final id = str(item['id']);
+    final model = ChatListMenuModel.from(item);
+    final command = await showChatListMenu(context, title: _title(item), model: model);
+    if (command == null || !mounted) return;
+    try {
+      switch (command) {
+        case ChatListCommand.pin:
+          await _actions.setPinned(id, !model.pinned);
+          _patchItem(id, (it) => applyChatPreference(it, pinned: !model.pinned));
+          await _load(silent: true);
+        case ChatListCommand.mute:
+          await _actions.setMuted(id, !model.muted);
+          _patchItem(id, (it) => applyChatPreference(it, muted: !model.muted));
+        case ChatListCommand.clear:
+          final ok = await confirmChatAction(context, title: ChatListMenuModel.clearConfirmTitle, text: ChatListMenuModel.clearConfirmText, action: 'Очистить');
+          if (!ok || !mounted) return;
+          await _actions.clearHistory(id);
+          await _load(silent: true);
+          if (mounted) showMessage(context, 'Переписка очищена');
+        case ChatListCommand.delete:
+          final ok = await confirmChatAction(context, title: model.deleteConfirmTitle, text: model.deleteConfirmText, action: model.deleteConfirmAction);
+          if (!ok || !mounted) return;
+          await _actions.leave(id);
+          setState(() => _items = [for (final raw in _items) if (str(asMap(raw)['id']) != id) raw]);
+      }
+    } catch (error) {
+      if (mounted) showMessage(context, 'Не получилось: ${describeDio(error)}');
+    }
   }
 
   @override
@@ -145,7 +193,7 @@ class _ChatsPageState extends State<ChatsPage> {
                   else
                     ListGroup(
                       children: [
-                        for (final raw in visible) _ChatRow(item: asMap(raw), title: _title(asMap(raw)), origin: origin, onTap: () => _open(asMap(raw))),
+                        for (final raw in visible) _ChatRow(item: asMap(raw), title: _title(asMap(raw)), origin: origin, onTap: () => _open(asMap(raw)), onLongPress: () => _showMenu(asMap(raw))),
                       ],
                     ),
                 ],
@@ -156,12 +204,13 @@ class _ChatsPageState extends State<ChatsPage> {
 }
 
 class _ChatRow extends StatelessWidget {
-  const _ChatRow({required this.item, required this.title, required this.origin, required this.onTap});
+  const _ChatRow({required this.item, required this.title, required this.origin, required this.onTap, required this.onLongPress});
 
   final Map<String, dynamic> item;
   final String title;
   final String origin;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -176,8 +225,11 @@ class _ChatRow extends StatelessWidget {
     final preview = sender.isNotEmpty && str(item['type']) != 'private' && !asBool(last['is_deleted']) ? '$sender: $text' : text;
     final type = str(item['type']);
     final avatarUrl = resolveUrl(origin, str(other['avatar_url']).isNotEmpty ? str(other['avatar_url']) : str(item['avatar_url']));
+    final pinned = asBool(item['my_ui_pinned']);
+    final muted = asBool(item['my_muted']);
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
@@ -200,6 +252,7 @@ class _ChatRow extends StatelessWidget {
                       Expanded(
                         child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: ChurchType.title.copyWith(color: palette.ink)),
                       ),
+                      if (muted) Padding(padding: const EdgeInsets.only(left: 4), child: Icon(Icons.volume_off_rounded, size: 14, color: palette.inkFaint)),
                       const SizedBox(width: 8),
                       Text(chatStamp(last['created_at']), style: TextStyle(fontSize: 12, color: unread > 0 ? palette.accent : palette.inkFaint)),
                     ],
@@ -219,7 +272,10 @@ class _ChatRow extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (unread > 0) ...[const SizedBox(width: 8), CountBadge(unread)],
+                      if (unread > 0)
+                        ...[const SizedBox(width: 8), CountBadge(unread)]
+                      else if (pinned)
+                        ...[const SizedBox(width: 8), Icon(Icons.push_pin, size: 15, color: palette.inkFaint)],
                     ],
                   ),
                 ],
