@@ -240,6 +240,9 @@ class ChurchApi {
   Future<Map<String, dynamic>> joinInvitation(String token) async =>
       asMap(await post('/api/call-invitations/${Uri.encodeComponent(token)}/join'));
 
+  /// Состояние звонка на сервере (`status`: ringing, active, declined, ended…).
+  Future<String> callStatus(String callId) async => str(asMap(asMap(await get('/api/calls/$callId'))['call'])['status']);
+
   Future<Map<String, dynamic>> callToken(String callId) async =>
       asMap(await post('/api/calls/$callId/token'));
 

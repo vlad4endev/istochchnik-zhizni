@@ -4,7 +4,24 @@ import 'package:molitva/core/session.dart';
 import 'package:molitva/core/theme.dart';
 import 'package:molitva/features/calls/call_page.dart';
 import 'package:molitva/core/call_alerts.dart';
+import 'package:molitva/features/calls/logic/call_access.dart';
 import 'package:provider/provider.dart';
+
+class _Gate implements CallPermissionGate {
+  _Gate(this.mic);
+  final Access mic;
+  int asked = 0;
+  int settings = 0;
+
+  @override
+  Future<({Access mic, Access cam})> request({required bool camera}) async {
+    asked++;
+    return (mic: mic, cam: Access.granted);
+  }
+
+  @override
+  Future<void> openSettings() async => settings++;
+}
 
 void main() {
   for (final (w, h, s) in [(320.0, 568.0, 1.0), (320.0, 568.0, 2.0), (390.0, 844.0, 1.3), (360.0, 640.0, 1.0)]) {
@@ -27,6 +44,29 @@ void main() {
       expect(find.text('МОЯ ЦЕРКОВЬ'), findsOneWidget);
       expect(find.text('Ответить'), findsOneWidget);
       expect(find.text('Отклонить'), findsOneWidget);
+      await tester.runAsync(() => tester.pumpWidget(const SizedBox()));
+    });
+  }
+
+  for (final (mic, expectSettings) in [(Access.denied, false), (Access.blocked, true)]) {
+    testWidgets('«Ответить» без микрофона ($mic): понятная причина, ${expectSettings ? 'кнопка «Настройки»' : 'можно повторить'}', (tester) async {
+      tester.view.physicalSize = const Size(360, 740);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final gate = _Gate(mic);
+      await tester.runAsync(() => tester.pumpWidget(ChangeNotifierProvider.value(
+            value: SessionController(),
+            child: MaterialApp(theme: churchTheme(brightness: Brightness.dark), home: CallPage(callId: 'c1', incoming: true, title: 'Анна', permissions: gate)),
+          )));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Звонит вам…'), findsOneWidget);
+      await tester.tap(find.text('Ответить'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(gate.asked, 1);
+      expect(find.textContaining('икрофон'), findsWidgets);
+      expect(find.text('Повторить'), findsOneWidget);
+      expect(find.text('Настройки'), expectSettings ? findsOneWidget : findsNothing);
       await tester.runAsync(() => tester.pumpWidget(const SizedBox()));
     });
   }

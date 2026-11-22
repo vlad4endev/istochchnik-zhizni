@@ -13,6 +13,7 @@ import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart' show showMessage;
 import 'logic/call_access.dart';
 import 'logic/call_layout.dart';
+import 'logic/call_status.dart';
 import 'logic/meeting_logic.dart';
 import 'widgets/call_stage.dart';
 import 'widgets/call_widgets.dart';
@@ -76,10 +77,15 @@ class _CallPageState extends State<CallPage> {
   bool _inviteOpen = true;
   CallLayoutMode _layout = CallLayoutMode.grid;
   EventsListener<RoomEvent>? _events;
-  DateTime? _joinedAt;
+  DateTime? _peerSince;
   Timer? _ticker;
   bool _needSettings = false;
   bool _declined = false;
+  bool _leaving = false; // мы сами завершаем звонок
+  bool _closing = false; // экран закрывается по сообщению (отклонён, завершён…)
+  String _stage =
+      ''; // что сейчас делает подключение — видно на экране, если оно долгое
+  Timer? _poll;
   bool _started = false;
   StreamSubscription<Map<String, dynamic>>? _callEvents;
 
@@ -95,7 +101,21 @@ class _CallPageState extends State<CallPage> {
         : widget.video;
     _room.addListener(_refresh);
     // Подписки на треки, смена камеры/микрофона и «говорит» приходят событиями комнаты.
-    _events = _room.createListener()..listen((_) => _refresh());
+    _events = _room.createListener()
+      ..listen((event) {
+        // Комнату закрыл сервер (собеседник отклонил или завершил) — не ждём сокет, закрываем сразу.
+        if (event is RoomDisconnectedEvent &&
+            _joined &&
+            !_leaving &&
+            !_closing) {
+          _finish(
+            event.reason == DisconnectReason.clientInitiated
+                ? null
+                : _disconnectMessage(event.reason),
+          );
+        }
+        _refresh();
+      });
   }
 
   @override
@@ -112,18 +132,55 @@ class _CallPageState extends State<CallPage> {
   void _onCallEvent(Map<String, dynamic> event) {
     final id = '${event['callId'] ?? ''}';
     if (id.isEmpty || id != _callId || !mounted) return;
-    final type = '${event['type'] ?? ''}';
-    final message = switch (type) {
-      'call:cancelled' => 'Звонок отменён',
-      'call:rejected' => 'Собеседник отклонил звонок',
-      'call:ended' => 'Звонок завершён',
-      _ => null,
-    };
-    if (message == null) return;
-    // Завершение на время переподключения LiveKit сервер не шлёт, поэтому закрываем сразу.
-    setState(() => _error = message);
-    Future<void>.delayed(const Duration(milliseconds: 1200), () {
+    final message = endMessageForEvent(
+      '${event['type'] ?? ''}',
+      reason: event['reason'] == null ? null : '${event['reason']}',
+    );
+    if (message != null) _finish(message);
+  }
+
+  /// Закрыть экран звонка с понятным сообщением. Повторные сигналы (сокет, комната, опрос) игнорируются.
+  void _finish(String? message) {
+    if (_closing || _leaving || !mounted) return;
+    _closing = true;
+    _poll?.cancel();
+    setState(() {
+      _error = message ?? 'Звонок завершён';
+      _connecting = false;
+    });
+    Future<void>.delayed(const Duration(milliseconds: 1300), () {
       if (mounted) Navigator.of(context).maybePop();
+    });
+  }
+
+  String _disconnectMessage(DisconnectReason? reason) => switch (reason) {
+    DisconnectReason.roomDeleted ||
+    DisconnectReason.participantRemoved ||
+    DisconnectReason.serverShutdown => 'Звонок завершён',
+    _ => 'Связь со звонком потеряна',
+  };
+
+  /// Запасной путь: если событие сокета потерялось, состояние звонка узнаём у сервера.
+  void _startPolling() {
+    _poll?.cancel();
+    // Для встреч звонок живёт, пока есть люди, — опрос не нужен.
+    if (widget.meeting != null || widget.inviteToken != null) {
+      return;
+    }
+    _poll = Timer.periodic(const Duration(seconds: 3), (_) async {
+      final id = _callId;
+      if (id == null || _closing || _leaving || !mounted) {
+        return;
+      }
+      try {
+        final status = await ChurchApi(
+          _session ?? context.read<SessionController>(),
+        ).callStatus(id);
+        final message = endMessageForStatus(status);
+        if (message != null) _finish(message);
+      } catch (_) {
+        /* нет сети — попробуем в следующий раз */
+      }
     });
   }
 
@@ -141,6 +198,7 @@ class _CallPageState extends State<CallPage> {
     final api = ChurchApi(session);
     try {
       final wantCamera = _camOn;
+      _setStage('Проверяем микрофон…');
       final access = await widget.permissions.request(camera: wantCamera);
       final decision = decideCallAccess(
         mic: access.mic,
@@ -163,11 +221,15 @@ class _CallPageState extends State<CallPage> {
         }
       }
       _needSettings = false;
-      final audio = await AudioSession.instance;
-      await audio.configure(const AudioSessionConfiguration.speech());
+      // Аудиосессия настраивается параллельно с запросом к серверу — так подключение идёт быстрее.
+      final audioReady = _prepareAudio();
       if (widget.incoming && _callId != null) {
-        await api.acceptCall(_callId!);
+        _setStage('Принимаем звонок…');
+        await Future.wait<void>([api.acceptCall(_callId!), audioReady]);
       } else if (_callId == null && widget.inviteToken == null) {
+        _setStage(
+          widget.recipientId != null ? 'Вызываем…' : 'Создаём встречу…',
+        );
         final meeting = widget.meeting;
         final created = meeting != null
             ? await api.createCall(
@@ -184,6 +246,7 @@ class _CallPageState extends State<CallPage> {
                 conversationId: widget.conversationId ?? '',
                 recipientId: widget.recipientId,
               );
+        await audioReady;
         final call = asMap(created['call']);
         _callId = str(call['id']);
         if (_callId == null || _callId!.isEmpty) {
@@ -196,6 +259,8 @@ class _CallPageState extends State<CallPage> {
           _meetingTitle = title.isNotEmpty ? title : null;
         }
       }
+      if (widget.inviteToken != null) await audioReady;
+      _setStage('Получаем доступ к комнате…');
       final Map<String, dynamic> tokenBody;
       if (widget.inviteToken != null && _callId == null) {
         tokenBody = await api.joinInvitation(widget.inviteToken!);
@@ -208,7 +273,28 @@ class _CallPageState extends State<CallPage> {
       if (url.isEmpty || token.isEmpty) {
         throw StateError('Сервер не выдал доступ в комнату звонка');
       }
-      await _room.connect(url, token);
+      _setStage('Подключаемся к серверу звонков…');
+      // Микрофон и камера включаются сразу при входе в комнату, а не отдельным шагом после неё;
+      // долгое подключение не висит бесконечно — через полминуты предлагаем повторить.
+      await _room
+          .connect(
+            url,
+            token,
+            fastConnectOptions: FastConnectOptions(
+              microphone: TrackOption(enabled: !_muted),
+              camera: TrackOption(enabled: _camOn),
+            ),
+          )
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              unawaited(_room.disconnect());
+              throw StateError(
+                'Не удалось подключиться к звонку вовремя. Проверьте интернет и нажмите «Повторить».',
+              );
+            },
+          );
+      _setStage('Включаем звук…');
       await _room.localParticipant?.setMicrophoneEnabled(!_muted);
       if (_camOn) {
         await _room.localParticipant?.setCameraEnabled(true);
@@ -217,9 +303,9 @@ class _CallPageState extends State<CallPage> {
       setState(() {
         _joined = true;
         _connecting = false;
-        _joinedAt = DateTime.now();
       });
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _refresh());
+      _startPolling();
       if (_inviteUrl != null) unawaited(_copyInvite(announce: true));
     } catch (error) {
       if (!mounted) return;
@@ -228,6 +314,20 @@ class _CallPageState extends State<CallPage> {
         _error = error is StateError ? error.message : describeDio(error);
       });
     }
+  }
+
+  Future<void> _prepareAudio() async {
+    try {
+      final audio = await AudioSession.instance;
+      await audio.configure(const AudioSessionConfiguration.speech());
+    } catch (_) {
+      /* без аудиосессии звонок всё равно можно попробовать */
+    }
+  }
+
+  void _setStage(String stage) {
+    if (!mounted || _stage == stage) return;
+    setState(() => _stage = stage);
   }
 
   String get _displayTitle =>
@@ -302,6 +402,8 @@ class _CallPageState extends State<CallPage> {
   ];
 
   Future<void> _hangUp({bool endForAll = false}) async {
+    _leaving = true;
+    _poll?.cancel();
     final id = _callId;
     try {
       await _room.disconnect();
@@ -317,6 +419,7 @@ class _CallPageState extends State<CallPage> {
 
   Future<void> _decline() async {
     _declined = true;
+    _leaving = true;
     final id = _callId;
     if (id != null && mounted) {
       try {
@@ -330,6 +433,8 @@ class _CallPageState extends State<CallPage> {
   void dispose() {
     _callEvents?.cancel();
     _ticker?.cancel();
+    _poll?.cancel();
+    _leaving = true;
     _events?.dispose();
     _room.removeListener(_refresh);
     final id = _callId;
@@ -337,7 +442,9 @@ class _CallPageState extends State<CallPage> {
     final joined = _joined;
     final declined = _declined;
     // Комната освобождается после отключения: иначе её таймеры живут до закрытия приложения.
-    unawaited(_room.disconnect().catchError((Object _) {}).whenComplete(_room.dispose));
+    unawaited(
+      _room.disconnect().catchError((Object _) {}).whenComplete(_room.dispose),
+    );
     if (joined && id != null && !declined && session != null) {
       ChurchApi(session).endCall(id, endForAll: false).ignore();
     }
@@ -352,11 +459,16 @@ class _CallPageState extends State<CallPage> {
   );
 
   String _statusText(int others, bool isMeeting) {
-    final time = _joinedAt == null
-        ? ''
-        : callTimer(DateTime.now().difference(_joinedAt!));
-    if (others == 0) return isMeeting ? 'Ждём участников' : 'Ждём собеседника…';
-    return time;
+    if (others == 0) {
+      _peerSince = null;
+      return waitingStatus(
+        direct: !isMeeting,
+        outgoing: !widget.incoming && widget.recipientId != null,
+      );
+    }
+    // Время разговора идёт с момента, когда ответил собеседник, а не когда мы вошли в комнату.
+    _peerSince ??= DateTime.now();
+    return callTimer(DateTime.now().difference(_peerSince!));
   }
 
   Widget _controls(bool videoCall, bool isMeeting) {
@@ -508,7 +620,9 @@ class _CallPageState extends State<CallPage> {
     final ringing = widget.incoming && !_joined && _error == null;
     final status =
         _error ??
-        (widget.incoming ? 'Звонит вам…' : 'Соединяем…');
+        (_connecting && _stage.isNotEmpty
+            ? _stage
+            : (widget.incoming ? 'Звонит вам…' : 'Соединяем…'));
     return DarkPage(
       child: SafeArea(
         // Короткие экраны и крупный шрифт: содержимое прокручивается, а на обычных — растягивается на всю высоту.
@@ -654,7 +768,12 @@ class _CallBrand extends StatelessWidget {
             fit: BoxFit.scaleDown,
             child: Text(
               'МОЯ ЦЕРКОВЬ',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 2.4, color: ChurchColors.amber),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.4,
+                color: ChurchColors.amber,
+              ),
             ),
           ),
         ),
@@ -773,42 +892,51 @@ class _CallButton extends StatelessWidget {
       excludeSemantics: true,
       child: Opacity(
         opacity: onTap == null && !busy ? 0.45 : 1,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Material(
-              color: color,
-              shape: const CircleBorder(),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: onTap,
-                child: SizedBox(
-                  width: 78,
-                  height: 78,
-                  child: busy
-                      ? const Padding(
-                          padding: EdgeInsets.all(26),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.4,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Icon(icon, color: Colors.white, size: 32),
+        // Нажатие по подписи тоже срабатывает: люди жмут и на «Ответить», а не только на кружок.
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Material(
+                color: color,
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: onTap,
+                  child: SizedBox(
+                    width: 78,
+                    height: 78,
+                    child: busy
+                        ? const Padding(
+                            padding: EdgeInsets.all(26),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Icon(icon, color: Colors.white, size: 32),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 124),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  label,
-                  style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: Colors.white),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 124),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
