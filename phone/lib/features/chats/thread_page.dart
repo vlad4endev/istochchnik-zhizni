@@ -11,6 +11,7 @@ import '../../core/church_api.dart';
 import '../../core/dates.dart';
 import '../../core/json.dart';
 import '../../core/push.dart';
+import '../../core/presence.dart';
 import '../../core/session.dart';
 import '../../core/unread_badge.dart';
 import '../../ui/kit/kit.dart';
@@ -79,6 +80,7 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
   /// Рекордер нужен только для голосовых — создаём при первой записи, а не при открытии чата.
   AudioRecorder get _recorder => _recorderInstance ??= AudioRecorder();
   late final ChatSource _source;
+  late final PresenceStore _presence;
   late final AttachmentPicker _picker = widget.picker ?? DeviceAttachmentPicker();
   late final ThreadController _c;
   bool _recording = false;
@@ -88,6 +90,8 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
     super.initState();
     final session = context.read<SessionController>();
     _source = widget.source ?? ChatApi(session);
+    // Собеседник вошёл или вышел — статус в шапке меняется сразу.
+    _presence = session.realtime.presence..addListener(_onPresence);
     _c = ThreadController(
       _source,
       conversationId: widget.conversationId,
@@ -112,8 +116,13 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
     }
   }
 
+  void _onPresence() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _presence.removeListener(_onPresence);
     WidgetsBinding.instance.removeObserver(this);
     if (PushService.activeConversationId == widget.conversationId) PushService.activeConversationId = null;
     _scroll.removeListener(_onScroll);
@@ -429,7 +438,13 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
       final n = _c.members.length;
       return n == 0 ? '' : membersCaption(n, channel: (_c.meta?.type ?? widget.type) == 'channel');
     }
-    return presenceLabel(online: false, lastSeen: parseApiDate(widget.lastSeen), now: DateTime.now());
+    final presence = _presence;
+    final peer = _c.peerId ?? widget.otherMemberId;
+    return presenceLabel(
+      online: presence.isOnline(peer),
+      lastSeen: presence.lastSeenOf(peer) ?? parseApiDate(widget.lastSeen),
+      now: DateTime.now(),
+    );
   }
 
   @override

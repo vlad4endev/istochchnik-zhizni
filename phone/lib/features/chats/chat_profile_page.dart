@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/church_api.dart';
 import '../../core/json.dart';
+import '../../core/presence.dart';
 import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
@@ -52,6 +53,7 @@ class ChatProfilePage extends StatefulWidget {
 
 class _ChatProfilePageState extends State<ChatProfilePage> {
   late final ChatSource _source;
+  late final PresenceStore _presence;
   late bool _muted = widget.muted;
   PrivateProfile? _profile;
   List<ChatMember>? _members;
@@ -64,6 +66,7 @@ class _ChatProfilePageState extends State<ChatProfilePage> {
   void initState() {
     super.initState();
     _source = widget.source ?? ChatApi(context.read<SessionController>());
+    _presence = context.read<SessionController>().realtime.presence..addListener(_onPresence);
     _load();
   }
 
@@ -132,12 +135,26 @@ class _ChatProfilePageState extends State<ChatProfilePage> {
     pushPage(context, CallPage(conversationId: widget.conversationId, recipientId: peer, title: widget.title));
   }
 
+  void _onPresence() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _presence.removeListener(_onPresence);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
     final subtitle = widget.isGroup
         ? (_members == null ? '' : _groupCaption(_members!))
-        : presenceLabel(online: false, lastSeen: _profile?.lastSeen, now: DateTime.now());
+        : presenceLabel(
+            online: _presence.isOnline(_profile?.id),
+            lastSeen: _presence.lastSeenOf(_profile?.id) ?? _profile?.lastSeen,
+            now: DateTime.now(),
+          );
     final name = widget.isGroup ? (_meta?.title.isNotEmpty == true ? _meta!.title : widget.title) : (_profile?.name.isNotEmpty == true ? _profile!.name : widget.title);
     final avatar = widget.isGroup ? (_meta?.avatarUrl ?? widget.avatarUrl) : (_profile?.avatarUrl ?? widget.avatarUrl);
     return Scaffold(

@@ -114,6 +114,15 @@ class _ChatsPageState extends State<ChatsPage> with CacheWatcher<ChatsPage> {
     _load();
   }
 
+  /// Строка чата; у личного чата следит за тем, в сети ли собеседник.
+  Widget _row(Map<String, dynamic> item, String origin) {
+    final peer = str(item['type']) == 'private' ? asInt(asMap(item['other_member'])['id']) : 0;
+    Widget build(bool online) => _ChatRow(item: item, title: _title(item), origin: origin, online: online, onTap: () => _open(item), onLongPress: () => _showMenu(item));
+    if (peer <= 0) return build(false);
+    final presence = context.read<SessionController>().realtime.presence;
+    return ListenableBuilder(listenable: presence, builder: (_, _) => build(presence.isOnline(peer)));
+  }
+
   void _patchItem(String id, Map<String, dynamic> Function(Map<String, dynamic>) change) {
     setState(() => _items = [for (final raw in _items) str(asMap(raw)['id']) == id ? change(asMap(raw)) : raw]);
   }
@@ -213,7 +222,7 @@ class _ChatsPageState extends State<ChatsPage> with CacheWatcher<ChatsPage> {
                   else
                     ListGroup(
                       children: [
-                        for (final raw in visible) _ChatRow(item: asMap(raw), title: _title(asMap(raw)), origin: origin, onTap: () => _open(asMap(raw)), onLongPress: () => _showMenu(asMap(raw))),
+                        for (final raw in visible) _row(asMap(raw), origin),
                       ],
                     ),
                 ],
@@ -224,11 +233,12 @@ class _ChatsPageState extends State<ChatsPage> with CacheWatcher<ChatsPage> {
 }
 
 class _ChatRow extends StatelessWidget {
-  const _ChatRow({required this.item, required this.title, required this.origin, required this.onTap, required this.onLongPress});
+  const _ChatRow({required this.item, required this.title, required this.origin, required this.online, required this.onTap, required this.onLongPress});
 
   final Map<String, dynamic> item;
   final String title;
   final String origin;
+  final bool online;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
@@ -254,10 +264,30 @@ class _ChatRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
           children: [
-            if (type == 'channel' && avatarUrl.isEmpty)
-              const ChurchLogo(size: 46, circle: true)
-            else
-              ChurchAvatar(name: title, imageUrl: avatarUrl, size: 46),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                if (type == 'channel' && avatarUrl.isEmpty) const ChurchLogo(size: 46, circle: true) else ChurchAvatar(name: title, imageUrl: avatarUrl, size: 46),
+                if (online)
+                  Positioned(
+                    right: -1,
+                    bottom: -1,
+                    child: Semantics(
+                      label: 'в сети',
+                      child: Container(
+                        key: ValueKey('online-${asInt(other['id'])}'),
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: ChurchColors.successBright,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: palette.card, width: 2.5),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
             const SizedBox(width: Space.md),
             Expanded(
               child: Column(

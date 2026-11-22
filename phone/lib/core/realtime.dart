@@ -4,11 +4,15 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'call_alerts.dart';
+import 'presence.dart';
 import 'session.dart';
 
 class ChurchRealtime {
   ChurchRealtime(this.session);
   final SessionController session;
+
+  /// Кто в сети (для точки в списке чатов и статуса в шапке чата).
+  final PresenceStore presence = PresenceStore();
 
   WebSocketChannel? _channel;
   Timer? _ping;
@@ -20,6 +24,9 @@ class ChurchRealtime {
   /// События чатов из сокета (новое, изменённое и удалённое сообщение, реакции, прочтение):
   /// открытый чат перечитывает себя сам.
   Stream<Map<String, dynamic>> get chatEvents => _chatEvents.stream;
+
+  /// Для тестов: подать сообщение так, будто оно пришло из сокета.
+  void debugReceive(Map<String, dynamic> message) => _onMessage(message);
 
   /// Для тестов: подать событие чата так, будто оно пришло из сокета.
   void debugEmitChat(Map<String, dynamic> event) => _chatEvents.add(event);
@@ -58,6 +65,7 @@ class ChurchRealtime {
   }
 
   void stop() {
+    presence.reset();
     _stopped = true;
     _ping?.cancel();
     _ping = null;
@@ -69,6 +77,7 @@ class ChurchRealtime {
   }
 
   void _retry() {
+    presence.reset();
     if (_stopped) return;
     Future<void>.delayed(const Duration(seconds: 4), () {
       if (!_stopped) start();
@@ -84,6 +93,7 @@ class ChurchRealtime {
     } catch (_) {
       return;
     }
+    if (presence.handle(message)) return;
     final type = '${message['type'] ?? ''}';
     if (type.startsWith('call:')) _callEvents.add(message);
     if (type.startsWith('msg:') || type.startsWith('conv:') || type.startsWith('read:') || type == 'messages_read') {
