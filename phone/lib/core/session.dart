@@ -130,6 +130,9 @@ class SectionRule {
   final List<String> roles;
 }
 
+/// Итог продления сессии: продлена, отклонена сервером (нужен вход) или не вышло из-за связи.
+enum RefreshOutcome { renewed, rejected, unavailable }
+
 class SessionController extends ChangeNotifier {
   SessionController({FlutterSecureStorage? storage, Duration cacheRecheckAfter = const Duration(seconds: 3)})
       : _storage = storage ?? const FlutterSecureStorage() {
@@ -143,18 +146,34 @@ class SessionController extends ChangeNotifier {
     );
     dio.interceptors.add(
       InterceptorsWrapper(
-        onRequest: (options, handler) {
+        onRequest: (options, handler) async {
+          // Токен вот-вот истечёт — продлеваем заранее, чтобы человека не выкидывало на вход.
+          if (!_isAuthPath(options.path) && _refreshToken != null && _tokenExpiresSoon()) {
+            await _refreshSession();
+          }
           final token = _token;
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
           handler.next(options);
         },
-        onError: (error, handler) {
+        onError: (error, handler) async {
           final path = error.requestOptions.path;
           final status = error.response?.statusCode;
-          final isAuthCall = path.contains('/api/auth/login') || path.contains('/api/auth/register');
+          final isAuthCall = _isAuthPath(path);
           if (status == 401 && !isAuthCall) {
+            if (error.requestOptions.extra[_retriedKey] != true) {
+              final outcome = await _refreshSession();
+              if (outcome == RefreshOutcome.renewed) {
+                try {
+                  return handler.resolve(await _repeat(error.requestOptions));
+                } on DioException catch (again) {
+                  return handler.next(again);
+                }
+              }
+              // Нет связи — это не повод выходить: человек остаётся в аккаунте, запрос просто не удался.
+              if (outcome == RefreshOutcome.unavailable) return handler.next(error);
+            }
             unawaitedLogout();
           }
           handler.next(error);
@@ -190,6 +209,10 @@ class SessionController extends ChangeNotifier {
   Map<String, SectionRule> sections = {};
   String? _token;
 
+  /// Cookie обновления сессии «имя=значение» (живёт до 90 дней, меняется при каждом продлении).
+  String? _refreshToken;
+  Future<RefreshOutcome>? _refreshing;
+
   /// Вызывается после успешного входа или регистрации (например, регистрация пушей).
   final List<Future<void> Function()> afterLogin = [];
 
@@ -206,6 +229,98 @@ class SessionController extends ChangeNotifier {
     return mine.any(rule.roles.contains);
   }
 
+
+  static const _refreshKey = 'auth_refresh';
+  static const _retriedKey = 'sessionRetried';
+
+  /// Вход, регистрация, продление и выход сами про сессию не спрашивают: на них 401 означает «неверные данные»
+  /// или «уже вышли», и продлевать сессию из-за них нельзя.
+  bool _isAuthPath(String path) =>
+      path.contains('/api/auth/login') ||
+      path.contains('/api/auth/register') ||
+      path.contains('/api/auth/refresh') ||
+      path.contains('/api/auth/logout');
+
+  /// Достаёт cookie обновления («имя=значение», как отдал сервер) из ответов входа и продления:
+  /// приложение cookie само не хранит.
+  static String? refreshCookieFrom(Headers headers) {
+    for (final line in headers['set-cookie'] ?? const <String>[]) {
+      final pair = line.split(';').first;
+      final eq = pair.indexOf('=');
+      if (eq <= 0) continue;
+      final name = pair.substring(0, eq).trim().toLowerCase();
+      final value = pair.substring(eq + 1).trim();
+      if (name.contains('refresh') && value.isNotEmpty) return pair.trim();
+    }
+    return null;
+  }
+
+  /// Срок действия токена доступа из самого токена (JWT); null, если токен другого вида.
+  static DateTime? tokenExpiry(String? token) {
+    if (token == null) return null;
+    final parts = token.split('.');
+    if (parts.length != 3) return null;
+    try {
+      final payload = asMap(jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1])))));
+      final exp = payload['exp'];
+      if (exp is! num) return null;
+      return DateTime.fromMillisecondsSinceEpoch(exp.toInt() * 1000);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _tokenExpiresSoon() {
+    final expiry = tokenExpiry(_token);
+    if (expiry == null) return false;
+    return expiry.difference(DateTime.now()) < const Duration(minutes: 2);
+  }
+
+  /// Продлевает сессию. Одновременные запросы ждут один и тот же ответ: сервер меняет токен обновления
+  /// при каждом продлении, второй параллельный запрос с прежним токеном был бы отклонён.
+  Future<RefreshOutcome> _refreshSession() => _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
+
+  Future<RefreshOutcome> _doRefresh() async {
+    final refresh = _refreshToken;
+    if (refresh == null || refresh.isEmpty || _token == null) return RefreshOutcome.rejected;
+    try {
+      final response = await dio.post<Object?>(
+        '/api/auth/refresh',
+        options: Options(headers: {'Cookie': refresh}),
+      );
+      final body = asMap(response.data);
+      final next = str(body['accessToken']).isNotEmpty ? str(body['accessToken']) : str(body['token']);
+      if (next.isEmpty) return RefreshOutcome.rejected;
+      _token = next;
+      await _writeSecure('auth_token', next);
+      final rotated = refreshCookieFrom(response.headers);
+      if (rotated != null) {
+        _refreshToken = rotated;
+        await _writeSecure(_refreshKey, rotated);
+      }
+      // Соединение с сервером в реальном времени узнаёт новый токен при переподключении.
+      if (user != null) realtime.start();
+      return RefreshOutcome.renewed;
+    } on DioException catch (error) {
+      final status = error.response?.statusCode ?? 0;
+      // Сервер ответил отказом (токен недействителен или отозван) — сессии конец. Нет связи или сбой сервера — нет.
+      return status == 401 || status == 403 ? RefreshOutcome.rejected : RefreshOutcome.unavailable;
+    } catch (_) {
+      return RefreshOutcome.unavailable;
+    }
+  }
+
+  /// Повторяет запрос, упавший из-за истёкшего токена, уже с новым токеном.
+  Future<Response<dynamic>> _repeat(RequestOptions options) {
+    final data = options.data;
+    final headers = Map<String, dynamic>.of(options.headers)..['Authorization'] = 'Bearer $_token';
+    return dio.fetch<dynamic>(options.copyWith(
+      headers: headers,
+      data: data is FormData ? data.clone() : data,
+      extra: {...options.extra, _retriedKey: true},
+    ));
+  }
+
   Future<void> bootstrap() async {
     final prefs = await SharedPreferences.getInstance();
     apiOrigin = (prefs.getString('api_origin') ?? defaultApiOrigin).trim();
@@ -218,6 +333,7 @@ class SessionController extends ChangeNotifier {
       _ => ThemeMode.system,
     };
     _token = await _readSecure('auth_token');
+    _refreshToken = await _readSecure(_refreshKey);
     final rawUser = await _readSecure('auth_user');
     if (rawUser != null && rawUser.isNotEmpty) {
       try {
@@ -280,7 +396,7 @@ class SessionController extends ChangeNotifier {
       if (body['code'] == 'password_reset_required') {
         return 'Нужно задать новый пароль. Сделайте это на сайте церкви, затем войдите здесь.';
       }
-      return await _acceptSession(body);
+      return await _acceptSession(body, refresh: refreshCookieFrom(response.headers));
     } on DioException catch (error) {
       return readApiError(error);
     }
@@ -304,13 +420,13 @@ class SessionController extends ChangeNotifier {
           'birth_date': birthDate,
         },
       );
-      return await _acceptSession(asMap(response.data));
+      return await _acceptSession(asMap(response.data), refresh: refreshCookieFrom(response.headers));
     } on DioException catch (error) {
       return readApiError(error);
     }
   }
 
-  Future<String?> _acceptSession(Map<String, dynamic> body) async {
+  Future<String?> _acceptSession(Map<String, dynamic> body, {String? refresh}) async {
     final token = str(body['token']);
     final userJson = asMap(body['user']);
     if (token.isEmpty || userJson.isEmpty) {
@@ -318,6 +434,12 @@ class SessionController extends ChangeNotifier {
       return message.isEmpty ? 'Сервер не вернул сессию' : message;
     }
     _token = token;
+    _refreshToken = refresh;
+    if (refresh != null) {
+      await _writeSecure(_refreshKey, refresh);
+    } else {
+      await _deleteSecure(_refreshKey);
+    }
     user = AppUser.fromJson(userJson);
     await _writeSecure('auth_token', token);
     await _writeSecure('auth_user', jsonEncode(user!.toJson()));
@@ -378,7 +500,11 @@ class SessionController extends ChangeNotifier {
     realtime.stop();
     try {
       if (_token != null) {
-        await dio.post<Object?>('/api/auth/logout');
+        final refresh = _refreshToken;
+        await dio.post<Object?>(
+          '/api/auth/logout',
+          options: refresh == null ? null : Options(headers: {'Cookie': refresh}),
+        );
       }
     } catch (_) {
       /* локальный выход всё равно завершаем */
@@ -387,8 +513,10 @@ class SessionController extends ChangeNotifier {
     await _forgetLegacyCache();
     await DraftStore.instance.forget();
     _token = null;
+    _refreshToken = null;
     user = null;
     sections = {};
+    await _deleteSecure(_refreshKey);
     await _deleteSecure('auth_token');
     await _deleteSecure('auth_user');
     notifyListeners();

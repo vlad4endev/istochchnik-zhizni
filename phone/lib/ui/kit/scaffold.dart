@@ -162,7 +162,11 @@ class ChurchPage extends StatelessWidget {
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: ChurchColors.night,
-        floatingActionButton: floatingActionButton,
+        // Вложенный Scaffold учитывает только клавиатуру и не знает о нижнем меню оболочки (extendBody):
+        // без этого отступа кнопка «+» оказывалась под меню.
+        floatingActionButton: floatingActionButton == null
+            ? null
+            : Padding(padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom), child: floatingActionButton),
         body: Stack(
           children: [
             const Positioned.fill(child: ChurchBackdrop()),
