@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.22.2+3020
+version: 1.22.3+3021
 
 environment:
   sdk: ^3.14.0
@@ -44,6 +44,7 @@ dependencies:
   url_launcher: ^6.3.3
   image_picker: ^1.2.4
   file_picker: ">=13.3.3 <13.4.0" # 13.4.0 тянет android_file_picker 2.2.0, который не собирается (нет FilePickerDelegate)
+  android_file_picker: 2.1.6 # нужен для восстановления выбора файла после выгрузки приложения (retrieveLostData)
   record: ^7.2.0
   just_audio: ^0.10.6
   audio_session: ^0.2.4

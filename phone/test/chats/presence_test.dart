@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molitva/core/presence.dart';
 import 'package:molitva/core/session.dart';
@@ -24,10 +25,11 @@ Map<String, dynamic> _chat(String id, String type, int peer, String name) => {
       'title': type == 'private' ? '' : name,
       'other_member': type == 'private' ? {'id': peer, 'name': name} : null,
       'unread_count': 0,
-      'last_message': {'content': 'Привет', 'created_at': '2026-11-22T10:00:00Z'},
+      'last_message': {'content': 'Привет', 'created_at': DateTime.now().toUtc().toIso8601String()},
     };
 
 void main() {
+  setUpAll(() => initializeDateFormatting('ru'));
   group('хранилище присутствия', () {
     test('список при подключении, затем вошёл и вышел с временем визита', () {
       final p = PresenceStore();
@@ -37,7 +39,7 @@ void main() {
       expect(p.isOnline(7) && p.isOnline(9), isTrue);
       p.handle({'type': 'presence:online', 'memberId': 12});
       expect(p.isOnline(12), isTrue);
-      p.handle({'type': 'presence:offline', 'memberId': 7, 'lastSeenAt': '2026-11-22T10:00:00Z'});
+      p.handle({'type': 'presence:offline', 'memberId': 7, 'lastSeenAt': DateTime.now().toUtc().toIso8601String()});
       expect(p.isOnline(7), isFalse);
       expect(p.lastSeenOf(7), isNotNull);
       expect(notified, 3);
@@ -88,7 +90,7 @@ void main() {
       await tester.pump();
       expect(find.byKey(const ValueKey('online-8')), findsOneWidget);
 
-      s.realtime.debugReceive({'type': 'presence:offline', 'memberId': 7, 'lastSeenAt': '2026-11-22T10:00:00Z'});
+      s.realtime.debugReceive({'type': 'presence:offline', 'memberId': 7, 'lastSeenAt': DateTime.now().toUtc().toIso8601String()});
       await tester.pump();
       expect(find.byKey(const ValueKey('online-7')), findsNothing, reason: 'Анна вышла');
       expect(tester.getSemantics(find.text('Пётр')).label, contains('в сети'), reason: 'скринридер тоже слышит статус');

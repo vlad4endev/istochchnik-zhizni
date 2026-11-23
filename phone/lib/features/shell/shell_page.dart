@@ -3,18 +3,24 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/nav.dart';
 import '../../core/push_nav.dart';
 import '../../core/session.dart';
 import '../../core/unread_badge.dart';
 import '../../ui/kit/kit.dart';
 import '../chats/chats_page.dart';
+import '../chats/data/lost_attachments.dart';
+import '../chats/thread_page.dart';
 import '../feed/feed_page.dart';
 import '../home/home_page.dart';
 import '../more/more_page.dart';
 import '../prayer/prayer_page.dart';
 
 class ShellPage extends StatefulWidget {
-  const ShellPage({super.key});
+  const ShellPage({super.key, this.lostPicks});
+
+  /// Откуда брать выбор файла, потерянный при выгрузке приложения (в тестах подменяется).
+  final LostPickSource? lostPicks;
 
   @override
   State<ShellPage> createState() => _ShellPageState();
@@ -42,7 +48,10 @@ class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
     _badge.addListener(_onBadge);
     PushNavigator.instance.addListener(_onPushTab);
     // Пуш, нажатый до того, как приложение построило вкладки, выполняется теперь.
-    WidgetsBinding.instance.addPostFrameCallback((_) => PushNavigator.instance.shellReady());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PushNavigator.instance.shellReady();
+      unawaited(_restoreAfterPickerKill());
+    });
     final session = context.read<SessionController>();
     _chatEvents = session.realtime.chatEvents.listen((_) => _badge.refreshSoon(session));
     _refreshUnread();
@@ -54,6 +63,20 @@ class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
   }
 
   bool _inForeground = true;
+
+  /// Телефон выгрузил приложение, пока было открыто окно выбора файла: возвращаем человека в тот чат и отправляем выбранное.
+  Future<void> _restoreAfterPickerKill() async {
+    await reopenAfterPickerKill(
+      source: widget.lostPicks,
+      open: (chat, files) async {
+        final nav = navigatorKey.currentState;
+        if (nav == null || !mounted) return;
+        await nav.push(MaterialPageRoute<void>(
+          builder: (_) => ThreadPage(conversationId: chat.conversationId, title: chat.title.isEmpty ? 'Чат' : chat.title, initialAttachments: files),
+        ));
+      },
+    );
+  }
 
   @override
   void dispose() {

@@ -10,7 +10,7 @@ packages:
     source: hosted
     version: "1.4.0"
   android_file_picker:
-    dependency: "direct overridden"
+    dependency: "direct main"
     description:
       name: android_file_picker
       sha256: e7e02f9bab7e014e5b47e4cef135a8f5c66f5c14fd90986e415e758f6a1762e1

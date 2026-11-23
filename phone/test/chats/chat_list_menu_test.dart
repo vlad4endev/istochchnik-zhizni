@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molitva/core/session.dart';
 import 'package:molitva/core/theme.dart';
@@ -49,10 +50,11 @@ Map<String, dynamic> _chat(String id, String type, {String name = 'Анна', bo
       'my_muted': muted,
       'my_role': role,
       'unread_count': 0,
-      'last_message': {'content': 'Привет', 'created_at': '2026-11-22T10:00:00Z'},
+      'last_message': {'content': 'Привет', 'created_at': DateTime.now().toUtc().toIso8601String()},
     };
 
 void main() {
+  setUpAll(() => initializeDateFormatting('ru'));
   group('модель меню (правила как на сайте)', () {
     test('закрепить/открепить и звук зависят от текущего состояния', () {
       final off = ChatListMenuModel.from(_chat('1', 'private'));

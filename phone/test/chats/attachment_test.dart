@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:molitva/core/session.dart';
 import 'package:molitva/core/theme.dart';
 import 'package:molitva/features/chats/data/attachment_picker.dart';
+import 'package:molitva/features/chats/data/lost_attachments.dart';
 import 'package:molitva/features/chats/logic/attachment_logic.dart';
 import 'package:molitva/features/chats/models/chat_models.dart';
 import 'package:molitva/features/chats/thread_controller.dart';
@@ -154,6 +155,63 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    testWidgets('выбор, спасённый после выгрузки приложения, уходит сам сразу после открытия чата', (tester) async {
+      final chat = FakeChat();
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(ChangeNotifierProvider.value(
+        value: session(),
+        child: MaterialApp(
+          theme: churchTheme(brightness: Brightness.light),
+          home: ThreadPage(
+            key: UniqueKey(),
+            conversationId: 'c1',
+            title: 'Молодёжь',
+            type: 'group',
+            source: chat,
+            picker: FakePicker(),
+            events: const Stream.empty(),
+            initialAttachments: [file('спасено.jpg'), file('справка.pdf')],
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(chat.uploads, ['спасено.jpg', 'справка.pdf']);
+      expect(chat.calls.where((x) => x.startsWith('send')), ['send:::image', 'send:::file']);
+    });
+
+    testWidgets('окно выбора открыто — чат запомнен; вернулись нормально — запись стёрта', (tester) async {
+      final picker = FakePicker()..filesNow = [file('отчёт.pdf')];
+      final opened = Completer<void>();
+      final release = Completer<void>();
+      final slow = _SlowPicker(picker, opened, release);
+      final chat = FakeChat();
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(ChangeNotifierProvider.value(
+        value: session(),
+        child: MaterialApp(
+          theme: churchTheme(brightness: Brightness.light),
+          home: ThreadPage(key: UniqueKey(), conversationId: 'c1', title: 'Молодёжь', type: 'group', source: chat, picker: slow, events: const Stream.empty()),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Прикрепить'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Файл'));
+      await tester.pump();
+      await opened.future;
+      final during = await AttachRecovery.read();
+      expect(during?.conversationId, 'c1', reason: 'пока окно открыто, чат записан — на случай выгрузки приложения');
+      expect(during?.title, 'Молодёжь');
+      release.complete();
+      await tester.pumpAndSettle();
+      expect(await AttachRecovery.read(), isNull);
+      expect(chat.uploads, ['отчёт.pdf']);
+    });
+
     testWidgets('в меню вложений: фото, видео, камера, файл, опрос', (tester) async {
       await open(tester, FakeChat(), FakePicker());
       await tester.tap(find.byTooltip('Прикрепить'));
@@ -287,4 +345,19 @@ void main() {
       await tester.pumpAndSettle();
     });
   });
+}
+
+/// Выбор файла, который «висит», пока тест не отпустит: имитирует открытое системное окно.
+class _SlowPicker extends FakePicker {
+  _SlowPicker(this.inner, this.opened, this.release);
+  final FakePicker inner;
+  final Completer<void> opened;
+  final Completer<void> release;
+
+  @override
+  Future<List<PickedAttachment>> files() async {
+    opened.complete();
+    await release.future;
+    return inner.files();
+  }
 }

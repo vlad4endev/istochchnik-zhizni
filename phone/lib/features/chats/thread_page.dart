@@ -23,6 +23,7 @@ import '../prayer/widgets/sheet_frame.dart' show actionError;
 import 'chat_profile_page.dart';
 import 'attachment_diagnostics_page.dart';
 import 'data/attachment_picker.dart';
+import 'data/lost_attachments.dart';
 import 'widgets/message_search.dart';
 import 'logic/mentions.dart';
 import 'logic/voice.dart';
@@ -56,10 +57,14 @@ class ThreadPage extends StatefulWidget {
     this.jumpToMessageId,
     this.unreadCount = 0,
     this.voiceBackend,
+    this.initialAttachments = const [],
   });
 
   final String conversationId;
   final String title;
+
+  /// Файлы, которые нужно отправить сразу после открытия: выбор, спасённый после выгрузки приложения из памяти.
+  final List<PickedAttachment> initialAttachments;
   final int? otherMemberId;
   final String? avatarUrl;
 
@@ -135,6 +140,11 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
     final loaded = _c.load();
     final target = widget.jumpToMessageId;
     if (target != null) loaded.then((_) => _jumpAfterFrame(target));
+    if (widget.initialAttachments.isNotEmpty) {
+      loaded.then((_) {
+        if (mounted) _sendFiles(widget.initialAttachments);
+      });
+    }
     // Недописанное сообщение возвращается, а набор текста виден собеседникам («печатает…»).
     final draft = DraftStore.instance.textFor(widget.conversationId);
     if (draft.isNotEmpty) _input.text = draft;
@@ -379,12 +389,16 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
   /// говорим об этом и предлагаем выбрать через «Файлы» — раньше это выглядело как «ничего не произошло».
   Future<void> _pick(Future<List<PickedAttachment>> Function() choose, {String? kind}) async {
     final started = DateTime.now();
+    // Если телефон выгрузит приложение, пока открыто окно выбора, при запуске мы вернём человека в этот чат.
+    await AttachRecovery.mark(widget.conversationId, widget.title);
     try {
       final picked = await choose();
+      await AttachRecovery.clear();
       if (picked.isNotEmpty) return await _sendFiles(picked);
       final quick = DateTime.now().difference(started) < widget.instantClose;
       if (kind != null && quick && mounted) _offerFiles(kind);
     } on PickerException catch (e) {
+      await AttachRecovery.clear();
       if (mounted) showMessage(context, e.message);
     }
   }
@@ -400,12 +414,15 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
   }
 
   Future<void> _viaFiles(String kind) async {
+    await AttachRecovery.mark(widget.conversationId, widget.title);
     try {
       final picked = await _picker.viaFiles(kind);
+      await AttachRecovery.clear();
       if (picked.isEmpty) return;
       await _picker.preferFiles(); // сработало — в следующий раз сразу этот способ
       await _sendFiles(picked);
     } on PickerException catch (e) {
+      await AttachRecovery.clear();
       if (mounted) showMessage(context, e.message);
     }
   }
