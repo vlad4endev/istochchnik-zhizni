@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molitva/features/chats/data/lost_attachments.dart';
 import 'package:molitva/features/chats/logic/attachment_logic.dart';
@@ -12,6 +14,13 @@ class _Source implements LostPickSource {
     calls++;
     return files;
   }
+}
+
+class _Delayed implements LostPickSource {
+  _Delayed(this.future);
+  final Future<List<PickedAttachment>> future;
+  @override
+  Future<List<PickedAttachment>> recover() => future;
 }
 
 void main() {
@@ -34,7 +43,7 @@ void main() {
       source: _Source([const PickedAttachment(path: '/tmp/a.jpg', name: 'a.jpg')]),
       open: (c, f) async {
         chat = c;
-        files = f;
+        files = await f;
       },
     );
     expect(result, isTrue);
@@ -47,8 +56,26 @@ void main() {
   test('окно закрыли без выбора, но приложение перезапустилось: чат всё равно открывается, файлов нет', () async {
     await AttachRecovery.mark('7', '');
     List<PickedAttachment>? files;
-    expect(await reopenAfterPickerKill(source: _Source(const []), open: (_, f) async => files = f), isTrue);
+    expect(await reopenAfterPickerKill(source: _Source(const []), open: (_, f) async => files = await f), isTrue);
     expect(files, isEmpty);
+  });
+
+  test('чат открывается сразу, не дожидаясь файлов; сбой плагина не роняет запуск', () async {
+    await AttachRecovery.mark('42', 'Наталья');
+    final slow = Completer<List<PickedAttachment>>();
+    var opened = false;
+    late Future<List<PickedAttachment>> pendingFiles;
+    final done = reopenAfterPickerKill(
+      source: _Delayed(slow.future),
+      open: (_, f) async {
+        opened = true;
+        pendingFiles = f;
+      },
+    );
+    await done;
+    expect(opened, isTrue, reason: 'чат открыт, хотя файл ещё не готов');
+    slow.completeError(StateError('плагин упал'));
+    expect(await pendingFiles, isEmpty);
   });
 
   test('после нормального возврата запись стирается — при следующем запуске чат не открывается', () async {

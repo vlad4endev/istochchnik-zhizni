@@ -57,14 +57,15 @@ class ThreadPage extends StatefulWidget {
     this.jumpToMessageId,
     this.unreadCount = 0,
     this.voiceBackend,
-    this.initialAttachments = const [],
+    this.incomingAttachments,
   });
 
   final String conversationId;
   final String title;
 
-  /// Файлы, которые нужно отправить сразу после открытия: выбор, спасённый после выгрузки приложения из памяти.
-  final List<PickedAttachment> initialAttachments;
+  /// Файлы, которые нужно отправить, как только они будут готовы: выбор, спасённый после выгрузки приложения из памяти.
+  /// Чат открывается сразу, не дожидаясь файлов.
+  final Future<List<PickedAttachment>>? incomingAttachments;
   final int? otherMemberId;
   final String? avatarUrl;
 
@@ -140,11 +141,8 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
     final loaded = _c.load();
     final target = widget.jumpToMessageId;
     if (target != null) loaded.then((_) => _jumpAfterFrame(target));
-    if (widget.initialAttachments.isNotEmpty) {
-      loaded.then((_) {
-        if (mounted) _sendFiles(widget.initialAttachments);
-      });
-    }
+    final incoming = widget.incomingAttachments;
+    if (incoming != null) unawaited(_sendIncoming(incoming, loaded));
     // Недописанное сообщение возвращается, а набор текста виден собеседникам («печатает…»).
     final draft = DraftStore.instance.textFor(widget.conversationId);
     if (draft.isNotEmpty) _input.text = draft;
@@ -154,6 +152,18 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
     _c.addListener(_onThreadChanged);
     WidgetsBinding.instance.addObserver(this);
     PushService.activeConversationId = widget.conversationId;
+  }
+
+  /// Спасённые после перезапуска файлы: пока их достают — подсказка, затем обычная отправка с полосой прогресса.
+  Future<void> _sendIncoming(Future<List<PickedAttachment>> incoming, Future<void> loaded) async {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) showMessage(context, 'Получаем выбранный файл…');
+    });
+    final files = await incoming;
+    await loaded;
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    await _sendFiles(files);
   }
 
   /// Свёрнутое приложение сообщения не читает: отмечаем прочитанным, когда человек вернулся в чат.

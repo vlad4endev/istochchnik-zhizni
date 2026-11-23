@@ -89,17 +89,18 @@ class DeviceLostPickSource implements LostPickSource {
   }
 }
 
-/// Если приложение было выгружено во время выбора файла — открывает тот же чат и отправляет выбранное.
-/// Возвращает true, когда чат был открыт. [open] получает чат и найденные файлы (их может не быть, если окно закрыли без выбора).
+/// Если приложение было выгружено во время выбора файла — сразу открывает тот же чат; выбранное догоняет следом.
+/// [open] получает чат и будущий список файлов: достать и скопировать файл может занять время, а чат ждать не должен.
+/// Файлов может не оказаться (окно закрыли без выбора). Возвращает true, когда чат был открыт.
 Future<bool> reopenAfterPickerKill({
-  required Future<void> Function(PendingAttach chat, List<PickedAttachment> files) open,
+  required Future<void> Function(PendingAttach chat, Future<List<PickedAttachment>> files) open,
   LostPickSource? source,
   DateTime? now,
 }) async {
   final pending = await AttachRecovery.read(now: now);
   if (pending == null) return false;
   await AttachRecovery.clear();
-  final files = await (source ?? DeviceLostPickSource()).recover();
+  final files = (source ?? DeviceLostPickSource()).recover().catchError((Object _) => <PickedAttachment>[]);
   await open(pending, files);
   return true;
 }

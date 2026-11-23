@@ -172,7 +172,7 @@ void main() {
             source: chat,
             picker: FakePicker(),
             events: const Stream.empty(),
-            initialAttachments: [file('спасено.jpg'), file('справка.pdf')],
+            incomingAttachments: Future.value([file('спасено.jpg'), file('справка.pdf')]),
           ),
         ),
       ));

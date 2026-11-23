@@ -72,7 +72,7 @@ class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
         final nav = navigatorKey.currentState;
         if (nav == null || !mounted) return;
         await nav.push(MaterialPageRoute<void>(
-          builder: (_) => ThreadPage(conversationId: chat.conversationId, title: chat.title.isEmpty ? 'Чат' : chat.title, initialAttachments: files),
+          builder: (_) => ThreadPage(conversationId: chat.conversationId, title: chat.title.isEmpty ? 'Чат' : chat.title, incomingAttachments: files),
         ));
       },
     );
