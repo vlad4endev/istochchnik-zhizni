@@ -79,7 +79,7 @@ fi
 if [[ -n "$LIVEKIT_RTC_NODE_IP" ]]; then
   echo "OK: LIVEKIT_RTC_NODE_IP=$LIVEKIT_RTC_NODE_IP"
 else
-  echo "WARN: LIVEKIT_RTC_NODE_IP не задан — LiveKit возьмёт IP через STUN"
+  echo "WARN: LIVEKIT_RTC_NODE_IP не задан — entrypoint не запустит LiveKit (STUN на старте отключён)"
 fi
 
 if [[ -z "$PUBLIC_WEB_ORIGIN" ]]; then
