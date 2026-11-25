@@ -5,6 +5,7 @@ import { LuArrowRight, LuDownload } from 'react-icons/lu';
 
 import { fetchLatestAppRelease, type AppReleaseLatest } from '../../admin/api';
 import { getApiBaseUrlFromEnv } from '../../../lib/config';
+import { isCapacitorNative } from '../../../lib/nativeApp';
 import {
   hasNewerRelease,
   isBannerDismissedForRelease,
@@ -112,6 +113,14 @@ export function isAppleMobileDevice(userAgent?: string): boolean {
     typeof navigator !== 'undefined' &&
     (navigator.maxTouchPoints ?? 0) > 1
   );
+}
+
+/** Android-браузер или Android-PWA — только им полезно предложение установить APK. */
+export function isAndroidDevice(userAgent?: string): boolean {
+  const ua = (
+    userAgent ?? (typeof navigator !== 'undefined' ? navigator.userAgent : '')
+  ).toLowerCase();
+  return ua.includes('android');
 }
 
 type ViewProps = {
@@ -242,7 +251,17 @@ export function AndroidAppReleaseWidgetView({
 /** Home widget: visible only when an active release with a download URL exists. */
 export function AndroidAppReleaseWidget() {
   const [seenId, setSeenId] = useState<number | null>(() => readSeenReleaseId());
-  const [hiddenOnThisDevice] = useState(() => isAppleMobileDevice());
+  /**
+   * Промо «есть полноценное приложение» адресован только Android-вебу (браузер/PWA):
+   * - iPhone/iPad — APK не ставится и скачивание в iOS не работает;
+   * - десктоп — предложение поставить телефонное приложение там не к чему;
+   * - нативный APK — приложение уже установлено, остаётся только режим «Обновление».
+   */
+  const [deviceMode] = useState<'native' | 'androidWeb' | 'hidden'>(() => {
+    if (isAppleMobileDevice()) return 'hidden';
+    if (isCapacitorNative()) return 'native';
+    return isAndroidDevice() ? 'androidWeb' : 'hidden';
+  });
   const [, forceTick] = useState(0);
 
   const latestQ = useQuery({
@@ -250,7 +269,7 @@ export function AndroidAppReleaseWidget() {
     queryFn: fetchLatestAppRelease,
     staleTime: 60_000,
     refetchOnWindowFocus: true,
-    enabled: !hiddenOnThisDevice,
+    enabled: deviceMode !== 'hidden',
   });
 
   useEffect(
@@ -275,12 +294,14 @@ export function AndroidAppReleaseWidget() {
     return release.id !== seenId;
   }, [updateAvailable, installedCode, release, seenId]);
 
-  if (hiddenOnThisDevice) return null;
+  if (deviceMode === 'hidden') return null;
   if (!release || !release.download_url?.trim()) return null;
   // Пока висит баннер обновления — виджет не дублируем; после «Позже» он вернётся.
   if (updateAvailable && !isBannerDismissedForRelease(release.id)) return null;
-  // Установленная версия известна и актуальна — приложение уже у пользователя, промо не нужно.
-  if (installedCode != null && !updateAvailable) return null;
+  // Внутри установленного приложения промо не показываем — только доступное обновление.
+  if (deviceMode === 'native' && !isUpdate) return null;
+  // Веб-Android со скачанной свежей сборкой — предложение уже выполнено.
+  if (deviceMode === 'androidWeb' && installedCode != null && !updateAvailable) return null;
 
   const href = resolveReleaseDownloadHref(release.download_url);
   if (!href) return null;
