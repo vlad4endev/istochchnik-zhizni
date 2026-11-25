@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  LuBookmark,
   LuChevronDown,
   LuChevronLeft,
   LuChevronRight,
@@ -9,6 +10,7 @@ import {
   LuMessageSquareText,
   LuNotebookPen,
   LuPlay,
+  LuShare2,
 } from 'react-icons/lu';
 
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -17,9 +19,12 @@ import { emitAppToast } from '@/lib/uiFeedback';
 import { useAuthStore } from '@/features/auth/authStore';
 
 import {
+  createBibleBookmark,
   createBibleNote,
   createChurchCommentary,
+  deleteBibleBookmark,
   fetchBibleAudio,
+  fetchBibleBookmarks,
   fetchBibleBooks,
   fetchBibleChapter,
   fetchBibleCommentaries,
@@ -56,7 +61,12 @@ export function BibleReaderPage() {
 
   // Приход по ?v= только подсвечивает стих (highlightVerse ниже) — панель действий
   // открывается лишь по явному тапу, иначе она закрывает текст при переходе из поиска.
-  const [selectedVerse, setSelectedVerse] = useState<number | null>(null);
+  // Выделение — диапазон [selStart..selEnd] (как в YouVersion): первый тап выбирает стих,
+  // тап левее/правее расширяет диапазон, тап внутри — сужает или снимает выбор.
+  const [selStart, setSelStart] = useState<number | null>(null);
+  const [selEnd, setSelEnd] = useState<number | null>(null);
+  const selLo = selStart;
+  const selHi = selStart != null ? (selEnd ?? selStart) : null;
   const [noteOpen, setNoteOpen] = useState(false);
   const [booksOpen, setBooksOpen] = useState(false);
   const [fontSize, setFontSize] = useState(() => readBibleFontSize());
@@ -64,6 +74,7 @@ export function BibleReaderPage() {
   const [churchBody, setChurchBody] = useState('');
   const verseRefs = useRef<Map<number, HTMLElement>>(new Map());
   const commentsRef = useRef<HTMLElement | null>(null);
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
 
   const audioTrack = useBibleAudioStore((s) => s.track);
   const audioStatus = useBibleAudioStore((s) => s.status);
@@ -95,6 +106,10 @@ export function BibleReaderPage() {
     queryKey: ['bible', 'notes', translation, book, chapter],
     queryFn: () => fetchBibleNotes({ translation, book, chapter }),
   });
+  const bookmarksQ = useQuery({
+    queryKey: ['bible', 'bookmarks', translation, book, chapter],
+    queryFn: () => fetchBibleBookmarks({ translation, book, chapter }),
+  });
   const commentsQ = useQuery({
     queryKey: ['bible', 'comments', translation, book, chapter],
     queryFn: () => fetchBibleCommentaries(translation, book, chapter),
@@ -118,6 +133,23 @@ export function BibleReaderPage() {
     return set;
   }, [notesQ.data]);
 
+  /** Стихи с закладками — янтарный значок в тексте. */
+  const bookmarkedVerses = useMemo(() => {
+    const set = new Set<number>();
+    for (const b of bookmarksQ.data ?? []) {
+      for (let v = b.verse_start; v <= b.verse_end; v += 1) set.add(v);
+    }
+    return set;
+  }, [bookmarksQ.data]);
+
+  /** Точная закладка на текущий выделенный диапазон (для toggle и состояния иконки). */
+  const currentBookmark =
+    selLo != null && selHi != null
+      ? (bookmarksQ.data ?? []).find(
+          (b) => b.verse_start === selLo && b.verse_end === selHi,
+        ) ?? null
+      : null;
+
   useEffect(() => {
     writeStoredTranslation(translation);
   }, [translation]);
@@ -126,10 +158,11 @@ export function BibleReaderPage() {
     writeBibleFontSize(fontSize);
   }, [fontSize]);
 
-  // Новая глава/книга/перевод — сбрасываем выделение стиха,
-  // иначе панель действий показывала бы стих из предыдущей главы.
+  // Новая глава/книга/перевод — сбрасываем выделение стихов,
+  // иначе панель действий показывала бы стихи из предыдущей главы.
   useEffect(() => {
-    setSelectedVerse(null);
+    setSelStart(null);
+    setSelEnd(null);
   }, [translation, book, chapter]);
 
   // Книги текущего перевода — стору для автоперехода к следующей главе/книге.
@@ -206,7 +239,8 @@ export function BibleReaderPage() {
         translation,
         book_slug: book,
         chapter,
-        verse_start: selectedVerse ?? 1,
+        verse_start: selLo ?? 1,
+        verse_end: selHi ?? undefined,
         body: noteBody,
       }),
     onSuccess: () => {
@@ -224,7 +258,8 @@ export function BibleReaderPage() {
         translation,
         book_slug: book,
         chapter,
-        verse_start: selectedVerse ?? undefined,
+        verse_start: selLo ?? undefined,
+        verse_end: selHi ?? undefined,
         body: churchBody,
       }),
     onSuccess: () => {
@@ -253,13 +288,20 @@ export function BibleReaderPage() {
     );
   }
 
-  const highlightVerse = activeAudioVerse ?? selectedVerse ?? focusVerse;
+  const highlightVerse = activeAudioVerse ?? focusVerse;
+  const selectedRef =
+    selLo != null && selHi != null
+      ? `${bookMeta?.short_name ?? book} ${chapter}:${selLo}${selHi > selLo ? `–${selHi}` : ''}`
+      : '';
   const selectedText =
-    selectedVerse != null
-      ? (chapterQ.data?.verses ?? []).find((v) => v.verse === selectedVerse)?.text ?? ''
+    selLo != null && selHi != null
+      ? (chapterQ.data?.verses ?? [])
+          .filter((v) => v.verse >= selLo && v.verse <= selHi)
+          .map((v) => v.text)
+          .join(' ')
       : '';
   const verseNotes = (notesQ.data ?? []).filter(
-    (n) => selectedVerse != null && n.verse_start <= selectedVerse && n.verse_end >= selectedVerse,
+    (n) => selLo != null && selHi != null && n.verse_start <= selHi && n.verse_end >= selLo,
   );
   const commentsCount = (commentsQ.data ?? []).length;
   const hasAudio = Boolean(audioQ.data && !audioQ.data.audio_url.endsWith('.json'));
@@ -270,20 +312,85 @@ export function BibleReaderPage() {
     if (next != null) setFontSize(next);
   }
 
+  function clearSelection() {
+    setSelStart(null);
+    setSelEnd(null);
+  }
+
+  function onVerseTap(v: number) {
+    if (selLo == null || selHi == null) {
+      setSelStart(v);
+      return;
+    }
+    if (v < selLo) {
+      setSelStart(v);
+      return;
+    }
+    if (v > selHi) {
+      setSelEnd(v);
+      return;
+    }
+    // Тап внутри выделения: одиночный стих — снять выбор; диапазон — сузить до v.
+    if (selLo === selHi) {
+      clearSelection();
+      return;
+    }
+    setSelEnd(v === selLo ? null : v);
+  }
+
+  function buildShareText(): string {
+    const tr = translationMeta?.short_title || translationMeta?.title || translation;
+    return `«${selectedText}» — ${selectedRef} (${tr})`;
+  }
+
   function copySelectedVerse() {
-    if (selectedVerse == null || !selectedText) return;
-    const ref = `${bookMeta?.short_name ?? book} ${chapter}:${selectedVerse}`;
-    const text = `«${selectedText}» — ${ref} (${translationMeta?.short_title || translationMeta?.title || translation})`;
-    void navigator.clipboard.writeText(text).then(
-      () => emitAppToast('Стих скопирован', 'success'),
+    if (selLo == null || !selectedText) return;
+    void navigator.clipboard.writeText(buildShareText()).then(
+      () => emitAppToast(selHi !== selLo ? 'Стихи скопированы' : 'Стих скопирован', 'success'),
       () => emitAppToast('Не удалось скопировать', 'error'),
     );
   }
 
+  function shareSelected() {
+    if (selLo == null || !selectedText) return;
+    const text = buildShareText();
+    if (typeof navigator.share === 'function') {
+      void navigator.share({ title: selectedRef, text }).catch(() => undefined);
+      return;
+    }
+    void navigator.clipboard.writeText(text).then(
+      () => emitAppToast('Скопировано — можно вставить где угодно', 'success'),
+      () => emitAppToast('Не удалось поделиться', 'error'),
+    );
+  }
+
+  const bookmarkMut = useMutation({
+    mutationFn: async () => {
+      if (currentBookmark) {
+        await deleteBibleBookmark(currentBookmark.id);
+        return 'removed' as const;
+      }
+      await createBibleBookmark({
+        translation,
+        book_slug: book,
+        chapter,
+        verse_start: selLo ?? 1,
+        verse_end: selHi ?? undefined,
+      });
+      return 'added' as const;
+    },
+    onSuccess: (result) => {
+      void qc.invalidateQueries({ queryKey: ['bible', 'bookmarks', translation, book, chapter] });
+      emitAppToast(result === 'added' ? 'Закладка добавлена' : 'Закладка убрана', 'success');
+      if (result === 'added') clearSelection();
+    },
+    onError: () => emitAppToast('Не удалось сохранить закладку', 'error'),
+  });
+
   function listenFromSelected() {
-    if (selectedVerse == null) return;
-    playCurrentChapter({ seekVerse: selectedVerse });
-    setSelectedVerse(null);
+    if (selLo == null) return;
+    playCurrentChapter({ seekVerse: selLo });
+    clearSelection();
   }
 
   const chromeOpen = noteOpen || booksOpen;
@@ -403,10 +510,30 @@ export function BibleReaderPage() {
             <div
               className="mt-2 space-y-1 pb-44 font-serif text-stone-900 lg:pb-32"
               style={{ fontSize: `${fontSize}px`, lineHeight: 1.8 }}
+              onTouchStart={(e) => {
+                const t = e.touches[0];
+                if (t) swipeStart.current = { x: t.clientX, y: t.clientY };
+              }}
+              onTouchEnd={(e) => {
+                const s = swipeStart.current;
+                swipeStart.current = null;
+                // Свайпы между главами — только без выделения и открытых шторок.
+                if (!s || selLo != null || chromeOpen) return;
+                const t = e.changedTouches[0];
+                if (!t) return;
+                const dx = t.clientX - s.x;
+                const dy = t.clientY - s.y;
+                if (Math.abs(dx) < 72 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+                if (dx < 0 && nextChapter != null) {
+                  void navigate(`/bible/${translation}/${book}/${nextChapter}`);
+                } else if (dx > 0 && prevChapter != null) {
+                  void navigate(`/bible/${translation}/${book}/${prevChapter}`);
+                }
+              }}
             >
               {(chapterQ.data?.verses ?? []).map((v) => {
                 const active = highlightVerse === v.verse;
-                const selected = selectedVerse === v.verse;
+                const selected = selLo != null && selHi != null && v.verse >= selLo && v.verse <= selHi;
                 return (
                   <p
                     key={v.verse}
@@ -421,13 +548,17 @@ export function BibleReaderPage() {
                           ? 'bg-amber-100/90'
                           : 'hover:bg-stone-100/80',
                     ].join(' ')}
-                    onClick={() => {
-                      setSelectedVerse(selected ? null : v.verse);
-                    }}
+                    onClick={() => onVerseTap(v.verse)}
                   >
                     <sup className="mr-1 select-none font-sans text-[0.6em] font-bold text-primary">
                       {v.verse}
                     </sup>
+                    {bookmarkedVerses.has(v.verse) ? (
+                      <LuBookmark
+                        aria-label="Есть закладка"
+                        className="mr-1 inline-block h-[0.65em] w-[0.65em] fill-amber-400 align-super text-amber-500"
+                      />
+                    ) : null}
                     {notedVerses.has(v.verse) ? (
                       <span
                         aria-label="Есть заметка"
@@ -477,55 +608,75 @@ export function BibleReaderPage() {
         currentBookSlug={book}
         onClose={() => setBooksOpen(false)}
         onPick={(bookSlug, nextChapterNum) => {
-          setSelectedVerse(null);
+          clearSelection();
           void navigate(`/bible/${translation}/${bookSlug}/${nextChapterNum}`);
         }}
       />
 
-      {/* Действия с выбранным стихом: компактная панель над таб-баром */}
-      {selectedVerse != null && !chromeOpen ? (
+      {/* Действия с выбранными стихами: компактная панель над таб-баром */}
+      {selLo != null && !chromeOpen ? (
         <div className="fixed inset-x-0 z-[95] flex justify-center px-3 bottom-[calc(var(--app-bottom-nav-total-height)+0.55rem)] lg:bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))]">
           <div className="w-full max-w-md rounded-3xl border border-stone-200/90 bg-white/95 p-2 shadow-[0_10px_36px_rgba(28,25,23,0.18)] backdrop-blur">
             <div className="flex items-center justify-between gap-2 px-2 pb-1.5 pt-0.5">
-              <p className="min-w-0 truncate text-sm font-bold text-stone-900">
-                {bookMeta?.short_name} {chapter}:{selectedVerse}
-              </p>
+              <p className="min-w-0 truncate text-sm font-bold text-stone-900">{selectedRef}</p>
               <button
                 type="button"
                 aria-label="Снять выбор"
-                onClick={() => setSelectedVerse(null)}
+                onClick={clearSelection}
                 className="shrink-0 rounded-full px-2 py-1 text-xs font-semibold text-stone-400 transition hover:text-stone-600"
               >
                 Отмена
               </button>
             </div>
             {/* flex, не grid-cols-*: mobile.css на <640px сводит их в колонку — кнопки действий должны оставаться в ряд */}
-            <div className="flex gap-1">
+            <div className="flex gap-0.5">
+              <button
+                type="button"
+                onClick={() => bookmarkMut.mutate()}
+                disabled={bookmarkMut.isPending}
+                className="flex flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-stone-800 transition hover:bg-stone-100 active:scale-[0.97]"
+              >
+                <LuBookmark
+                  size={19}
+                  className={currentBookmark ? 'fill-amber-400 text-amber-500' : 'text-amber-500'}
+                />
+                <span className="text-[10px] font-semibold">
+                  {currentBookmark ? 'Убрать' : 'Закладка'}
+                </span>
+              </button>
               <button
                 type="button"
                 onClick={() => setNoteOpen(true)}
-                className="flex flex-1 flex-col items-center gap-1 rounded-2xl px-2 py-2 text-stone-800 transition hover:bg-stone-100 active:scale-[0.97]"
+                className="flex flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-stone-800 transition hover:bg-stone-100 active:scale-[0.97]"
               >
                 <LuNotebookPen size={19} className="text-primary" />
-                <span className="text-[11px] font-semibold">Заметка</span>
+                <span className="text-[10px] font-semibold">Заметка</span>
               </button>
               {hasAudio ? (
                 <button
                   type="button"
                   onClick={listenFromSelected}
-                  className="flex flex-1 flex-col items-center gap-1 rounded-2xl px-2 py-2 text-stone-800 transition hover:bg-stone-100 active:scale-[0.97]"
+                  className="flex flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-stone-800 transition hover:bg-stone-100 active:scale-[0.97]"
                 >
                   <LuPlay size={19} className="text-primary" />
-                  <span className="text-[11px] font-semibold">Слушать</span>
+                  <span className="text-[10px] font-semibold">Слушать</span>
                 </button>
               ) : null}
               <button
                 type="button"
                 onClick={copySelectedVerse}
-                className="flex flex-1 flex-col items-center gap-1 rounded-2xl px-2 py-2 text-stone-800 transition hover:bg-stone-100 active:scale-[0.97]"
+                className="flex flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-stone-800 transition hover:bg-stone-100 active:scale-[0.97]"
               >
                 <LuCopy size={19} className="text-primary" />
-                <span className="text-[11px] font-semibold">Копировать</span>
+                <span className="text-[10px] font-semibold">Копия</span>
+              </button>
+              <button
+                type="button"
+                onClick={shareSelected}
+                className="flex flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-stone-800 transition hover:bg-stone-100 active:scale-[0.97]"
+              >
+                <LuShare2 size={19} className="text-primary" />
+                <span className="text-[10px] font-semibold">Поделиться</span>
               </button>
             </div>
           </div>
@@ -533,7 +684,7 @@ export function BibleReaderPage() {
       ) : null}
 
       {/* Главы: круглые кнопки по краям снизу; скрыты, пока висит мини-плеер — они бы перекрывались */}
-      {selectedVerse == null && !chromeOpen && chapterQ.data && audioTrack == null ? (
+      {selLo == null && !chromeOpen && chapterQ.data && audioTrack == null ? (
         <div className="pointer-events-none fixed inset-x-0 z-[90] flex items-end justify-between px-3 sm:px-4 lg:px-8 bottom-[calc(var(--app-bottom-nav-total-height)+0.55rem)] lg:bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))]">
           <button
             type="button"
@@ -561,14 +712,13 @@ export function BibleReaderPage() {
       ) : null}
 
       <BibleSheetShell
-        open={noteOpen && selectedVerse != null}
-        title={`${bookMeta?.short_name ?? ''} ${chapter}:${selectedVerse ?? ''}`}
+        open={noteOpen && selLo != null}
+        title={selectedRef}
         onClose={() => setNoteOpen(false)}
       >
         <div className="p-4">
           {selectedText ? (
             <p className="mb-3 rounded-2xl bg-stone-50 px-3.5 py-3 font-serif text-[15px] leading-relaxed text-stone-800">
-              <sup className="mr-1 font-sans text-[10px] font-bold text-primary">{selectedVerse}</sup>
               {selectedText}
             </p>
           ) : null}
