@@ -194,6 +194,44 @@ export async function deleteBibleNote(id: number): Promise<void> {
   await apiClient.delete(`/api/bible/notes/${id}`);
 }
 
+export interface BibleBookmark {
+  id: number;
+  translation_code: string;
+  book_slug: string;
+  book_name: string;
+  short_name: string;
+  chapter: number;
+  verse_start: number;
+  verse_end: number;
+  created_at: string;
+}
+
+export async function fetchBibleBookmarks(params?: {
+  translation?: string;
+  book?: string;
+  chapter?: number;
+}): Promise<BibleBookmark[]> {
+  const { data } = await apiClient.get<{ bookmarks: BibleBookmark[] }>('/api/bible/bookmarks', {
+    params,
+  });
+  return data.bookmarks ?? [];
+}
+
+export async function createBibleBookmark(body: {
+  translation?: string;
+  book_slug: string;
+  chapter: number;
+  verse_start: number;
+  verse_end?: number;
+}): Promise<BibleBookmark> {
+  const { data } = await apiClient.post<BibleBookmark>('/api/bible/bookmarks', body);
+  return data;
+}
+
+export async function deleteBibleBookmark(id: number): Promise<void> {
+  await apiClient.delete(`/api/bible/bookmarks/${id}`);
+}
+
 export async function fetchBiblePlans(): Promise<BiblePlan[]> {
   const { data } = await apiClient.get<{ plans: BiblePlan[] }>('/api/bible/plans');
   return data.plans ?? [];

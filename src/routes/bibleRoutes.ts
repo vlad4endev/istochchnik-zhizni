@@ -2,6 +2,9 @@ import { Router } from 'express';
 
 import {
   bibleAudioGet,
+  bibleBookmarksCreate,
+  bibleBookmarksDelete,
+  bibleBookmarksList,
   bibleBooksList,
   bibleChapterGet,
   bibleCommentariesCreate,
@@ -42,6 +45,10 @@ router.get('/notes', bibleNotesList);
 router.post('/notes', bibleNotesCreate);
 router.patch('/notes/:id', bibleNotesUpdate);
 router.delete('/notes/:id', bibleNotesDelete);
+
+router.get('/bookmarks', bibleBookmarksList);
+router.post('/bookmarks', bibleBookmarksCreate);
+router.delete('/bookmarks/:id', bibleBookmarksDelete);
 
 router.get('/plans', biblePlansList);
 router.get('/plans/:id', biblePlansGet);

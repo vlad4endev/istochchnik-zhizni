@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
+  LuBookmark,
   LuBookOpen,
   LuChevronRight,
   LuNotebookPen,
@@ -16,7 +17,6 @@ import { pluralizeRu } from '@/lib/pluralizeRu';
 
 import {
   fetchBibleBooks,
-  fetchBiblePlans,
   fetchBibleProgress,
   fetchBibleTranslations,
   searchBible,
@@ -31,6 +31,7 @@ import {
 } from '../bibleUiMeta';
 import { BooksSheet } from '../components/BooksSheet';
 import { TranslationPicker } from '../components/TranslationPicker';
+import { VerseOfDayCard } from '../components/VerseOfDayCard';
 
 export function BibleHomePage() {
   const navigate = useNavigate();
@@ -70,10 +71,6 @@ export function BibleHomePage() {
     queryFn: () => fetchBibleProgress(translation),
     enabled: hasText,
   });
-  const plansQ = useQuery({
-    queryKey: ['bible', 'plans'],
-    queryFn: fetchBiblePlans,
-  });
   const searchQ = useQuery({
     queryKey: ['bible', 'search', translation, debouncedQ],
     queryFn: () => searchBible(debouncedQ, translation),
@@ -95,14 +92,6 @@ export function BibleHomePage() {
   const searching = query.length > 0;
   const refParsed = searching ? parseBibleRef(query) : null;
   const refBook = refParsed ? (books.find((b) => b.slug === refParsed.bookSlug) ?? null) : null;
-
-  const firstPlan = (plansQ.data ?? [])[0] ?? null;
-  const planHint = (() => {
-    if (!firstPlan) return 'День за днём';
-    const total = firstPlan.days_total ?? 0;
-    const done = firstPlan.days_completed ?? 0;
-    return total > 0 ? `${firstPlan.title} · ${done} из ${total}` : firstPlan.title;
-  })();
 
   function rememberAndGo(bookSlug: string, chapter: number, verse?: number | null) {
     const book = books.find((b) => b.slug === bookSlug);
@@ -214,6 +203,15 @@ export function BibleHomePage() {
           </div>
         ) : (
           <>
+            {hasText ? (
+              <div className="mt-4">
+                <VerseOfDayCard
+                  translation={translation}
+                  translationTitle={currentMeta?.short_title || currentMeta?.title || translation}
+                />
+              </div>
+            ) : null}
+
             {progress && hasText ? (
               <button
                 type="button"
@@ -273,30 +271,34 @@ export function BibleHomePage() {
               </div>
             ) : null}
 
-            <div className="mt-4 grid grid-cols-2 gap-2">
+            {/* app-mobile-sections-grid: иначе mobile.css схлопывает grid-cols-3 в одну колонку на телефоне */}
+            <div className="app-mobile-sections-grid mt-4 grid grid-cols-3 gap-2">
               <Link
                 to="/bible/notes"
-                className="flex items-center gap-3 rounded-2xl border border-stone-200 bg-[var(--surface-elevated)] px-4 py-3 transition hover:border-primary/30"
+                className="flex flex-col items-center gap-2 rounded-2xl border border-stone-200 bg-[var(--surface-elevated)] px-2 py-3.5 text-center transition hover:border-primary/30"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <LuNotebookPen size={17} />
                 </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-bold text-stone-900">Заметки</span>
-                  <span className="block truncate text-xs text-stone-400">К стихам</span>
+                <span className="block text-[13px] font-bold leading-tight text-stone-900">Заметки</span>
+              </Link>
+              <Link
+                to="/bible/notes?tab=bookmarks"
+                className="flex flex-col items-center gap-2 rounded-2xl border border-stone-200 bg-[var(--surface-elevated)] px-2 py-3.5 text-center transition hover:border-primary/30"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600">
+                  <LuBookmark size={17} />
                 </span>
+                <span className="block text-[13px] font-bold leading-tight text-stone-900">Закладки</span>
               </Link>
               <Link
                 to="/bible/plans"
-                className="flex items-center gap-3 rounded-2xl border border-stone-200 bg-[var(--surface-elevated)] px-4 py-3 transition hover:border-primary/30"
+                className="flex flex-col items-center gap-2 rounded-2xl border border-stone-200 bg-[var(--surface-elevated)] px-2 py-3.5 text-center transition hover:border-primary/30"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <LuSparkles size={17} />
                 </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-bold text-stone-900">Планы</span>
-                  <span className="block truncate text-xs text-stone-400">{planHint}</span>
-                </span>
+                <span className="block text-[13px] font-bold leading-tight text-stone-900">Планы</span>
               </Link>
             </div>
 
@@ -337,7 +339,8 @@ export function BibleHomePage() {
                 </div>
               ) : null}
 
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              {/* app-mobile-sections-grid: иначе mobile.css схлопывает сетку в одну колонку на телефоне — 66 книг «лентой» */}
+              <div className="app-mobile-sections-grid mt-3 grid grid-cols-2 gap-2">
                 {visibleBooks.map((b) => (
                   <button
                     key={b.slug}

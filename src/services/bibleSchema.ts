@@ -263,6 +263,26 @@ export async function ensureBibleSchema(): Promise<void> {
         END $mig$
       `);
 
+      // Создаём после smallint→integer миграции: FK требует совпадения типов колонок.
+      await query(`
+        CREATE TABLE IF NOT EXISTS public.bible_bookmarks (
+          id BIGSERIAL PRIMARY KEY,
+          member_id INTEGER NOT NULL,
+          translation_id INTEGER NOT NULL REFERENCES public.bible_translations(id) ON DELETE CASCADE,
+          book_id INTEGER NOT NULL REFERENCES public.bible_books(id) ON DELETE CASCADE,
+          chapter SMALLINT NOT NULL,
+          verse_start SMALLINT NOT NULL,
+          verse_end SMALLINT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (member_id, translation_id, book_id, chapter, verse_start, verse_end)
+        )
+      `);
+
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_bible_bookmarks_member_created
+          ON public.bible_bookmarks (member_id, created_at DESC)
+      `);
+
       // Soft FK to members when table exists
       await query(`
         DO $$
@@ -299,6 +319,16 @@ export async function ensureBibleSchema(): Promise<void> {
             ) THEN
               ALTER TABLE public.bible_reading_plans
                 ADD CONSTRAINT bible_reading_plans_member_id_fkey
+                FOREIGN KEY (member_id) REFERENCES public.members(id) ON DELETE CASCADE;
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.table_constraints
+              WHERE constraint_schema = 'public'
+                AND table_name = 'bible_bookmarks'
+                AND constraint_name = 'bible_bookmarks_member_id_fkey'
+            ) THEN
+              ALTER TABLE public.bible_bookmarks
+                ADD CONSTRAINT bible_bookmarks_member_id_fkey
                 FOREIGN KEY (member_id) REFERENCES public.members(id) ON DELETE CASCADE;
             END IF;
           END IF;
