@@ -1,10 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FaAndroid } from 'react-icons/fa';
 import { LuArrowRight, LuDownload } from 'react-icons/lu';
 
 import { fetchLatestAppRelease, type AppReleaseLatest } from '../../admin/api';
 import { getApiBaseUrlFromEnv } from '../../../lib/config';
+import {
+  hasNewerRelease,
+  isBannerDismissedForRelease,
+  markReleaseDownloaded,
+  notifyUpdateBannerVisibilityChanged,
+  onUpdateBannerVisibilityChanged,
+  readInstalledVersionCode,
+} from '../../../lib/appVersion';
 
 const SEEN_RELEASE_KEY = 'android-app-release-seen-id';
 const LATEST_KEY = ['app-release-latest'] as const;
@@ -235,6 +243,7 @@ export function AndroidAppReleaseWidgetView({
 export function AndroidAppReleaseWidget() {
   const [seenId, setSeenId] = useState<number | null>(() => readSeenReleaseId());
   const [hiddenOnThisDevice] = useState(() => isAppleMobileDevice());
+  const [, forceTick] = useState(0);
 
   const latestQ = useQuery({
     queryKey: LATEST_KEY,
@@ -244,16 +253,34 @@ export function AndroidAppReleaseWidget() {
     enabled: !hiddenOnThisDevice,
   });
 
+  useEffect(
+    () => onUpdateBannerVisibilityChanged(() => forceTick((v) => v + 1)),
+    [],
+  );
+
   const release = latestQ.data ?? null;
 
+  const installedCode = readInstalledVersionCode();
+  const updateAvailable = useMemo(
+    () => hasNewerRelease(release?.version_code, installedCode),
+    [release, installedCode],
+  );
+
   const isUpdate = useMemo(() => {
+    if (updateAvailable) return true;
+    // Версию установить не удалось (старая сборка без константы, PWA) — эвристика «видел ли релиз».
+    if (installedCode != null) return false;
     if (!release) return false;
     if (seenId == null) return false;
     return release.id !== seenId;
-  }, [release, seenId]);
+  }, [updateAvailable, installedCode, release, seenId]);
 
   if (hiddenOnThisDevice) return null;
   if (!release || !release.download_url?.trim()) return null;
+  // Пока висит баннер обновления — виджет не дублируем; после «Позже» он вернётся.
+  if (updateAvailable && !isBannerDismissedForRelease(release.id)) return null;
+  // Установленная версия известна и актуальна — приложение уже у пользователя, промо не нужно.
+  if (installedCode != null && !updateAvailable) return null;
 
   const href = resolveReleaseDownloadHref(release.download_url);
   if (!href) return null;
@@ -263,6 +290,8 @@ export function AndroidAppReleaseWidget() {
   const onActivate = () => {
     markReleaseSeen(release.id);
     setSeenId(release.id);
+    markReleaseDownloaded(release.version_code);
+    notifyUpdateBannerVisibilityChanged();
   };
 
   return (

@@ -1683,6 +1683,8 @@ export async function createAdminAppRelease(input: {
   download_url?: string;
   is_active?: boolean;
   apk?: File | null;
+  /** Разослать пуш о новой сборке всем участникам с push-подписками. */
+  notify?: boolean;
 }): Promise<AppReleaseItem> {
   if (input.apk) {
     const form = new FormData();
@@ -1692,6 +1694,7 @@ export async function createAdminAppRelease(input: {
     if (input.notes) form.append('notes', input.notes);
     if (input.download_url) form.append('download_url', input.download_url);
     if (input.is_active !== undefined) form.append('is_active', String(input.is_active));
+    if (input.notify !== undefined) form.append('notify', String(input.notify));
     form.append('apk', input.apk);
     const { data } = await apiClient.post<{ item: AppReleaseItem }>('/api/releases', form, {
       timeout: 10 * 60_000,
@@ -1705,8 +1708,31 @@ export async function createAdminAppRelease(input: {
     notes: input.notes ?? '',
     download_url: input.download_url ?? '',
     is_active: input.is_active !== false,
+    notify: input.notify !== false,
   });
   return data.item;
+}
+
+export type ReleaseNotifySummary = {
+  recipients: number;
+  attempted: number;
+  failed: number;
+};
+
+/** POST /api/releases/notify — разослать пуш о релизе (по умолчанию — последнем активном). */
+export async function notifyAdminAppRelease(releaseId?: number): Promise<{
+  release: AppReleaseItem;
+  summary: ReleaseNotifySummary;
+}> {
+  const { data } = await apiClient.post<{
+    release: AppReleaseItem;
+    summary: ReleaseNotifySummary;
+  }>(
+    '/api/releases/notify',
+    releaseId != null ? { release_id: releaseId } : {},
+    { timeout: 10 * 60_000 },
+  );
+  return data;
 }
 
 export async function patchAdminAppRelease(

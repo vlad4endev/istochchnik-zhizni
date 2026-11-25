@@ -16,6 +16,13 @@ declare module 'pdfjs-dist/build/pdf.worker.min.mjs?url' {
 declare const __WEB_REACT_BUILD_STAMP__: string;
 /** Уникальный id фронтовой сборки (GITHUB_SHA или stamp); см. vite.config.ts */
 declare const __CLIENT_BUILD_VERSION__: string;
+/**
+ * versionCode / versionName из android/app/build.gradle (см. vite.config.ts).
+ * Имеет смысл только внутри нативного APK; в PWA/вебе — null.
+ * Старые сборки APK без этой константы дают 'undefined' через typeof-проверку.
+ */
+declare const __APP_VERSION_CODE__: number | null;
+declare const __APP_VERSION_NAME__: string | null;
 
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string;
