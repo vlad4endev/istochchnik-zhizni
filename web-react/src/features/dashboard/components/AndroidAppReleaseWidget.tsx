@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { FaAndroid } from 'react-icons/fa';
-import { LuDownload } from 'react-icons/lu';
+import { LuArrowRight, LuDownload } from 'react-icons/lu';
 
 import { fetchLatestAppRelease, type AppReleaseLatest } from '../../admin/api';
 import { getApiBaseUrlFromEnv } from '../../../lib/config';
@@ -112,14 +112,7 @@ export function AndroidAppReleaseWidgetView({
     (release.version_code != null ? `сборка ${release.version_code}` : null);
 
   return (
-    <section
-      aria-label={isUpdate ? 'Обновление Android-приложения' : 'Приложение Android'}
-      className={[
-        'rounded-2xl border border-[#3DDC84]/35 bg-gradient-to-br from-[#E8F5E9] via-white to-[#F1F8E9]',
-        'p-4 shadow-[var(--shadow-card)] sm:p-5',
-        'dark:border-[#3DDC84]/25 dark:from-[#0d2818]/60 dark:via-[var(--surface-elevated)] dark:to-[#14301f]/40',
-      ].join(' ')}
-    >
+    <section aria-label={isUpdate ? 'Обновление Android-приложения' : 'Приложение Android'}>
       <a
         href={href}
         download={downloadName}
@@ -127,50 +120,93 @@ export function AndroidAppReleaseWidgetView({
         rel={openInNewTab ? 'noopener noreferrer' : undefined}
         onClick={onActivate}
         className={[
-          'flex w-full cursor-pointer items-start gap-3 text-left no-underline outline-none',
-          'rounded-xl text-inherit focus-visible:ring-2 focus-visible:ring-[#3DDC84] focus-visible:ring-offset-2',
-          'active:scale-[0.99] transition-transform',
+          'group relative block cursor-pointer overflow-hidden rounded-3xl no-underline outline-none',
+          'border border-[#3DDC84]/40 bg-gradient-to-br from-[#E9F7EE] via-white to-[#F4F9E9]',
+          'p-4 text-inherit shadow-[var(--shadow-card)] transition-all duration-300 sm:p-5',
+          'hover:-translate-y-0.5 hover:border-[#3DDC84]/70 hover:shadow-[0_20px_44px_-18px_rgba(27,94,32,0.4)]',
+          'focus-visible:ring-2 focus-visible:ring-[#3DDC84] focus-visible:ring-offset-2',
+          'dark:border-[#3DDC84]/25 dark:from-[#0C2417] dark:via-[var(--surface-elevated)] dark:to-[#0F2A1B]',
+          'motion-reduce:transition-none motion-reduce:hover:transform-none',
         ].join(' ')}
       >
         <span
-          className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#3DDC84] text-[#073042] shadow-sm"
+          className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-[#3DDC84]/25 blur-2xl dark:bg-[#3DDC84]/15"
+          aria-hidden
+        />
+        <span
+          className="pointer-events-none absolute -bottom-14 -right-10 text-[#1B5E20]/[0.07] dark:text-[#3DDC84]/[0.08]"
           aria-hidden
         >
-          <FaAndroid className="h-7 w-7" />
+          <FaAndroid className="h-40 w-40" />
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#1B5E20] dark:text-[#81C784]">
-            Android
-          </p>
-          <h2 className="mt-1 text-base font-extrabold leading-snug text-stone-900 dark:text-[var(--text)]">
-            {isUpdate
-              ? 'Доступно обновление приложения'
-              : 'Доступно полноценное приложение на ANDROID'}
-          </h2>
-          <p className="mt-1.5 text-sm font-medium leading-relaxed text-stone-600 dark:text-[var(--text-muted)]">
-            {release.title?.trim() ||
-              (isUpdate
-                ? 'Нажмите, чтобы скачать новую сборку и обновить приложение.'
-                : 'Нажмите, чтобы скачать и установить APK на устройство.')}
-            {versionLabel ? (
-              <span className="mt-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">
-                Версия {versionLabel}
-                {sizeLabel ? ` · ${sizeLabel}` : ''}
-              </span>
-            ) : sizeLabel ? (
-              <span className="mt-1 block text-xs font-semibold text-stone-500">{sizeLabel}</span>
-            ) : null}
-          </p>
+
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
           <span
             className={[
-              'mt-3 inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl px-4',
-              'bg-[#073042] text-sm font-extrabold text-white',
-              'dark:bg-[#3DDC84] dark:text-[#073042]',
+              'grid h-14 w-14 shrink-0 place-items-center rounded-2xl',
+              'bg-gradient-to-br from-[#3DDC84] to-[#1FA95C] text-[#05301D]',
+              'shadow-[0_12px_26px_-10px_rgba(31,169,92,0.65)] ring-1 ring-white/50',
+              'transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none',
             ].join(' ')}
+            aria-hidden
           >
-            <LuDownload className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
-            {isUpdate ? 'Скачать обновление' : 'Скачать APK'}
+            <FaAndroid className="h-8 w-8" />
           </span>
+
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#1B5E20] dark:text-[#81C784]">
+                Android
+              </span>
+              <span className="rounded-full bg-[#3DDC84]/15 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.06em] text-[#1B5E20] ring-1 ring-[#3DDC84]/30 dark:text-[#A5D6A7]">
+                {isUpdate ? 'Обновление' : 'Приложение'}
+              </span>
+            </p>
+            <h2 className="mt-1.5 text-[17px] font-extrabold leading-snug text-stone-900 dark:text-[var(--text)]">
+              {isUpdate ? 'Доступно обновление приложения' : 'Доступно полноценное приложение'}
+            </h2>
+            <p className="mt-1 text-sm font-medium leading-relaxed text-stone-600 dark:text-[var(--text-muted)]">
+              {release.title?.trim() ||
+                (isUpdate
+                  ? 'Нажмите, чтобы скачать новую сборку и обновить приложение.'
+                  : 'Нажмите, чтобы скачать и установить APK на устройство.')}
+            </p>
+            {versionLabel || sizeLabel ? (
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                {versionLabel ? (
+                  <span className="inline-flex items-center rounded-full bg-[#073042]/[0.06] px-2.5 py-1 text-[11px] font-bold text-stone-700 ring-1 ring-[#073042]/10 dark:bg-white/10 dark:ring-white/10">
+                    Версия {versionLabel}
+                  </span>
+                ) : null}
+                {sizeLabel ? (
+                  <span className="inline-flex items-center rounded-full bg-[#073042]/[0.06] px-2.5 py-1 text-[11px] font-bold text-stone-700 ring-1 ring-[#073042]/10 dark:bg-white/10 dark:ring-white/10">
+                    {sizeLabel}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="shrink-0 sm:text-center">
+            <span
+              className={[
+                'inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl px-5 sm:w-auto',
+                'bg-[#073042] text-sm font-extrabold text-white',
+                'shadow-[0_12px_26px_-10px_rgba(7,48,66,0.75)]',
+                'transition-colors duration-200 group-hover:bg-[#0C4258] motion-reduce:transition-none',
+              ].join(' ')}
+            >
+              <LuDownload className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+              {isUpdate ? 'Скачать обновление' : 'Скачать APK'}
+              <LuArrowRight
+                className="h-4 w-4 shrink-0 opacity-70 transition-transform duration-200 group-hover:translate-x-1 motion-reduce:transition-none"
+                aria-hidden
+              />
+            </span>
+            <p className="mt-2 text-[11px] font-semibold text-stone-500 dark:text-stone-400">
+              Бесплатно · без Google Play
+            </p>
+          </div>
         </div>
       </a>
     </section>
