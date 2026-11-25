@@ -15,7 +15,10 @@ import {
   listSetlists,
 } from './studioService';
 
-const hasDb = Boolean(process.env.DATABASE_URL);
+// Тест дропает схему public — только против отдельной scratch-БД и с явным согласием:
+// ALLOW_DESTRUCTIVE_DB_TESTS=1 DATABASE_URL=postgres://.../scratch npm test
+const hasDb =
+  Boolean(process.env.DATABASE_URL) && process.env.ALLOW_DESTRUCTIVE_DB_TESTS === '1';
 const suite = hasDb ? describe : describe.skip;
 
 async function resetMinimalSchema(): Promise<void> {
