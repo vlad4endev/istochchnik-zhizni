@@ -5,9 +5,10 @@ import {
   LuChevronDown,
   LuChevronLeft,
   LuChevronRight,
+  LuCopy,
   LuMessageSquareText,
   LuNotebookPen,
-  LuX,
+  LuPlay,
 } from 'react-icons/lu';
 
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -27,10 +28,13 @@ import {
   saveBibleProgress,
 } from '../api';
 import {
+  BIBLE_FONT_SIZES,
   pushRecentBible,
-  readRecentBible,
+  readBibleFontSize,
+  writeBibleFontSize,
   writeStoredTranslation,
 } from '../bibleUiMeta';
+import { BibleSheetShell } from '../components/BibleSheetShell';
 import { BooksSheet } from '../components/BooksSheet';
 import { SyncedAudioPlayer } from '../components/SyncedAudioPlayer';
 import { TranslationPicker } from '../components/TranslationPicker';
@@ -48,14 +52,20 @@ export function BibleReaderPage() {
     ['admin', 'pastor', 'editor', 'minister'].includes(String(r ?? '').toLowerCase()),
   );
 
-  const [selectedVerse, setSelectedVerse] = useState<number | null>(focusVerse);
+  // Приход по ?v= только подсвечивает стих (highlightVerse ниже) — панель действий
+  // открывается лишь по явному тапу, иначе она закрывает текст при переходе из поиска.
+  const [selectedVerse, setSelectedVerse] = useState<number | null>(null);
   const [activeAudioVerse, setActiveAudioVerse] = useState<number | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
   const [booksOpen, setBooksOpen] = useState(false);
-  const [recent, setRecent] = useState(() => readRecentBible());
+  const [fontSize, setFontSize] = useState(() => readBibleFontSize());
   const [noteBody, setNoteBody] = useState('');
   const [churchBody, setChurchBody] = useState('');
+  /** Стих, с которого запустили озвучку кнопкой «Слушать» (null — не перематывать). */
+  const [listenVerse, setListenVerse] = useState<number | null>(null);
+  const [seekNonce, setSeekNonce] = useState(0);
   const verseRefs = useRef<Map<number, HTMLElement>>(new Map());
+  const commentsRef = useRef<HTMLElement | null>(null);
 
   const translationsQ = useQuery({
     queryKey: ['bible', 'translations'],
@@ -88,9 +98,22 @@ export function BibleReaderPage() {
     [booksQ.data, book, chapterQ.data?.book],
   );
 
+  /** Стихи, к которым есть личные заметки — помечаем точкой в тексте. */
+  const notedVerses = useMemo(() => {
+    const set = new Set<number>();
+    for (const n of notesQ.data ?? []) {
+      for (let v = n.verse_start; v <= n.verse_end; v += 1) set.add(v);
+    }
+    return set;
+  }, [notesQ.data]);
+
   useEffect(() => {
     writeStoredTranslation(translation);
   }, [translation]);
+
+  useEffect(() => {
+    writeBibleFontSize(fontSize);
+  }, [fontSize]);
 
   useEffect(() => {
     if (!chapterQ.data?.verses.length) return;
@@ -105,16 +128,14 @@ export function BibleReaderPage() {
 
   useEffect(() => {
     if (!bookMeta || !translationMeta) return;
-    setRecent(
-      pushRecentBible({
-        translation,
-        translation_title: translationMeta.title,
-        book_slug: bookMeta.slug,
-        book_name: bookMeta.name,
-        short_name: bookMeta.short_name,
-        chapter,
-      }),
-    );
+    pushRecentBible({
+      translation,
+      translation_title: translationMeta.title,
+      book_slug: bookMeta.slug,
+      book_name: bookMeta.name,
+      short_name: bookMeta.short_name,
+      chapter,
+    });
   }, [
     translation,
     chapter,
@@ -147,6 +168,7 @@ export function BibleReaderPage() {
       }),
     onSuccess: () => {
       setNoteBody('');
+      setNoteOpen(false);
       void qc.invalidateQueries({ queryKey: ['bible', 'notes', translation, book, chapter] });
       emitAppToast('Заметка сохранена', 'success');
     },
@@ -171,10 +193,42 @@ export function BibleReaderPage() {
   });
 
   const prevChapter = chapter > 1 ? chapter - 1 : null;
-  const nextChapter =
-    bookMeta && chapter < bookMeta.chapters_count ? chapter + 1 : null;
+  const nextChapter = bookMeta && chapter < bookMeta.chapters_count ? chapter + 1 : null;
 
   const highlightVerse = activeAudioVerse ?? selectedVerse ?? focusVerse;
+  const selectedText =
+    selectedVerse != null
+      ? (chapterQ.data?.verses ?? []).find((v) => v.verse === selectedVerse)?.text ?? ''
+      : '';
+  const verseNotes = (notesQ.data ?? []).filter(
+    (n) => selectedVerse != null && n.verse_start <= selectedVerse && n.verse_end >= selectedVerse,
+  );
+  const commentsCount = (commentsQ.data ?? []).length;
+  const hasAudio = Boolean(audioQ.data && !audioQ.data.audio_url.endsWith('.json'));
+  const fontIdx = (BIBLE_FONT_SIZES as readonly number[]).indexOf(fontSize);
+
+  function bumpFont(delta: 1 | -1) {
+    const next = BIBLE_FONT_SIZES[fontIdx + delta];
+    if (next != null) setFontSize(next);
+  }
+
+  function copySelectedVerse() {
+    if (selectedVerse == null || !selectedText) return;
+    const ref = `${bookMeta?.short_name ?? book} ${chapter}:${selectedVerse}`;
+    const text = `«${selectedText}» — ${ref} (${translationMeta?.short_title || translationMeta?.title || translation})`;
+    void navigator.clipboard.writeText(text).then(
+      () => emitAppToast('Стих скопирован', 'success'),
+      () => emitAppToast('Не удалось скопировать', 'error'),
+    );
+  }
+
+  function listenFromSelected() {
+    if (selectedVerse == null) return;
+    setListenVerse(selectedVerse);
+    setSeekNonce((n) => n + 1);
+  }
+
+  const chromeOpen = noteOpen || booksOpen;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -182,79 +236,162 @@ export function BibleReaderPage() {
         <PageHeader title="Библия" />
       </div>
 
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 px-4 py-4 sm:px-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <TranslationPicker
-            compact
-            translations={translationsQ.data ?? []}
-            value={translation}
-            onChange={(code) => {
-              writeStoredTranslation(code);
-              void navigate(
-                `/bible/${code}/${book}/${chapter}${focusVerse != null ? `?v=${focusVerse}` : ''}`,
-              );
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => setBooksOpen(true)}
-            className="inline-flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-left"
-          >
-            <span className="truncate text-sm font-bold text-stone-900">
-              {bookMeta ? `${bookMeta.name} ${chapter}` : 'Книга'}
-            </span>
-            <LuChevronDown size={16} className="shrink-0 text-stone-400" />
-          </button>
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pb-4 sm:px-5">
+        <div className="sticky top-12 z-10 -mx-4 border-b border-stone-200/60 bg-[var(--surface)] px-4 py-2 sm:-mx-5 sm:px-5">
+          <div className="flex items-center gap-2">
+            <Link
+              to="/bible"
+              aria-label="К списку книг"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-700 transition active:scale-95"
+            >
+              <LuChevronLeft size={18} />
+            </Link>
+            <TranslationPicker
+              compact
+              translations={translationsQ.data ?? []}
+              value={translation}
+              onChange={(code) => {
+                writeStoredTranslation(code);
+                void navigate(
+                  `/bible/${code}/${book}/${chapter}${focusVerse != null ? `?v=${focusVerse}` : ''}`,
+                );
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setBooksOpen(true)}
+              className="inline-flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-left"
+            >
+              <span className="truncate text-sm font-bold text-stone-900">
+                {bookMeta ? `${bookMeta.name} ${chapter}` : 'Глава'}
+              </span>
+              <LuChevronDown size={16} className="shrink-0 text-stone-400" />
+            </button>
+            <div className="flex shrink-0 items-center rounded-full border border-stone-200 bg-white">
+              <button
+                type="button"
+                aria-label="Уменьшить шрифт"
+                disabled={fontIdx <= 0}
+                onClick={() => bumpFont(-1)}
+                className="px-2 py-1.5 text-xs font-bold text-stone-700 disabled:opacity-30"
+              >
+                A−
+              </button>
+              <span className="h-4 w-px bg-stone-200" aria-hidden />
+              <button
+                type="button"
+                aria-label="Увеличить шрифт"
+                disabled={fontIdx < 0 || fontIdx >= BIBLE_FONT_SIZES.length - 1}
+                onClick={() => bumpFont(1)}
+                className="px-2 py-1.5 text-base font-bold text-stone-700 disabled:opacity-30"
+              >
+                A+
+              </button>
+            </div>
+          </div>
         </div>
 
         {audioQ.data ? (
-          <SyncedAudioPlayer
-            audio={audioQ.data}
-            onActiveVerse={setActiveAudioVerse}
-            seekVerse={sheetOpen ? selectedVerse : null}
-          />
+          <div className="mt-3">
+            <SyncedAudioPlayer
+              audio={audioQ.data}
+              onActiveVerse={setActiveAudioVerse}
+              seekVerse={listenVerse}
+              seekNonce={seekNonce}
+            />
+          </div>
         ) : null}
 
         {chapterQ.isLoading ? (
-          <p className="text-sm text-stone-500">Загрузка…</p>
+          <p className="mt-4 text-sm text-stone-500">Загрузка…</p>
+        ) : chapterQ.isError ? (
+          <div className="mt-4 rounded-2xl border border-stone-200 bg-white px-4 py-6 text-center">
+            <p className="text-sm font-semibold text-stone-800">Глава не найдена</p>
+            <p className="mt-1 text-sm text-stone-500">
+              Проверьте ссылку или выберите книгу из списка.
+            </p>
+            <Link
+              to="/bible"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white"
+            >
+              <LuChevronLeft size={15} /> К списку книг
+            </Link>
+          </div>
         ) : chapterQ.data?.verses.length === 0 ? (
-          <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             Текст главы отсутствует. Загрузка:{' '}
             <code>npm run bible:seed -- --translation={translationMeta?.code || translation}</code>
           </p>
         ) : (
-          <div className="space-y-1 pb-36 font-serif text-[17px] leading-8 text-stone-900 sm:text-[18px] lg:pb-24">
-            {(chapterQ.data?.verses ?? []).map((v) => {
-              const active = highlightVerse === v.verse;
-              return (
-                <p
-                  key={v.verse}
-                  ref={(el) => {
-                    if (el) verseRefs.current.set(v.verse, el);
-                  }}
-                  className={[
-                    'cursor-pointer rounded-xl px-2 py-1 transition',
-                    active ? 'bg-amber-100/90' : 'hover:bg-stone-100/80',
-                  ].join(' ')}
-                  onClick={() => {
-                    setSelectedVerse(v.verse);
-                    setSheetOpen(true);
-                  }}
-                >
-                  <sup className="mr-1 select-none text-[11px] font-sans font-bold text-primary">
-                    {v.verse}
-                  </sup>
-                  {v.text}
-                </p>
-              );
-            })}
-          </div>
+          <>
+            <h1 className="mt-4 font-serif text-[22px] font-bold text-stone-900">
+              {bookMeta?.name} {chapter}
+            </h1>
+            {commentsCount > 0 ? (
+              <button
+                type="button"
+                onClick={() =>
+                  commentsRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+                }
+                className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-[#f3e8e4]"
+              >
+                <LuMessageSquareText size={13} />
+                {commentsCount}{' '}
+                {commentsCount === 1 ? 'комментарий' : commentsCount < 5 ? 'комментария' : 'комментариев'}
+              </button>
+            ) : null}
+            <div
+              className="mt-2 space-y-1 pb-44 font-serif text-stone-900 lg:pb-32"
+              style={{ fontSize: `${fontSize}px`, lineHeight: 1.8 }}
+            >
+              {(chapterQ.data?.verses ?? []).map((v) => {
+                const active = highlightVerse === v.verse;
+                const selected = selectedVerse === v.verse;
+                return (
+                  <p
+                    key={v.verse}
+                    ref={(el) => {
+                      if (el) verseRefs.current.set(v.verse, el);
+                    }}
+                    className={[
+                      'cursor-pointer rounded-xl px-2 py-1 transition',
+                      selected
+                        ? 'bg-amber-100/90 ring-1 ring-amber-300'
+                        : active
+                          ? 'bg-amber-100/90'
+                          : 'hover:bg-stone-100/80',
+                    ].join(' ')}
+                    onClick={() => {
+                      setSelectedVerse(selected ? null : v.verse);
+                    }}
+                  >
+                    <sup className="mr-1 select-none font-sans text-[0.6em] font-bold text-primary">
+                      {v.verse}
+                    </sup>
+                    {notedVerses.has(v.verse) ? (
+                      <span
+                        aria-label="Есть заметка"
+                        title="Есть заметка"
+                        className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-primary align-super"
+                      />
+                    ) : null}
+                    {v.text}
+                  </p>
+                );
+              })}
+            </div>
+          </>
         )}
 
-        {(commentsQ.data ?? []).length > 0 ? (
-          <section className="space-y-2 border-t border-stone-200 pb-28 pt-4 lg:pb-16">
+        {commentsCount > 0 ? (
+          <section
+            ref={(el) => {
+              commentsRef.current = el;
+            }}
+            className="space-y-2 border-t border-stone-200 pb-32 pt-4 lg:pb-20"
+          >
             <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-stone-500">
-              <LuMessageSquareText size={14} /> Комментарии
+              <LuMessageSquareText size={14} /> Комментарии · {commentsCount}
             </h2>
             {(commentsQ.data ?? []).map((c) => (
               <article
@@ -278,15 +415,65 @@ export function BibleReaderPage() {
         books={booksQ.data ?? []}
         translation={translationMeta ?? null}
         currentBookSlug={book}
-        recent={recent}
         onClose={() => setBooksOpen(false)}
         onPick={(bookSlug, nextChapterNum) => {
+          setSelectedVerse(null);
           void navigate(`/bible/${translation}/${bookSlug}/${nextChapterNum}`);
         }}
       />
 
-      {/* Главы: круглые кнопки по краям снизу, над таб-баром (как в «Библия») */}
-      {!sheetOpen && !booksOpen ? (
+      {/* Действия с выбранным стихом: компактная панель над таб-баром */}
+      {selectedVerse != null && !chromeOpen ? (
+        <div className="fixed inset-x-0 z-[95] flex justify-center px-3 bottom-[calc(var(--app-bottom-nav-total-height)+0.55rem)] lg:bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))]">
+          <div className="w-full max-w-md rounded-3xl border border-stone-200/90 bg-white/95 p-2 shadow-[0_10px_36px_rgba(28,25,23,0.18)] backdrop-blur">
+            <div className="flex items-center justify-between gap-2 px-2 pb-1.5 pt-0.5">
+              <p className="min-w-0 truncate text-sm font-bold text-stone-900">
+                {bookMeta?.short_name} {chapter}:{selectedVerse}
+              </p>
+              <button
+                type="button"
+                aria-label="Снять выбор"
+                onClick={() => setSelectedVerse(null)}
+                className="shrink-0 rounded-full px-2 py-1 text-xs font-semibold text-stone-400 transition hover:text-stone-600"
+              >
+                Отмена
+              </button>
+            </div>
+            {/* flex, не grid-cols-*: mobile.css на <640px сводит их в колонку — кнопки действий должны оставаться в ряд */}
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => setNoteOpen(true)}
+                className="flex flex-1 flex-col items-center gap-1 rounded-2xl px-2 py-2 text-stone-800 transition hover:bg-stone-100 active:scale-[0.97]"
+              >
+                <LuNotebookPen size={19} className="text-primary" />
+                <span className="text-[11px] font-semibold">Заметка</span>
+              </button>
+              {hasAudio ? (
+                <button
+                  type="button"
+                  onClick={listenFromSelected}
+                  className="flex flex-1 flex-col items-center gap-1 rounded-2xl px-2 py-2 text-stone-800 transition hover:bg-stone-100 active:scale-[0.97]"
+                >
+                  <LuPlay size={19} className="text-primary" />
+                  <span className="text-[11px] font-semibold">Слушать</span>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={copySelectedVerse}
+                className="flex flex-1 flex-col items-center gap-1 rounded-2xl px-2 py-2 text-stone-800 transition hover:bg-stone-100 active:scale-[0.97]"
+              >
+                <LuCopy size={19} className="text-primary" />
+                <span className="text-[11px] font-semibold">Копировать</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Главы: круглые кнопки по краям снизу, над таб-баром; только при загруженной главе */}
+      {selectedVerse == null && !chromeOpen && chapterQ.data ? (
         <div className="pointer-events-none fixed inset-x-0 z-[90] flex items-end justify-between px-3 sm:px-4 lg:px-8 bottom-[calc(var(--app-bottom-nav-total-height)+0.55rem)] lg:bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))]">
           <button
             type="button"
@@ -313,16 +500,18 @@ export function BibleReaderPage() {
         </div>
       ) : null}
 
-      {sheetOpen && selectedVerse != null ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-2xl rounded-t-3xl border border-stone-200 bg-[var(--surface-elevated)] p-4 shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="font-bold text-stone-900">
-              {bookMeta?.short_name} {chapter}:{selectedVerse}
+      <BibleSheetShell
+        open={noteOpen && selectedVerse != null}
+        title={`${bookMeta?.short_name ?? ''} ${chapter}:${selectedVerse ?? ''}`}
+        onClose={() => setNoteOpen(false)}
+      >
+        <div className="p-4">
+          {selectedText ? (
+            <p className="mb-3 rounded-2xl bg-stone-50 px-3.5 py-3 font-serif text-[15px] leading-relaxed text-stone-800">
+              <sup className="mr-1 font-sans text-[10px] font-bold text-primary">{selectedVerse}</sup>
+              {selectedText}
             </p>
-            <button type="button" aria-label="Закрыть" onClick={() => setSheetOpen(false)}>
-              <LuX size={20} className="text-stone-500" />
-            </button>
-          </div>
+          ) : null}
           <textarea
             value={noteBody}
             onChange={(e) => setNoteBody(e.target.value)}
@@ -330,7 +519,7 @@ export function BibleReaderPage() {
             placeholder="Личная заметка…"
             className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 outline-none ring-primary/30 placeholder:text-stone-400 focus:ring-2"
           />
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <button
               type="button"
               className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
@@ -343,13 +532,11 @@ export function BibleReaderPage() {
               Все заметки
             </Link>
           </div>
-          {(notesQ.data ?? [])
-            .filter((n) => n.verse_start <= selectedVerse && n.verse_end >= selectedVerse)
-            .map((n) => (
-              <p key={n.id} className="mt-2 rounded-xl bg-stone-50 px-3 py-2 text-sm text-stone-700">
-                {n.body}
-              </p>
-            ))}
+          {verseNotes.map((n) => (
+            <p key={n.id} className="mt-2 rounded-xl bg-stone-50 px-3 py-2 text-sm text-stone-700">
+              {n.body}
+            </p>
+          ))}
           {canChurchComment ? (
             <div className="mt-3 border-t border-stone-100 pt-3">
               <textarea
@@ -370,7 +557,7 @@ export function BibleReaderPage() {
             </div>
           ) : null}
         </div>
-      ) : null}
+      </BibleSheetShell>
     </div>
   );
 }

@@ -8,9 +8,11 @@ type Props = {
   audio: BibleAudio;
   onActiveVerse?: (verse: number | null) => void;
   seekVerse?: number | null;
+  /** Меняется при повторном запросе того же стиха (кнопка «Слушать»). */
+  seekNonce?: number;
 };
 
-export function SyncedAudioPlayer({ audio, onActiveVerse, seekVerse }: Props) {
+export function SyncedAudioPlayer({ audio, onActiveVerse, seekVerse, seekNonce = 0 }: Props) {
   const ref = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [rate, setRate] = useState(1);
@@ -24,7 +26,7 @@ export function SyncedAudioPlayer({ audio, onActiveVerse, seekVerse }: Props) {
     if (!timing) return;
     el.currentTime = timing.start;
     void el.play().then(() => setPlaying(true)).catch(() => undefined);
-  }, [seekVerse, audio.timings]);
+  }, [seekVerse, seekNonce, audio.timings]);
 
   useEffect(() => {
     const el = ref.current;
