@@ -352,6 +352,14 @@ export default defineConfig(({ mode }) => {
             },
             {
               /**
+               * APK и прочие файлы релизов. Общий `/api/` — NetworkFirst с таймаутом 15с и
+               * записью в кэш: 40+ МБ либо обрываются, либо вытесняют API-кэш.
+               */
+              urlPattern: /\/api\/uploads\//,
+              handler: 'NetworkOnly',
+            },
+            {
+              /**
                * Долгие LLM-запросы (очистка песни, vision и т.п.): не гонять через NetworkFirst
                * с networkTimeoutSeconds=15 — иначе SW раньше клиента сдаётся и ломает POST.
                */

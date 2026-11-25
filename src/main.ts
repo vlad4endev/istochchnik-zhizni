@@ -16,7 +16,7 @@ import { ensurePrayerCycleAnchor } from './config/prayerCycleAnchor';
 import { ensureMediaScheduleSchema } from './services/mediaScheduleMigrations';
 import { ensureMusicScheduleSchema } from './services/musicScheduleMigrations';
 import { ensureTelegramSendLogsSchema } from './services/telegramSendLogService';
-import { ensureAppReleasesSchema } from './services/appReleasesService';
+import { applyUploadsStaticHeaders, ensureAppReleasesSchema } from './services/appReleasesService';
 import { requireAuthSession, resolveAuthSession } from './middleware/authSession';
 import { enforceRoleAccess, resolveUserRole } from './middleware/roleAccess';
 import routes from './routes';
@@ -329,9 +329,8 @@ console.log(`[uploads] serving static files from: ${uploadsAbs}`);
 // Явный 404 после static: не отдаём SPA index.html на несуществующие /uploads/*.
 app.use('/uploads', express.static(uploadsAbs, {
   fallthrough: true,
-  setHeaders: (res) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+  setHeaders: (res, filePath) => {
+    applyUploadsStaticHeaders(res, filePath);
   },
 }));
 app.use('/uploads', (_req, res) => {
@@ -340,9 +339,8 @@ app.use('/uploads', (_req, res) => {
 // Alias for reverse proxies that only route `/api/*`.
 app.use('/api/uploads', express.static(uploadsAbs, {
   fallthrough: true,
-  setHeaders: (res) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+  setHeaders: (res, filePath) => {
+    applyUploadsStaticHeaders(res, filePath);
   },
 }));
 app.use('/api/uploads', (_req, res) => {

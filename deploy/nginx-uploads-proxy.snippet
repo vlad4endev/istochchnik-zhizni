@@ -1,5 +1,7 @@
 # Включите в server { … } того же vhost, что отдаёт SPA для app.church-tambov.ru (или объедините с /api).
 # Без этого GET https://<origin>/uploads/<id> идёт в статику nginx → 404/502, а не в Node.
+# Ссылки на APK в приложении идут на /api/uploads/releases/…: голый /uploads/ на части edge
+# принимается и не отвечает, и кнопка «Скачать APK» выглядит некликабельной.
 # То же для /api/uploads/*: если в конфиге есть location ~* \.(jpg|png|…)$ для SPA, он перехватит
 # /api/uploads/.../file.jpg раньше общего proxy /api — нужен отдельный ^~ /api/uploads/.
 # Для Supabase Storage на том же origin см. deploy/nginx-supabase-storage-proxy.snippet (^~ /storage/v1/).
