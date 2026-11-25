@@ -69,8 +69,10 @@ export function BibleNotesPage() {
   const notes = notesQ.data ?? [];
   const bookmarks = bookmarksQ.data ?? [];
 
+  // Без min-h-0: корень-flex-ребёнок .page-enter с min-h-0 сжимается до высоты экрана,
+  // и sticky-шапка «срывается» вверх после первого экрана прокрутки (см. BibleReaderPage).
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-1 flex-col">
       <div className={sectionHeroStickyClass}>
         <PageHeader title="Библия" />
       </div>
