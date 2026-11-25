@@ -2,6 +2,7 @@ import { Button, Group, Paper, Text } from '@mantine/core';
 import { useEffect, useMemo, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { scheduleServiceWorkerRegistrationRetry } from '../features/pwa/ensureServiceWorker';
+import { isCapacitorNative } from '../lib/nativeApp';
 
 /**
  * Показ при registerType: 'prompt' — пользователь сам решает, когда активировать новый SW.
@@ -13,7 +14,8 @@ export function PWAUpdatePrompt() {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
-    immediate: true,
+    // В нативном APK SW не регистрируется (см. ensureServiceWorker) — не дёргаем и промпт.
+    immediate: !isCapacitorNative(),
     onRegisterError(error) {
       console.warn('SW registration failed:', error);
       // sw.js мог отдать 5xx во время передеплоя — без повтора push не заработает до перезагрузки.

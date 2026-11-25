@@ -1,7 +1,10 @@
 import { useEffect } from 'react';
 
+import { isCapacitorNative } from '../lib/nativeApp';
+
 export function useAppUpdate() {
   useEffect(() => {
+    if (isCapacitorNative()) return;
     if (!('serviceWorker' in navigator)) return;
     let swFetchFailureCooldownUntil = 0;
     let swFetchFailureLogged = false;
