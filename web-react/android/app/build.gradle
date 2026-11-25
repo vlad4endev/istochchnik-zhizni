@@ -1,3 +1,17 @@
+import java.io.FileInputStream
+import java.util.Properties
+
+// Release-подпись: android/keystore.properties (см. keystore.properties.example, в .gitignore).
+// storeFile — путь относительно каталога android/. Без файла release собирается debug-подписью:
+// обновления встанут поверх текущих debug-сборок, но собственный ключ нужен для «взрослого»
+// распространения и безопасной ротации (потеря ключа = переустановка приложения у всех).
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def hasReleaseKeystore = keystorePropertiesFile.exists()
+def keystoreProperties = new Properties()
+if (hasReleaseKeystore) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 apply plugin: 'com.android.application'
 
 android {
@@ -7,8 +21,10 @@ android {
         applicationId "com.istochnikzhizni.molitva"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 8
-        versionName "1.0.7"
+        // Поднимается перед каждой сборкой: npm run android:bump -- <version>.
+        // Баннер «Доступно обновление» сравнивает versionCode с /api/releases/latest.
+        versionCode 28
+        versionName "1.27.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +32,32 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            release {
+                storeFile rootProject.file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Без keystore.properties — debug-подпись, чтобы сборка не падала и обновления
+            // ставились поверх установленных debug-версий (плюс предупреждение в build-apk.sh).
+            signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+    // Готовый артефакт: istochnik-zhizni-v<version>-release.apk — имя с версией, как в админке релизов.
+    applicationVariants.all { variant ->
+        if (variant.buildType.name == 'release') {
+            variant.outputs.all { output ->
+                outputFileName = "istochnik-zhizni-v${variant.versionName}-release.apk"
+            }
         }
     }
 }

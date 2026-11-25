@@ -24,6 +24,7 @@ import {
   isAndroidInstalledPwa,
   restorePwaAppThemeColor,
 } from './features/pwa/utils/pwaEnvironment';
+import { purgeServiceWorkerInNativeApp } from './features/pwa/ensureServiceWorker';
 import { AppRouter } from './app/Router';
 import { AppRouterMain } from './app/RouterMain';
 import { AppRouterStudio } from './app/RouterStudio';
@@ -322,6 +323,9 @@ function NativePushBridge() {
 
 function PwaUpdateListener() {
   useAppUpdate();
+  useEffect(() => {
+    void purgeServiceWorkerInNativeApp();
+  }, []);
   return null;
 }
 
