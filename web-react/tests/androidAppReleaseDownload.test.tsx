@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
   AndroidAppReleaseWidgetView,
+  isAppleMobileDevice,
   releaseDownloadFileName,
   releaseLinkOpensNewTab,
   resolveReleaseDownloadHref,
@@ -63,6 +64,44 @@ describe('download attribute', () => {
     const href = 'https://cdn.example/builds/app.apk';
     expect(releaseDownloadFileName(href, 'app.apk', 'https://app.church-tambov.ru')).toBeUndefined();
     expect(releaseLinkOpensNewTab(href, 'https://app.church-tambov.ru')).toBe(true);
+  });
+});
+
+describe('isAppleMobileDevice', () => {
+  it('detects iPhone, iPad and iPod user agents', () => {
+    expect(
+      isAppleMobileDevice(
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1',
+      ),
+    ).toBe(true);
+    expect(
+      isAppleMobileDevice(
+        'Mozilla/5.0 (iPad; CPU OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+      ),
+    ).toBe(true);
+    expect(
+      isAppleMobileDevice(
+        'Mozilla/5.0 (iPod touch; CPU iPhone OS 15_7 like Mac OS X) AppleWebKit/605.1.15',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not flag Android or desktop devices', () => {
+    expect(
+      isAppleMobileDevice(
+        'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      ),
+    ).toBe(false);
+    expect(
+      isAppleMobileDevice(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      ),
+    ).toBe(false);
+    expect(isAppleMobileDevice('')).toBe(false);
+  });
+
+  it('does not throw in a node environment without a real navigator', () => {
+    expect(typeof isAppleMobileDevice()).toBe('boolean');
   });
 });
 
