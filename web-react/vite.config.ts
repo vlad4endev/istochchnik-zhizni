@@ -125,6 +125,24 @@ export default defineConfig(({ mode }) => {
   const pwaScope = pwaOrigin ? `${pwaOrigin}/` : base;
   const canHandleLinks = /^https:\/\//i.test(pwaOrigin);
 
+  /**
+   * Версия Android-приложения из android/app/build.gradle вшивается в бандл: APK «знает»
+   * свой versionCode и сам показывает баннер «Доступно обновление», сверяясь с
+   * /api/releases/latest. В PWA/вебе константа игнорируется (не нативная платформа) —
+   * там версия берётся из localStorage-маркера, который пишется по клику «Обновить».
+   */
+  let androidVersionCode: number | null = null;
+  let androidVersionName: string | null = null;
+  try {
+    const gradle = readFileSync(path.resolve(__dirname, 'android/app/build.gradle'), 'utf8');
+    const code = /versionCode\s+(\d+)/.exec(gradle);
+    if (code) androidVersionCode = Number(code[1]);
+    const name = /versionName\s+"([^"]*)"/.exec(gradle);
+    if (name) androidVersionName = name[1] || null;
+  } catch {
+    /* не Android-сборка — константы остаются null */
+  }
+
   return {
     resolve: {
       alias: {
@@ -134,6 +152,8 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       __WEB_REACT_BUILD_STAMP__: JSON.stringify(buildStamp),
+      __APP_VERSION_CODE__: JSON.stringify(androidVersionCode),
+      __APP_VERSION_NAME__: JSON.stringify(androidVersionName),
       /**
        * Уникален на каждый деплой (GITHUB_SHA / buildStamp). Клиент сравнивает с
        * `/build-version.txt` и сбрасывает SW/Cache Storage, если залип на старой сборке.

@@ -8,7 +8,13 @@ import {
   listAppReleases,
   patchAppRelease,
   publicDownloadUrlForStoredFile,
+  type AppRelease,
+  type AppReleasePublic,
 } from '../services/appReleasesService';
+import {
+  notifyAllMembersAboutRelease,
+  notifyAllMembersAboutReleaseInBackground,
+} from '../services/appReleaseNotifyService';
 
 type AuthRequest = Request & {
   authUserId?: number;
@@ -118,11 +124,71 @@ export async function createReleaseHandler(req: Request, res: Response): Promise
       is_active: parseBool(body.is_active, true),
       created_by: auth.authUserId ?? null,
     });
+    // Пуш о новой сборке не должен держать ответ админки (рассылка идёт чанками по всем участникам).
+    if (parseBool(body.notify, false) && item.is_active) {
+      notifyAllMembersAboutReleaseInBackground(toPublicShape(item));
+    }
     res.status(201).json({ item });
   } catch (e) {
     console.error('[releases] create', e);
     const mapped = mapError(e);
     res.status(mapped.status).json({ error: mapped.error });
+  }
+}
+
+function toPublicShape(item: AppRelease): AppReleasePublic {
+  return {
+    id: item.id,
+    version_name: item.version_name,
+    version_code: item.version_code,
+    title: item.title,
+    notes: item.notes,
+    download_url: item.download_url,
+    file_name: item.file_name,
+    file_size_bytes: item.file_size_bytes,
+    created_at: item.created_at,
+  };
+}
+
+/**
+ * POST /api/releases/notify — разослать пуш о релизе всем участникам с push-подписками.
+ * Без release_id берёт последний активный релиз. Возвращает счётчики доставки.
+ */
+export async function notifyReleaseHandler(req: Request, res: Response): Promise<void> {
+  const auth = ensureAdmin(req, res);
+  if (!auth) return;
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    let release: AppReleasePublic | null = null;
+    if (body.release_id !== undefined && body.release_id !== null && String(body.release_id).trim() !== '') {
+      const id = Number(body.release_id);
+      if (!Number.isFinite(id) || id <= 0) {
+        res.status(400).json({ error: 'Некорректный release_id' });
+        return;
+      }
+      const items = await listAppReleases();
+      const found = items.find((r) => r.id === id);
+      if (!found) {
+        res.status(404).json({ error: 'Релиз не найден' });
+        return;
+      }
+      if (!found.is_active || !found.download_url.trim()) {
+        res.status(400).json({ error: 'Релиз выключен или без ссылки — включите его перед рассылкой' });
+        return;
+      }
+      release = toPublicShape(found);
+    } else {
+      release = await getLatestActiveAppRelease();
+    }
+    if (!release) {
+      res.status(404).json({ error: 'Нет активного релиза со ссылкой на APK' });
+      return;
+    }
+    const summary = await notifyAllMembersAboutRelease(release);
+    res.json({ ok: true, release, summary });
+  } catch (e) {
+    console.error('[releases] notify', e);
+    res.status(500).json({ error: 'Не удалось разослать уведомление' });
   }
 }
 

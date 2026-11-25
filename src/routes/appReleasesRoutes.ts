@@ -5,6 +5,7 @@ import {
   deleteReleaseHandler,
   getLatestReleaseHandler,
   listReleasesHandler,
+  notifyReleaseHandler,
   patchReleaseHandler,
 } from '../controllers/appReleasesController';
 import { requireAuthSession } from '../middleware/authSession';
@@ -27,6 +28,7 @@ router.get('/latest', getLatestReleaseHandler);
 
 router.get('/', requireAuthSession, listReleasesHandler);
 router.post('/', requireAuthSession, apkUploadIfMultipart, createReleaseHandler);
+router.post('/notify', requireAuthSession, notifyReleaseHandler);
 router.patch('/:id', requireAuthSession, apkUploadIfMultipart, patchReleaseHandler);
 router.delete('/:id', requireAuthSession, deleteReleaseHandler);
 

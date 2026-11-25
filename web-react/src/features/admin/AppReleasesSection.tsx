@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { FaAndroid } from 'react-icons/fa';
-import { LuDownload, LuLink2, LuPlus, LuTrash2, LuUpload } from 'react-icons/lu';
+import { LuBellRing, LuDownload, LuLink2, LuPlus, LuTrash2, LuUpload } from 'react-icons/lu';
 
 import {
   apiErrorMessage,
   createAdminAppRelease,
   deleteAdminAppRelease,
   fetchAdminAppReleases,
+  notifyAdminAppRelease,
   patchAdminAppRelease,
   type AppReleaseItem,
 } from './api';
@@ -57,6 +58,7 @@ type FormState = {
   notes: string;
   download_url: string;
   is_active: boolean;
+  notify: boolean;
   apk: File | null;
 };
 
@@ -67,6 +69,7 @@ const EMPTY_FORM: FormState = {
   notes: '',
   download_url: '',
   is_active: true,
+  notify: true,
   apk: null,
 };
 
@@ -99,11 +102,18 @@ export function AppReleasesSection() {
         notes: form.notes.trim(),
         download_url: form.download_url.trim(),
         is_active: form.is_active,
+        notify: form.notify,
         apk: form.apk,
       });
     },
     onSuccess: () => {
-      setNote({ type: 'ok', text: 'Релиз опубликован. Виджет на главной покажет эту сборку.' });
+      setNote({
+        type: 'ok',
+        text:
+          form.notify && form.is_active
+            ? 'Релиз опубликован. Пуш о сборке отправляется всем — виджет на главной и баннер обновления покажут её автоматически.'
+            : 'Релиз опубликован. Виджет на главной покажет эту сборку.',
+      });
       setForm(EMPTY_FORM);
       setShowForm(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -139,6 +149,21 @@ export function AppReleasesSection() {
     },
   });
 
+  const notifyMut = useMutation({
+    mutationFn: (releaseId: number) => notifyAdminAppRelease(releaseId),
+    onSuccess: ({ summary }) => {
+      setNote({
+        type: 'ok',
+        text: `Пуш отправлен: ${summary.recipients} участникам (подписок: ${summary.attempted}${
+          summary.failed > 0 ? `, ошибок доставки: ${summary.failed}` : ''
+        }).`,
+      });
+    },
+    onError: (e) => {
+      setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось разослать уведомление') });
+    },
+  });
+
   const items = listQ.data ?? [];
 
   return (
@@ -151,8 +176,10 @@ export function AppReleasesSection() {
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-extrabold text-stone-900">Android-релизы</h3>
             <p className="mt-1 text-sm font-medium leading-relaxed text-stone-600">
-              Загрузите APK или укажите ссылку на сборку. На главной появится виджет скачивания, пока
-              есть активный релиз со ссылкой. Новый активный релиз заменяет предыдущий в виджете.
+              Загрузите APK или укажите ссылку на сборку. Новый активный релиз автоматически
+              появится в виджете на главной и в баннере «Доступно обновление» внутри приложения
+              (внутри APK он сравнивает versionCode со свежей версией), а по галочке «Пуш всем»
+              уходит уведомление участникам.
             </p>
           </div>
           <button
@@ -270,6 +297,15 @@ export function AppReleasesSection() {
             />
             Активен (показывать в виджете, если это самый новый активный релиз)
           </label>
+          <label className="flex items-center gap-2 text-sm font-semibold text-stone-800">
+            <input
+              type="checkbox"
+              checked={form.notify}
+              onChange={(e) => setForm((f) => ({ ...f, notify: e.target.checked }))}
+              className="h-4 w-4 rounded border-stone-300 text-primary focus:ring-primary"
+            />
+            Отправить пуш о сборке всем участникам с уведомлениями
+          </label>
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               type="button"
@@ -316,9 +352,11 @@ export function AppReleasesSection() {
               key={item.id}
               item={item}
               busy={patchMut.isPending || deleteMut.isPending}
+              notifyBusy={notifyMut.isPending}
               onToggleActive={() =>
                 patchMut.mutate({ id: item.id, is_active: !item.is_active })
               }
+              onNotify={() => notifyMut.mutate(item.id)}
               onDelete={() => {
                 if (window.confirm(`Удалить релиз ${item.version_name || `#${item.id}`}?`)) {
                   deleteMut.mutate(item.id);
@@ -335,12 +373,16 @@ export function AppReleasesSection() {
 function ReleaseRow({
   item,
   busy,
+  notifyBusy,
   onToggleActive,
+  onNotify,
   onDelete,
 }: {
   item: AppReleaseItem;
   busy: boolean;
+  notifyBusy: boolean;
   onToggleActive: () => void;
+  onNotify: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -383,6 +425,16 @@ function ReleaseRow({
         </a>
       </div>
       <div className="flex shrink-0 flex-wrap gap-2">
+        <button
+          type="button"
+          className={`${btnSecondary('text-xs')} disabled:opacity-40`}
+          disabled={notifyBusy || !item.is_active}
+          title={item.is_active ? 'Разослать пуш о сборке всем участникам' : 'Включите релиз, чтобы отправить пуш'}
+          onClick={onNotify}
+        >
+          <LuBellRing className="h-4 w-4" aria-hidden />
+          {notifyBusy ? 'Отправка…' : 'Пуш всем'}
+        </button>
         <button type="button" className={btnSecondary('text-xs')} disabled={busy} onClick={onToggleActive}>
           {item.is_active ? 'Выключить' : 'Включить'}
         </button>

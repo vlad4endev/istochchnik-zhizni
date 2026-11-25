@@ -34,6 +34,7 @@ import { useSyncServerRole } from '../hooks/useSyncServerRole';
 import { BodyPortal } from '../components/BodyPortal';
 import { IOSInstallBanner } from '../components/IOSInstallBanner';
 import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
+import { AppUpdateBanner } from './AppUpdateBanner';
 import { PermissionsRequestModal } from '../components/PermissionsRequestModal';
 import { NotificationPrompt } from '../features/pwa';
 import { PrefetchNavLink } from '../components/PrefetchNavLink';
@@ -983,6 +984,7 @@ export function Layout() {
           'page-content',
         ].join(' ')}
       >
+        <AppUpdateBanner />
         <div key={location.pathname} className="page-enter flex min-h-0 w-full max-w-full flex-1 flex-col">
           <Outlet />
           {/* Только iOS (см. index.css): запас под плавающую панель внутри скролла страницы. */}
