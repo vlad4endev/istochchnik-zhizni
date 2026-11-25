@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
   AndroidAppReleaseWidgetView,
+  isAndroidDevice,
   isAppleMobileDevice,
   releaseDownloadFileName,
   releaseLinkOpensNewTab,
@@ -130,6 +131,38 @@ describe('AndroidAppReleaseWidgetView', () => {
     expect(html).toContain('Скачать APK');
     expect(html).toContain('Версия 1.27.1');
     expect(html).toContain('43.1 МБ');
+  });
+});
+
+describe('isAndroidDevice', () => {
+  it('detects Android browser and PWA user agents', () => {
+    expect(
+      isAndroidDevice(
+        'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      ),
+    ).toBe(true);
+    expect(isAndroidDevice('Mozilla/5.0 (Linux; Android 12; SM-A528B) AppleWebKit/537.36')).toBe(
+      true,
+    );
+  });
+
+  it('ignores desktop, iPhone and empty user agents', () => {
+    expect(
+      isAndroidDevice(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      ),
+    ).toBe(false);
+    expect(
+      isAndroidDevice(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+      ),
+    ).toBe(false);
+    expect(
+      isAndroidDevice(
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
+      ),
+    ).toBe(false);
+    expect(isAndroidDevice('')).toBe(false);
   });
 });
 

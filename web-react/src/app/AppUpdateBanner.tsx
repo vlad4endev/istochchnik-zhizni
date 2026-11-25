@@ -5,6 +5,7 @@ import { LuDownload, LuX } from 'react-icons/lu';
 
 import { fetchLatestAppRelease, type AppReleaseLatest } from '../features/admin/api';
 import {
+  isAndroidDevice,
   isAppleMobileDevice,
   releaseDownloadFileName,
   releaseLinkOpensNewTab,
@@ -98,10 +99,13 @@ export function AppUpdateBannerView({ release, href, onActivate, onDismiss }: Vi
 /**
  * Компактный баннер «Доступно обновление» — показывается на любом экране, пока
  * установленная версия приложения старше последнего активного релиза.
- * На iPhone/iPad скрыт (APK туда не ставится), кнопка «Позже» прячет до следующего релиза.
+ * Только Android: iPhone/iPad (APK не ставится) и десктоп (телефонное приложение
+ * там не обновить) баннер не видят.
  */
 export function AppUpdateBanner() {
-  const [hiddenOnThisDevice] = useState(() => isAppleMobileDevice());
+  const [hiddenOnThisDevice] = useState(
+    () => isAppleMobileDevice() || !isAndroidDevice(),
+  );
   const [, forceTick] = useState(0);
 
   const latestQ = useQuery({
