@@ -26,13 +26,15 @@ export function TranslationPicker({ translations, value, onChange, compact = fal
         onClick={() => setOpen(true)}
         className={
           compact
-            ? 'inline-flex max-w-full items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-left'
+            ? 'inline-flex max-w-full items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-left'
             : 'flex w-full items-center gap-3 rounded-2xl border border-stone-200 bg-[var(--surface-elevated)] px-3 py-3 text-left transition hover:border-primary/30'
         }
       >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-white text-[10px] font-bold tracking-wide text-stone-800">
-          {translationBadge(current)}
-        </span>
+        {compact ? null : (
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-white text-[10px] font-bold tracking-wide text-stone-800">
+            {translationBadge(current)}
+          </span>
+        )}
         <span className="min-w-0 flex-1">
           {!compact ? (
             <span className="block truncate text-[11px] text-stone-400">

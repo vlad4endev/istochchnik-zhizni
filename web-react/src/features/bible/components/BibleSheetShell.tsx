@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { LuEllipsis, LuX } from 'react-icons/lu';
+import { LuX } from 'react-icons/lu';
 
 type Props = {
   open: boolean;
@@ -8,10 +8,9 @@ type Props = {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
-  showMore?: boolean;
 };
 
-export function BibleSheetShell({ open, title, onClose, children, footer, showMore = false }: Props) {
+export function BibleSheetShell({ open, title, onClose, children, footer }: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -50,18 +49,10 @@ export function BibleSheetShell({ open, title, onClose, children, footer, showMo
           >
             <LuX size={20} />
           </button>
-          <h2 className="text-[17px] font-bold text-stone-900">{title}</h2>
-          {showMore ? (
-            <button
-              type="button"
-              aria-label="Ещё"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-stone-100 text-stone-700"
-            >
-              <LuEllipsis size={18} />
-            </button>
-          ) : (
-            <span className="inline-flex h-10 w-10" />
-          )}
+          <h2 className="min-w-0 flex-1 truncate text-center text-[17px] font-bold text-stone-900">
+            {title}
+          </h2>
+          <span className="inline-flex h-10 w-10 shrink-0" />
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
         {footer ? <div className="border-t border-stone-100 px-4 py-3">{footer}</div> : null}

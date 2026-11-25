@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 
 import type { BibleBook, BibleTranslation } from '../api';
-import type { BibleRecentItem } from '../bibleUiMeta';
 import { BibleSheetShell } from './BibleSheetShell';
 
 type Props = {
@@ -12,7 +10,6 @@ type Props = {
   currentBookSlug?: string;
   /** Open directly on chapter grid for this book */
   initialBookSlug?: string | null;
-  recent: BibleRecentItem[];
   onClose: () => void;
   onPick: (bookSlug: string, chapter: number) => void;
 };
@@ -23,24 +20,27 @@ export function BooksSheet({
   translation,
   currentBookSlug,
   initialBookSlug = null,
-  recent,
   onClose,
   onPick,
 }: Props) {
   const [chapterBook, setChapterBook] = useState<BibleBook | null>(null);
+  const [tab, setTab] = useState<'nt' | 'ot'>('nt');
 
   useEffect(() => {
     if (!open) {
       setChapterBook(null);
       return;
     }
-    if (!initialBookSlug) return;
-    const hit = books.find((b) => b.slug === initialBookSlug) ?? null;
-    setChapterBook(hit);
-  }, [open, initialBookSlug, books]);
+    const focusSlug = initialBookSlug ?? currentBookSlug ?? null;
+    const focusBook = focusSlug ? (books.find((b) => b.slug === focusSlug) ?? null) : null;
+    setChapterBook(initialBookSlug ? focusBook : null);
+    setTab(focusBook?.testament === 'ot' ? 'ot' : 'nt');
+  }, [open, initialBookSlug, currentBookSlug, books]);
 
   const ot = useMemo(() => books.filter((b) => b.testament === 'ot'), [books]);
   const nt = useMemo(() => books.filter((b) => b.testament === 'nt'), [books]);
+  const showTabs = ot.length > 0 && nt.length > 0 && translation?.scope !== 'nt';
+  const visibleBooks = tab === 'ot' && showTabs ? ot : nt;
   const translationTitle = translation?.title || 'Перевод';
 
   function closeAll() {
@@ -59,29 +59,6 @@ export function BooksSheet({
         }
         closeAll();
       }}
-      showMore
-      footer={
-        chapterBook || recent.length === 0 ? null : (
-          <div>
-            <p className="mb-2 text-sm font-bold text-stone-900">Недавние</p>
-            <div className="-mx-1 flex gap-2 overflow-x-auto pb-1">
-              {recent.slice(0, 6).map((r) => (
-                <Link
-                  key={`${r.translation}-${r.book_slug}-${r.chapter}-${r.at}`}
-                  to={`/bible/${r.translation}/${r.book_slug}/${r.chapter}`}
-                  onClick={closeAll}
-                  className="min-w-[10.5rem] max-w-[12rem] shrink-0 rounded-2xl bg-stone-100 px-3 py-3"
-                >
-                  <p className="truncate text-sm font-bold text-stone-900">
-                    {r.book_name} {r.chapter}
-                  </p>
-                  <p className="mt-1 truncate text-xs text-stone-500">{r.translation_title}</p>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )
-      }
     >
       {chapterBook ? (
         <div className="p-4">
@@ -104,22 +81,34 @@ export function BooksSheet({
         </div>
       ) : (
         <div>
-          {nt.length > 0 ? (
-            <BookList
-              title="Новый Завет"
-              books={nt}
-              currentBookSlug={currentBookSlug}
-              onSelect={setChapterBook}
-            />
+          {showTabs ? (
+            <div className="sticky top-0 z-10 bg-white px-4 pb-2 pt-3">
+              {/* flex, не grid-cols-2: mobile.css на <640px сводит grid-cols-2 в колонку — табы должны быть горизонтальными */}
+              <div className="flex gap-1 rounded-2xl bg-stone-100 p-1">
+                {(
+                  [
+                    ['nt', 'Новый Завет'],
+                    ['ot', 'Ветхий Завет'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setTab(key)}
+                    className={[
+                      'flex-1 rounded-xl py-2 text-sm font-semibold transition',
+                      tab === key
+                        ? 'bg-white text-stone-900 shadow-sm'
+                        : 'text-stone-500 hover:text-stone-700',
+                    ].join(' ')}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           ) : null}
-          {ot.length > 0 && translation?.scope !== 'nt' ? (
-            <BookList
-              title="Ветхий Завет"
-              books={ot}
-              currentBookSlug={currentBookSlug}
-              onSelect={setChapterBook}
-            />
-          ) : null}
+          <BookList books={visibleBooks} currentBookSlug={currentBookSlug} onSelect={setChapterBook} />
         </div>
       )}
     </BibleSheetShell>
@@ -127,40 +116,33 @@ export function BooksSheet({
 }
 
 function BookList({
-  title,
   books,
   currentBookSlug,
   onSelect,
 }: {
-  title: string;
   books: BibleBook[];
   currentBookSlug?: string;
   onSelect: (book: BibleBook) => void;
 }) {
   return (
-    <section>
-      <h3 className="sticky top-0 z-10 bg-white/95 px-4 py-2 text-xs font-bold uppercase tracking-wide text-stone-400 backdrop-blur">
-        {title}
-      </h3>
-      <ul>
-        {books.map((b) => {
-          const active = b.slug === currentBookSlug;
-          return (
-            <li key={b.slug}>
-              <button
-                type="button"
-                onClick={() => onSelect(b)}
-                className={[
-                  'w-full px-4 py-3.5 text-left text-[17px] font-bold text-stone-900 transition',
-                  active ? 'bg-[#f3e8e4]' : 'hover:bg-stone-50',
-                ].join(' ')}
-              >
-                {b.name}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+    <ul className="pb-2">
+      {books.map((b) => {
+        const active = b.slug === currentBookSlug;
+        return (
+          <li key={b.slug}>
+            <button
+              type="button"
+              onClick={() => onSelect(b)}
+              className={[
+                'w-full px-4 py-3.5 text-left text-[17px] font-bold text-stone-900 transition',
+                active ? 'bg-[#f3e8e4]' : 'hover:bg-stone-50',
+              ].join(' ')}
+            >
+              {b.name}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

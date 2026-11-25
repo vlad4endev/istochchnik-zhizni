@@ -12,6 +12,11 @@ export type BibleRecentItem = {
 
 const RECENT_KEY = 'bible.recent';
 const TRANSLATION_KEY = 'bible.translation';
+const FONT_SIZE_KEY = 'bible.fontSize';
+
+/** Ступени размера текста главы (px). Средняя — дефолт. */
+export const BIBLE_FONT_SIZES = [16, 18, 20, 22, 24] as const;
+export const BIBLE_FONT_SIZE_DEFAULT = 18;
 
 const PUBLISHER_BY_CODE: Record<string, string> = {
   synodal: 'Public domain',
@@ -48,6 +53,23 @@ export function readStoredTranslation(fallback = 'synodal'): string {
 export function writeStoredTranslation(code: string): void {
   try {
     localStorage.setItem(TRANSLATION_KEY, code);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readBibleFontSize(): number {
+  try {
+    const n = Number(localStorage.getItem(FONT_SIZE_KEY));
+    return (BIBLE_FONT_SIZES as readonly number[]).includes(n) ? n : BIBLE_FONT_SIZE_DEFAULT;
+  } catch {
+    return BIBLE_FONT_SIZE_DEFAULT;
+  }
+}
+
+export function writeBibleFontSize(px: number): void {
+  try {
+    localStorage.setItem(FONT_SIZE_KEY, String(px));
   } catch {
     /* ignore */
   }

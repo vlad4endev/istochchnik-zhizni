@@ -1,4 +1,4 @@
-import { LuCloud, LuEllipsis } from 'react-icons/lu';
+import { LuCheck, LuCloud } from 'react-icons/lu';
 
 import type { BibleTranslation } from '../api';
 import { translationBadge, translationPublisher } from '../bibleUiMeta';
@@ -13,27 +13,8 @@ type Props = {
 };
 
 export function TranslationsSheet({ open, translations, value, onClose, onChange }: Props) {
-  const withText = translations.filter((t) => (t.verse_count ?? 0) > 0);
-  const withoutText = translations.filter((t) => !(t.verse_count && t.verse_count > 0));
-
   return (
-    <BibleSheetShell
-      open={open}
-      title="Мои переводы"
-      onClose={onClose}
-      showMore
-      footer={
-        <div className="space-y-2 text-center">
-          <p className="rounded-full bg-stone-100 px-4 py-3 text-sm font-semibold text-stone-700">
-            Переводов в приложении: {translations.length}
-          </p>
-          <p className="text-xs text-stone-400">
-            С текстом: {withText.length}
-            {withoutText.length ? ` · без текста: ${withoutText.length}` : ''}
-          </p>
-        </div>
-      }
-    >
+    <BibleSheetShell open={open} title="Перевод" onClose={onClose}>
       <ul className="divide-y divide-stone-100">
         {translations.map((t) => {
           const active = t.code === value;
@@ -67,8 +48,11 @@ export function TranslationsSheet({ open, translations, value, onClose, onChange
                     </span>
                   ) : null}
                 </span>
-                {empty ? <LuCloud size={18} className="shrink-0 text-stone-400" /> : null}
-                <LuEllipsis size={18} className="shrink-0 text-stone-300" />
+                {empty ? (
+                  <LuCloud size={18} className="shrink-0 text-stone-400" />
+                ) : active ? (
+                  <LuCheck size={18} className="shrink-0 text-primary" strokeWidth={2.5} />
+                ) : null}
               </button>
             </li>
           );
