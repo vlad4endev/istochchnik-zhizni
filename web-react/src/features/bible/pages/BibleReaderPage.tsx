@@ -115,6 +115,28 @@ export function BibleReaderPage() {
     writeBibleFontSize(fontSize);
   }, [fontSize]);
 
+  // Новая глава/книга/перевод — сбрасываем выделение стиха и подсветку озвучки,
+  // иначе панель действий показывала бы стих из предыдущей главы.
+  useEffect(() => {
+    setSelectedVerse(null);
+    setActiveAudioVerse(null);
+    setListenVerse(null);
+  }, [translation, book, chapter]);
+
+  // Приход по ?play=1 (автопереход на следующую главу): запускаем озвучку
+  // с начала главы и убираем параметр, чтобы перезагрузка не включала звук снова.
+  const wantPlay = search.get('play') === '1';
+  useEffect(() => {
+    if (!wantPlay || !audioQ.data) return;
+    setListenVerse(1);
+    setSeekNonce((n) => n + 1);
+    const rest = new URLSearchParams(search);
+    rest.delete('play');
+    const qs = rest.toString();
+    navigate(`/bible/${translation}/${book}/${chapter}${qs ? `?${qs}` : ''}`, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantPlay, audioQ.data]);
+
   useEffect(() => {
     if (!chapterQ.data?.verses.length) return;
     const verse = focusVerse && focusVerse > 0 ? focusVerse : 1;
@@ -194,6 +216,20 @@ export function BibleReaderPage() {
 
   const prevChapter = chapter > 1 ? chapter - 1 : null;
   const nextChapter = bookMeta && chapter < bookMeta.chapters_count ? chapter + 1 : null;
+
+  /** Куда переходить, когда озвучка главы закончилась: следующая глава или начало следующей книги. */
+  const audioNextTarget = useMemo(() => {
+    if (nextChapter != null) return { book, chapter: nextChapter };
+    const books = booksQ.data ?? [];
+    const idx = books.findIndex((b) => b.slug === book);
+    const nextBook = idx >= 0 ? books[idx + 1] : undefined;
+    return nextBook ? { book: nextBook.slug, chapter: 1 } : null;
+  }, [nextChapter, book, booksQ.data]);
+
+  function handleAudioAutoNext() {
+    if (!audioNextTarget) return;
+    void navigate(`/bible/${translation}/${audioNextTarget.book}/${audioNextTarget.chapter}?play=1`);
+  }
 
   const highlightVerse = activeAudioVerse ?? selectedVerse ?? focusVerse;
   const selectedText =
@@ -295,9 +331,11 @@ export function BibleReaderPage() {
           <div className="mt-3">
             <SyncedAudioPlayer
               audio={audioQ.data}
+              title={bookMeta ? `${bookMeta.name} ${chapter}` : undefined}
               onActiveVerse={setActiveAudioVerse}
               seekVerse={listenVerse}
               seekNonce={seekNonce}
+              onAutoNext={handleAudioAutoNext}
             />
           </div>
         ) : null}

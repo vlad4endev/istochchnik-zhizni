@@ -13,6 +13,43 @@ export type BibleRecentItem = {
 const RECENT_KEY = 'bible.recent';
 const TRANSLATION_KEY = 'bible.translation';
 const FONT_SIZE_KEY = 'bible.fontSize';
+const AUDIO_PREFS_KEY = 'bible.audioPrefs';
+
+export const BIBLE_AUDIO_RATES = [0.75, 1, 1.25, 1.5, 2] as const;
+
+export type BibleAudioPrefs = {
+  /** Скорость воспроизведения озвучки главы. */
+  rate: number;
+  /** Автоматически переходить к следующей главе, когда аудио закончилось. */
+  autoNext: boolean;
+};
+
+export function readBibleAudioPrefs(): BibleAudioPrefs {
+  const fallback: BibleAudioPrefs = { rate: 1, autoNext: true };
+  try {
+    const raw = localStorage.getItem(AUDIO_PREFS_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<BibleAudioPrefs>;
+    return {
+      rate:
+        typeof parsed.rate === 'number' &&
+        (BIBLE_AUDIO_RATES as readonly number[]).includes(parsed.rate)
+          ? parsed.rate
+          : fallback.rate,
+      autoNext: typeof parsed.autoNext === 'boolean' ? parsed.autoNext : fallback.autoNext,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+export function writeBibleAudioPrefs(prefs: BibleAudioPrefs): void {
+  try {
+    localStorage.setItem(AUDIO_PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    /* ignore */
+  }
+}
 
 /** Ступени размера текста главы (px). Средняя — дефолт. */
 export const BIBLE_FONT_SIZES = [16, 18, 20, 22, 24] as const;
