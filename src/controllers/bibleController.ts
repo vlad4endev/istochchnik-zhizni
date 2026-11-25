@@ -18,6 +18,12 @@ import {
   updateBibleNote,
 } from '../services/bibleNotesService';
 import {
+  createBibleBookmark,
+  deleteBibleBookmark,
+  listBibleBookmarks,
+  listBibleBookmarksForChapter,
+} from '../services/bibleBookmarksService';
+import {
   deletePlan,
   getPlan,
   listPlans,
@@ -243,6 +249,68 @@ export async function bibleNotesDelete(req: Request, res: Response): Promise<voi
   } catch (e) {
     console.error('[bible] notes delete:', e);
     res.status(500).json({ error: 'Не удалось удалить заметку' });
+  }
+}
+
+export async function bibleBookmarksList(req: Request, res: Response): Promise<void> {
+  try {
+    const id = memberId(req);
+    if (!id) {
+      res.status(401).json({ error: 'Требуется вход' });
+      return;
+    }
+    const translation = typeof req.query.translation === 'string' ? req.query.translation : null;
+    const book = typeof req.query.book === 'string' ? req.query.book : null;
+    const chapter = req.query.chapter != null ? Number(req.query.chapter) : null;
+    if (translation && book && chapter != null && Number.isInteger(chapter)) {
+      res.json({ bookmarks: await listBibleBookmarksForChapter(id, translation, book, chapter) });
+      return;
+    }
+    res.json({ bookmarks: await listBibleBookmarks(id) });
+  } catch (e) {
+    console.error('[bible] bookmarks list:', e);
+    res.status(500).json({ error: 'Не удалось загрузить закладки' });
+  }
+}
+
+export async function bibleBookmarksCreate(req: Request, res: Response): Promise<void> {
+  try {
+    const id = memberId(req);
+    if (!id) {
+      res.status(401).json({ error: 'Требуется вход' });
+      return;
+    }
+    const body = req.body as Record<string, unknown>;
+    const bookmark = await createBibleBookmark(id, {
+      translationCode: String(body.translation ?? 'synodal'),
+      bookSlug: String(body.book_slug ?? ''),
+      chapter: Number(body.chapter),
+      verseStart: Number(body.verse_start ?? body.verse ?? 1),
+      verseEnd: body.verse_end != null ? Number(body.verse_end) : undefined,
+    });
+    res.status(201).json(bookmark);
+  } catch (e) {
+    console.error('[bible] bookmarks create:', e);
+    res.status(500).json({ error: 'Не удалось создать закладку' });
+  }
+}
+
+export async function bibleBookmarksDelete(req: Request, res: Response): Promise<void> {
+  try {
+    const id = memberId(req);
+    if (!id) {
+      res.status(401).json({ error: 'Требуется вход' });
+      return;
+    }
+    const ok = await deleteBibleBookmark(id, Number(req.params.id));
+    if (!ok) {
+      res.status(404).json({ error: 'Закладка не найдена' });
+      return;
+    }
+    res.status(204).send();
+  } catch (e) {
+    console.error('[bible] bookmarks delete:', e);
+    res.status(500).json({ error: 'Не удалось удалить закладку' });
   }
 }
 
