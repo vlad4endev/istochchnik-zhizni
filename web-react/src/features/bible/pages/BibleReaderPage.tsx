@@ -34,9 +34,11 @@ import {
   writeBibleFontSize,
   writeStoredTranslation,
 } from '../bibleUiMeta';
+import { verseFromTimings } from '../bibleRef';
+import { registerBibleAudioNavigator, useBibleAudioStore } from '../bibleAudioStore';
 import { BibleSheetShell } from '../components/BibleSheetShell';
 import { BooksSheet } from '../components/BooksSheet';
-import { SyncedAudioPlayer } from '../components/SyncedAudioPlayer';
+import { ChapterListenRow } from '../components/ChapterListenRow';
 import { TranslationPicker } from '../components/TranslationPicker';
 
 export function BibleReaderPage() {
@@ -55,17 +57,26 @@ export function BibleReaderPage() {
   // Приход по ?v= только подсвечивает стих (highlightVerse ниже) — панель действий
   // открывается лишь по явному тапу, иначе она закрывает текст при переходе из поиска.
   const [selectedVerse, setSelectedVerse] = useState<number | null>(null);
-  const [activeAudioVerse, setActiveAudioVerse] = useState<number | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [booksOpen, setBooksOpen] = useState(false);
   const [fontSize, setFontSize] = useState(() => readBibleFontSize());
   const [noteBody, setNoteBody] = useState('');
   const [churchBody, setChurchBody] = useState('');
-  /** Стих, с которого запустили озвучку кнопкой «Слушать» (null — не перематывать). */
-  const [listenVerse, setListenVerse] = useState<number | null>(null);
-  const [seekNonce, setSeekNonce] = useState(0);
   const verseRefs = useRef<Map<number, HTMLElement>>(new Map());
   const commentsRef = useRef<HTMLElement | null>(null);
+
+  const audioTrack = useBibleAudioStore((s) => s.track);
+  const audioStatus = useBibleAudioStore((s) => s.status);
+  const audioTime = useBibleAudioStore((s) => s.time);
+  const isCurrentAudio =
+    audioTrack?.translation === translation &&
+    audioTrack.bookSlug === book &&
+    audioTrack.chapter === chapter;
+  // Подсветка читаемого стиха — только когда в сторе есть тайминги.
+  const activeAudioVerse =
+    isCurrentAudio && audioStatus !== 'idle' && audioTrack.timings.length > 0
+      ? verseFromTimings(audioTrack.timings, audioTime)
+      : null;
 
   const translationsQ = useQuery({
     queryKey: ['bible', 'translations'],
@@ -115,21 +126,31 @@ export function BibleReaderPage() {
     writeBibleFontSize(fontSize);
   }, [fontSize]);
 
-  // Новая глава/книга/перевод — сбрасываем выделение стиха и подсветку озвучки,
+  // Новая глава/книга/перевод — сбрасываем выделение стиха,
   // иначе панель действий показывала бы стих из предыдущей главы.
   useEffect(() => {
     setSelectedVerse(null);
-    setActiveAudioVerse(null);
-    setListenVerse(null);
   }, [translation, book, chapter]);
+
+  // Книги текущего перевода — стору для автоперехода к следующей главе/книге.
+  useEffect(() => {
+    if (booksQ.data?.length) useBibleAudioStore.getState().setBooks(booksQ.data);
+  }, [booksQ.data]);
+
+  // Пока открыта читалка, автопереход делаем роутером (?play=1) — глава подгружается на экране.
+  useEffect(() => {
+    registerBibleAudioNavigator((nextBook, nextChapter) => {
+      void navigate(`/bible/${translation}/${nextBook}/${nextChapter}?play=1`);
+    });
+    return () => registerBibleAudioNavigator(null);
+  }, [translation, navigate]);
 
   // Приход по ?play=1 (автопереход на следующую главу): запускаем озвучку
   // с начала главы и убираем параметр, чтобы перезагрузка не включала звук снова.
   const wantPlay = search.get('play') === '1';
   useEffect(() => {
     if (!wantPlay || !audioQ.data) return;
-    setListenVerse(1);
-    setSeekNonce((n) => n + 1);
+    playCurrentChapter();
     const rest = new URLSearchParams(search);
     rest.delete('play');
     const qs = rest.toString();
@@ -217,18 +238,19 @@ export function BibleReaderPage() {
   const prevChapter = chapter > 1 ? chapter - 1 : null;
   const nextChapter = bookMeta && chapter < bookMeta.chapters_count ? chapter + 1 : null;
 
-  /** Куда переходить, когда озвучка главы закончилась: следующая глава или начало следующей книги. */
-  const audioNextTarget = useMemo(() => {
-    if (nextChapter != null) return { book, chapter: nextChapter };
-    const books = booksQ.data ?? [];
-    const idx = books.findIndex((b) => b.slug === book);
-    const nextBook = idx >= 0 ? books[idx + 1] : undefined;
-    return nextBook ? { book: nextBook.slug, chapter: 1 } : null;
-  }, [nextChapter, book, booksQ.data]);
-
-  function handleAudioAutoNext() {
-    if (!audioNextTarget) return;
-    void navigate(`/bible/${translation}/${audioNextTarget.book}/${audioNextTarget.chapter}?play=1`);
+  function playCurrentChapter(opts?: { seekVerse?: number }) {
+    if (!audioQ.data) return;
+    useBibleAudioStore.getState().playChapter(
+      {
+        translation,
+        translationTitle: translationMeta?.short_title || translationMeta?.title || translation,
+        bookSlug: book,
+        bookName: bookMeta?.name ?? book,
+        chapter,
+        audio: audioQ.data,
+      },
+      { seekVerse: opts?.seekVerse ?? null },
+    );
   }
 
   const highlightVerse = activeAudioVerse ?? selectedVerse ?? focusVerse;
@@ -260,8 +282,8 @@ export function BibleReaderPage() {
 
   function listenFromSelected() {
     if (selectedVerse == null) return;
-    setListenVerse(selectedVerse);
-    setSeekNonce((n) => n + 1);
+    playCurrentChapter({ seekVerse: selectedVerse });
+    setSelectedVerse(null);
   }
 
   const chromeOpen = noteOpen || booksOpen;
@@ -327,15 +349,15 @@ export function BibleReaderPage() {
           </div>
         </div>
 
-        {audioQ.data ? (
+        {hasAudio ? (
           <div className="mt-3">
-            <SyncedAudioPlayer
-              audio={audioQ.data}
-              title={bookMeta ? `${bookMeta.name} ${chapter}` : undefined}
-              onActiveVerse={setActiveAudioVerse}
-              seekVerse={listenVerse}
-              seekNonce={seekNonce}
-              onAutoNext={handleAudioAutoNext}
+            <ChapterListenRow
+              translation={translation}
+              bookSlug={book}
+              chapter={chapter}
+              title={bookMeta ? `${bookMeta.name} ${chapter}` : `Глава ${chapter}`}
+              translationTitle={translationMeta?.short_title || translationMeta?.title || translation}
+              onPlay={() => playCurrentChapter()}
             />
           </div>
         ) : null}
@@ -510,8 +532,8 @@ export function BibleReaderPage() {
         </div>
       ) : null}
 
-      {/* Главы: круглые кнопки по краям снизу, над таб-баром; только при загруженной главе */}
-      {selectedVerse == null && !chromeOpen && chapterQ.data ? (
+      {/* Главы: круглые кнопки по краям снизу; скрыты, пока висит мини-плеер — они бы перекрывались */}
+      {selectedVerse == null && !chromeOpen && chapterQ.data && audioTrack == null ? (
         <div className="pointer-events-none fixed inset-x-0 z-[90] flex items-end justify-between px-3 sm:px-4 lg:px-8 bottom-[calc(var(--app-bottom-nav-total-height)+0.55rem)] lg:bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))]">
           <button
             type="button"
