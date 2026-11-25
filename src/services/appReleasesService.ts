@@ -93,7 +93,7 @@ function mapRow(row: ReleaseRow): AppRelease {
         : Number(row.version_code),
     title: (row.title ?? '').trim(),
     notes: (row.notes ?? '').trim(),
-    download_url: (row.download_url ?? '').trim(),
+    download_url: toDownloadableReleaseUrl(row.download_url ?? ''),
     file_name: row.file_name ? String(row.file_name) : null,
     file_size_bytes:
       row.file_size_bytes === null || row.file_size_bytes === undefined
@@ -125,14 +125,50 @@ function requirePool() {
   return pool;
 }
 
+/**
+ * Файлы релизов лежат в `uploads/releases`, но публичная ссылка — `/api/uploads/releases/…`.
+ * На боевом edge (openresty) голый `/uploads/…` не проксируется и запрос висит без ответа,
+ * поэтому клик «Скачать APK» ничего не скачивает. `/api/uploads/…` отдаёт тот же каталог.
+ */
+const RELEASE_FILE_MARKER = '/uploads/releases/';
+const RELEASE_DOWNLOAD_PREFIX = '/api/uploads/releases/';
+
+export function toDownloadableReleaseUrl(url: string): string {
+  const u = url.trim();
+  if (!u || u.includes(RELEASE_DOWNLOAD_PREFIX)) return u;
+  return u.replace(
+    /^(https?:\/\/[^/\s]+)?\/uploads\/releases\//,
+    (_match, origin: string | undefined) => `${origin ?? ''}${RELEASE_DOWNLOAD_PREFIX}`,
+  );
+}
+
 export function publicDownloadUrlForStoredFile(storedFileName: string): string {
-  return `/uploads/releases/${encodeURIComponent(storedFileName)}`;
+  return `${RELEASE_DOWNLOAD_PREFIX}${encodeURIComponent(storedFileName)}`;
+}
+
+/**
+ * Заголовки статики `/uploads` и `/api/uploads`.
+ * APK отдаём как вложение, чтобы переход по ссылке скачивал файл, а не открывал его как страницу.
+ */
+export function applyUploadsStaticHeaders(
+  res: { setHeader(name: string, value: string): void },
+  filePath: string,
+): void {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  if (filePath.toLowerCase().endsWith('.apk')) {
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    const base = path.basename(filePath).replace(/[\r\n"]/g, '') || 'app.apk';
+    res.setHeader('Content-Disposition', `attachment; filename="${base}"`);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return;
+  }
+  res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
 }
 
 /** Absolute path if download_url points at a local releases file. */
 export function resolveLocalReleaseFilePath(downloadUrl: string): string | null {
   const u = (downloadUrl || '').trim();
-  const marker = '/uploads/releases/';
+  const marker = RELEASE_FILE_MARKER;
   const idx = u.indexOf(marker);
   if (idx < 0) return null;
   const rawName = decodeURIComponent(u.slice(idx + marker.length).split('?')[0] || '');

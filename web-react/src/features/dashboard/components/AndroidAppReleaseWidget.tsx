@@ -4,6 +4,7 @@ import { FaAndroid } from 'react-icons/fa';
 import { LuDownload } from 'react-icons/lu';
 
 import { fetchLatestAppRelease, type AppReleaseLatest } from '../../admin/api';
+import { getApiBaseUrlFromEnv } from '../../../lib/config';
 
 const SEEN_RELEASE_KEY = 'android-app-release-seen-id';
 const LATEST_KEY = ['app-release-latest'] as const;
@@ -33,21 +34,78 @@ function formatBytes(n: number | null): string | null {
   return `${(n / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
-function resolveDownloadHref(url: string): string {
+/**
+ * Голый `/uploads/releases/…` на боевом сайте не проксируется (запрос висит без ответа).
+ * Тот же файл доступен как `/api/uploads/releases/…`.
+ */
+export function resolveReleaseDownloadHref(url: string, apiBase = getApiBaseUrlFromEnv()): string {
   const u = url.trim();
-  if (!u) return '#';
-  if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('blob:')) return u;
-  if (u.startsWith('/')) return u;
-  return `/${u}`;
+  if (!u) return '';
+  const rewritten = u.includes('/api/uploads/releases/')
+    ? u
+    : u.replace(
+        /^(https?:\/\/[^/\s]+)?\/uploads\/releases\//,
+        (_match, origin: string | undefined) => `${origin ?? ''}/api/uploads/releases/`,
+      );
+  const href =
+    rewritten.startsWith('http://') ||
+    rewritten.startsWith('https://') ||
+    rewritten.startsWith('blob:') ||
+    rewritten.startsWith('/')
+      ? rewritten
+      : `/${rewritten}`;
+  if (!href.startsWith('/')) return href;
+  const base = apiBase.trim().replace(/\/+$/, '');
+  return base ? `${base}${href}` : href;
+}
+
+/** `download` на чужом origin в Chrome отменяет переход, и клик выглядит мёртвым. */
+export function releaseDownloadFileName(
+  href: string,
+  fileName: string | null | undefined,
+  pageOrigin?: string,
+): string | undefined {
+  const name = (fileName ?? '').trim();
+  if (!name || /[/\\]/.test(name) || name.includes('..')) return undefined;
+  if (/^https?:\/\//i.test(href)) {
+    const origin = pageOrigin ?? (typeof window !== 'undefined' ? window.location.origin : '');
+    try {
+      if (!origin || new URL(href).origin !== origin) return undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return name;
+}
+
+export function releaseLinkOpensNewTab(href: string, pageOrigin?: string): boolean {
+  if (!/^https?:\/\//i.test(href)) return false;
+  const origin = pageOrigin ?? (typeof window !== 'undefined' ? window.location.origin : '');
+  try {
+    if (!origin) return true;
+    return new URL(href).origin !== origin;
+  } catch {
+    return true;
+  }
 }
 
 type ViewProps = {
   release: AppReleaseLatest;
   isUpdate: boolean;
-  onDownload: () => void;
+  href: string;
+  downloadName?: string;
+  openInNewTab: boolean;
+  onActivate: () => void;
 };
 
-export function AndroidAppReleaseWidgetView({ release, isUpdate, onDownload }: ViewProps) {
+export function AndroidAppReleaseWidgetView({
+  release,
+  isUpdate,
+  href,
+  downloadName,
+  openInNewTab,
+  onActivate,
+}: ViewProps) {
   const sizeLabel = formatBytes(release.file_size_bytes);
   const versionLabel =
     release.version_name.trim() ||
@@ -62,12 +120,15 @@ export function AndroidAppReleaseWidgetView({ release, isUpdate, onDownload }: V
         'dark:border-[#3DDC84]/25 dark:from-[#0d2818]/60 dark:via-[var(--surface-elevated)] dark:to-[#14301f]/40',
       ].join(' ')}
     >
-      <button
-        type="button"
-        onClick={onDownload}
+      <a
+        href={href}
+        download={downloadName}
+        target={openInNewTab ? '_blank' : undefined}
+        rel={openInNewTab ? 'noopener noreferrer' : undefined}
+        onClick={onActivate}
         className={[
-          'flex w-full items-start gap-3 text-left outline-none',
-          'rounded-xl focus-visible:ring-2 focus-visible:ring-[#3DDC84] focus-visible:ring-offset-2',
+          'flex w-full cursor-pointer items-start gap-3 text-left no-underline outline-none',
+          'rounded-xl text-inherit focus-visible:ring-2 focus-visible:ring-[#3DDC84] focus-visible:ring-offset-2',
           'active:scale-[0.99] transition-transform',
         ].join(' ')}
       >
@@ -111,7 +172,7 @@ export function AndroidAppReleaseWidgetView({ release, isUpdate, onDownload }: V
             {isUpdate ? 'Скачать обновление' : 'Скачать APK'}
           </span>
         </div>
-      </button>
+      </a>
     </section>
   );
 }
@@ -137,28 +198,26 @@ export function AndroidAppReleaseWidget() {
 
   if (!release || !release.download_url?.trim()) return null;
 
-  const href = resolveDownloadHref(release.download_url);
+  const href = resolveReleaseDownloadHref(release.download_url);
+  if (!href) return null;
+  const downloadName = releaseDownloadFileName(href, release.file_name);
+  const openInNewTab = releaseLinkOpensNewTab(href);
 
-  const onDownload = () => {
+  const onActivate = () => {
     markReleaseSeen(release.id);
     setSeenId(release.id);
-    try {
-      const a = document.createElement('a');
-      a.href = href;
-      a.rel = 'noopener noreferrer';
-      a.target = '_blank';
-      if (release.file_name) a.download = release.file_name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } catch {
-      window.open(href, '_blank', 'noopener,noreferrer');
-    }
   };
 
   return (
     <div className="pt-3 pb-1 sm:pt-4 lg:pt-4">
-      <AndroidAppReleaseWidgetView release={release} isUpdate={isUpdate} onDownload={onDownload} />
+      <AndroidAppReleaseWidgetView
+        release={release}
+        isUpdate={isUpdate}
+        href={href}
+        downloadName={downloadName}
+        openInNewTab={openInNewTab}
+        onActivate={onActivate}
+      />
     </div>
   );
 }
