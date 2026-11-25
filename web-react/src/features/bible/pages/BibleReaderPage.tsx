@@ -395,15 +395,18 @@ export function BibleReaderPage() {
 
   const chromeOpen = noteOpen || booksOpen;
 
+  // Без min-h-0 на корне: иначе корень сжимается до высоты экрана (flex-ребёнок .page-enter),
+  // а sticky-шапка упирается в низ своего containing block и «срывается» вверх после первого
+  // экрана прокрутки — текст уезжает выше панели. min-height:auto даёт корню полную высоту контента.
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-1 flex-col">
+      {/* Шапка и тулбар — ОДИН sticky-блок: тулбар с отдельным `top-12` расходился с реальной
+          высотой шапки (на компактных телефонах она 40px, не 48px) и оставлял прозрачную щель,
+          сквозь которую был виден прокручиваемый текст. */}
       <div className={sectionHeroStickyClass}>
         <PageHeader title="Библия" />
-      </div>
-
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pb-4 sm:px-5">
-        <div className="sticky top-12 z-10 -mx-4 border-b border-stone-200/60 bg-[var(--surface)] px-4 py-2 sm:-mx-5 sm:px-5">
-          <div className="flex items-center gap-2">
+        <div className="border-b border-stone-200/60 bg-[var(--surface)] px-4 py-2 sm:px-5">
+          <div className="mx-auto flex w-full max-w-2xl items-center gap-2">
             <Link
               to="/bible"
               aria-label="К списку книг"
@@ -455,7 +458,9 @@ export function BibleReaderPage() {
             </div>
           </div>
         </div>
+      </div>
 
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pb-4 sm:px-5">
         {hasAudio ? (
           <div className="mt-3">
             <ChapterListenRow
