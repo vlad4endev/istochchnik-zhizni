@@ -3,11 +3,15 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/church_api.dart';
 import '../../core/nav.dart';
 import '../../core/push_nav.dart';
 import '../../core/session.dart';
 import '../../core/unread_badge.dart';
 import '../../ui/kit/kit.dart';
+import '../calls/call_page.dart';
+import '../calls/logic/active_call_store.dart';
+import '../calls/logic/meeting_logic.dart';
 import '../chats/chats_page.dart';
 import '../chats/data/lost_attachments.dart';
 import '../chats/thread_page.dart';
@@ -51,7 +55,7 @@ class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
     // Пуш, нажатый до того, как приложение построило вкладки, выполняется теперь.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       PushNavigator.instance.shellReady();
-      unawaited(_restoreAfterPickerKill());
+      unawaited(_restoreAfterPickerKill().then((_) => _restoreActiveCall()));
     });
     final session = context.read<SessionController>();
     _chatEvents = session.realtime.chatEvents.listen((_) => _badge.refreshSoon(session));
@@ -87,6 +91,36 @@ class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
       );
     } finally {
       AttachRecovery.restoring.value = false;
+    }
+  }
+
+  /// Телефон выгрузил приложение, пока человек был в звонке (например, отправлял ссылку-приглашение):
+  /// если звонок на сервере ещё идёт, возвращаем в него, а не оставляем на «Главной».
+  Future<void> _restoreActiveCall() async {
+    final record = await ActiveCallStore.read();
+    if (record == null || !mounted) return;
+    try {
+      final call = await ChurchApi(context.read<SessionController>()).callDetails(record.callId);
+      final status = '${call['status'] ?? ''}';
+      if (status != 'active' && status != 'waiting') {
+        await ActiveCallStore.clear();
+        return;
+      }
+      final nav = navigatorKey.currentState;
+      if (nav == null || !mounted) return;
+      final media = record.video ? MeetingMedia.video : MeetingMedia.audio;
+      await nav.push(PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 280),
+        pageBuilder: (_, _, _) => CallPage(
+          callId: record.callId,
+          video: record.video,
+          title: record.title.isEmpty ? media.defaultTitle : record.title,
+          meeting: record.host ? MeetingLaunch(media: media, conversationId: record.conversationId, title: record.title) : null,
+        ),
+        transitionsBuilder: (_, animation, _, child) => FadeTransition(opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut), child: child),
+      ));
+    } catch (_) {
+      /* нет сети: запись остаётся, попробуем при следующем запуске */
     }
   }
 

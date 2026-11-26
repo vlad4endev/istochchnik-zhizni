@@ -12,6 +12,7 @@ import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart' show showMessage;
 import 'logic/call_access.dart';
+import 'logic/active_call_store.dart';
 import 'logic/call_layout.dart';
 import 'logic/call_rejoin.dart';
 import 'logic/call_status.dart';
@@ -88,6 +89,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
       ''; // что сейчас делает подключение — видно на экране, если оно долгое
   Timer? _poll;
   bool _started = false;
+  bool _recorded = false; // звонок запомнен для возврата после выгрузки приложения
   bool _rejoining = false; // возвращаемся в комнату после обрыва связи
   int _rejoinAttempts = 0;
   StreamSubscription<Map<String, dynamic>>? _callEvents;
@@ -138,6 +140,13 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
       _started = true;
       _connect();
     }
+  }
+
+  /// Звонок закончился или мы вышли: возвращать в него после перезапуска больше не нужно.
+  void _forgetCall() {
+    if (!_recorded) return;
+    _recorded = false;
+    unawaited(ActiveCallStore.clear());
   }
 
   /// Вернулись в приложение: пока оно было свёрнуто, система могла оборвать связь с комнатой.
@@ -210,6 +219,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   void _finish(String? message) {
     if (_closing || _leaving || !mounted) return;
     _closing = true;
+    _forgetCall();
     _poll?.cancel();
     setState(() {
       _error = message ?? 'Звонок завершён';
@@ -327,6 +337,16 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
         }
       }
       if (widget.inviteToken != null) await audioReady;
+      if (widget.meeting != null && _inviteUrl == null && _callId != null && widget.callId != null) {
+        // Организатор вернулся в уже созданную встречу: ссылку-приглашение берём у сервера.
+        try {
+          final call = await api.callDetails(_callId!);
+          final invite = str(call['inviteUrl']);
+          if (invite.isNotEmpty) _inviteUrl = absoluteInviteUrl(invite, session.apiOrigin);
+          final title = str(call['title']);
+          if (title.isNotEmpty) _meetingTitle = title;
+        } catch (_) {}
+      }
       _setStage('Получаем доступ к комнате…');
       final Map<String, dynamic> tokenBody;
       if (widget.inviteToken != null && _callId == null) {
@@ -373,7 +393,16 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
       });
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _refresh());
       _startPolling();
-      if (_inviteUrl != null) unawaited(_copyInvite(announce: true));
+      _recorded = true;
+      unawaited(ActiveCallStore.save(
+        callId: _callId!,
+        host: widget.meeting != null,
+        video: widget.video || (widget.meeting?.media.isVideo ?? false) || (widget.inviteMedia?.isVideo ?? false),
+        title: widget.meeting != null ? _displayTitle : widget.title,
+        conversationId: widget.meeting?.conversationId ?? widget.conversationId,
+      ));
+      // Ссылку копируем только при создании встречи, а не при возврате в неё.
+      if (_inviteUrl != null && widget.callId == null) unawaited(_copyInvite(announce: true));
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -470,6 +499,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
 
   Future<void> _hangUp({bool endForAll = false}) async {
     _leaving = true;
+    _forgetCall();
     _poll?.cancel();
     final id = _callId;
     try {
@@ -485,6 +515,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   }
 
   Future<void> _decline() async {
+    _forgetCall();
     _declined = true;
     _leaving = true;
     final id = _callId;
@@ -499,6 +530,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _forgetCall();
     _callEvents?.cancel();
     _ticker?.cancel();
     _poll?.cancel();
