@@ -7,6 +7,8 @@ import { isInstalledPwa } from '../../pwa/utils/pwaEnvironment';
 
 /** Последний известный публичный VAPID с сервера — чтобы при смене ключей пересоздать подписку. */
 const LS_VAPID_PUBLIC_KEY = 'web_push_vapid_public_key';
+/** За сколько до expirationTime пересоздаём подписку заранее (3 суток). */
+const RESUBSCRIBE_BEFORE_EXPIRY_MS = 3 * 24 * 3600_000;
 export type WebPushResult = {
   ok: boolean;
   error?: string;
@@ -305,6 +307,22 @@ async function initMessengerPushNotificationsInternal(
       }
       existing = null;
       localStorage.removeItem(LS_VAPID_PUBLIC_KEY);
+      lastSyncedEndpoint = null;
+    }
+
+    // Подписка с близким expirationTime (Chrome/FCM задают его при создании) рискует молча
+    // перестать получать сообщения после истечения — пересоздаём заранее, не дожидаясь сбоя.
+    if (
+      existing &&
+      typeof existing.expirationTime === 'number' &&
+      existing.expirationTime - Date.now() < RESUBSCRIBE_BEFORE_EXPIRY_MS
+    ) {
+      try {
+        await existing.unsubscribe();
+      } catch {
+        /* ignore */
+      }
+      existing = null;
       lastSyncedEndpoint = null;
     }
 

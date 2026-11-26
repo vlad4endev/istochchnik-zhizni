@@ -66,7 +66,7 @@ describe('initMessengerPushNotifications resilience', () => {
     vi.clearAllMocks();
   });
 
-  function setupBrowserMocks(unsubscribe: ReturnType<typeof vi.fn>) {
+  function setupBrowserMocks(unsubscribe: ReturnType<typeof vi.fn>, existingSub?: unknown) {
     const controllerPostMessage = vi.fn();
     const sub = {
       endpoint: 'https://fcm.googleapis.com/fcm/send/test-endpoint',
@@ -82,7 +82,7 @@ describe('initMessengerPushNotifications resilience', () => {
 
     const registration = {
       pushManager: {
-        getSubscription: vi.fn().mockResolvedValue(null),
+        getSubscription: vi.fn().mockResolvedValue(existingSub ?? null),
         subscribe: vi.fn().mockResolvedValue(sub),
       },
       active: { postMessage: vi.fn() },
@@ -110,7 +110,7 @@ describe('initMessengerPushNotifications resilience', () => {
     );
     vi.mocked(fetchVapidPublicKey).mockResolvedValue(VALID_VAPID);
 
-    return { controllerPostMessage };
+    return { controllerPostMessage, registration };
   }
 
   it('не уничтожает подписку при временной ошибке 503 и помечает результат retryable', async () => {
@@ -158,5 +158,43 @@ describe('initMessengerPushNotifications resilience', () => {
       endpoint: 'https://fcm.googleapis.com/fcm/send/test-endpoint',
       auth: 'auth-key',
     });
+  });
+
+  function makeExistingSub(unsubscribe: ReturnType<typeof vi.fn>, expirationTime: number | null) {
+    return {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/existing',
+      expirationTime,
+      options: {},
+      getKey: vi.fn(() => null),
+      toJSON: vi.fn(() => ({
+        endpoint: 'https://fcm.googleapis.com/fcm/send/existing',
+        keys: { p256dh: 'p256-old', auth: 'auth-old' },
+      })),
+      unsubscribe,
+    };
+  }
+
+  it('пересоздаёт подписку заранее, когда expirationTime истекает через < 3 суток', async () => {
+    const unsubscribe = vi.fn().mockResolvedValue(true);
+    const existingSub = makeExistingSub(unsubscribe, Date.now() + 60 * 60_000);
+    const { registration } = setupBrowserMocks(unsubscribe, existingSub);
+    vi.mocked(apiClient.post).mockResolvedValueOnce({ data: { ok: true } });
+
+    const res = await initMessengerPushNotifications({ force: true, silent: true });
+    expect(res.ok).toBe(true);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(registration.pushManager.subscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('не пересоздаёт подписку с далёким expirationTime', async () => {
+    const unsubscribe = vi.fn().mockResolvedValue(true);
+    const existingSub = makeExistingSub(unsubscribe, Date.now() + 30 * 24 * 3600_000);
+    const { registration } = setupBrowserMocks(unsubscribe, existingSub);
+    vi.mocked(apiClient.post).mockResolvedValueOnce({ data: { ok: true } });
+
+    const res = await initMessengerPushNotifications({ force: true, silent: true });
+    expect(res.ok).toBe(true);
+    expect(unsubscribe).not.toHaveBeenCalled();
+    expect(registration.pushManager.subscribe).not.toHaveBeenCalled();
   });
 });

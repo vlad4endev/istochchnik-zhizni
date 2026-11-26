@@ -13,14 +13,14 @@ describe('describePushEnableError', () => {
     expect(describePushEnableError(new Error('Service worker not ready'))).toMatch(/Ctrl\+Shift\+R/);
   });
 
-  it('AbortError — push-сервис браузера недоступен', () => {
+  it('AbortError — связь с push-сервисом браузера не установилась', () => {
     expect(describePushEnableError(domError('AbortError', 'Registration failed - push service error'))).toMatch(
-      /push-сервис/,
+      /серверы Google/,
     );
   });
 
-  it('NotAllowedError — запрещено в настройках сайта', () => {
-    expect(describePushEnableError(domError('NotAllowedError'))).toMatch(/настройки сайта/);
+  it('NotAllowedError — советует включить уведомления через адресную строку', () => {
+    expect(describePushEnableError(domError('NotAllowedError'))).toMatch(/адресной строке/);
   });
 
   it('повреждённый VAPID-ключ', () => {

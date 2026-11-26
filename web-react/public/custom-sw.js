@@ -101,16 +101,25 @@ self.addEventListener('push', function (event) {
   event.waitUntil(
     (async () => {
       // userVisibleOnly: на каждый push обязан быть показ уведомления (иначе iOS/Chrome
-      // отзывают подписку). При ошибке опций показываем упрощённое уведомление.
+      // отзывают подписку). При ошибке опций показываем упрощённое уведомление,
+      // а последней попыткой — совсем без опций: reject из waitUntil = «тихий push» = отзовут подписку.
       try {
         await self.registration.showNotification(title, options);
       } catch (e) {
-        await self.registration.showNotification(title, {
-          body: options.body,
-          icon: options.icon,
-          tag: options.tag,
-          data: options.data,
-        });
+        try {
+          await self.registration.showNotification(title, {
+            body: options.body,
+            icon: options.icon,
+            tag: options.tag,
+            data: options.data,
+          });
+        } catch (e2) {
+          try {
+            await self.registration.showNotification(title, { body: options.body });
+          } catch (e3) {
+            /* разрешение отозвано пользователем/системой — показать ничего нельзя */
+          }
+        }
       }
       try {
         if (
