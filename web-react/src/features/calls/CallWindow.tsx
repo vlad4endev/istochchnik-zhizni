@@ -18,6 +18,7 @@ import {
   ConnectionQuality,
   ConnectionState,
   DisconnectReason,
+  MediaDeviceFailure,
   ParticipantEvent,
   RoomEvent,
   Track,
@@ -74,6 +75,12 @@ import {
   startCallJournal,
   stopCallJournal,
 } from './callJournal';
+import {
+  computeRejoinDelayMs,
+  createCallAudioRecovery,
+  isMediaDeviceError,
+  MAX_REJOIN_ATTEMPTS,
+} from './callMediaRecovery';
 import {
   cancelCall,
   createCallInvitation,
@@ -196,113 +203,104 @@ function useMeetingUi(): MeetingUiState | null {
   return useContext(MeetingUiContext);
 }
 
-/** Разблокировать WebAudio + LiveKit HTMLMediaElement playback (autoplay policy). */
+function hasPausedCallAudioElements(): boolean {
+  if (typeof document === 'undefined') return false;
+  const elements = document.querySelectorAll('audio');
+  for (const el of elements) {
+    if (el.srcObject instanceof MediaStream && (el.paused || el.muted)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function resumePausedCallAudioElements(): boolean {
+  if (typeof document === 'undefined') return false;
+  let touched = false;
+  document.querySelectorAll('audio').forEach((el) => {
+    // Только потоки звонка (LiveKit ставит srcObject); голосовые мессенджера не трогаем.
+    if (!(el.srcObject instanceof MediaStream)) return;
+    if (el.muted) {
+      el.muted = false;
+      touched = true;
+    }
+    if (el.paused) {
+      touched = true;
+      void el.play().catch(() => undefined);
+    }
+  });
+  return touched;
+}
+
+/** Разблокировать аудио по явному действию пользователя, только если звук действительно заблокирован/на паузе. */
 function resumeCallMedia(room?: Room | null): void {
-  unlockCallAudio();
-  if (!room) return;
-  void room.startAudio().catch(() => undefined);
+  if (!room) {
+    unlockCallAudio();
+    return;
+  }
+  if (!room.canPlaybackAudio || hasPausedCallAudioElements()) {
+    unlockCallAudio();
+    void room.startAudio().catch(() => undefined);
+  }
 }
 
 /**
- * Звук собеседника на iOS PWA / macOS Safari: autoplay policy блокирует <audio> без жеста,
- * а после фона/блокировки экрана браузер suspend'ит аудио. Повторяем startAudio():
- * при подключении, новых аудио-треках, смене статуса воспроизведения, возврате на foreground,
- * на любом первом жесте пользователя и коротким retry-циклом, пока звук не заработает.
+ * Восстановление аудио собеседника на десктопе и iOS PWA / Safari:
+ * - Не вызывает startAudio() из AudioPlaybackStatusChanged(false), чтобы не создавать
+ *   бесконечный цикл 200ms блокировок в livekit-client.
+ * - Разблокирует autoplay на пользовательском жесте (один раз за тап, только когда нужно).
+ * - Watchdog тихо будит <audio>, поставленные iOS/Safari на паузу, когда звук разрешён.
  */
 function KeepAliveCallMedia() {
   const room = useRoomContext();
   useEffect(() => {
-    let disposed = false;
-    let retryTimer: number | null = null;
-    let retries = 0;
+    const recovery = createCallAudioRecovery({
+      isConnected: () => room.state === ConnectionState.Connected,
+      canPlaybackAudio: () => room.canPlaybackAudio,
+      startAudio: () => room.startAudio(),
+      isHidden: () => typeof document !== 'undefined' && document.visibilityState === 'hidden',
+      hasPausedAudioElements: hasPausedCallAudioElements,
+      resumePausedAudioElements: resumePausedCallAudioElements,
+      onUserGestureUnlock: unlockCallAudio,
+    });
 
-    const clearRetry = () => {
-      if (retryTimer != null) {
-        window.clearTimeout(retryTimer);
-        retryTimer = null;
-      }
-    };
-
-    const kick = () => {
-      if (disposed) return;
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      resumeCallMedia(room);
-    };
-
-    const scheduleRetry = () => {
-      clearRetry();
-      if (disposed || room.canPlaybackAudio || retries >= 20) return;
-      retries += 1;
-      retryTimer = window.setTimeout(() => {
-        kick();
-        scheduleRetry();
-      }, 1500);
-    };
-
-    const onPlaybackChanged = () => {
-      if (room.canPlaybackAudio) {
-        retries = 0;
-        clearRetry();
-      } else {
-        kick();
-        scheduleRetry();
-      }
-    };
-
-    const onTrack = () => {
-      kick();
-      scheduleRetry();
-    };
-
-    const onGesture = () => {
-      kick();
-    };
+    const onRoomActive = () => recovery.onRoomActive();
+    const onPlaybackChanged = () => recovery.onPlaybackChanged();
+    const onForeground = () => recovery.onForeground();
+    const onGesture = () => recovery.onGesture();
 
     // Сторож: iOS/Safari может молча поставить удалённый звук на паузу (маршрутизация
     // аудио после включения микрофона, прерывание системой, смена устройства вывода).
     const watchdog = window.setInterval(() => {
-      if (disposed) return;
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      if (!room.canPlaybackAudio) {
-        resumeCallMedia(room);
-        return;
-      }
-      document.querySelectorAll('audio').forEach((el) => {
-        // Только потоки звонка (LiveKit ставит srcObject); голосовые мессенджера не трогаем.
-        if (!(el.srcObject instanceof MediaStream)) return;
-        if (el.muted) el.muted = false;
-        if (el.paused) void el.play().catch(() => undefined);
-      });
-      unlockCallAudio();
-    }, 2500);
+      recovery.onWatchdogTick();
+    }, 3000);
 
-    document.addEventListener('visibilitychange', kick);
-    window.addEventListener('focus', kick);
-    window.addEventListener('pageshow', kick);
-    // Любой жест разблокирует autoplay: capture, чтобы не зависеть от stopPropagation в UI.
+    document.addEventListener('visibilitychange', onForeground);
+    window.addEventListener('focus', onForeground);
+    window.addEventListener('pageshow', onForeground);
+    // Capture: перехватываем любой жест независимо от stopPropagation в UI.
     document.addEventListener('pointerdown', onGesture, true);
-    document.addEventListener('touchend', onGesture, true);
     document.addEventListener('click', onGesture, true);
+    document.addEventListener('keydown', onGesture, true);
     room.on(RoomEvent.AudioPlaybackStatusChanged, onPlaybackChanged);
-    room.on(RoomEvent.TrackSubscribed, onTrack);
-    room.on(RoomEvent.Connected, onTrack);
-    room.on(RoomEvent.Reconnected, onTrack);
-    kick();
-    scheduleRetry();
+    room.on(RoomEvent.TrackSubscribed, onRoomActive);
+    room.on(RoomEvent.Connected, onRoomActive);
+    room.on(RoomEvent.Reconnected, onRoomActive);
+    onRoomActive();
+
     return () => {
-      disposed = true;
+      recovery.dispose();
       window.clearInterval(watchdog);
-      clearRetry();
-      document.removeEventListener('visibilitychange', kick);
-      window.removeEventListener('focus', kick);
-      window.removeEventListener('pageshow', kick);
+      document.removeEventListener('visibilitychange', onForeground);
+      window.removeEventListener('focus', onForeground);
+      window.removeEventListener('pageshow', onForeground);
       document.removeEventListener('pointerdown', onGesture, true);
-      document.removeEventListener('touchend', onGesture, true);
       document.removeEventListener('click', onGesture, true);
+      document.removeEventListener('keydown', onGesture, true);
       room.off(RoomEvent.AudioPlaybackStatusChanged, onPlaybackChanged);
-      room.off(RoomEvent.TrackSubscribed, onTrack);
-      room.off(RoomEvent.Connected, onTrack);
-      room.off(RoomEvent.Reconnected, onTrack);
+      room.off(RoomEvent.TrackSubscribed, onRoomActive);
+      room.off(RoomEvent.Connected, onRoomActive);
+      room.off(RoomEvent.Reconnected, onRoomActive);
     };
   }, [room]);
   return null;
@@ -673,10 +671,12 @@ function CallControls({
 
 /** Apply mic/cam lobby toggles once after LiveKit connects. */
 function ApplyLobbyMediaPrefs({
+  callId,
   micOn,
   camOn,
   videoEnabled,
 }: {
+  callId: string;
   micOn: boolean;
   camOn: boolean;
   videoEnabled: boolean;
@@ -691,16 +691,24 @@ function ApplyLobbyMediaPrefs({
     void room.localParticipant
       .setMicrophoneEnabled(micOn)
       .catch((e) => {
+        logCallEvent(callId, 'device_error', {
+          severity: 'warn',
+          payload: { device: 'microphone', message: e instanceof Error ? e.message : String(e) },
+        });
         emitAppToast(mapDeviceError(e), 'error');
       });
     if (videoEnabled) {
       void room.localParticipant
         .setCameraEnabled(camOn)
         .catch((e) => {
+          logCallEvent(callId, 'device_error', {
+            severity: 'warn',
+            payload: { device: 'camera', message: e instanceof Error ? e.message : String(e) },
+          });
           emitAppToast(mapDeviceError(e), 'error');
         });
     }
-  }, [camOn, connectionState, micOn, room, videoEnabled]);
+  }, [callId, camOn, connectionState, micOn, room, videoEnabled]);
 
   return null;
 }
@@ -981,7 +989,6 @@ function RoomStage({
   callType: 'audio' | 'video';
   connectError: string | null;
 }) {
-  const room = useRoomContext();
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: false },
@@ -1021,10 +1028,9 @@ function RoomStage({
       setElapsed(0);
       return;
     }
-    resumeCallMedia(room);
     const t = window.setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => window.clearInterval(t);
-  }, [connected, room]);
+  }, [connected]);
 
   // После attach трека Safari/Chrome иногда не стартуют video.play без явного вызова.
   useEffect(() => {
@@ -1503,8 +1509,6 @@ function RoomStage({
           {statusLabel}
         </p>
       ) : null}
-      <RoomAudioRenderer />
-      <StartAudio label="Нажмите, чтобы включить звук" className="call-start-audio" />
     </div>
   );
 }
@@ -2008,8 +2012,11 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
    * исчерпан, закэшированный JWT мог протухнуть — берём свежий и монтируем комнату заново.
    */
   const [rejoinNonce, setRejoinNonce] = useState(0);
+  const [rejoinPending, setRejoinPending] = useState(false);
+  const rejoinPendingRef = useRef(false);
   const rejoinAttemptsRef = useRef(0);
   const rejoinTimerRef = useRef<number | null>(null);
+  const lastRoomErrorRef = useRef<string | null>(null);
 
   const clearRejoinTimer = useCallback(() => {
     if (rejoinTimerRef.current != null) {
@@ -2019,18 +2026,26 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   }, []);
 
   const scheduleRejoin = useCallback(() => {
+    if (rejoinPendingRef.current) return;
     // Звонок закрыт самим пользователем/другой стороной — не воскрешаем UI.
     const stored = useCallStore.getState().activeCall;
     if (!stored || stored.callId !== activeCall.callId || stored.status === 'ended') return;
-    if (rejoinAttemptsRef.current >= 3) {
-      if (rejoinAttemptsRef.current === 3) {
-        rejoinAttemptsRef.current = 4;
+    if (rejoinAttemptsRef.current >= MAX_REJOIN_ATTEMPTS) {
+      if (rejoinAttemptsRef.current === MAX_REJOIN_ATTEMPTS) {
+        rejoinAttemptsRef.current = MAX_REJOIN_ATTEMPTS + 1;
         logCallEvent(activeCall.callId, 'rejoin_abandoned', { severity: 'error' });
+        const finalMsg =
+          lastRoomErrorRef.current ||
+          'Не удалось подключиться к звонку. Попробуйте позвонить ещё раз.';
+        setConnectError(finalMsg);
+        emitAppToast(finalMsg, 'error');
       }
       return; // дальше — только вручную: завершить и перезвонить
     }
     rejoinAttemptsRef.current += 1;
-    const delay = Math.min(2000 * 2 ** (rejoinAttemptsRef.current - 1), 10_000);
+    const delay = computeRejoinDelayMs(rejoinAttemptsRef.current);
+    rejoinPendingRef.current = true;
+    setRejoinPending(true);
     logCallEvent(activeCall.callId, 'rejoin_attempt', {
       severity: 'warn',
       payload: { attempt: rejoinAttemptsRef.current, delayMs: delay },
@@ -2038,9 +2053,11 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     clearRejoinTimer();
     rejoinTimerRef.current = window.setTimeout(() => {
       rejoinTimerRef.current = null;
+      rejoinPendingRef.current = false;
       roomTokenRef.current = null;
       roomUrlRef.current = null;
       tokenInflight.current = false;
+      setRejoinPending(false);
       setCreds(null);
       setConnectError(null);
       setTokenError(null);
@@ -2065,6 +2082,9 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
 
   const hangup = useCallback(
     async (opts?: { endForAll?: boolean }) => {
+      clearRejoinTimer();
+      rejoinPendingRef.current = false;
+      setRejoinPending(false);
       stopCallRing();
       try {
         if (activeCall.status === 'calling' && activeCall.isInitiator && !opts?.endForAll) {
@@ -2077,7 +2097,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
       }
       closeCall();
     },
-    [activeCall.callId, activeCall.isInitiator, activeCall.status, closeCall],
+    [activeCall.callId, activeCall.isInitiator, activeCall.status, clearRejoinTimer, closeCall],
   );
 
   useEffect(() => {
@@ -2195,14 +2215,14 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
 
   // LiveKit Room.connect ждёт и signal, и первый ICE — только для первого входа, не для reconnect.
   useEffect(() => {
-    if (!creds?.token || !creds.url || connectError || lkConnected) return;
+    if (!creds?.token || !creds.url || connectError || lkConnected || rejoinPending) return;
     if (hadConnectedRef.current) return;
     const t = window.setTimeout(() => {
-      if (hadConnectedRef.current) return;
+      if (hadConnectedRef.current || rejoinPendingRef.current) return;
       setConnectError('Ошибка сервера или идут технические работы. Попробуйте позже.');
     }, 32_000);
     return () => window.clearTimeout(t);
-  }, [creds?.token, creds?.url, connectError, lkConnected]);
+  }, [creds?.token, creds?.url, connectError, lkConnected, rejoinPending]);
 
   const isGroupCall = activeCall.callKind === 'group';
   const roomOptions = useMemo<RoomOptions>(
@@ -2237,10 +2257,95 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     () => ({
       autoSubscribe: true,
       maxRetries: 8,
+      websocketTimeout: 15_000,
       peerConnectionTimeout: 30_000,
     }),
     [],
   );
+
+  // Стабильные ссылки для коллбэков <LiveKitRoom>: в @livekit/components-react
+  // onError стоит в deps у эффекта room.connect() — новая ссылка на ре-рендере
+  // вызывает повторный connect() (дубли ошибок, rogue connect при backoff и срыв reconnect).
+  const scheduleRejoinRef = useRef(scheduleRejoin);
+  scheduleRejoinRef.current = scheduleRejoin;
+  const clearRejoinTimerRef = useRef(clearRejoinTimer);
+  clearRejoinTimerRef.current = clearRejoinTimer;
+  const closeCallRef = useRef(closeCall);
+  closeCallRef.current = closeCall;
+
+  const handleRoomError = useCallback(
+    (e: Error) => {
+      const rawMessage = e?.message ?? String(e);
+      // Штатный teardown (наш перезаход/завершение) — не сбой: ни журнал, ни тост.
+      if (isBenignRoomErrorMessage(rawMessage)) return;
+      if (isMediaDeviceError(e)) {
+        logCallEvent(activeCall.callId, 'device_error', {
+          severity: 'warn',
+          payload: { message: rawMessage },
+        });
+        emitAppToast(mapDeviceError(e), 'error');
+        return;
+      }
+      logCallEvent(activeCall.callId, 'room_error', {
+        severity: 'error',
+        payload: { message: rawMessage },
+      });
+      const msg = mapDeviceError(e);
+      lastRoomErrorRef.current = msg;
+      // Во время запланированного автоперезахода не пугаем красным баннером/тостом.
+      if (rejoinPendingRef.current) return;
+      setConnectError(msg);
+      emitAppToast(msg, 'error');
+    },
+    [activeCall.callId],
+  );
+
+  const handleRoomConnected = useCallback(() => {
+    setLkConnected(true);
+    setConnectError(null);
+    lastRoomErrorRef.current = null;
+    rejoinAttemptsRef.current = 0;
+    rejoinPendingRef.current = false;
+    setRejoinPending(false);
+    clearRejoinTimerRef.current();
+  }, []);
+
+  const handleMediaDeviceFailure = useCallback(
+    (failure?: MediaDeviceFailure) => {
+      logCallEvent(activeCall.callId, 'device_error', {
+        severity: 'warn',
+        payload: { message: failure ? String(failure) : 'media_device_failure' },
+      });
+      emitAppToast('Не удалось получить доступ к камере или микрофону', 'error');
+    },
+    [activeCall.callId],
+  );
+
+  const handleRoomDisconnected = useCallback((reason?: DisconnectReason) => {
+    setLkConnected(false);
+    // Hard end: room gone / kicked / duplicate. Transient drops → LiveKit reconnects.
+    const roomClosed = (DisconnectReason as unknown as { ROOM_CLOSED?: number }).ROOM_CLOSED;
+    const hardEnd =
+      reason === DisconnectReason.ROOM_DELETED ||
+      reason === DisconnectReason.PARTICIPANT_REMOVED ||
+      reason === DisconnectReason.SERVER_SHUTDOWN ||
+      reason === DisconnectReason.DUPLICATE_IDENTITY ||
+      (roomClosed != null && reason === roomClosed);
+    if (hardEnd) {
+      emitAppToast(
+        reason === DisconnectReason.DUPLICATE_IDENTITY
+          ? 'Звонок открыт на другом устройстве'
+          : 'Звонок завершён',
+        'info',
+      );
+      closeCallRef.current();
+      return;
+    }
+    // Собственный disconnect при unmount/re-mount (key) — не перезаходим.
+    if (reason === DisconnectReason.CLIENT_INITIATED) return;
+    // Финальный обрыв (внутренние reconnect LiveKit исчерпаны): перезаход со свежим JWT.
+    scheduleRejoinRef.current();
+  }, []);
 
   if (activeCall.status === 'calling' && activeCall.isInitiator && activeCall.callKind === 'direct') {
     return <OutgoingRing activeCall={activeCall} onCancel={() => void hangup()} />;
@@ -2257,6 +2362,22 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     }
     return (
       <CallShell onHangup={() => void hangup()} status={tokenError}>
+        <MinimizeCallButton className="call-minimize-btn--overlay" />
+      </CallShell>
+    );
+  }
+
+  if (rejoinPending) {
+    if (uiMinimized) {
+      return (
+        <ActiveCallMinimizedBarSimple
+          activeCall={activeCall}
+          onHangup={() => void hangup()}
+        />
+      );
+    }
+    return (
+      <CallShell onHangup={() => void hangup()} status="Переподключение к комнате…">
         <MinimizeCallButton className="call-minimize-btn--overlay" />
       </CallShell>
     );
@@ -2293,70 +2414,29 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         token={roomToken}
         serverUrl={roomUrl}
         connect
-        audio={preferMicOn}
-        video={preferCamOn}
+        audio={false}
+        video={false}
         options={roomOptions}
         connectOptions={connectOptions}
-        onError={(e) => {
-          const rawMessage = e?.message ?? String(e);
-          // Штатный teardown (наш перезаход/завершение) — не сбой: ни журнал, ни тост.
-          if (isBenignRoomErrorMessage(rawMessage)) return;
-          logCallEvent(activeCall.callId, 'room_error', {
-            severity: 'error',
-            payload: { message: rawMessage },
-          });
-          const msg = mapDeviceError(e);
-          setConnectError(msg);
-          emitAppToast(msg, 'error');
-        }}
-        onConnected={() => {
-          unlockCallAudio();
-          setLkConnected(true);
-          setConnectError(null);
-          rejoinAttemptsRef.current = 0;
-          clearRejoinTimer();
-        }}
-        onMediaDeviceFailure={() => {
-          emitAppToast('Не удалось получить доступ к камере или микрофону', 'error');
-        }}
-        onDisconnected={(reason) => {
-          setLkConnected(false);
-          // Hard end: room gone / kicked / duplicate. Transient drops → LiveKit reconnects.
-          const roomClosed = (DisconnectReason as unknown as { ROOM_CLOSED?: number }).ROOM_CLOSED;
-          const hardEnd =
-            reason === DisconnectReason.ROOM_DELETED ||
-            reason === DisconnectReason.PARTICIPANT_REMOVED ||
-            reason === DisconnectReason.SERVER_SHUTDOWN ||
-            reason === DisconnectReason.DUPLICATE_IDENTITY ||
-            (roomClosed != null && reason === roomClosed);
-          if (hardEnd) {
-            emitAppToast(
-              reason === DisconnectReason.DUPLICATE_IDENTITY
-                ? 'Звонок открыт на другом устройстве'
-                : 'Звонок завершён',
-              'info',
-            );
-            closeCall();
-            return;
-          }
-          // Собственный disconnect при unmount/re-mount (key) — не перезаходим.
-          if (reason === DisconnectReason.CLIENT_INITIATED) return;
-          // Финальный обрыв (внутренние reconnect LiveKit исчерпаны): перезаход со свежим JWT.
-          scheduleRejoin();
-        }}
+        onError={handleRoomError}
+        onConnected={handleRoomConnected}
+        onMediaDeviceFailure={handleMediaDeviceFailure}
+        onDisconnected={handleRoomDisconnected}
         className="call-lk-room"
       >
         <KeepAliveCallMedia />
         <CallJournalRecorder callId={activeCall.callId} />
         <ReportCallQuality callId={activeCall.callId} />
-        <ApplyLobbyMediaPrefs micOn={preferMicOn} camOn={preferCamOn} videoEnabled={videoEnabled} />
+        <ApplyLobbyMediaPrefs
+          callId={activeCall.callId}
+          micOn={preferMicOn}
+          camOn={preferCamOn}
+          videoEnabled={videoEnabled}
+        />
+        <RoomAudioRenderer />
+        <StartAudio label="Нажмите, чтобы включить звук" className="call-start-audio" />
         {uiMinimized ? (
-          <>
-            {/* RoomStage unmounted while minimized — keep remote audio alive. */}
-            <RoomAudioRenderer />
-            <StartAudio label="Нажмите, чтобы включить звук" className="call-start-audio" />
-            <ActiveCallMinimizedBar activeCall={activeCall} onHangup={() => void hangup()} />
-          </>
+          <ActiveCallMinimizedBar activeCall={activeCall} onHangup={() => void hangup()} />
         ) : activeCall.callKind === 'group' ? (
           <GroupMeetingShell
             callId={activeCall.callId}

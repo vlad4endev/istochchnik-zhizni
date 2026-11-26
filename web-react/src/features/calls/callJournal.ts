@@ -36,13 +36,13 @@ const MAX_BATCH_PER_FLUSH = 100;
  * схлопываются в одно событие со счётчиком `repeat` — иначе хронология и карточка
  * «Ошибка медиасервера» завышают реальное число сбоев.
  */
-const ERROR_DEDUPE_KINDS = new Set(['room_error', 'device_error']);
+const ERROR_DEDUPE_KINDS = new Set(['room_error', 'device_error', 'audio_playback_blocked']);
 const ERROR_DEDUPE_WINDOW_MS = 5_000;
 
 function stripRepeat(payload?: Record<string, unknown>): Record<string, unknown> | null {
   if (!payload) return null;
   const { repeat: _repeat, ...rest } = payload;
-  return rest;
+  return Object.keys(rest).length > 0 ? rest : null;
 }
 
 /** Если next дублирует последнее событие буфера — наращивает его `repeat` и возвращает true. */
@@ -112,6 +112,52 @@ export function humanizeCallErrorMessage(raw: string): string {
     if (re.test(text)) return human;
   }
   return text;
+}
+
+const DISCONNECT_REASON_LABELS: Record<string, string> = {
+  '0': 'Обрыв соединения / таймаут',
+  UNKNOWN_REASON: 'Обрыв соединения / таймаут',
+  '1': 'Отключение клиентом',
+  CLIENT_INITIATED: 'Отключение клиентом',
+  '2': 'Вход с другого устройства',
+  DUPLICATE_IDENTITY: 'Вход с другого устройства',
+  '3': 'Перезапуск медиасервера',
+  SERVER_SHUTDOWN: 'Перезапуск медиасервера',
+  '4': 'Участник удалён из комнаты',
+  PARTICIPANT_REMOVED: 'Участник удалён из комнаты',
+  '5': 'Комната закрыта',
+  ROOM_DELETED: 'Комната закрыта',
+  '6': 'Рассинхронизация сессии',
+  STATE_MISMATCH: 'Рассинхронизация сессии',
+  '7': 'Не удалось войти в комнату',
+  JOIN_FAILURE: 'Не удалось войти в комнату',
+  '8': 'Миграция медиасервера',
+  MIGRATION: 'Миграция медиасервера',
+  '9': 'Разрыв сигнального канала',
+  SIGNAL_CLOSE: 'Разрыв сигнального канала',
+  '10': 'Комната закрыта',
+  ROOM_CLOSED: 'Комната закрыта',
+  '11': 'Абонент недоступен',
+  USER_UNAVAILABLE: 'Абонент недоступен',
+  '12': 'Вызов отклонён',
+  USER_REJECTED: 'Вызов отклонён',
+  '13': 'Ошибка SIP',
+  SIP_TRUNK_FAILURE: 'Ошибка SIP',
+  '14': 'Таймаут подключения',
+  CONNECTION_TIMEOUT: 'Таймаут подключения',
+  '15': 'Сбой медиапотока',
+  MEDIA_FAILURE: 'Сбой медиапотока',
+  '16': 'Ошибка агента',
+  AGENT_ERROR: 'Ошибка агента',
+};
+
+/** Переводит код или имя LiveKit DisconnectReason в понятную подпись для журнала. */
+export function formatDisconnectReason(raw: unknown): string | null {
+  if (raw == null) return null;
+  const key = String(raw).trim();
+  if (!key) return null;
+  const label = DISCONNECT_REASON_LABELS[key] ?? DISCONNECT_REASON_LABELS[key.toUpperCase()];
+  return label ? `${label} (${key})` : key;
 }
 
 export type NetworkSample = {

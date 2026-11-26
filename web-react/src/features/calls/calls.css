@@ -678,6 +678,7 @@
   bottom: var(--call-controls-reserve, calc(128px + var(--call-inset-bottom, 0px)));
   transform: translateX(-50%);
   z-index: 60;
+  pointer-events: auto;
   border: 0;
   border-radius: 999px;
   padding: 10px 18px;

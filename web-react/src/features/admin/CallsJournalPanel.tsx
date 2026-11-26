@@ -10,7 +10,7 @@ import {
 } from 'react-icons/lu';
 
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
-import { humanizeCallErrorMessage } from '../calls/callJournal';
+import { formatDisconnectReason, humanizeCallErrorMessage } from '../calls/callJournal';
 import {
   isTimelineEventVisible,
   participantStatusLabel,
@@ -240,8 +240,15 @@ function EventPayloadView({ event }: { event: CallLogEvent }) {
     );
   }
   if (event.kind === 'disconnected') {
-    const reason = str(p.reason);
+    const reason = formatDisconnectReason(p.reason);
     return reason ? line(`причина: ${reason}`) : null;
+  }
+  if (event.kind === 'audio_playback_blocked') {
+    const repeat = num(p.repeat);
+    if (repeat != null && repeat > 1) {
+      return line(`повторялось ${repeat} ${pluralRu(repeat, 'раз', 'раза', 'раз')} подряд`);
+    }
+    return null;
   }
   if (event.kind === 'rejoin_attempt') {
     const attempt = num(p.attempt);
