@@ -661,7 +661,7 @@ async function inspectPostgresSubsystem(): Promise<SubsystemItem> {
           SELECT relname, COALESCE(n_live_tup, 0)::text AS rows
             FROM pg_stat_user_tables
            WHERE relname IN (
-             'members', 'prayer_cycles', 'calendar_events', 'songs',
+             'members', 'prayer_cycles', 'church_events', 'songs',
              'service_plans', 'app_logs', 'push_subscriptions', 'global_settings',
              'messenger_conversations', 'messenger_messages'
            )

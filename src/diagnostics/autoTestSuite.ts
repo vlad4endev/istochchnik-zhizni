@@ -398,7 +398,7 @@ export async function runAutomatedTestSuite(
         'members',
         'global_settings',
         'app_logs',
-        'calendar_events',
+        'church_events',
         'push_subscriptions',
       ];
       const { rows } = await pool.query<{ table_name: string }>(
