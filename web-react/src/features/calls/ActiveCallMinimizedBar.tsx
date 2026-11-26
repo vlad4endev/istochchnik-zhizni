@@ -1,26 +1,16 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  IcMic,
-  IcMicOff,
-  IcPhone,
-  IcHangup,
-  IcVideo,
-} from './callIcons';
 import { useLocalParticipant, useRoomContext } from '@livekit/components-react';
 
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../lib/uiFeedback';
 
+import { IcChevronsUp, IcPhone, IcVideo } from './callIcons';
 import { mapDeviceError } from './callsApi';
 import { unlockCallAudio } from './callRingtone';
-import { useCallStore, type ActiveCallState } from './callStore';
-
-function formatDuration(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
+import { useCallStore, type ActiveCallState, type MinimizedCallControls } from './callStore';
+import { formatCallDuration, useCallElapsedSeconds } from './callTime';
+import { MinimizedCallActions } from './MinimizedCallActions';
 
 function getCallMeta(activeCall: ActiveCallState): { title: string; subtitle: string } {
   const title =
@@ -39,28 +29,32 @@ function getCallMeta(activeCall: ActiveCallState): { title: string; subtitle: st
 
 type BarProps = {
   activeCall: ActiveCallState;
-  onHangup: () => void;
-  elapsed: number;
+  controls: MinimizedCallControls;
   isMuted?: boolean;
-  mediaBusy?: boolean;
-  onToggleMic?: () => void;
   hangupLabel?: string;
 };
 
-function ActiveCallBarChrome({
-  activeCall,
-  onHangup,
-  elapsed,
-  isMuted = false,
-  mediaBusy = false,
-  onToggleMic,
-  hangupLabel = 'Завершить звонок',
-}: BarProps) {
+/** Колбэки из CallWindow создаются заново на каждый рендер — отдаём в store стабильную обёртку. */
+function useStableCallback(fn: () => void): () => void {
+  const ref = useRef(fn);
+  ref.current = fn;
+  return useCallback(() => ref.current(), []);
+}
+
+/** Публикует управление в store: из списка чатов звонком пользуется плашка `ActiveCallBanner`. */
+function usePublishControls(controls: MinimizedCallControls) {
+  const setMinimizedControls = useCallStore((s) => s.setMinimizedControls);
+  useEffect(() => {
+    setMinimizedControls(controls);
+    return () => setMinimizedControls(null);
+  }, [controls, setMinimizedControls]);
+}
+
+function ActiveCallBarChrome({ activeCall, controls, isMuted = false, hangupLabel }: BarProps) {
   const navigate = useNavigate();
   const expandCall = useCallStore((s) => s.expandCall);
-  const avatarSrc = activeCall.peerAvatar
-    ? resolvePublicUrl(activeCall.peerAvatar)
-    : undefined;
+  const elapsed = useCallElapsedSeconds(activeCall.startedAt);
+  const avatarSrc = activeCall.peerAvatar ? resolvePublicUrl(activeCall.peerAvatar) : undefined;
   const { title, subtitle } = getCallMeta(activeCall);
 
   const onReturn = useCallback(() => {
@@ -70,98 +64,41 @@ function ActiveCallBarChrome({
 
   return (
     <div className="active-call-bar-host" role="region" aria-label="Активный звонок">
-      <button
-        type="button"
-        className="active-call-bar"
-        onClick={onReturn}
-        aria-label={`Вернуться в звонок: ${title}`}
-      >
-        <span className="active-call-bar__glow" aria-hidden />
-        <span className="active-call-bar__pulse" aria-hidden />
-
-        <span className="active-call-bar__avatar" aria-hidden>
-          {avatarSrc && activeCall.callKind === 'direct' ? (
-            <img src={avatarSrc} alt="" className="active-call-bar__avatar-img" />
-          ) : (
-            <span className="active-call-bar__avatar-mark">
-              {activeCall.callType === 'video' ? (
-                <IcVideo size={18} strokeWidth={2.2} />
-              ) : (
-                <IcPhone size={18} strokeWidth={2.2} />
-              )}
-            </span>
-          )}
-          <span className="active-call-bar__live-dot" />
-        </span>
-
-        <span className="active-call-bar__copy">
-          <span className="active-call-bar__title">{title}</span>
-          <span className="active-call-bar__meta">
-            <span className="active-call-bar__live-label">В звонке</span>
-            <span className="active-call-bar__dot" aria-hidden>
-              ·
-            </span>
-            <span className="active-call-bar__timer">{formatDuration(elapsed)}</span>
-            <span className="active-call-bar__dot active-call-bar__dot--wide" aria-hidden>
-              ·
-            </span>
-            <span className="active-call-bar__hint">{subtitle} · нажмите, чтобы вернуться</span>
-          </span>
-        </span>
-
-        <span className="active-call-bar__cta" aria-hidden>
-          Вернуться
-        </span>
-      </button>
-
-      <div className="active-call-bar__actions">
-        {onToggleMic ? (
-          <button
-            type="button"
-            className={[
-              'active-call-bar__action',
-              isMuted ? 'active-call-bar__action--warn' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleMic();
-            }}
-            disabled={mediaBusy}
-            aria-label={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
-          >
-            {isMuted ? (
-              <IcMicOff size={18} strokeWidth={2.3} />
-            ) : (
-              <IcMic size={18} strokeWidth={2.3} />
-            )}
-          </button>
-        ) : null}
+      <div className="active-call-bar">
         <button
           type="button"
-          className="active-call-bar__action active-call-bar__action--hangup"
-          onClick={(e) => {
-            e.stopPropagation();
-            onHangup();
-          }}
-          aria-label={hangupLabel}
+          className="active-call-bar__main"
+          onClick={onReturn}
+          aria-label={`Вернуться в звонок: ${title}`}
         >
-          <IcHangup size={18} strokeWidth={2.3} />
+          <span className="active-call-bar__avatar" aria-hidden>
+            {avatarSrc && activeCall.callKind === 'direct' ? (
+              <img src={avatarSrc} alt="" className="active-call-bar__avatar-img" />
+            ) : (
+              <span className="active-call-bar__avatar-mark">
+                {activeCall.callType === 'video' ? <IcVideo size={20} /> : <IcPhone size={20} />}
+              </span>
+            )}
+          </span>
+          <span className="active-call-bar__copy">
+            <span className="active-call-bar__title">{title}</span>
+            <span className="active-call-bar__meta">
+              <span className="active-call-bar__live-dot" aria-hidden />
+              <span className="active-call-bar__timer">{formatCallDuration(elapsed)}</span>
+              <span className="active-call-bar__hint">· {subtitle}</span>
+            </span>
+          </span>
+          <IcChevronsUp className="active-call-bar__chevron" size={18} aria-hidden />
         </button>
+        <MinimizedCallActions
+          controls={controls}
+          isMuted={isMuted}
+          tone="dark"
+          hangupLabel={hangupLabel}
+        />
       </div>
     </div>
   );
-}
-
-function useElapsed(callId: string): number {
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    setElapsed(0);
-    const t = window.setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => window.clearInterval(t);
-  }, [callId]);
-  return elapsed;
 }
 
 /** Outside LiveKit (outgoing ring / loading) — return + hangup only. */
@@ -174,15 +111,10 @@ export function ActiveCallMinimizedBarSimple({
   onHangup: () => void;
   hangupLabel?: string;
 }) {
-  const elapsed = useElapsed(activeCall.callId);
-  return (
-    <ActiveCallBarChrome
-      activeCall={activeCall}
-      onHangup={onHangup}
-      elapsed={elapsed}
-      hangupLabel={hangupLabel}
-    />
-  );
+  const stableHangup = useStableCallback(onHangup);
+  const controls = useMemo<MinimizedCallControls>(() => ({ hangup: stableHangup }), [stableHangup]);
+  usePublishControls(controls);
+  return <ActiveCallBarChrome activeCall={activeCall} controls={controls} hangupLabel={hangupLabel} />;
 }
 
 /** Inside LiveKitRoom — mic toggle + return + hangup. */
@@ -193,7 +125,6 @@ export function ActiveCallMinimizedBar({
   activeCall: ActiveCallState;
   onHangup: () => void;
 }): ReactNode {
-  const elapsed = useElapsed(activeCall.callId);
   const room = useRoomContext();
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
   const setMuted = useCallStore((s) => s.setMuted);
@@ -223,14 +154,13 @@ export function ActiveCallMinimizedBar({
     }
   }, [isMuted, localParticipant, mediaBusy, room]);
 
-  return (
-    <ActiveCallBarChrome
-      activeCall={activeCall}
-      onHangup={onHangup}
-      elapsed={elapsed}
-      isMuted={isMuted}
-      mediaBusy={mediaBusy}
-      onToggleMic={() => void toggleMic()}
-    />
+  const stableHangup = useStableCallback(onHangup);
+  const stableToggleMic = useStableCallback(() => void toggleMic());
+  const controls = useMemo<MinimizedCallControls>(
+    () => ({ hangup: stableHangup, toggleMic: stableToggleMic, micBusy: mediaBusy }),
+    [mediaBusy, stableHangup, stableToggleMic],
   );
+  usePublishControls(controls);
+
+  return <ActiveCallBarChrome activeCall={activeCall} controls={controls} isMuted={isMuted} />;
 }

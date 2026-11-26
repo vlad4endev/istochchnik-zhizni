@@ -24,8 +24,17 @@ export interface ActiveCallState {
   startedAt?: number;
 }
 
+/** Управление свёрнутым звонком — публикуется панелью внутри комнаты, чтобы им пользоваться из списка чатов. */
+export interface MinimizedCallControls {
+  hangup: () => void;
+  toggleMic?: () => void;
+  micBusy?: boolean;
+}
+
 interface CallStore {
   activeCall: ActiveCallState | null;
+  minimizedControls: MinimizedCallControls | null;
+  setMinimizedControls: (controls: MinimizedCallControls | null) => void;
   /** Full-screen call UI hidden; LiveKit stays connected — show return bar. */
   uiMinimized: boolean;
   isMuted: boolean;
@@ -46,6 +55,8 @@ interface CallStore {
 
 export const useCallStore = create<CallStore>((set) => ({
   activeCall: null,
+  minimizedControls: null,
+  setMinimizedControls: (minimizedControls) => set({ minimizedControls }),
   uiMinimized: false,
   isMuted: false,
   isVideoOff: false,
@@ -94,6 +105,7 @@ export const useCallStore = create<CallStore>((set) => ({
   closeCall: () =>
     set({
       activeCall: null,
+      minimizedControls: null,
       uiMinimized: false,
       isMuted: false,
       isVideoOff: false,

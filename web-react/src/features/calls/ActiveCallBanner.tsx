@@ -1,29 +1,42 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { IcPhone, IcVideo } from './callIcons';
 import { useCallStore } from './callStore';
+import { formatCallDuration, useCallElapsedSeconds } from './callTime';
+import { MinimizedCallActions } from './MinimizedCallActions';
 import styles from './ActiveCallBanner.module.css';
 
-export function formatCallDuration(totalSec: number): string {
-  const sec = Math.max(0, Math.floor(totalSec));
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = sec % 60;
-  const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
-  return `${h > 0 ? `${h}:` : ''}${mm}:${String(s).padStart(2, '0')}`;
+let visibleBanners = 0;
+
+/** Пока плашка на экране, плавающая панель звонка скрыта (CSS по `data-call-banner`) — иначе две панели про одно и то же. */
+function useHideFloatingBar(visible: boolean) {
+  useEffect(() => {
+    if (!visible) return undefined;
+    visibleBanners += 1;
+    document.documentElement.setAttribute('data-call-banner', '1');
+    return () => {
+      visibleBanners -= 1;
+      if (visibleBanners <= 0) {
+        visibleBanners = 0;
+        document.documentElement.removeAttribute('data-call-banner');
+      }
+    };
+  }, [visible]);
 }
 
 /**
- * Плашка над списком чатов, пока звонок/встреча свёрнуты: одно нажатие возвращает в звонок.
- * Нужна, чтобы можно было выйти в чат (вставить ссылку, написать сообщение), не завершая встречу.
+ * Плашка над списком чатов, пока звонок/встреча свёрнуты: тап возвращает в звонок,
+ * справа — микрофон и завершение. Можно выйти в чат (вставить ссылку, написать сообщение),
+ * не завершая встречу.
  */
 export function ActiveCallBanner() {
   const navigate = useNavigate();
   const activeCall = useCallStore((s) => s.activeCall);
   const uiMinimized = useCallStore((s) => s.uiMinimized);
+  const isMuted = useCallStore((s) => s.isMuted);
+  const controls = useCallStore((s) => s.minimizedControls);
   const expandCall = useCallStore((s) => s.expandCall);
-  const [now, setNow] = useState(() => Date.now());
 
   const visible =
     Boolean(activeCall) &&
@@ -31,12 +44,8 @@ export function ActiveCallBanner() {
     activeCall!.status !== 'ended' &&
     activeCall!.status !== 'ringing_in';
 
-  useEffect(() => {
-    if (!visible) return undefined;
-    setNow(Date.now());
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [visible, activeCall?.callId]);
+  useHideFloatingBar(visible && Boolean(controls));
+  const elapsed = useCallElapsedSeconds(activeCall?.startedAt, visible);
 
   const onReturn = useCallback(() => {
     const call = useCallStore.getState().activeCall;
@@ -50,29 +59,36 @@ export function ActiveCallBanner() {
   const title =
     activeCall.peerName?.trim() || (activeCall.callKind === 'group' ? 'Встреча' : 'Звонок');
   const isConnecting = activeCall.status === 'calling';
-  const elapsed = activeCall.startedAt ? (now - activeCall.startedAt) / 1000 : 0;
-  const subtitle = isConnecting ? 'Соединение…' : `Идёт ${formatCallDuration(elapsed)}`;
+  const subtitle = isConnecting ? 'Соединение…' : formatCallDuration(elapsed);
 
   return (
-    <button
-      type="button"
-      className={styles.banner}
-      onClick={onReturn}
-      aria-label={`Вернуться в звонок: ${title}`}
-    >
-      <span className={styles.icon} aria-hidden>
-        {activeCall.callType === 'video' ? (
-          <IcVideo size={20} strokeWidth={2.2} />
-        ) : (
-          <IcPhone size={20} strokeWidth={2.2} />
-        )}
-        <span className={styles.dot} />
-      </span>
-      <span className={styles.text}>
-        <span className={styles.title}>{title}</span>
-        <span className={styles.subtitle}>{subtitle}</span>
-      </span>
-      <span className={styles.action}>Вернуться</span>
-    </button>
+    <div className={styles.banner} role="region" aria-label="Активный звонок">
+      <button
+        type="button"
+        className={styles.main}
+        onClick={onReturn}
+        aria-label={`Вернуться в звонок: ${title}`}
+      >
+        <span className={styles.icon} aria-hidden>
+          {activeCall.callType === 'video' ? <IcVideo size={20} /> : <IcPhone size={20} />}
+        </span>
+        <span className={styles.text}>
+          <span className={styles.title}>{title}</span>
+          <span className={styles.subtitle}>
+            <span className={styles.dot} aria-hidden />
+            <span className={styles.time}>{subtitle}</span>
+            <span className={styles.tap}>· нажмите, чтобы вернуться</span>
+          </span>
+        </span>
+      </button>
+      {controls ? (
+        <MinimizedCallActions
+          controls={controls}
+          isMuted={isMuted}
+          tone="light"
+          hangupLabel={isConnecting ? 'Отменить вызов' : 'Завершить звонок'}
+        />
+      ) : null}
+    </div>
   );
 }

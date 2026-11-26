@@ -17,6 +17,7 @@ export {
   PiXBold as IcClose,
   PiCopyFill as IcCopy,
   PiCaretDoubleDownBold as IcChevronsDown,
+  PiCaretDoubleUpBold as IcChevronsUp,
   PiSquaresFourFill as IcLayoutGrid,
   PiRowsFill as IcLayoutSpeaker,
   PiSidebarSimpleFill as IcLayoutSidebar,

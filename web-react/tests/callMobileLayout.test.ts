@@ -57,6 +57,8 @@ describe('mobile call layout', () => {
     expect(banner).toMatch(/expandCall/);
     expect(banner).toMatch(/\/call\/\$\{/);
     expect(banner).toMatch(/Вернуться в звонок/);
+    expect(banner).toMatch(/MinimizedCallActions/);
+    expect(banner).toMatch(/data-call-banner/);
     expect(chatList).toMatch(/ActiveCallBanner/);
     expect(chatWindow).toMatch(/ActiveCallBanner/);
     expect(callWindow).toMatch(/navigate\('\/messenger', \{ replace \}\)/);
