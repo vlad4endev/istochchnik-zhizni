@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +10,7 @@ import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 import '../prayer/widgets/sheet_frame.dart';
 import 'call_page.dart';
+import 'widgets/call_banner.dart';
 import 'logic/invite_logic.dart';
 import 'logic/meeting_logic.dart';
 
@@ -70,8 +73,9 @@ class _JoinMeetingPageState extends State<JoinMeetingPage> {
     }
   }
 
-  void _join(InvitePreview preview) {
-    Navigator.of(context).pushReplacement(
+  Future<void> _join(InvitePreview preview) async {
+    if (!await confirmStartNewCall(context) || !mounted) return;
+    unawaited(Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
         builder: (_) => CallPage(
           inviteToken: widget.token,
@@ -82,7 +86,7 @@ class _JoinMeetingPageState extends State<JoinMeetingPage> {
           title: preview.displayTitle,
         ),
       ),
-    );
+    ));
   }
 
   @override

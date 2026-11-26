@@ -18,6 +18,7 @@ import '../../core/unread_badge.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 import '../calls/call_page.dart';
+import '../calls/widgets/call_banner.dart';
 import '../calls/join_meeting_page.dart';
 import '../prayer/widgets/sheet_frame.dart' show actionError;
 import 'chat_profile_page.dart';
@@ -360,6 +361,7 @@ class _ThreadPageState extends State<ThreadPage> with WidgetsBindingObserver {
         return;
       }
     }
+    if (!await confirmStartNewCall(context) || !mounted) return;
     await pushPage(
       context,
       CallPage(

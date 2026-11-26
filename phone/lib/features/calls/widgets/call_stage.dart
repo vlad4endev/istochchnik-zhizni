@@ -17,7 +17,11 @@ class CallStage extends StatefulWidget {
     this.statusText,
     this.inviteBar,
     this.controlsReserve = 112,
+    this.onMinimize,
   });
+
+  /// Свернуть звонок (экран закрывается, звонок идёт); null — кнопки нет.
+  final VoidCallback? onMinimize;
 
   /// Свой участник первым, затем остальные.
   final List<CallPerson> people;
@@ -59,6 +63,7 @@ class _CallStageState extends State<CallStage> {
           onLayout: widget.onLayout,
           quality: local?.quality,
           statusText: widget.statusText,
+          onMinimize: widget.onMinimize,
         ),
         if (widget.inviteBar != null) widget.inviteBar!,
         Expanded(
@@ -160,10 +165,11 @@ class _CallStageState extends State<CallStage> {
               ),
             ),
           ),
+        if (widget.onMinimize != null) Positioned(top: 4, left: 4, child: MinimizeButton(onTap: widget.onMinimize!)),
         if (remoteVideo && widget.statusText != null)
           Positioned(
             top: 12,
-            left: 16,
+            left: widget.onMinimize != null ? 56 : 16,
             right: 16,
             child: Align(
               alignment: Alignment.topLeft,
