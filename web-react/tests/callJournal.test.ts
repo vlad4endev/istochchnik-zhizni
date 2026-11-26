@@ -156,4 +156,37 @@ describe('mergeDuplicateErrorEvent', () => {
     const buffer: JournalEvent[] = [mk('room_error', 'boom', '2026-11-03T06:35:27.000Z')];
     expect(mod.mergeDuplicateErrorEvent(buffer, mk('room_error', 'boom', '2026-11-03T06:36:00.000Z'))).toBe(false);
   });
+
+  it('схлопывает подряд события audio_playback_blocked без payload', () => {
+    const buffer: JournalEvent[] = [
+      { kind: 'audio_playback_blocked', severity: 'warn', at: '2026-11-03T06:35:27.000Z' },
+    ];
+    expect(
+      mod.mergeDuplicateErrorEvent(buffer, {
+        kind: 'audio_playback_blocked',
+        severity: 'warn',
+        at: '2026-11-03T06:35:27.400Z',
+      }),
+    ).toBe(true);
+    expect(
+      mod.mergeDuplicateErrorEvent(buffer, {
+        kind: 'audio_playback_blocked',
+        severity: 'warn',
+        at: '2026-11-03T06:35:27.800Z',
+      }),
+    ).toBe(true);
+    expect(buffer).toHaveLength(1);
+    expect(buffer[0].payload?.repeat).toBe(3);
+  });
+});
+
+describe('formatDisconnectReason', () => {
+  it('расшифровывает числовые и строковые коды DisconnectReason', () => {
+    expect(mod.formatDisconnectReason('0')).toContain('Обрыв соединения');
+    expect(mod.formatDisconnectReason(0)).toContain('(0)');
+    expect(mod.formatDisconnectReason(1)).toContain('Отключение клиентом');
+    expect(mod.formatDisconnectReason('SIGNAL_CLOSE')).toContain('сигнального канала');
+    expect(mod.formatDisconnectReason('999')).toBe('999');
+    expect(mod.formatDisconnectReason(null)).toBeNull();
+  });
 });

@@ -16,6 +16,7 @@ import { useAuthStore } from '../auth/authStore';
 import { isAppleMobileWeb, isInstalledPwa } from '../pwa/utils/pwaEnvironment';
 
 import { joinInvitation, previewInvitation } from './callsApi';
+import { unlockCallAudio } from './callRingtone';
 import {
   GlassCallCta,
   GlassCallShell,
@@ -72,6 +73,7 @@ export function CallJoinPage() {
 
   const onJoin = useCallback(async () => {
     if (!preview || joining) return;
+    unlockCallAudio();
     setJoining(true);
     try {
       const isVideo = preview.mediaType === 'video';

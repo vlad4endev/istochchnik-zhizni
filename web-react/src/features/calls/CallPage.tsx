@@ -11,6 +11,7 @@ import { emitAppToast } from '../../lib/uiFeedback';
 import { useAuthStore } from '../auth/authStore';
 
 import { acceptCall, fetchCall, type CallPublic } from './callsApi';
+import { unlockCallAudio } from './callRingtone';
 import {
   GlassCallCta,
   GlassCallShell,
@@ -215,6 +216,7 @@ export function CallPage() {
             type="button"
             className="glass-call__pill glass-call__pill--accept"
             onClick={() => {
+              unlockCallAudio();
               void acceptCall(call.id)
                 .then(() => {
                   useCallStore.getState().setStatus('active');
