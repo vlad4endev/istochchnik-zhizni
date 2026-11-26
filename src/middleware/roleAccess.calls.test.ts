@@ -77,6 +77,35 @@ async function main(): Promise<void> {
     }
   }
 
+  // Библия: личные данные (место чтения, заметки, закладки, планы) — любому участнику и прихожанину.
+  for (const role of ['member', 'parishioner']) {
+    for (const [method, path] of [
+      ['PUT', '/api/bible/progress'],
+      ['POST', '/api/bible/notes'],
+      ['PATCH', '/api/bible/notes/3'],
+      ['DELETE', '/api/bible/notes/3'],
+      ['POST', '/api/bible/bookmarks'],
+      ['DELETE', '/api/bible/bookmarks/3'],
+      ['POST', '/api/bible/plans/generate'],
+      ['PATCH', '/api/bible/plans/2/days/1'],
+      ['DELETE', '/api/bible/plans/2'],
+      ['POST', '/api/bible/commentaries'],
+    ]) {
+      const r = await run(role, method, path);
+      assert.equal(r.body, 'next', `${role} can ${method} ${path}`);
+    }
+    // Лишнего не открываем: чужие и неизвестные пути Библии по-прежнему закрыты.
+    for (const [method, path] of [
+      ['POST', '/api/bible/notes/3'],
+      ['PUT', '/api/bible/notes'],
+      ['POST', '/api/bible/seed'],
+      ['DELETE', '/api/bible/progress'],
+    ]) {
+      const r = await run(role, method, path);
+      assert.equal(r.status, 403, `${role} cannot ${method} ${path}`);
+    }
+  }
+
   const denied = await run('member', 'POST', '/api/admin/something');
   assert.equal(denied.status, 403);
 

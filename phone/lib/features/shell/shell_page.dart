@@ -8,6 +8,10 @@ import '../../core/push_nav.dart';
 import '../../core/session.dart';
 import '../../core/unread_badge.dart';
 import '../../ui/kit/kit.dart';
+import '../bible/audio/bible_audio_player.dart';
+import '../bible/bible_store.dart' show BibleTheme;
+import '../bible/widgets/audio_widgets.dart';
+import '../bible/widgets/bible_palette.dart';
 import '../chats/chats_page.dart';
 import '../chats/data/lost_attachments.dart';
 import '../chats/thread_page.dart';
@@ -158,13 +162,32 @@ class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
       backgroundColor: ChurchColors.night,
       extendBody: true,
       body: IndexedStack(index: index, children: [for (final tab in tabs) tab.page]),
-      bottomNavigationBar: ChurchBottomNav(
-        items: [for (final tab in tabs) tab.item],
-        index: index,
-        onSelect: (next) {
-          setState(() => _current = tabs[next].id);
-          if (tabs[next].id == 'chats') _refreshUnread();
-        },
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Озвучка Библии продолжает играть, пока человек ходит по разделам: управлять ей можно отсюда.
+          ListenableBuilder(
+            listenable: BiblePlayer.instance,
+            builder: (context, _) => BiblePlayer.instance.isActive
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    child: BibleMiniPlayer(
+                      player: BiblePlayer.instance,
+                      palette: biblePaletteFor(BibleTheme.auto, Theme.of(context).brightness),
+                      onOpen: () => showBiblePlayerSheet(context, player: BiblePlayer.instance, palette: biblePaletteFor(BibleTheme.auto, Theme.of(context).brightness)),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+          ChurchBottomNav(
+            items: [for (final tab in tabs) tab.item],
+            index: index,
+            onSelect: (next) {
+              setState(() => _current = tabs[next].id);
+              if (tabs[next].id == 'chats') _refreshUnread();
+            },
+          ),
+        ],
       ),
     );
   }

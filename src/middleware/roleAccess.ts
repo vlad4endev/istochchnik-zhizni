@@ -120,8 +120,29 @@ const COORDINATOR_DASHBOARD_NOTES_DELETE =
 const MEMBER_NOTIFICATIONS_POST =
   /^\/api\/notifications\/(?:subscribe|unsubscribe|save-token|save-voip-token|remove-token|test|test-sample|deliveries\/\d+\/open|deliveries\/\d+\/dismiss|deliveries\/open-all|deliveries\/local-reminder)\/?$/;
 
-/** Профиль / лента: мутации только своего контента (проверка в контроллере по сессии). */
+/**
+ * Библия: место чтения, заметки, закладки и планы чтения — личные данные самого участника
+ * (контроллеры работают только с member_id из сессии). Церковные комментарии проверяют роль в контроллере.
+ */
+function isBibleParticipantMutation(method: string, path: string): boolean {
+  const p = path.split('?')[0];
+  if (!p.startsWith('/api/bible/')) return false;
+  if (method === 'PUT') return /^\/api\/bible\/progress\/?$/.test(p);
+  if (method === 'POST') {
+    return /^\/api\/bible\/(?:notes|bookmarks|commentaries|plans\/generate)\/?$/.test(p);
+  }
+  if (method === 'PATCH') {
+    return /^\/api\/bible\/notes\/\d+\/?$/.test(p) || /^\/api\/bible\/plans\/\d+\/days\/\d+\/?$/.test(p);
+  }
+  if (method === 'DELETE') {
+    return /^\/api\/bible\/(?:notes|bookmarks|commentaries|plans)\/\d+\/?$/.test(p);
+  }
+  return false;
+}
+
+/** Профиль / лента / Библия: мутации только своего контента (проверка в контроллере по сессии). */
 function isMemberProfileMutation(method: string, path: string): boolean {
+  if (isBibleParticipantMutation(method, path)) return true;
   if (method === 'PATCH' && /^\/api\/profile\/settings\/?$/.test(path)) return true;
   if (method === 'PATCH' && /^\/api\/posts\/\d+\/?$/.test(path)) return true;
   if (method === 'POST') {

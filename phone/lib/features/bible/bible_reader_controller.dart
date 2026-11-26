@@ -2,11 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'audio/bible_audio_player.dart';
 import 'bible_store.dart';
 import 'data/bible_repository.dart';
 import 'logic/chapter_index.dart';
 import 'logic/quote.dart';
+import 'logic/verse_groups.dart';
 import 'models/bible_models.dart';
+
+/// Итог нажатия «Закладка».
+enum BookmarkResult { added, removed }
 
 /// Читалка: одна лента глав, выделение стихов, заметки, подсветка и запоминание места.
 class BibleReaderController extends ChangeNotifier {
@@ -20,10 +25,19 @@ class BibleReaderController extends ChangeNotifier {
     this.focusVerse,
     this.onPosition,
     this.saveDelay = const Duration(seconds: 1),
+    this.translations = const [],
+    BiblePlayer? audio,
   })  : index = ChapterIndex(books),
-        settings = const BibleSettings() {
+        settings = const BibleSettings(),
+        audio = audio ?? BiblePlayer.instance {
     page = index.indexOf(bookSlug, chapter) ?? 0;
   }
+
+  /// Переводы нужны только для подписи озвучки («Синод.»).
+  final List<BibleTranslation> translations;
+
+  /// Озвучка: плеер общий на всё приложение.
+  final BiblePlayer audio;
 
   final BibleSource source;
   final BibleStore store;
@@ -41,6 +55,12 @@ class BibleReaderController extends ChangeNotifier {
 
   final Map<int, Future<ChapterText>> _chapters = {};
   final Map<int, List<BibleNote>> _notes = {};
+  final Map<int, List<BibleBookmark>> _bookmarks = {};
+  final Map<int, List<BibleCommentary>> _commentaries = {};
+  final Map<int, Future<BibleAudio?>> _audio = {};
+  final Map<int, bool> _hasAudio = {};
+  final Set<int> _bookmarksLoading = {};
+  final Set<int> _commentariesLoading = {};
   final Set<int> _notesLoading = {};
   Map<String, List<int>> _highlights = {};
   Timer? _saveTimer;
@@ -54,6 +74,7 @@ class BibleReaderController extends ChangeNotifier {
   Future<void> init() async {
     settings = await store.settings();
     _highlights = await store.highlights();
+    _shareContextWithPlayer();
     if (_disposed) return;
     notifyListeners();
     _touch(page);
@@ -96,9 +117,19 @@ class BibleReaderController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Плееру нужны книги и источник, чтобы после конца главы сам включить следующую, даже когда читалка закрыта.
+  void _shareContextWithPlayer() {
+    audio
+      ..books = index.books
+      ..source = source;
+  }
+
   void _touch(int pageIndex) {
     _prefetch(pageIndex);
     unawaited(loadNotes(pageIndex));
+    unawaited(loadBookmarks(pageIndex));
+    unawaited(loadCommentaries(pageIndex));
+    unawaited(audioAt(pageIndex));
     final entry = index.at(pageIndex);
     _queuePosition(ReadingPosition(
       translation: translation,
@@ -140,7 +171,12 @@ class BibleReaderController extends ChangeNotifier {
     page = index.indexOf(slug, chapter) ?? 0;
     _chapters.clear();
     _notes.clear();
+    _bookmarks.clear();
+    _commentaries.clear();
+    _audio.clear();
+    _hasAudio.clear();
     selected.clear();
+    _shareContextWithPlayer();
     await store.saveTranslation(next.code);
     _touch(page);
     notifyListeners();
@@ -251,6 +287,143 @@ class BibleReaderController extends ChangeNotifier {
     await source.deleteNote(note.id);
     _notes[page] = [for (final n in notesAt(page)) if (n.id != note.id) n];
     notifyListeners();
+  }
+
+  // ——— закладки ———
+
+  List<BibleBookmark> bookmarksAt(int pageIndex) => _bookmarks[pageIndex] ?? const [];
+
+  /// Стихи главы, на которых есть закладка, — в тексте у них значок.
+  Set<int> bookmarkedVersesAt(int pageIndex) => {
+        for (final b in bookmarksAt(pageIndex))
+          for (var v = b.verseStart; v <= b.verseEnd; v++) v,
+      };
+
+  Future<void> loadBookmarks(int pageIndex) async {
+    if (_bookmarks.containsKey(pageIndex) || !_bookmarksLoading.add(pageIndex)) return;
+    final entry = index.at(pageIndex);
+    final tr = translation;
+    try {
+      final list = await source.bookmarks(translation: tr, bookSlug: entry.book.slug, chapter: entry.chapter);
+      if (_disposed || tr != translation) return;
+      _bookmarks[pageIndex] = list;
+      notifyListeners();
+    } catch (_) {
+      /* закладки не нужны, чтобы читать; загрузим при следующем заходе в главу */
+    } finally {
+      _bookmarksLoading.remove(pageIndex);
+    }
+  }
+
+  /// Кнопка в панели действий подписана «Убрать», если выбранное уже в закладках точно.
+  bool get selectionBookmarked => selected.isNotEmpty && planBookmarkToggle(selected, bookmarksAt(page)).remove.isNotEmpty;
+
+  /// Ставит или снимает закладку на выбранные стихи. Ошибку сети отдаёт наверх.
+  Future<BookmarkResult> toggleBookmarkSelected() async {
+    if (selected.isEmpty) throw StateError('Не выбраны стихи');
+    final entry = current;
+    final plan = planBookmarkToggle(selected, bookmarksAt(page));
+    var list = [...bookmarksAt(page)];
+    if (plan.remove.isNotEmpty) {
+      for (final b in plan.remove) {
+        await source.deleteBookmark(b.id);
+        list = [for (final x in list) if (x.id != b.id) x];
+      }
+      _bookmarks[page] = list;
+      notifyListeners();
+      return BookmarkResult.removed;
+    }
+    for (final span in plan.add) {
+      list.add(await source.createBookmark(
+        translation: translation,
+        bookSlug: entry.book.slug,
+        chapter: entry.chapter,
+        verseStart: span.start,
+        verseEnd: span.end,
+      ));
+    }
+    _bookmarks[page] = list;
+    selected.clear();
+    notifyListeners();
+    return BookmarkResult.added;
+  }
+
+  // ——— комментарии ———
+
+  List<BibleCommentary> commentariesAt(int pageIndex) => _commentaries[pageIndex] ?? const [];
+
+  Future<void> loadCommentaries(int pageIndex) async {
+    if (_commentaries.containsKey(pageIndex) || !_commentariesLoading.add(pageIndex)) return;
+    final entry = index.at(pageIndex);
+    final tr = translation;
+    try {
+      final list = await source.commentaries(tr, entry.book.slug, entry.chapter);
+      if (_disposed || tr != translation) return;
+      _commentaries[pageIndex] = list;
+      notifyListeners();
+    } catch (_) {
+      /* комментарии — дополнение к тексту */
+    } finally {
+      _commentariesLoading.remove(pageIndex);
+    }
+  }
+
+  // ——— озвучка ———
+
+  /// Есть ли запись для главы; результат запоминается, чтобы не спрашивать сервер снова.
+  Future<BibleAudio?> audioAt(int pageIndex) {
+    final entry = index.at(pageIndex);
+    return _audio.putIfAbsent(pageIndex, () {
+      final future = source.audio(translation, entry.book.slug, entry.chapter).then<BibleAudio?>((value) => value, onError: (Object _) {
+        // Временный сбой не запоминаем: при следующем обращении спросим сервер заново.
+        _audio.remove(pageIndex);
+        return null;
+      });
+      future.then<void>((value) {
+        if (_disposed || !_audio.containsKey(pageIndex)) return;
+        _hasAudio[pageIndex] = value != null;
+        notifyListeners();
+      });
+      return future;
+    });
+  }
+
+  /// Известно ли уже, что у главы есть озвучка (панель действий показывает «Слушать»).
+  bool hasAudioAt(int pageIndex) => _hasAudio[pageIndex] ?? false;
+
+  String get _translationTitle {
+    for (final t in translations) {
+      if (t.code == translation) return t.shortTitle;
+    }
+    return translation;
+  }
+
+  /// Включает озвучку главы [pageIndex] (по умолчанию — открытой), при желании со стиха [fromVerse].
+  /// false — для главы нет записи.
+  Future<bool> listen({int? pageIndex, int? fromVerse}) async {
+    final at = pageIndex ?? page;
+    final recording = await audioAt(at);
+    if (recording == null || _disposed) return false;
+    final entry = index.at(at);
+    _shareContextWithPlayer();
+    await audio.playChapter(
+      BibleTrack(
+        translation: translation,
+        translationTitle: _translationTitle,
+        bookSlug: entry.book.slug,
+        bookName: entry.book.name,
+        chapter: entry.chapter,
+        audio: recording,
+      ),
+      fromVerse: fromVerse,
+    );
+    return true;
+  }
+
+  /// Звучит ли сейчас глава [pageIndex].
+  bool isPlayingPage(int pageIndex) {
+    final entry = index.at(pageIndex);
+    return audio.isCurrent(translation, entry.book.slug, entry.chapter);
   }
 
   // ——— настройки ———

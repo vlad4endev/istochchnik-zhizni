@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'logic/audio_logic.dart';
 import 'models/bible_models.dart';
 
 enum BibleTheme {
@@ -65,6 +66,7 @@ class BibleStore {
   static const _positionKey = 'bible_position';
   static const _recentKey = 'bible_recent';
   static const _highlightKey = 'bible_highlights';
+  static const _audioPrefsKey = 'bible_audio_prefs';
   static const maxRecent = 8;
   static const _maxHighlightedChapters = 600;
 
@@ -148,4 +150,20 @@ class BibleStore {
     final kept = entries.length > _maxHighlightedChapters ? entries.sublist(entries.length - _maxHighlightedChapters) : entries;
     await (await _prefs())?.setString(_highlightKey, jsonEncode({for (final e in kept) e.key: e.value}));
   }
+
+  /// Скорость озвучки и автопереход к следующей главе — общие для всех глав.
+  Future<({double rate, bool autoNext})> audioPrefs() async {
+    try {
+      final raw = (await _prefs())?.getString(_audioPrefsKey);
+      if (raw == null) return (rate: 1.0, autoNext: true);
+      final json = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      final rate = json['rate'];
+      return (rate: rate is num && audioRates.contains(rate.toDouble()) ? rate.toDouble() : 1.0, autoNext: json['autoNext'] != false);
+    } catch (_) {
+      return (rate: 1.0, autoNext: true);
+    }
+  }
+
+  Future<void> saveAudioPrefs({required double rate, required bool autoNext}) async =>
+      (await _prefs())?.setString(_audioPrefsKey, jsonEncode({'rate': rate, 'autoNext': autoNext}));
 }

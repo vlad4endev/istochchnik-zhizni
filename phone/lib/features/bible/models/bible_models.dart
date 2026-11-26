@@ -258,3 +258,108 @@ class VerseHit {
     );
   }
 }
+
+/// Закладка на стих или диапазон стихов (общая с веб-версией).
+class BibleBookmark {
+  const BibleBookmark({
+    required this.id,
+    required this.translation,
+    required this.bookSlug,
+    required this.bookName,
+    required this.shortName,
+    required this.chapter,
+    required this.verseStart,
+    required this.verseEnd,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String translation;
+  final String bookSlug;
+  final String bookName;
+  final String shortName;
+  final int chapter;
+  final int verseStart;
+  final int verseEnd;
+  final DateTime? createdAt;
+
+  String get reference {
+    final base = '$shortName $chapter:$verseStart';
+    return verseEnd > verseStart ? '$base–$verseEnd' : base;
+  }
+
+  bool covers(int verse) => verse >= verseStart && verse <= verseEnd;
+
+  factory BibleBookmark.fromJson(Map<String, dynamic> json) {
+    final start = asInt(json['verse_start']);
+    final end = asInt(json['verse_end']);
+    final slug = str(json['book_slug']);
+    final def = bookBySlug(slug);
+    return BibleBookmark(
+      id: asInt(json['id']),
+      translation: str(json['translation_code']).isEmpty ? 'synodal' : str(json['translation_code']),
+      bookSlug: slug,
+      bookName: str(json['book_name']).isEmpty ? (def?.name ?? slug) : str(json['book_name']),
+      shortName: str(json['short_name']).isEmpty ? (def?.shortName ?? slug) : str(json['short_name']),
+      chapter: asInt(json['chapter']),
+      verseStart: start < 1 ? 1 : start,
+      verseEnd: end < start ? (start < 1 ? 1 : start) : end,
+      createdAt: DateTime.tryParse(str(json['created_at'])),
+    );
+  }
+}
+
+/// Когда в озвучке главы читается стих: секунды от начала записи.
+class VerseTiming {
+  const VerseTiming({required this.verse, required this.start, required this.end});
+
+  final int verse;
+  final double start;
+  final double end;
+}
+
+/// Озвучка главы: адрес записи и разметка по стихам (для подсветки читаемого стиха).
+class BibleAudio {
+  const BibleAudio({required this.url, required this.timings, this.durationSec = 0});
+
+  final String url;
+  final List<VerseTiming> timings;
+  final double durationSec;
+
+  /// Сервер иногда хранит вместо записи только разметку (`.json`) — слушать такое нельзя.
+  bool get playable => url.trim().isNotEmpty && !url.trim().toLowerCase().split('?').first.endsWith('.json');
+
+  factory BibleAudio.fromJson(Map<String, dynamic> json) {
+    double num_(Object? v) => v is num ? v.toDouble() : (double.tryParse(str(v)) ?? 0);
+    return BibleAudio(
+      url: str(json['audio_url']),
+      durationSec: num_(json['duration_sec']),
+      timings: [
+        for (final raw in asList(json['timings']))
+          if (asInt(asMap(raw)['v']) > 0)
+            VerseTiming(verse: asInt(asMap(raw)['v']), start: num_(asMap(raw)['start']), end: num_(asMap(raw)['end'])),
+      ],
+    );
+  }
+}
+
+/// Комментарий к главе: Лопухин или церковный.
+class BibleCommentary {
+  const BibleCommentary({required this.id, required this.fromChurch, required this.title, required this.body, this.verseStart});
+
+  final int id;
+  final bool fromChurch;
+  final String title;
+  final String body;
+  final int? verseStart;
+
+  String get sourceLabel => fromChurch ? 'Церковь' : 'Лопухин';
+
+  factory BibleCommentary.fromJson(Map<String, dynamic> json) => BibleCommentary(
+        id: asInt(json['id']),
+        fromChurch: str(json['source']) == 'church',
+        title: str(json['title']),
+        body: str(json['body']),
+        verseStart: json['verse_start'] == null ? null : asInt(json['verse_start']),
+      );
+}
