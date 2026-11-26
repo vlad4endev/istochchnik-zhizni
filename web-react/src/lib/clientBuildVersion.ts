@@ -6,6 +6,8 @@
 export const CLIENT_BUILD_VERSION_KEY = 'app:client-build-version';
 export const CLIENT_BUILD_RELOAD_KEY = 'app:client-build-reload-once';
 export const BUILD_VERSION_PATH = '/build-version.txt';
+/** Кэш метаданных Web Push в SW — сохраняем при сбросе кэша сборки, чтобы не потерять контекст ротации. */
+export const PUSH_META_CACHE_NAME = 'push-meta-v1';
 
 export function resolveClientBuildVersion(): string {
   if (typeof __CLIENT_BUILD_VERSION__ === 'string' && __CLIENT_BUILD_VERSION__.trim()) {
@@ -40,30 +42,20 @@ export async function fetchRemoteBuildVersion(
   return normalizeBuildVersion(await res.text());
 }
 
+/**
+ * Очищает устаревшие кэши и запускает мягкое обновление Service Worker.
+ * ВАЖНО: намеренно НЕ вызывает `registration.unregister()`, потому что удаление
+ * регистрации SW мгновенно аннулирует Web Push подписку пользователя (FCM/APNs).
+ */
 export async function purgeServiceWorkerAndCaches(): Promise<void> {
   if (typeof window === 'undefined') return;
 
   try {
-    if ('serviceWorker' in navigator) {
-      const registration = await navigator.serviceWorker.getRegistration();
-      if (registration) {
-        await Promise.race([
-          registration.unregister(),
-          new Promise<void>((r) => {
-            window.setTimeout(r, 8000);
-          }),
-        ]);
-      }
-    }
-  } catch {
-    // ignore service worker errors
-  }
-
-  try {
     if ('caches' in window) {
       const keys = await caches.keys();
+      const keysToDelete = keys.filter((key) => key !== PUSH_META_CACHE_NAME);
       await Promise.race([
-        Promise.all(keys.map((key) => caches.delete(key))),
+        Promise.all(keysToDelete.map((key) => caches.delete(key))),
         new Promise<void>((r) => {
           window.setTimeout(r, 12_000);
         }),
@@ -71,5 +63,68 @@ export async function purgeServiceWorkerAndCaches(): Promise<void> {
     }
   } catch {
     // ignore cache cleanup errors
+  }
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration) {
+        await Promise.race([
+          registration.update().catch(() => undefined),
+          new Promise<void>((r) => {
+            window.setTimeout(r, 8000);
+          }),
+        ]);
+
+        const activateWaiting = async (worker: ServiceWorker): Promise<void> => {
+          await new Promise<void>((resolve) => {
+            let done = false;
+            const finish = () => {
+              if (done) return;
+              done = true;
+              navigator.serviceWorker.removeEventListener('controllerchange', finish);
+              window.clearTimeout(timer);
+              resolve();
+            };
+            const timer = window.setTimeout(finish, 2000);
+            navigator.serviceWorker.addEventListener('controllerchange', finish, { once: true });
+            try {
+              worker.postMessage({ type: 'SKIP_WAITING' });
+            } catch {
+              finish();
+            }
+          });
+        };
+
+        if (registration.waiting) {
+          await activateWaiting(registration.waiting);
+        } else if (registration.installing) {
+          const installing = registration.installing;
+          await new Promise<void>((resolve) => {
+            let settled = false;
+            const done = () => {
+              if (settled) return;
+              settled = true;
+              installing.removeEventListener('statechange', onStateChange);
+              window.clearTimeout(timer);
+              resolve();
+            };
+            const onStateChange = () => {
+              if (installing.state === 'installed' || installing.state === 'redundant') {
+                done();
+              }
+            };
+            const timer = window.setTimeout(done, 4000);
+            installing.addEventListener('statechange', onStateChange);
+            onStateChange();
+          });
+          if (registration.waiting) {
+            await activateWaiting(registration.waiting);
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore service worker update errors
   }
 }
