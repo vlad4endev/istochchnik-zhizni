@@ -375,6 +375,49 @@ async function assertMemberFreeInTx(
   }
 }
 
+/**
+ * Освобождает человека от его же «брошенных» конференций: он создал встречу, приложение не дождалось ответа
+ * (медленная сеть/сервер), и повторная попытка упиралась бы в «Вы уже участвуете в другом звонке».
+ * Закрываем только то, что точно брошено: статус waiting, инициатор — он сам, и в звонке больше никого нет.
+ * Возвращает комнаты LiveKit, которые нужно закрыть после коммита.
+ */
+export async function supersedeOwnAbandonedCalls(
+  client: DbClient,
+  memberId: number,
+): Promise<string[]> {
+  const res = await client.query(
+    `UPDATE calls c
+     SET status = 'cancelled', ended_at = NOW(), end_reason = 'superseded'
+     WHERE c.initiated_by = $1
+       AND c.status = 'waiting'
+       AND NOT EXISTS (
+         SELECT 1 FROM call_participants o
+         WHERE o.call_id = c.id
+           AND o.user_id <> $1
+           AND o.status IN ('invited', 'ringing', 'joined')
+       )
+     RETURNING c.id, c.livekit_room_name`,
+    [memberId],
+  );
+  const rows = res.rows as Array<{ id: string; livekit_room_name: string | null }>;
+  if (rows.length === 0) return [];
+  await client.query(
+    `UPDATE call_participants
+     SET status = 'left', left_at = COALESCE(left_at, NOW())
+     WHERE call_id = ANY($1::uuid[]) AND status IN ('invited', 'ringing', 'joined')`,
+    [rows.map((r) => r.id)],
+  );
+  for (const r of rows) {
+    recordCallEvent({
+      callId: r.id,
+      memberId,
+      kind: 'call_finished',
+      payload: { fromStatus: 'waiting', toStatus: 'cancelled', endReason: 'superseded' },
+    });
+  }
+  return rows.map((r) => r.livekit_room_name).filter((n): n is string => !!n);
+}
+
 async function getParticipantRoleInConversation(
   conversationId: string | null | undefined,
   memberId: number,
@@ -761,7 +804,10 @@ export async function createGroupCall(input: {
   const callId = randomUUID();
   const roomName = `group_${callId.replace(/-/g, '')}`;
 
+  const supersededRooms: string[] = [];
   const { call, invite } = await withTransaction(async (client) => {
+    await lockMemberCallSlot(client, input.initiatorId);
+    supersededRooms.push(...(await supersedeOwnAbandonedCalls(client, input.initiatorId)));
     await assertMemberFreeInTx(client, input.initiatorId);
 
     const ins = await client.query(
@@ -790,6 +836,8 @@ export async function createGroupCall(input: {
     const inv = await createInvitationRaw(client, callId, input.initiatorId, null);
     return { call: mapCallRow(ins.rows[0]), invite: inv };
   });
+
+  for (const room of supersededRooms) void endLiveKitRoom(room).catch(() => undefined);
 
   try {
     await ensureLiveKitRoom({
@@ -947,7 +995,10 @@ export async function createStandaloneLinkCall(input: {
   const callId = randomUUID();
   const roomName = `meet_${callId.replace(/-/g, '')}`;
 
+  const supersededRooms: string[] = [];
   const { call, invite } = await withTransaction(async (client) => {
+    await lockMemberCallSlot(client, input.initiatorId);
+    supersededRooms.push(...(await supersedeOwnAbandonedCalls(client, input.initiatorId)));
     await assertMemberFreeInTx(client, input.initiatorId);
 
     const ins = await client.query(
@@ -974,6 +1025,8 @@ export async function createStandaloneLinkCall(input: {
     const inv = await createInvitationRaw(client, callId, input.initiatorId, null);
     return { call: mapCallRow(ins.rows[0]), invite: inv };
   });
+
+  for (const room of supersededRooms) void endLiveKitRoom(room).catch(() => undefined);
 
   try {
     await ensureLiveKitRoom({

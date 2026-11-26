@@ -1,4 +1,11 @@
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
+import {
+  EnsuredRooms,
+  UrlHealth,
+  roomEnsureBudgetMs,
+  roomServiceAttemptTimeoutMs,
+  withTimeout,
+} from './livekitReachability';
 
 export type LiveKitJoinTokenInput = {
   roomName: string;
@@ -27,6 +34,8 @@ export type LiveKitSettingsOverride = {
 
 /** Запомненный рабочий Room Service URL после успешного createRoom/listRooms. */
 let preferredInternalUrl: string | null = null;
+const urlHealth = new UrlHealth();
+const ensuredRooms = new EnsuredRooms();
 
 let settingsOverride: LiveKitSettingsOverride = {
   apiKey: null,
@@ -330,11 +339,15 @@ async function withRoomServiceFallback<T>(
   opName: string,
   fn: (svc: RoomServiceClient) => Promise<T>,
 ): Promise<T> {
-  const candidates = getLiveKitInternalUrlCandidates();
+  // Адреса, которые только что не ответили, пробуем в последнюю очередь, а на каждую попытку — жёсткий таймаут:
+  // иначе недоступный адрес держит запрос по несколько секунд, и конференция создаётся десятки секунд.
+  const candidates = urlHealth.order(getLiveKitInternalUrlCandidates());
+  const attemptMs = roomServiceAttemptTimeoutMs();
   let lastErr: unknown;
   for (const url of candidates) {
     try {
-      const result = await fn(roomServiceAt(url));
+      const result = await withTimeout(fn(roomServiceAt(url)), attemptMs, `${opName} via ${url}`);
+      urlHealth.markOk(url);
       if (preferredInternalUrl !== url) {
         preferredInternalUrl = url;
         console.info(`[livekit] ${opName} OK via ${url}`);
@@ -344,6 +357,7 @@ async function withRoomServiceFallback<T>(
       const msg = err instanceof Error ? err.message : String(err);
       lastErr = err;
       if (isRoomExistsError(msg)) {
+        urlHealth.markOk(url);
         preferredInternalUrl = url;
         throw err;
       }
@@ -351,6 +365,7 @@ async function withRoomServiceFallback<T>(
       if (!isTransientReachabilityError(msg)) {
         throw err;
       }
+      urlHealth.markFailed(url);
       console.warn(`[livekit] ${opName} via ${url} failed: ${msg}`);
     }
   }
@@ -500,23 +515,34 @@ export async function ensureLiveKitRoom(input: {
     console.warn('[livekit] ensureLiveKitRoom skipped — not configured');
     return;
   }
+  // Комнату уже готовили (создание звонка → сразу запрос токена): второй круг к Room Service не нужен.
+  if (ensuredRooms.shouldSkip(input.roomName)) return;
   try {
-    await withRoomServiceFallback('createRoom', async (svc) => {
-      await svc.createRoom({
-        name: input.roomName,
-        emptyTimeout: input.emptyTimeoutSec ?? 900,
-        // Дать клиенту время на LiveKit reconnect, не считая комнату пустой.
-        departureTimeout: 180,
-        maxParticipants: input.maxParticipants,
-        metadata: input.metadata,
-      });
-    });
+    // Всего на подготовку комнаты — не больше нескольких секунд: она всё равно создаётся при первом входе,
+    // а человек ждёт ответа на своё нажатие «Создать встречу».
+    await withTimeout(
+      withRoomServiceFallback('createRoom', async (svc) => {
+        await svc.createRoom({
+          name: input.roomName,
+          emptyTimeout: input.emptyTimeoutSec ?? 900,
+          // Дать клиенту время на LiveKit reconnect, не считая комнату пустой.
+          departureTimeout: 180,
+          maxParticipants: input.maxParticipants,
+          metadata: input.metadata,
+        });
+      }),
+      roomEnsureBudgetMs(),
+      'createRoom',
+    );
+    ensuredRooms.markOk(input.roomName);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // Idempotent: room may already exist
     if (isRoomExistsError(msg)) {
+      ensuredRooms.markOk(input.roomName);
       return;
     }
+    ensuredRooms.markFailed(input.roomName);
     // LiveKit создаёт комнату при первом join. Не валим звонок, если Room Service
     // недоступен из api (часто UFW docker→host:7880), а публичный WSS /lk жив.
     console.error(

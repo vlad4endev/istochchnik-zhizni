@@ -9,6 +9,7 @@ import '../../core/church_api.dart';
 import '../../core/json.dart';
 import '../../core/session.dart';
 import 'logic/call_access.dart';
+import 'logic/call_retry.dart';
 import 'logic/call_layout.dart';
 import 'logic/call_status.dart';
 import 'logic/meeting_logic.dart';
@@ -293,8 +294,11 @@ class CallController extends ChangeNotifier {
       } else if (_callId == null && spec.inviteToken == null) {
         _setStage(spec.recipientId != null ? 'Вызываем…' : 'Создаём встречу…');
         final meeting = spec.meeting;
-        final created = meeting != null
-            ? await api.createCall(
+        // Единичный сбой сети или медленный ответ не заставляет жать «Повторить»: запрос повторяется сам,
+        // а сервер закрывает брошенную первую попытку.
+        final created = await retryOnceOnTransient(
+          () => meeting != null
+            ? api.createCall(
                 type: 'group',
                 mediaType: meeting.media.apiValue,
                 conversationId: meeting.conversationId ?? '',
@@ -302,12 +306,15 @@ class CallController extends ChangeNotifier {
                 standalone: meeting.standalone,
                 title: cleanMeetingTitle(meeting.title),
               )
-            : await api.createCall(
+            : api.createCall(
                 type: spec.recipientId != null ? 'direct' : 'group',
                 mediaType: spec.video ? 'video' : 'audio',
                 conversationId: spec.conversationId ?? '',
                 recipientId: spec.recipientId,
-              );
+              ),
+          onRetry: () => _setStage('Сеть отвечает медленно — повторяем…'),
+          isCancelled: () => _ended,
+        );
         await audioReady;
         final call = asMap(created['call']);
         _callId = str(call['id']);
@@ -334,7 +341,11 @@ class CallController extends ChangeNotifier {
         tokenBody = await api.joinInvitation(spec.inviteToken!);
         _callId = str(asMap(tokenBody['call'])['id']);
       } else {
-        tokenBody = await api.callToken(_callId!);
+        tokenBody = await retryOnceOnTransient(
+          () => api.callToken(_callId!),
+          onRetry: () => _setStage('Сеть отвечает медленно — повторяем…'),
+          isCancelled: () => _ended,
+        );
       }
       final url = str(tokenBody['url']);
       final token = str(tokenBody['token']);
