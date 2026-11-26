@@ -18,6 +18,9 @@ const parser = new Parser();
 
 const lastFiredPeriod = new Map<string, string>();
 
+/** Сколько минут после запланированного времени правило ещё может «догнать» отправку. */
+const RULE_CATCHUP_WINDOW_MINUTES = 15;
+
 function applyBodyTemplate(template: string, vars: Record<string, string>): string {
   return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_all, key: string) => vars[key] ?? '');
 }
@@ -450,6 +453,37 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
   }
 }
 
+/**
+ * Дедуп срабатывания правил. Ключ периода хранится и в памяти (быстрая проверка),
+ * и в БД (global_settings.notification_settings_json → runtimeState.lastFiredPeriods):
+ * при рестарте/передеплое API в минуту срабатывания тик догоняет отправку вместо потери.
+ */
+async function markRuleFired(ruleId: string, periodKey: string): Promise<void> {
+  lastFiredPeriod.set(ruleId, periodKey);
+  try {
+    await patchNotificationRuntimeState((d) => ({
+      ...d,
+      runtimeState: { ...d.runtimeState, lastFiredPeriods: { ...(d.runtimeState?.lastFiredPeriods ?? {}), [ruleId]: periodKey } },
+    }));
+  } catch (e) {
+    // БД недоступна — память остаётся страховкой от дублей в этом процессе.
+    console.warn('[notifications] persist lastFiredPeriods failed', ruleId, e);
+  }
+}
+
+async function unmarkRuleFired(ruleId: string): Promise<void> {
+  lastFiredPeriod.delete(ruleId);
+  try {
+    await patchNotificationRuntimeState((d) => {
+      const rest = { ...(d.runtimeState?.lastFiredPeriods ?? {}) };
+      delete rest[ruleId];
+      return { ...d, runtimeState: { ...d.runtimeState, lastFiredPeriods: rest } };
+    });
+  } catch (e) {
+    console.warn('[notifications] clear lastFiredPeriods failed', ruleId, e);
+  }
+}
+
 let rulesTickInFlight = false;
 
 /**
@@ -466,18 +500,23 @@ export async function runNotificationRulesTick(): Promise<void> {
     for (const rule of doc.rules) {
       if (!rule.enabled) continue;
       const hm = parseHm(rule.time);
-      if (!hm || z.hour !== hm.hour || z.minute !== hm.minute) continue;
+      if (!hm) continue;
+      // Отправляем в минуту срабатывания, а также с опозданием до 15 минут — если API был
+      // занят/рестартовал в момент срабатывания (передеплой), уведомление догоняется, а не теряется.
+      const minutesSinceScheduled = z.hour * 60 + z.minute - (hm.hour * 60 + hm.minute);
+      if (minutesSinceScheduled < 0 || minutesSinceScheduled > RULE_CATCHUP_WINDOW_MINUTES) continue;
       if (!repeatMatches(rule, z)) continue;
 
       const pk = `${rule.id}:${periodKey(rule, z)}`;
-      if (lastFiredPeriod.get(rule.id) === pk) continue;
+      const firedInDb = doc.runtimeState?.lastFiredPeriods?.[rule.id];
+      if (lastFiredPeriod.get(rule.id) === pk || firedInDb === pk) continue;
 
-      lastFiredPeriod.set(rule.id, pk);
+      await markRuleFired(rule.id, pk);
       try {
         const fresh = await loadNotificationSettings();
         await handleRule(rule, fresh, z);
       } catch (e) {
-        lastFiredPeriod.delete(rule.id);
+        await unmarkRuleFired(rule.id);
         console.error('[notifications] rule error', rule.id, e);
       }
     }

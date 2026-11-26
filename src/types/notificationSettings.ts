@@ -41,6 +41,8 @@ export interface NotificationRuntimeState {
   /** После первого чтения кода трансляции не шлём ложное «эфир начался». */
   broadcastInitialized?: boolean;
   lastApiBuildStamp?: string | null;
+  /** ruleId → последний отработанный период (дата/неделя/месяц/год): дедуп survive рестарт API. */
+  lastFiredPeriods?: Record<string, string>;
 }
 
 export interface NotificationSettingsDocument {
@@ -177,6 +179,16 @@ export const DEFAULT_NOTIFICATION_RULES: readonly NotificationRule[] = [
 
 const RULE_IDS = new Set<string>(DEFAULT_NOTIFICATION_RULES.map((r) => r.id));
 
+function normalizeLastFiredPeriods(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [ruleId, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value !== 'string' || !value.trim()) continue;
+    out[ruleId] = value.trim().slice(0, 64);
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function clampInt(n: number, lo: number, hi: number, fallback: number): number {
   if (!Number.isFinite(n)) return fallback;
   return Math.min(hi, Math.max(lo, Math.floor(n)));
@@ -262,6 +274,7 @@ export function normalizeNotificationSettingsDocument(raw: unknown): Notificatio
         typeof rs.lastApiBuildStamp === 'string' || rs.lastApiBuildStamp === null
           ? (rs.lastApiBuildStamp as string | null)
           : undefined,
+      lastFiredPeriods: normalizeLastFiredPeriods(rs.lastFiredPeriods),
     };
   }
 
