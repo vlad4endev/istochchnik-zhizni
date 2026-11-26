@@ -307,13 +307,17 @@ export function getLiveKitPublicUrl(): string {
   return ensureLiveKitPublicUrlPath(resolved);
 }
 
+const ROOM_SERVICE_REQUEST_TIMEOUT_SEC = 5;
+
 function roomServiceAt(url: string): RoomServiceClient {
   const apiKey = resolveApiKey();
   const apiSecret = resolveApiSecret();
   if (!url || !apiKey || !apiSecret) {
     throw new Error('livekit_not_configured');
   }
-  return new RoomServiceClient(url, apiKey, apiSecret);
+  return new RoomServiceClient(url, apiKey, apiSecret, {
+    requestTimeout: ROOM_SERVICE_REQUEST_TIMEOUT_SEC,
+  });
 }
 
 function isRoomExistsError(msg: string): boolean {
@@ -321,7 +325,7 @@ function isRoomExistsError(msg: string): boolean {
 }
 
 function isTransientReachabilityError(msg: string): boolean {
-  return /fetch failed|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|socket hang up|network|AbortError|undici|connect/i.test(
+  return /fetch failed|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|socket hang up|network|AbortError|TimeoutError|timed? ?out|aborted|undici|connect/i.test(
     msg,
   );
 }
