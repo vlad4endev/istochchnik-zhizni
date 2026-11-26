@@ -19,6 +19,7 @@ import { groupFcmTargetsByChannel } from '../lib/fcmChannels';
 import { getVapidConfig, initVapidKeys, type VapidConfig } from './vapidKeys';
 import { sendApnsVoipPush, isApnsVoipConfigured } from './apnsVoipPush';
 import { deleteVoipToken, getVoipTokensForMember } from './voipTokenService';
+import { webPushRetryDelayMs, webPushRetryMaxAttempts } from '../lib/webPushRetry';
 
 /** Таймаут HTTP к FCM/Web Push (мс). На VPS с жёстким firewall иногда нужен больший срок. */
 const WEB_PUSH_HTTP_TIMEOUT_MS = Math.min(
@@ -378,96 +379,128 @@ function serializeWebPushPayload(payload: unknown): string {
   return json;
 }
 
+export type WebPushSendOptions = {
+  /** Сколько push-сервис может хранить сообщение (сек). Для звонков — короткое, чтобы «поздний звонок» не приходил часами спустя. */
+  ttlSec?: number;
+  urgency?: 'very-low' | 'low' | 'normal' | 'high';
+};
+
+const sleepMs = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+function endpointHostOf(endpoint: string): string {
+  try {
+    return new URL(endpoint).host;
+  } catch {
+    return 'unknown';
+  }
+}
+
 export async function sendNotificationToSubscription(
   sub: PushSubscriptionData,
   payload: unknown,
+  sendOptions?: WebPushSendOptions,
 ): Promise<WebSendOutcome> {
   if (!vapidReady) {
     return 'skipped';
   }
-  try {
-    await webpush.sendNotification(
-      {
-        endpoint: sub.endpoint,
-        keys: sub.keys,
-      },
-      serializeWebPushPayload(payload),
-      // urgency high — иначе Android в Doze и iOS откладывают доставку (вплоть до минут/часов).
-      { TTL: 86400, urgency: 'high', timeout: WEB_PUSH_HTTP_TIMEOUT_MS, proxy: pushProxyForEndpoint(sub.endpoint) },
-    );
-    // Mark as used
-    query(`UPDATE push_subscriptions SET last_used_at = NOW() WHERE endpoint = $1`, [sub.endpoint]).catch(e => {
-        console.warn('Failed to update last_used_at on push success', e);
-    });
-    return 'sent';
-  } catch (err: unknown) {
+  const ttlSec = Math.max(0, Math.min(28 * 86400, Math.floor(sendOptions?.ttlSec ?? 86400)));
+  const serialized = serializeWebPushPayload(payload);
+  const maxAttempts = webPushRetryMaxAttempts();
+
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await webpush.sendNotification(
+        {
+          endpoint: sub.endpoint,
+          keys: sub.keys,
+        },
+        serialized,
+        // urgency high — иначе Android в Doze и iOS откладывают доставку (вплоть до минут/часов).
+        {
+          TTL: ttlSec,
+          urgency: sendOptions?.urgency ?? 'high',
+          timeout: WEB_PUSH_HTTP_TIMEOUT_MS,
+          proxy: pushProxyForEndpoint(sub.endpoint),
+        },
+      );
+      // Mark as used
+      query(`UPDATE push_subscriptions SET last_used_at = NOW() WHERE endpoint = $1`, [sub.endpoint]).catch(e => {
+          console.warn('Failed to update last_used_at on push success', e);
+      });
+      return 'sent';
+    } catch (err: unknown) {
+      lastErr = err;
+      const statusCode =
+        err && typeof err === 'object' && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
+      const body =
+        err && typeof err === 'object' && 'body' in err ? String((err as { body?: unknown }).body ?? '') : '';
+      if (statusCode === 404 || statusCode === 410) {
+        // Subscription has expired or is no longer valid
+        console.log('[push] Subscription expired. Removing from DB.', sub.endpoint);
+        await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
+        return 'removed';
+      }
+      if (
+        // Apple отвечает 400 {"reason":"VapidPkHashMismatch"}, Mozilla/Google — 401/403.
+        (statusCode === 403 || statusCode === 400 || statusCode === 401) &&
+        (/vapid|UnauthorizedRegistration|InvalidToken|mismatch/i.test(body) ||
+          /vapid|UnauthorizedRegistration|InvalidToken|mismatch/i.test(
+            err instanceof Error ? err.message : String(err ?? ''),
+          ))
+      ) {
+        // VAPID key rotated or subscription bound to another applicationServerKey
+        console.warn('[push] VAPID/auth mismatch. Removing subscription.', {
+          endpointHost: endpointHostOf(sub.endpoint),
+          body: body.slice(0, 200),
+        });
+        await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
+        return 'removed';
+      }
+
+      // 429 (rate limit, honoring Retry-After), 5xx и сетевые обрывы — временные:
+      // до 3 попыток с нарастающей паузой, иначе разовый сбой push-сервисa = потерянное уведомление.
+      const delayMs = attempt < maxAttempts ? webPushRetryDelayMs(err, attempt) : null;
+      if (delayMs == null) break;
+      console.warn('[push] transient send failure, retrying', {
+        attempt,
+        delayMs,
+        statusCode: statusCode ?? null,
+        endpointHost: endpointHostOf(sub.endpoint),
+      });
+      await sleepMs(delayMs);
+    }
+  }
+
+  const err = lastErr;
+  if (err == null) return 'failed';
+  if (isPushNetworkTimeoutErr(err)) {
+    suppressedPushNetworkErrCount += 1;
+    const now = Date.now();
+    if (now - lastPushNetworkErrLogMs >= PUSH_NETWORK_ERR_LOG_INTERVAL_MS) {
+      const count = suppressedPushNetworkErrCount;
+      suppressedPushNetworkErrCount = 0;
+      lastPushNetworkErrLogMs = now;
+      console.warn(
+        '[push] Сеть: таймаут/обрыв при отправке в push-сервис (FCM/Web Push). Проверьте исходящий HTTPS с контейнера API, DNS и firewall. Можно увеличить PUSH_REQUEST_TIMEOUT_MS.',
+        {
+          endpointHost: endpointHostOf(sub.endpoint),
+          failuresSinceLastLog: count,
+          message: err instanceof Error ? err.message : String(err),
+        },
+      );
+    }
+  } else {
     const statusCode =
       err && typeof err === 'object' && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
     const body =
       err && typeof err === 'object' && 'body' in err ? String((err as { body?: unknown }).body ?? '') : '';
-    if (statusCode === 404 || statusCode === 410) {
-      // Subscription has expired or is no longer valid
-      console.log('[push] Subscription expired. Removing from DB.', sub.endpoint);
-      await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
-      return 'removed';
-    } else if (
-      // Apple отвечает 400 {"reason":"VapidPkHashMismatch"}, Mozilla/Google — 401/403.
-      (statusCode === 403 || statusCode === 400 || statusCode === 401) &&
-      (/vapid|UnauthorizedRegistration|InvalidToken|mismatch/i.test(body) ||
-        /vapid|UnauthorizedRegistration|InvalidToken|mismatch/i.test(
-          err instanceof Error ? err.message : String(err ?? ''),
-        ))
-    ) {
-      // VAPID key rotated or subscription bound to another applicationServerKey
-      console.warn('[push] VAPID/auth mismatch. Removing subscription.', {
-        endpointHost: (() => {
-          try {
-            return new URL(sub.endpoint).host;
-          } catch {
-            return 'unknown';
-          }
-        })(),
-        body: body.slice(0, 200),
-      });
-      await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
-      return 'removed';
-    } else if (isPushNetworkTimeoutErr(err)) {
-      const now = Date.now();
-      suppressedPushNetworkErrCount += 1;
-      if (now - lastPushNetworkErrLogMs >= PUSH_NETWORK_ERR_LOG_INTERVAL_MS) {
-        const count = suppressedPushNetworkErrCount;
-        suppressedPushNetworkErrCount = 0;
-        lastPushNetworkErrLogMs = now;
-        const endpointHost = (() => {
-          try {
-            return new URL(sub.endpoint).host;
-          } catch {
-            return 'unknown';
-          }
-        })();
-        console.warn(
-          '[push] Сеть: таймаут/обрыв при отправке в push-сервис (FCM/Web Push). Проверьте исходящий HTTPS с контейнера API, DNS и firewall. Можно увеличить PUSH_REQUEST_TIMEOUT_MS.',
-          {
-            endpointHost,
-            failuresSinceLastLog: count,
-            message: err instanceof Error ? err.message : String(err),
-          },
-        );
-      }
-    } else {
-      console.error('[push] Error sending web push notification', {
-        statusCode,
-        endpointHost: (() => {
-          try {
-            return new URL(sub.endpoint).host;
-          } catch {
-            return 'unknown';
-          }
-        })(),
-        message: err instanceof Error ? err.message : err,
-        body: body.slice(0, 300),
-      });
-    }
+    console.error('[push] Error sending web push notification', {
+      statusCode,
+      endpointHost: endpointHostOf(sub.endpoint),
+      message: err instanceof Error ? err.message : err,
+      body: body.slice(0, 300),
+    });
   }
   return 'failed';
 }
@@ -475,13 +508,14 @@ export async function sendNotificationToSubscription(
 export async function sendNotificationToMember(
   memberId: number,
   payload: unknown,
+  sendOptions?: WebPushSendOptions,
 ): Promise<PushChannelSummary> {
   const summary = emptyChannel();
   if (!vapidReady) {
     return summary;
   }
   const subs = await getSubscriptionsForMember(memberId);
-  const outcomes = await Promise.all(subs.map((sub) => sendNotificationToSubscription(sub, payload)));
+  const outcomes = await Promise.all(subs.map((sub) => sendNotificationToSubscription(sub, payload, sendOptions)));
   for (const o of outcomes) {
     if (o === 'skipped') continue;
     summary.attempted += 1;
@@ -856,7 +890,8 @@ export async function sendIncomingCallWake(
     requireInteraction: 'true',
   };
 
-  // PWA / Web Push only (без FCM alert — иначе дубль с CallStyle data-only)
+  // PWA / Web Push only (без FCM alert — иначе дубль с CallStyle data-only).
+  // TTL короткий (как звонок): опоздавший на часы «входящий звонок» хуже его отсутствия.
   void sendNotificationToMember(memberId, {
     title,
     body,
@@ -865,7 +900,7 @@ export async function sendIncomingCallWake(
       { action: 'call_accept', title: 'Принять' },
       { action: 'call_decline', title: 'Отклонить' },
     ],
-  }).catch((e) => console.warn('[calls] web push wake failed:', e instanceof Error ? e.message : e));
+  }, { ttlSec: ttlSec, urgency: 'high' }).catch((e) => console.warn('[calls] web push wake failed:', e instanceof Error ? e.message : e));
 
   // Android Capacitor: data-only FCM → AppFirebaseMessagingService CallStyle
   void sendFcmCallDataOnly(memberId, title, body, data, ttlSec).catch((e) =>
