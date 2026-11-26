@@ -1076,6 +1076,31 @@ export function getOnlineMemberIds(): number[] {
 }
 
 /**
+ * Диагностический срез состояния WebSocket-хаба и Redis pub/sub fan-out.
+ */
+export function getRealtimeWsStats(): {
+  instanceId: string;
+  connectedSockets: number;
+  onlineMembers: number;
+  activeRooms: number;
+  redisFanoutEnabled: boolean;
+  pubStatus: string | null;
+  subStatus: string | null;
+} {
+  const statusOf = (client: Redis | null): string | null =>
+    client ? String((client as unknown as { status?: string }).status ?? 'unknown') : null;
+  return {
+    instanceId: INSTANCE_ID,
+    connectedSockets: clientsByWs.size,
+    onlineMembers: onlineMembers.size,
+    activeRooms: rooms.size,
+    redisFanoutEnabled,
+    pubStatus: statusOf(pubClient),
+    subStatus: statusOf(subClient),
+  };
+}
+
+/**
  * Только fan-out «broadcast» (инвалидация React Query — см. `wsNotifyHub.broadcastRealtime`).
  */
 export function publishFanoutBroadcastPayload(payload: unknown): void {

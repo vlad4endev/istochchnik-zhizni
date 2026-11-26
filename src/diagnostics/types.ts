@@ -207,3 +207,226 @@ export interface FullDiagnosticsReport {
   };
   truthfulnessNote: string;
 }
+
+// ─── Система мониторинга в реальном времени ────────────────────────────────
+
+export type MonitorCheckStatus = 'ok' | 'warn' | 'fail' | 'skip';
+export type AlertSeverity = 'critical' | 'warning';
+export type MonitorCheckCategory = 'core' | 'resources' | 'traffic' | 'integrations' | 'security';
+
+/** Результат одной проверки здоровья, выполняемой вотчдогом или полным отчётом. */
+export interface MonitorCheckResult {
+  id: string;
+  label: string;
+  category?: MonitorCheckCategory;
+  status: MonitorCheckStatus;
+  /** Насколько серьёзна проваленная проверка: critical роняет общий статус, warning — деградирует. */
+  severity: AlertSeverity;
+  /** Опциональные интеграции (Redis, Supabase, LiveKit) не считаются поломкой, если не настроены. */
+  optional: boolean;
+  details: string;
+  value?: number;
+  durationMs: number;
+  threshold?: { warn: number; fail: number; unit: string };
+}
+
+export interface EndpointMetricSummary {
+  route: string;
+  requests: number;
+  errors4xx: number;
+  errors5xx: number;
+  avgMs: number;
+  p95Ms: number;
+  maxMs: number;
+  lastStatus: number;
+  lastSeenAt: string;
+}
+
+export interface RecentError5xxSample {
+  at: string;
+  method: string;
+  path: string;
+  status: number;
+  durationMs: number;
+  message?: string;
+}
+
+export interface CronJobHeartbeat {
+  name: string;
+  lastRunAt: string;
+  ok: boolean;
+  durationMs: number;
+  runs: number;
+  failures: number;
+  lastError?: string;
+}
+
+/** Живая метрика процесса: счётчики запросов, латентность, event loop, память, эндпоинты. */
+export interface MonitorMetricsSnapshot {
+  timestamp: string;
+  processUptimeSec: number;
+  nodeVersion: string;
+  pid: number;
+  env: string;
+  cpuCores: number;
+  loadAverage: number[];
+  requests: {
+    total: number;
+    errors4xx: number;
+    errors5xx: number;
+    perMinute: number;
+    errorRatePercent: number;
+    latency: { p50Ms: number; p95Ms: number; p99Ms: number; avgMs: number };
+  };
+  eventLoop: { lagMs: number; maxLagMs: number; p95LagMs: number };
+  memory: {
+    rssBytes: number;
+    heapUsedBytes: number;
+    heapTotalBytes: number;
+    heapLimitBytes: number;
+    externalBytes: number;
+    /** Использование относительно реального лимита V8 heap_size_limit (без ложных тревог). */
+    usagePercent: number;
+  };
+  systemMemory: {
+    totalBytes: number;
+    availableBytes: number;
+    freeBytes: number;
+    usagePercent: number;
+    source: 'proc_meminfo' | 'os_freemem';
+  };
+  unhandledRejections: number;
+  uncaughtExceptions: number;
+  /** Поминутная история за последний час (для спарклайнов в админке). */
+  minuteHistory: MonitorMinutePoint[];
+  /** Самые проблемные маршруты по 5xx/4xx. */
+  topErrorEndpoints: EndpointMetricSummary[];
+  /** Самые медленные маршруты по p95. */
+  slowestEndpoints: EndpointMetricSummary[];
+  /** Последние ошибки 5xx в реальном времени. */
+  recentErrors5xx: RecentError5xxSample[];
+}
+
+export interface MonitorMinutePoint {
+  minuteStart: string;
+  requests: number;
+  errors4xx: number;
+  errors5xx: number;
+  errorRatePercent: number;
+  p95Ms: number;
+}
+
+export type MonitorAlertStatus = 'active' | 'acknowledged' | 'resolved';
+
+export interface MonitorAlert {
+  key: string;
+  checkId: string;
+  severity: AlertSeverity;
+  title: string;
+  message: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  occurrences: number;
+  status: MonitorAlertStatus;
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  resolvedAt?: string;
+  lastNotifiedAt?: string;
+}
+
+export interface MonitorThresholds {
+  eventLoopWarnMs: number;
+  eventLoopFailMs: number;
+  heapWarnPercent: number;
+  heapFailPercent: number;
+  systemMemWarnPercent: number;
+  systemMemFailPercent: number;
+  diskWarnPercent: number;
+  diskFailPercent: number;
+  latencyP95WarnMs: number;
+  latencyP95FailMs: number;
+  errorRateWindowMin: number;
+  errorRateWarnPercent: number;
+  errorRateFailPercent: number;
+  dbLatencyWarnMs: number;
+  http5xxBurstCount: number;
+  http5xxBurstWindowSec: number;
+}
+
+export interface MonitorSettings {
+  enabled: boolean;
+  intervalSec: number;
+  notifyChannels: {
+    push: boolean;
+    telegram: boolean;
+    webhookUrl: string | null;
+  };
+  telegramOpsChatId: string | null;
+  notifyOn: {
+    critical: boolean;
+    warning: boolean;
+    recovery: boolean;
+    crash: boolean;
+    http5xxBurst: boolean;
+    restart: boolean;
+  };
+  thresholds: MonitorThresholds;
+  cooldownCriticalMin: number;
+  cooldownWarningMin: number;
+  mutedChecks: string[];
+}
+
+export interface SubsystemItem {
+  id: string;
+  name: string;
+  status: MonitorCheckStatus;
+  configured: boolean;
+  summary: string;
+  latencyMs?: number;
+  metrics: Record<string, string | number | boolean | null>;
+  warnings?: string[];
+}
+
+export interface SubsystemInventory {
+  collectedAt: string;
+  durationMs: number;
+  items: SubsystemItem[];
+  cronJobs: CronJobHeartbeat[];
+}
+
+export type MonitorOverallStatus = 'healthy' | 'degraded' | 'critical';
+
+export interface MonitorRunResult {
+  generatedAt: string;
+  overall: MonitorOverallStatus;
+  checks: MonitorCheckResult[];
+  raisedAlerts: MonitorAlert[];
+  resolvedAlerts: MonitorAlert[];
+}
+
+export interface MonitorChannelsSummary {
+  telegramConfigured: boolean;
+  telegramEnabledInSettings: boolean;
+  telegramOpsChatConfigured: boolean;
+  pushConfigured: boolean;
+  vapidReady: boolean;
+  fcmReady: boolean;
+  webhookConfigured: boolean;
+  adminTargets: number;
+  adminsWithTelegram: number;
+  adminsWithPush: number;
+}
+
+/** Ответ GET /api/diagnostics/monitor/status. */
+export interface MonitorStatusResponse {
+  generatedAt: string;
+  overall: MonitorOverallStatus;
+  watchdog: { enabled: boolean; intervalSec: number; lastRunAt: string | null; lastRun: MonitorRunResult | null };
+  metrics: MonitorMetricsSnapshot;
+  checks: MonitorCheckResult[];
+  activeAlerts: MonitorAlert[];
+  alertHistory: MonitorAlert[];
+  channels: MonitorChannelsSummary;
+  settings: MonitorSettings;
+  subsystems?: SubsystemInventory;
+}
