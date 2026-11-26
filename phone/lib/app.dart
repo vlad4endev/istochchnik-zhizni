@@ -8,6 +8,7 @@ import 'core/theme.dart';
 import 'ui/kit/kit.dart';
 import 'features/auth/login_page.dart';
 import 'features/auth/pending_page.dart';
+import 'features/calls/widgets/call_banner.dart';
 import 'features/shell/shell_page.dart';
 
 class IstochnikApp extends StatelessWidget {
@@ -25,6 +26,8 @@ class IstochnikApp extends StatelessWidget {
       themeMode: session.themeMode,
       locale: const Locale('ru'),
       supportedLocales: const [Locale('ru')],
+      // Плашка «Идёт звонок» поверх любого экрана, пока звонок свёрнут.
+      builder: (context, child) => CallBannerHost(child: child ?? const SizedBox.shrink()),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,

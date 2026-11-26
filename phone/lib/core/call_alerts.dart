@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../features/calls/call_controller.dart';
 import '../features/calls/call_page.dart';
 import 'nav.dart';
 import 'session.dart';
@@ -162,7 +163,19 @@ class CallAlerts {
         ))
         .whenComplete(() {
       _openPages.remove(invite.callId);
-      endNative(invite.callId);
+      // Экран закрыт, но звонок мог продолжиться свёрнутым — системную звонилку снимаем, когда он закончится.
+      final active = CallCenter.instance.current;
+      if (active != null && !active.ended && active.callId == invite.callId) {
+        void onChange() {
+          if (!active.ended) return;
+          active.removeListener(onChange);
+          endNative(invite.callId);
+        }
+
+        active.addListener(onChange);
+      } else {
+        endNative(invite.callId);
+      }
     });
   }
 

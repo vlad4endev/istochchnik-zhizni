@@ -15,19 +15,40 @@ String conversationTitle(Map<String, dynamic> item) {
   return other.isEmpty ? 'Чат' : other;
 }
 
+/// Выбранный чат: id для отправки и название для сообщений человеку («не удалось отправить в …»).
+class ChatPick {
+  const ChatPick({required this.id, required this.title});
+  final String id;
+  final String title;
+}
+
 /// Куда переслать сообщение: список чатов с поиском и галочками. Возвращает выбранные id.
-Future<List<String>?> showForwardSheet(BuildContext context, ChatSource source, {required String excludeId}) {
-  return showPrayerSheet<List<String>>(
+Future<List<String>?> showForwardSheet(BuildContext context, ChatSource source, {required String excludeId}) async {
+  final picks = await showChatPickerSheet(context, source, excludeId: excludeId);
+  return picks == null ? null : [for (final p in picks) p.id];
+}
+
+/// Список чатов с поиском и галочками; возвращает выбранные чаты (null — закрыли, ничего не выбрав).
+/// [excludeId] — чат, который не показываем (например, тот, откуда пересылаем).
+Future<List<ChatPick>?> showChatPickerSheet(
+  BuildContext context,
+  ChatSource source, {
+  String excludeId = '',
+  String title = 'Переслать',
+  String actionLabel = 'Переслать',
+}) {
+  return showPrayerSheet<List<ChatPick>>(
     context,
-    title: 'Переслать',
-    builder: (sheet) => _ForwardList(source: source, excludeId: excludeId),
+    title: title,
+    builder: (sheet) => _ForwardList(source: source, excludeId: excludeId, actionLabel: actionLabel),
   );
 }
 
 class _ForwardList extends StatefulWidget {
-  const _ForwardList({required this.source, required this.excludeId});
+  const _ForwardList({required this.source, required this.excludeId, this.actionLabel = 'Переслать'});
   final ChatSource source;
   final String excludeId;
+  final String actionLabel;
 
   @override
   State<_ForwardList> createState() => _ForwardListState();
@@ -96,9 +117,15 @@ class _ForwardListState extends State<_ForwardList> {
           ),
         const SizedBox(height: 12),
         PrimaryButton(
-          label: _selected.isEmpty ? 'Выберите чат' : 'Переслать (${_selected.length})',
+          label: _selected.isEmpty ? 'Выберите чат' : '${widget.actionLabel} (${_selected.length})',
           icon: Icons.send_rounded,
-          onPressed: _selected.isEmpty ? null : () => Navigator.pop(context, _selected.toList()),
+          onPressed: _selected.isEmpty
+              ? null
+              : () => Navigator.pop(context, [
+                    // Порядок — как в списке чатов, а не в порядке нажатий.
+                    for (final i in items)
+                      if (_selected.contains(str(i['id']))) ChatPick(id: str(i['id']), title: conversationTitle(i)),
+                  ]),
         ),
       ],
     );

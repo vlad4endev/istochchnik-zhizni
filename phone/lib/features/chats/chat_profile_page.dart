@@ -14,6 +14,7 @@ import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 import '../calls/call_page.dart';
+import '../calls/widgets/call_banner.dart';
 import '../prayer/widgets/sheet_frame.dart';
 import 'data/chat_source.dart';
 import 'logic/chat_logic.dart';
@@ -139,10 +140,11 @@ class _ChatProfilePageState extends State<ChatProfilePage> {
     if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  void _call() {
+  Future<void> _call() async {
     final peer = _profile?.id ?? widget.otherMemberId;
     if (peer == null || peer <= 0) return;
-    pushPage(context, CallPage(conversationId: widget.conversationId, recipientId: peer, title: widget.title));
+    if (!await confirmStartNewCall(context) || !mounted) return;
+    await pushPage(context, CallPage(conversationId: widget.conversationId, recipientId: peer, title: widget.title));
   }
 
   void _onPresence() {
