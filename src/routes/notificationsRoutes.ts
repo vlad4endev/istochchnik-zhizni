@@ -9,7 +9,7 @@ import {
   markNotificationDeliveryDismissed,
   markNotificationDeliveryOpened,
 } from '../services/notificationDeliveryService';
-import { removeSubscription, saveSubscription, sendPush } from '../services/pushService';
+import { removeSubscription, rotateSubscription, saveSubscription, sendPush } from '../services/pushService';
 import { getFirebaseMessaging } from '../config/firebaseAdmin';
 import { query } from '../config/db';
 import { getVapidPublicKeyValue } from '../services/vapidKeys';
@@ -105,6 +105,93 @@ router.post('/subscribe', requireAuthSession, async (req: Request, res: Response
   } catch (e) {
     console.error('[notifications] subscribe error:', e);
     res.status(500).json({ error: 'Failed to save subscription' });
+  }
+});
+
+function isValidHttpsPushEndpoint(raw: unknown): raw is string {
+  if (typeof raw !== 'string') return false;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 2048) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * POST /api/notifications/rotate-subscription
+ * Body: { oldEndpoint: string, oldAuth?: string, subscription: PushSubscription }
+ *
+ * Вызывается из Service Worker `pushsubscriptionchange`, когда короткоживущая access-cookie
+ * истекла (standalone PWA в фоне). Авторизацией выступает знание секретного oldEndpoint (+ oldAuth).
+ */
+router.post('/rotate-subscription', async (req: Request, res: Response) => {
+  const oldEndpoint = typeof req.body?.oldEndpoint === 'string' ? req.body.oldEndpoint.trim() : '';
+  const oldAuth = typeof req.body?.oldAuth === 'string' ? req.body.oldAuth.trim() : null;
+  const subscription = (req.body?.subscription ?? null) as PushSubscriptionBody | null;
+
+  if (
+    !isValidHttpsPushEndpoint(oldEndpoint) ||
+    !subscription ||
+    !isValidHttpsPushEndpoint(subscription.endpoint) ||
+    !subscription.keys?.p256dh ||
+    !subscription.keys?.auth
+  ) {
+    res.status(400).json({ error: 'Invalid rotation payload' });
+    return;
+  }
+
+  const p256dh = String(subscription.keys.p256dh).trim();
+  const auth = String(subscription.keys.auth).trim();
+  if (!p256dh || !auth || p256dh.length > 512 || auth.length > 512) {
+    res.status(400).json({ error: 'Invalid subscription keys' });
+    return;
+  }
+
+  try {
+    try {
+      await ensurePushSchemaOnce();
+    } catch (schemaErr) {
+      console.warn('[notifications] ensurePushSubscriptionsSchema on rotate failed:', schemaErr);
+    }
+    const userAgent =
+      typeof req.headers['user-agent'] === 'string'
+        ? req.headers['user-agent']
+        : typeof req.body?.userAgent === 'string'
+          ? req.body.userAgent
+          : undefined;
+
+    const result = await rotateSubscription(
+      oldEndpoint,
+      oldAuth,
+      {
+        endpoint: subscription.endpoint.trim(),
+        keys: { p256dh, auth },
+      },
+      userAgent,
+    );
+
+    if (result === 'not_found') {
+      res.status(404).json({ error: 'Previous subscription not found' });
+      return;
+    }
+    if (result === 'unauthorized') {
+      res.status(403).json({ error: 'Subscription credentials mismatch' });
+      return;
+    }
+
+    try {
+      const host = new URL(subscription.endpoint.trim()).host;
+      console.log('[notifications] web push rotate ok', { pushHost: host });
+    } catch {
+      console.log('[notifications] web push rotate ok');
+    }
+    res.status(200).json({ ok: true, status: 'rotated' });
+  } catch (e) {
+    console.error('[notifications] rotate-subscription error:', e);
+    res.status(500).json({ error: 'Failed to rotate subscription' });
   }
 });
 

@@ -375,6 +375,11 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
     return;
   }
 
+  if (req.method === 'POST' && /^\/api\/notifications\/rotate-subscription\/?$/.test(fullPath)) {
+    next();
+    return;
+  }
+
   const sessionRoles = normalizeAppRoles(allRoles.length > 0 ? allRoles : [role], role);
 
   if (isStudioApiPath(fullPath) && authId) {

@@ -80,6 +80,32 @@ async function main(): Promise<void> {
   const denied = await run('member', 'POST', '/api/admin/something');
   assert.equal(denied.status, 403);
 
+  // Фоновая ротация Web Push подписки из SW без активной cookie-сессии.
+  const rotateAnon = await new Promise<{ status: number | null; body: unknown }>((resolve) => {
+    const req = {
+      method: 'POST',
+      originalUrl: '/api/notifications/rotate-subscription',
+      url: '/api/notifications/rotate-subscription',
+      path: '/api/notifications/rotate-subscription',
+      userRole: 'member',
+      authUserRoles: [],
+      authUserId: undefined,
+    } as unknown as RoleReq;
+    let status: number | null = null;
+    const res = {
+      status(code: number) {
+        status = code;
+        return this;
+      },
+      json(payload: unknown) {
+        resolve({ status, body: payload });
+        return this;
+      },
+    } as unknown as Response;
+    enforceRoleAccess(req as Request, res, () => resolve({ status: null, body: 'next' }));
+  });
+  assert.equal(rotateAnon.body, 'next', 'anonymous SW can POST /api/notifications/rotate-subscription');
+
   console.log('roleAccess.calls ok');
 }
 

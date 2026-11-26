@@ -138,6 +138,95 @@ self.addEventListener('push', function (event) {
  * `offline.html` по-прежнему в precache — при необходимости на неё можно вести из приложения.
  */
 
+var PUSH_META_CACHE_NAME = 'push-meta-v1';
+var PUSH_META_KEY = '/__push-meta__';
+
+function arrayBufferToBase64Url(buf) {
+  if (!buf) return '';
+  var bytes = new Uint8Array(buf);
+  var binary = '';
+  for (var i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function serializePushSubscription(sub) {
+  if (!sub) return null;
+  var json = typeof sub.toJSON === 'function' ? sub.toJSON() : {};
+  var keys = json && typeof json.keys === 'object' && json.keys ? Object.assign({}, json.keys) : {};
+  if (!keys.p256dh && typeof sub.getKey === 'function') {
+    keys.p256dh = arrayBufferToBase64Url(sub.getKey('p256dh'));
+  }
+  if (!keys.auth && typeof sub.getKey === 'function') {
+    keys.auth = arrayBufferToBase64Url(sub.getKey('auth'));
+  }
+  var endpoint = typeof json.endpoint === 'string' && json.endpoint ? json.endpoint : sub.endpoint;
+  if (!endpoint || !keys.p256dh || !keys.auth) return null;
+  return {
+    endpoint: endpoint,
+    keys: {
+      p256dh: String(keys.p256dh),
+      auth: String(keys.auth),
+    },
+  };
+}
+
+async function saveLastPushMeta(endpoint, auth) {
+  if (!endpoint || typeof caches === 'undefined') return;
+  try {
+    var cache = await caches.open(PUSH_META_CACHE_NAME);
+    var payload = JSON.stringify({
+      endpoint: String(endpoint),
+      auth: auth ? String(auth) : '',
+      updatedAt: Date.now(),
+    });
+    await cache.put(
+      new Request(new URL(PUSH_META_KEY, self.location.origin).href),
+      new Response(payload, { headers: { 'Content-Type': 'application/json' } }),
+    );
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+async function readLastPushMeta() {
+  if (typeof caches === 'undefined') return null;
+  try {
+    var cache = await caches.open(PUSH_META_CACHE_NAME);
+    var res = await cache.match(new Request(new URL(PUSH_META_KEY, self.location.origin).href));
+    if (!res) return null;
+    var parsed = await res.json();
+    if (!parsed || typeof parsed.endpoint !== 'string' || !parsed.endpoint) return null;
+    return {
+      endpoint: parsed.endpoint,
+      auth: typeof parsed.auth === 'string' ? parsed.auth : '',
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Выполняет запрос из SW с cookie; при 401 один раз обновляет access-cookie через /api/auth/refresh
+ * и повторяет запрос (access-cookie живёт 60 мин, refresh-cookie — 30 дней).
+ */
+async function fetchWithAuthRefresh(url, init) {
+  var res = await fetch(url, init);
+  if (res.status !== 401) return res;
+  try {
+    var refreshRes = await fetch(new URL('/api/auth/refresh', self.location.origin).href, {
+      method: 'POST',
+      credentials: 'include',
+      mode: 'same-origin',
+    });
+    if (refreshRes.ok) {
+      return await fetch(url, init);
+    }
+  } catch (e) {
+    /* ignore */
+  }
+  return res;
+}
+
 function markDeliveryOpenedById(deliveryIdRaw) {
   const deliveryId =
     typeof deliveryIdRaw === 'string'
@@ -148,11 +237,14 @@ function markDeliveryOpenedById(deliveryIdRaw) {
   if (!(deliveryId && /^\d+$/.test(deliveryId))) {
     return Promise.resolve();
   }
-  return fetch(new URL('/api/notifications/deliveries/' + deliveryId + '/open', self.location.origin).href, {
-    method: 'POST',
-    credentials: 'include',
-    mode: 'same-origin',
-  }).catch(function () {});
+  return fetchWithAuthRefresh(
+    new URL('/api/notifications/deliveries/' + deliveryId + '/open', self.location.origin).href,
+    {
+      method: 'POST',
+      credentials: 'include',
+      mode: 'same-origin',
+    },
+  ).catch(function () {});
 }
 
 function markDeliveryDismissedById(deliveryIdRaw) {
@@ -165,11 +257,14 @@ function markDeliveryDismissedById(deliveryIdRaw) {
   if (!(deliveryId && /^\d+$/.test(deliveryId))) {
     return Promise.resolve();
   }
-  return fetch(new URL('/api/notifications/deliveries/' + deliveryId + '/dismiss', self.location.origin).href, {
-    method: 'POST',
-    credentials: 'include',
-    mode: 'same-origin',
-  }).catch(function () {});
+  return fetchWithAuthRefresh(
+    new URL('/api/notifications/deliveries/' + deliveryId + '/dismiss', self.location.origin).href,
+    {
+      method: 'POST',
+      credentials: 'include',
+      mode: 'same-origin',
+    },
+  ).catch(function () {});
 }
 
 self.addEventListener('notificationclick', function (event) {
@@ -188,13 +283,16 @@ self.addEventListener('notificationclick', function (event) {
     const status = event.action === 'confirm' ? 'confirmed' : 'declined';
     if (assignmentId) {
       event.waitUntil(
-        fetch(new URL('/api/media-schedule/assignments/' + assignmentId + '/status', self.location.origin).href, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status }),
-          credentials: 'include',
-          mode: 'same-origin',
-        }).catch(function () {}),
+        fetchWithAuthRefresh(
+          new URL('/api/media-schedule/assignments/' + assignmentId + '/status', self.location.origin).href,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status }),
+            credentials: 'include',
+            mode: 'same-origin',
+          },
+        ).catch(function () {}),
       );
       return;
     }
@@ -269,10 +367,14 @@ self.addEventListener('notificationclick', function (event) {
   );
 });
 
-// Клиент просит очистить шторку (пользователь открыл приложение / прочитал чат).
+// Клиент просит очистить шторку или сохранить метаданные подписки для фоновой ротации.
 self.addEventListener('message', function (event) {
   const msg = event.data;
   if (!msg || typeof msg !== 'object') return;
+  if (msg.type === 'push:remember-subscription' && typeof msg.endpoint === 'string' && msg.endpoint) {
+    event.waitUntil(saveLastPushMeta(msg.endpoint, typeof msg.auth === 'string' ? msg.auth : ''));
+    return;
+  }
   if (msg.type === 'push:clear-all' || msg.type === 'push:clear-tag') {
     event.waitUntil(
       (async function () {
@@ -306,6 +408,18 @@ self.addEventListener('pushsubscriptionchange', function (event) {
   event.waitUntil(
     (async function () {
       try {
+        var oldSerialized = serializePushSubscription(event.oldSubscription || null);
+        var savedMeta = oldSerialized ? null : await readLastPushMeta();
+        var oldEndpoint =
+          (oldSerialized && oldSerialized.endpoint) ||
+          (event.oldSubscription && event.oldSubscription.endpoint) ||
+          (savedMeta && savedMeta.endpoint) ||
+          '';
+        var oldAuth =
+          (oldSerialized && oldSerialized.keys && oldSerialized.keys.auth) ||
+          (savedMeta && savedMeta.auth) ||
+          '';
+
         let newSubscription = event.newSubscription || null;
         if (!newSubscription) {
           let options = event.oldSubscription && event.oldSubscription.options;
@@ -326,17 +440,49 @@ self.addEventListener('pushsubscriptionchange', function (event) {
           }
           newSubscription = await self.registration.pushManager.subscribe(options);
         }
-        const res = await fetch('/api/notifications/subscribe', {
+
+        var payload = serializePushSubscription(newSubscription);
+        if (!payload) {
+          console.warn('[sw] pushsubscriptionchange: failed to serialize new subscription');
+          return;
+        }
+
+        // 1. Пробуем стандартный /subscribe (при 401 автоматически обновляем access-cookie через /auth/refresh).
+        var res = await fetchWithAuthRefresh('/api/notifications/subscribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newSubscription),
+          body: JSON.stringify(payload),
           credentials: 'include',
           mode: 'same-origin',
         });
-        if (!res.ok) {
-          // Не авторизованы в SW (401) — подписка досохранится при следующем открытии приложения.
-          console.warn('[sw] pushsubscriptionchange: subscribe failed', res.status);
+
+        if (res.ok) {
+          await saveLastPushMeta(payload.endpoint, payload.keys.auth);
+          return;
         }
+
+        // 2. Fallback без cookie (standalone PWA, где iOS/браузер очистил cookies):
+        // подтверждаем владение знанием предыдущего секретного endpoint (+ auth).
+        if (oldEndpoint) {
+          var rotateRes = await fetch('/api/notifications/rotate-subscription', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              oldEndpoint: oldEndpoint,
+              oldAuth: oldAuth || undefined,
+              subscription: payload,
+            }),
+            mode: 'same-origin',
+          });
+          if (rotateRes.ok) {
+            await saveLastPushMeta(payload.endpoint, payload.keys.auth);
+            return;
+          }
+          console.warn('[sw] pushsubscriptionchange: rotate-subscription failed', rotateRes.status);
+          return;
+        }
+
+        console.warn('[sw] pushsubscriptionchange: subscribe failed', res.status);
       } catch (e) {
         console.warn('[sw] pushsubscriptionchange failed', e);
       }

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { pushProxyForEndpoint } from '../lib/pushProxy';
 import webpush from 'web-push';
 import { getFirebaseMessaging } from '../config/firebaseAdmin';
@@ -26,6 +27,7 @@ const WEB_PUSH_HTTP_TIMEOUT_MS = Math.min(
 );
 
 let lastPushNetworkErrLogMs = 0;
+let suppressedPushNetworkErrCount = 0;
 const PUSH_NETWORK_ERR_LOG_INTERVAL_MS = 60_000;
 
 function isPushNetworkTimeoutErr(err: unknown): boolean {
@@ -49,6 +51,11 @@ function applyVapid(cfg: VapidConfig | null): void {
     // web-push требует subject вида mailto:… или https://…
     webpush.setVapidDetails(cfg.subject, cfg.publicKey, cfg.privateKey);
     vapidReady = true;
+    if (cfg.subject === 'mailto:admin@example.com') {
+      console.warn(
+        '[push] VAPID_SUBJECT uses fallback mailto:admin@example.com — set VAPID_SUBJECT or PUBLIC_WEB_ORIGIN in .env for reliable Apple/Web Push delivery.',
+      );
+    }
   } catch (e) {
     vapidReady = false;
     console.error('[push] Invalid VAPID configuration — Web Push disabled:', e);
@@ -228,6 +235,80 @@ export async function removeSubscription(memberId: number, endpoint: string): Pr
   );
 }
 
+export type RotateSubscriptionResult = 'rotated' | 'not_found' | 'unauthorized';
+
+function timingSafeStringEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+/**
+ * Безопасная ротация Web Push подписки из фонового SW `pushsubscriptionchange`,
+ * когда короткоживущая access-cookie (60 мин) уже истекла.
+ * Правом на замену служит знание секретного `oldEndpoint` (и при наличии `oldAuth`).
+ */
+export async function rotateSubscription(
+  oldEndpointRaw: string,
+  oldAuthRaw: string | null,
+  newSub: PushSubscriptionData,
+  userAgent?: string,
+): Promise<RotateSubscriptionResult> {
+  const oldEndpoint = String(oldEndpointRaw ?? '').trim();
+  const newEndpoint = String(newSub.endpoint ?? '').trim();
+  const p256dh = String(newSub.keys?.p256dh ?? '').trim();
+  const auth = String(newSub.keys?.auth ?? '').trim();
+  if (!oldEndpoint || !newEndpoint || !p256dh || !auth) {
+    throw new Error('Invalid push subscription rotation payload');
+  }
+  const existing = await query(
+    `SELECT member_id, keys_auth
+     FROM push_subscriptions
+     WHERE endpoint = $1
+     LIMIT 1`,
+    [oldEndpoint],
+  );
+  const row = (existing.rows[0] as { member_id: number; keys_auth: string } | undefined) ?? null;
+  if (!row) return 'not_found';
+
+  const oldAuth = typeof oldAuthRaw === 'string' && oldAuthRaw.trim() ? oldAuthRaw.trim() : null;
+  if (oldAuth && !timingSafeStringEqual(row.keys_auth, oldAuth)) {
+    return 'unauthorized';
+  }
+
+  const normalizedUserAgent =
+    typeof userAgent === 'string' && userAgent.trim().length > 0 ? userAgent.trim() : null;
+
+  if (newEndpoint !== oldEndpoint) {
+    // Удаляем возможный конфликт по новому endpoint перед переименованием старой записи.
+    await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [newEndpoint]);
+  }
+
+  try {
+    await query(
+      `UPDATE push_subscriptions
+       SET endpoint = $1,
+           keys_p256dh = $2,
+           keys_auth = $3,
+           user_agent = COALESCE($4, push_subscriptions.user_agent),
+           last_used_at = NOW()
+       WHERE endpoint = $5 AND member_id = $6`,
+      [newEndpoint, p256dh, auth, normalizedUserAgent, oldEndpoint, row.member_id],
+    );
+  } catch (err) {
+    if (!isMissingPushColumnError(err)) throw err;
+    await query(
+      `UPDATE push_subscriptions
+       SET endpoint = $1, keys_p256dh = $2, keys_auth = $3
+       WHERE endpoint = $4 AND member_id = $5`,
+      [newEndpoint, p256dh, auth, oldEndpoint, row.member_id],
+    );
+  }
+
+  return 'rotated';
+}
+
 export async function getSubscriptionsForMember(memberId: number): Promise<PushSubscriptionData[]> {
   const result = await query(
     `SELECT endpoint, keys_p256dh, keys_auth FROM push_subscriptions WHERE member_id = $1`,
@@ -352,11 +433,25 @@ export async function sendNotificationToSubscription(
       return 'removed';
     } else if (isPushNetworkTimeoutErr(err)) {
       const now = Date.now();
+      suppressedPushNetworkErrCount += 1;
       if (now - lastPushNetworkErrLogMs >= PUSH_NETWORK_ERR_LOG_INTERVAL_MS) {
+        const count = suppressedPushNetworkErrCount;
+        suppressedPushNetworkErrCount = 0;
         lastPushNetworkErrLogMs = now;
+        const endpointHost = (() => {
+          try {
+            return new URL(sub.endpoint).host;
+          } catch {
+            return 'unknown';
+          }
+        })();
         console.warn(
           '[push] Сеть: таймаут/обрыв при отправке в push-сервис (FCM/Web Push). Проверьте исходящий HTTPS с контейнера API, DNS и firewall. Можно увеличить PUSH_REQUEST_TIMEOUT_MS.',
-          err instanceof Error ? err.message : err,
+          {
+            endpointHost,
+            failuresSinceLastLog: count,
+            message: err instanceof Error ? err.message : String(err),
+          },
         );
       }
     } else {

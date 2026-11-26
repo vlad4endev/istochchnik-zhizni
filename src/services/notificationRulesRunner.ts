@@ -59,6 +59,21 @@ function periodKey(rule: NotificationRule, z: ZonedNow): string {
   }
 }
 
+const PUSH_BATCH_SIZE = 20;
+
+async function sendPushInBatches(
+  ids: Iterable<number>,
+  title: string,
+  body: string,
+  payload: Record<string, string>,
+): Promise<void> {
+  const list = Array.from(ids);
+  for (let i = 0; i < list.length; i += PUSH_BATCH_SIZE) {
+    const chunk = list.slice(i, i + PUSH_BATCH_SIZE);
+    await Promise.allSettled(chunk.map((id) => sendPush(id, title, body, payload)));
+  }
+}
+
 async function pushToAllMembers(
   title: string,
   body: string,
@@ -75,9 +90,7 @@ async function pushToAllMembers(
     tag: `rule-${normalizedKind}`,
     ...(extra ?? {}),
   };
-  for (const id of ids) {
-    await sendPush(id, title, body, payload);
-  }
+  await sendPushInBatches(ids, title, body, payload);
 }
 
 async function pushToCoordinators(
@@ -88,14 +101,12 @@ async function pushToCoordinators(
 ): Promise<void> {
   const ids = await getCoordinatorMemberIdsWithPush();
   const normalizedKind = kind.trim().toLowerCase() || 'coordinator';
-  for (const id of ids) {
-    await sendPush(id, title, body, {
-      url,
-      kind: normalizedKind,
-      type: normalizedKind,
-      tag: `rule-${normalizedKind}`,
-    });
-  }
+  await sendPushInBatches(ids, title, body, {
+    url,
+    kind: normalizedKind,
+    type: normalizedKind,
+    tag: `rule-${normalizedKind}`,
+  });
 }
 
 function ymdFromZoned(z: ZonedNow): string {
@@ -204,9 +215,7 @@ async function notifyMissingPrayerNeedForDate(
   const pushType =
     bodyType === 'tomorrow' ? 'missing_prayer_need_tomorrow' : 'missing_prayer_need_today_escalation';
 
-  for (const id of recipients) {
-    await sendPush(id, title, body, { url: '/calendar', type: pushType });
-  }
+  await sendPushInBatches(recipients, title, body, { url: '/calendar', type: pushType });
 }
 
 type BroadcastStartCandidate = {
@@ -441,29 +450,38 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
   }
 }
 
+let rulesTickInFlight = false;
+
 /**
  * Вызывается из минутного крона: при совпадении времени и периода шлёт push по правилам.
  */
 export async function runNotificationRulesTick(): Promise<void> {
-  const doc = await loadNotificationSettings();
-  const tz = doc.timezone || 'Europe/Moscow';
-  const z = getZonedNow(tz);
+  if (rulesTickInFlight) return;
+  rulesTickInFlight = true;
+  try {
+    const doc = await loadNotificationSettings();
+    const tz = doc.timezone || 'Europe/Moscow';
+    const z = getZonedNow(tz);
 
-  for (const rule of doc.rules) {
-    if (!rule.enabled) continue;
-    const hm = parseHm(rule.time);
-    if (!hm || z.hour !== hm.hour || z.minute !== hm.minute) continue;
-    if (!repeatMatches(rule, z)) continue;
+    for (const rule of doc.rules) {
+      if (!rule.enabled) continue;
+      const hm = parseHm(rule.time);
+      if (!hm || z.hour !== hm.hour || z.minute !== hm.minute) continue;
+      if (!repeatMatches(rule, z)) continue;
 
-    const pk = `${rule.id}:${periodKey(rule, z)}`;
-    if (lastFiredPeriod.get(rule.id) === pk) continue;
+      const pk = `${rule.id}:${periodKey(rule, z)}`;
+      if (lastFiredPeriod.get(rule.id) === pk) continue;
 
-    try {
-      const fresh = await loadNotificationSettings();
-      await handleRule(rule, fresh, z);
       lastFiredPeriod.set(rule.id, pk);
-    } catch (e) {
-      console.error('[notifications] rule error', rule.id, e);
+      try {
+        const fresh = await loadNotificationSettings();
+        await handleRule(rule, fresh, z);
+      } catch (e) {
+        lastFiredPeriod.delete(rule.id);
+        console.error('[notifications] rule error', rule.id, e);
+      }
     }
+  } finally {
+    rulesTickInFlight = false;
   }
 }
