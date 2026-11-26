@@ -35,6 +35,17 @@ class MainActivity : FlutterActivity() {
                         startActivity(intent)
                         result.success(null)
                     }
+                    "shareText" -> {
+                        // Системное окно «Поделиться»: стих можно отправить в любой мессенджер.
+                        val text = call.argument<String>("text") ?: ""
+                        val title = call.argument<String>("title") ?: ""
+                        val send = Intent(Intent.ACTION_SEND)
+                            .setType("text/plain")
+                            .putExtra(Intent.EXTRA_TEXT, text)
+                        if (title.isNotEmpty()) send.putExtra(Intent.EXTRA_SUBJECT, title)
+                        startActivity(Intent.createChooser(send, title.ifEmpty { null }))
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }

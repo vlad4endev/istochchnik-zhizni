@@ -23,6 +23,10 @@ class ChapterView extends StatefulWidget {
     required this.onNoteTap,
     this.focusVerse,
     this.bottomPadding = 110,
+    this.bookmarked = const {},
+    this.commentaries = const [],
+    this.activeVerse,
+    this.listen,
   });
 
   final ChapterText text;
@@ -36,6 +40,16 @@ class ChapterView extends StatefulWidget {
   final ValueChanged<BibleNote> onNoteTap;
   final int? focusVerse;
   final double bottomPadding;
+
+  /// Стихи с закладкой — перед номером значок.
+  final Set<int> bookmarked;
+  final List<BibleCommentary> commentaries;
+
+  /// Стих, который сейчас читает озвучка: подсвечивается, текст прокручивается за ним.
+  final int? activeVerse;
+
+  /// Строка «Слушать главу» под заголовком.
+  final Widget? listen;
 
   @override
   State<ChapterView> createState() => _ChapterViewState();
@@ -62,6 +76,39 @@ class _ChapterViewState extends State<ChapterView> {
       _jumped = false;
       _scheduleJump();
     }
+    if (old.activeVerse != widget.activeVerse && widget.activeVerse != null) _followVerse(widget.activeVerse!);
+  }
+
+  /// Озвучка перешла к другому стиху: если он ушёл из поля зрения — подтягиваем текст.
+  void _followVerse(int verse) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final viewport = context.findRenderObject();
+      if (viewport is! RenderBox) return;
+      double? y;
+      if (widget.settings.verseLines) {
+        final box = _verseKeys[verse]?.currentContext?.findRenderObject();
+        if (box is RenderBox) y = box.localToGlobal(Offset.zero).dy;
+      } else {
+        final paragraph = _paragraphKey.currentContext?.findRenderObject();
+        final offset = _verseOffsets[verse];
+        if (paragraph is RenderParagraph && offset != null) {
+          final caret = paragraph.getOffsetForCaret(TextPosition(offset: offset), Rect.zero);
+          y = paragraph.localToGlobal(Offset(0, caret.dy)).dy;
+        }
+      }
+      if (y == null) return;
+      final top = viewport.localToGlobal(Offset.zero).dy;
+      final bottom = top + viewport.size.height;
+      // Нижняя часть закрыта панелью плеера и действий — запас больше, чем сверху.
+      if (y > top + 56 && y < bottom - widget.bottomPadding - 40) return;
+      final target = (_scroll.offset + (y - top) - viewport.size.height * 0.3).clamp(0.0, _scroll.position.maxScrollExtent);
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _scroll.jumpTo(target);
+      } else {
+        _scroll.animateTo(target, duration: const Duration(milliseconds: 320), curve: Curves.easeOut);
+      }
+    });
   }
 
   @override
@@ -105,6 +152,8 @@ class _ChapterViewState extends State<ChapterView> {
   Color get _markColor =>
       widget.palette.isDark ? const Color(0xFFFFD166).withValues(alpha: 0.2) : const Color(0xFFFFD166).withValues(alpha: 0.5);
 
+  Color get _readColor => const Color(0xFFF2B879).withValues(alpha: widget.palette.isDark ? 0.34 : 0.55);
+
   Color get _selectColor => widget.palette.accent.withValues(alpha: widget.palette.isDark ? 0.3 : 0.2);
 
   TextStyle get _body => TextStyle(
@@ -123,6 +172,7 @@ class _ChapterViewState extends State<ChapterView> {
 
   Color? _background(int verse) {
     if (widget.selected.contains(verse)) return _selectColor;
+    if (widget.activeVerse == verse) return _readColor;
     if (widget.highlighted.contains(verse)) return _markColor;
     return null;
   }
@@ -141,6 +191,17 @@ class _ChapterViewState extends State<ChapterView> {
           fontWeight: FontWeight.w800,
           color: widget.palette.accent,
           backgroundColor: background,
+        ),
+      );
+
+  InlineSpan _bookmarkIcon(int verse) => WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
+        child: Semantics(
+          label: 'Закладка у стиха $verse',
+          child: Padding(
+            padding: const EdgeInsets.only(right: 3),
+            child: Icon(Icons.bookmark_rounded, size: widget.settings.fontSize * 0.78, color: const Color(0xFFE0A030)),
+          ),
         ),
       );
 
@@ -180,7 +241,17 @@ class _ChapterViewState extends State<ChapterView> {
           const SizedBox(height: 4),
           Text('Глава ${widget.text.chapter}', style: ChurchType.serifTitle.copyWith(fontSize: 32, color: p.text)),
           const SizedBox(height: 18),
+          if (widget.listen != null) widget.listen!,
           content,
+          if (widget.commentaries.isNotEmpty) ...[
+            const SizedBox(height: 28),
+            Semantics(
+              header: true,
+              child: Text('КОММЕНТАРИИ · ${widget.commentaries.length}', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 1.15, color: p.muted)),
+            ),
+            const SizedBox(height: 10),
+            for (final c in widget.commentaries) _CommentaryCard(commentary: c, palette: p),
+          ],
           if (widget.notes.isNotEmpty) ...[
             const SizedBox(height: 28),
             Text('ЗАМЕТКИ К ГЛАВЕ', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 1.15, color: p.muted)),
@@ -199,6 +270,10 @@ class _ChapterViewState extends State<ChapterView> {
       final bg = _background(verse.number);
       final note = _noteAt(verse.number);
       _verseOffsets[verse.number] = cursor;
+      if (widget.bookmarked.contains(verse.number)) {
+        spans.add(_bookmarkIcon(verse.number));
+        cursor += 1;
+      }
       final number = _numberSpan(verse, bg, () => widget.onVerseTap(verse.number));
       spans.add(number);
       cursor += number.text!.length;
@@ -229,6 +304,7 @@ class _ChapterViewState extends State<ChapterView> {
             child: Text.rich(
               TextSpan(
                 children: [
+                  if (widget.bookmarked.contains(verse.number)) _bookmarkIcon(verse.number),
                   _numberSpan(verse, _background(verse.number), () => widget.onVerseTap(verse.number)),
                   TextSpan(
                     text: verse.text,
@@ -275,6 +351,35 @@ class _NoteCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CommentaryCard extends StatelessWidget {
+  const _CommentaryCard({required this.commentary, required this.palette});
+
+  final BibleCommentary commentary;
+  final ReaderPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = commentary;
+    final head = [c.sourceLabel, if (c.verseStart != null) 'ст. ${c.verseStart}'].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(color: palette.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: palette.border)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(head.toUpperCase(), style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: palette.muted)),
+            if (c.title.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(c.title, style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: palette.text))),
+            Padding(padding: const EdgeInsets.only(top: 4), child: Text(c.body, style: TextStyle(fontSize: 15, height: 1.5, color: palette.text))),
+          ],
         ),
       ),
     );

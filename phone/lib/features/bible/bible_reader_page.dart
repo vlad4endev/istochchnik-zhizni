@@ -1,15 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/church_api.dart';
+import '../../core/share_text.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 import '../songbook/widgets/reader_palette.dart';
+import 'audio/bible_audio_player.dart';
 import 'bible_reader_controller.dart';
 import 'bible_store.dart';
 import 'data/bible_repository.dart';
 import 'logic/quote.dart';
 import 'models/bible_models.dart';
+import 'widgets/audio_widgets.dart';
 import 'widgets/bible_palette.dart';
 import 'widgets/bible_sheets.dart';
 import 'widgets/book_picker.dart';
@@ -28,6 +33,7 @@ class BibleReaderPage extends StatefulWidget {
     this.focusVerse,
     this.onPosition,
     this.store,
+    this.player,
   });
 
   final BibleSource source;
@@ -39,6 +45,9 @@ class BibleReaderPage extends StatefulWidget {
   final int? focusVerse;
   final void Function(ReadingPosition position)? onPosition;
   final BibleStore? store;
+
+  /// Плеер озвучки; по умолчанию — общий на всё приложение (тесты подставляют свой).
+  final BiblePlayer? player;
 
   @override
   State<BibleReaderPage> createState() => _BibleReaderPageState();
@@ -61,16 +70,83 @@ class _BibleReaderPageState extends State<BibleReaderPage> {
       chapter: widget.chapter,
       focusVerse: widget.focusVerse,
       onPosition: widget.onPosition,
+      translations: widget.translations,
+      audio: widget.player,
     );
     _pages = PageController(initialPage: _c.page);
     _c.init();
+    // Пока читалка открыта, после конца озвученной главы листаем на следующую прямо на экране.
+    _c.audio.navigator = _onAutoNext;
+    _c.audio.addListener(_onAudioChanged);
+    _c.addListener(_onSelectionChanged);
+  }
+
+  bool _hadSelection = false;
+
+  /// Плашка «Закладка добавлена» и подобные не должны закрывать панель действий, когда выбирают стихи снова.
+  void _onSelectionChanged() {
+    final has = _c.selected.isNotEmpty;
+    if (has && !_hadSelection && mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    _hadSelection = has;
   }
 
   @override
   void dispose() {
+    if (_c.audio.navigator == _onAutoNext) _c.audio.navigator = null;
+    _c.audio.removeListener(_onAudioChanged);
+    _c.removeListener(_onSelectionChanged);
     _c.dispose();
     _pages.dispose();
     super.dispose();
+  }
+
+  /// Озвучка дошла до конца главы: открываем следующую и включаем её.
+  void _onAutoNext(String slug, int chapter) {
+    final page = _c.index.indexOf(slug, chapter);
+    if (page == null || !mounted) return;
+    _goTo(page);
+    unawaited(_c.listen(pageIndex: page));
+  }
+
+  /// Сбой озвучки (нет сети, запись недоступна) показываем, а не глотаем.
+  void _onAudioChanged() {
+    final problem = _c.audio.problem;
+    if (problem == null || !mounted) return;
+    _c.audio.clearProblem();
+    showMessage(context, problem);
+  }
+
+  Future<void> _openPlayer() => showBiblePlayerSheet(context, player: _c.audio, palette: _palette);
+
+  Future<void> _bookmark() async {
+    try {
+      final result = await _c.toggleBookmarkSelected();
+      if (mounted) showMessage(context, result == BookmarkResult.added ? 'Закладка добавлена' : 'Закладка убрана');
+    } catch (_) {
+      if (mounted) showMessage(context, 'Не удалось сохранить закладку — проверьте интернет.');
+    }
+  }
+
+  Future<void> _share() async {
+    final text = await _c.selectedQuote();
+    if (text.isEmpty) return;
+    final ref = '${_c.current.book.shortName} ${_c.current.chapter}:${verseRanges(_c.selected)}';
+    final opened = await shareText(text, title: ref);
+    if (opened) {
+      _c.clearSelection();
+      return;
+    }
+    // Окно «Поделиться» недоступно — хотя бы копируем, чтобы вставить куда нужно.
+    await Clipboard.setData(ClipboardData(text: text));
+    _c.clearSelection();
+    if (mounted) showMessage(context, 'Скопировано — можно вставить где угодно');
+  }
+
+  Future<void> _listenFromSelection() async {
+    final first = (_c.selected.toList()..sort()).first;
+    _c.clearSelection();
+    final ok = await _c.listen(fromVerse: first);
+    if (!ok && mounted) showMessage(context, 'Для этой главы нет озвучки');
   }
 
   bool get _reduceMotion => MediaQuery.disableAnimationsOf(context);
@@ -179,17 +255,35 @@ class _BibleReaderPageState extends State<BibleReaderPage> {
                           controller: _pages,
                           itemCount: _c.index.count,
                           onPageChanged: _c.onPageChanged,
-                          itemBuilder: (context, i) => _ChapterPage(controller: _c, page: i, palette: p, onNote: _openNote),
+                          itemBuilder: (context, i) => _ChapterPage(controller: _c, page: i, palette: p, onNote: _openNote, onOpenPlayer: _openPlayer),
                         ),
                         Positioned(
                           left: 12,
                           right: 12,
                           bottom: 10 + MediaQuery.paddingOf(context).bottom,
-                          child: AnimatedSwitcher(
-                            duration: Motion.fast,
-                            child: _c.selected.isEmpty
-                                ? _NavBar(controller: _c, palette: p, onPrev: () => _goTo(_c.page - 1, animate: true), onNext: () => _goTo(_c.page + 1, animate: true), onPlace: _pickPlace)
-                                : _SelectionBar(controller: _c, palette: p, onCopy: _copy, onNote: _newNote),
+                          child: ListenableBuilder(
+                            listenable: _c.audio,
+                            builder: (context, _) => Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_c.audio.isActive && _c.selected.isEmpty)
+                                  Padding(padding: const EdgeInsets.only(bottom: 8), child: BibleMiniPlayer(player: _c.audio, palette: p, onOpen: _openPlayer)),
+                                AnimatedSwitcher(
+                                  duration: Motion.fast,
+                                  child: _c.selected.isEmpty
+                                      ? _NavBar(controller: _c, palette: p, onPrev: () => _goTo(_c.page - 1, animate: true), onNext: () => _goTo(_c.page + 1, animate: true), onPlace: _pickPlace)
+                                      : _SelectionBar(
+                                          controller: _c,
+                                          palette: p,
+                                          onCopy: _copy,
+                                          onNote: _newNote,
+                                          onBookmark: _bookmark,
+                                          onShare: _share,
+                                          onListen: _c.hasAudioAt(_c.page) ? _listenFromSelection : null,
+                                        ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -269,7 +363,11 @@ class _Header extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: palette.border)),
-                    child: Text(translation.shortTitle, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: palette.accent)),
+                    // Крупный системный шрифт не должен выдавливать название перевода за край экрана.
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 76),
+                      child: FittedBox(fit: BoxFit.scaleDown, child: Text(translation.shortTitle, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: palette.accent))),
+                    ),
                   ),
                 ),
               ),
@@ -318,12 +416,13 @@ class _IconBox extends StatelessWidget {
 
 /// Одна страница ленты: загрузка, ошибка с «Повторить» или текст главы.
 class _ChapterPage extends StatelessWidget {
-  const _ChapterPage({required this.controller, required this.page, required this.palette, required this.onNote});
+  const _ChapterPage({required this.controller, required this.page, required this.palette, required this.onNote, required this.onOpenPlayer});
 
   final BibleReaderController controller;
   final int page;
   final ReaderPalette palette;
   final ValueChanged<BibleNote> onNote;
+  final VoidCallback onOpenPlayer;
 
   @override
   Widget build(BuildContext context) {
@@ -344,17 +443,26 @@ class _ChapterPage extends StatelessWidget {
           );
         }
         final isCurrent = page == c.page;
-        return ChapterView(
-          text: snapshot.requireData,
-          bookName: entry.book.name,
-          palette: palette,
-          settings: c.settings,
-          selected: isCurrent ? c.selected : const {},
-          highlighted: c.highlightsAt(page),
-          notes: c.notesAt(page),
-          focusVerse: isCurrent ? c.focusVerse : null,
-          onVerseTap: c.toggleVerse,
-          onNoteTap: onNote,
+        // Читаемый стих меняется часто — перерисовывается только текст, а не вся читалка.
+        return ValueListenableBuilder<int?>(
+          valueListenable: c.audio.activeVerse,
+          builder: (context, active, _) => ChapterView(
+            text: snapshot.requireData,
+            bookName: entry.book.name,
+            palette: palette,
+            settings: c.settings,
+            selected: isCurrent ? c.selected : const {},
+            highlighted: c.highlightsAt(page),
+            notes: c.notesAt(page),
+            bookmarked: c.bookmarkedVersesAt(page),
+            commentaries: c.commentariesAt(page),
+            activeVerse: c.isPlayingPage(page) ? active : null,
+            focusVerse: isCurrent ? c.focusVerse : null,
+            bottomPadding: c.audio.isActive ? 190 : 110,
+            listen: ChapterListenRow(controller: c, pageIndex: page, palette: palette, onOpenPlayer: onOpenPlayer),
+            onVerseTap: c.toggleVerse,
+            onNoteTap: onNote,
+          ),
         );
       },
     );
@@ -466,57 +574,121 @@ class _NavBar extends StatelessWidget {
 }
 
 class _SelectionBar extends StatelessWidget {
-  const _SelectionBar({required this.controller, required this.palette, required this.onCopy, required this.onNote});
+  const _SelectionBar({
+    required this.controller,
+    required this.palette,
+    required this.onCopy,
+    required this.onNote,
+    required this.onBookmark,
+    required this.onShare,
+    required this.onListen,
+  });
 
   final BibleReaderController controller;
   final ReaderPalette palette;
   final VoidCallback onCopy;
   final VoidCallback onNote;
+  final VoidCallback onBookmark;
+  final VoidCallback onShare;
+
+  /// null — для главы нет озвучки, кнопки «Слушать» не будет.
+  final VoidCallback? onListen;
 
   @override
   Widget build(BuildContext context) {
     final c = controller;
     final marked = c.selectionAllHighlighted;
+    final bookmarked = c.selectionBookmarked;
     return _Bar(
       key: const ValueKey('selection'),
       palette: palette,
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _BarButton(icon: Icons.close_rounded, label: 'Снять выделение', palette: palette, onTap: c.clearSelection),
-          Expanded(
-            child: Semantics(
-              liveRegion: true,
-              child: Text(
-                'Стихи: ${verseRanges(c.selected)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: palette.secondary),
+          Row(
+            children: [
+              _BarButton(icon: Icons.close_rounded, label: 'Снять выделение', palette: palette, onTap: c.clearSelection),
+              Expanded(
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    'Стихи: ${verseRanges(c.selected)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: palette.secondary),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 48),
+            ],
           ),
-          _BarButton(icon: Icons.copy_rounded, label: 'Копировать', palette: palette, onTap: onCopy),
-          _BarButton(
-            icon: marked ? Icons.highlight_off_rounded : Icons.format_color_fill_rounded,
-            label: marked ? 'Снять подсветку' : 'Подсветить',
-            palette: palette,
-            onTap: c.toggleHighlightSelected,
+          Row(
+            children: [
+              _Action(icon: bookmarked ? Icons.bookmark_remove_rounded : Icons.bookmark_add_outlined, label: bookmarked ? 'Убрать' : 'Закладка', tooltip: bookmarked ? 'Убрать закладку' : 'Закладка', palette: palette, onTap: onBookmark),
+              _Action(icon: Icons.edit_note_rounded, label: 'Заметка', tooltip: 'Заметка', palette: palette, onTap: onNote, accent: true),
+              if (onListen != null) _Action(icon: Icons.play_circle_outline_rounded, label: 'Слушать', tooltip: 'Слушать с этого стиха', palette: palette, onTap: onListen!),
+              _Action(icon: Icons.copy_rounded, label: 'Копия', tooltip: 'Копировать', palette: palette, onTap: onCopy),
+              _Action(icon: marked ? Icons.highlight_off_rounded : Icons.format_color_fill_rounded, label: marked ? 'Снять' : 'Цвет', tooltip: marked ? 'Снять подсветку' : 'Подсветить', palette: palette, onTap: c.toggleHighlightSelected),
+              _Action(icon: Icons.ios_share_rounded, label: 'Отправить', tooltip: 'Поделиться', palette: palette, onTap: onShare),
+            ],
           ),
-          _BarButton(icon: Icons.edit_note_rounded, label: 'Заметка', palette: palette, onTap: onNote, accent: true),
         ],
       ),
     );
   }
 }
 
+/// Действие над выбранными стихами: значок и короткая подпись, чтобы не угадывать по картинке.
+class _Action extends StatelessWidget {
+  const _Action({required this.icon, required this.label, required this.tooltip, required this.palette, required this.onTap, this.accent = false});
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final ReaderPalette palette;
+  final VoidCallback onTap;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: Tooltip(
+          message: tooltip,
+          child: Semantics(
+            button: true,
+            label: tooltip,
+            excludeSemantics: true,
+            child: Material(
+              color: accent ? palette.accent : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onTap,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 54),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, size: 23, color: accent ? palette.onAccent : palette.text),
+                      const SizedBox(height: 2),
+                      Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: accent ? palette.onAccent : palette.muted)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
 class _BarButton extends StatelessWidget {
-  const _BarButton({required this.icon, required this.label, required this.palette, required this.onTap, this.accent = false});
+  const _BarButton({required this.icon, required this.label, required this.palette, required this.onTap});
 
   final IconData icon;
   final String label;
   final ReaderPalette palette;
   final VoidCallback? onTap;
-  final bool accent;
 
   @override
   Widget build(BuildContext context) => Tooltip(
@@ -529,12 +701,12 @@ class _BarButton extends StatelessWidget {
           child: Opacity(
             opacity: onTap == null ? 0.35 : 1,
             child: Material(
-              color: accent ? palette.accent : Colors.transparent,
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(16),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: onTap,
-                child: SizedBox(width: 48, height: 48, child: Icon(icon, size: 24, color: accent ? palette.onAccent : palette.text)),
+                child: SizedBox(width: 48, height: 48, child: Icon(icon, size: 24, color: palette.text)),
               ),
             ),
           ),

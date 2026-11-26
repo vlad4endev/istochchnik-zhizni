@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/json.dart';
 import '../../../core/session.dart';
 import '../models/bible_models.dart';
+import '../models/plan_models.dart';
 import 'book_catalog.dart';
 
 /// Откуда экраны Библии берут данные. Отдельный интерфейс — чтобы проверять без сети.
@@ -29,6 +30,28 @@ abstract class BibleSource {
   });
   Future<BibleNote> updateNote(int id, String body);
   Future<void> deleteNote(int id);
+
+  /// Закладки: без аргументов — все, с главой — только этой главы.
+  Future<List<BibleBookmark>> bookmarks({String? translation, String? bookSlug, int? chapter});
+  Future<BibleBookmark> createBookmark({
+    required String translation,
+    required String bookSlug,
+    required int chapter,
+    required int verseStart,
+    required int verseEnd,
+  });
+  Future<void> deleteBookmark(int id);
+
+  /// Озвучка главы; null — для этой главы записи нет.
+  Future<BibleAudio?> audio(String translation, String bookSlug, int chapter);
+
+  Future<List<BibleCommentary>> commentaries(String translation, String bookSlug, int chapter);
+
+  Future<List<BiblePlan>> plans();
+  Future<BiblePlan> plan(int id);
+  Future<BiblePlan> generatePlan({required String goal, required int days, DateTime? startDate});
+  Future<void> setPlanDay(int planId, int dayIndex, {required bool done});
+  Future<void> deletePlan(int id);
 }
 
 /// Текст Писания не меняется, поэтому прочитанные главы лежат в файлах на телефоне
@@ -236,5 +259,101 @@ class BibleRepository implements BibleSource {
   @override
   Future<void> deleteNote(int id) async {
     await session.dio.delete<Object?>('/api/bible/notes/$id');
+  }
+
+  @override
+  Future<List<BibleBookmark>> bookmarks({String? translation, String? bookSlug, int? chapter}) async {
+    final response = await session.dio.get<Object?>('/api/bible/bookmarks', queryParameters: {
+      if (translation != null && bookSlug != null && chapter != null) ...{
+        'translation': translation,
+        'book': bookSlug,
+        'chapter': chapter,
+      },
+    });
+    return [for (final raw in asList(asMap(response.data)['bookmarks'])) BibleBookmark.fromJson(asMap(raw))];
+  }
+
+  @override
+  Future<BibleBookmark> createBookmark({
+    required String translation,
+    required String bookSlug,
+    required int chapter,
+    required int verseStart,
+    required int verseEnd,
+  }) async {
+    final response = await session.dio.post<Object?>('/api/bible/bookmarks', data: {
+      'translation': translation,
+      'book_slug': bookSlug,
+      'chapter': chapter,
+      'verse_start': verseStart,
+      'verse_end': verseEnd,
+    });
+    return BibleBookmark.fromJson(asMap(response.data));
+  }
+
+  @override
+  Future<void> deleteBookmark(int id) async {
+    await session.dio.delete<Object?>('/api/bible/bookmarks/$id');
+  }
+
+  @override
+  Future<BibleAudio?> audio(String translation, String bookSlug, int chapter) async {
+    try {
+      final response = await session.dio.get<Object?>('/api/bible/audio/$translation/$bookSlug/$chapter');
+      final audio = BibleAudio.fromJson(asMap(response.data));
+      return audio.playable ? audio : null;
+    } on DioException catch (error) {
+      // 404 — записи для этой главы просто нет. Любой другой сбой (нет сети) отдаём наверх:
+      // «записи нет» запоминается, а временный обрыв — нет, и в следующий раз спросим заново.
+      if (error.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<BibleCommentary>> commentaries(String translation, String bookSlug, int chapter) async {
+    final response = await session.dio.get<Object?>('/api/bible/commentaries', queryParameters: {
+      'translation': translation,
+      'book': bookSlug,
+      'chapter': chapter,
+    });
+    return [for (final raw in asList(asMap(response.data)['commentaries'])) BibleCommentary.fromJson(asMap(raw))];
+  }
+
+  @override
+  Future<List<BiblePlan>> plans() async {
+    final response = await session.dio.get<Object?>('/api/bible/plans');
+    return [for (final raw in asList(asMap(response.data)['plans'])) BiblePlan.fromJson(asMap(raw))];
+  }
+
+  @override
+  Future<BiblePlan> plan(int id) async {
+    final response = await session.dio.get<Object?>('/api/bible/plans/$id');
+    return BiblePlan.fromJson(asMap(response.data));
+  }
+
+  @override
+  Future<BiblePlan> generatePlan({required String goal, required int days, DateTime? startDate}) async {
+    final response = await session.dio.post<Object?>(
+      '/api/bible/plans/generate',
+      data: {
+        'goal': goal,
+        'days': days,
+        if (startDate != null) 'start_date': '${startDate.year.toString().padLeft(4, '0')}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}',
+      },
+      // Составление плана на сервере может занять время.
+      options: Options(receiveTimeout: const Duration(minutes: 2)),
+    );
+    return BiblePlan.fromJson(asMap(response.data));
+  }
+
+  @override
+  Future<void> setPlanDay(int planId, int dayIndex, {required bool done}) async {
+    await session.dio.patch<Object?>('/api/bible/plans/$planId/days/$dayIndex', data: {'completed': done});
+  }
+
+  @override
+  Future<void> deletePlan(int id) async {
+    await session.dio.delete<Object?>('/api/bible/plans/$id');
   }
 }

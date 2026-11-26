@@ -6,6 +6,7 @@ import '../../core/session.dart';
 import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart';
 import '../songbook/widgets/song_row.dart' show highlighted;
+import 'audio/bible_audio_player.dart';
 import 'bible_controller.dart';
 import 'bible_reader_page.dart';
 import 'bible_store.dart';
@@ -13,17 +14,24 @@ import 'data/bible_repository.dart';
 import 'logic/bible_ref.dart';
 import 'logic/verse_marks.dart';
 import 'models/bible_models.dart';
+import 'models/plan_models.dart';
 import 'notes_page.dart';
+import 'plans_page.dart';
+import 'widgets/audio_widgets.dart';
 import 'widgets/bible_palette.dart';
 import 'widgets/bible_sheets.dart';
 import 'widgets/book_picker.dart';
+import 'widgets/verse_of_day_card.dart';
 
 /// Раздел «Библия»: поиск по ссылке и по словам, «продолжить чтение», книги по заветам.
 class BiblePage extends StatefulWidget {
-  const BiblePage({super.key, this.source});
+  const BiblePage({super.key, this.source, this.player});
 
   /// Для тестов; в приложении источник создаётся из сессии.
   final BibleSource? source;
+
+  /// Плеер озвучки; по умолчанию общий на всё приложение.
+  final BiblePlayer? player;
 
   @override
   State<BiblePage> createState() => _BiblePageState();
@@ -32,6 +40,7 @@ class BiblePage extends StatefulWidget {
 class _BiblePageState extends State<BiblePage> {
   late final BibleSource _source;
   late final BibleController _c;
+  late final BiblePlayer _player = widget.player ?? BiblePlayer.instance;
   final _search = TextEditingController();
   final _focus = FocusNode();
 
@@ -64,6 +73,7 @@ class _BiblePageState extends State<BiblePage> {
         chapter: chapter,
         focusVerse: verse,
         onPosition: _c.remember,
+        player: _player,
       ),
     );
   }
@@ -84,15 +94,35 @@ class _BiblePageState extends State<BiblePage> {
     if (picked != null) await _c.setTranslation(picked.code);
   }
 
-  void _openNotes() {
+  void _openNotes({SavedTab tab = SavedTab.notes}) {
     pushPage(
       context,
       BibleNotesPage(
+        initialTab: tab,
         load: () => _source.notes(),
         onOpen: (note) => _open(note.bookSlug, note.chapter, verse: note.verseStart, translation: note.translation),
+        loadBookmarks: () => _source.bookmarks(),
+        onOpenBookmark: (b) => _open(b.bookSlug, b.chapter, verse: b.verseStart, translation: b.translation),
+        deleteBookmark: (b) => _source.deleteBookmark(b.id),
       ),
     );
   }
+
+  void _openPlans() {
+    pushPage(
+      context,
+      BiblePlansPage(
+        source: _source,
+        onOpenRef: (PlanRef ref) => _open(ref.bookSlug, ref.chapter, verse: ref.verseStart),
+      ),
+    );
+  }
+
+  Future<void> _openPlayer() => showBiblePlayerSheet(
+        context,
+        player: _player,
+        palette: biblePaletteFor(BibleTheme.auto, Theme.of(context).brightness),
+      );
 
   void _clearSearch() {
     _search.clear();
@@ -116,6 +146,16 @@ class _BiblePageState extends State<BiblePage> {
               child: _SearchField(controller: _search, focus: _focus, onChanged: _c.setQuery),
             ),
             Expanded(child: _content()),
+            // Озвучка продолжает играть, пока человек выбирает, что читать дальше.
+            ListenableBuilder(
+              listenable: _player,
+              builder: (context, _) => _player.isActive
+                  ? Padding(
+                      padding: EdgeInsets.fromLTRB(Space.lg, 4, Space.lg, 10 + MediaQuery.paddingOf(context).bottom),
+                      child: BibleMiniPlayer(player: _player, palette: biblePaletteFor(BibleTheme.auto, Theme.of(context).brightness), onOpen: _openPlayer),
+                    )
+                  : const SizedBox.shrink(),
+            ),
           ],
         ),
       ),
@@ -148,6 +188,12 @@ class _BiblePageState extends State<BiblePage> {
     return SheetList(
       gap: Space.lg,
       children: [
+        VerseOfDayCard(
+          source: _source,
+          translation: _c.translation,
+          books: _c.books,
+          onOpen: (slug, chapter, verse) => _open(slug, chapter, verse: verse),
+        ),
         if (position != null)
           _ContinueCard(position: position, translation: _c.translation, onTap: () => _open(position.bookSlug, position.chapter, verse: position.verse > 1 ? position.verse : null, translation: position.translation))
         else
@@ -172,6 +218,15 @@ class _BiblePageState extends State<BiblePage> {
               ),
             ],
           ),
+        Row(
+          children: [
+            Expanded(child: FeatureTile(icon: Icons.sticky_note_2_outlined, label: 'Заметки', centered: true, tone: Tone.wine, onTap: () => _openNotes())),
+            const SizedBox(width: Space.sm),
+            Expanded(child: FeatureTile(icon: Icons.bookmark_border_rounded, label: 'Закладки', centered: true, tone: Tone.amber, onTap: () => _openNotes(tab: SavedTab.bookmarks))),
+            const SizedBox(width: Space.sm),
+            Expanded(child: FeatureTile(icon: Icons.event_note_rounded, label: 'Планы', centered: true, tone: Tone.teal, onTap: _openPlans)),
+          ],
+        ),
         if (_c.translations.where((t) => t.hasText).length > 1) _TranslationRow(translation: _c.translation, onTap: _pickTranslation),
         BookGrid(books: _c.books, colors: PickerColors.fromChurch(palette), onPick: _pickBook, currentSlug: position?.bookSlug),
       ],
