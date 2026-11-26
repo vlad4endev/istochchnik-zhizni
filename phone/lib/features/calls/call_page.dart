@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:material_ui/material_ui.dart' hide ConnectionState;
 import 'package:provider/provider.dart';
 
 import '../../core/church_api.dart';
@@ -13,6 +13,7 @@ import '../../ui/kit/kit.dart';
 import '../../ui/widgets.dart' show showMessage;
 import 'logic/call_access.dart';
 import 'logic/call_layout.dart';
+import 'logic/call_rejoin.dart';
 import 'logic/call_status.dart';
 import 'logic/meeting_logic.dart';
 import 'widgets/call_stage.dart';
@@ -62,7 +63,7 @@ class CallPage extends StatefulWidget {
   State<CallPage> createState() => _CallPageState();
 }
 
-class _CallPageState extends State<CallPage> {
+class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   final Room _room = Room();
   SessionController? _session;
   String? _callId;
@@ -87,6 +88,8 @@ class _CallPageState extends State<CallPage> {
       ''; // что сейчас делает подключение — видно на экране, если оно долгое
   Timer? _poll;
   bool _started = false;
+  bool _rejoining = false; // возвращаемся в комнату после обрыва связи
+  int _rejoinAttempts = 0;
   StreamSubscription<Map<String, dynamic>>? _callEvents;
 
   @override
@@ -99,6 +102,7 @@ class _CallPageState extends State<CallPage> {
         : widget.inviteToken != null
         ? ((widget.inviteMedia?.isVideo ?? false) && widget.camOn)
         : widget.video;
+    WidgetsBinding.instance.addObserver(this);
     _room.addListener(_refresh);
     // Подписки на треки, смена камеры/микрофона и «говорит» приходят событиями комнаты.
     _events = _room.createListener()
@@ -107,12 +111,19 @@ class _CallPageState extends State<CallPage> {
         if (event is RoomDisconnectedEvent &&
             _joined &&
             !_leaving &&
-            !_closing) {
-          _finish(
-            event.reason == DisconnectReason.clientInitiated
-                ? null
-                : _disconnectMessage(event.reason),
-          );
+            !_closing &&
+            !_rejoining) {
+          // Свернули приложение (например, чтобы отправить ссылку в мессенджер) или моргнула сеть —
+          // звонок на сервере жив, возвращаемся в комнату, а не закрываем экран.
+          if (shouldRejoinAfterDisconnect(event.reason)) {
+            unawaited(_rejoin());
+          } else {
+            _finish(
+              event.reason == DisconnectReason.clientInitiated
+                  ? null
+                  : _disconnectMessage(event.reason),
+            );
+          }
         }
         _refresh();
       });
@@ -126,6 +137,62 @@ class _CallPageState extends State<CallPage> {
     if (!_started && (!widget.incoming || widget.autoAccept)) {
       _started = true;
       _connect();
+    }
+  }
+
+  /// Вернулись в приложение: пока оно было свёрнуто, система могла оборвать связь с комнатой.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    if (!_joined || _leaving || _closing || _rejoining) return;
+    if (_room.connectionState == ConnectionState.disconnected) {
+      unawaited(_rejoin());
+    }
+  }
+
+  /// Вход в комнату заново по свежему токену: звонок на сервере не завершался.
+  Future<void> _rejoin() async {
+    if (_rejoining || _leaving || _closing || !mounted) return;
+    final id = _callId;
+    if (id == null || id.isEmpty) return;
+    _rejoining = true;
+    _refresh();
+    try {
+      while (_rejoinAttempts < maxRejoinAttempts && mounted && !_leaving && !_closing) {
+        _rejoinAttempts++;
+        await Future<void>.delayed(rejoinDelay(_rejoinAttempts));
+        if (!mounted || _leaving || _closing) return;
+        try {
+          final api = ChurchApi(_session ?? context.read<SessionController>());
+          final status = endMessageForStatus(await api.callStatus(id));
+          if (status != null) {
+            _finish(status);
+            return;
+          }
+          final body = await api.callToken(id);
+          final url = str(body['url']);
+          final token = str(body['token']);
+          if (url.isEmpty || token.isEmpty) continue;
+          await _room
+              .connect(
+                url,
+                token,
+                fastConnectOptions: FastConnectOptions(
+                  microphone: TrackOption(enabled: !_muted),
+                  camera: TrackOption(enabled: _camOn),
+                ),
+              )
+              .timeout(const Duration(seconds: 20));
+          _rejoinAttempts = 0;
+          return;
+        } catch (_) {
+          /* нет сети или сервер недоступен — следующая попытка */
+        }
+      }
+      _finish('Связь со звонком потеряна');
+    } finally {
+      _rejoining = false;
+      if (mounted) _refresh();
     }
   }
 
@@ -431,6 +498,7 @@ class _CallPageState extends State<CallPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _callEvents?.cancel();
     _ticker?.cancel();
     _poll?.cancel();
@@ -459,6 +527,7 @@ class _CallPageState extends State<CallPage> {
   );
 
   String _statusText(int others, bool isMeeting) {
+    if (_rejoining) return 'Переподключаемся…';
     if (others == 0) {
       _peerSince = null;
       return waitingStatus(

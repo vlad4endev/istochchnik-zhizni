@@ -2,6 +2,7 @@ import 'package:dio/dio.dart' show DioException, FormData, MultipartFile, Option
 
 import '../../../core/json.dart';
 import '../../../core/session.dart';
+import '../logic/send_retry.dart';
 import '../models/chat_models.dart';
 
 /// Всё, что экран чата берёт с сервера. Интерфейс нужен тестам: контроллер не знает про Dio.
@@ -65,13 +66,23 @@ class ChatApi implements ChatSource {
 
   @override
   Future<ChatMessage?> send(String conversationId, String text, {String? replyTo, String payloadType = 'text', Map<String, dynamic>? payload}) async {
-    final data = await _send('POST', '$_base/conversations/${Uri.encodeComponent(conversationId)}/messages', data: {
+    // Один идентификатор на все попытки: если ответ потерялся, а сообщение уже создано, повтор вернёт его же.
+    final body = {
       'content': text,
       'replyToMessageId': ?replyTo,
+      'clientMsgId': newClientMsgId(),
       if (payloadType != 'text') 'payloadType': payloadType,
       'payload': ?payload,
-    });
-    return ChatMessage.tryParse(data);
+    };
+    final path = '$_base/conversations/${Uri.encodeComponent(conversationId)}/messages';
+    for (var attempt = 1;; attempt++) {
+      try {
+        return ChatMessage.tryParse(await _send('POST', path, data: body));
+      } catch (e) {
+        if (attempt >= sendAttempts || !isTransientSendError(e)) rethrow;
+        await Future<void>.delayed(sendRetryDelay(attempt));
+      }
+    }
   }
 
   @override
