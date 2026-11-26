@@ -48,6 +48,14 @@ import impersonationRoutes from './routes/impersonationRoutes';
 import syncRoutes from './routes/syncRoutes';
 import { analyticsMiddleware } from './middleware/analyticsMiddleware';
 import { diagnosticsRouter } from './diagnostics/routes/diagnostics.router';
+import { recordRequest } from './diagnostics/monitor/metrics';
+import {
+  initSystemWatchdog,
+  markCleanShutdown,
+  noteUnhandledRejection,
+  notifyAdminsAboutCrash,
+  onHttp5xx,
+} from './diagnostics/monitor/watchdog';
 import {
   attachRealtimeWebSocket,
   initMessengerFanoutPublisherOnly,
@@ -294,6 +302,11 @@ app.use((req, res, next) => {
   }
   res.on('finish', () => {
     const status = res.statusCode;
+    const durationMs = Date.now() - startedAt;
+    recordRequest(status, durationMs, req.method, targetPath);
+    if (status >= 500) {
+      onHttp5xx(req.method, targetPath, status);
+    }
     const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
     const authReq = req as RequestWithAuthUser;
     const logContext: Record<string, unknown> = {
@@ -312,7 +325,7 @@ app.use((req, res, next) => {
       request_method: req.method,
       request_path: targetPath,
       status_code: status,
-      duration_ms: Date.now() - startedAt,
+      duration_ms: durationMs,
       user_id: authReq.authUserId,
       ip: req.ip,
       user_agent: req.get('user-agent') ?? '',
@@ -498,6 +511,46 @@ if (hasSpaIndex) {
   });
 }
 
+// Глобальный обработчик неперехваченных ошибок Express: логируем и передаём в мониторинг.
+app.use(
+  (
+    err: unknown,
+    req: ExpressRequest,
+    res: express.Response,
+    next: express.NextFunction,
+  ) => {
+    if (res.headersSent) {
+      next(err);
+      return;
+    }
+    const status =
+      typeof (err as { status?: unknown })?.status === 'number'
+        ? Number((err as { status: number }).status)
+        : typeof (err as { statusCode?: unknown })?.statusCode === 'number'
+          ? Number((err as { statusCode: number }).statusCode)
+          : 500;
+    const message = err instanceof Error ? err.message : String(err);
+    const targetPath = (req.originalUrl || req.url || req.path || '').split('?')[0] || '';
+    if (status >= 500) {
+      console.error(`[express] unhandled error on ${req.method} ${targetPath}:`, err);
+      onHttp5xx(req.method, targetPath, status, message);
+      void writeAppLog({
+        level: 'error',
+        scope: 'express',
+        event: 'express.unhandled_error',
+        message: `Ошибка маршрута ${req.method} ${targetPath}: ${message}`,
+        request_method: req.method,
+        request_path: targetPath,
+        status_code: status,
+        context: { stack: err instanceof Error ? (err.stack ?? null) : null },
+      });
+    }
+    res.status(status).json({
+      error: status >= 500 ? 'Внутренняя ошибка сервера' : message,
+    });
+  },
+);
+
 async function start(): Promise<void> {
   if (process.env.DATABASE_URL) {
     if (skipDbInitOnStart) {
@@ -654,6 +707,7 @@ async function start(): Promise<void> {
   server.listen(Number(PORT), () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.log('[realtime] Notify WebSocket: /api/realtime (мессенджер — отдельный сервис)');
+    initSystemWatchdog();
     void writeAppLog({
       level: 'info',
       scope: 'boot',
@@ -662,6 +716,21 @@ async function start(): Promise<void> {
       context: { port: Number(PORT) },
     });
   });
+
+  let shuttingDown = false;
+  const handleGracefulShutdown = (signal: NodeJS.Signals) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[runtime] Received ${signal}, shutting down cleanly...`);
+    void markCleanShutdown(signal).finally(() => {
+      server.close(() => {
+        process.exit(0);
+      });
+      setTimeout(() => process.exit(0), 5000).unref();
+    });
+  };
+  process.on('SIGTERM', () => handleGracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => handleGracefulShutdown('SIGINT'));
 }
 
 start().catch((err) => {
@@ -673,12 +742,17 @@ start().catch((err) => {
     message: 'Не удалось запустить сервер',
     context: { error: err instanceof Error ? err.message : String(err) },
   });
-  process.exit(1);
+  const bootErrDetail =
+    err instanceof Error ? `${err.message}\n${(err.stack ?? '').slice(0, 600)}` : String(err);
+  void notifyAdminsAboutCrash('bootFailed', bootErrDetail).finally(() => {
+    process.exit(1);
+  });
 });
 
 process.on('unhandledRejection', (reason) => {
   const msg = reason instanceof Error ? reason.message : String(reason);
   console.error('[runtime] Unhandled rejection:', reason);
+  noteUnhandledRejection(reason);
   void writeAppLog({
     level: 'error',
     scope: 'runtime',
@@ -690,6 +764,10 @@ process.on('unhandledRejection', (reason) => {
 
 process.on('uncaughtException', (error) => {
   console.error('[runtime] Uncaught exception:', error);
+  void notifyAdminsAboutCrash(
+    'uncaughtException',
+    `${error.message}\n${(error.stack ?? '').slice(0, 600)}`,
+  );
   void writeAppLog({
     level: 'error',
     scope: 'runtime',

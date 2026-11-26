@@ -2,18 +2,9 @@ import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ServerDiagnosticResult } from '../types';
+import { readSystemMemoryInfo } from '../monitor/metrics';
 
 const execFileAsync = promisify(execFile);
-
-function extractJson(raw: string): unknown {
-  const objectMatch = raw.match(/\{[\s\S]*\}/);
-  const arrayMatch = raw.match(/\[[\s\S]*\]/);
-  const candidate = objectMatch?.[0] ?? arrayMatch?.[0];
-  if (!candidate) {
-    throw new Error('Claude response does not contain JSON payload');
-  }
-  return JSON.parse(candidate);
-}
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -24,13 +15,12 @@ function sumCpuTimes(snapshot: os.CpuInfo[]): { idle: number; total: number } {
   let total = 0;
   for (const cpu of snapshot) {
     idle += cpu.times.idle;
-    total +=
-      cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.idle + cpu.times.irq;
+    total += cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.idle + cpu.times.irq;
   }
   return { idle, total };
 }
 
-async function sampleCpuUsage(sampleMs = 500): Promise<number> {
+async function sampleCpuUsage(sampleMs = 350): Promise<number> {
   const start = sumCpuTimes(os.cpus());
   await wait(sampleMs);
   const end = sumCpuTimes(os.cpus());
@@ -48,85 +38,77 @@ async function readDiskUsageK(): Promise<ServerDiagnosticResult['disk']> {
       .map((line) => line.trim())
       .filter(Boolean);
     if (lines.length < 2) return null;
-    const parts = lines[1].split(/\s+/);
+    const parts = lines[1]!.split(/\s+/);
     if (parts.length < 6) return null;
     const usagePercent = Number(String(parts[4]).replace('%', ''));
     return {
-      filesystem: parts[0],
+      filesystem: parts[0]!,
       totalKb: Number(parts[1]) || 0,
       usedKb: Number(parts[2]) || 0,
       availableKb: Number(parts[3]) || 0,
       usagePercent: Number.isFinite(usagePercent) ? usagePercent : 0,
-      mountPoint: parts[5],
+      mountPoint: parts[5]!,
     };
   } catch {
     return null;
   }
 }
 
-async function buildAiRecommendations(snapshot: ServerDiagnosticResult): Promise<string[]> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return ['ANTHROPIC_API_KEY не задан. AI-рекомендации недоступны.'];
-  }
+function buildDeterministicServerRecommendations(snapshot: ServerDiagnosticResult): string[] {
+  const recs: string[] = [];
+  const cores = Math.max(1, os.cpus().length);
+  const load1 = snapshot.runtime.loadAverage[0] ?? 0;
 
-  const prompt = [
-    'You are a senior SRE.',
-    'Given server metrics, return PURE JSON only (no markdown fences).',
-    'Schema: { "recommendations": string[] }',
-    'Focus on actionable, concrete, prioritized recommendations.',
-    JSON.stringify(snapshot, null, 2),
-  ].join('\n');
-
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    if (!response.ok) {
-      const errorText = await response.text();
-      return [`AI-рекомендации недоступны: HTTP ${response.status} ${errorText.slice(0, 120)}`];
-    }
-    const json = (await response.json()) as { content?: Array<{ text?: string }> };
-    const rawText = json.content?.map((item) => item.text ?? '').join('\n') ?? '';
-    const parsed = extractJson(rawText) as { recommendations?: unknown };
-    if (!Array.isArray(parsed.recommendations)) {
-      return ['Claude вернул ответ без рекомендаций.'];
-    }
-    return parsed.recommendations.map((item) => String(item));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return [`AI-рекомендации недоступны: ${message}`];
+  if (snapshot.cpu.usagePercent >= 85) {
+    recs.push(
+      `Высокая загрузка CPU (${snapshot.cpu.usagePercent.toFixed(1)}%): проверьте тяжёлые запросы, фоновые задачи бекапа/сканирования или увеличьте vCPU.`,
+    );
   }
+  if (load1 / cores >= 1.5) {
+    recs.push(
+      `Load Average 1m (${load1.toFixed(2)}) превышает количество ядер (${cores}): возможна очередь процессов или I/O-ожидание.`,
+    );
+  }
+  if (snapshot.memory.usagePercent >= 88) {
+    recs.push(
+      `Оперативная память занята на ${snapshot.memory.usagePercent.toFixed(1)}%: проверьте утечки памяти, размер контейнеров и кеши PostgreSQL/Redis.`,
+    );
+  }
+  if (snapshot.disk && snapshot.disk.usagePercent >= 85) {
+    const availGb = (snapshot.disk.availableKb / 1024 / 1024).toFixed(2);
+    recs.push(
+      `Диск заполнен на ${snapshot.disk.usagePercent.toFixed(1)}% (осталось ${availGb} GB): очистите старые локальные бекапы, логи Docker и временные загрузки.`,
+    );
+  }
+  if (snapshot.runtime.processUptimeSec < 120) {
+    recs.push(
+      `Процесс недавно перезапускался (uptime ${Math.round(snapshot.runtime.processUptimeSec)} с) — проверьте журнал на наличие крашей или свежего деплоя.`,
+    );
+  }
+  if (recs.length === 0) {
+    recs.push(
+      'Ресурсы сервера (CPU, RAM, диск, Load Average) в норме. Критичных отклонений не обнаружено.',
+    );
+  }
+  return recs;
 }
 
 export async function collectServerDiagnostics(): Promise<ServerDiagnosticResult> {
-  const [cpuUsagePercent, disk] = await Promise.all([sampleCpuUsage(500), readDiskUsageK()]);
-  const totalBytes = os.totalmem();
-  const freeBytes = os.freemem();
-  const usedBytes = totalBytes - freeBytes;
-  const memoryUsagePercent = totalBytes > 0 ? Number(((usedBytes / totalBytes) * 100).toFixed(2)) : 0;
+  const [cpuUsagePercent, disk] = await Promise.all([sampleCpuUsage(350), readDiskUsageK()]);
+  const sysMem = readSystemMemoryInfo();
+  const usedBytes = Math.max(0, sysMem.totalBytes - sysMem.availableBytes);
 
   const result: ServerDiagnosticResult = {
     timestamp: new Date().toISOString(),
     cpu: {
       usagePercent: cpuUsagePercent,
-      sampledOverMs: 500,
+      sampledOverMs: 350,
     },
     memory: {
-      totalBytes,
-      freeBytes,
+      totalBytes: sysMem.totalBytes,
+      freeBytes: sysMem.availableBytes,
       usedBytes,
-      usagePercent: memoryUsagePercent,
+      usagePercent: sysMem.usagePercent,
     },
     disk,
     runtime: {
@@ -141,6 +123,6 @@ export async function collectServerDiagnostics(): Promise<ServerDiagnosticResult
     recommendations: [],
   };
 
-  result.recommendations = await buildAiRecommendations(result);
+  result.recommendations = buildDeterministicServerRecommendations(result);
   return result;
 }

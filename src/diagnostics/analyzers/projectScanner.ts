@@ -2,7 +2,49 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ProjectScanResult } from '../types';
 
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist']);
+const SKIP_DIRS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'build',
+  'uploads',
+  'backups',
+  'release',
+  'coverage',
+  '.cache',
+  '.next',
+  '.gradle',
+  'Pods',
+  'tmp',
+]);
+
+const TEXT_EXTENSIONS = new Set([
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+  '.json',
+  '.sql',
+  '.prisma',
+  '.css',
+  '.scss',
+  '.html',
+  '.md',
+  '.yml',
+  '.yaml',
+  '.sh',
+  '.env',
+  '.example',
+  '.dart',
+  '.kt',
+  '.swift',
+  '.xml',
+  '.toml',
+]);
+
+const MAX_TEXT_READ_BYTES = 1024 * 1024; // 1 MB — защита от бинарников и огромных дампов
 
 async function exists(filePath: string): Promise<boolean> {
   try {
@@ -18,7 +60,14 @@ function normalizeExt(fileName: string): string {
   return ext || '[no-ext]';
 }
 
-async function readLineCount(filePath: string): Promise<number> {
+function isTestFileName(fileName: string): boolean {
+  return /\.(test|spec)\.(ts|tsx|js|jsx|mjs)$/i.test(fileName);
+}
+
+async function readLineCount(filePath: string, sizeBytes: number, ext: string): Promise<number> {
+  if (sizeBytes <= 0 || sizeBytes > MAX_TEXT_READ_BYTES || !TEXT_EXTENSIONS.has(ext)) {
+    return 0;
+  }
   try {
     const data = await fs.readFile(filePath, 'utf8');
     if (!data) return 0;
@@ -44,12 +93,18 @@ export async function scanProject(targetDir: string): Promise<ProjectScanResult>
   let filesScanned = 0;
   let directoriesScanned = 0;
   let linesOfCode = 0;
+  let foundTestFile = false;
 
   async function walk(currentDir: string): Promise<void> {
     directoriesScanned += 1;
-    const entries = await fs.readdir(currentDir, { withFileTypes: true });
+    let entries;
+    try {
+      entries = await fs.readdir(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
     for (const entry of entries) {
-      if (entry.name.startsWith('.') && entry.name !== '.env' && entry.name !== '.env.example') {
+      if (entry.name.startsWith('.') && entry.name !== '.env' && entry.name !== '.env.example' && entry.name !== '.env.local.example') {
         if (entry.isDirectory()) continue;
       }
       if (entry.isDirectory() && SKIP_DIRS.has(entry.name)) continue;
@@ -59,19 +114,29 @@ export async function scanProject(targetDir: string): Promise<ProjectScanResult>
         await walk(fullPath);
         continue;
       }
+      if (!entry.isFile()) continue;
 
       filesScanned += 1;
       const ext = normalizeExt(entry.name);
       byExtension[ext] = (byExtension[ext] ?? 0) + 1;
+      if (!foundTestFile && isTestFileName(entry.name)) {
+        foundTestFile = true;
+      }
 
-      const stat = await fs.stat(fullPath);
-      const lines = await readLineCount(fullPath);
-      linesOfCode += lines;
-      largestFiles.push({
-        path: path.relative(rootDir, fullPath),
-        sizeBytes: stat.size,
-        lines,
-      });
+      try {
+        const stat = await fs.stat(fullPath);
+        const lines = await readLineCount(fullPath, stat.size, ext);
+        linesOfCode += lines;
+        if (TEXT_EXTENSIONS.has(ext) && stat.size <= MAX_TEXT_READ_BYTES) {
+          largestFiles.push({
+            path: path.relative(rootDir, fullPath),
+            sizeBytes: stat.size,
+            lines,
+          });
+        }
+      } catch {
+        // skip unreadable/vanished files
+      }
     }
   }
 
@@ -105,12 +170,17 @@ export async function scanProject(targetDir: string): Promise<ProjectScanResult>
     linesOfCode,
     byExtension,
     hasTests:
+      foundTestFile ||
       (await exists(path.join(rootDir, 'test'))) ||
       (await exists(path.join(rootDir, 'tests'))) ||
       (await exists(path.join(rootDir, '__tests__'))),
-    hasDocker: (await exists(path.join(rootDir, 'Dockerfile'))) || (await exists(path.join(rootDir, 'docker-compose.yml'))),
+    hasDocker:
+      (await exists(path.join(rootDir, 'Dockerfile'))) ||
+      (await exists(path.join(rootDir, 'docker-compose.yml'))),
     hasGitignore: await exists(path.join(rootDir, '.gitignore')),
-    hasEnvExample: (await exists(path.join(rootDir, '.env.example'))) || (await exists(path.join(rootDir, '.env.local.example'))),
+    hasEnvExample:
+      (await exists(path.join(rootDir, '.env.example'))) ||
+      (await exists(path.join(rootDir, '.env.local.example'))),
     packageDependenciesCount,
     packageDevDependenciesCount,
     topLargestFiles,

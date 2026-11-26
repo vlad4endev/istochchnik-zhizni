@@ -14,6 +14,7 @@ import {
   processCoordinatorTelegramScenariosDue,
 } from '../services/coordinatorTelegramScenariosService';
 import { processMusicScheduleMailingDue } from '../services/musicScheduleMailingService';
+import { recordCronHeartbeat } from '../diagnostics/monitor/metrics';
 
 type CuratorWeekKind = 'current' | 'next';
 
@@ -84,9 +85,12 @@ export function initPushCronJobs() {
   cron.schedule(
     '* * * * *',
     async () => {
+      const tickStart = Date.now();
+      let tickError: string | undefined;
       try {
         await runNotificationRulesTick();
       } catch (e) {
+        tickError = e instanceof Error ? e.message : String(e);
         console.error('[CRON] notification rules tick', e);
       }
       try {
@@ -131,7 +135,15 @@ export function initPushCronJobs() {
           }
         }
       } catch (e) {
+        tickError = tickError ?? (e instanceof Error ? e.message : String(e));
         console.error('[CRON] music schedule mailing tick', e);
+      } finally {
+        recordCronHeartbeat(
+          'Уведомления и рассылки (1м)',
+          !tickError,
+          Date.now() - tickStart,
+          tickError,
+        );
       }
     },
     { timezone: 'UTC' },

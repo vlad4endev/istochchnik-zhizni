@@ -7,6 +7,7 @@ import {
   runDriveRetentionCleanup,
 } from '../services/backupService';
 import { loadBackupSettingsDocument } from '../services/backupSettingsService';
+import { recordCronHeartbeat } from '../diagnostics/monitor/metrics';
 
 let scheduledTask: ReturnType<typeof cron.schedule> | null = null;
 let lastSettingsKey = '';
@@ -40,13 +41,16 @@ async function runAutoBackupTick(): Promise<void> {
   if (!settings.auto_enabled) return;
 
   console.log('[CRON] backup: старт автобекапа');
+  const startedAt = Date.now();
   try {
     const result = await createFullBackup({
       sendTelegram: settings.telegram_send,
       trigger: 'auto',
     });
+    recordCronHeartbeat('Автобекап БД', true, Date.now() - startedAt);
     console.log(`[CRON] backup: OK ${result.id}`);
   } catch (error) {
+    recordCronHeartbeat('Автобекап БД', false, Date.now() - startedAt, error);
     console.error('[CRON] backup failed:', error);
   }
 }

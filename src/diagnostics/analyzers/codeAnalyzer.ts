@@ -1,3 +1,4 @@
+import { chatCompletion } from '../../ai/llmClient';
 import { CodeAnalysisResult, type DiagnosticIssue, type SeverityLevel } from '../types';
 
 interface AnalyzeCodeInput {
@@ -6,7 +7,7 @@ interface AnalyzeCodeInput {
   language?: string;
 }
 
-interface ClaudeJsonShape {
+interface LlmCodeAuditShape {
   summary?: string;
   score?: number;
   recommendations?: string[];
@@ -24,18 +25,18 @@ function extractJson(raw: string): unknown {
   const arrayMatch = raw.match(/\[[\s\S]*\]/);
   const candidate = objectMatch?.[0] ?? arrayMatch?.[0];
   if (!candidate) {
-    throw new Error('Claude response does not contain JSON payload');
+    throw new Error('Ответ модели не содержит JSON-объекта');
   }
   return JSON.parse(candidate);
 }
 
-function normalizeScore(value: unknown, fallback = 50): number {
+function normalizeScore(value: unknown, fallback = 75): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(100, Math.max(0, Math.round(parsed)));
 }
 
-function normalizeIssues(issues: ClaudeJsonShape['issues']): DiagnosticIssue[] {
+function normalizeIssues(issues: LlmCodeAuditShape['issues']): DiagnosticIssue[] {
   if (!Array.isArray(issues)) return [];
   return issues.map((issue, index) => {
     const severity = issue?.severity;
@@ -54,32 +55,105 @@ function normalizeIssues(issues: ClaudeJsonShape['issues']): DiagnosticIssue[] {
   });
 }
 
-function buildFallbackResult(input: AnalyzeCodeInput, reason: string): CodeAnalysisResult {
+function runStaticHeuristicAudit(input: AnalyzeCodeInput, fallbackReason?: string): CodeAnalysisResult {
+  const code = input.code;
+  const issues: DiagnosticIssue[] = [];
+  let score = 95;
+
+  const pushIssue = (
+    severity: SeverityLevel,
+    penalty: number,
+    title: string,
+    description: string,
+    suggestion: string,
+    category: string,
+  ) => {
+    score -= penalty;
+    issues.push({
+      id: `static-${issues.length + 1}`,
+      severity,
+      title,
+      description,
+      suggestion,
+      category,
+    });
+  };
+
+  if (/\beval\s*\(|new\s+Function\s*\(/.test(code)) {
+    pushIssue(
+      'CRITICAL',
+      30,
+      'Динамическое исполнение кода (eval / Function)',
+      'Обнаружен вызов eval() или new Function(), что создаёт риск RCE / XSS.',
+      'Замените на безопасный парсинг или явную логику.',
+      'security',
+    );
+  }
+  if (/(?:api[_-]?key|secret|password|token)\s*[:=]\s*['"][^'"]{10,}['"]/i.test(code)) {
+    pushIssue(
+      'CRITICAL',
+      25,
+      'Возможный хардкод секрета в коде',
+      'Найдено присваивание строкового литерала ключу/паролю/токену.',
+      'Вынесите секрет в переменные окружения (.env).',
+      'security',
+    );
+  }
+  if (/SELECT\s+\*/i.test(code)) {
+    pushIssue(
+      'MEDIUM',
+      8,
+      'Использование SELECT * в SQL-запросе',
+      'SELECT * тянет лишние колонки и ломается при изменении схемы.',
+      'Явно перечислите необходимые поля в запросе.',
+      'performance',
+    );
+  }
+  if (/query\s*\(\s*`[^`]*\$\{/.test(code)) {
+    pushIssue(
+      'HIGH',
+      20,
+      'Возможная SQL-инъекция через шаблонную строку',
+      'Интерполяция `${...}` внутри SQL-запроса может привести к SQL-инъекции.',
+      'Используйте параметризованные запросы ($1, $2, ...).',
+      'security',
+    );
+  }
+  const consoleMatches = code.match(/console\.log\s*\(/g);
+  if (consoleMatches && consoleMatches.length >= 5) {
+    pushIssue(
+      'LOW',
+      5,
+      `Много отладочных console.log (${consoleMatches.length})`,
+      'Избыточный вывод в stdout зашумляет логи продакшена.',
+      'Используйте структурированное логирование writeAppLog или удалите отладку.',
+      'maintainability',
+    );
+  }
+
   return {
     mode: input.mode ?? 'general',
     language: input.language ?? 'typescript',
-    summary: `AI-анализ временно недоступен: ${reason}`,
-    score: 50,
-    issues: [],
-    recommendations: [
-      'Проверьте ANTHROPIC_API_KEY в окружении.',
-      'Повторите запрос позже или уменьшите размер сниппета.',
-    ],
+    summary:
+      issues.length > 0
+        ? `Статический анализ выявил замечаний: ${issues.length}.${fallbackReason ? ` (ИИ-провайдер: ${fallbackReason})` : ''}`
+        : `Статический анализ не нашёл очевидных проблем.${fallbackReason ? ` (ИИ-провайдер: ${fallbackReason})` : ''}`,
+    score: Math.max(0, Math.min(100, score)),
+    issues,
+    recommendations:
+      issues.length > 0
+        ? issues.map((i) => i.suggestion)
+        : ['Для более глубокого разбора включите ИИ в Админке → Интеграции → ИИ.'],
     fallback: true,
   };
 }
 
 export async function analyzeCodeWithClaude(input: AnalyzeCodeInput): Promise<CodeAnalysisResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return buildFallbackResult(input, 'не задан ANTHROPIC_API_KEY');
-  }
-
   const mode = input.mode ?? 'general';
   const language = input.language ?? 'typescript';
   const prompt = [
     'You are a senior static code auditor.',
-    'Analyze the provided code for bugs, security issues and performance problems.',
+    'Analyze the provided code for bugs, security issues and performance problems. Respond in Russian.',
     'Return PURE JSON only (no markdown, no code fences).',
     'JSON schema:',
     '{',
@@ -103,29 +177,12 @@ export async function analyzeCodeWithClaude(input: AnalyzeCodeInput): Promise<Co
   ].join('\n');
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
+    const modelText = await chatCompletion([{ role: 'user', content: prompt }], {
+      skipSystemPrompt: true,
+      max_tokens: 1800,
+      temperature: 0.2,
     });
-
-    if (!response.ok) {
-      const text = await response.text();
-      return buildFallbackResult(input, `HTTP ${response.status}: ${text.slice(0, 200)}`);
-    }
-
-    const raw = (await response.json()) as { content?: Array<{ text?: string }> };
-    const modelText = raw.content?.map((item) => item.text ?? '').join('\n').trim() ?? '';
-    const parsed = extractJson(modelText) as ClaudeJsonShape;
-
+    const parsed = extractJson(modelText) as LlmCodeAuditShape;
     return {
       mode,
       language,
@@ -139,6 +196,6 @@ export async function analyzeCodeWithClaude(input: AnalyzeCodeInput): Promise<Co
     };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    return buildFallbackResult(input, reason);
+    return runStaticHeuristicAudit(input, reason);
   }
 }
