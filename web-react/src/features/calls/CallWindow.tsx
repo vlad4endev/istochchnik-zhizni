@@ -41,6 +41,7 @@ import {
 import {
   IcChevronsDown,
   IcCopy,
+  IcMessage,
   IcLayoutSpeaker,
   IcLayoutGrid,
   IcMic,
@@ -57,6 +58,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 import { BodyPortal } from '../../components/BodyPortal';
+import { isBackLayerOnTop, useBackLayer } from '../../lib/backLayers';
 import { emitAppToast } from '../../lib/uiFeedback';
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
 import { subscribeRealtimeMessages } from '../../lib/realtimeWsClient';
@@ -90,27 +92,35 @@ import {
   connectionQualityTone,
 } from './callConnectionQuality';
 import { startCallRing, stopCallRing, unlockCallAudio } from './callRingtone';
-import { copyInviteShare, formatInviteShareText, shareInviteLink } from './inviteShare';
+import { copyInviteShare, formatInviteShareText } from './inviteShare';
 import { MeetingAvatar } from './MeetingAvatar';
+import { ShareInviteSheet } from './ShareInviteSheet';
 import { useCallStore, type ActiveCallState } from './callStore';
 import { useNetworkChangeToast } from './useNetworkChangeToast';
 import './calls.css';
 
-function MinimizeCallButton({ className }: { className?: string }) {
+/** Свернуть звонок и открыть список чатов (звонок остаётся в фоне, сверху — плашка «вернуться»). */
+function useMinimizeToChats(): () => void {
   const navigate = useNavigate();
   const minimizeCall = useCallStore((s) => s.minimizeCall);
+  return useCallback(() => {
+    // Запись истории, оставленную окном звонка, заменяем — иначе «Назад» пришлось бы жать дважды.
+    const replace = isBackLayerOnTop();
+    minimizeCall();
+    void navigate('/messenger', { replace });
+  }, [minimizeCall, navigate]);
+}
+
+function MinimizeCallButton({ className }: { className?: string }) {
+  const minimizeToChats = useMinimizeToChats();
 
   return (
     <button
       type="button"
       className={['call-minimize-btn', className].filter(Boolean).join(' ')}
-      onClick={() => {
-        minimizeCall();
-        // Open chats list (not a conversation) so the Stories-style call ring is visible on mobile.
-        void navigate('/messenger');
-      }}
-      aria-label="Свернуть звонок и продолжить пользоваться приложением"
-      title="Свернуть"
+      onClick={minimizeToChats}
+      aria-label="Свернуть звонок и вернуться в чаты — звонок продолжится"
+      title="Свернуть — звонок продолжится"
     >
       <IcChevronsDown size={20} strokeWidth={2.3} aria-hidden />
     </button>
@@ -446,6 +456,8 @@ function CallControls({
   const [mediaBusy, setMediaBusy] = useState(false);
   const [leaveMenuOpen, setLeaveMenuOpen] = useState(false);
   const leaveWrapRef = useRef<HTMLDivElement | null>(null);
+  const minimizeToChats = useMinimizeToChats();
+  const remoteCount = useRemoteParticipants().length;
 
   useEffect(() => {
     if (!leaveMenuOpen) return;
@@ -623,6 +635,17 @@ function CallControls({
           <div className="call-leave-menu" role="menu" aria-label="Выход из встречи">
             <button
               type="button"
+              className="call-leave-menu__btn call-leave-menu__btn--primary"
+              role="menuitem"
+              onClick={() => {
+                setLeaveMenuOpen(false);
+                minimizeToChats();
+              }}
+            >
+              Свернуть — звонок продолжится
+            </button>
+            <button
+              type="button"
               className="call-leave-menu__btn"
               role="menuitem"
               onClick={() => {
@@ -630,7 +653,7 @@ function CallControls({
                 onHangup();
               }}
             >
-              Выйти из встречи
+              {remoteCount === 0 ? 'Выйти и закрыть встречу' : 'Выйти из встречи'}
             </button>
             <button
               type="button"
@@ -1513,6 +1536,7 @@ function RoomStage({
 function MeetingInviteBar({ callId, onCollapse }: { callId: string; onCollapse: () => void }) {
   const inviteUrl = useCallStore((s) => s.activeCall?.inviteUrl ?? null);
   const meetingTitle = useCallStore((s) => s.activeCall?.peerName?.trim() || 'Встреча');
+  const mediaType = useCallStore((s) => (s.activeCall?.callType === 'audio' ? 'audio' : 'video'));
   const setInviteUrl = useCallStore((s) => s.setInviteUrl);
   const [busy, setBusy] = useState(false);
 
@@ -1543,15 +1567,9 @@ function MeetingInviteBar({ callId, onCollapse }: { callId: string; onCollapse: 
     });
   }, [displayUrl, meetingTitle]);
 
-  const share = useCallback(async () => {
-    if (!displayUrl) return;
-    const result = await shareInviteLink(meetingTitle, displayUrl);
-    if (result === 'copied') {
-      emitAppToast('Название и ссылка скопированы', 'success');
-    } else if (result === 'failed') {
-      emitAppToast('Не удалось поделиться ссылкой', 'error');
-    }
-  }, [displayUrl, meetingTitle]);
+  const minimizeToChats = useMinimizeToChats();
+  const [shareOpen, setShareOpen] = useState(false);
+  const closeShare = useCallback(() => setShareOpen(false), []);
 
   return (
     <div className="call-invite-bar" role="dialog" aria-label="Ссылка для подключения">
@@ -1565,7 +1583,7 @@ function MeetingInviteBar({ callId, onCollapse }: { callId: string; onCollapse: 
       </button>
       <p className="call-invite-bar__title">{meetingTitle}</p>
       <p className="call-invite-bar__hint">
-        При шаринге уйдёт название и ссылка — отправьте в чат или мессенджер
+        «Поделиться» отправит приглашение в выбранные чаты от вашего имени. Выходить из звонка не нужно.
       </p>
       <code className="call-invite-bar__url" title={displayUrl || undefined}>
         {busy && !displayUrl
@@ -1588,12 +1606,23 @@ function MeetingInviteBar({ callId, onCollapse }: { callId: string; onCollapse: 
           type="button"
           className="call-invite-btn call-invite-btn--primary"
           disabled={!displayUrl}
-          onClick={() => void share()}
+          onClick={() => setShareOpen(true)}
         >
           <IcShare size={18} strokeWidth={2.2} aria-hidden />
           Поделиться
         </button>
       </div>
+      <button type="button" className="call-invite-bar__minimize" onClick={minimizeToChats}>
+        <IcMessage size={16} aria-hidden />
+        Свернуть звонок и открыть чаты
+      </button>
+      <ShareInviteSheet
+        open={shareOpen}
+        onClose={closeShare}
+        title={meetingTitle}
+        url={displayUrl}
+        mediaType={mediaType}
+      />
     </div>
   );
 }
@@ -2388,6 +2417,10 @@ export function CallWindow() {
       activeCall.status !== 'ended' &&
       !uiMinimized,
   );
+
+  const minimizeCall = useCallStore((s) => s.minimizeCall);
+  // Системное «Назад» / свайп сворачивает звонок, а не уводит со страницы: так звонок не теряется.
+  useBackLayer(callUiExpanded, minimizeCall);
 
   useEffect(() => {
     if (!callUiExpanded) {

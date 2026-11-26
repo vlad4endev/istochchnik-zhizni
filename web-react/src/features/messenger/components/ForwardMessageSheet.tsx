@@ -3,11 +3,9 @@ import { createPortal } from 'react-dom';
 import { LuCheck, LuLoaderCircle, LuSearch, LuX } from 'react-icons/lu';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { emitAppToast } from '../../../lib/uiFeedback';
-import {
-  forwardMessage,
-  type ConversationListItem,
-} from '../api/messengerApi';
+import { forwardMessage } from '../api/messengerApi';
 import { useChatStore } from '../chatStore';
+import { conversationAvatar, conversationTitle } from '../conversationDisplay';
 
 type ForwardMessageSheetProps = {
   open: boolean;
@@ -16,20 +14,6 @@ type ForwardMessageSheetProps = {
   /** Exclude current chat from the list (still allowed by API). */
   sourceConversationId?: string;
 };
-
-function conversationTitle(c: ConversationListItem): string {
-  if (c.type === 'private' && c.other_member) {
-    const om = c.other_member;
-    const fl = `${om.first_name ?? ''} ${om.last_name ?? ''}`.trim();
-    return fl || om.name || `Участник ${om.id}`;
-  }
-  return c.title?.trim() || (c.type === 'channel' ? 'Канал' : 'Группа');
-}
-
-function conversationAvatar(c: ConversationListItem): string | null {
-  if (c.type === 'private' && c.other_member?.avatar_url) return c.other_member.avatar_url;
-  return c.avatar_url;
-}
 
 export function ForwardMessageSheet({
   open,

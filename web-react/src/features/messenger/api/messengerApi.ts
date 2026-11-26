@@ -299,11 +299,13 @@ export async function sendMessage(
   clientMsgId?: string | null,
   payloadType?: MessagePayloadType,
   payload?: MessagePayload,
+  opts?: { silentErrorToast?: boolean },
 ): Promise<MessageWithSender> {
   // chat id — в path (`:id` на бэке). user id не передаём: apiClient добавляет Authorization: Bearer <token>.
   const { data } = await apiClient.post<MessageWithSender>(
     `${BASE}/conversations/${encodeURIComponent(conversationId)}/messages`,
     { content, replyToMessageId, clientMsgId, payloadType, payload },
+    opts?.silentErrorToast ? { silentErrorToast: true } : undefined,
   );
   return data;
 }

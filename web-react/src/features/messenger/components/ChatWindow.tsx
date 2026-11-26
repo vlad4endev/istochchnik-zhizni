@@ -25,7 +25,7 @@ import {
   shouldListAssistantConversation,
 } from '../messengerChannelKinds';
 import { useCallStore } from '../../calls/callStore';
-import { ActiveCallStoryChip } from '../../calls/ActiveCallStoryChip';
+import { ActiveCallBanner } from '../../calls/ActiveCallBanner';
 import { requestCallNotificationsFromUserGesture } from '../../calls/incomingCallBackground';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { canAccessMessengerAssistantRoles, useAuthStore } from '../../auth/authStore';
@@ -1337,7 +1337,9 @@ export function ChatWindow({
         </div>
       </header>
 
-      <ActiveCallStoryChip />
+      <div className="shrink-0 md:hidden">
+        <ActiveCallBanner />
+      </div>
 
       <div className="tg-chat-window__body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {!isDraft && pinnedMessages.length > 0 ? (

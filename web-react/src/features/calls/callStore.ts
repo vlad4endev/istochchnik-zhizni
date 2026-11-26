@@ -20,6 +20,8 @@ export interface ActiveCallState {
   /** Prefs from pre-join lobby (join link / create meeting). Applied on LiveKit connect. */
   initialMicOn?: boolean;
   initialCamOn?: boolean;
+  /** Локальный момент начала звонка (мс) — для таймера в плашке «вернуться в звонок». */
+  startedAt?: number;
 }
 
 interface CallStore {
@@ -57,6 +59,7 @@ export const useCallStore = create<CallStore>((set) => ({
         status: call.status ?? 'calling',
         initialMicOn: call.initialMicOn ?? true,
         initialCamOn: call.initialCamOn ?? call.callType === 'video',
+        startedAt: call.startedAt ?? Date.now(),
       },
       uiMinimized: false,
       isMuted: call.initialMicOn === false,
@@ -124,6 +127,7 @@ export const useCallStore = create<CallStore>((set) => ({
           // Не затирать уже выданный токен при navigate на /call/:id
           livekitUrl: extras.livekitUrl ?? (sameCall ? s.activeCall?.livekitUrl ?? null : null),
           livekitToken: extras.livekitToken ?? (sameCall ? s.activeCall?.livekitToken ?? null : null),
+          startedAt: (sameCall ? s.activeCall?.startedAt : undefined) ?? extras.startedAt ?? Date.now(),
           initialMicOn:
             extras.initialMicOn ??
             (sameCall ? s.activeCall?.initialMicOn : undefined) ??

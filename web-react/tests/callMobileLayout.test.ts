@@ -42,12 +42,8 @@ describe('mobile call layout', () => {
     expect(css).toMatch(/call-window--minimized/);
   });
 
-  it('в чатах есть Stories-кольцо для возврата в свёрнутый звонок', () => {
-    const chip = readFileSync(join(root, 'src/features/calls/ActiveCallStoryChip.tsx'), 'utf8');
-    const chipCss = readFileSync(
-      join(root, 'src/features/calls/ActiveCallStoryChip.module.css'),
-      'utf8',
-    );
+  it('в чатах есть плашка возврата в свёрнутый звонок', () => {
+    const banner = readFileSync(join(root, 'src/features/calls/ActiveCallBanner.tsx'), 'utf8');
     const chatList = readFileSync(
       join(root, 'src/features/messenger/components/ChatList.tsx'),
       'utf8',
@@ -57,15 +53,19 @@ describe('mobile call layout', () => {
       'utf8',
     );
     const callWindow = readFileSync(join(root, 'src/features/calls/CallWindow.tsx'), 'utf8');
-    expect(chip).toMatch(/uiMinimized/);
-    expect(chip).toMatch(/expandCall/);
-    expect(chip).toMatch(/\/call\/\$\{/);
-    expect(chip).toMatch(/Вернуться в звонок/);
-    expect(chipCss).toMatch(/\.ring\b/);
-    expect(chipCss).toMatch(/call-ring-pulse/);
-    expect(chatList).toMatch(/ActiveCallStoryChip/);
-    expect(chatWindow).toMatch(/ActiveCallStoryChip/);
-    expect(callWindow).toMatch(/navigate\('\/messenger'\)/);
+    expect(banner).toMatch(/uiMinimized/);
+    expect(banner).toMatch(/expandCall/);
+    expect(banner).toMatch(/\/call\/\$\{/);
+    expect(banner).toMatch(/Вернуться в звонок/);
+    expect(chatList).toMatch(/ActiveCallBanner/);
+    expect(chatWindow).toMatch(/ActiveCallBanner/);
+    expect(callWindow).toMatch(/navigate\('\/messenger', \{ replace \}\)/);
+  });
+
+  it('«Назад» сворачивает звонок, а «Поделиться» отправляет приглашение в чаты', () => {
+    const callWindow = readFileSync(join(root, 'src/features/calls/CallWindow.tsx'), 'utf8');
+    expect(callWindow).toMatch(/useBackLayer\(callUiExpanded,\s*minimizeCall\)/);
+    expect(callWindow).toMatch(/<ShareInviteSheet/);
   });
 
   it('резервирует место под кнопки и safe-area на мобиле', () => {

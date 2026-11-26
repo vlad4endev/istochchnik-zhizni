@@ -10,7 +10,7 @@ import { MessengerPlainText, renderMessengerPlainText } from '../messengerPlainT
 import { LuBot, LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2, LuSearch } from 'react-icons/lu';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { isAssistantMessengerChannel } from '../messengerChannelKinds';
-import { ActiveCallStoryChip } from '../../calls/ActiveCallStoryChip';
+import { ActiveCallBanner } from '../../calls/ActiveCallBanner';
 
 interface ChatListProps {
   onSelect: (id: string) => void;
@@ -86,6 +86,7 @@ export const ChatList = memo(function ChatList({ onSelect, activeId }: ChatListP
   if (conversationsLoading && !conversationsLoaded) {
     return (
       <div className="tg-chatlist-root flex min-h-0 flex-1 flex-col bg-[var(--surface-elevated)]">
+        <ActiveCallBanner />
         <div className="shrink-0 border-b border-stone-200/60 px-3 pb-2 pt-2 md:px-4">
           <div className="flex items-center gap-1 rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] p-1 shadow-sm">
             <SkeletonBox height="32px" radius="10px" />
@@ -113,7 +114,7 @@ export const ChatList = memo(function ChatList({ onSelect, activeId }: ChatListP
   if (conversations.length === 0) {
     return (
       <div className="tg-chatlist-root flex min-h-0 flex-1 flex-col bg-[var(--surface-elevated)]">
-        <ActiveCallStoryChip />
+        <ActiveCallBanner />
         <div className="flex h-full w-full flex-col items-center justify-center p-8 text-center">
           <p className="text-sm font-semibold text-[var(--text-secondary)]">Нет чатов. Нажмите +, чтобы начать.</p>
         </div>
@@ -123,6 +124,7 @@ export const ChatList = memo(function ChatList({ onSelect, activeId }: ChatListP
 
   return (
     <div ref={listRootRef} className="tg-chatlist-root flex min-h-0 flex-1 flex-col bg-[var(--surface-elevated)]">
+      <ActiveCallBanner />
       <div className="tg-chatlist-toolbar shrink-0">
         <ChatListSearch value={listSearchQuery} onChange={setListSearchQuery} />
         <div className="tg-chatlist-tabs-slot">
@@ -136,8 +138,6 @@ export const ChatList = memo(function ChatList({ onSelect, activeId }: ChatListP
           />
         </div>
       </div>
-
-      <ActiveCallStoryChip />
 
       <div className="tg-chatlist-scroll chats-scroll-area min-h-0 flex-1 overflow-y-auto bg-[var(--surface-elevated)] [scrollbar-gutter:stable] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
         <ul className="min-h-full w-full list-none bg-[var(--surface-elevated)]" role="list">

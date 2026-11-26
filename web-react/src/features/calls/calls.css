@@ -1026,6 +1026,10 @@
   color: #ff8a80;
 }
 
+.call-leave-menu__btn--primary {
+  color: #7dd3fc;
+}
+
 .call-ctrl--hangup .call-ctrl__icon {
   width: 52px;
   height: 52px;
@@ -2586,6 +2590,30 @@ html[data-telegram-webapp='1'][data-telegram-call='1'] .app-bottom-nav {
 .call-invite-bar__actions .call-invite-btn {
   flex: 1 1 auto;
   min-width: 8rem;
+}
+
+.call-invite-bar__minimize {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.call-invite-bar__minimize:hover,
+.call-invite-bar__minimize:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
 }
 
 .call-route-page {
