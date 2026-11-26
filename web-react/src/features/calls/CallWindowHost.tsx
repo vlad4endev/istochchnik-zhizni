@@ -1,6 +1,9 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
+
+import { useAuthStore } from '../auth/authStore';
 
 import { useCallStore } from './callStore';
+import { restoreActiveCall } from './restoreActiveCall';
 
 /**
  * LiveKit + CallWindow тяжёлые (~сотни KB). Раньше тянулись в entry через Layout
@@ -16,6 +19,12 @@ const CallWindow = lazy(async () => {
 });
 
 export function CallWindowHost() {
+  const hasSession = useAuthStore((s) => Boolean(s.token?.trim()));
+  // Вкладку могла выгрузить ОС, пока пользователь отправлял ссылку-приглашение — возвращаем звонок.
+  useEffect(() => {
+    if (hasSession) void restoreActiveCall();
+  }, [hasSession]);
+
   /**
    * `ringing_in` тоже триггерит preload: к моменту Accept чанк LiveKit уже в полёте.
    * Сам CallWindow при ringing_in возвращает null (UI — IncomingCallOverlay).

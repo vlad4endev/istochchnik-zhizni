@@ -2,7 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import type { MutableRefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
+import { useChatStore, isDraftPrivateConversationId, isUploadedFileQueuedForRetry } from '../chatStore';
 import {
   LuPaperclip,
   LuSmile,
@@ -786,7 +786,9 @@ export function ChatInput({
             size: u.size,
           })),
         });
-        if (!sent) return;
+        if (!sent && !(first && isUploadedFileQueuedForRetry(first.url))) return;
+        // Если отправка не удалась, сообщение уже в очереди и уйдёт само — не держим копию в композере,
+        // иначе повторный тап создаст дубль.
         setReplyingTo(null);
         setReplyTo(null);
         setContent('');
@@ -874,7 +876,7 @@ export function ChatInput({
           }
         }
         const sent = await sendMessage(conversationId, text, numericReplyId, payloadType, payload);
-        if (!sent) return;
+        if (!sent && !isUploadedFileQueuedForRetry(uploaded.url)) return;
         setReplyingTo(null);
         setReplyTo(null);
         setContent('');

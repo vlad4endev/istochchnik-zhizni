@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { clearPersistedCall, persistCall } from './callPersistence';
 import type { CallMediaType, CallPublic } from './callsApi';
 
 export interface ActiveCallState {
@@ -143,3 +144,13 @@ export const useCallStore = create<CallStore>((set) => ({
       };
     }),
 }));
+
+// Переживает выгрузку страницы мобильной ОС (см. callPersistence / restoreActiveCall).
+useCallStore.subscribe((state, prev) => {
+  const call = state.activeCall;
+  if (call?.status === 'active') {
+    persistCall(call);
+    return;
+  }
+  if ((!call && prev.activeCall) || call?.status === 'ended') clearPersistedCall();
+});

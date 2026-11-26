@@ -1,3 +1,4 @@
+import { outboxHasUploadedUrl } from './outboxQueueUtils';
 import { create } from 'zustand';
 import axios from 'axios';
 import { canAccessMessengerAssistantSession, useAuthStore } from '../auth/authStore';
@@ -450,6 +451,11 @@ function saveOutboxSnapshot(get: () => ChatState, outbox: OutboxItem[]): void {
   } catch {
     /* ignore */
   }
+}
+
+/** true, если загруженный файл уже стоит в очереди повторной отправки (см. outboxQueueUtils). */
+export function isUploadedFileQueuedForRetry(url: string): boolean {
+  return outboxHasUploadedUrl(inMemoryOutbox, url);
 }
 
 function enqueueOutbox(get: () => ChatState, item: OutboxItem): number {

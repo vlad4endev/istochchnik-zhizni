@@ -114,7 +114,9 @@ export async function fetchCall(callId: string): Promise<CallPublic> {
     const { data } = await apiClient.get<{ call: CallPublic }>(`/api/calls/${callId}`);
     return data.call;
   } catch (e) {
-    throw new Error(errMessage(e, 'Звонок не найден'));
+    const err = new Error(errMessage(e, 'Звонок не найден')) as Error & { status?: number };
+    err.status = (e as { response?: { status?: number } }).response?.status;
+    throw err;
   }
 }
 
