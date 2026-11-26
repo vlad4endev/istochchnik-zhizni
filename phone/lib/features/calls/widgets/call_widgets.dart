@@ -233,8 +233,27 @@ class SignalBars extends StatelessWidget {
 }
 
 /// Верхняя строка встречи: название, качество связи, число участников, переключатель раскладки.
+/// «Свернуть»: звонок остаётся, а приложение можно пользоваться — например, отправить ссылку в чат.
+class MinimizeButton extends StatelessWidget {
+  const MinimizeButton({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+        key: const ValueKey('call-minimize'),
+        tooltip: 'Свернуть звонок',
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        onPressed: onTap,
+        icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30, color: Colors.white),
+      );
+}
+
 class CallTopBar extends StatelessWidget {
-  const CallTopBar({super.key, required this.title, required this.count, required this.layout, required this.onLayout, this.quality, this.statusText});
+  const CallTopBar({super.key, required this.title, required this.count, required this.layout, required this.onLayout, this.quality, this.statusText, this.onMinimize});
+
+  /// Свернуть звонок: экран закрывается, а звонок продолжается (вернуться — по плашке сверху).
+  final VoidCallback? onMinimize;
 
   final String title;
   final int count;
@@ -246,10 +265,11 @@ class CallTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 12, 6),
+      padding: EdgeInsets.fromLTRB(onMinimize == null ? 16 : 4, 8, 12, 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (onMinimize != null) MinimizeButton(onTap: onMinimize!),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -430,14 +450,16 @@ class LocalPip extends StatelessWidget {
 }
 
 /// Ссылка-приглашение: на старте раскрыта, пока никто не подключился.
+/// «Копировать» кладёт название и ссылку в буфер, «Поделиться» отправляет их в выбранные чаты.
 class InviteBar extends StatelessWidget {
-  const InviteBar({super.key, required this.title, required this.url, required this.copied, required this.onCopy, required this.onClose});
+  const InviteBar({super.key, required this.title, required this.url, required this.copied, required this.onCopy, required this.onClose, this.onShare});
 
   final String title;
   final String url;
   final bool copied;
   final VoidCallback onCopy;
   final VoidCallback onClose;
+  final VoidCallback? onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -456,18 +478,38 @@ class InviteBar extends StatelessWidget {
           ),
           const Text('Отправьте ссылку участникам — они подключатся по ней', style: TextStyle(fontSize: 12.5, color: Color(0xB3FFFFFF))),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(child: Text(url, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontFamily: 'monospace', color: Color(0xE6FFFFFF)))),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                key: const ValueKey('invite-copy'),
-                style: FilledButton.styleFrom(backgroundColor: CallColors.speak, minimumSize: const Size(44, 44), padding: const EdgeInsets.symmetric(horizontal: 14)),
-                onPressed: onCopy,
-                icon: Icon(copied ? Icons.check_rounded : Icons.link_rounded, size: 18),
-                label: Text(copied ? 'Скопировано' : 'Копировать'),
-              ),
-            ],
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Text(url, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontFamily: 'monospace', color: Color(0xE6FFFFFF))),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    key: const ValueKey('invite-copy'),
+                    style: FilledButton.styleFrom(backgroundColor: copied ? const Color(0x33FFFFFF) : CallColors.speak, minimumSize: const Size(44, 44), padding: const EdgeInsets.symmetric(horizontal: 10)),
+                    onPressed: onCopy,
+                    icon: Icon(copied ? Icons.check_rounded : Icons.link_rounded, size: 18),
+                    label: FittedBox(fit: BoxFit.scaleDown, child: Text(copied ? 'Скопировано' : 'Копировать')),
+                  ),
+                ),
+                if (onShare != null) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      key: const ValueKey('invite-share'),
+                      style: FilledButton.styleFrom(backgroundColor: CallColors.speak, minimumSize: const Size(44, 44), padding: const EdgeInsets.symmetric(horizontal: 10)),
+                      onPressed: onShare,
+                      icon: const Icon(Icons.send_rounded, size: 18),
+                      label: const FittedBox(fit: BoxFit.scaleDown, child: Text('Поделиться')),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),
@@ -476,7 +518,7 @@ class InviteBar extends StatelessWidget {
 }
 
 /// Лист «Участники»: список с состоянием микрофона/камеры и ссылкой для приглашения.
-Future<void> showParticipantsSheet(BuildContext context, {required List<CallPerson> people, String? inviteUrl, VoidCallback? onCopyInvite}) {
+Future<void> showParticipantsSheet(BuildContext context, {required List<CallPerson> people, String? inviteUrl, VoidCallback? onCopyInvite, VoidCallback? onShareInvite}) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: CallColors.bgElevated,
@@ -539,8 +581,24 @@ Future<void> showParticipantsSheet(BuildContext context, {required List<CallPers
                       const SizedBox(height: 10),
                       SizedBox(
                         width: double.infinity,
-                        child: FilledButton.icon(style: FilledButton.styleFrom(backgroundColor: CallColors.speak, minimumSize: const Size(44, 48)), onPressed: onCopyInvite, icon: const Icon(Icons.link_rounded), label: const Text('Скопировать название и ссылку')),
+                        child: FilledButton.icon(key: const ValueKey('sheet-copy'), style: FilledButton.styleFrom(backgroundColor: CallColors.speak, minimumSize: const Size(44, 48)), onPressed: onCopyInvite, icon: const Icon(Icons.link_rounded), label: const Text('Скопировать название и ссылку')),
                       ),
+                      if (onShareInvite != null) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            key: const ValueKey('sheet-share'),
+                            style: FilledButton.styleFrom(backgroundColor: CallColors.speak, minimumSize: const Size(44, 48)),
+                            onPressed: () {
+                              Navigator.pop(context);
+                              onShareInvite();
+                            },
+                            icon: const Icon(Icons.send_rounded),
+                            label: const Text('Поделиться в чатах'),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

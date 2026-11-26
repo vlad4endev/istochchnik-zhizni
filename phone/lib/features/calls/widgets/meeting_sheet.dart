@@ -7,6 +7,7 @@ import '../../../ui/widgets.dart';
 import '../../prayer/widgets/sheet_frame.dart';
 import '../call_page.dart';
 import '../join_meeting_page.dart';
+import 'call_banner.dart';
 import '../logic/meeting_logic.dart';
 
 /// Диалог создания конференции по ссылке: название, микрофон/камера, шаблоны стражи.
@@ -19,6 +20,7 @@ Future<void> showMeetingSheet(BuildContext context, {required MeetingMedia media
     builder: (_) => MeetingForm(media: media, conversationId: conversationId, user: user ?? context.read<SessionController>().user),
   );
   if (launch == null || !context.mounted) return;
+  if (!await confirmStartNewCall(context) || !context.mounted) return;
   await pushPage(context, CallPage(video: launch.media.isVideo, title: launch.title ?? launch.media.defaultTitle, meeting: launch));
 }
 
