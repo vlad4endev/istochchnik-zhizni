@@ -24,6 +24,10 @@ class AttachRecovery {
 
   static const _key = 'pending_attach';
 
+  /// Приложение запущено заново после окна выбора файла: пока чат не открыт, экран закрыт заставкой,
+  /// чтобы не мелькала «Главная» между тёмным запуском и чатом.
+  static final restoring = ValueNotifier<bool>(false);
+
   /// Дольше этого срока запись считается забытой: человек давно ушёл, возвращать его в чат не нужно.
   static const maxAge = Duration(minutes: 15);
 

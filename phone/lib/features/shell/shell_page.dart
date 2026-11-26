@@ -15,6 +15,7 @@ import '../feed/feed_page.dart';
 import '../home/home_page.dart';
 import '../more/more_page.dart';
 import '../prayer/prayer_page.dart';
+import 'restore_cover.dart';
 
 class ShellPage extends StatefulWidget {
   const ShellPage({super.key, this.lostPicks});
@@ -66,16 +67,27 @@ class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
 
   /// Телефон выгрузил приложение, пока было открыто окно выбора файла: возвращаем человека в тот чат и отправляем выбранное.
   Future<void> _restoreAfterPickerKill() async {
-    await reopenAfterPickerKill(
-      source: widget.lostPicks,
-      open: (chat, files) async {
-        final nav = navigatorKey.currentState;
-        if (nav == null || !mounted) return;
-        await nav.push(MaterialPageRoute<void>(
-          builder: (_) => ThreadPage(conversationId: chat.conversationId, title: chat.title.isEmpty ? 'Чат' : chat.title, incomingAttachments: files),
-        ));
-      },
-    );
+    try {
+      await reopenAfterPickerKill(
+        source: widget.lostPicks,
+        open: (chat, files) async {
+          final nav = navigatorKey.currentState;
+          if (nav == null || !mounted) return;
+          // Мягкий переход: чат проявляется из заставки, а не выезжает поверх «Главной».
+          final opened = nav.push(PageRouteBuilder<void>(
+            transitionDuration: const Duration(milliseconds: 280),
+            reverseTransitionDuration: const Duration(milliseconds: 200),
+            pageBuilder: (_, _, _) => ThreadPage(conversationId: chat.conversationId, title: chat.title.isEmpty ? 'Чат' : chat.title, incomingAttachments: files),
+            transitionsBuilder: (_, animation, _, child) => FadeTransition(opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut), child: child),
+          ));
+          // Заставка уходит уже под открытым чатом: при возврате назад «Главная» без мерцания.
+          WidgetsBinding.instance.addPostFrameCallback((_) => AttachRecovery.restoring.value = false);
+          await opened;
+        },
+      );
+    } finally {
+      AttachRecovery.restoring.value = false;
+    }
   }
 
   @override
@@ -154,7 +166,7 @@ class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
     ];
     final found = tabs.indexWhere((tab) => tab.id == _current);
     final index = found < 0 ? 0 : found;
-    return Scaffold(
+    final shell = Scaffold(
       backgroundColor: ChurchColors.night,
       extendBody: true,
       body: IndexedStack(index: index, children: [for (final tab in tabs) tab.page]),
@@ -167,5 +179,6 @@ class _ShellPageState extends State<ShellPage> with WidgetsBindingObserver {
         },
       ),
     );
+    return RestoreGate(restoring: AttachRecovery.restoring, child: shell);
   }
 }

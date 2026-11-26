@@ -11,6 +11,7 @@ import 'core/call_alerts.dart';
 import 'core/firebase_config.dart';
 import 'core/push.dart';
 import 'core/session.dart';
+import 'features/chats/data/lost_attachments.dart';
 import 'features/schedule/data/schedule_repository.dart';
 import 'features/service/data/plan_repository.dart';
 import 'features/songbook/data/songbook_repository.dart';
@@ -31,6 +32,7 @@ Future<void> main() async {
   session.beforeLogout.add(PlanRepository.clearAll);
   session.beforeLogout.add(StudioRepository.clearAll);
   await session.bootstrap();
+  AttachRecovery.restoring.value = session.user != null && await AttachRecovery.read() != null;
   unawaited(PushService.instance.start(session));
   runApp(
     ChangeNotifierProvider.value(
