@@ -21,21 +21,32 @@ export function useWebPushSync(): void {
     if (Capacitor.isNativePlatform()) return;
     if (typeof window === 'undefined') return;
 
-    // Один раз после входа / смены токена. Если SW не готов (передеплой, sw.js отдал 5xx) — повторяем
-    // с нарастающей паузой, а не ждём ручной перезагрузки.
+    // Один раз после входа / смены токена. Если SW не готов или временная ошибка (401/5xx/сеть
+    // при передеплое) — повторяем с нарастающей паузой, а не ждём ручной перезагрузки.
     let cancelled = false;
+    let lastSyncOk = false;
     const retryTimers: ReturnType<typeof setTimeout>[] = [];
-    const syncWithRetry = async (attempt = 0): Promise<void> => {
-      const result = await initMessengerPushNotifications({ force: true });
-      if (cancelled || result.ok || result.code !== 'sw-not-ready') return;
-      const delays = [20_000, 60_000, 180_000, 600_000];
-      if (attempt >= delays.length) return;
+    const scheduleRetry = (attempt: number) => {
+      const delays = [10_000, 30_000, 90_000, 300_000];
+      if (cancelled || attempt >= delays.length) return;
       retryTimers.push(setTimeout(() => void syncWithRetry(attempt + 1), delays[attempt]));
+    };
+    const syncWithRetry = async (attempt = 0): Promise<void> => {
+      const result = await initMessengerPushNotifications({ force: true, silent: true });
+      if (cancelled) return;
+      if (result.ok) {
+        lastSyncOk = true;
+        return;
+      }
+      lastSyncOk = false;
+      if (result.code === 'sw-not-ready' || result.retryable === true) {
+        scheduleRetry(attempt);
+      }
     };
     void syncWithRetry();
 
     // После передеплоя сервер мог потерять подписку (новые VAPID-ключи → 403/410 → удаление, пересоздание БД),
-    // а браузер продолжает считать себя подписанным. Спрашиваем сервер и при расхождении подписываемся заново.
+    // а браузер продолжает считать себя подписанным (или наоборот — iOS/браузер сбросил подписку при granted).
     let lastServerCheckMs = 0;
     const verifyWithServer = async () => {
       const now = Date.now();
@@ -45,10 +56,13 @@ export function useWebPushSync(): void {
       try {
         const reg = await navigator.serviceWorker?.getRegistration();
         const sub = await reg?.pushManager?.getSubscription();
-        if (!sub) return; // отсутствие подписки в браузере обрабатывает проверка ниже
+        if (!sub) {
+          await syncWithRetry();
+          return;
+        }
         const status = await fetchPushStatus(sub.endpoint);
         if (status.currentEndpointRegistered === false) {
-          await initMessengerPushNotifications({ force: true });
+          await syncWithRetry();
         }
       } catch {
         /* сеть/401 — повторим при следующем возврате в приложение */
@@ -63,9 +77,9 @@ export function useWebPushSync(): void {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
       const now = Date.now();
-      if (now - lastResyncMs >= 6 * 3600_000) {
+      if (!lastSyncOk || now - lastResyncMs >= 6 * 3600_000) {
         lastResyncMs = now;
-        void initMessengerPushNotifications({ force: true });
+        void syncWithRetry();
         return;
       }
       // Дёшево (локально, без сети): разрешение выдали в системных настройках или iOS вытеснил подписку —
@@ -80,7 +94,7 @@ export function useWebPushSync(): void {
           const sub = await reg?.pushManager?.getSubscription();
           if (!sub) {
             lastResyncMs = Date.now();
-            await initMessengerPushNotifications({ force: true });
+            await syncWithRetry();
           }
         } catch {
           /* следующая проверка при очередном возврате */
@@ -89,11 +103,23 @@ export function useWebPushSync(): void {
     };
     document.addEventListener('visibilitychange', onVisible);
 
+    // Возврат в сеть после офлайна: если синхронизация ранее не прошла, повторяем немедленно.
+    const onOnline = () => {
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+      if (!lastSyncOk) {
+        void syncWithRetry();
+      } else {
+        lastServerCheckMs = 0;
+        void verifyWithServer();
+      }
+    };
+    window.addEventListener('online', onOnline);
+
     // Пользователь включил уведомления в настройках браузера, не покидая вкладку.
     let permStatus: PermissionStatus | null = null;
     const onPermChange = () => {
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        void initMessengerPushNotifications({ force: true });
+        void syncWithRetry();
       }
     };
     try {
@@ -112,6 +138,7 @@ export function useWebPushSync(): void {
       cancelled = true;
       retryTimers.forEach(clearTimeout);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', onOnline);
       permStatus?.removeEventListener('change', onPermChange);
     };
     const sw = navigator.serviceWorker;
@@ -124,7 +151,7 @@ export function useWebPushSync(): void {
       debounceRef.current = setTimeout(() => {
         debounceRef.current = undefined;
         // Новый SW мог ротировать push subscription — нужно пересохранить endpoint.
-        void initMessengerPushNotifications({ force: true });
+        void syncWithRetry();
       }, 800);
     };
 

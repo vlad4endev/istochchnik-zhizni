@@ -39,19 +39,20 @@ export function notifyIncomingCallBackground(payload: {
   if (document.visibilityState !== 'hidden') return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
+  const title = payload.callType === 'video' ? 'Видеозвонок' : 'Входящий звонок';
+  const body = (payload.callerName || 'Собеседник').trim() || 'Собеседник';
+  const icon =
+    toAbsoluteIconUrl(payload.callerAvatar) ??
+    (typeof window !== 'undefined' ? `${window.location.origin}/assets/pwa-192x192.png` : undefined);
+  const badge =
+    typeof window !== 'undefined' ? `${window.location.origin}/assets/pwa-192x192.png` : undefined;
+  const tag = `istochik-call:${payload.callId}`;
+
   try {
     lastBrowserNotification?.close();
-    const title = payload.callType === 'video' ? 'Видеозвонок' : 'Входящий звонок';
-    const body = (payload.callerName || 'Собеседник').trim() || 'Собеседник';
-    const icon =
-      toAbsoluteIconUrl(payload.callerAvatar) ??
-      (typeof window !== 'undefined' ? `${window.location.origin}/assets/logo.svg` : undefined);
-    const badge =
-      typeof window !== 'undefined' ? `${window.location.origin}/assets/logo.svg` : undefined;
-
     const n = new Notification(title, {
       body,
-      tag: `istochik-call:${payload.callId}`,
+      tag,
       requireInteraction: true,
       silent: false,
       ...(icon ? { icon } : {}),
@@ -74,7 +75,28 @@ export function notifyIncomingCallBackground(payload: {
       );
     };
   } catch {
-    /* Safari / приватный режим и т.п. */
+    // Android Chrome PWA: `new Notification()` бросает TypeError — fallback на SW showNotification.
+    lastNotifiedCallId = payload.callId;
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      void navigator.serviceWorker
+        .getRegistration()
+        .then((reg) =>
+          reg?.showNotification(title, {
+            body,
+            tag,
+            requireInteraction: true,
+            silent: false,
+            ...(icon ? { icon } : {}),
+            ...(badge ? { badge } : {}),
+            data: {
+              url: `/call/${encodeURIComponent(payload.callId)}`,
+              callId: payload.callId,
+              pushType: 'incoming_call',
+            },
+          }),
+        )
+        .catch(() => {});
+    }
   }
 }
 
@@ -84,6 +106,16 @@ export function dismissIncomingCallBrowserNotification(callId: string): void {
     lastBrowserNotification?.close();
   } catch {
     /* ignore */
+  }
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+    try {
+      navigator.serviceWorker.controller?.postMessage({
+        type: 'push:clear-tag',
+        tag: `istochik-call:${callId}`,
+      });
+    } catch {
+      /* ignore */
+    }
   }
   lastBrowserNotification = null;
   lastNotifiedCallId = null;

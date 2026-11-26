@@ -7,10 +7,66 @@ import { isInstalledPwa } from '../../pwa/utils/pwaEnvironment';
 
 /** Последний известный публичный VAPID с сервера — чтобы при смене ключей пересоздать подписку. */
 const LS_VAPID_PUBLIC_KEY = 'web_push_vapid_public_key';
-export type WebPushResult = { ok: boolean; error?: string; code?: 'sw-not-ready' };
+export type WebPushResult = {
+  ok: boolean;
+  error?: string;
+  code?: 'sw-not-ready' | 'retryable-error';
+  retryable?: boolean;
+};
 let pushSyncInFlight: Promise<WebPushResult> | null = null;
 /** Endpoint, успешно сохранённый на сервере в этой вкладке. */
 let lastSyncedEndpoint: string | null = null;
+
+function readHttpStatus(err: unknown): number | undefined {
+  if (err && typeof err === 'object' && 'response' in err) {
+    return (err as { response?: { status?: number } }).response?.status;
+  }
+  return undefined;
+}
+
+export function isRetryablePushError(err: unknown): boolean {
+  const status = readHttpStatus(err);
+  if (status != null) {
+    return status === 401 || status === 408 || status === 425 || status === 429 || status >= 500;
+  }
+  const name =
+    err instanceof Error || (err && typeof err === 'object' && 'name' in err)
+      ? String((err as { name?: unknown }).name ?? '')
+      : '';
+  if (
+    name === 'NotAllowedError' ||
+    name === 'NotSupportedError' ||
+    name === 'SecurityError' ||
+    name === 'InvalidCharacterError' ||
+    name === 'InvalidAccessError'
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function rememberSubscriptionInSw(
+  registration: ServiceWorkerRegistration,
+  body: Record<string, unknown>,
+): void {
+  const endpoint = typeof body.endpoint === 'string' ? body.endpoint : '';
+  const keys = (body.keys && typeof body.keys === 'object' ? body.keys : {}) as Record<string, unknown>;
+  const auth = typeof keys.auth === 'string' ? keys.auth : '';
+  if (!endpoint) return;
+  const msg = { type: 'push:remember-subscription', endpoint, auth };
+  try {
+    navigator.serviceWorker?.controller?.postMessage(msg);
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (registration.active && registration.active !== navigator.serviceWorker?.controller) {
+      registration.active.postMessage(msg);
+    }
+  } catch {
+    /* ignore */
+  }
+}
 
 function subscriptionToJsonBody(sub: PushSubscription): Record<string, unknown> {
   let body: Record<string, unknown>;
@@ -114,11 +170,17 @@ export function describePushEnableError(err: unknown): string {
   return `Не удалось включить push в браузере${name ? ` (${name})` : ''}. Проверьте интернет и откройте сайт по HTTPS; на iPhone — ярлык с экрана «Домой».`;
 }
 
-export async function initMessengerPushNotifications(opts?: { force?: boolean }): Promise<WebPushResult> {
+export async function initMessengerPushNotifications(opts?: {
+  force?: boolean;
+  silent?: boolean;
+}): Promise<WebPushResult> {
   if (pushSyncInFlight) {
     return pushSyncInFlight;
   }
-  pushSyncInFlight = initMessengerPushNotificationsInternal(opts?.force === true);
+  pushSyncInFlight = initMessengerPushNotificationsInternal(
+    opts?.force === true,
+    opts?.silent === true,
+  );
   try {
     return await pushSyncInFlight;
   } finally {
@@ -144,7 +206,7 @@ export async function enableWebPush(): Promise<WebPushResult> {
     }
   }
   if (pushSyncInFlight) await pushSyncInFlight.catch(() => undefined);
-  pushSyncInFlight = initMessengerPushNotificationsInternal(true);
+  pushSyncInFlight = initMessengerPushNotificationsInternal(true, false);
   try {
     return await pushSyncInFlight;
   } finally {
@@ -168,22 +230,28 @@ export function resetWebPushSyncCache(): void {
 }
 
 async function syncSubscriptionWithServer(
+  registration: ServiceWorkerRegistration,
   subscription: PushSubscription,
   vapidPublicKey: string,
   force: boolean,
 ): Promise<void> {
   const endpoint = subscription.endpoint;
   if (!force && lastSyncedEndpoint === endpoint) return;
-  await apiClient.post('/api/notifications/subscribe', subscriptionToJsonBody(subscription), {
+  const body = subscriptionToJsonBody(subscription);
+  await apiClient.post('/api/notifications/subscribe', body, {
     // Не сбрасывать сессию и не показывать глобальный «войдите снова» из 401-interceptor.
     skipAuthClearOn401: true,
     silentErrorToast: true,
   });
   localStorage.setItem(LS_VAPID_PUBLIC_KEY, vapidPublicKey);
   lastSyncedEndpoint = endpoint;
+  rememberSubscriptionInSw(registration, body);
 }
 
-async function initMessengerPushNotificationsInternal(force: boolean): Promise<WebPushResult> {
+async function initMessengerPushNotificationsInternal(
+  force: boolean,
+  silent: boolean,
+): Promise<WebPushResult> {
   if (!('serviceWorker' in navigator)) return { ok: false, error: 'Service Worker не поддерживается.' };
   if (!('PushManager' in window)) return { ok: false, error: 'Push не поддерживается браузером.' };
 
@@ -212,7 +280,12 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<W
     const vapidPublicKey = serverVapidKey || (envKey && envKey.trim() ? envKey.trim() : '');
     if (!vapidPublicKey) {
       console.warn('[push] VAPID public key is missing, skipping push subscribe.');
-      return { ok: false, error: 'Сервер push не настроен (VAPID). Обратитесь к администратору.' };
+      return {
+        ok: false,
+        code: 'retryable-error',
+        retryable: true,
+        error: 'Сервер push не настроен (VAPID). Обратитесь к администратору.',
+      };
     }
     const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
 
@@ -237,21 +310,23 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<W
 
     if (existing) {
       try {
-        await syncSubscriptionWithServer(existing, vapidPublicKey, force);
+        await syncSubscriptionWithServer(registration, existing, vapidPublicKey, force);
         return { ok: true };
       } catch (err) {
         console.error('[push] POST /subscribe (sync existing) failed:', err);
         lastSyncedEndpoint = null;
         // 401 здесь не значит «выйти» — сессию не трогаем; пользователю не мешаем.
-        const status =
-          err && typeof err === 'object' && 'response' in err
-            ? (err as { response?: { status?: number } }).response?.status
-            : undefined;
+        const status = readHttpStatus(err);
+        const retryable = isRetryablePushError(err);
         const message = readPushSubscribeError(err);
-        if (status !== 401) {
+        if (!silent && status !== 401) {
           emitAppToast({ message, kind: 'error' });
         }
-        return { ok: false, error: message };
+        return {
+          ok: false,
+          error: message,
+          ...(retryable ? { code: 'retryable-error' as const, retryable: true } : { retryable: false }),
+        };
       }
     }
 
@@ -261,20 +336,33 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<W
     });
 
     try {
-      await syncSubscriptionWithServer(subscription, vapidPublicKey, true);
+      await syncSubscriptionWithServer(registration, subscription, vapidPublicKey, true);
       return { ok: true };
     } catch (err) {
       console.error('[push] POST /subscribe (new) failed:', err);
+      const status = readHttpStatus(err);
+      const retryable = isRetryablePushError(err);
       const message = readPushSubscribeError(err);
-      emitAppToast({ message, kind: 'error' });
-      try {
-        await subscription.unsubscribe();
-      } catch {
-        /* ignore */
+      if (!silent && status !== 401) {
+        emitAppToast({ message, kind: 'error' });
       }
-      localStorage.removeItem(LS_VAPID_PUBLIC_KEY);
+      // Не отписываемся на временных ошибках (401/5xx/сеть): при следующем ретрае
+      // существующая подписка браузера просто синхронизируется с сервером.
+      // Отписываемся только если сервер явно отклонил структуру подписки (400).
+      if (status === 400) {
+        try {
+          await subscription.unsubscribe();
+        } catch {
+          /* ignore */
+        }
+        localStorage.removeItem(LS_VAPID_PUBLIC_KEY);
+      }
       lastSyncedEndpoint = null;
-      return { ok: false, error: message };
+      return {
+        ok: false,
+        error: message,
+        ...(retryable ? { code: 'retryable-error' as const, retryable: true } : { retryable: false }),
+      };
     }
   } catch (err) {
     console.error('[push] initMessengerPushNotifications failed:', err);
@@ -284,11 +372,19 @@ async function initMessengerPushNotificationsInternal(force: boolean): Promise<W
       return {
         ok: false,
         code: 'sw-not-ready',
+        retryable: true,
         error: 'Service Worker ещё не готов, повторим автоматически.',
       };
     }
+    const retryable = isRetryablePushError(err);
     const message = describePushEnableError(err);
-    emitAppToast({ message, kind: 'error' });
-    return { ok: false, error: message };
+    if (!silent) {
+      emitAppToast({ message, kind: 'error' });
+    }
+    return {
+      ok: false,
+      error: message,
+      ...(retryable ? { code: 'retryable-error' as const, retryable: true } : { retryable: false }),
+    };
   }
 }

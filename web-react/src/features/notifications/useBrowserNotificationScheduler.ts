@@ -90,9 +90,9 @@ function notify(
   deliveryId?: number,
 ): boolean {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
+  const silent = importance === 'low';
+  const requireInteraction = importance === 'high';
   try {
-    const silent = importance === 'low';
-    const requireInteraction = importance === 'high';
     const notification = new Notification(title, { body, tag, silent, requireInteraction });
     if (deliveryId != null && Number.isFinite(deliveryId) && deliveryId > 0) {
       const markOpened = () => {
@@ -108,6 +108,27 @@ function notify(
     }
     return true;
   } catch {
+    // На Android Chrome PWA `new Notification()` бросает TypeError — показываем через ServiceWorkerRegistration.
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      void navigator.serviceWorker
+        .getRegistration()
+        .then((reg) =>
+          reg?.showNotification(title, {
+            body,
+            tag,
+            silent,
+            requireInteraction,
+            icon: '/assets/pwa-192x192.png',
+            badge: '/assets/pwa-192x192.png',
+            data: {
+              url: '/',
+              deliveryId: deliveryId != null && Number.isFinite(deliveryId) && deliveryId > 0 ? String(deliveryId) : null,
+            },
+          }),
+        )
+        .catch(() => {});
+      return true;
+    }
     return false;
   }
 }
