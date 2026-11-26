@@ -157,6 +157,7 @@ type MonitorSettings = {
     webhookUrl: string | null;
   };
   telegramOpsChatId: string | null;
+  recipientAdminIds: number[] | null;
   notifyOn: {
     critical: boolean;
     warning: boolean;
@@ -180,8 +181,18 @@ type MonitorChannelsSummary = {
   fcmReady: boolean;
   webhookConfigured: boolean;
   adminTargets: number;
+  adminsTotal: number;
+  recipientsMode: 'all' | 'selected';
   adminsWithTelegram: number;
   adminsWithPush: number;
+};
+
+type AdminRecipient = {
+  memberId: number;
+  name: string;
+  telegramChatId: string | null;
+  hasPush: boolean;
+  selected: boolean;
 };
 
 type CronJobHeartbeat = {
@@ -534,6 +545,8 @@ export function DiagnosticsDashboardSection() {
   const [settingsDraft, setSettingsDraft] = useState<MonitorSettings | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSavedMsg, setSettingsSavedMsg] = useState<string | null>(null);
+  const [adminRecipients, setAdminRecipients] = useState<AdminRecipient[] | null>(null);
+  const [adminRecipientsLoading, setAdminRecipientsLoading] = useState(false);
 
   const [testAlertLoading, setTestAlertLoading] = useState(false);
   const [testAlertResult, setTestAlertResult] = useState<TestAlertResult | null>(null);
@@ -594,6 +607,24 @@ export function DiagnosticsDashboardSection() {
     }, 15_000);
     return () => window.clearInterval(timer);
   }, [autoRefresh, fetchMonitorStatus]);
+
+  const fetchAdminRecipients = useCallback(async () => {
+    setAdminRecipientsLoading(true);
+    try {
+      const res = await apiClient.get<{ admins: AdminRecipient[] }>('/api/diagnostics/monitor/admins');
+      setAdminRecipients(res.data.admins);
+    } catch (err) {
+      setErrorText(err instanceof Error ? err.message : 'Не удалось загрузить список администраторов');
+    } finally {
+      setAdminRecipientsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'alerts' && !adminRecipients && !adminRecipientsLoading) {
+      void fetchAdminRecipients();
+    }
+  }, [activeTab, adminRecipients, adminRecipientsLoading, fetchAdminRecipients]);
 
   useEffect(() => {
     if (activeTab === 'subsystems' && !subsystems && !subsystemsLoading) {
@@ -667,7 +698,7 @@ export function DiagnosticsDashboardSection() {
       );
       setSettingsDraft(res.data);
       setSettingsSavedMsg('Настройки мониторинга и оповещений сохранены');
-      await fetchMonitorStatus(true);
+      await Promise.all([fetchMonitorStatus(true), fetchAdminRecipients()]);
       window.setTimeout(() => setSettingsSavedMsg(null), 4000);
     } catch (err) {
       setErrorText(err instanceof Error ? err.message : 'Не удалось сохранить настройки');
@@ -1756,7 +1787,15 @@ export function DiagnosticsDashboardSection() {
                   Каналы оповещения администраторов
                 </h3>
                 <p className="text-xs text-stone-500">
-                  Получатели: активных админов <strong>{monitor.channels.adminTargets}</strong> · с Telegram:{' '}
+                  Получатели:{' '}
+                  {monitor.channels.recipientsMode === 'all'
+                    ? 'все активные админы'
+                    : 'выбранные админы'}{' '}
+                  <strong>
+                    {monitor.channels.adminTargets}
+                    {monitor.channels.recipientsMode === 'selected' ? ` из ${monitor.channels.adminsTotal}` : ''}
+                  </strong>{' '}
+                  · с Telegram:{' '}
                   <strong>{monitor.channels.adminsWithTelegram}</strong> · с Push-подпиской:{' '}
                   <strong>{monitor.channels.adminsWithPush}</strong>
                 </p>
@@ -1923,7 +1962,7 @@ export function DiagnosticsDashboardSection() {
                     }
                     className="h-4 w-4 accent-primary"
                   />
-                  Push-уведомления всем администраторам (Web + Android/iOS)
+                  Push-уведомления администраторам (Web + Android/iOS)
                 </label>
                 <label className="flex items-center gap-2.5 rounded-xl border border-stone-200 p-3 text-xs font-semibold">
                   <input
@@ -1937,7 +1976,7 @@ export function DiagnosticsDashboardSection() {
                     }
                     className="h-4 w-4 accent-primary"
                   />
-                  Telegram-сообщения администраторам и в Ops-чат
+                  Telegram-сообщения администраторам (и в Ops-чат, если указан)
                 </label>
                 <label className="flex flex-col gap-1 text-xs">
                   <span className="font-semibold text-stone-700">
@@ -1977,6 +2016,133 @@ export function DiagnosticsDashboardSection() {
                   />
                 </label>
               </div>
+            </div>
+
+            {/* Recipients */}
+            <div className="space-y-3 border-t border-stone-100 pt-4">
+              <div className="text-xs font-extrabold uppercase tracking-wide text-stone-500">
+                Кому из администраторов отправлять Push и Telegram
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ['all', 'Всем активным администраторам'],
+                    ['selected', 'Только выбранным'],
+                  ] as const
+                ).map(([mode, label]) => {
+                  const active =
+                    mode === 'all'
+                      ? settingsDraft.recipientAdminIds === null
+                      : settingsDraft.recipientAdminIds !== null;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() =>
+                        setSettingsDraft({
+                          ...settingsDraft,
+                          recipientAdminIds:
+                            mode === 'all'
+                              ? null
+                              : (settingsDraft.recipientAdminIds ??
+                                (adminRecipients ?? []).map((a) => a.memberId)),
+                        })
+                      }
+                      className={`rounded-xl border px-3 py-2 text-xs font-bold ${
+                        active
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-stone-200 text-stone-600 hover:bg-stone-50'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {settingsDraft.recipientAdminIds !== null && (
+                <div className="space-y-2">
+                  {adminRecipientsLoading && !adminRecipients && (
+                    <div className="text-xs text-stone-500">Загрузка списка администраторов…</div>
+                  )}
+                  {adminRecipients && adminRecipients.length === 0 && (
+                    <div className="text-xs text-stone-500">Активных администраторов не найдено.</div>
+                  )}
+                  {adminRecipients && adminRecipients.length > 0 && (
+                    <>
+                      <div className="flex flex-wrap items-center gap-3 text-xs">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSettingsDraft({
+                              ...settingsDraft,
+                              recipientAdminIds: adminRecipients.map((a) => a.memberId),
+                            })
+                          }
+                          className="font-bold text-primary hover:underline"
+                        >
+                          Выбрать всех
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSettingsDraft({ ...settingsDraft, recipientAdminIds: [] })}
+                          className="font-bold text-stone-600 hover:underline"
+                        >
+                          Снять выбор
+                        </button>
+                        <span className="text-stone-500">
+                          Выбрано: {settingsDraft.recipientAdminIds.length} из {adminRecipients.length}
+                        </span>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {adminRecipients.map((admin) => {
+                          const ids = settingsDraft.recipientAdminIds ?? [];
+                          const checked = ids.includes(admin.memberId);
+                          return (
+                            <label
+                              key={admin.memberId}
+                              className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-xs ${
+                                checked ? 'border-primary/40 bg-primary/5' : 'border-stone-200'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) =>
+                                  setSettingsDraft({
+                                    ...settingsDraft,
+                                    recipientAdminIds: e.target.checked
+                                      ? [...ids, admin.memberId]
+                                      : ids.filter((id) => id !== admin.memberId),
+                                  })
+                                }
+                                className="mt-0.5 h-4 w-4 accent-primary"
+                              />
+                              <span className="min-w-0">
+                                <span className="block truncate font-bold text-stone-900">{admin.name}</span>
+                                <span className="block text-stone-500">
+                                  Telegram: {admin.telegramChatId ? 'привязан' : 'нет'} · Push:{' '}
+                                  {admin.hasPush ? 'есть подписка' : 'нет подписки'}
+                                </span>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                  {settingsDraft.recipientAdminIds.length === 0 && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+                      Ни один администратор не выбран: Push и личные Telegram-сообщения отправляться не будут
+                      (только Ops-чат и Webhook, если заданы).
+                    </div>
+                  )}
+                </div>
+              )}
+              <p className="text-[11px] text-stone-500">
+                Настройка действует на все оповещения мониторинга, включая тестовые. Ops-чат и Webhook получают
+                оповещения независимо от выбора.
+              </p>
             </div>
 
             {/* Event triggers */}

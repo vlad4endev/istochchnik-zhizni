@@ -29,6 +29,7 @@ export function buildDefaultMonitorSettings(): MonitorSettings {
       webhookUrl: webhook,
     },
     telegramOpsChatId: opsChat,
+    recipientAdminIds: null,
     notifyOn: {
       critical: true,
       warning: true,
@@ -138,6 +139,21 @@ export function normalizeMonitorSettings(raw: unknown, base = buildDefaultMonito
   const webhookRaw =
     nc.webhookUrl === undefined ? base.notifyChannels.webhookUrl : nc.webhookUrl;
 
+  let recipientAdminIds: number[] | null;
+  if (r.recipientAdminIds === undefined) {
+    recipientAdminIds = base.recipientAdminIds;
+  } else if (r.recipientAdminIds === null || !Array.isArray(r.recipientAdminIds)) {
+    recipientAdminIds = null;
+  } else {
+    recipientAdminIds = Array.from(
+      new Set(
+        r.recipientAdminIds
+          .map((v) => Number(v))
+          .filter((v) => Number.isInteger(v) && v > 0),
+      ),
+    ).slice(0, 500);
+  }
+
   const mutedChecks = Array.isArray(r.mutedChecks)
     ? Array.from(new Set(r.mutedChecks.map((v) => String(v).trim()).filter(Boolean))).slice(0, 50)
     : base.mutedChecks;
@@ -151,6 +167,7 @@ export function normalizeMonitorSettings(raw: unknown, base = buildDefaultMonito
       webhookUrl: normalizeWebhookUrl(webhookRaw),
     },
     telegramOpsChatId,
+    recipientAdminIds,
     notifyOn: {
       critical: typeof no.critical === 'boolean' ? no.critical : base.notifyOn.critical,
       warning: typeof no.warning === 'boolean' ? no.warning : base.notifyOn.warning,
@@ -214,6 +231,7 @@ export type MonitorSettingsPatch = Partial<{
   intervalSec: number;
   notifyChannels: Partial<MonitorSettings['notifyChannels']>;
   telegramOpsChatId: string | null;
+  recipientAdminIds: number[] | null;
   notifyOn: Partial<MonitorSettings['notifyOn']>;
   thresholds: Partial<MonitorThresholds>;
   cooldownCriticalMin: number;

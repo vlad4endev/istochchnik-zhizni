@@ -14,6 +14,7 @@ import { resolveSafeScanDir, scanProject } from '../analyzers/projectScanner';
 import { collectServerDiagnostics } from '../analyzers/serverAnalyzer';
 import { resolveInternalBaseUrl, runAutomatedTestSuite } from '../autoTestSuite';
 import { collectSubsystemInventory } from '../monitor/checks';
+import { listAdminRecipients } from '../monitor/notifyAdmins';
 import { loadMonitorSettings } from '../monitor/settings';
 import {
   acknowledgeMonitorAlert,
@@ -870,6 +871,18 @@ diagnosticsRouter.get('/monitor/settings', async (_req: Request, res: Response) 
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Не удалось загрузить настройки мониторинга',
+    });
+  }
+});
+
+diagnosticsRouter.get('/monitor/admins', async (_req: Request, res: Response) => {
+  try {
+    await loadMonitorSettings();
+    const admins = await listAdminRecipients();
+    res.json({ admins });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Не удалось загрузить список администраторов',
     });
   }
 });

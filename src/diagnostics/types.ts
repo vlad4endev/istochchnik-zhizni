@@ -362,6 +362,8 @@ export interface MonitorSettings {
     webhookUrl: string | null;
   };
   telegramOpsChatId: string | null;
+  /** ID админов-получателей (members.id). null — все активные админы. */
+  recipientAdminIds: number[] | null;
   notifyOn: {
     critical: boolean;
     warning: boolean;
@@ -413,6 +415,8 @@ export interface MonitorChannelsSummary {
   fcmReady: boolean;
   webhookConfigured: boolean;
   adminTargets: number;
+  adminsTotal: number;
+  recipientsMode: 'all' | 'selected';
   adminsWithTelegram: number;
   adminsWithPush: number;
 }

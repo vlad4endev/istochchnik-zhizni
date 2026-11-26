@@ -23,6 +23,7 @@ import {
   recordRequest,
   resetMetricsForTests,
 } from './metrics';
+import { selectRecipientAdmins } from './notifyAdmins';
 import {
   buildDefaultMonitorSettings,
   normalizeMonitorSettings,
@@ -121,6 +122,27 @@ assert.equal(normalized.notifyChannels.push, false);
 assert.equal(normalized.notifyChannels.webhookUrl, null);
 assert.ok(normalized.thresholds.diskFailPercent >= normalized.thresholds.diskWarnPercent);
 assert.deepEqual(normalized.mutedChecks, ['redis']);
+
+// 4b. Recipient admin selection
+assert.equal(defaults.recipientAdminIds, null);
+assert.equal(normalizeMonitorSettings({}, defaults).recipientAdminIds, null);
+assert.deepEqual(
+  normalizeMonitorSettings({ recipientAdminIds: [3, '5', 3, -1, 'x', 0] }, defaults).recipientAdminIds,
+  [3, 5],
+);
+assert.deepEqual(normalizeMonitorSettings({ recipientAdminIds: [] }, defaults).recipientAdminIds, []);
+assert.equal(normalizeMonitorSettings({ recipientAdminIds: null }, defaults).recipientAdminIds, null);
+const adminPool = [
+  { memberId: 1, name: 'A', telegramChatId: null },
+  { memberId: 2, name: 'B', telegramChatId: '10' },
+  { memberId: 3, name: 'C', telegramChatId: null },
+];
+assert.equal(selectRecipientAdmins(adminPool, null).length, 3);
+assert.deepEqual(
+  selectRecipientAdmins(adminPool, [2, 99]).map((a) => a.memberId),
+  [2],
+);
+assert.equal(selectRecipientAdmins(adminPool, []).length, 0);
 
 // 5. Alert lifecycle: dedup, cooldown, escalation, ack, resolve, mute
 resetAlertsForTests();

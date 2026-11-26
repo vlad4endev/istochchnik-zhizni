@@ -25,6 +25,48 @@ export interface AdminTarget {
   telegramChatId: string | null;
 }
 
+export function selectRecipientAdmins(
+  admins: AdminTarget[],
+  recipientAdminIds: number[] | null,
+): AdminTarget[] {
+  if (recipientAdminIds === null) return admins;
+  const allowed = new Set(recipientAdminIds);
+  return admins.filter((a) => allowed.has(a.memberId));
+}
+
+export interface AdminRecipientInfo extends AdminTarget {
+  hasPush: boolean;
+  selected: boolean;
+}
+
+/** Список активных админов с признаками каналов и отметкой выбора — для экрана настроек. */
+export async function listAdminRecipients(): Promise<AdminRecipientInfo[]> {
+  const settings = getCachedMonitorSettings();
+  const admins = await findActiveAdmins();
+  const pushIds = new Set<number>();
+  if (pool && admins.length > 0) {
+    const ids = admins.map((a) => a.memberId);
+    for (const table of ['push_subscriptions', 'fcm_tokens']) {
+      try {
+        const { rows } = await pool.query<{ member_id: number }>(
+          `SELECT DISTINCT member_id FROM ${table} WHERE member_id = ANY($1::int[])`,
+          [ids],
+        );
+        for (const row of rows) pushIds.add(Number(row.member_id));
+      } catch {
+        /* таблица может отсутствовать */
+      }
+    }
+  }
+  const selectedIds =
+    settings.recipientAdminIds === null ? null : new Set(settings.recipientAdminIds);
+  return admins.map((a) => ({
+    ...a,
+    hasPush: pushIds.has(a.memberId),
+    selected: selectedIds === null ? true : selectedIds.has(a.memberId),
+  }));
+}
+
 export async function findActiveAdmins(): Promise<AdminTarget[]> {
   if (!pool) return [];
   try {
@@ -55,7 +97,8 @@ export async function findActiveAdmins(): Promise<AdminTarget[]> {
 
 export async function getNotificationChannelsSummary(): Promise<MonitorChannelsSummary> {
   const settings = getCachedMonitorSettings();
-  const admins = await findActiveAdmins();
+  const allAdmins = await findActiveAdmins();
+  const admins = selectRecipientAdmins(allAdmins, settings.recipientAdminIds);
   const adminsWithTelegram = admins.filter((a) => Boolean(a.telegramChatId)).length;
 
   let adminsWithPush = 0;
@@ -115,6 +158,8 @@ export async function getNotificationChannelsSummary(): Promise<MonitorChannelsS
     fcmReady,
     webhookConfigured: Boolean(settings.notifyChannels.webhookUrl),
     adminTargets: admins.length,
+    adminsTotal: allAdmins.length,
+    recipientsMode: settings.recipientAdminIds === null ? 'all' : 'selected',
     adminsWithTelegram,
     adminsWithPush,
   };
@@ -208,7 +253,7 @@ export async function notifyAdmins(options: AdminNotifyOptions): Promise<AdminNo
   };
 
   const overall = (async () => {
-    const admins = await findActiveAdmins();
+    const admins = selectRecipientAdmins(await findActiveAdmins(), settings.recipientAdminIds);
     result.adminsFound = admins.length;
     const jobs: Promise<void>[] = [];
 
